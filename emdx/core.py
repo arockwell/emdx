@@ -129,6 +129,7 @@ def find(
 def view(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
 ):
     """View a document from the knowledge base"""
     try:
@@ -142,24 +143,36 @@ def view(
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
         
-        # Display document header
-        console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-        console.print("=" * 60)
-        
-        # Display metadata
-        console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-        console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
-        console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-        console.print("=" * 60 + "\n")
-        
-        # Display content
-        if raw:
-            # Show raw markdown
-            console.print(doc['content'])
+        # Display document with or without pager
+        if no_pager:
+            # Direct output without pager
+            console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
+            console.print("=" * 60)
+            console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
+            console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+            console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+            console.print("=" * 60 + "\n")
+            
+            if raw:
+                console.print(doc['content'])
+            else:
+                markdown = Markdown(doc['content'])
+                console.print(markdown)
         else:
-            # Render markdown
-            markdown = Markdown(doc['content'])
-            console.print(markdown)
+            # Use Rich's pager
+            with console.pager():
+                console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
+                console.print("=" * 60)
+                console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
+                console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+                console.print("=" * 60 + "\n")
+                
+                if raw:
+                    console.print(doc['content'])
+                else:
+                    markdown = Markdown(doc['content'])
+                    console.print(markdown)
         
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")
