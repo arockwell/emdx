@@ -1,11 +1,11 @@
 # emdx - Documentation Index Management System
 
-A powerful command-line tool for managing your personal knowledge base with PostgreSQL full-text search, Git integration, and a beautiful terminal interface.
+A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a beautiful terminal interface.
 
 ## Features
 
 - 🚀 **Unified CLI**: Single `emdx` command with intuitive subcommands
-- 🔍 **Full-Text Search**: PostgreSQL-powered search with ranking and fuzzy matching
+- 🔍 **Full-Text Search**: SQLite FTS5-powered search with ranking and fuzzy matching
 - 📝 **Multiple Input Methods**: Save files, create notes, pipe output, or paste from clipboard
 - 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
@@ -140,21 +140,6 @@ In the browser:
 - `emdx recent [count]` - Show recently accessed documents
 - `emdx stats [--project]` - Show statistics
 - `emdx gui` - Launch interactive browser
-
-## Migrating from PostgreSQL
-
-If you were using emdx with PostgreSQL, you can easily migrate your data:
-
-```bash
-# Install with PostgreSQL support
-pip install "emdx[postgres]"
-
-# Run migration
-emdx migrate
-
-# Or specify custom connections
-emdx migrate --postgres-url "postgresql://user@localhost/db" --sqlite-path ~/my-knowledge.db
-```
 
 ## Configuration
 
