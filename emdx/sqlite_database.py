@@ -24,8 +24,16 @@ class SQLiteDatabase:
     @contextmanager
     def get_connection(self):
         """Get a database connection with context manager"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(
+            self.db_path,
+            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+        )
         conn.row_factory = sqlite3.Row  # Enable column access by name
+        
+        # Register datetime adapter
+        sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
+        sqlite3.register_converter("timestamp", lambda b: datetime.fromisoformat(b.decode()))
+        
         try:
             yield conn
         finally:
@@ -138,7 +146,12 @@ class SQLiteDatabase:
             row = cursor.fetchone()
             
             if row:
-                return dict(row)
+                # Convert Row to dict and parse datetime strings
+                doc = dict(row)
+                for field in ['created_at', 'updated_at', 'accessed_at']:
+                    if field in doc and isinstance(doc[field], str):
+                        doc[field] = datetime.fromisoformat(doc[field])
+                return doc
             return None
     
     def list_documents(self, project: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
@@ -160,7 +173,15 @@ class SQLiteDatabase:
                     LIMIT ?
                 """, (limit,))
             
-            return [dict(row) for row in cursor.fetchall()]
+            # Convert rows and parse datetime strings
+            docs = []
+            for row in cursor.fetchall():
+                doc = dict(row)
+                for field in ['created_at', 'updated_at', 'accessed_at']:
+                    if field in doc and isinstance(doc[field], str):
+                        doc[field] = datetime.fromisoformat(doc[field])
+                docs.append(doc)
+            return docs
     
     def search_documents(self, query: str, project: Optional[str] = None, 
                         limit: int = 10, fuzzy: bool = False) -> List[Dict[str, Any]]:
@@ -194,7 +215,15 @@ class SQLiteDatabase:
                     LIMIT ?
                 """, (query, limit))
             
-            return [dict(row) for row in cursor.fetchall()]
+            # Convert rows and parse datetime strings
+            docs = []
+            for row in cursor.fetchall():
+                doc = dict(row)
+                for field in ['created_at', 'updated_at', 'accessed_at']:
+                    if field in doc and isinstance(doc[field], str):
+                        doc[field] = datetime.fromisoformat(doc[field])
+                docs.append(doc)
+            return docs
     
     def update_document(self, doc_id: int, title: str, content: str) -> bool:
         """Update a document"""
@@ -233,7 +262,15 @@ class SQLiteDatabase:
                 LIMIT ?
             """, (limit,))
             
-            return [dict(row) for row in cursor.fetchall()]
+            # Convert rows and parse datetime strings
+            docs = []
+            for row in cursor.fetchall():
+                doc = dict(row)
+                for field in ['created_at', 'updated_at', 'accessed_at']:
+                    if field in doc and isinstance(doc[field], str):
+                        doc[field] = datetime.fromisoformat(doc[field])
+                docs.append(doc)
+            return docs
     
     def get_stats(self, project: Optional[str] = None) -> Dict[str, Any]:
         """Get database statistics"""
