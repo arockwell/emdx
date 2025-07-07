@@ -142,24 +142,60 @@ def view(
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
         
-        # Display document header
-        console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-        console.print("=" * 60)
+        # Check if we should use mdcat
+        import subprocess
+        import tempfile
+        import os
         
-        # Display metadata
-        console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-        console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
-        console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-        console.print("=" * 60 + "\n")
+        use_mdcat = False
+        if not raw:
+            try:
+                result = subprocess.run(['which', 'mdcat'], capture_output=True)
+                use_mdcat = result.returncode == 0
+            except:
+                pass
         
-        # Display content
-        if raw:
-            # Show raw markdown
-            console.print(doc['content'])
+        if use_mdcat:
+            # Create full markdown document with header
+            full_content = f"""# {doc['title']}
+
+**Document ID:** #{doc['id']}  
+**Project:** {doc['project'] or 'None'}  
+**Created:** {doc['created_at'].strftime('%Y-%m-%d %H:%M')}  
+**Views:** {doc['access_count']}
+
+---
+
+{doc['content']}"""
+            
+            # Use mdcat with pager
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+                f.write(full_content)
+                temp_path = f.name
+            
+            try:
+                # Run mdcat with automatic pager detection
+                subprocess.run(['mdcat', '--paginate', temp_path])
+            finally:
+                os.unlink(temp_path)
         else:
-            # Render markdown
-            markdown = Markdown(doc['content'])
-            console.print(markdown)
+            # Fall back to Rich rendering
+            # Display document header
+            console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
+            console.print("=" * 60)
+            
+            # Display metadata
+            console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
+            console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+            console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+            console.print("=" * 60 + "\n")
+            
+            # Display content
+            if raw:
+                console.print(doc['content'])
+            else:
+                markdown = Markdown(doc['content'])
+                console.print(markdown)
         
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")

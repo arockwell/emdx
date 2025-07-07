@@ -18,6 +18,7 @@ A powerful command-line tool for managing your personal knowledge base with Post
 
 - Python 3.8+
 - fzf (for interactive mode)
+- mdcat (optional, for better markdown viewing with pagination)
 
 ### Install from source
 
