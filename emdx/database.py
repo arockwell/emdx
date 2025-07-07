@@ -6,11 +6,18 @@ import os
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from multiple sources
+# 1. First, try user config directory
+user_config = Path.home() / '.config' / 'emdx' / '.env'
+if user_config.exists():
+    load_dotenv(user_config)
+
+# 2. Then load from current directory (for development)
 load_dotenv()
 
 
