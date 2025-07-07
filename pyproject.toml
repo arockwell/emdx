@@ -48,6 +48,9 @@ dev = [
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
 ]
+postgres = [
+    "psycopg[binary]>=3.1.0",  # For migration from PostgreSQL
+]
 
 [project.scripts]
 emdx = "emdx.cli:run"
