@@ -190,6 +190,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 MIT License - see LICENSE file for details
 
-## Acknowledgments
-
-Originally developed as part of the [clauding](https://github.com/arockwell/clauding) project, emdx has been extracted and enhanced as a standalone tool for general-purpose knowledge management.
