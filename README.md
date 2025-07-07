@@ -10,14 +10,13 @@ A powerful command-line tool for managing your personal knowledge base with Post
 - 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
 - 🖥️ **Interactive Browser**: FZF-based document browser for quick navigation
-- 💾 **PostgreSQL Backend**: Reliable, fast, and scalable document storage
+- 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.8+
-- PostgreSQL 12+
 - fzf (for interactive mode)
 
 ### Install from source
@@ -28,19 +27,9 @@ cd emdx
 pip install -e .
 ```
 
-### Set up the database
+### No database setup required!
 
-By default, emdx connects to PostgreSQL using standard environment variables:
-- `PGHOST` (default: localhost)
-- `PGPORT` (default: 5432)
-- `PGUSER` (default: your system username)
-- `PGPASSWORD` (if needed)
-- `PGDATABASE` (default: same as PGUSER)
-
-Or set a complete connection URL:
-```bash
-export EMDX_DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
-```
+emdx uses SQLite and stores your knowledge base at `~/.config/emdx/knowledge.db`. It's created automatically on first use.
 
 ## Quick Start
 
@@ -151,36 +140,40 @@ In the browser:
 - `emdx stats [--project]` - Show statistics
 - `emdx gui` - Launch interactive browser
 
+## Migrating from PostgreSQL
+
+If you were using emdx with PostgreSQL, you can easily migrate your data:
+
+```bash
+# Install with PostgreSQL support
+pip install "emdx[postgres]"
+
+# Run migration
+emdx migrate
+
+# Or specify custom connections
+emdx migrate --postgres-url "postgresql://user@localhost/db" --sqlite-path ~/my-knowledge.db
+```
+
 ## Configuration
 
-### Environment Variables
+### Database Location
 
-- `EMDX_DATABASE_URL` - PostgreSQL connection URL
-- `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` - Standard PostgreSQL variables
+By default, emdx stores your knowledge base at `~/.config/emdx/knowledge.db`. This location is created automatically.
 
 ### Git Integration
 
 emdx automatically detects the Git repository name when saving files. This helps organize documents by project without manual tagging.
 
-## Database Schema
+## Technical Details
 
-emdx uses a simple but powerful schema:
+emdx uses SQLite with FTS5 (Full-Text Search 5) for powerful search capabilities:
 
-```sql
-CREATE TABLE claude.knowledge (
-    id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    project TEXT,
-    search_vector tsvector,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    access_count INTEGER DEFAULT 0
-);
-```
-
-Full-text search is powered by PostgreSQL's native text search with automatic stemming and ranking.
+- **Instant search** across all your documents
+- **Ranked results** based on relevance
+- **Stemming support** (search "running" finds "run", "runs")
+- **Phrase search** with quotation marks
+- **Portable database** - just one file you can backup or sync
 
 ## Contributing
 

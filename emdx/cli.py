@@ -11,6 +11,7 @@ from emdx.core import app as core_app
 from emdx.capture import app as capture_app
 from emdx.browse import app as browse_app
 from emdx.gui import gui
+from emdx.migrate import migrate
 
 # Create main app
 app = typer.Typer(
@@ -35,6 +36,9 @@ for command in browse_app.registered_commands:
 
 # Add the gui command
 app.command()(gui)
+
+# Add the migrate command
+app.command()(migrate)
 
 # Version command
 @app.command()
