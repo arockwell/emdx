@@ -104,10 +104,6 @@ class SQLiteDatabase:
                 CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)
             """)
             
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(is_deleted, deleted_at)
-            """)
-            
             # Add soft delete columns to existing databases (migration)
             # Check if columns exist first
             cursor = conn.execute("PRAGMA table_info(documents)")
@@ -118,6 +114,11 @@ class SQLiteDatabase:
             
             if 'is_deleted' not in columns:
                 conn.execute("ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
+            
+            # Create index after columns exist
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(is_deleted, deleted_at)
+            """)
             
             conn.commit()
     
