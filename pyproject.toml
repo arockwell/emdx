@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "emdx"
-version = "0.3.0"
+version = "0.3.1"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -132,11 +132,12 @@ def gui():
         else:
             preview_cmd = f"{sys.executable} {preview_script_path} {{1}}"
         
-        # Simple commands using emdx
+        # Simple commands using emdx - made portable for all shells
         view_cmd = f"{emdx_cmd} view {{1}} < /dev/tty"
         edit_cmd = f"{emdx_cmd} edit {{1}} < /dev/tty"
-        delete_cmd = f"echo 'Delete document {{1}}? (soft delete - can be restored)' && read -p 'Press y to confirm, any other key to cancel: ' -n 1 confirm && echo && [ \"$confirm\" = 'y' ] && {emdx_cmd} delete {{1}} < /dev/tty"
-        reload_cmd = f"{sys.executable} -c 'from emdx.gui import format_document_list; print(\"\\n\".join(format_document_list()))'"
+        # Use Python for the delete confirmation to be shell-agnostic
+        delete_cmd = f"{sys.executable} -c \"import sys; print('Delete document {{1}}? (soft delete - can be restored)'); print('Press y to confirm, any other key to cancel: ', end='', flush=True); import termios, tty; fd = sys.stdin.fileno(); old = termios.tcgetattr(fd); try: tty.setraw(fd); ch = sys.stdin.read(1); finally: termios.tcsetattr(fd, termios.TCSADRAIN, old); print(); sys.exit(0 if ch.lower() == 'y' else 1)\" < /dev/tty && {emdx_cmd} delete {{1}} < /dev/tty"
+        reload_cmd = f"{sys.executable} -c \"from emdx.gui import format_document_list; print('\\n'.join(format_document_list()))\""
         
         # Create fzf command
         fzf_cmd = [
@@ -158,7 +159,7 @@ def gui():
             f"--bind=ctrl-r:reload({reload_cmd})",
             "--bind=q:abort",
             "--bind=ctrl-c:abort",
-            "--bind=ctrl-h:execute(echo -e \"\\n📚 emdx - Help\\n\\nNavigation:\\n  j/k, ↑/↓    Move up/down\\n  g/G         First/last item\\n  /           Toggle search\\n  Mouse       Click & scroll\\n\\nActions:\\n  Enter       View document\\n  e           Edit document\\n  d           Delete document (soft)\\n  Ctrl-R      Refresh list\\n\\nPreview:\\n  Ctrl-D/U    Scroll down/up\\n  Ctrl-F/B    Page down/up\\n\\nOther:\\n  q, Ctrl-C   Quit\\n\\nPress any key to continue...\" && read -n 1)",
+            f"--bind=ctrl-h:execute({sys.executable} -c \"print('\\n📚 emdx - Help\\n\\nNavigation:\\n  j/k, ↑/↓    Move up/down\\n  g/G         First/last item\\n  /           Toggle search\\n  Mouse       Click & scroll\\n\\nActions:\\n  Enter       View document\\n  e           Edit document\\n  d           Delete document (soft)\\n  Ctrl-R      Refresh list\\n\\nPreview:\\n  Ctrl-D/U    Scroll down/up\\n  Ctrl-F/B    Page down/up\\n\\nOther:\\n  q, Ctrl-C   Quit\\n\\nPress any key to continue...'); input()\" < /dev/tty)",
             "--header=📚 emdx - Documentation Index (enter: view, e: edit, d: delete, /: search, ctrl-h: help, q: quit)",
             "--delimiter= │ ",
             "--with-nth=1,2,3,4",
