@@ -6,9 +6,13 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 from datetime import datetime
+import tempfile
+import subprocess
+import os
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+from rich.table import Table
 
 from emdx.database import db
 from emdx.utils import get_git_project
@@ -182,32 +186,376 @@ def view(
 @app.command()
 def edit(
     identifier: str = typer.Argument(..., help="Document ID or title"),
-    editor: Optional[str] = typer.Option(None, "--editor", "-e", help="Editor to use"),
+    title: Optional[str] = typer.Option(None, "--title", "-t", help="Update title without editing content"),
+    editor: Optional[str] = typer.Option(None, "--editor", "-e", help="Editor to use (default: $EDITOR)"),
 ):
     """Edit a document in the knowledge base"""
-    # TODO: Lookup document
-    # TODO: Create temp file with content
-    # TODO: Open in editor (use $EDITOR if not specified)
-    # TODO: Save changes back to database
-    # TODO: Update search vector
-    
-    typer.echo(f"📝 Editing document: {identifier}")
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+        
+        # Fetch document
+        doc = db.get_document(identifier)
+        
+        if not doc:
+            console.print(f"[red]Error: Document '{identifier}' not found[/red]")
+            raise typer.Exit(1)
+        
+        # Quick title update without editing content
+        if title:
+            success = db.update_document(doc['id'], title, doc['content'])
+            if success:
+                console.print(f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]")
+            else:
+                console.print(f"[red]Error updating document title[/red]")
+                raise typer.Exit(1)
+            return
+        
+        # Determine editor to use
+        if not editor:
+            editor = os.environ.get('EDITOR', 'nano')
+        
+        # Create temporary file with current content
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as tmp_file:
+            # Write header comment
+            tmp_file.write(f"# Editing: {doc['title']} (ID: {doc['id']})\n")
+            tmp_file.write(f"# Project: {doc['project'] or 'None'}\n")
+            tmp_file.write(f"# Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}\n")
+            tmp_file.write(f"# Lines starting with '#' will be removed\n")
+            tmp_file.write("#\n")
+            tmp_file.write("# First line (after comments) will be used as the title\n")
+            tmp_file.write("# The rest will be the content\n")
+            tmp_file.write("#\n")
+            
+            # Write title and content
+            tmp_file.write(f"{doc['title']}\n\n")
+            tmp_file.write(doc['content'])
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # Open editor
+            console.print(f"[dim]Opening {editor}...[/dim]")
+            result = subprocess.run([editor, tmp_file_path])
+            
+            if result.returncode != 0:
+                console.print(f"[red]Editor exited with error code {result.returncode}[/red]")
+                raise typer.Exit(1)
+            
+            # Read edited content
+            with open(tmp_file_path, 'r') as f:
+                lines = f.readlines()
+            
+            # Remove comment lines
+            lines = [line for line in lines if not line.strip().startswith('#')]
+            
+            # Extract title and content
+            if not lines:
+                console.print("[yellow]No changes made (empty file)[/yellow]")
+                return
+            
+            # First non-empty line is the title
+            new_title = ""
+            content_start = 0
+            for i, line in enumerate(lines):
+                if line.strip():
+                    new_title = line.strip()
+                    content_start = i + 1
+                    break
+            
+            if not new_title:
+                console.print("[yellow]No changes made (no title found)[/yellow]")
+                return
+            
+            # Rest is content
+            new_content = ''.join(lines[content_start:]).strip()
+            
+            # Check if anything changed
+            if new_title == doc['title'] and new_content == doc['content'].strip():
+                console.print("[yellow]No changes made[/yellow]")
+                return
+            
+            # Update document
+            success = db.update_document(doc['id'], new_title, new_content)
+            
+            if success:
+                console.print(f"[green]✅ Updated #{doc['id']}:[/green] [cyan]{new_title}[/cyan]")
+                if new_title != doc['title']:
+                    console.print(f"   [dim]Title changed from:[/dim] {doc['title']}")
+                console.print(f"   [dim]Content updated[/dim]")
+            else:
+                console.print(f"[red]Error updating document[/red]")
+                raise typer.Exit(1)
+                
+        finally:
+            # Clean up temp file
+            os.unlink(tmp_file_path)
+            
+    except Exception as e:
+        console.print(f"[red]Error editing document: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command()
 def delete(
-    identifier: str = typer.Argument(..., help="Document ID or title"),
+    identifiers: List[str] = typer.Argument(..., help="Document ID(s) or title(s) to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    hard: bool = typer.Option(False, "--hard", help="Permanently delete (cannot be restored)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be deleted without deleting"),
+):
+    """Delete one or more documents (soft delete by default)"""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+        
+        # Collect documents to delete
+        docs_to_delete = []
+        not_found = []
+        
+        for identifier in identifiers:
+            doc = db.get_document(identifier)
+            if doc:
+                docs_to_delete.append(doc)
+            else:
+                not_found.append(identifier)
+        
+        # Report not found
+        if not_found:
+            console.print(f"[yellow]Warning: The following documents were not found:[/yellow]")
+            for nf in not_found:
+                console.print(f"  [dim]• {nf}[/dim]")
+            console.print()
+        
+        if not docs_to_delete:
+            console.print("[red]No valid documents to delete[/red]")
+            raise typer.Exit(1)
+        
+        # Show what will be deleted
+        console.print(f"\n[bold]{'Would delete' if dry_run else 'Will delete'} {len(docs_to_delete)} document(s):[/bold]\n")
+        
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("ID", style="cyan", width=6)
+        table.add_column("Title", style="white")
+        table.add_column("Project", style="green")
+        table.add_column("Created", style="yellow")
+        table.add_column("Type", style="red" if hard else "yellow")
+        
+        for doc in docs_to_delete:
+            table.add_row(
+                str(doc['id']),
+                doc['title'][:50] + "..." if len(doc['title']) > 50 else doc['title'],
+                doc['project'] or "[dim]None[/dim]",
+                doc['created_at'].strftime('%Y-%m-%d'),
+                "[red]PERMANENT[/red]" if hard else "[yellow]Soft delete[/yellow]"
+            )
+        
+        console.print(table)
+        
+        if dry_run:
+            console.print("\n[dim]This is a dry run. No documents were deleted.[/dim]")
+            return
+        
+        # Confirmation
+        if not force:
+            if hard:
+                console.print(f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete {len(docs_to_delete)} document(s)![/red bold]")
+                console.print("[red]This action cannot be undone![/red]\n")
+                confirm = typer.confirm("Are you absolutely sure?", abort=True)
+                if confirm:
+                    # Extra confirmation for hard delete
+                    confirm2 = typer.confirm("Type 'yes' to confirm permanent deletion", abort=True)
+            else:
+                console.print(f"\n[yellow]This will move {len(docs_to_delete)} document(s) to trash.[/yellow]")
+                console.print("[dim]You can restore them later with 'emdx restore'[/dim]\n")
+                confirm = typer.confirm("Continue?", abort=True)
+        
+        # Perform deletion
+        deleted_count = 0
+        failed = []
+        
+        for doc in docs_to_delete:
+            success = db.delete_document(str(doc['id']), hard_delete=hard)
+            if success:
+                deleted_count += 1
+            else:
+                failed.append(doc)
+        
+        # Report results
+        if deleted_count > 0:
+            if hard:
+                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")
+            else:
+                console.print(f"\n[green]✅ Moved {deleted_count} document(s) to trash[/green]")
+                console.print("[dim]💡 Use 'emdx trash' to view deleted documents[/dim]")
+                console.print("[dim]💡 Use 'emdx restore <id>' to restore documents[/dim]")
+        
+        if failed:
+            console.print(f"\n[red]Failed to delete {len(failed)} document(s):[/red]")
+            for doc in failed:
+                console.print(f"  [dim]• #{doc['id']}: {doc['title']}[/dim]")
+        
+    except typer.Abort:
+        console.print("[yellow]Deletion cancelled[/yellow]")
+        raise typer.Exit(0)
+    except Exception as e:
+        console.print(f"[red]Error deleting documents: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def trash(
+    days: Optional[int] = typer.Option(None, "--days", "-d", help="Show items deleted in last N days"),
+    limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
+):
+    """List all soft-deleted documents"""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+        
+        # Get deleted documents
+        deleted_docs = db.list_deleted_documents(days=days, limit=limit)
+        
+        if not deleted_docs:
+            if days:
+                console.print(f"[yellow]No documents deleted in the last {days} days[/yellow]")
+            else:
+                console.print("[yellow]No documents in trash[/yellow]")
+            return
+        
+        # Display results
+        if days:
+            console.print(f"\n[bold]🗑️  Documents deleted in the last {days} days:[/bold]\n")
+        else:
+            console.print(f"\n[bold]🗑️  Documents in trash ({len(deleted_docs)} items):[/bold]\n")
+        
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("ID", style="cyan", width=6)
+        table.add_column("Title", style="white")
+        table.add_column("Project", style="green")
+        table.add_column("Deleted", style="red")
+        table.add_column("Views", style="yellow", justify="right")
+        
+        for doc in deleted_docs:
+            table.add_row(
+                str(doc['id']),
+                doc['title'][:50] + "..." if len(doc['title']) > 50 else doc['title'],
+                doc['project'] or "[dim]None[/dim]",
+                doc['deleted_at'].strftime('%Y-%m-%d %H:%M'),
+                str(doc['access_count'])
+            )
+        
+        console.print(table)
+        console.print("\n[dim]💡 Use 'emdx restore <id>' to restore documents[/dim]")
+        console.print("[dim]💡 Use 'emdx purge' to permanently delete all items in trash[/dim]")
+        
+    except Exception as e:
+        console.print(f"[red]Error listing deleted documents: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def restore(
+    identifiers: List[str] = typer.Argument(None, help="Document ID(s) or title(s) to restore"),
+    all: bool = typer.Option(False, "--all", help="Restore all deleted documents"),
+):
+    """Restore soft-deleted document(s)"""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+        
+        # Validate arguments
+        if not identifiers and not all:
+            console.print("[red]Error: Provide document ID(s) to restore or use --all[/red]")
+            raise typer.Exit(1)
+        
+        if all:
+            # Restore all deleted documents
+            deleted_docs = db.list_deleted_documents()
+            if not deleted_docs:
+                console.print("[yellow]No documents to restore[/yellow]")
+                return
+            
+            console.print(f"\n[bold]Will restore {len(deleted_docs)} document(s)[/bold]")
+            confirm = typer.confirm("Continue?", abort=True)
+            
+            restored_count = 0
+            for doc in deleted_docs:
+                if db.restore_document(str(doc['id'])):
+                    restored_count += 1
+            
+            console.print(f"\n[green]✅ Restored {restored_count} document(s)[/green]")
+        else:
+            # Restore specific documents
+            restored = []
+            not_found = []
+            
+            for identifier in identifiers:
+                if db.restore_document(identifier):
+                    restored.append(identifier)
+                else:
+                    not_found.append(identifier)
+            
+            if restored:
+                console.print(f"\n[green]✅ Restored {len(restored)} document(s):[/green]")
+                for r in restored:
+                    console.print(f"  [dim]• {r}[/dim]")
+            
+            if not_found:
+                console.print(f"\n[yellow]Could not restore {len(not_found)} document(s):[/yellow]")
+                for nf in not_found:
+                    console.print(f"  [dim]• {nf} (not found in trash)[/dim]")
+        
+    except typer.Abort:
+        console.print("[yellow]Restore cancelled[/yellow]")
+        raise typer.Exit(0)
+    except Exception as e:
+        console.print(f"[red]Error restoring documents: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def purge(
+    older_than: Optional[int] = typer.Option(None, "--older-than", help="Only purge items deleted more than N days ago"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
-    """Delete a document from the knowledge base"""
-    if not force:
-        # TODO: Show document title for confirmation
-        confirm = typer.confirm(f"Are you sure you want to delete '{identifier}'?")
-        if not confirm:
-            typer.echo("Deletion cancelled.")
-            raise typer.Abort()
-    
-    # TODO: Delete from database
-    # TODO: Also delete any attachments
-    
-    typer.echo(f"🗑️  Deleted document: {identifier}")
+    """Permanently delete all items in trash"""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+        
+        # Get count of documents to purge
+        if older_than:
+            deleted_docs = db.list_deleted_documents()
+            # Filter by age
+            from datetime import datetime, timedelta
+            cutoff = datetime.now() - timedelta(days=older_than)
+            docs_to_purge = [d for d in deleted_docs if d['deleted_at'] < cutoff]
+            count = len(docs_to_purge)
+        else:
+            deleted_docs = db.list_deleted_documents()
+            count = len(deleted_docs)
+        
+        if count == 0:
+            if older_than:
+                console.print(f"[yellow]No documents deleted more than {older_than} days ago[/yellow]")
+            else:
+                console.print("[yellow]No documents in trash to purge[/yellow]")
+            return
+        
+        # Show warning
+        console.print(f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete {count} document(s) from trash![/red bold]")
+        console.print("[red]This action cannot be undone![/red]\n")
+        
+        if not force:
+            confirm = typer.confirm("Are you absolutely sure?", abort=True)
+        
+        # Perform purge
+        purged_count = db.purge_deleted_documents(older_than_days=older_than)
+        
+        console.print(f"\n[green]✅ Permanently deleted {purged_count} document(s) from trash[/green]")
+        
+    except typer.Abort:
+        console.print("[yellow]Purge cancelled[/yellow]")
+        raise typer.Exit(0)
+    except Exception as e:
+        console.print(f"[red]Error purging documents: {e}[/red]")
+        raise typer.Exit(1)
