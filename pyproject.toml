@@ -37,6 +37,7 @@ dependencies = [
     "gitpython>=3.1.0",
     "pygments>=2.0.0",
     "rapidfuzz>=3.0.0",  # For fuzzy title matching
+    "PyGithub>=2.1.0",  # For GitHub gist integration
 ]
 
 [project.optional-dependencies]

@@ -11,6 +11,7 @@ from emdx.core import app as core_app
 from emdx.capture import app as capture_app
 from emdx.browse import app as browse_app
 from emdx.gui import gui
+from emdx.gist import app as gist_app
 
 # Create main app
 app = typer.Typer(
@@ -31,6 +32,10 @@ for command in capture_app.registered_commands:
 
 # Browse commands are added directly to the main app
 for command in browse_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Gist commands are added directly to the main app
+for command in gist_app.registered_commands:
     app.registered_commands.append(command)
 
 # Add the gui command
