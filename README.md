@@ -11,6 +11,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
 - 🖥️ **Interactive Browser**: FZF-based document browser for quick navigation
 - 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
+- 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
 
 ## Installation
 
@@ -106,6 +107,33 @@ emdx cmd "git log --oneline -10" --title "Recent commits"
 emdx direct "Meeting notes" "Discussed project timeline..."
 ```
 
+### Share via GitHub Gists
+```bash
+# Create a secret gist (default)
+emdx gist 42
+
+# Create a public gist
+emdx gist "Project Notes" --public
+
+# Create gist with custom description
+emdx gist 42 --desc "My project documentation"
+
+# Create gist and copy URL to clipboard
+emdx gist 42 --copy
+
+# Create gist and open in browser
+emdx gist 42 --open
+
+# Update an existing gist
+emdx gist 42 --update abc123def456
+
+# List all created gists
+emdx gist-list
+
+# List gists for a specific project
+emdx gist-list --project "my-app"
+```
+
 ### Interactive browser
 ```bash
 # Launch interactive FZF browser
@@ -141,6 +169,11 @@ In the browser:
 - `emdx stats [--project]` - Show statistics
 - `emdx gui` - Launch interactive browser
 
+### Gist Commands
+- `emdx gist <id|title> [--public] [--copy] [--open]` - Create a GitHub Gist from a document
+- `emdx gist <id|title> --update <gist-id>` - Update an existing gist
+- `emdx gist-list [--project]` - List all created gists
+
 ## Configuration
 
 ### Database Location
@@ -150,6 +183,21 @@ By default, emdx stores your knowledge base at `~/.config/emdx/knowledge.db`. Th
 ### Git Integration
 
 emdx automatically detects the Git repository name when saving files. This helps organize documents by project without manual tagging.
+
+### GitHub Authentication
+
+To use the gist commands, you need GitHub authentication. emdx supports two methods:
+
+1. **GitHub CLI (recommended)**: If you have `gh` installed and authenticated, emdx will use it automatically.
+   ```bash
+   gh auth login
+   ```
+
+2. **Personal Access Token**: Set the `GITHUB_TOKEN` environment variable:
+   ```bash
+   export GITHUB_TOKEN=your_github_token
+   ```
+   To create a token, visit https://github.com/settings/tokens/new and select the 'gist' scope.
 
 ## Technical Details
 

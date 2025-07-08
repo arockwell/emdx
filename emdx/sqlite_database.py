@@ -120,6 +120,29 @@ class SQLiteDatabase:
                 CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(is_deleted, deleted_at)
             """)
             
+            # Create gists table for tracking document-gist relationships
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS gists (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id INTEGER NOT NULL,
+                    gist_id TEXT NOT NULL,
+                    gist_url TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_public BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (document_id) REFERENCES documents (id)
+                )
+            """)
+            
+            # Create indexes for gists table
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)
+            """)
+            
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)
+            """)
+            
             conn.commit()
     
     def save_document(self, title: str, content: str, project: Optional[str] = None) -> int:
