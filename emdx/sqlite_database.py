@@ -55,7 +55,9 @@ class SQLiteDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    access_count INTEGER DEFAULT 0
+                    access_count INTEGER DEFAULT 0,
+                    deleted_at TIMESTAMP,
+                    is_deleted BOOLEAN DEFAULT FALSE
                 )
             """)
             
@@ -102,6 +104,21 @@ class SQLiteDatabase:
                 CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)
             """)
             
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(is_deleted, deleted_at)
+            """)
+            
+            # Add soft delete columns to existing databases (migration)
+            # Check if columns exist first
+            cursor = conn.execute("PRAGMA table_info(documents)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            if 'deleted_at' not in columns:
+                conn.execute("ALTER TABLE documents ADD COLUMN deleted_at TIMESTAMP")
+            
+            if 'is_deleted' not in columns:
+                conn.execute("ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
+            
             conn.commit()
     
     def save_document(self, title: str, content: str, project: Optional[str] = None) -> int:
@@ -124,22 +141,22 @@ class SQLiteDatabase:
                     UPDATE documents 
                     SET accessed_at = CURRENT_TIMESTAMP, 
                         access_count = access_count + 1
-                    WHERE id = ?
+                    WHERE id = ? AND is_deleted = FALSE
                 """, (int(identifier),))
                 
                 cursor = conn.execute("""
-                    SELECT * FROM documents WHERE id = ?
+                    SELECT * FROM documents WHERE id = ? AND is_deleted = FALSE
                 """, (int(identifier),))
             else:
                 conn.execute("""
                     UPDATE documents 
                     SET accessed_at = CURRENT_TIMESTAMP, 
                         access_count = access_count + 1
-                    WHERE LOWER(title) = LOWER(?)
+                    WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
                 """, (identifier,))
                 
                 cursor = conn.execute("""
-                    SELECT * FROM documents WHERE LOWER(title) = LOWER(?)
+                    SELECT * FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
                 """, (identifier,))
             
             conn.commit()
@@ -161,7 +178,7 @@ class SQLiteDatabase:
                 cursor = conn.execute("""
                     SELECT id, title, project, created_at, access_count
                     FROM documents
-                    WHERE project = ?
+                    WHERE project = ? AND is_deleted = FALSE
                     ORDER BY created_at DESC
                     LIMIT ?
                 """, (project, limit))
@@ -169,6 +186,7 @@ class SQLiteDatabase:
                 cursor = conn.execute("""
                     SELECT id, title, project, created_at, access_count
                     FROM documents
+                    WHERE is_deleted = FALSE
                     ORDER BY created_at DESC
                     LIMIT ?
                 """, (limit,))
@@ -198,7 +216,7 @@ class SQLiteDatabase:
                         rank as rank
                     FROM documents d
                     JOIN documents_fts ON d.id = documents_fts.rowid
-                    WHERE documents_fts MATCH ? AND d.project = ?
+                    WHERE documents_fts MATCH ? AND d.project = ? AND d.is_deleted = FALSE
                     ORDER BY rank
                     LIMIT ?
                 """, (query, project, limit))
@@ -210,7 +228,7 @@ class SQLiteDatabase:
                         rank as rank
                     FROM documents d
                     JOIN documents_fts ON d.id = documents_fts.rowid
-                    WHERE documents_fts MATCH ?
+                    WHERE documents_fts MATCH ? AND d.is_deleted = FALSE
                     ORDER BY rank
                     LIMIT ?
                 """, (query, limit))
@@ -237,17 +255,33 @@ class SQLiteDatabase:
             conn.commit()
             return cursor.rowcount > 0
     
-    def delete_document(self, identifier: str) -> bool:
-        """Delete a document by ID or title"""
+    def delete_document(self, identifier: str, hard_delete: bool = False) -> bool:
+        """Delete a document by ID or title (soft delete by default)"""
         with self.get_connection() as conn:
-            if identifier.isdigit():
-                cursor = conn.execute("""
-                    DELETE FROM documents WHERE id = ?
-                """, (int(identifier),))
+            if hard_delete:
+                # Permanent deletion
+                if identifier.isdigit():
+                    cursor = conn.execute("""
+                        DELETE FROM documents WHERE id = ? AND is_deleted = FALSE
+                    """, (int(identifier),))
+                else:
+                    cursor = conn.execute("""
+                        DELETE FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
+                    """, (identifier,))
             else:
-                cursor = conn.execute("""
-                    DELETE FROM documents WHERE LOWER(title) = LOWER(?)
-                """, (identifier,))
+                # Soft delete
+                if identifier.isdigit():
+                    cursor = conn.execute("""
+                        UPDATE documents 
+                        SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
+                        WHERE id = ? AND is_deleted = FALSE
+                    """, (int(identifier),))
+                else:
+                    cursor = conn.execute("""
+                        UPDATE documents 
+                        SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
+                        WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
+                    """, (identifier,))
             
             conn.commit()
             return cursor.rowcount > 0
@@ -258,6 +292,7 @@ class SQLiteDatabase:
             cursor = conn.execute("""
                 SELECT id, title, project, accessed_at, access_count
                 FROM documents
+                WHERE is_deleted = FALSE
                 ORDER BY accessed_at DESC
                 LIMIT ?
             """, (limit,))
@@ -285,7 +320,7 @@ class SQLiteDatabase:
                         MAX(created_at) as newest_doc,
                         MAX(accessed_at) as last_accessed
                     FROM documents
-                    WHERE project = ?
+                    WHERE project = ? AND is_deleted = FALSE
                 """, (project,))
             else:
                 # Overall stats
@@ -298,6 +333,7 @@ class SQLiteDatabase:
                         MAX(created_at) as newest_doc,
                         MAX(accessed_at) as last_accessed
                     FROM documents
+                    WHERE is_deleted = FALSE
                 """)
             
             stats = dict(cursor.fetchone())
@@ -310,7 +346,7 @@ class SQLiteDatabase:
                 cursor = conn.execute("""
                     SELECT id, title, access_count
                     FROM documents
-                    WHERE project = ?
+                    WHERE project = ? AND is_deleted = FALSE
                     ORDER BY access_count DESC
                     LIMIT 1
                 """, (project,))
@@ -318,6 +354,7 @@ class SQLiteDatabase:
                 cursor = conn.execute("""
                     SELECT id, title, access_count
                     FROM documents
+                    WHERE is_deleted = FALSE
                     ORDER BY access_count DESC
                     LIMIT 1
                 """)
@@ -327,6 +364,74 @@ class SQLiteDatabase:
                 stats['most_viewed'] = dict(most_viewed)
             
             return stats
+    
+    def list_deleted_documents(self, days: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """List soft-deleted documents"""
+        with self.get_connection() as conn:
+            if days:
+                cursor = conn.execute("""
+                    SELECT id, title, project, deleted_at, access_count
+                    FROM documents
+                    WHERE is_deleted = TRUE 
+                    AND deleted_at >= datetime('now', '-' || ? || ' days')
+                    ORDER BY deleted_at DESC
+                    LIMIT ?
+                """, (days, limit))
+            else:
+                cursor = conn.execute("""
+                    SELECT id, title, project, deleted_at, access_count
+                    FROM documents
+                    WHERE is_deleted = TRUE
+                    ORDER BY deleted_at DESC
+                    LIMIT ?
+                """, (limit,))
+            
+            # Convert rows and parse datetime strings
+            docs = []
+            for row in cursor.fetchall():
+                doc = dict(row)
+                for field in ['created_at', 'updated_at', 'accessed_at', 'deleted_at']:
+                    if field in doc and isinstance(doc[field], str):
+                        doc[field] = datetime.fromisoformat(doc[field])
+                docs.append(doc)
+            return docs
+    
+    def restore_document(self, identifier: str) -> bool:
+        """Restore a soft-deleted document"""
+        with self.get_connection() as conn:
+            if identifier.isdigit():
+                cursor = conn.execute("""
+                    UPDATE documents 
+                    SET is_deleted = FALSE, deleted_at = NULL
+                    WHERE id = ? AND is_deleted = TRUE
+                """, (int(identifier),))
+            else:
+                cursor = conn.execute("""
+                    UPDATE documents 
+                    SET is_deleted = FALSE, deleted_at = NULL
+                    WHERE LOWER(title) = LOWER(?) AND is_deleted = TRUE
+                """, (identifier,))
+            
+            conn.commit()
+            return cursor.rowcount > 0
+    
+    def purge_deleted_documents(self, older_than_days: Optional[int] = None) -> int:
+        """Permanently delete soft-deleted documents"""
+        with self.get_connection() as conn:
+            if older_than_days:
+                cursor = conn.execute("""
+                    DELETE FROM documents 
+                    WHERE is_deleted = TRUE 
+                    AND deleted_at <= datetime('now', '-' || ? || ' days')
+                """, (older_than_days,))
+            else:
+                cursor = conn.execute("""
+                    DELETE FROM documents 
+                    WHERE is_deleted = TRUE
+                """)
+            
+            conn.commit()
+            return cursor.rowcount
 
 
 # Global database instance
