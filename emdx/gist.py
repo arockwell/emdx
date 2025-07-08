@@ -3,12 +3,16 @@ GitHub Gist integration for emdx
 """
 
 import os
-import typer
-from typing import Optional
+import subprocess
+import webbrowser
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
+
+import typer
 from rich.console import Console
-from rich.prompt import Confirm
+from rich.table import Table
+from rich.panel import Panel
 from github import Github, GithubException
 
 from emdx.database import db
@@ -18,405 +22,358 @@ app = typer.Typer()
 console = Console()
 
 
-def get_github_client() -> Github:
-    """Get authenticated GitHub client"""
+def get_github_auth() -> Optional[str]:
+    """Get GitHub authentication token."""
+    # Priority order:
+    # 1. Environment variable GITHUB_TOKEN
     token = os.getenv("GITHUB_TOKEN")
+    if token:
+        return token
+    
+    # 2. Try to get token from gh CLI if available
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    # 3. Check config file (future enhancement)
+    # config_path = Path.home() / '.config' / 'emdx' / 'config.yml'
+    # if config_path.exists():
+    #     # Load token from config
+    
+    return None
+
+
+def create_gist_with_gh(
+    content: str,
+    filename: str,
+    description: str,
+    public: bool = False
+) -> Optional[Dict[str, str]]:
+    """Create a gist using gh CLI."""
+    try:
+        # Create a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(content)
+            temp_path = f.name
+        
+        # Build gh command
+        cmd = ["gh", "gist", "create", temp_path, "--desc", description]
+        if public:
+            cmd.append("--public")
+        
+        # Execute command
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        # Clean up temp file
+        os.unlink(temp_path)
+        
+        if result.returncode == 0:
+            gist_url = result.stdout.strip()
+            # Extract gist ID from URL
+            gist_id = gist_url.split("/")[-1]
+            return {
+                "id": gist_id,
+                "url": gist_url
+            }
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    return None
+
+
+def create_gist_with_api(
+    content: str,
+    filename: str,
+    description: str,
+    public: bool = False,
+    token: Optional[str] = None
+) -> Optional[Dict[str, str]]:
+    """Create a gist using GitHub API."""
     if not token:
-        console.print("[red]Error: GITHUB_TOKEN environment variable not set[/red]")
-        console.print("\n[yellow]To use GitHub gist features, you need to set a GitHub personal access token:[/yellow]")
-        console.print("1. Go to https://github.com/settings/tokens")
-        console.print("2. Create a new token with 'gist' scope")
-        console.print("3. Set the token: export GITHUB_TOKEN='your-token-here'")
-        console.print("   Or add it to ~/.config/emdx/.env")
-        raise typer.Exit(1)
+        return None
     
     try:
-        return Github(token)
-    except Exception as e:
-        console.print(f"[red]Error connecting to GitHub: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def create(
-    identifier: str = typer.Argument(..., help="Document ID or title to create gist from"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Gist description"),
-    public: bool = typer.Option(False, "--public", "-p", help="Make gist public (default: private)"),
-    filename: Optional[str] = typer.Option(None, "--filename", "-f", help="Filename for the gist (default: title.md)"),
-):
-    """Create a GitHub gist from a document"""
-    try:
-        # Ensure database schema exists
-        db.ensure_schema()
-        
-        # Get the document
-        doc = db.get_document(identifier)
-        if not doc:
-            console.print(f"[red]Error: Document '{identifier}' not found[/red]")
-            raise typer.Exit(1)
-        
-        # Get GitHub client
-        g = get_github_client()
+        g = Github(token)
         user = g.get_user()
         
-        # Prepare gist data
-        if not filename:
-            # Clean title for filename
-            filename = f"{doc['title'].replace(' ', '_').replace('/', '-')}.md"
+        # Create gist
+        gist = user.create_gist(
+            public=public,
+            files={filename: {"content": content}},
+            description=description
+        )
         
-        if not description:
-            description = f"emdx: {doc['title']}"
-            if doc['project']:
-                description += f" (Project: {doc['project']})"
-        
-        # Create the gist
-        console.print(f"[yellow]Creating gist from document #{doc['id']}: {doc['title']}...[/yellow]")
-        
-        try:
-            gist = user.create_gist(
-                public=public,
-                files={filename: {"content": doc['content']}},
-                description=description
-            )
-            
-            # Save gist mapping to database
-            save_gist_mapping(doc['id'], gist.id, gist.html_url)
-            
-            console.print(f"[green]✅ Created gist successfully![/green]")
-            console.print(f"[cyan]Gist URL:[/cyan] {gist.html_url}")
-            console.print(f"[cyan]Gist ID:[/cyan] {gist.id}")
-            
-            if public:
-                console.print("[yellow]Note: This gist is public and visible to everyone[/yellow]")
-            else:
-                console.print("[dim]This gist is private (only visible to you)[/dim]")
-                
-        except GithubException as e:
-            console.print(f"[red]GitHub API error: {e}[/red]")
-            raise typer.Exit(1)
-            
-    except Exception as e:
-        console.print(f"[red]Error creating gist: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def update(
-    identifier: str = typer.Argument(..., help="Document ID or title to update gist from"),
-    gist_id: Optional[str] = typer.Option(None, "--gist-id", "-g", help="Specific gist ID to update"),
-):
-    """Update an existing gist with latest document content"""
-    try:
-        # Ensure database schema exists
-        db.ensure_schema()
-        
-        # Get the document
-        doc = db.get_document(identifier)
-        if not doc:
-            console.print(f"[red]Error: Document '{identifier}' not found[/red]")
-            raise typer.Exit(1)
-        
-        # Get gist mapping if not provided
-        if not gist_id:
-            mapping = get_gist_mapping(doc['id'])
-            if not mapping:
-                console.print(f"[red]Error: No gist found for document #{doc['id']}[/red]")
-                console.print("[yellow]Tip: Use 'emdx gist create' to create a new gist[/yellow]")
-                raise typer.Exit(1)
-            gist_id = mapping['gist_id']
-        
-        # Get GitHub client and gist
-        g = get_github_client()
-        
-        try:
-            gist = g.get_gist(gist_id)
-            
-            # Update the gist
-            console.print(f"[yellow]Updating gist {gist_id}...[/yellow]")
-            
-            # Get the first file in the gist (we'll update it)
-            filename = list(gist.files.keys())[0] if gist.files else f"{doc['title'].replace(' ', '_')}.md"
-            
-            gist.edit(
-                files={filename: {"content": doc['content']}}
-            )
-            
-            # Update sync timestamp
-            update_gist_sync_time(doc['id'], gist_id)
-            
-            console.print(f"[green]✅ Updated gist successfully![/green]")
-            console.print(f"[cyan]Gist URL:[/cyan] {gist.html_url}")
-            
-        except GithubException as e:
-            if e.status == 404:
-                console.print(f"[red]Error: Gist {gist_id} not found or not accessible[/red]")
-            else:
-                console.print(f"[red]GitHub API error: {e}[/red]")
-            raise typer.Exit(1)
-            
-    except Exception as e:
-        console.print(f"[red]Error updating gist: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def sync(
-    identifier: str = typer.Argument(..., help="Document ID or title to sync"),
-    direction: str = typer.Option("push", "--direction", "-d", help="Sync direction: 'push' or 'pull'"),
-):
-    """Sync document with its gist (push local changes or pull remote changes)"""
-    try:
-        # Ensure database schema exists
-        db.ensure_schema()
-        
-        # Get the document
-        doc = db.get_document(identifier)
-        if not doc:
-            console.print(f"[red]Error: Document '{identifier}' not found[/red]")
-            raise typer.Exit(1)
-        
-        # Get gist mapping
-        mapping = get_gist_mapping(doc['id'])
-        if not mapping:
-            console.print(f"[red]Error: No gist found for document #{doc['id']}[/red]")
-            console.print("[yellow]Tip: Use 'emdx gist create' to create a new gist[/yellow]")
-            raise typer.Exit(1)
-        
-        # Get GitHub client and gist
-        g = get_github_client()
-        
-        try:
-            gist = g.get_gist(mapping['gist_id'])
-            
-            if direction == "push":
-                # Push local changes to gist
-                console.print(f"[yellow]Pushing local changes to gist {mapping['gist_id']}...[/yellow]")
-                
-                filename = list(gist.files.keys())[0] if gist.files else f"{doc['title'].replace(' ', '_')}.md"
-                gist.edit(files={filename: {"content": doc['content']}})
-                
-                update_gist_sync_time(doc['id'], mapping['gist_id'])
-                console.print(f"[green]✅ Pushed changes to gist successfully![/green]")
-                
-            elif direction == "pull":
-                # Pull remote changes from gist
-                console.print(f"[yellow]Pulling changes from gist {mapping['gist_id']}...[/yellow]")
-                
-                # Get gist content
-                if not gist.files:
-                    console.print("[red]Error: Gist has no files[/red]")
-                    raise typer.Exit(1)
-                
-                # Get the first file content
-                filename = list(gist.files.keys())[0]
-                content = gist.files[filename].content
-                
-                # Show what will be updated
-                console.print(f"\n[bold]Document:[/bold] #{doc['id']} - {doc['title']}")
-                console.print(f"[bold]Gist file:[/bold] {filename}")
-                console.print(f"[bold]Last synced:[/bold] {mapping['synced_at'] or 'Never'}")
-                
-                if Confirm.ask("\nDo you want to overwrite the local document with gist content?"):
-                    # Update document
-                    db.update_document(doc['id'], doc['title'], content)
-                    update_gist_sync_time(doc['id'], mapping['gist_id'])
-                    console.print(f"[green]✅ Pulled changes from gist successfully![/green]")
-                else:
-                    console.print("[yellow]Sync cancelled[/yellow]")
-            else:
-                console.print(f"[red]Error: Invalid direction '{direction}'. Use 'push' or 'pull'[/red]")
-                raise typer.Exit(1)
-                
-        except GithubException as e:
-            console.print(f"[red]GitHub API error: {e}[/red]")
-            raise typer.Exit(1)
-            
-    except Exception as e:
-        console.print(f"[red]Error syncing gist: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command(name="import")
-def import_gist(
-    gist_id: str = typer.Argument(..., help="GitHub gist ID or URL to import"),
-    title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title (default: gist description or filename)"),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name (auto-detected from git)"),
-):
-    """Import a GitHub gist into the knowledge base"""
-    try:
-        # Extract gist ID from URL if provided
-        if "/" in gist_id:
-            # It's likely a URL, extract the ID
-            gist_id = gist_id.rstrip("/").split("/")[-1]
-        
-        # Get GitHub client
-        g = get_github_client()
-        
-        console.print(f"[yellow]Fetching gist {gist_id}...[/yellow]")
-        
-        try:
-            gist = g.get_gist(gist_id)
-            
-            # Get content from the first file
-            if not gist.files:
-                console.print("[red]Error: Gist has no files[/red]")
-                raise typer.Exit(1)
-            
-            # Use the first file
-            filename = list(gist.files.keys())[0]
-            content = gist.files[filename].content
-            
-            # Determine title
-            if not title:
-                if gist.description:
-                    title = gist.description
-                else:
-                    # Use filename without extension as title
-                    title = Path(filename).stem
-            
-            # Auto-detect project from git if not provided
-            if not project:
-                project = get_git_project()
-            
-            # Add gist metadata to content
-            metadata = f"\n\n---\n*Imported from gist: {gist.html_url}*\n*Original filename: {filename}*"
-            full_content = content + metadata
-            
-            # Save to database
-            db.ensure_schema()
-            doc_id = db.save_document(title, full_content, project)
-            
-            # Save gist mapping
-            save_gist_mapping(doc_id, gist.id, gist.html_url)
-            
-            console.print(f"[green]✅ Imported gist as #{doc_id}:[/green] [cyan]{title}[/cyan]")
-            if project:
-                console.print(f"   [dim]Project:[/dim] {project}")
-            console.print(f"   [dim]Gist:[/dim] {gist.html_url}")
-            
-        except GithubException as e:
-            if e.status == 404:
-                console.print(f"[red]Error: Gist {gist_id} not found or not accessible[/red]")
-                console.print("[yellow]Note: Private gists require authentication[/yellow]")
-            else:
-                console.print(f"[red]GitHub API error: {e}[/red]")
-            raise typer.Exit(1)
-            
-    except Exception as e:
-        console.print(f"[red]Error importing gist: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def list(
-    limit: int = typer.Option(10, "--limit", "-n", help="Maximum number of gist mappings to show"),
-):
-    """List documents that have associated gists"""
-    try:
-        # Ensure database schema exists
-        db.ensure_schema()
-        ensure_gist_table()
-        
-        # Get gist mappings
-        mappings = get_all_gist_mappings(limit)
-        
-        if not mappings:
-            console.print("[yellow]No documents with gists found[/yellow]")
-            console.print("[dim]Tip: Use 'emdx gist create <doc-id>' to create a gist from a document[/dim]")
-            return
-        
-        console.print(f"\n[bold]📄 Documents with GitHub Gists[/bold]\n")
-        
-        for mapping in mappings:
-            # Get document info
-            doc = db.get_document(str(mapping['document_id']))
-            if doc:
-                console.print(f"[bold cyan]#{doc['id']}[/bold cyan] [bold]{doc['title']}[/bold]")
-                console.print(f"   [green]Gist:[/green] {mapping['gist_url']}")
-                console.print(f"   [yellow]Gist ID:[/yellow] {mapping['gist_id']}")
-                if mapping['synced_at']:
-                    console.print(f"   [dim]Last synced:[/dim] {mapping['synced_at'].strftime('%Y-%m-%d %H:%M')}")
-                else:
-                    console.print(f"   [dim]Last synced:[/dim] Never")
-                console.print()
-        
-    except Exception as e:
-        console.print(f"[red]Error listing gist mappings: {e}[/red]")
-        raise typer.Exit(1)
-
-
-# Database helper functions
-
-def ensure_gist_table():
-    """Ensure the gist_mappings table exists"""
-    with db.get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS gist_mappings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                document_id INTEGER NOT NULL,
-                gist_id TEXT NOT NULL,
-                gist_url TEXT NOT NULL,
-                synced_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
-                UNIQUE(document_id, gist_id)
-            )
-        """)
-        conn.commit()
-
-
-def save_gist_mapping(document_id: int, gist_id: str, gist_url: str):
-    """Save a document-to-gist mapping"""
-    ensure_gist_table()
-    with db.get_connection() as conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO gist_mappings (document_id, gist_id, gist_url, synced_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        """, (document_id, gist_id, gist_url))
-        conn.commit()
-
-
-def get_gist_mapping(document_id: int) -> Optional[dict]:
-    """Get gist mapping for a document"""
-    ensure_gist_table()
-    with db.get_connection() as conn:
-        cursor = conn.execute("""
-            SELECT * FROM gist_mappings WHERE document_id = ?
-            ORDER BY created_at DESC LIMIT 1
-        """, (document_id,))
-        row = cursor.fetchone()
-        if row:
-            mapping = dict(row)
-            if mapping['synced_at'] and isinstance(mapping['synced_at'], str):
-                mapping['synced_at'] = datetime.fromisoformat(mapping['synced_at'])
-            return mapping
+        return {
+            "id": gist.id,
+            "url": gist.html_url
+        }
+    except GithubException as e:
+        console.print(f"[red]GitHub API error: {e}[/red]")
         return None
 
 
-def update_gist_sync_time(document_id: int, gist_id: str):
-    """Update the sync timestamp for a gist mapping"""
-    with db.get_connection() as conn:
-        conn.execute("""
-            UPDATE gist_mappings 
-            SET synced_at = CURRENT_TIMESTAMP
-            WHERE document_id = ? AND gist_id = ?
-        """, (document_id, gist_id))
-        conn.commit()
+def update_gist_with_gh(
+    gist_id: str,
+    content: str,
+    filename: str
+) -> bool:
+    """Update an existing gist using gh CLI."""
+    try:
+        # Create a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(content)
+            temp_path = f.name
+        
+        # Execute gh command
+        cmd = ["gh", "gist", "edit", gist_id, temp_path]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        # Clean up temp file
+        os.unlink(temp_path)
+        
+        return result.returncode == 0
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    return False
 
 
-def get_all_gist_mappings(limit: int = 10) -> list:
-    """Get all gist mappings"""
-    ensure_gist_table()
+def update_gist_with_api(
+    gist_id: str,
+    content: str,
+    filename: str,
+    token: Optional[str] = None
+) -> bool:
+    """Update an existing gist using GitHub API."""
+    if not token:
+        return False
+    
+    try:
+        g = Github(token)
+        gist = g.get_gist(gist_id)
+        
+        # Update gist
+        gist.edit(files={filename: {"content": content}})
+        return True
+    except GithubException as e:
+        console.print(f"[red]GitHub API error: {e}[/red]")
+        return False
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Copy text to clipboard."""
+    try:
+        # macOS
+        subprocess.run(['pbcopy'], input=text.encode(), check=True)
+        return True
+    except:
+        try:
+            # Linux (X11)
+            subprocess.run(
+                ['xclip', '-selection', 'clipboard'],
+                input=text.encode(),
+                check=True
+            )
+            return True
+        except:
+            # Windows or fallback - would need pyperclip
+            return False
+
+
+def sanitize_filename(title: str) -> str:
+    """Sanitize document title for use as filename."""
+    # Remove/replace invalid filename characters
+    invalid_chars = '<>:"/\\|?*'
+    filename = title
+    for char in invalid_chars:
+        filename = filename.replace(char, '-')
+    
+    # Ensure .md extension
+    if not filename.endswith('.md'):
+        filename += '.md'
+    
+    return filename
+
+
+def create(
+    identifier: str = typer.Argument(..., help="Document ID or title"),
+    public: bool = typer.Option(False, "--public", help="Create public gist"),
+    secret: bool = typer.Option(False, "--secret", help="Create secret gist (default)"),
+    description: Optional[str] = typer.Option(None, "--desc", "-d", help="Gist description"),
+    copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
+    open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
+    update: Optional[str] = typer.Option(None, "--update", "-u", help="Update existing gist ID"),
+):
+    """Create or update a GitHub Gist from a document."""
+    # Ensure database schema is up to date
+    db.ensure_schema()
+    
+    # Check for conflicting options
+    if public and secret:
+        console.print("[red]Error: Cannot use both --public and --secret options[/red]")
+        raise typer.Exit(1)
+    
+    # Get the document
+    doc = db.get_document(identifier)
+    if not doc:
+        console.print(f"[red]Error: Document '{identifier}' not found[/red]")
+        raise typer.Exit(1)
+    
+    # Get GitHub authentication
+    token = get_github_auth()
+    if not token:
+        console.print("[red]Error: GitHub authentication not configured[/red]")
+        console.print("\nTo use the gist command, you need to:")
+        console.print("1. Set the GITHUB_TOKEN environment variable, or")
+        console.print("2. Install and authenticate with GitHub CLI: [cyan]gh auth login[/cyan]")
+        console.print("\nTo create a GitHub token:")
+        console.print("1. Go to https://github.com/settings/tokens/new")
+        console.print("2. Select 'gist' scope")
+        console.print("3. Set: [cyan]export GITHUB_TOKEN=your_token[/cyan]")
+        raise typer.Exit(1)
+    
+    # Prepare gist content
+    filename = sanitize_filename(doc['title'])
+    content = doc['content']
+    
+    # Use document title and metadata in description if not provided
+    if not description:
+        description = f"{doc['title']} - emdx knowledge base"
+        if doc.get('project'):
+            description += f" (Project: {doc['project']})"
+    
+    # Create or update gist
+    if update:
+        # Update existing gist
+        console.print(f"[yellow]Updating gist {update}...[/yellow]")
+        
+        # Try gh CLI first
+        success = update_gist_with_gh(update, content, filename)
+        if not success:
+            # Fallback to API
+            success = update_gist_with_api(update, content, filename, token)
+        
+        if success:
+            console.print(f"[green]✓ Updated gist {update}[/green]")
+            
+            # Update database record
+            with db.get_connection() as conn:
+                conn.execute("""
+                    UPDATE gists 
+                    SET updated_at = CURRENT_TIMESTAMP
+                    WHERE gist_id = ? AND document_id = ?
+                """, (update, doc['id']))
+                conn.commit()
+        else:
+            console.print("[red]Error: Failed to update gist[/red]")
+            raise typer.Exit(1)
+    else:
+        # Create new gist
+        console.print(f"[yellow]Creating {'public' if public else 'secret'} gist...[/yellow]")
+        
+        # Try gh CLI first
+        result = create_gist_with_gh(content, filename, description, public)
+        if not result:
+            # Fallback to API
+            result = create_gist_with_api(content, filename, description, public, token)
+        
+        if result:
+            gist_id = result['id']
+            gist_url = result['url']
+            
+            console.print(f"[green]✓ Created gist:[/green] {gist_url}")
+            
+            # Save to database
+            with db.get_connection() as conn:
+                conn.execute("""
+                    INSERT INTO gists (document_id, gist_id, gist_url, is_public)
+                    VALUES (?, ?, ?, ?)
+                """, (doc['id'], gist_id, gist_url, public))
+                conn.commit()
+            
+            # Post-creation actions
+            if copy_url:
+                if copy_to_clipboard(gist_url):
+                    console.print("[green]✓ URL copied to clipboard[/green]")
+                else:
+                    console.print("[yellow]⚠ Could not copy to clipboard[/yellow]")
+            
+            if open_browser:
+                webbrowser.open(gist_url)
+                console.print("[green]✓ Opened in browser[/green]")
+        else:
+            console.print("[red]Error: Failed to create gist[/red]")
+            raise typer.Exit(1)
+
+
+@app.command("gist-list")
+def list_gists(
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+):
+    """List all gists created from documents."""
+    db.ensure_schema()
+    
     with db.get_connection() as conn:
-        cursor = conn.execute("""
-            SELECT * FROM gist_mappings 
-            ORDER BY synced_at DESC 
-            LIMIT ?
-        """, (limit,))
-        mappings = []
-        for row in cursor.fetchall():
-            mapping = dict(row)
-            if mapping['synced_at'] and isinstance(mapping['synced_at'], str):
-                mapping['synced_at'] = datetime.fromisoformat(mapping['synced_at'])
-            mappings.append(mapping)
-        return mappings
+        if project:
+            cursor = conn.execute("""
+                SELECT g.*, d.title, d.project
+                FROM gists g
+                JOIN documents d ON g.document_id = d.id
+                WHERE d.project = ?
+                ORDER BY g.created_at DESC
+            """, (project,))
+        else:
+            cursor = conn.execute("""
+                SELECT g.*, d.title, d.project
+                FROM gists g
+                JOIN documents d ON g.document_id = d.id
+                ORDER BY g.created_at DESC
+            """)
+        
+        rows = cursor.fetchall()
+    
+    if not rows:
+        console.print("[yellow]No gists found[/yellow]")
+        return
+    
+    # Create table
+    table = Table(title="Created Gists")
+    table.add_column("Doc ID", style="cyan")
+    table.add_column("Title", style="white")
+    table.add_column("Project", style="blue")
+    table.add_column("Gist ID", style="green")
+    table.add_column("Type", style="yellow")
+    table.add_column("Created", style="dim")
+    
+    for row in rows:
+        # Handle datetime formatting
+        created_at = row['created_at']
+        if isinstance(created_at, datetime):
+            created_at_str = created_at.strftime("%Y-%m-%d %H:%M")
+        else:
+            created_at_str = str(created_at)[:16]
+        
+        table.add_row(
+            str(row['document_id']),
+            row['title'],
+            row['project'] or "-",
+            row['gist_id'],
+            "Public" if row['is_public'] else "Secret",
+            created_at_str
+        )
+    
+    console.print(table)
+
+
+# Register the create function as the default 'gist' command
+app.command(name="gist")(create)
