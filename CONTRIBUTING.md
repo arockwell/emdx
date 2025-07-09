@@ -135,8 +135,12 @@ emdx/
 ├── browse.py            # Browse and stats commands
 ├── gist.py              # GitHub Gist integration
 ├── gui.py               # Interactive FZF browser
+├── tags.py              # Core tag functionality
+├── tag_commands.py      # Tag-related CLI commands
 ├── database.py          # Database abstraction
 ├── sqlite_database.py   # SQLite implementation
+├── migrations.py        # Database migration system
+├── config.py            # Configuration management
 └── utils.py             # Shared utilities
 ```
 

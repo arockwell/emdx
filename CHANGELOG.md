@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-01-09
+
+### Added
+- **Comprehensive Tag System** - Organize documents with tags
+  - Add tags when saving: `emdx save file.md --tags "python,tutorial"`
+  - Search by tags: `emdx find --tags "python,api" --any-tags`
+  - Tag management commands:
+    - `emdx tag <id> [tags...]` - Add/view tags for a document
+    - `emdx untag <id> <tags...>` - Remove tags from a document
+    - `emdx tags` - List all tags with usage statistics
+    - `emdx retag <old> <new>` - Rename a tag globally
+    - `emdx merge-tags <tags...> --into <target>` - Merge multiple tags
+  - Tags displayed in document view and search results
+  - Tag autocomplete and suggestions
+  - Database migration system for schema updates
+
+### Changed
+- **Simplified Input Interface** - Consolidated 5 capture commands into 1
+  - Removed separate commands: `note`, `clip`, `pipe`, `cmd`, `direct`
+  - Single `save` command now handles all input methods:
+    - Files: `emdx save README.md`
+    - Direct text: `emdx save "Quick note"`
+    - Stdin: `echo "content" | emdx save --title "My Note"`
+    - Clipboard: `pbpaste | emdx save --title "Clipboard"`
+    - Command output: `ls -la | emdx save --title "Directory"`
+- Improved GUI viewing experience with better markdown rendering
+- Enhanced color output support in terminal
+
+### Fixed
+- GUI preview pane shell compatibility issues
+- Command execution in interactive browser
+
+### Removed
+- `emdx/capture.py` module (functionality merged into core.py)
+
 ## [0.3.2] - 2025-01-09
 
 ### Fixed
@@ -67,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.4.0]: https://github.com/arockwell/emdx/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/arockwell/emdx/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/arockwell/emdx/compare/v0.2.1...v0.3.1
 [0.2.1]: https://github.com/arockwell/emdx/compare/v0.2.0...v0.2.1

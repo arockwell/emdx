@@ -1,6 +1,6 @@
 # emdx - Documentation Index Management System
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -18,6 +18,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
 - ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
 - 📊 **Export Options**: Export your knowledge base as JSON or CSV
+- 🏷️ **Tag System**: Organize documents with tags for better categorization and discovery
 
 ## Installation
 
@@ -68,6 +69,9 @@ ls -la | emdx save --title "Directory listing"
 
 # With custom project
 emdx save notes.md --title "Project Notes" --project "my-app"
+
+# With tags
+emdx save README.md --tags "documentation,python,api"
 ```
 
 ### Search documents
@@ -83,6 +87,13 @@ emdx find "todo" --project "my-app"
 
 # Fuzzy search (typo-tolerant)
 emdx find "datbase" --fuzzy
+
+# Search by tags
+emdx find --tags "python,tutorial"  # Documents with ALL tags
+emdx find --tags "python,tutorial" --any-tags  # Documents with ANY tag
+
+# Combine text and tag search
+emdx find "async" --tags "python"
 ```
 
 ### View documents
@@ -115,6 +126,29 @@ emdx restore 42
 
 # Permanently delete from trash
 emdx purge 42
+```
+
+### Tag management
+```bash
+# Add tags to a document
+emdx tag 42 python tutorial api
+
+# View tags for a document
+emdx tag 42
+
+# Remove tags from a document
+emdx untag 42 tutorial
+
+# List all tags with statistics
+emdx tags
+emdx tags --sort usage  # Sort by usage count
+emdx tags --sort name   # Sort alphabetically
+
+# Rename a tag globally
+emdx retag "python3" "python"
+
+# Merge multiple tags into one
+emdx merge-tags py python3 --into python
 ```
 
 ### List documents
@@ -182,8 +216,8 @@ The GUI browser provides:
 ## Command Reference
 
 ### Core Commands
-- `emdx save [input] [--title] [--project]` - Save content (file, text, or stdin)
-- `emdx find <query> [--project] [--limit] [--snippets] [--fuzzy]` - Search documents
+- `emdx save [input] [--title] [--project] [--tags]` - Save content (file, text, or stdin)
+- `emdx find <query> [--project] [--limit] [--snippets] [--fuzzy] [--tags] [--any-tags]` - Search documents
 - `emdx view <id|title> [--raw]` - View a document
 - `emdx list [--project] [--limit] [--format]` - List documents
 - `emdx edit <id|title>` - Edit a document
@@ -191,6 +225,13 @@ The GUI browser provides:
 - `emdx trash <id|title>` - Move document to trash
 - `emdx restore <id|title>` - Restore from trash
 - `emdx purge <id|title> [--force]` - Permanently delete
+
+### Tag Commands
+- `emdx tag <id> [tags...]` - Add tags to a document (or view if no tags given)
+- `emdx untag <id> <tags...>` - Remove tags from a document
+- `emdx tags [--sort] [--limit]` - List all tags with usage statistics
+- `emdx retag <old_tag> <new_tag> [--force]` - Rename a tag globally
+- `emdx merge-tags <tags...> --into <target> [--force]` - Merge multiple tags
 
 ### Browse Commands
 - `emdx recent [count]` - Show recently accessed documents
@@ -239,6 +280,8 @@ emdx uses SQLite with FTS5 (Full-Text Search 5) for powerful search capabilities
 - **Phrase search** with quotation marks
 - **Portable database** - just one file you can backup or sync
 - **Soft deletes** - Documents are moved to trash before permanent deletion
+- **Tag system** - Flexible tagging with autocomplete and bulk operations
+- **Database migrations** - Automatic schema updates when upgrading
 
 ### Project Structure
 
@@ -250,8 +293,12 @@ emdx/
 ├── browse.py           # Browse and stats commands
 ├── gist.py             # GitHub Gist integration
 ├── gui.py              # Interactive FZF browser
+├── tags.py             # Core tag functionality
+├── tag_commands.py     # Tag-related CLI commands
 ├── database.py         # Database abstraction layer
 ├── sqlite_database.py  # SQLite implementation
+├── migrations.py       # Database migration system
+├── config.py           # Configuration management
 └── utils.py            # Shared utilities
 ```
 
