@@ -132,7 +132,6 @@ emdx/
 ├── __init__.py          # Package initialization
 ├── cli.py               # CLI entry point (Typer app)
 ├── core.py              # Core commands (save, find, view, etc.)
-├── capture.py           # Quick capture commands
 ├── browse.py            # Browse and stats commands
 ├── gist.py              # GitHub Gist integration
 ├── gui.py               # Interactive FZF browser

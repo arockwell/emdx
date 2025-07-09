@@ -247,7 +247,6 @@ emdx/
 ├── __init__.py
 ├── cli.py              # Main CLI entry point using Typer
 ├── core.py             # Core commands (save, find, view, edit, delete)
-├── capture.py          # Quick capture commands (note, clip, pipe)
 ├── browse.py           # Browse and stats commands
 ├── gist.py             # GitHub Gist integration
 ├── gui.py              # Interactive FZF browser
