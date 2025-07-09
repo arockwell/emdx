@@ -148,59 +148,6 @@ def tags(
         raise typer.Exit(1)
 
 
-@app.command(name="find-tags")
-def find_by_tags(
-    tags: List[str] = typer.Argument(..., help="Tags to search for"),
-    mode: str = typer.Option("all", "--mode", "-m", help="Search mode: 'all' or 'any'"),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
-    limit: int = typer.Option(20, "--limit", "-n", help="Maximum results"),
-):
-    """Find documents by tags"""
-    try:
-        # Ensure database schema exists
-        db.ensure_schema()
-        
-        # Validate mode
-        if mode not in ['all', 'any']:
-            console.print("[red]Error: mode must be 'all' or 'any'[/red]")
-            raise typer.Exit(1)
-        
-        # Search by tags
-        results = search_by_tags(tags, mode=mode, project=project, limit=limit)
-        
-        if not results:
-            if mode == 'all':
-                console.print(f"[yellow]No documents found with all tags: {', '.join(tags)}[/yellow]")
-            else:
-                console.print(f"[yellow]No documents found with any of these tags: {', '.join(tags)}[/yellow]")
-            return
-        
-        # Display results
-        mode_desc = "all of these" if mode == "all" else "any of these"
-        console.print(f"\n[bold]🏷️  Found {len(results)} documents with {mode_desc} tags: [cyan]{', '.join(tags)}[/cyan][/bold]\n")
-        
-        for i, doc in enumerate(results, 1):
-            console.print(f"[bold cyan]#{doc['id']}[/bold cyan] [bold]{doc['title']}[/bold]")
-            
-            metadata = []
-            if doc['project']:
-                metadata.append(f"[green]{doc['project']}[/green]")
-            metadata.append(f"[yellow]{doc['created_at'].strftime('%Y-%m-%d')}[/yellow]")
-            
-            console.print(" • ".join(metadata))
-            
-            if doc.get('tags'):
-                console.print(f"[dim]Tags: {doc['tags']}[/dim]")
-            
-            if i < len(results):
-                console.print()
-        
-        console.print(f"\n[dim]💡 Use 'emdx view <id>' to view a document[/dim]")
-        
-    except Exception as e:
-        console.print(f"[red]Error searching by tags: {e}[/red]")
-        raise typer.Exit(1)
-
 
 @app.command()
 def retag(

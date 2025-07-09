@@ -13,7 +13,6 @@ alias efta='emdx find --any-tags'
 # Tag management  
 alias et='emdx tag'
 alias ets='emdx tags'  # show all tags
-alias etb='emdx browse-tags'  # future feature
 ```
 
 ## Fish aliases
@@ -27,14 +26,13 @@ alias efta 'emdx find --any-tags'
 # Tag management
 alias et 'emdx tag'
 alias ets 'emdx tags'
-alias etb 'emdx browse-tags'  # future feature
 ```
 
 ## Usage Examples
 
 ```bash
 # Find all documents with python tag
-eft python
+emdx find --tags python
 
 # Find documents with either python OR rust tags
 efta python,rust

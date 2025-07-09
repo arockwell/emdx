@@ -112,7 +112,7 @@ def save(
 
 @app.command()
 def find(
-    query: List[str] = typer.Argument(..., help="Search terms"),
+    query: List[str] = typer.Argument(None, help="Search terms (optional if using --tags)"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
@@ -121,11 +121,16 @@ def find(
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
 ):
     """Search the knowledge base with full-text search"""
-    search_query = " ".join(query)
+    search_query = " ".join(query) if query else ""
     
     try:
         # Ensure database schema exists
         db.ensure_schema()
+        
+        # Validate that we have something to search for
+        if not search_query and not tags:
+            console.print("[red]Error: Provide search terms or use --tags option[/red]")
+            raise typer.Exit(1)
         
         # Handle tag-based search
         if tags:
