@@ -1,5 +1,9 @@
 # emdx - Documentation Index Management System
 
+[![Version](https://img.shields.io/badge/version-0.3.2-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+
 A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a beautiful terminal interface.
 
 ## Features
@@ -12,6 +16,8 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 🖥️ **Interactive Browser**: FZF-based document browser for quick navigation
 - 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
 - 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
+- ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
+- 📊 **Export Options**: Export your knowledge base as JSON or CSV
 
 ## Installation
 
@@ -24,9 +30,17 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 ### Install from source
 
 ```bash
-git clone https://github.com/yourusername/emdx.git
+git clone https://github.com/arockwell/emdx.git
 cd emdx
 pip install -e .
+```
+
+### Development installation
+
+```bash
+git clone https://github.com/arockwell/emdx.git
+cd emdx
+pip install -e ".[dev]"
 ```
 
 ### No database setup required!
@@ -72,6 +86,26 @@ emdx view "Project Notes"
 
 # View raw markdown (no formatting)
 emdx view 42 --raw
+```
+
+### Edit and delete documents
+```bash
+# Edit a document in your default editor
+emdx edit 42
+emdx edit "Project Notes"
+
+# Delete a document (moves to trash)
+emdx delete 42
+emdx delete "Project Notes"
+
+# Force delete without confirmation
+emdx delete 42 --force
+
+# Restore from trash
+emdx restore 42
+
+# Permanently delete from trash
+emdx purge 42
 ```
 
 ### List documents
@@ -140,12 +174,18 @@ emdx gist-list --project "my-app"
 emdx gui
 ```
 
-In the browser:
-- `j/k` or `↑/↓` - Navigate
-- `/` - Toggle search
-- `Enter` - View document
-- `Ctrl-R` - Refresh list
-- `q` - Quit
+The GUI browser provides:
+- **Real-time search**: Filter documents as you type
+- **Document preview**: See content in the preview pane
+- **Quick actions**: View, edit, or delete documents
+- **Keyboard navigation**:
+  - `↑/↓` or `Ctrl-p/Ctrl-n` - Navigate through documents
+  - `Enter` - View selected document
+  - `Ctrl-e` - Edit selected document
+  - `Ctrl-d` - Delete selected document
+  - `Ctrl-r` - Restore document from trash
+  - `Ctrl-t` - Toggle between active/trashed documents
+  - `Esc` or `Ctrl-c` - Exit browser
 
 ## Command Reference
 
@@ -155,7 +195,10 @@ In the browser:
 - `emdx view <id|title> [--raw]` - View a document
 - `emdx list [--project] [--limit] [--format]` - List documents
 - `emdx edit <id|title>` - Edit a document
-- `emdx delete <id|title> [--force]` - Delete a document
+- `emdx delete <id|title> [--force]` - Delete a document (moves to trash)
+- `emdx trash <id|title>` - Move document to trash
+- `emdx restore <id|title>` - Restore from trash
+- `emdx purge <id|title> [--force]` - Permanently delete
 
 ### Capture Commands
 - `emdx note <text>` - Save a quick note
@@ -199,19 +242,132 @@ To use the gist commands, you need GitHub authentication. emdx supports two meth
    ```
    To create a token, visit https://github.com/settings/tokens/new and select the 'gist' scope.
 
-## Technical Details
+## Architecture
+
+### Technical Details
 
 emdx uses SQLite with FTS5 (Full-Text Search 5) for powerful search capabilities:
 
 - **Instant search** across all your documents
-- **Ranked results** based on relevance
+- **Ranked results** based on relevance (BM25 algorithm)
 - **Stemming support** (search "running" finds "run", "runs")
 - **Phrase search** with quotation marks
 - **Portable database** - just one file you can backup or sync
+- **Soft deletes** - Documents are moved to trash before permanent deletion
+
+### Project Structure
+
+```
+emdx/
+├── __init__.py
+├── cli.py              # Main CLI entry point using Typer
+├── core.py             # Core commands (save, find, view, edit, delete)
+├── capture.py          # Quick capture commands (note, clip, pipe)
+├── browse.py           # Browse and stats commands
+├── gist.py             # GitHub Gist integration
+├── gui.py              # Interactive FZF browser
+├── database.py         # Database abstraction layer
+├── sqlite_database.py  # SQLite implementation
+└── utils.py            # Shared utilities
+```
+
+## Data Management
+
+### Backup
+
+Your entire knowledge base is stored in a single SQLite file:
+```bash
+# Default location
+~/.config/emdx/knowledge.db
+
+# Backup
+cp ~/.config/emdx/knowledge.db ~/backups/emdx-backup-$(date +%Y%m%d).db
+```
+
+### Export
+
+```bash
+# Export all documents as JSON
+emdx list --format json > my-knowledge-base.json
+
+# Export as CSV
+emdx list --format csv > my-knowledge-base.csv
+
+# Export specific project
+emdx list --project "my-app" --format json > my-app-docs.json
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**FZF not found error when using `emdx gui`**
+```bash
+# Install fzf
+brew install fzf              # macOS
+sudo apt-get install fzf      # Ubuntu/Debian
+sudo dnf install fzf          # Fedora
+```
+
+**"No documents found" after installation**
+- This is normal! Start by saving your first document:
+  ```bash
+  emdx save README.md
+  ```
+
+**Permission denied errors**
+- Check that `~/.config/emdx/` is writable
+- The directory is created automatically with user permissions
+
+**Search not finding expected results**
+- Use quotes for exact phrases: `emdx find "exact phrase"`
+- Try fuzzy search for typos: `emdx find "datbase" --fuzzy`
+- Check if the document exists: `emdx list`
+
+**Editor not opening for `emdx edit`**
+- Set your preferred editor: `export EDITOR=vim`
+- Or specify directly: `EDITOR=nano emdx edit 42`
+
+## Development
+
+### Setting up for development
+
+```bash
+# Clone and install
+git clone https://github.com/arockwell/emdx.git
+cd emdx
+pip install -e ".[dev]"
+
+# Run code quality tools
+black emdx/              # Format code
+ruff check emdx/         # Lint
+mypy emdx/               # Type checking
+```
+
+### Code Style
+
+- Black formatting with 100 character line length
+- Ruff linting with pycodestyle, pyflakes, and isort rules
+- Type hints required (enforced by mypy)
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Priorities
+
+- [ ] Add comprehensive test suite
+- [ ] Set up GitHub Actions CI/CD
+- [ ] Add more export formats (Markdown, HTML)
+- [ ] Implement search operators (AND, OR, NOT)
+- [ ] Add tagging system
+- [ ] Create web UI companion
 
 ## License
 
