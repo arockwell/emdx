@@ -8,7 +8,6 @@ from typing import Optional
 
 from emdx import __version__
 from emdx.core import app as core_app
-from emdx.capture import app as capture_app
 from emdx.browse import app as browse_app
 from emdx.gui import gui
 from emdx.gist import app as gist_app
@@ -25,10 +24,6 @@ app = typer.Typer(
 # Add subcommand groups
 # Core commands are added directly to the main app
 for command in core_app.registered_commands:
-    app.registered_commands.append(command)
-
-# Capture commands are added directly to the main app
-for command in capture_app.registered_commands:
     app.registered_commands.append(command)
 
 # Browse commands are added directly to the main app
@@ -72,18 +67,18 @@ def main(
     Save a file:
         [cyan]emdx save README.md[/cyan]
     
+    Save text directly:
+        [cyan]emdx save "Remember to fix the API endpoint"[/cyan]
+    
+    Save from pipe:
+        [cyan]docker ps | emdx save --title "Running containers"[/cyan]
+    
     Search for content:
         [cyan]emdx find "docker compose"[/cyan]
     
     View a document:
         [cyan]emdx view 42[/cyan]
         [cyan]emdx view "My Document Title"[/cyan]
-    
-    Quick note:
-        [cyan]emdx note "Remember to fix the API endpoint"[/cyan]
-    
-    Pipe command output:
-        [cyan]ls -la | emdx pipe "Directory listing"[/cyan]
     """
     # Set up global state based on flags
     if verbose and quiet:

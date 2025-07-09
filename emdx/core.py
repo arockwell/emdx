@@ -24,31 +24,63 @@ console = Console()
 
 @app.command()
 def save(
-    file: Path = typer.Argument(..., help="Markdown file to save"),
-    title: Optional[str] = typer.Argument(None, help="Document title (defaults to filename)"),
-    project: Optional[str] = typer.Argument(None, help="Project name (auto-detected from git)"),
-    tags: Optional[str] = typer.Option(None, "--tags", "-t", help="Comma-separated tags"),
+    input: Optional[str] = typer.Argument(None, help="File path or content to save (reads from stdin if not provided)"),
+    title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name (auto-detected from git)"),
+    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
 ):
-    """Save a markdown file to the knowledge base"""
-    # Check if file exists
-    if not file.exists():
-        console.print(f"[red]Error: File '{file}' not found[/red]")
+    """Save content to the knowledge base (from file, stdin, or direct text)"""
+    import sys
+    
+    content = None
+    source_type = None
+    
+    # Priority 1: Check if stdin has data
+    if not sys.stdin.isatty():
+        content = sys.stdin.read()
+        source_type = "stdin"
+        if not title:
+            title = f"Piped content - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    
+    # Priority 2: Check if input is provided
+    elif input:
+        # Check if it's a file path
+        file_path = Path(input)
+        if file_path.exists() and file_path.is_file():
+            # It's a file
+            try:
+                content = file_path.read_text(encoding='utf-8')
+                source_type = "file"
+                if not title:
+                    title = file_path.stem  # filename without extension
+                # Auto-detect project from git if not provided
+                if not project:
+                    detected_project = get_git_project(file_path.parent)
+                    if detected_project:
+                        project = detected_project
+            except Exception as e:
+                console.print(f"[red]Error reading file: {e}[/red]")
+                raise typer.Exit(1)
+        else:
+            # Treat as direct content
+            content = input
+            source_type = "direct"
+            if not title:
+                # Create title from first line or truncated content
+                first_line = content.split('\n')[0].strip()
+                if first_line:
+                    title = first_line[:50] + "..." if len(first_line) > 50 else first_line
+                else:
+                    title = f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    
+    # No input provided
+    else:
+        console.print("[red]Error: No input provided. Provide a file path, text content, or pipe data via stdin[/red]")
         raise typer.Exit(1)
     
-    # Read file content
-    try:
-        content = file.read_text(encoding='utf-8')
-    except Exception as e:
-        console.print(f"[red]Error reading file: {e}[/red]")
-        raise typer.Exit(1)
-    
-    # Use filename as title if not provided
-    if not title:
-        title = file.stem  # filename without extension
-    
-    # Auto-detect project from git if not provided
-    if not project:
-        detected_project = get_git_project(file.parent)
+    # Auto-detect project from current directory if not provided and not from file
+    if not project and source_type != "file":
+        detected_project = get_git_project(Path.cwd())
         if detected_project:
             project = detected_project
     
