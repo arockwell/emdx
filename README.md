@@ -10,7 +10,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 
 - 🚀 **Unified CLI**: Single `emdx` command with intuitive subcommands
 - 🔍 **Full-Text Search**: SQLite FTS5-powered search with ranking and fuzzy matching
-- 📝 **Multiple Input Methods**: Save files, create notes, pipe output, or paste from clipboard
+- 📝 **Flexible Input**: Save files, text, or piped input with one command
 - 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
 - 🖥️ **Interactive Browser**: FZF-based document browser for quick navigation
@@ -49,16 +49,25 @@ emdx uses SQLite and stores your knowledge base at `~/.config/emdx/knowledge.db`
 
 ## Quick Start
 
-### Save a document
+### Save content
 ```bash
 # Save a markdown file
 emdx save README.md
 
-# Save with custom title
-emdx save notes.md "Project Notes"
+# Save text directly
+emdx save "Remember to fix the API endpoint"
 
-# Save with specific project
-emdx save doc.md "API Docs" "my-project"
+# Save from pipe
+docker ps | emdx save --title "Running containers"
+
+# Save from clipboard
+pbpaste | emdx save --title "Code snippet"
+
+# Save command output
+ls -la | emdx save --title "Directory listing"
+
+# With custom project
+emdx save notes.md --title "Project Notes" --project "my-app"
 ```
 
 ### Search documents
@@ -123,23 +132,6 @@ emdx list --format json
 emdx list --format csv
 ```
 
-### Quick capture
-```bash
-# Save a quick note
-emdx note "Remember to review PR #123"
-
-# Save clipboard contents
-emdx clip "Useful code snippet"
-
-# Pipe command output
-ls -la | emdx pipe "Directory structure"
-
-# Execute and save command output
-emdx cmd "git log --oneline -10" --title "Recent commits"
-
-# Direct text input
-emdx direct "Meeting notes" "Discussed project timeline..."
-```
 
 ### Share via GitHub Gists
 ```bash
@@ -190,7 +182,7 @@ The GUI browser provides:
 ## Command Reference
 
 ### Core Commands
-- `emdx save <file> [title] [project]` - Save a markdown file
+- `emdx save [input] [--title] [--project]` - Save content (file, text, or stdin)
 - `emdx find <query> [--project] [--limit] [--snippets] [--fuzzy]` - Search documents
 - `emdx view <id|title> [--raw]` - View a document
 - `emdx list [--project] [--limit] [--format]` - List documents
@@ -199,13 +191,6 @@ The GUI browser provides:
 - `emdx trash <id|title>` - Move document to trash
 - `emdx restore <id|title>` - Restore from trash
 - `emdx purge <id|title> [--force]` - Permanently delete
-
-### Capture Commands
-- `emdx note <text>` - Save a quick note
-- `emdx clip [title]` - Save clipboard contents
-- `emdx pipe <title>` - Save piped input
-- `emdx cmd <command>` - Execute and save command output
-- `emdx direct <title> <content>` - Save text directly
 
 ### Browse Commands
 - `emdx recent [count]` - Show recently accessed documents
