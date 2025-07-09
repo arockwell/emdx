@@ -14,11 +14,13 @@ from rich.syntax import Syntax
 from rich.markdown import Markdown
 from rich.table import Table
 
-from emdx.database import db
+from emdx.sqlite_database import db
 from emdx.utils import get_git_project
+from emdx.tags import add_tags_to_document, get_document_tags, search_by_tags
 
 app = typer.Typer()
-console = Console()
+# Force color output even when not connected to a terminal
+console = Console(force_terminal=True, color_system="auto")
 
 
 @app.command()
@@ -26,6 +28,7 @@ def save(
     input: Optional[str] = typer.Argument(None, help="File path or content to save (reads from stdin if not provided)"),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name (auto-detected from git)"),
+    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
 ):
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     import sys
@@ -95,6 +98,14 @@ def save(
         console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{title}[/cyan]")
         if project:
             console.print(f"   [dim]Project:[/dim] {project}")
+        
+        # Add tags if provided
+        if tags:
+            tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+            if tag_list:
+                added_tags = add_tags_to_document(doc_id, tag_list)
+                if added_tags:
+                    console.print(f"   [dim]Tags:[/dim] {', '.join(added_tags)}")
     except Exception as e:
         console.print(f"[red]Error saving document: {e}[/red]")
         raise typer.Exit(1)
@@ -102,25 +113,61 @@ def save(
 
 @app.command()
 def find(
-    query: List[str] = typer.Argument(..., help="Search terms"),
+    query: List[str] = typer.Argument(None, help="Search terms (optional if using --tags)"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
     fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy search"),
+    tags: Optional[str] = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
 ):
     """Search the knowledge base with full-text search"""
-    search_query = " ".join(query)
+    search_query = " ".join(query) if query else ""
     
     try:
         # Ensure database schema exists
         db.ensure_schema()
         
-        # Search database
-        results = db.search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
+        # Validate that we have something to search for
+        if not search_query and not tags:
+            console.print("[red]Error: Provide search terms or use --tags option[/red]")
+            raise typer.Exit(1)
         
-        if not results:
-            console.print(f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]")
-            return
+        # Handle tag-based search
+        if tags:
+            tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+            tag_mode = 'any' if any_tags else 'all'
+            
+            # If we have both tags and search query, we need to combine results
+            if search_query:
+                # Get documents matching tags
+                tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+                tag_doc_ids = {doc['id'] for doc in tag_results}
+                
+                # Get documents matching search query
+                search_results = db.search_documents(search_query, project=project, limit=limit*2, fuzzy=fuzzy)
+                
+                # Combine: only show documents that match both criteria
+                results = [doc for doc in search_results if doc['id'] in tag_doc_ids][:limit]
+                
+                if not results:
+                    console.print(f"[yellow]No results found matching both '[/yellow]{search_query}[yellow]' and tags: {', '.join(tag_list)}[/yellow]")
+                    return
+            else:
+                # Tag-only search
+                results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+                if not results:
+                    mode_desc = "all" if not any_tags else "any"
+                    console.print(f"[yellow]No results found with {mode_desc} tags: {', '.join(tag_list)}[/yellow]")
+                    return
+                search_query = f"tags: {', '.join(tag_list)}"
+        else:
+            # Regular search without tags
+            results = db.search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
+            
+            if not results:
+                console.print(f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]")
+                return
         
         # Display results
         console.print(f"\n[bold]🔍 Found {len(results)} results for '[cyan]{search_query}[/cyan]'[/bold]\n")
@@ -141,6 +188,11 @@ def find(
                 metadata.append(f"[dim]similarity: {result['score']:.3f}[/dim]")
             
             console.print(" • ".join(metadata))
+            
+            # Display tags
+            doc_tags = get_document_tags(result['id'])
+            if doc_tags:
+                console.print(f"[dim]Tags: {', '.join(doc_tags)}[/dim]")
             
             # Display snippet if requested
             if snippets and 'snippet' in result:
@@ -166,6 +218,7 @@ def view(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
+    no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
 ):
     """View a document from the knowledge base"""
     try:
@@ -182,12 +235,17 @@ def view(
         # Display document with or without pager
         if no_pager:
             # Direct output without pager
-            console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-            console.print("=" * 60)
-            console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-            console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
-            console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-            console.print("=" * 60 + "\n")
+            if not no_header:
+                console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
+                console.print("=" * 60)
+                console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
+                console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+                # Show tags
+                doc_tags = get_document_tags(doc['id'])
+                if doc_tags:
+                    console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
+                console.print("=" * 60 + "\n")
             
             if raw:
                 console.print(doc['content'])
@@ -195,14 +253,22 @@ def view(
                 markdown = Markdown(doc['content'])
                 console.print(markdown)
         else:
-            # Use Rich's pager
+            # Use Rich's pager with color support
+            # Set LESS environment variable if not already set
+            if 'LESS' not in os.environ:
+                os.environ['LESS'] = '-R'
             with console.pager():
-                console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-                console.print("=" * 60)
-                console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
-                console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-                console.print("=" * 60 + "\n")
+                if not no_header:
+                    console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
+                    console.print("=" * 60)
+                    console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
+                    console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                    console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+                    # Show tags
+                    doc_tags = get_document_tags(doc['id'])
+                    if doc_tags:
+                        console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
+                    console.print("=" * 60 + "\n")
                 
                 if raw:
                     console.print(doc['content'])

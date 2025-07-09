@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 import json
+from . import migrations
 
 class SQLiteDatabase:
     """SQLite database connection manager for emdx"""
@@ -41,6 +42,9 @@ class SQLiteDatabase:
     
     def ensure_schema(self):
         """Ensure the tables and FTS5 virtual table exist"""
+        # Run any pending migrations first
+        migrations.run_migrations()
+        
         with self.get_connection() as conn:
             # Enable foreign keys
             conn.execute("PRAGMA foreign_keys = ON")
