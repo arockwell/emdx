@@ -67,19 +67,36 @@ def format_document_list():
 
 def create_preview_script():
     """Create a Python script for document preview."""
-    script = '''#!/usr/bin/env python3
+    # Get the actual emdx module path
+    import emdx
+    emdx_path = Path(emdx.__file__).parent.parent
+    
+    script = f'''#!/usr/bin/env python3
 import sys
 from pathlib import Path
 
-# Add emdx to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add emdx to path using the correct path
+sys.path.insert(0, '{emdx_path}')
 
-from emdx.database import db
-
-doc_id = int(sys.argv[1])
-doc = db.get_document(str(doc_id))
-if doc:
-    print(doc['content'])
+try:
+    from emdx.database import db
+    
+    if len(sys.argv) < 2:
+        print("No document ID provided")
+        sys.exit(1)
+    
+    doc_id = int(sys.argv[1])
+    
+    # Ensure database connection
+    db.ensure_schema()
+    
+    doc = db.get_document(str(doc_id))
+    if doc:
+        print(doc['content'])
+    else:
+        print(f"Document {{doc_id}} not found")
+except Exception as e:
+    print(f"Error: {{e}}")
 '''
     return script
 
@@ -124,7 +141,8 @@ def gui():
         os.chmod(preview_script_path, 0o755)
         
         # Build commands
-        emdx_cmd = sys.argv[0]  # Get the emdx command path
+        # Use proper module invocation instead of direct script path
+        emdx_cmd = f"{sys.executable} -m emdx.cli"
         
         # Check if mdcat is available, otherwise use cat
         if subprocess.run(["which", "mdcat"], capture_output=True).returncode == 0:
