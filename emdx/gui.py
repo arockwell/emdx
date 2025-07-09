@@ -151,7 +151,7 @@ def gui():
             preview_cmd = f"{sys.executable} {preview_script_path} {{1}}"
         
         # Simple commands using emdx - made portable for all shells
-        view_cmd = f"{emdx_cmd} view {{1}} < /dev/tty"
+        view_cmd = f"{emdx_cmd} view {{1}} --no-pager < /dev/tty"
         edit_cmd = f"{emdx_cmd} edit {{1}} < /dev/tty"
         # Use Python for the delete confirmation to be shell-agnostic
         delete_cmd = f"{sys.executable} -c \"import sys; print('Delete document {{1}}? (soft delete - can be restored)'); print('Press y to confirm, any other key to cancel: ', end='', flush=True); import termios, tty; fd = sys.stdin.fileno(); old = termios.tcgetattr(fd); try: tty.setraw(fd); ch = sys.stdin.read(1); finally: termios.tcsetattr(fd, termios.TCSADRAIN, old); print(); sys.exit(0 if ch.lower() == 'y' else 1)\" < /dev/tty && {emdx_cmd} delete {{1}} < /dev/tty"
