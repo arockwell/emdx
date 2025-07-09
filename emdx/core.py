@@ -14,8 +14,9 @@ from rich.syntax import Syntax
 from rich.markdown import Markdown
 from rich.table import Table
 
-from emdx.database import db
+from emdx.sqlite_database import db
 from emdx.utils import get_git_project
+from emdx.tags import add_tags_to_document, get_document_tags, search_by_tags
 
 app = typer.Typer()
 console = Console()
@@ -26,6 +27,7 @@ def save(
     file: Path = typer.Argument(..., help="Markdown file to save"),
     title: Optional[str] = typer.Argument(None, help="Document title (defaults to filename)"),
     project: Optional[str] = typer.Argument(None, help="Project name (auto-detected from git)"),
+    tags: Optional[str] = typer.Option(None, "--tags", "-t", help="Comma-separated tags"),
 ):
     """Save a markdown file to the knowledge base"""
     # Check if file exists
@@ -63,6 +65,14 @@ def save(
         console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{title}[/cyan]")
         if project:
             console.print(f"   [dim]Project:[/dim] {project}")
+        
+        # Add tags if provided
+        if tags:
+            tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+            if tag_list:
+                added_tags = add_tags_to_document(doc_id, tag_list)
+                if added_tags:
+                    console.print(f"   [dim]Tags:[/dim] {', '.join(added_tags)}")
     except Exception as e:
         console.print(f"[red]Error saving document: {e}[/red]")
         raise typer.Exit(1)
@@ -75,6 +85,8 @@ def find(
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
     fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy search"),
+    tags: Optional[str] = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
 ):
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query)
@@ -83,12 +95,41 @@ def find(
         # Ensure database schema exists
         db.ensure_schema()
         
-        # Search database
-        results = db.search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
-        
-        if not results:
-            console.print(f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]")
-            return
+        # Handle tag-based search
+        if tags:
+            tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+            tag_mode = 'any' if any_tags else 'all'
+            
+            # If we have both tags and search query, we need to combine results
+            if search_query:
+                # Get documents matching tags
+                tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+                tag_doc_ids = {doc['id'] for doc in tag_results}
+                
+                # Get documents matching search query
+                search_results = db.search_documents(search_query, project=project, limit=limit*2, fuzzy=fuzzy)
+                
+                # Combine: only show documents that match both criteria
+                results = [doc for doc in search_results if doc['id'] in tag_doc_ids][:limit]
+                
+                if not results:
+                    console.print(f"[yellow]No results found matching both '[/yellow]{search_query}[yellow]' and tags: {', '.join(tag_list)}[/yellow]")
+                    return
+            else:
+                # Tag-only search
+                results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+                if not results:
+                    mode_desc = "all" if not any_tags else "any"
+                    console.print(f"[yellow]No results found with {mode_desc} tags: {', '.join(tag_list)}[/yellow]")
+                    return
+                search_query = f"tags: {', '.join(tag_list)}"
+        else:
+            # Regular search without tags
+            results = db.search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
+            
+            if not results:
+                console.print(f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]")
+                return
         
         # Display results
         console.print(f"\n[bold]🔍 Found {len(results)} results for '[cyan]{search_query}[/cyan]'[/bold]\n")
@@ -109,6 +150,11 @@ def find(
                 metadata.append(f"[dim]similarity: {result['score']:.3f}[/dim]")
             
             console.print(" • ".join(metadata))
+            
+            # Display tags
+            doc_tags = get_document_tags(result['id'])
+            if doc_tags:
+                console.print(f"[dim]Tags: {', '.join(doc_tags)}[/dim]")
             
             # Display snippet if requested
             if snippets and 'snippet' in result:
@@ -155,6 +201,10 @@ def view(
             console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
             console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
             console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+            # Show tags
+            doc_tags = get_document_tags(doc['id'])
+            if doc_tags:
+                console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
             console.print("=" * 60 + "\n")
             
             if raw:
@@ -170,6 +220,10 @@ def view(
                 console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
                 console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
                 console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+                # Show tags
+                doc_tags = get_document_tags(doc['id'])
+                if doc_tags:
+                    console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
                 console.print("=" * 60 + "\n")
                 
                 if raw:
