@@ -19,7 +19,8 @@ from emdx.utils import get_git_project
 from emdx.tags import add_tags_to_document, get_document_tags, search_by_tags
 
 app = typer.Typer()
-console = Console()
+# Force color output even when not connected to a terminal
+console = Console(force_terminal=True, color_system="auto")
 
 
 @app.command()
@@ -217,6 +218,7 @@ def view(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
+    no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
 ):
     """View a document from the knowledge base"""
     try:
@@ -233,25 +235,7 @@ def view(
         # Display document with or without pager
         if no_pager:
             # Direct output without pager
-            console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-            console.print("=" * 60)
-            console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-            console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
-            console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-            # Show tags
-            doc_tags = get_document_tags(doc['id'])
-            if doc_tags:
-                console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
-            console.print("=" * 60 + "\n")
-            
-            if raw:
-                console.print(doc['content'])
-            else:
-                markdown = Markdown(doc['content'])
-                console.print(markdown)
-        else:
-            # Use Rich's pager
-            with console.pager():
+            if not no_header:
                 console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
                 console.print("=" * 60)
                 console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
@@ -262,6 +246,29 @@ def view(
                 if doc_tags:
                     console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
                 console.print("=" * 60 + "\n")
+            
+            if raw:
+                console.print(doc['content'])
+            else:
+                markdown = Markdown(doc['content'])
+                console.print(markdown)
+        else:
+            # Use Rich's pager with color support
+            # Set LESS environment variable if not already set
+            if 'LESS' not in os.environ:
+                os.environ['LESS'] = '-R'
+            with console.pager():
+                if not no_header:
+                    console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
+                    console.print("=" * 60)
+                    console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
+                    console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                    console.print(f"[dim]Views:[/dim] {doc['access_count']}")
+                    # Show tags
+                    doc_tags = get_document_tags(doc['id'])
+                    if doc_tags:
+                        console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
+                    console.print("=" * 60 + "\n")
                 
                 if raw:
                     console.print(doc['content'])
