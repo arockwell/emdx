@@ -17,6 +17,7 @@ from textual import events
 from textual.screen import Screen, ModalScreen
 import subprocess
 import sys
+import os
 from datetime import datetime
 from typing import Optional
 import asyncio
@@ -32,7 +33,169 @@ class SearchInput(Input):
     pass
 
 
-# TODO: Add modal dialog for delete confirmation
+class FullScreenView(Screen):
+    """Full screen document viewer."""
+    
+    CSS = """
+    FullScreenView {
+        align: center middle;
+    }
+    
+    #doc-viewer {
+        width: 100%;
+        height: 100%;
+        padding: 1;
+    }
+    
+    #header {
+        dock: top;
+        height: 3;
+        background: $surface;
+        padding: 0 2;
+    }
+    
+    #footer {
+        dock: bottom; 
+        height: 1;
+        background: $surface;
+        content-align: center middle;
+    }
+    """
+    
+    BINDINGS = [
+        ("q", "close", "Close"),
+        ("escape", "close", "Close"),
+        ("j", "scroll_down", "Down"),
+        ("k", "scroll_up", "Up"),
+        ("ctrl+d", "page_down", "Page down"),
+        ("ctrl+u", "page_up", "Page up"),
+        ("g", "scroll_top", "Top"),
+        ("shift+g", "scroll_bottom", "Bottom"),
+    ]
+    
+    def __init__(self, doc_id: int):
+        super().__init__()
+        self.doc_id = doc_id
+        
+    def compose(self) -> ComposeResult:
+        # Get document
+        doc = db.get_document(str(self.doc_id))
+        if doc:
+            created = doc['created_at'].strftime('%Y-%m-%d %H:%M')
+            
+            # Header with title
+            yield Label(f"📄 {doc['title']} | {doc['project'] or 'No Project'} | {created}", id="header")
+            
+            # Document content  
+            with ScrollableContainer(id="doc-viewer"):
+                yield RichLog(id="content", wrap=True, highlight=True, markup=True, auto_scroll=False)
+            
+            # Footer
+            yield Label("Press q or ESC to return", id="footer")
+    
+    def on_mount(self) -> None:
+        """Load document content when mounted."""
+        doc = db.get_document(str(self.doc_id))
+        if doc:
+            content_log = self.query_one("#content", RichLog)
+            content_log.clear()
+            
+            # Render markdown
+            md = Markdown(doc['content'], code_theme="monokai")
+            content_log.write(md)
+            content_log.scroll_to(0, 0, animate=False)
+    
+    def action_close(self) -> None:
+        """Close the viewer."""
+        self.dismiss()
+    
+    def action_scroll_down(self) -> None:
+        """Scroll down."""
+        self.query_one("#doc-viewer", ScrollableContainer).scroll_relative(y=1)
+    
+    def action_scroll_up(self) -> None:
+        """Scroll up."""
+        self.query_one("#doc-viewer", ScrollableContainer).scroll_relative(y=-1)
+    
+    def action_page_down(self) -> None:
+        """Page down."""
+        self.query_one("#doc-viewer", ScrollableContainer).scroll_relative(y=10)
+    
+    def action_page_up(self) -> None:
+        """Page up.""" 
+        self.query_one("#doc-viewer", ScrollableContainer).scroll_relative(y=-10)
+    
+    def action_scroll_top(self) -> None:
+        """Scroll to top."""
+        self.query_one("#doc-viewer", ScrollableContainer).scroll_to(0, 0, animate=False)
+    
+    def action_scroll_bottom(self) -> None:
+        """Scroll to bottom."""
+        container = self.query_one("#doc-viewer", ScrollableContainer)
+        container.scroll_to(0, container.max_scroll_y, animate=False)
+
+
+class DeleteConfirmScreen(ModalScreen):
+    """Modal screen for delete confirmation."""
+    
+    CSS = """
+    DeleteConfirmScreen {
+        align: center middle;
+    }
+    
+    #dialog {
+        grid-size: 2;
+        grid-gutter: 1 2;
+        grid-rows: 1fr 3;
+        padding: 0 2;
+        width: 60;
+        height: 11;
+        border: thick $background 80%;
+        background: $surface;
+    }
+    
+    #question {
+        column-span: 2;
+        height: 3;
+        content-align: center middle;
+        text-style: bold;
+    }
+    
+    Button {
+        width: 100%;
+    }
+    """
+    
+    BINDINGS = [
+        ("y", "confirm_delete", "Yes"),
+        ("n", "cancel", "No"),
+        ("escape", "cancel", "Cancel"),
+    ]
+    
+    def __init__(self, doc_id: int, doc_title: str):
+        super().__init__()
+        self.doc_id = doc_id
+        self.doc_title = doc_title
+        
+    def compose(self) -> ComposeResult:
+        with Grid(id="dialog"):
+            yield Label(f"Delete document #{self.doc_id}?\n\"{self.doc_title}\"\n\n[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]", id="question")
+            yield Button("Cancel (n)", variant="primary", id="cancel")
+            yield Button("Delete (y)", variant="error", id="delete")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "delete":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+    
+    def action_confirm_delete(self) -> None:
+        """Confirm deletion with y key."""
+        self.dismiss(True)
+    
+    def action_cancel(self) -> None:
+        """Cancel with n or escape."""
+        self.dismiss(False)
 
 
 class DocumentBrowser(App):
@@ -351,27 +514,48 @@ class DocumentBrowser(App):
         if self.mode == "SEARCH":
             return  # Don't trigger in search mode
         if self.current_doc_id:
-            # Simply exit - we'll handle the rest outside
-            self.exit()
-            subprocess.run([sys.executable, '-m', 'emdx.cli', 'edit', str(self.current_doc_id)])
+            # Store the doc ID in a temp file to signal edit mode
+            import tempfile
+            temp_file = os.path.join(tempfile.gettempdir(), 'emdx_edit_doc.txt')
+            with open(temp_file, 'w') as f:
+                f.write(str(self.current_doc_id))
+            # Exit with special code
+            self.exit(message="EDIT")
     
     def action_delete(self):
         """Delete the current document."""
         if self.mode == "SEARCH":
             return  # Don't trigger in search mode
         if self.current_doc_id:
-            # Exit and let the CLI handle confirmation
-            self.exit()
-            subprocess.run([sys.executable, '-m', 'emdx.cli', 'delete', str(self.current_doc_id)])
+            # Get document title for the dialog
+            table = self.query_one("#doc-table", DataTable)
+            if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+                doc = self.filtered_docs[table.cursor_row]
+                
+                def check_delete(should_delete: bool) -> None:
+                    """Callback for delete confirmation."""
+                    if should_delete:
+                        # Delete the document with --force to skip CLI confirmation
+                        result = subprocess.run(
+                            [sys.executable, '-m', 'emdx.cli', 'delete', str(self.current_doc_id), '--force'], 
+                            capture_output=True,
+                            text=True
+                        )
+                        if result.returncode == 0:
+                            # Reload documents
+                            self.load_documents()
+                            self.filter_documents(self.search_query)
+                
+                # Show the modal
+                self.push_screen(DeleteConfirmScreen(doc['id'], doc['title']), check_delete)
     
     def action_view(self):
         """View the current document."""
         if self.mode == "SEARCH":
             return  # Don't trigger in search mode
         if self.current_doc_id:
-            # Don't exit - just update the preview to be full screen or show a message
-            # For now, let's just show a message that they should use Enter for full view
-            pass  # TODO: Implement full-screen view
+            # Push the full screen viewer
+            self.push_screen(FullScreenView(self.current_doc_id))
     
     def action_quit(self):
         """Quit the application."""
@@ -380,23 +564,44 @@ class DocumentBrowser(App):
 
 def run():
     """Run the textual browser."""
-    try:
-        # Check if we have documents
-        db.ensure_schema()
-        docs = db.list_documents(limit=1)
-        if not docs:
-            print("No documents found in knowledge base.")
-            print("\nGet started with:")
-            print("  emdx save <file>         - Save a markdown file")
-            print("  emdx direct <title>      - Create a document directly") 
-            print("  emdx note 'quick note'   - Save a quick note")
-            return
-        
-        app = DocumentBrowser()
-        app.run()
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    import tempfile
+    
+    while True:
+        try:
+            # Check if we have documents
+            db.ensure_schema()
+            docs = db.list_documents(limit=1)
+            if not docs:
+                print("No documents found in knowledge base.")
+                print("\nGet started with:")
+                print("  emdx save <file>         - Save a markdown file")
+                print("  emdx direct <title>      - Create a document directly") 
+                print("  emdx note 'quick note'   - Save a quick note")
+                return
+            
+            app = DocumentBrowser()
+            app.run()
+            
+            # Check if we need to edit
+            temp_file = os.path.join(tempfile.gettempdir(), 'emdx_edit_doc.txt')
+            if os.path.exists(temp_file):
+                with open(temp_file, 'r') as f:
+                    doc_id = f.read().strip()
+                os.remove(temp_file)
+                
+                # Run the editor
+                subprocess.run([sys.executable, '-m', 'emdx.cli', 'edit', doc_id])
+                # Continue the loop to restart browser
+                continue
+            
+            # Normal exit
+            break
+            
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
