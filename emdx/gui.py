@@ -176,60 +176,115 @@ def gui():
         logger.debug(f"edit_cmd: {edit_cmd}")
         logger.debug(f"delete_cmd: {delete_cmd}")
         
-        # Create simpler modal approach using state file
-        mode_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        mode_file.write("NAV")
-        mode_file.close()
-        mode_file_path = mode_file.name
         
-        # Create mode switching commands - using TAB instead of 'a'
-        set_search_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'w') as f: f.write('SEARCH')\""
-        set_nav_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'w') as f: f.write('NAV')\""
-        check_search_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'r') as f: mode = f.read().strip(); exit(0 if mode == 'SEARCH' else 1)\""
-        check_nav_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'r') as f: mode = f.read().strip(); exit(0 if mode == 'NAV' else 1)\""
+        # Create a state file for leader mode
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            leader_file = f.name
+            f.write('0')
         
-        # Create conditional commands that check mode before executing
-        # Actions work in NAV mode
-        nav_edit_cmd = f"{check_nav_mode} && {edit_cmd}"
-        nav_delete_cmd = f"{check_nav_mode} && {delete_cmd}"
-        nav_view_cmd = f"{check_nav_mode} && {view_cmd}"
-        # Search only works in SEARCH mode
-        search_only = f"{check_search_mode} && echo 'search activated'"
+        # Create Python helper scripts for leader mode
+        set_leader_script = f'''import time; open('{leader_file}', 'w').write(str(time.time()))'''
         
-        # Create fzf command with modal interface using state file
+        check_and_execute_script = '''
+import sys
+import time
+import subprocess
+import os
+
+# Debug logging
+debug_log = '/tmp/emdx_leader_debug.log'
+with open(debug_log, 'a') as log:
+    log.write(f"\\nLeader check called: {sys.argv}\\n")
+
+leader_file = sys.argv[1]
+action = sys.argv[2]
+doc_id = sys.argv[3]
+
+# Check if leader was pressed within last 2 seconds
+try:
+    with open(leader_file, 'r') as f:
+        content = f.read().strip()
+        leader_time = float(content) if content and content != '0' else 0
+    
+    current_time = time.time()
+    time_diff = current_time - leader_time
+    
+    with open(debug_log, 'a') as log:
+        log.write(f"Leader time: {leader_time}, Current time: {current_time}, Diff: {time_diff}\\n")
+    
+    if leader_time > 0 and time_diff < 2:
+        # Leader was pressed, execute action
+        with open(leader_file, 'w') as f:
+            f.write('0')  # Reset
+        
+        with open(debug_log, 'a') as log:
+            log.write(f"Executing action: {action} on doc {doc_id}\\n")
+        
+        if action == 'edit':
+            subprocess.run([sys.executable, '-m', 'emdx.cli', 'edit', doc_id], stdin=open('/dev/tty'))
+        elif action == 'delete':
+            # Run the delete confirmation
+            result = subprocess.run([sys.executable, '-c', """import sys; print('Delete document {0}? (soft delete - can be restored)'); print('Press y to confirm, any other key to cancel: ', end='', flush=True); import termios, tty; fd = sys.stdin.fileno(); old = termios.tcgetattr(fd); try: tty.setraw(fd); ch = sys.stdin.read(1); finally: termios.tcsetattr(fd, termios.TCSADRAIN, old); print(); sys.exit(0 if ch.lower() == 'y' else 1)""".format(doc_id)], stdin=open('/dev/tty'))
+            if result.returncode == 0:
+                subprocess.run([sys.executable, '-m', 'emdx.cli', 'delete', doc_id], stdin=open('/dev/tty'))
+        elif action == 'view':
+            result = subprocess.run([sys.executable, '-m', 'emdx.cli', 'view', doc_id, '--raw', '--no-pager', '--no-header'], capture_output=True, text=True)
+            print(result.stdout)
+    else:
+        # No leader or timeout
+        with open(debug_log, 'a') as log:
+            log.write(f"No leader or timeout - exiting\\n")
+        with open(leader_file, 'w') as f:
+            f.write('0')
+        sys.exit(1)
+except Exception as e:
+    with open(debug_log, 'a') as log:
+        log.write(f"Error: {e}\\n")
+    sys.exit(1)
+'''
+        
+        # Save the check script
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            check_script_path = f.name
+            f.write(check_and_execute_script)
+        
+        # Commands
+        set_leader_cmd = f'''execute-silent({sys.executable} -c "{set_leader_script}")'''
+        leader_edit_cmd = f"execute({sys.executable} {check_script_path} {leader_file} edit {{1}} < /dev/tty)"
+        leader_delete_cmd = f"execute({sys.executable} {check_script_path} {leader_file} delete {{1}} < /dev/tty)"
+        leader_view_cmd = f"execute({sys.executable} {check_script_path} {leader_file} view {{1}} | mdcat --paginate)"
+        
+        # Create fzf command with LEADER KEYS!
         fzf_cmd = [
             fzf_path,
             f"--preview={preview_cmd}",
             "--preview-window=right:60%:wrap",
-            # Start in NAV mode
-            "--prompt=NAV> ",
-            # Navigation bindings (always active)
+            "--prompt=> ",
+            # Navigation bindings
             "--bind=j:down",
             "--bind=k:up",
             "--bind=g:first",
             "--bind=G:last",
-            # Search only works in SEARCH mode
-            f"--bind=/:execute-silent({check_search_mode})+toggle-search",
-            # Mode switching
-            f"--bind=tab:execute-silent({set_search_mode})+change-prompt(SEARCH> )",
-            f"--bind=esc:execute-silent({set_nav_mode})+change-prompt(NAV> )",
-            # Action keys - only work in NAV mode
+            "--bind=/:toggle-search",
             f"--bind=enter:execute({view_cmd})",
-            f"--bind=e:execute({nav_edit_cmd})+reload({reload_cmd})",
-            f"--bind=d:execute({nav_delete_cmd})+reload({reload_cmd})",
-            f"--bind=v:execute({nav_view_cmd})",
-            # Preview scrolling (works in both modes)
+            # LEADER KEY (comma)
+            f"--bind=,:change-prompt(LEADER> )+{set_leader_cmd}",
+            # Leader actions
+            f"--bind=e:{leader_edit_cmd}+reload({reload_cmd})+change-prompt(> )",
+            f"--bind=d:{leader_delete_cmd}+reload({reload_cmd})+change-prompt(> )",
+            f"--bind=v:{leader_view_cmd}+change-prompt(> )",
+            # Preview scrolling
             "--bind=ctrl-d:preview-page-down",
             "--bind=ctrl-u:preview-page-up",
             "--bind=ctrl-f:preview-page-down",
             "--bind=ctrl-b:preview-page-up",
-            # Global bindings (work in both modes) - quit commands must abort
+            # Global bindings
             f"--bind=ctrl-r:reload({reload_cmd})",
             "--bind=q:abort",
             "--bind=ctrl-c:abort",
-            # ESC returns to nav mode, not quit
-            f"--bind=ctrl-h:execute({sys.executable} -c \"print('\\n📚 emdx - Modal Interface Help\\n\\n🧭 NAV MODE (navigation & actions):\\n  j/k         Move up/down\\n  g/G         First/last item\\n  Enter       View document\\n  e           Edit document\\n  d           Delete document\\n  v           View document\\n  TAB         Switch to SEARCH mode\\n\\n🔍 SEARCH MODE:\\n  /           Toggle search\\n  ESC         Return to NAV mode\\n\\n📋 BOTH MODES:\\n  Ctrl-D/U    Preview scroll down/up\\n  Ctrl-F/B    Preview page down/up\\n  Ctrl-R      Refresh list\\n  q           Quit\\n  Ctrl-C      Quit\\n\\nPress any key to continue...'); input()\" < /dev/tty)",
-            "--header=📚 emdx - Documentation Index (Mode: see prompt | TAB: search mode, ESC: nav mode, q: quit)",
+            "--bind=esc:cancel",
+            f"--bind=ctrl-h:execute({sys.executable} -c \"print('\\n📚 emdx - Help\\n\\nNavigation:\\n  j/k         Move up/down\\n  g/G         First/last item\\n  /           Toggle search\\n\\nLeader Key Actions:\\n  ,           Leader key (press first)\\n  ,e          Edit document\\n  ,d          Delete document\\n  ,v          View document\\n\\nDirect Actions:\\n  Enter       View document\\n\\nPreview:\\n  Ctrl-D/U    Preview scroll down/up\\n  Ctrl-F/B    Preview page down/up\\n\\nOther:\\n  Ctrl-R      Refresh list\\n  q           Quit\\n  Ctrl-C      Quit\\n  ESC         Cancel search / Quit\\n  Ctrl-H      Show this help\\n\\nNote: Press comma (,) followed by e/d/v within 2 seconds.\\nAll letters work normally in search mode.\\n\\nPress any key to continue...'); input()\" < /dev/tty)",
+            "--header=📚 emdx - Documentation Index (,e: edit, ,d: delete, /: search, q: quit, ctrl-h: help)",
             "--delimiter= │ ",
             "--with-nth=1,2,3,4",
             "--info=inline",
@@ -273,7 +328,59 @@ def gui():
     finally:
         # Clean up temp files
         os.unlink(preview_script_path)
-        os.unlink(mode_file_path)
+        if 'leader_file' in locals():
+            try:
+                os.unlink(leader_file)
+            except:
+                pass
+        if 'check_script_path' in locals():
+            try:
+                os.unlink(check_script_path)
+            except:
+                pass
     
     # Clear screen on exit
     os.system('clear')
+
+
+@app.command()
+def modal():
+    """True modal browser with vim-style navigation."""
+    import curses
+    from emdx.modal_browser import main as modal_main
+    
+    try:
+        curses.wrapper(modal_main)
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        raise typer.Exit(1)
+
+
+@app.command()
+def textual():
+    """Modern TUI browser with mouse support and true modal behavior."""
+    from emdx.textual_browser import run as textual_run
+    
+    try:
+        textual_run()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        raise typer.Exit(1)
+
+
+@app.command()
+def markdown():
+    """TUI browser with native markdown rendering (instant preview updates)."""
+    from emdx.textual_markdown import run as markdown_run
+    
+    try:
+        markdown_run()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        raise typer.Exit(1)

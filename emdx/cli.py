@@ -9,7 +9,7 @@ from typing import Optional
 from emdx import __version__
 from emdx.core import app as core_app
 from emdx.browse import app as browse_app
-from emdx.gui import gui
+from emdx.gui import gui, modal, textual, markdown
 from emdx.gist import app as gist_app
 from emdx.tag_commands import app as tag_app
 
@@ -38,8 +38,11 @@ for command in gist_app.registered_commands:
 for command in tag_app.registered_commands:
     app.registered_commands.append(command)
 
-# Add the gui command
+# Add the gui commands
 app.command()(gui)
+app.command(name="modal")(modal)
+app.command(name="textual")(textual)
+app.command(name="markdown")(markdown)
 
 # Version command
 @app.command()
