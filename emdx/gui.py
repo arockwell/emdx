@@ -8,11 +8,20 @@ import sys
 import tempfile
 from typing import Optional
 from pathlib import Path
+import logging
 
 import typer
 from rich.console import Console
 
 from emdx.database import db
+
+# Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename='/tmp/emdx_gui_debug.log'
+)
+logger = logging.getLogger(__name__)
 
 app = typer.Typer()
 console = Console()
@@ -162,28 +171,65 @@ def gui():
         delete_cmd = f"{sys.executable} -c \"import sys; print('Delete document {{1}}? (soft delete - can be restored)'); print('Press y to confirm, any other key to cancel: ', end='', flush=True); import termios, tty; fd = sys.stdin.fileno(); old = termios.tcgetattr(fd); try: tty.setraw(fd); ch = sys.stdin.read(1); finally: termios.tcsetattr(fd, termios.TCSADRAIN, old); print(); sys.exit(0 if ch.lower() == 'y' else 1)\" < /dev/tty && {emdx_cmd} delete {{1}} < /dev/tty"
         reload_cmd = f"{sys.executable} -c \"from emdx.gui import format_document_list; print('\\n'.join(format_document_list()))\""
         
-        # Create fzf command
+        # Log the command strings for debugging
+        logger.debug(f"view_cmd: {view_cmd}")
+        logger.debug(f"edit_cmd: {edit_cmd}")
+        logger.debug(f"delete_cmd: {delete_cmd}")
+        
+        # Create simpler modal approach using state file
+        mode_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        mode_file.write("NAV")
+        mode_file.close()
+        mode_file_path = mode_file.name
+        
+        # Create mode switching commands - using TAB instead of 'a'
+        set_search_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'w') as f: f.write('SEARCH')\""
+        set_nav_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'w') as f: f.write('NAV')\""
+        check_search_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'r') as f: mode = f.read().strip(); exit(0 if mode == 'SEARCH' else 1)\""
+        check_nav_mode = f"{sys.executable} -c \"with open('{mode_file_path}', 'r') as f: mode = f.read().strip(); exit(0 if mode == 'NAV' else 1)\""
+        
+        # Create conditional commands that check mode before executing
+        # Actions work in NAV mode
+        nav_edit_cmd = f"{check_nav_mode} && {edit_cmd}"
+        nav_delete_cmd = f"{check_nav_mode} && {delete_cmd}"
+        nav_view_cmd = f"{check_nav_mode} && {view_cmd}"
+        # Search only works in SEARCH mode
+        search_only = f"{check_search_mode} && echo 'search activated'"
+        
+        # Create fzf command with modal interface using state file
         fzf_cmd = [
             fzf_path,
             f"--preview={preview_cmd}",
             "--preview-window=right:60%:wrap",
+            # Start in NAV mode
+            "--prompt=NAV> ",
+            # Navigation bindings (always active)
             "--bind=j:down",
             "--bind=k:up",
-            "--bind=/:toggle-search",
+            "--bind=g:first",
+            "--bind=G:last",
+            # Search only works in SEARCH mode
+            f"--bind=/:execute-silent({check_search_mode})+toggle-search",
+            # Mode switching
+            f"--bind=tab:execute-silent({set_search_mode})+change-prompt(SEARCH> )",
+            f"--bind=esc:execute-silent({set_nav_mode})+change-prompt(NAV> )",
+            # Action keys - only work in NAV mode
             f"--bind=enter:execute({view_cmd})",
-            f"--bind=e:execute({edit_cmd})+reload({reload_cmd})",
-            f"--bind=d:execute({delete_cmd})+reload({reload_cmd})",
+            f"--bind=e:execute({nav_edit_cmd})+reload({reload_cmd})",
+            f"--bind=d:execute({nav_delete_cmd})+reload({reload_cmd})",
+            f"--bind=v:execute({nav_view_cmd})",
+            # Preview scrolling (works in both modes)
             "--bind=ctrl-d:preview-page-down",
             "--bind=ctrl-u:preview-page-up",
             "--bind=ctrl-f:preview-page-down",
             "--bind=ctrl-b:preview-page-up",
-            "--bind=g:first",
-            "--bind=G:last",
+            # Global bindings (work in both modes) - quit commands must abort
             f"--bind=ctrl-r:reload({reload_cmd})",
             "--bind=q:abort",
             "--bind=ctrl-c:abort",
-            f"--bind=ctrl-h:execute({sys.executable} -c \"print('\\n📚 emdx - Help\\n\\nNavigation:\\n  j/k, ↑/↓    Move up/down\\n  g/G         First/last item\\n  /           Toggle search\\n  Mouse       Click & scroll\\n\\nActions:\\n  Enter       View document\\n  e           Edit document\\n  d           Delete document (soft)\\n  Ctrl-R      Refresh list\\n\\nPreview:\\n  Ctrl-D/U    Scroll down/up\\n  Ctrl-F/B    Page down/up\\n\\nOther:\\n  q, Ctrl-C   Quit\\n\\nPress any key to continue...'); input()\" < /dev/tty)",
-            "--header=📚 emdx - Documentation Index (enter: view, e: edit, d: delete, /: search, ctrl-h: help, q: quit)",
+            # ESC returns to nav mode, not quit
+            f"--bind=ctrl-h:execute({sys.executable} -c \"print('\\n📚 emdx - Modal Interface Help\\n\\n🧭 NAV MODE (navigation & actions):\\n  j/k         Move up/down\\n  g/G         First/last item\\n  Enter       View document\\n  e           Edit document\\n  d           Delete document\\n  v           View document\\n  TAB         Switch to SEARCH mode\\n\\n🔍 SEARCH MODE:\\n  /           Toggle search\\n  ESC         Return to NAV mode\\n\\n📋 BOTH MODES:\\n  Ctrl-D/U    Preview scroll down/up\\n  Ctrl-F/B    Preview page down/up\\n  Ctrl-R      Refresh list\\n  q           Quit\\n  Ctrl-C      Quit\\n\\nPress any key to continue...'); input()\" < /dev/tty)",
+            "--header=📚 emdx - Documentation Index (Mode: see prompt | TAB: search mode, ESC: nav mode, q: quit)",
             "--delimiter= │ ",
             "--with-nth=1,2,3,4",
             "--info=inline",
@@ -191,17 +237,26 @@ def gui():
             "--cycle",
         ]
         
+        logger.debug(f"Full fzf command: {' '.join(fzf_cmd)}")
+        
         # App loop - stay in browser until quit
         while True:
             # Get document list
             doc_list = format_document_list()
             
+            logger.debug(f"Running fzf with {len(doc_list)} documents")
+            
             # Run fzf with direct terminal access
             result = subprocess.run(
                 fzf_cmd,
                 input='\n'.join(doc_list),
-                text=True
+                text=True,
+                capture_output=True
             )
+            
+            logger.debug(f"fzf exit code: {result.returncode}")
+            logger.debug(f"fzf stdout: {result.stdout}")
+            logger.debug(f"fzf stderr: {result.stderr}")
             
             # Check exit status
             # fzf returns 130 for ctrl-c, 1 for ESC/q
@@ -209,13 +264,16 @@ def gui():
                 break
             elif result.returncode == 2:
                 # fzf error - exit gracefully
+                logger.error(f"fzf error: {result.stderr}")
+                console.print(f"[red]Error running fzf: {result.stderr}[/red]")
                 break
             
             # For any other status (including 0 for Enter), continue the loop
             
     finally:
-        # Clean up temp file
+        # Clean up temp files
         os.unlink(preview_script_path)
+        os.unlink(mode_file_path)
     
     # Clear screen on exit
     os.system('clear')
