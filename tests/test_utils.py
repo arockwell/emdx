@@ -10,7 +10,6 @@ from emdx.utils import get_git_project
 
 def test_get_git_project_with_origin_https():
     """Test getting project name from HTTPS git remote."""
-    # Mock git repo with HTTPS remote
     mock_remote = Mock()
     mock_remote.name = 'origin'
     mock_remote.url = 'https://github.com/arockwell/emdx.git'
@@ -25,7 +24,6 @@ def test_get_git_project_with_origin_https():
 
 def test_get_git_project_with_origin_ssh():
     """Test getting project name from SSH git remote."""
-    # Mock git repo with SSH remote
     mock_remote = Mock()
     mock_remote.name = 'origin'
     mock_remote.url = 'git@github.com:arockwell/emdx.git'
@@ -54,7 +52,6 @@ def test_get_git_project_no_git_extension():
 
 def test_get_git_project_no_remotes(tmp_path):
     """Test getting project name when repo has no remotes."""
-    # Mock a repo with no remotes
     mock_repo = Mock()
     mock_repo.remotes = []
     mock_repo.working_dir = str(tmp_path / 'my-project')
@@ -84,5 +81,4 @@ def test_get_git_project_with_custom_path(tmp_path):
         result = get_git_project(tmp_path)
         assert result == 'custom-repo'
         
-        # Verify the path was passed correctly
         assert result == 'custom-repo'

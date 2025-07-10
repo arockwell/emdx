@@ -1,4 +1,4 @@
-"""Simplified test database setup."""
+"""Test database setup."""
 
 import sqlite3
 from pathlib import Path
@@ -6,12 +6,11 @@ import tempfile
 
 
 class TestDatabase:
-    """Simple test database wrapper that handles in-memory databases correctly."""
+    """Test database wrapper that handles in-memory databases correctly."""
     
     def __init__(self, db_path=":memory:"):
         self.db_path = db_path
         if db_path == ":memory:":
-            # For in-memory database, keep a connection open
             self.conn = sqlite3.connect(":memory:")
             self.conn.row_factory = sqlite3.Row
             self._create_schema()

@@ -7,15 +7,15 @@ from unittest.mock import patch
 
 from emdx.database import SQLiteDatabase
 from emdx.tags import add_tags_to_document
-from test_fixtures import create_test_database
+from test_fixtures import TestDatabase
 
 
 @pytest.fixture
 def temp_db():
     """Create a temporary in-memory SQLite database for testing."""
-    db = create_test_database(":memory:")
+    db = TestDatabase(":memory:")
     yield db
-    # No cleanup needed for in-memory database
+    db.close()
 
 
 @pytest.fixture
@@ -62,8 +62,6 @@ def sample_documents(temp_db):
             content=doc["content"],
             project=doc["project"]
         )
-        # Add tags using the tag module function
-        # We need to patch the db instance
         import emdx.tags
         original_db = emdx.tags.db
         emdx.tags.db = temp_db
