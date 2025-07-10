@@ -105,17 +105,6 @@ class MinimalDocumentBrowser(App):
         height: 100%;
     }
     
-    #mode-indicator {
-        background: $success;
-        color: $background;
-        padding: 0 2;
-        dock: top;
-        height: 1;
-    }
-    
-    #mode-indicator.search-mode {
-        background: $warning;
-    }
     
     Input {
         dock: top;
@@ -158,7 +147,6 @@ class MinimalDocumentBrowser(App):
         self.current_doc_id = None
         
     def compose(self) -> ComposeResult:
-        yield Label("NORMAL", id="mode-indicator")
         yield Input(placeholder="Type to search...", id="search-input")
         
         with Horizontal():
@@ -241,16 +229,11 @@ class MinimalDocumentBrowser(App):
         status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
     
     def watch_mode(self, old_mode: str, new_mode: str):
-        mode_label = self.query_one("#mode-indicator", Label)
-        mode_label.update(new_mode)
-        
         if new_mode == "SEARCH":
-            mode_label.add_class("search-mode")
             search = self.query_one("#search-input", Input)
             search.add_class("visible")
             search.focus()
         else:
-            mode_label.remove_class("search-mode")
             search = self.query_one("#search-input", Input)
             search.remove_class("visible")
             search.value = ""
