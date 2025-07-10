@@ -1,4 +1,4 @@
-# EMDX Test Suite
+# EMDX Test Suite - Claude Instructions
 
 ## Overview
 
