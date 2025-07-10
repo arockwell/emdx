@@ -223,16 +223,8 @@ class MinimalDocumentBrowser(App):
                 preview_log = self.query_one("#preview-content", RichLog)
                 preview_log.clear()
                 
-                created = doc['created_at'].strftime('%Y-%m-%d %H:%M')
-                markdown_content = f"""# {doc['title']}
-
-**Project:** {doc['project'] or 'None'}  
-**Created:** {created}  
-**Views:** {doc['access_count']}
-
----
-
-{doc['content']}"""
+                # Just show the content without metadata
+                markdown_content = doc['content']
                 
                 md = Markdown(markdown_content, code_theme="monokai")
                 preview_log.write(md)
