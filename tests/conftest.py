@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
-from emdx.database import SQLiteDatabase
+from emdx.sqlite_database import SQLiteDatabase
 from emdx.tags import add_tags_to_document
 from test_fixtures import TestDatabase
 
@@ -24,7 +24,7 @@ def temp_db_file():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
     
-    db = create_test_database(db_path)
+    db = TestDatabase(str(db_path))
     yield db
     
     # Cleanup
