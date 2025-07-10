@@ -384,3 +384,31 @@ def markdown():
     except Exception as e:
         console.print(f"❌ Error: {e}", style="red")
         raise typer.Exit(1)
+
+
+@app.command()
+def seamless():
+    """Seamless TUI browser with no-flash nvim integration."""
+    from emdx.textual_browser_seamless import run_seamless
+    
+    try:
+        run_seamless()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        raise typer.Exit(1)
+
+
+@app.command()
+def wrapper():
+    """External wrapper approach - complete terminal state management."""
+    from emdx.nvim_wrapper import run_textual_with_nvim_wrapper
+    
+    try:
+        run_textual_with_nvim_wrapper()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        raise typer.Exit(1)

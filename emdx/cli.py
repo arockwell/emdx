@@ -9,7 +9,7 @@ from typing import Optional
 from emdx import __version__
 from emdx.core import app as core_app
 from emdx.browse import app as browse_app
-from emdx.gui import gui, modal, textual, markdown
+from emdx.gui import gui, modal, textual, markdown, seamless, wrapper
 from emdx.gist import app as gist_app
 from emdx.tag_commands import app as tag_app
 
@@ -43,6 +43,8 @@ app.command()(gui)
 app.command(name="modal")(modal)
 app.command(name="textual")(textual)
 app.command(name="markdown")(markdown)
+app.command(name="seamless")(seamless)
+app.command(name="wrapper")(wrapper)
 
 # Version command
 @app.command()
