@@ -112,7 +112,21 @@ except Exception as e:
 
 @app.command()
 def gui():
-    """Interactive FZF-based document browser for emdx."""
+    """Seamless TUI browser with zero-flash nvim integration."""
+    from emdx.nvim_wrapper import run_textual_with_nvim_wrapper
+    
+    try:
+        run_textual_with_nvim_wrapper()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        raise typer.Exit(1)
+
+
+@app.command()
+def fzf():
+    """Interactive FZF-based document browser (legacy)."""
     # Check prerequisites
     fzf_path = get_fzf_path()
     if not fzf_path:
@@ -343,72 +357,3 @@ except Exception as e:
     os.system('clear')
 
 
-@app.command()
-def modal():
-    """True modal browser with vim-style navigation."""
-    import curses
-    from emdx.modal_browser import main as modal_main
-    
-    try:
-        curses.wrapper(modal_main)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        console.print(f"❌ Error: {e}", style="red")
-        raise typer.Exit(1)
-
-
-@app.command()
-def textual():
-    """Modern TUI browser with mouse support and true modal behavior."""
-    from emdx.textual_browser import run as textual_run
-    
-    try:
-        textual_run()
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        console.print(f"❌ Error: {e}", style="red")
-        raise typer.Exit(1)
-
-
-@app.command()
-def markdown():
-    """TUI browser with native markdown rendering (instant preview updates)."""
-    from emdx.textual_markdown import run as markdown_run
-    
-    try:
-        markdown_run()
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        console.print(f"❌ Error: {e}", style="red")
-        raise typer.Exit(1)
-
-
-@app.command()
-def seamless():
-    """Seamless TUI browser with no-flash nvim integration."""
-    from emdx.textual_browser_seamless import run_seamless
-    
-    try:
-        run_seamless()
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        console.print(f"❌ Error: {e}", style="red")
-        raise typer.Exit(1)
-
-
-@app.command()
-def wrapper():
-    """External wrapper approach - complete terminal state management."""
-    from emdx.nvim_wrapper import run_textual_with_nvim_wrapper
-    
-    try:
-        run_textual_with_nvim_wrapper()
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        console.print(f"❌ Error: {e}", style="red")
-        raise typer.Exit(1)

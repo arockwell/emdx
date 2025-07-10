@@ -100,7 +100,7 @@ class FullScreenView(Screen):
             content_log = self.query_one("#content", RichLog)
             content_log.clear()
             
-            # Render markdown
+            # Render just the content markdown without metadata
             md = Markdown(doc['content'], code_theme="monokai")
             content_log.write(md)
             content_log.scroll_to(0, 0, animate=False)
