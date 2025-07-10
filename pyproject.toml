@@ -1,17 +1,13 @@
-[build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "emdx"
-version = "0.4.0"
+version = "0.5.0"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
+authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
-authors = [
-    {name = "Alex Rockwell", email = "alex@rockwell.dev"},
-]
+license = "MIT"
+homepage = "https://github.com/arockwell/emdx"
+repository = "https://github.com/arockwell/emdx"
+documentation = "https://github.com/arockwell/emdx#readme"
 keywords = ["knowledge-base", "documentation", "cli", "sqlite", "full-text-search"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -29,39 +25,32 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 
-dependencies = [
-    "typer[all]>=0.9.0",
-    "rich>=13.0.0",
-    "click>=8.0.0",
-    "python-dotenv>=1.0.0",
-    "gitpython>=3.1.0",
-    "pygments>=2.0.0",
-    "rapidfuzz>=3.0.0",  # For fuzzy title matching
-    "PyGithub>=2.1.0",  # For GitHub gist integration
-    "textual>=0.40.0",  # For terminal UI
-]
+[tool.poetry.dependencies]
+python = "^3.8"
+typer = {extras = ["all"], version = "^0.9.0"}
+rich = "^13.0.0"
+click = "^8.0.0"
+python-dotenv = "^1.0.0"
+gitpython = "^3.1.0"
+pygments = "^2.0.0"
+rapidfuzz = "^3.0.0"
+PyGithub = "^2.1.0"
+textual = "^0.40.0"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-    "pre-commit>=3.0.0",
-]
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-cov = "^4.0.0"
+black = "^23.0.0"
+ruff = "^0.1.0"
+mypy = "^1.0.0"
+pre-commit = "^3.0.0"
 
-[project.scripts]
+[tool.poetry.scripts]
 emdx = "emdx.cli:run"
 
-[project.urls]
-Homepage = "https://github.com/arockwell/emdx"
-Documentation = "https://github.com/arockwell/emdx#readme"
-Repository = "https://github.com/arockwell/emdx"
-Issues = "https://github.com/arockwell/emdx/issues"
-
-[tool.setuptools]
-packages = ["emdx"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 100
@@ -88,7 +77,7 @@ disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --strict-markers"
+addopts = "-v --tb=short --strict-markers"
 testpaths = ["tests"]
 
 [tool.coverage.run]
