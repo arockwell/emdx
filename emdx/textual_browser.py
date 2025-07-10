@@ -44,7 +44,7 @@ class FullScreenView(Screen):
     #doc-viewer {
         width: 100%;
         height: 100%;
-        padding: 1;
+        padding: 0;
     }
     
     #header {
