@@ -1,10 +1,10 @@
 # emdx - Documentation Index Management System
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a beautiful terminal interface.
+A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a modern terminal interface with seamless nvim integration.
 
 ## Features
 
@@ -13,7 +13,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 📝 **Flexible Input**: Save files, text, or piped input with one command
 - 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
-- 🖥️ **Interactive Browser**: FZF-based document browser for quick navigation
+- 🖥️ **Modern TUI Browser**: Textual-based browser with vim-style navigation and zero-flash nvim editing
 - 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
 - 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
 - ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
@@ -25,8 +25,8 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 ### Prerequisites
 
 - Python 3.8+
-- fzf (for interactive mode)
-- mdcat (optional, for better markdown viewing with pagination)
+- textual (for interactive GUI - installed automatically)
+- nvim (for seamless editing integration)
 
 ### Install from source
 
@@ -196,22 +196,24 @@ emdx gist-list --project "my-app"
 
 ### Interactive browser
 ```bash
-# Launch interactive FZF browser
+# Launch modern textual browser with seamless nvim integration
 emdx gui
 ```
 
 The GUI browser provides:
-- **Real-time search**: Filter documents as you type
-- **Document preview**: See content in the preview pane
-- **Quick actions**: View, edit, or delete documents
+- **Zero-flash nvim editing**: Seamless transition to nvim without terminal flash
+- **Modal interface**: True vim-style NORMAL/SEARCH modes  
+- **Live search**: Real-time document filtering as you type
+- **Rich markdown preview**: Clean document rendering with syntax highlighting
+- **Mouse support**: Click and scroll support alongside keyboard navigation
 - **Keyboard navigation**:
-  - `↑/↓` or `Ctrl-p/Ctrl-n` - Navigate through documents
-  - `Enter` - View selected document
-  - `Ctrl-e` - Edit selected document
-  - `Ctrl-d` - Delete selected document
-  - `Ctrl-r` - Restore document from trash
-  - `Ctrl-t` - Toggle between active/trashed documents
-  - `Esc` or `Ctrl-c` - Exit browser
+  - `j/k` - Move up/down through documents
+  - `g/G` - Go to first/last document
+  - `/` - Enter search mode
+  - `e` - Edit document in nvim (seamless, no flash)
+  - `d` - Delete document (modal confirmation)
+  - `v` or `Enter` - View document in full-screen
+  - `q` or `Esc` - Exit browser
 
 ## Command Reference
 

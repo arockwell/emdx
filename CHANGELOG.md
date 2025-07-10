@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-01-10
+
+### Added
+- **Seamless nvim Integration** - Zero terminal flash when editing documents
+  - External wrapper approach using proper terminal state management
+  - Clean exit/restart cycle with signal-based process coordination
+  - nvim gets full terminal control without visual artifacts
+- **Modern Textual-based GUI** - Complete rewrite of the interactive browser
+  - True modal behavior with NORMAL/SEARCH modes (like vim)
+  - Vim-style navigation: j/k (up/down), g/G (top/bottom), / (search)
+  - Live search with instant document filtering
+  - Mouse support with modern textual widgets
+  - Modal delete confirmation dialog with y/n shortcuts
+  - Full-screen document viewer with vim navigation (j/k, ctrl+d/u, g/G)
+
+### Changed
+- **BREAKING**: `emdx gui` now uses textual browser instead of FZF
+- **Clean markdown rendering** - Documents show only title + content
+  - Removed project/created/views metadata headers
+  - Matches mdcat behavior for clean reading experience
+  - Both preview pane and full-screen view show consistent formatting
+
+### Removed
+- **FZF browser completely removed** - All FZF-related code and dependencies
+- **Experimental commands removed**: modal, textual, markdown, seamless, wrapper
+- All preview script helpers and leader key implementations
+
+### Technical Details
+- New `nvim_wrapper.py` handles terminal state management
+- `textual_browser_minimal.py` provides the modal TUI interface
+- Uses Textual library for modern terminal UI components
+- Rich markdown rendering with syntax highlighting
+
 ## [0.4.0] - 2025-01-09
 
 ### Added
@@ -102,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.5.0]: https://github.com/arockwell/emdx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/arockwell/emdx/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/arockwell/emdx/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/arockwell/emdx/compare/v0.2.1...v0.3.1
