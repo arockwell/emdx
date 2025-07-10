@@ -92,10 +92,21 @@ class FullScreenView(Screen):
             content_log = self.query_one("#content", RichLog)
             content_log.clear()
             
-            # Render title and content without metadata
-            markdown_content = f"""# {doc['title']}
+            # Smart title handling - avoid double titles
+            content = doc['content'].strip()
+            
+            # Check if content already starts with the title as H1
+            content_lines = content.split('\n')
+            first_line = content_lines[0].strip() if content_lines else ""
+            
+            if first_line == f"# {doc['title']}":
+                # Content already has the title, just show content
+                markdown_content = content
+            else:
+                # Add title if not already present
+                markdown_content = f"""# {doc['title']}
 
-{doc['content']}"""
+{content}"""
             md = Markdown(markdown_content, code_theme="monokai")
             content_log.write(md)
             content_log.scroll_to(0, 0, animate=False)
