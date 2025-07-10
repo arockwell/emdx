@@ -223,8 +223,10 @@ class MinimalDocumentBrowser(App):
                 preview_log = self.query_one("#preview-content", RichLog)
                 preview_log.clear()
                 
-                # Just show the content without metadata
-                markdown_content = doc['content']
+                # Show title and content, but no metadata
+                markdown_content = f"""# {doc['title']}
+
+{doc['content']}"""
                 
                 md = Markdown(markdown_content, code_theme="monokai")
                 preview_log.write(md)
