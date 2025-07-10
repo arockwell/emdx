@@ -93,7 +93,7 @@ class MinimalDocumentBrowser(App):
     
     #preview {
         width: 50%;
-        padding: 1;
+        padding: 0;
     }
     
     RichLog {
