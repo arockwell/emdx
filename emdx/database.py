@@ -16,10 +16,13 @@ if user_config.exists():
 load_dotenv()
 
 # Import the SQLite implementation
-from .sqlite_database import SQLiteDatabase, db
+from .sqlite_database import SQLiteDatabase, get_db, reset_db
 
 # For now, just use SQLite as the Database class
 Database = SQLiteDatabase
 
-# Export the global instance
-__all__ = ['Database', 'db']
+# Get the global instance
+db = get_db()
+
+# Export everything needed
+__all__ = ['Database', 'db', 'get_db', 'reset_db']

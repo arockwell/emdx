@@ -18,6 +18,9 @@ class TestSQLiteDatabase:
             db_path = Path(tmpdir) / "test.db"
             db = SQLiteDatabase(db_path)
             
+            # Database file is created on first connection
+            db.ensure_schema()
+            
             assert db_path.exists()
             assert db.db_path == db_path
     
@@ -63,6 +66,7 @@ class TestSQLiteDatabase:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
             db = SQLiteDatabase(db_path)
+            db.ensure_schema()
             
             doc_id = db.save_document(
                 title="Test Document",
@@ -84,12 +88,13 @@ class TestSQLiteDatabase:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
             db = SQLiteDatabase(db_path)
+            db.ensure_schema()
             
+            # Save document first
             doc_id = db.save_document(
                 title="Tagged Document",
                 content="Content with tags",
-                project="test",
-                tags=["python", "testing", "cli"]
+                project="test"
             )
             
             assert doc_id > 0

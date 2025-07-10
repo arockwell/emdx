@@ -32,6 +32,16 @@ def temp_db_file():
 
 
 @pytest.fixture
+def sqlite_db():
+    """Create a properly initialized SQLiteDatabase for testing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        db = SQLiteDatabase(db_path)
+        db.ensure_schema()
+        yield db
+
+
+@pytest.fixture
 def sample_documents(temp_db):
     """Add some sample documents to the database."""
     docs = [

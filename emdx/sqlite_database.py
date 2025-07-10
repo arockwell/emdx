@@ -463,4 +463,20 @@ class SQLiteDatabase:
 
 
 # Global database instance
-db = SQLiteDatabase()
+_db = None
+
+def get_db():
+    """Get the global database instance, creating it if needed."""
+    global _db
+    if _db is None:
+        _db = SQLiteDatabase()
+    return _db
+
+def reset_db(db_path=None):
+    """Reset the database instance - primarily for testing."""
+    global _db
+    _db = SQLiteDatabase(db_path)
+    return _db
+
+# For backward compatibility
+db = get_db()

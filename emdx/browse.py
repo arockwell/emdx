@@ -11,6 +11,9 @@ from rich.table import Table
 app = typer.Typer()
 console = Console()
 
+# Import db at module level for easier testing
+from emdx.database import db
+
 
 @app.command()
 def list(
@@ -19,9 +22,8 @@ def list(
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, csv"),
 ):
     """List all documents in the knowledge base"""
+    import json
     try:
-        from emdx.database import db
-        import json
         
         # Ensure database schema exists
         db.ensure_schema()
