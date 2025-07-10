@@ -78,20 +78,12 @@ class FullScreenView(Screen):
         self.doc_id = doc_id
         
     def compose(self) -> ComposeResult:
-        # Get document
-        doc = db.get_document(str(self.doc_id))
-        if doc:
-            created = doc['created_at'].strftime('%Y-%m-%d %H:%M')
-            
-            # Header with title
-            yield Label(f"📄 {doc['title']} | {doc['project'] or 'No Project'} | {created}", id="header")
-            
-            # Document content  
-            with ScrollableContainer(id="doc-viewer"):
-                yield RichLog(id="content", wrap=True, highlight=True, markup=True, auto_scroll=False)
-            
-            # Footer
-            yield Label("Press q or ESC to return", id="footer")
+        # Just the document content - no header metadata
+        with ScrollableContainer(id="doc-viewer"):
+            yield RichLog(id="content", wrap=True, highlight=True, markup=True, auto_scroll=False)
+        
+        # Footer
+        yield Label("Press q or ESC to return", id="footer")
     
     def on_mount(self) -> None:
         """Load document content when mounted."""
