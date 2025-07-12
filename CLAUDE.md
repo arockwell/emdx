@@ -269,4 +269,4 @@ When Claude Code helps with EMDX:
 4. **Generate progress reports** from tag analytics
 5. **Maintain minimal taxonomy** - resist adding too many tags
 
-This enables powerful project management and success tracking while keeping the tag system simple and space-efficient in the GUI.
+This enables powerful project management and success tracking while keeping the tag system simple and space-efficient in the GUI.# Documentation refresh
