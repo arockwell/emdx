@@ -13,7 +13,7 @@ console = Console()
 def gui():
     """Seamless TUI browser with zero-flash nvim integration."""
     from emdx.nvim_wrapper import run_textual_with_nvim_wrapper
-    
+
     try:
         run_textual_with_nvim_wrapper()
     except KeyboardInterrupt:

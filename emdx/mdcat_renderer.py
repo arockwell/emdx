@@ -10,93 +10,95 @@ mdcat provides superior markdown rendering with:
 - Proper link handling
 """
 
-import subprocess
-import shutil
 import os
-from typing import Optional, Tuple
+import shutil
+import subprocess
 import tempfile
+from typing import Optional, Tuple
 
 
 class MdcatRenderer:
     """Render markdown using mdcat and capture the output."""
-    
+
     @staticmethod
     def is_available() -> bool:
         """Check if mdcat is available on the system."""
-        return shutil.which('mdcat') is not None
-    
+        return shutil.which("mdcat") is not None
+
     @staticmethod
     def get_terminal_info() -> Tuple[str, bool]:
         """Get terminal type and whether it supports images."""
-        term = os.environ.get('TERM', '')
-        term_program = os.environ.get('TERM_PROGRAM', '')
-        
+        term = os.environ.get("TERM", "")
+        term_program = os.environ.get("TERM_PROGRAM", "")
+
         # Check for terminals that support images
-        supports_images = any([
-            'kitty' in term.lower(),
-            term_program == 'iTerm.app',
-            'wezterm' in term.lower(),
-        ])
-        
+        supports_images = any(
+            [
+                "kitty" in term.lower(),
+                term_program == "iTerm.app",
+                "wezterm" in term.lower(),
+            ]
+        )
+
         return term, supports_images
-    
+
     @staticmethod
     def render(content: str, width: Optional[int] = None) -> str:
         """
         Render markdown content using mdcat and return the formatted output.
-        
+
         Args:
             content: Markdown content to render
             width: Optional terminal width for rendering
-            
+
         Returns:
             Formatted terminal output from mdcat
         """
         if not MdcatRenderer.is_available():
             raise RuntimeError("mdcat is not installed. Install with: cargo install mdcat")
-        
+
         # Create a temporary file with the markdown content
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write(content)
             temp_path = f.name
-        
+
         try:
             # Build mdcat command
-            cmd = ['mdcat']
-            
+            cmd = ["mdcat"]
+
             # Add width if specified
             if width:
-                cmd.extend(['--columns', str(width)])
-            
+                cmd.extend(["--columns", str(width)])
+
             # Disable paging for capture
-            cmd.append('--no-pager')
-            
+            cmd.append("--no-pager")
+
             # Add the file
             cmd.append(temp_path)
-            
+
             # Run mdcat and capture output
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                env={**os.environ, 'TERM': 'xterm-256color'}  # Ensure color support
+                env={**os.environ, "TERM": "xterm-256color"},  # Ensure color support
             )
-            
+
             if result.returncode != 0:
                 raise RuntimeError(f"mdcat failed: {result.stderr}")
-            
+
             return result.stdout
-            
+
         finally:
             # Clean up temp file
             os.unlink(temp_path)
-    
+
     @staticmethod
     def render_to_html(content: str) -> str:
         """
         Render markdown to HTML using mdcat's HTML output.
-        
-        Note: mdcat doesn't directly support HTML output, 
+
+        Note: mdcat doesn't directly support HTML output,
         so this would need a different tool like pandoc.
         """
         # This is a placeholder - mdcat focuses on terminal output
@@ -107,17 +109,17 @@ class MdcatRenderer:
 class MdcatWidget:
     """
     A concept for integrating mdcat output into Textual.
-    
+
     This is experimental and shows how you might capture mdcat's
     ANSI output and display it in a Textual widget.
     """
-    
+
     @staticmethod
     def create_ansi_widget(content: str):
         """
         Create a Textual widget that can display ANSI formatted text from mdcat.
-        
-        Note: This would require a custom widget that can properly 
+
+        Note: This would require a custom widget that can properly
         interpret ANSI escape codes, which is non-trivial.
         """
         # This is a conceptual implementation
@@ -125,7 +127,7 @@ class MdcatWidget:
         # 1. Parse ANSI escape codes from mdcat output
         # 2. Convert them to Textual's rendering format
         # 3. Handle special features like images (if supported)
-        
+
         try:
             rendered = MdcatRenderer.render(content)
             # TODO: Create a custom widget that can display ANSI text
@@ -165,7 +167,7 @@ print(hello("World"))
 - [Textual](https://textual.textualize.io)
 - [mdcat](https://github.com/lunaryorn/mdcat)
 """
-    
+
     if MdcatRenderer.is_available():
         print("mdcat is available!")
         term, images = MdcatRenderer.get_terminal_info()

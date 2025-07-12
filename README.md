@@ -41,7 +41,21 @@ pip install -e .
 ```bash
 git clone https://github.com/arockwell/emdx.git
 cd emdx
-pip install -e ".[dev]"
+
+# Install Just (task runner)
+# macOS
+brew install just
+# Linux
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+# Install dependencies
+poetry install
+
+# Run development version
+just dev
+
+# See all available commands
+just
 ```
 
 ### No database setup required!
