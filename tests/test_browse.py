@@ -13,7 +13,7 @@ runner = CliRunner()
 class TestBrowseCommands:
     """Test browse command-line interface."""
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_list_command_empty_database(self, mock_db):
         """Test list command with empty database."""
         mock_db.ensure_schema = Mock()
@@ -25,7 +25,7 @@ class TestBrowseCommands:
         assert "No documents found" in result.stdout
         mock_db.list_documents.assert_called_once()
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_list_command_with_documents(self, mock_db):
         """Test list command with documents."""
         mock_db.ensure_schema = Mock()
@@ -45,7 +45,7 @@ class TestBrowseCommands:
         assert "Test Document" in result.stdout
         mock_db.list_documents.assert_called_once()
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_list_command_with_project_filter(self, mock_db):
         """Test list command with project filter."""
         mock_db.ensure_schema = Mock()
@@ -56,7 +56,7 @@ class TestBrowseCommands:
         assert result.exit_code == 0
         mock_db.list_documents.assert_called_once_with(project="test-project", limit=50)
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_list_command_json_format(self, mock_db):
         """Test list command with JSON format."""
         mock_db.ensure_schema = Mock()
@@ -70,7 +70,7 @@ class TestBrowseCommands:
         assert "[" in result.stdout  # JSON array
         assert '"id": 1' in result.stdout
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_recent_command(self, mock_db):
         """Test recent command."""
         mock_db.ensure_schema = Mock()
@@ -90,7 +90,7 @@ class TestBrowseCommands:
         assert "Recent Doc" in result.stdout
         mock_db.get_recently_accessed.assert_called_once()
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_stats_command(self, mock_db):
         """Test stats command."""
         mock_db.ensure_schema = Mock()
@@ -113,7 +113,7 @@ class TestBrowseCommands:
         assert "Popular Doc" in result.stdout
         mock_db.get_stats.assert_called_once()
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_projects_command(self, mock_db):
         """Test projects command."""
         mock_db.ensure_schema = Mock()
@@ -130,7 +130,7 @@ class TestBrowseCommands:
         assert "10" in result.stdout
         mock_db.get_projects.assert_called_once()
     
-    @patch('emdx.database.db')
+    @patch('emdx.browse.db')
     def test_projects_command_empty(self, mock_db):
         """Test projects command with no projects."""
         mock_db.ensure_schema = Mock()

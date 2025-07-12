@@ -8,6 +8,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from emdx.sqlite_database import db
+
 app = typer.Typer()
 console = Console()
 
@@ -21,8 +23,6 @@ def list(
     """List all documents in the knowledge base"""
     try:
         import json
-
-        from emdx.database import db
 
         # Ensure database schema exists
         db.ensure_schema()

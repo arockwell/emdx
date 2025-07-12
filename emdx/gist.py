@@ -13,7 +13,7 @@ from github import Github, GithubException
 from rich.console import Console
 from rich.table import Table
 
-from emdx.database import db
+from emdx.sqlite_database import db
 
 app = typer.Typer()
 console = Console()
