@@ -61,6 +61,12 @@ class FullScreenView(Screen):
     ]
 
     def __init__(self, doc_id: int):
+        """Initialize the full screen viewer.
+
+        Args:
+            doc_id: The ID of the document to display.
+
+        """
         super().__init__()
         self.doc_id = doc_id
 
