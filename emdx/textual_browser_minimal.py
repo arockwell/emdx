@@ -34,7 +34,7 @@ class SelectionTextArea(TextArea):
         self.app_instance = app_instance
     
     def on_key(self, event: events.Key) -> None:
-        if event.character == "s":
+        if event.character == "s" or event.key == "escape":
             event.stop()
             event.prevent_default()
             self.app_instance.action_toggle_selection_mode()
@@ -496,7 +496,7 @@ class MinimalDocumentBrowser(App):
                 except Exception:
                     # Might be in selection mode with TextArea
                     try:
-                        preview_area = self.query_one("#preview-content", TextArea)
+                        preview_area = self.query_one("#preview-content")
                         content = doc["content"].strip()
                         if not content.startswith(f"# {doc['title']}"):
                             plain_content = f"# {doc['title']}\n\n{content}"
@@ -514,7 +514,7 @@ class MinimalDocumentBrowser(App):
                 preview_area.write(f"[red]Error loading preview: {e}[/red]")
             except Exception:
                 try:
-                    preview_area = self.query_one("#preview-content", TextArea)
+                    preview_area = self.query_one("#preview-content")
                     preview_area.text = f"Error loading preview: {e}"
                 except Exception:
                     pass
@@ -664,11 +664,7 @@ class MinimalDocumentBrowser(App):
             
         # Handle global Escape key - quit from any mode
         if event.key == "escape":
-            # In selection mode, return to normal mode first
-            if self.selection_mode:
-                self.action_toggle_selection_mode()
-                event.prevent_default()
-                return
+            # Selection mode ESC is handled by SelectionTextArea
             
             # From any mode/state, ESC should quit
             if self.mode == "SEARCH":
@@ -1092,8 +1088,8 @@ class MinimalDocumentBrowser(App):
                 # If in selection mode, check for TextArea selection
                 if self.selection_mode:
                     try:
-                        # Get the TextArea widget
-                        text_area = self.query_one("#preview-content", TextArea)
+                        # Get the TextArea widget (could be SelectionTextArea)
+                        text_area = self.query_one("#preview-content")
                         
                         # Try to get selected text
                         try:
