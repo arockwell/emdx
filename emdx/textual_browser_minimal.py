@@ -27,6 +27,23 @@ from emdx.tags import (
 )
 
 
+class SelectionTextArea(TextArea):
+    """TextArea that captures 's' key to exit selection mode."""
+    
+    def __init__(self, app_instance, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.app_instance = app_instance
+    
+    def on_key(self, event: events.Key) -> None:
+        if event.character == "s":
+            event.stop()
+            event.prevent_default()
+            self.app_instance.action_toggle_selection_mode()
+            return
+        # Let TextArea handle all other keys normally
+        super().on_key(event)
+
+
 
 
 class FullScreenView(Screen):
@@ -622,15 +639,13 @@ class MinimalDocumentBrowser(App):
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
-        # Check for 's' in selection mode first
+        # Handle 's' key for selection mode toggle anywhere in the app
         if event.character == "s":
-            # If we're in selection mode OR if a TextArea has focus, toggle
-            focused = self.focused
-            if self.selection_mode or (focused and focused.id == "selection-content"):
-                event.prevent_default()
-                event.stop()
-                self.action_toggle_selection_mode()
-                return
+            # Always capture 's' at the app level, regardless of focus
+            event.stop()
+            event.prevent_default()
+            self.action_toggle_selection_mode()
+            return
             
         if self.mode == "SEARCH":
             if event.key == "escape":
@@ -1101,8 +1116,9 @@ class MinimalDocumentBrowser(App):
                 # We'll show a plain text version that's easier to select
                 plain_content = header_text + markdown_content
                 
-                # Create a TextArea for selection
-                selection_area = TextArea(
+                # Create a custom TextArea for selection that captures 's' key
+                selection_area = SelectionTextArea(
+                    self,  # Pass app instance so it can call toggle method
                     plain_content,
                     id="selection-content",
                     theme="dracula",
