@@ -1112,9 +1112,14 @@ class MinimalDocumentBrowser(App):
                 wrap=True, 
                 highlight=True, 
                 markup=True, 
-                auto_scroll=False
+                auto_scroll=False,
+                max_width=None,  # Ensure it uses container width
             )
             preview_container.mount(preview_log)
+            
+            # Force the app to recalculate layouts
+            self.refresh(layout=True)
+            preview_log.refresh()
             
             # Refresh the preview
             if self.current_doc_id:
