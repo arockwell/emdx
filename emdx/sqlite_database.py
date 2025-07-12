@@ -173,17 +173,27 @@ class SQLiteDatabase:
 
     def save_document(self, title: str, content: str, project: Optional[str] = None) -> int:
         """Save a document to the knowledge base"""
-        with self.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO documents (title, content, project)
-                VALUES (?, ?, ?)
-            """,
-                (title, content, project),
-            )
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO documents (title, content, project)
+                    VALUES (?, ?, ?)
+                """,
+                    (title, content, project),
+                )
 
-            conn.commit()
-            return cursor.lastrowid
+                conn.commit()
+                doc_id = cursor.lastrowid
+                logger.debug("Document saved to database", extra={"doc_id": doc_id, "title": title, "project": project})
+                return doc_id
+        except sqlite3.Error as e:
+            logger.error("Database error saving document", extra={"title": title, "project": project, "error": str(e)})
+            raise DatabaseError(
+                message="Failed to save document to database",
+                details={"title": title, "project": project, "sqlite_error": str(e)},
+                suggestion="Check database permissions and disk space."
+            )
 
     def get_document(self, identifier: str) -> Optional[Dict[str, Any]]:
         """Get a document by ID or title"""

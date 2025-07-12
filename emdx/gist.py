@@ -184,7 +184,8 @@ def create(
 ):
     """Create or update a GitHub Gist from a document."""
     # Ensure database schema is up to date
-    db.ensure_schema()
+    db = get_database()
+    ensure_database_schema(db)
 
     # Check for conflicting options
     if public and secret:
@@ -295,7 +296,8 @@ def list_gists(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
 ):
     """List all gists created from documents."""
-    db.ensure_schema()
+    db = get_database()
+    ensure_database_schema(db)
 
     with db.get_connection() as conn:
         if project:

@@ -17,7 +17,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Input, Label, RichLog
 
-from emdx.sqlite_database import db
+from emdx.database_factory import get_database, ensure_database_schema
 
 
 class FullScreenView(Screen):
@@ -61,10 +61,17 @@ class FullScreenView(Screen):
     ]
 
     def __init__(self, doc_id: int):
+        """Initialize the full screen viewer.
+
+        Args:
+            doc_id: The ID of the document to display.
+
+        """
         super().__init__()
         self.doc_id = doc_id
 
     def compose(self) -> ComposeResult:
+        """Compose the UI layout for the full screen viewer."""
         # Just the document content - no header metadata
         with ScrollableContainer(id="doc-viewer"):
             yield RichLog(id="content", wrap=True, highlight=True, markup=True, auto_scroll=False)
@@ -74,6 +81,7 @@ class FullScreenView(Screen):
 
     def on_mount(self) -> None:
         """Load document content when mounted."""
+        db = get_database()
         doc = db.get_document(str(self.doc_id))
         if doc:
             content_log = self.query_one("#content", RichLog)
@@ -166,11 +174,19 @@ class DeleteConfirmScreen(ModalScreen):
     ]
 
     def __init__(self, doc_id: int, doc_title: str):
+        """Initialize the delete confirmation dialog.
+
+        Args:
+            doc_id: The ID of the document to delete.
+            doc_title: The title of the document for display.
+
+        """
         super().__init__()
         self.doc_id = doc_id
         self.doc_title = doc_title
 
     def compose(self) -> ComposeResult:
+        """Compose the UI layout for the delete confirmation dialog."""
         with Grid(id="dialog"):
             yield Label(
                 f'Delete document #{self.doc_id}?\n"{self.doc_title}"\n\n[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]',
@@ -180,15 +196,18 @@ class DeleteConfirmScreen(ModalScreen):
             yield Button("Delete (y)", variant="error", id="delete")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events in the delete confirmation dialog."""
         if event.button.id == "delete":
             self.dismiss(True)
         else:
             self.dismiss(False)
 
     def action_confirm_delete(self) -> None:
+        """Confirm deletion action (y key)."""
         self.dismiss(True)
 
     def action_cancel(self) -> None:
+        """Cancel deletion action (n key or escape)."""
         self.dismiss(False)
 
 
@@ -279,7 +298,8 @@ class MinimalDocumentBrowser(App):
 
     def load_documents(self):
         try:
-            db.ensure_schema()
+            db = get_database()
+            ensure_database_schema(db)
             docs = db.list_documents(limit=1000)
             self.documents = docs
             self.filtered_docs = docs
@@ -319,6 +339,7 @@ class MinimalDocumentBrowser(App):
 
     def update_preview(self, doc_id: int):
         try:
+            db = get_database()
             doc = db.get_document(str(doc_id))
             if doc:
                 preview_log = self.query_one("#preview-content", RichLog)
@@ -464,6 +485,7 @@ class MinimalDocumentBrowser(App):
 
         try:
             # Get document content
+            db = get_database()
             doc = db.get_document(str(self.current_doc_id))
             if not doc:
                 return
@@ -596,7 +618,8 @@ def run_minimal():
     """Run the minimal browser and return exit code."""
     try:
         # Check if documents exist
-        db.ensure_schema()
+        db = get_database()
+        ensure_database_schema(db)
         docs = db.list_documents(limit=1)
         if not docs:
             print("No documents found in knowledge base.")

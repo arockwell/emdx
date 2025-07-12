@@ -7,6 +7,8 @@ from typing import Optional
 
 import git
 
+from .error_handling import logger
+
 
 def get_git_project(path: Optional[Path] = None) -> Optional[str]:
     """
@@ -52,7 +54,9 @@ def get_git_project(path: Optional[Path] = None) -> Optional[str]:
 
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         # Not in a git repository
+        logger.debug("Not in a git repository", extra={"path": str(path)})
         return None
-    except Exception:
+    except Exception as e:
         # Any other error, just return None
+        logger.debug("Error detecting git project", extra={"path": str(path), "error": str(e)})
         return None
