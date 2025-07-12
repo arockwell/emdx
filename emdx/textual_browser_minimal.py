@@ -622,14 +622,7 @@ class MinimalDocumentBrowser(App):
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
-        if self.selection_mode:
-            # In selection mode, use Ctrl+Q to exit (TextArea won't intercept this)
-            if event.key == "ctrl+q":
-                event.prevent_default()
-                event.stop()
-                self.action_toggle_selection_mode()
-                return
-        elif self.mode == "SEARCH":
+        if self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
                 self.search_query = ""
@@ -1098,20 +1091,23 @@ class MinimalDocumentBrowser(App):
                 language="markdown",
             )
             
-            # Add a message handler for the TextArea to catch Ctrl+Q
-            def handle_key_in_textarea(message):
-                if isinstance(message, events.Key):
-                    if message.key == "ctrl+q":
-                        self.action_toggle_selection_mode()
-                        message.stop()
+            # Override TextArea's key handling to catch 's' for toggle
+            original_handle_key = selection_area.handle_key
+            def custom_handle_key(event):
+                if event.character == "s":
+                    # Toggle back to normal mode
+                    self.action_toggle_selection_mode()
+                    return True  # Event handled
+                # For all other keys, use TextArea's normal handling
+                return original_handle_key(event)
             
-            selection_area.on_key = handle_key_in_textarea
+            selection_area.handle_key = custom_handle_key
             
             preview_container.mount(selection_area)
             selection_area.focus()
             
             status.update(
-                "SELECT MODE: Select & copy text (edits ignored), Ctrl+Q to exit"
+                "SELECT MODE: Select & copy text (edits ignored), press 's' to return"
             )
         else:
             self.selection_mode = False
