@@ -623,11 +623,17 @@ class MinimalDocumentBrowser(App):
 
     def on_key(self, event: events.Key):
         if self.selection_mode:
-            # In selection mode, handle escape to exit
+            # In selection mode, handle escape and 's' to exit
             if event.key == "escape":
                 event.prevent_default()
                 event.stop()
                 self.action_toggle_selection_mode()
+                return  # Don't process further
+            elif event.character == "s":
+                event.prevent_default()
+                event.stop()
+                self.action_toggle_selection_mode()
+                return
         elif self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
@@ -1096,6 +1102,18 @@ class MinimalDocumentBrowser(App):
                 theme="dracula",  # Different theme to indicate different mode
                 language="markdown",
             )
+            
+            # Override TextArea's key handling to allow escape
+            original_on_key = selection_area._on_key
+            def custom_on_key(event):
+                if event.key == "escape" or event.character == "s":
+                    # Don't handle escape or 's' - let them bubble up to the app
+                    pass
+                else:
+                    # Handle all other keys normally
+                    original_on_key(event)
+            selection_area._on_key = custom_on_key
+            
             preview_container.mount(selection_area)
             selection_area.focus()
             
