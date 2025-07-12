@@ -622,6 +622,13 @@ class MinimalDocumentBrowser(App):
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
+        # Check for 's' in selection mode first
+        if self.selection_mode and event.character == "s":
+            event.prevent_default()
+            event.stop()
+            self.action_toggle_selection_mode()
+            return
+            
         if self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
@@ -1091,17 +1098,7 @@ class MinimalDocumentBrowser(App):
                 language="markdown",
             )
             
-            # Override TextArea's key handling to catch 's' for toggle
-            original_handle_key = selection_area.handle_key
-            def custom_handle_key(event):
-                if event.character == "s":
-                    # Toggle back to normal mode
-                    self.action_toggle_selection_mode()
-                    return True  # Event handled
-                # For all other keys, use TextArea's normal handling
-                return original_handle_key(event)
-            
-            selection_area.handle_key = custom_handle_key
+            # Don't override handle_key - let app's on_key handle it
             
             preview_container.mount(selection_area)
             selection_area.focus()
