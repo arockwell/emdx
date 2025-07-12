@@ -1,7 +1,7 @@
 """Tag management operations for emdx."""
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from .sqlite_database import db
 
@@ -21,7 +21,7 @@ def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
     return cursor.lastrowid
 
 
-def add_tags_to_document(doc_id: int, tag_names: List[str]) -> List[str]:
+def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Add tags to a document. Returns list of newly added tags."""
     with db.get_connection() as conn:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -60,7 +60,7 @@ def add_tags_to_document(doc_id: int, tag_names: List[str]) -> List[str]:
         return added_tags
 
 
-def remove_tags_from_document(doc_id: int, tag_names: List[str]) -> List[str]:
+def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Remove tags from a document. Returns list of removed tags."""
     with db.get_connection() as conn:
         removed_tags = []
@@ -94,7 +94,7 @@ def remove_tags_from_document(doc_id: int, tag_names: List[str]) -> List[str]:
         return removed_tags
 
 
-def get_document_tags(doc_id: int) -> List[str]:
+def get_document_tags(doc_id: int) -> list[str]:
     """Get all tags for a document."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -111,7 +111,7 @@ def get_document_tags(doc_id: int) -> List[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def list_all_tags(sort_by: str = "usage") -> List[Dict[str, Any]]:
+def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
     """List all tags with statistics.
 
     Args:
@@ -166,8 +166,8 @@ def list_all_tags(sort_by: str = "usage") -> List[Dict[str, Any]]:
 
 
 def search_by_tags(
-    tag_names: List[str], mode: str = "all", project: Optional[str] = None, limit: int = 20
-) -> List[Dict[str, Any]]:
+    tag_names: list[str], mode: str = "all", project: Optional[str] = None, limit: int = 20
+) -> list[dict[str, Any]]:
     """Search documents by tags.
 
     Args:
@@ -258,7 +258,7 @@ def rename_tag(old_name: str, new_name: str) -> bool:
             return False
 
 
-def merge_tags(source_tags: List[str], target_tag: str) -> int:
+def merge_tags(source_tags: list[str], target_tag: str) -> int:
     """Merge multiple tags into one target tag."""
     with db.get_connection() as conn:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -322,7 +322,7 @@ def merge_tags(source_tags: List[str], target_tag: str) -> int:
         return merged_count
 
 
-def get_tag_suggestions(partial: str, limit: int = 10) -> List[str]:
+def get_tag_suggestions(partial: str, limit: int = 10) -> list[str]:
     """Get tag suggestions based on partial input."""
     with db.get_connection() as conn:
         partial = partial.lower().strip()

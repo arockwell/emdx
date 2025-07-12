@@ -1,7 +1,7 @@
 """Database migration system for emdx."""
 
 import sqlite3
-from typing import Callable, List, Tuple
+from typing import Callable
 
 from .config import get_db_path
 
@@ -71,7 +71,7 @@ def migration_001_add_tags(conn: sqlite3.Connection):
 
 
 # List of all migrations in order
-MIGRATIONS: List[Tuple[int, str, Callable]] = [
+MIGRATIONS: list[tuple[int, str, Callable]] = [
     (1, "Add tags system", migration_001_add_tags),
 ]
 

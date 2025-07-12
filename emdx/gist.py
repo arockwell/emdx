@@ -6,7 +6,7 @@ import os
 import subprocess
 import webbrowser
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Optional
 
 import typer
 from github import Github, GithubException
@@ -45,7 +45,7 @@ def get_github_auth() -> Optional[str]:
 
 def create_gist_with_gh(
     content: str, filename: str, description: str, public: bool = False
-) -> Optional[Dict[str, str]]:
+) -> Optional[dict[str, str]]:
     """Create a gist using gh CLI."""
     try:
         # Create a temporary file
@@ -79,7 +79,7 @@ def create_gist_with_gh(
 
 def create_gist_with_api(
     content: str, filename: str, description: str, public: bool = False, token: Optional[str] = None
-) -> Optional[Dict[str, str]]:
+) -> Optional[dict[str, str]]:
     """Create a gist using GitHub API."""
     if not token:
         return None
