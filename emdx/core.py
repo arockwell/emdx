@@ -138,7 +138,7 @@ def apply_tags(doc_id: int, tags_str: Optional[str]) -> List[str]:
     return []
 
 
-def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]):
+def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
     if metadata.project:
