@@ -26,24 +26,6 @@ from emdx.tags import (
 )
 
 
-class SelectableText(Static):
-    """Static widget with text selection enabled."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.can_focus = True
-        
-    def render(self):
-        """Render markdown content."""
-        content = self.renderable
-        if isinstance(content, str):
-            from rich.markdown import Markdown
-            return Markdown(content, code_theme="monokai")
-        return content
-
-
-
-
 
 
 class FullScreenView(Screen):
@@ -281,7 +263,8 @@ class MinimalDocumentBrowser(App):
     #preview {
         width: 50%;
         padding: 0;
-        overflow: hidden;
+        overflow: auto;
+        scrollbar-gutter: stable;
     }
 
     RichLog {
@@ -342,6 +325,7 @@ class MinimalDocumentBrowser(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit", key_display="q"),
+        Binding("escape", "quit", "Quit", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
@@ -357,6 +341,7 @@ class MinimalDocumentBrowser(App):
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("c", "copy_content", "Copy", key_display="c"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
+        Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -651,32 +636,35 @@ class MinimalDocumentBrowser(App):
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
-        # Handle Escape key when preview is focused
+        # Handle Cmd+C / Ctrl+C for copying in selection mode
+        if self.selection_mode and event.key == "ctrl+c":
+            self.action_copy_content()
+            event.prevent_default()
+            return
+            
+        # Handle global Escape key - quit from any mode
         if event.key == "escape":
-            try:
-                preview_area = self.query_one("#preview-content", RichLog)
-                if preview_area.has_focus:
-                    table = self.query_one("#doc-table", DataTable)
-                    table.focus()
-                    status = self.query_one("#status", Label)
-                    status.update("Returned to table navigation")
-                    event.stop()
-                    event.prevent_default()
-                    return
-            except Exception:
-                pass
-                
-        if self.mode == "SEARCH":
-            if event.key == "escape":
+            # In selection mode, return to normal mode first
+            if self.selection_mode:
+                self.action_toggle_selection_mode()
+                event.prevent_default()
+                return
+            
+            # From any mode/state, ESC should quit
+            if self.mode == "SEARCH":
                 self.mode = "NORMAL"
                 self.search_query = ""
                 self.filter_documents("")
-                event.prevent_default()
-        elif self.mode == "TAG":
-            if event.key == "escape":
+            elif self.mode == "TAG":
                 self.mode = "NORMAL"
-                event.prevent_default()
-            elif event.key == "tab" and self.tag_action == "remove":
+            else:
+                # From normal mode or preview focus, quit the app
+                self.action_quit()
+            event.prevent_default()
+            return
+                
+        if self.mode == "TAG":
+            if event.key == "tab" and self.tag_action == "remove":
                 # Tab cycling for tag removal
                 self.complete_tag_removal()
                 event.prevent_default()
@@ -1070,13 +1058,70 @@ class MinimalDocumentBrowser(App):
             table.cursor_coordinate = (0, 0)
             self.on_row_selected()
 
+    def action_copy_selected(self):
+        """Copy selected text when Ctrl+C is pressed."""
+        if self.selection_mode:
+            self.action_copy_content()
+    
     def action_copy_content(self):
-        """Copy current document content to clipboard."""
+        """Copy selected text or current document content to clipboard."""
         if self.current_doc_id:
             try:
+                status = self.query_one("#status", Label)
+                
+                # If in selection mode, check for TextArea selection
+                if self.selection_mode:
+                    try:
+                        # Get the TextArea widget
+                        text_area = self.query_one("#preview-content", TextArea)
+                        
+                        # Try to get selected text
+                        try:
+                            # Check if selection exists and get selected text
+                            selection_start = text_area.selection.start
+                            selection_end = text_area.selection.end
+                            
+                            if selection_start != selection_end:
+                                # There's a selection - get the text
+                                selection = text_area.get_text_range(selection_start, selection_end)
+                                if selection and selection.strip():
+                                    self.copy_to_clipboard(selection)
+                                    status.update("Selected text copied to clipboard!")
+                                    return
+                        except Exception:
+                            # No selection or selection API issue
+                            pass
+                        
+                        # No selection, copy full document
+                        self.copy_to_clipboard(text_area.text)
+                        status.update("Full document copied! Select text first to copy partial content")
+                        return
+                        
+                    except Exception as e:
+                        # Fallback to full document copy
+                        doc = db.get_document(str(self.current_doc_id))
+                        if doc:
+                            content = doc['content'].strip()
+                            if not content.startswith(f"# {doc['title']}"):
+                                text_content = f"# {doc['title']}\n\n{content}"
+                            else:
+                                text_content = content
+                            self.copy_to_clipboard(text_content)
+                            status.update("Full document copied!")
+                        return
+                
+                # In formatted mode, copy the full document
                 doc = db.get_document(str(self.current_doc_id))
                 if doc:
-                    self.copy_to_clipboard(doc['content'])
+                    content = doc['content'].strip()
+                    if not content.startswith(f"# {doc['title']}"):
+                        content_to_copy = f"# {doc['title']}\n\n{content}"
+                    else:
+                        content_to_copy = content
+                    
+                    self.copy_to_clipboard(content_to_copy)
+                    status.update("Full document copied to clipboard!")
+                    
             except Exception as e:
                 status = self.query_one("#status", Label)
                 status.update(f"Copy failed: {e}")
@@ -1085,12 +1130,15 @@ class MinimalDocumentBrowser(App):
     def action_focus_preview(self):
         """Focus the preview pane."""
         try:
-            preview_area = self.query_one("#preview-content", RichLog)
+            # Try to get whatever widget is currently in the preview
+            preview_area = self.query_one("#preview-content")
             preview_area.focus()
             status = self.query_one("#status", Label)
-            status.update(
-                "Preview focused - use terminal text selection, Esc to return"
-            )
+            
+            if self.selection_mode:
+                status.update("TextArea focused - select text with mouse, Esc to return")
+            else:
+                status.update("Preview focused - use 's' for text selection, Esc to return")
         except Exception as e:
             status = self.query_one("#status", Label)
             status.update(f"Focus failed: {e}")
@@ -1102,11 +1150,10 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             
             if not self.selection_mode:
-                # Switch to selection mode - replace RichLog with TextArea
+                # Switch to selection mode - use TextArea for native selection support
                 self.selection_mode = True
-                container.remove_children()
                 
-                # Get current document content as plain text
+                # Get current document content as plain text first
                 plain_content = "Select and copy text here..."
                 if self.current_doc_id:
                     doc = db.get_document(str(self.current_doc_id))
@@ -1117,17 +1164,31 @@ class MinimalDocumentBrowser(App):
                         else:
                             plain_content = content
                 
-                # Create TextArea for selection
-                textarea = TextArea(plain_content, id="preview-content")
-                textarea.read_only = True
-                textarea.show_line_numbers = False
-                container.mount(textarea)
-                textarea.focus()
+                # Remove old widgets
+                container.remove_children()
                 
-                status.update("SELECTION MODE: Select text with mouse/keys, 's' to exit")
+                # Create TextArea for selection
+                try:
+                    text_area = TextArea(
+                        plain_content,
+                        id="preview-content"
+                    )
+                    # Make it read-only after creation
+                    text_area.read_only = True
+                    
+                    # Mount the widget
+                    container.mount(text_area)
+                    text_area.focus()
+                    
+                    status.update("SELECTION MODE: Select text with mouse, then 'c' to copy. ESC exits")
+                except Exception as mount_error:
+                    status.update(f"Failed to create selection widget: {mount_error}")
+                    
             else:
                 # Switch back to formatted view
                 self.selection_mode = False
+                
+                # Remove old widgets
                 container.remove_children()
                 
                 # Create RichLog for formatted display
@@ -1138,17 +1199,41 @@ class MinimalDocumentBrowser(App):
                     markup=True,
                     auto_scroll=False
                 )
+                
+                # Mount the new widget
                 container.mount(richlog)
                 
                 # Restore content with formatting
                 if self.current_doc_id:
                     self.update_preview(self.current_doc_id)
                 
-                status.update("FORMATTED MODE: Nice display, press 's' for text selection")
+                status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
                 
         except Exception as e:
+            # Recovery: ensure we have a working widget
             status = self.query_one("#status", Label)
-            status.update(f"Toggle failed: {e}")
+            status.update(f"Toggle failed: {e} - restoring view...")
+            
+            try:
+                # Emergency recovery - ensure we have a preview widget
+                container = self.query_one("#preview", ScrollableContainer)
+                container.remove_children()
+                
+                richlog = RichLog(
+                    id="preview-content",
+                    wrap=True,
+                    highlight=True,
+                    markup=True,
+                    auto_scroll=False
+                )
+                container.mount(richlog)
+                self.selection_mode = False
+                
+                if self.current_doc_id:
+                    self.update_preview(self.current_doc_id)
+                    
+            except Exception as recovery_error:
+                status.update(f"Failed to recover preview: {recovery_error}")
 
     def action_save_preview(self):
         """Save is now handled by external editor - show message."""
