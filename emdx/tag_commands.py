@@ -1,6 +1,5 @@
 """Tag management commands for emdx."""
 
-from typing import List
 
 import typer
 from rich.console import Console
@@ -23,7 +22,7 @@ console = Console()
 @app.command()
 def tag(
     doc_id: int = typer.Argument(..., help="Document ID to tag"),
-    tags: List[str] = typer.Argument(None, help="Tags to add (space-separated)"),
+    tags: list[str] = typer.Argument(None, help="Tags to add (space-separated)"),
 ):
     """Add tags to a document"""
     try:
@@ -62,13 +61,13 @@ def tag(
 
     except Exception as e:
         console.print(f"[red]Error adding tags: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
 def untag(
     doc_id: int = typer.Argument(..., help="Document ID to untag"),
-    tags: List[str] = typer.Argument(..., help="Tags to remove (space-separated)"),
+    tags: list[str] = typer.Argument(..., help="Tags to remove (space-separated)"),
 ):
     """Remove tags from a document"""
     try:
@@ -86,7 +85,8 @@ def untag(
 
         if removed_tags:
             console.print(
-                f"[green]✅ Removed tags from #{doc_id}:[/green] [cyan]{', '.join(removed_tags)}[/cyan]"
+                f"[green]✅ Removed tags from #{doc_id}:[/green] "
+                f"[cyan]{', '.join(removed_tags)}[/cyan]"
             )
         else:
             console.print("[yellow]No tags removed (may not exist)[/yellow]")
@@ -100,7 +100,7 @@ def untag(
 
     except Exception as e:
         console.print(f"[red]Error removing tags: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -129,7 +129,7 @@ def tags(
         table.add_column("Created", style="green")
         table.add_column("Last Used", style="magenta")
 
-        for i, tag in enumerate(all_tags[:limit]):
+        for tag in all_tags[:limit]:
             created = tag["created_at"].strftime("%Y-%m-%d") if tag["created_at"] else "Unknown"
             last_used = tag["last_used"].strftime("%Y-%m-%d") if tag["last_used"] else "Never"
 
@@ -144,7 +144,7 @@ def tags(
 
     except Exception as e:
         console.print(f"[red]Error listing tags: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -169,9 +169,10 @@ def retag(
         # Confirm
         if not force:
             console.print(
-                f"\n[yellow]This will rename tag '{old_tag}' to '{new_tag}' across {old_tag_info['count']} document(s)[/yellow]"
+                f"\n[yellow]This will rename tag '{old_tag}' to '{new_tag}' across "
+                f"{old_tag_info['count']} document(s)[/yellow]"
             )
-            confirm = typer.confirm("Continue?", abort=True)
+            typer.confirm("Continue?", abort=True)
 
         # Rename
         success = rename_tag(old_tag, new_tag)
@@ -184,15 +185,15 @@ def retag(
 
     except typer.Abort:
         console.print("[yellow]Rename cancelled[/yellow]")
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error renaming tag: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command(name="merge-tags")
 def merge_tags_cmd(
-    source_tags: List[str] = typer.Argument(..., help="Source tags to merge"),
+    source_tags: list[str] = typer.Argument(..., help="Source tags to merge"),
     target: str = typer.Option(..., "--into", "-i", help="Target tag to merge into"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
@@ -224,7 +225,7 @@ def merge_tags_cmd(
             for info in source_infos:
                 console.print(f"  • {info['name']} ({info['count']} documents)")
             console.print(f"\n[yellow]Affecting up to {total_docs} document associations[/yellow]")
-            confirm = typer.confirm("Continue?", abort=True)
+            typer.confirm("Continue?", abort=True)
 
         # Merge
         merged_count = merge_tags(source_tags, target)
@@ -234,7 +235,7 @@ def merge_tags_cmd(
 
     except typer.Abort:
         console.print("[yellow]Merge cancelled[/yellow]")
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error merging tags: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e

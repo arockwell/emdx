@@ -1,11 +1,10 @@
 """Tests for browse commands."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
 from typer.testing import CliRunner
 
 from emdx.browse import app
-from test_fixtures import TestDatabase
 
 runner = CliRunner()
 

@@ -1,10 +1,8 @@
 """Tests for SQLiteDatabase class."""
 
-import pytest
+import sqlite3
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-import sqlite3
 
 from emdx.sqlite_database import SQLiteDatabase
 
@@ -25,13 +23,13 @@ class TestSQLiteDatabase:
         """Test that ensure_schema creates necessary tables."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
-            db = SQLiteDatabase(db_path)
+            SQLiteDatabase(db_path)
 
             # Check tables exist
             conn = sqlite3.connect(db_path)
             cursor = conn.execute(
                 """
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='table' AND name='documents'
             """
             )
@@ -40,7 +38,7 @@ class TestSQLiteDatabase:
             # Check FTS table
             cursor = conn.execute(
                 """
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='table' AND name='documents_fts'
             """
             )
@@ -51,13 +49,13 @@ class TestSQLiteDatabase:
         """Test that migrations run correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
-            db = SQLiteDatabase(db_path)
+            SQLiteDatabase(db_path)
 
             # Check schema_version table exists
             conn = sqlite3.connect(db_path)
             cursor = conn.execute(
                 """
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='table' AND name='schema_version'
             """
             )
@@ -102,7 +100,7 @@ class TestSQLiteDatabase:
             conn = sqlite3.connect(db_path)
             cursor = conn.execute(
                 """
-                SELECT t.name 
+                SELECT t.name
                 FROM tags t
                 JOIN document_tags dt ON t.id = dt.tag_id
                 WHERE dt.document_id = ?

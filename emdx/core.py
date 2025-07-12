@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -37,18 +37,18 @@ class DocumentMetadata:
     """Container for document metadata"""
     title: str
     project: Optional[str] = None
-    tags: Optional[List[str]] = None
+    tags: Optional[list[str]] = None
 
 
 def get_input_content(input_arg: Optional[str]) -> InputContent:
     """Handle input from stdin, file, or direct text"""
     import sys
-    
+
     # Priority 1: Check if stdin has data
     if not sys.stdin.isatty():
         content = sys.stdin.read()
         return InputContent(content=content, source_type="stdin")
-    
+
     # Priority 2: Check if input is provided
     elif input_arg:
         # Check if it's a file path
@@ -60,15 +60,16 @@ def get_input_content(input_arg: Optional[str]) -> InputContent:
                 return InputContent(content=content, source_type="file", source_path=file_path)
             except Exception as e:
                 console.print(f"[red]Error reading file: {e}[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
         else:
             # Treat as direct content
             return InputContent(content=input_arg, source_type="direct")
-    
+
     # No input provided
     else:
         console.print(
-            "[red]Error: No input provided. Provide a file path, text content, or pipe data via stdin[/red]"
+            "[red]Error: No input provided. Provide a file path, text content, "
+            "or pipe data via stdin[/red]"
         )
         raise typer.Exit(1)
 
@@ -77,13 +78,13 @@ def generate_title(input_content: InputContent, provided_title: Optional[str]) -
     """Generate appropriate title based on source and content"""
     if provided_title:
         return provided_title
-    
+
     if input_content.source_type == "stdin":
         return f"Piped content - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    
+
     elif input_content.source_type == "file" and input_content.source_path:
         return input_content.source_path.stem  # filename without extension
-    
+
     else:  # direct content
         # Create title from first line or truncated content
         first_line = input_content.content.split("\n")[0].strip()
@@ -97,13 +98,13 @@ def detect_project(input_content: InputContent, provided_project: Optional[str])
     """Detect project from git repository"""
     if provided_project:
         return provided_project
-    
+
     # Try to detect from file path if it's a file
     if input_content.source_type == "file" and input_content.source_path:
         detected_project = get_git_project(input_content.source_path.parent)
         if detected_project:
             return detected_project
-    
+
     # Otherwise try current directory
     detected_project = get_git_project(Path.cwd())
     return detected_project
@@ -116,29 +117,29 @@ def create_document(title: str, content: str, project: Optional[str]) -> int:
         db.ensure_schema()
     except Exception as e:
         console.print(f"[red]Database error: {e}[/red]")
-        raise typer.Exit(1)
-    
+        raise typer.Exit(1) from e
+
     # Save to database
     try:
         doc_id = db.save_document(title, content, project)
         return doc_id
     except Exception as e:
         console.print(f"[red]Error saving document: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
-def apply_tags(doc_id: int, tags_str: Optional[str]) -> List[str]:
+def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
     """Parse and apply tags to document"""
     if not tags_str:
         return []
-    
+
     tag_list = [t.strip() for t in tags_str.split(",") if t.strip()]
     if tag_list:
         return add_tags_to_document(doc_id, tag_list)
     return []
 
 
-def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]) -> None:
+def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: list[str]) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
     if metadata.project:
@@ -161,29 +162,31 @@ def save(
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
     input_content = get_input_content(input)
-    
+
     # Step 2: Generate title
     final_title = generate_title(input_content, title)
-    
+
     # Step 3: Detect project
     final_project = detect_project(input_content, project)
-    
+
     # Step 4: Create metadata object
     metadata = DocumentMetadata(title=final_title, project=final_project)
-    
+
     # Step 5: Create document in database
     doc_id = create_document(metadata.title, input_content.content, metadata.project)
-    
+
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
-    
+
     # Step 7: Display result
     display_save_result(doc_id, metadata, applied_tags)
 
 
 @app.command()
 def find(
-    query: List[str] = typer.Argument(None, help="Search terms (optional if using --tags)"),
+    query: Optional[list[str]] = typer.Argument(
+        default=None, help="Search terms (optional if using --tags)"
+    ),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
@@ -226,7 +229,8 @@ def find(
 
                 if not results:
                     console.print(
-                        f"[yellow]No results found matching both '[/yellow]{search_query}[yellow]' and tags: {', '.join(tag_list)}[/yellow]"
+                        f"[yellow]No results found matching both '[/yellow]{search_query}[yellow]' "
+                        f"and tags: {', '.join(tag_list)}[/yellow]"
                     )
                     return
             else:
@@ -235,7 +239,8 @@ def find(
                 if not results:
                     mode_desc = "all" if not any_tags else "any"
                     console.print(
-                        f"[yellow]No results found with {mode_desc} tags: {', '.join(tag_list)}[/yellow]"
+                        f"[yellow]No results found with {mode_desc} tags: "
+                        f"{', '.join(tag_list)}[/yellow]"
                     )
                     return
                 search_query = f"tags: {', '.join(tag_list)}"
@@ -296,7 +301,7 @@ def find(
 
     except Exception as e:
         console.print(f"[red]Error searching documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -368,7 +373,7 @@ def view(
 
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -486,12 +491,14 @@ def edit(
 
     except Exception as e:
         console.print(f"[red]Error editing document: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
 def delete(
-    identifiers: List[str] = typer.Argument(..., help="Document ID(s) or title(s) to delete"),
+    identifiers: list[str] = typer.Argument(
+        help="Document ID(s) or title(s) to delete"
+    ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     hard: bool = typer.Option(False, "--hard", help="Permanently delete (cannot be restored)"),
     dry_run: bool = typer.Option(
@@ -527,7 +534,8 @@ def delete(
 
         # Show what will be deleted
         console.print(
-            f"\n[bold]{'Would delete' if dry_run else 'Will delete'} {len(docs_to_delete)} document(s):[/bold]\n"
+            f"\n[bold]{'Would delete' if dry_run else 'Will delete'} "
+            f"{len(docs_to_delete)} document(s):[/bold]\n"
         )
 
         table = Table(show_header=True, header_style="bold cyan")
@@ -556,13 +564,14 @@ def delete(
         if not force:
             if hard:
                 console.print(
-                    f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete {len(docs_to_delete)} document(s)![/red bold]"
+                    f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete "
+                    f"{len(docs_to_delete)} document(s)![/red bold]"
                 )
                 console.print("[red]This action cannot be undone![/red]\n")
                 confirm = typer.confirm("Are you absolutely sure?", abort=True)
                 if confirm:
                     # Extra confirmation for hard delete
-                    confirm2 = typer.confirm("Type 'yes' to confirm permanent deletion", abort=True)
+                    typer.confirm("Type 'yes' to confirm permanent deletion", abort=True)
             else:
                 console.print(
                     f"\n[yellow]This will move {len(docs_to_delete)} document(s) to trash.[/yellow]"
@@ -584,7 +593,9 @@ def delete(
         # Report results
         if deleted_count > 0:
             if hard:
-                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")
+                console.print(
+                    f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]"
+                )
             else:
                 console.print(f"\n[green]✅ Moved {deleted_count} document(s) to trash[/green]")
                 console.print("[dim]💡 Use 'emdx trash' to view deleted documents[/dim]")
@@ -597,10 +608,10 @@ def delete(
 
     except typer.Abort:
         console.print("[yellow]Deletion cancelled[/yellow]")
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error deleting documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -653,12 +664,14 @@ def trash(
 
     except Exception as e:
         console.print(f"[red]Error listing deleted documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
 def restore(
-    identifiers: List[str] = typer.Argument(None, help="Document ID(s) or title(s) to restore"),
+    identifiers: Optional[list[str]] = typer.Argument(
+        default=None, help="Document ID(s) or title(s) to restore"
+    ),
     all: bool = typer.Option(False, "--all", help="Restore all deleted documents"),
 ) -> None:
     """Restore soft-deleted document(s)"""
@@ -679,7 +692,7 @@ def restore(
                 return
 
             console.print(f"\n[bold]Will restore {len(deleted_docs)} document(s)[/bold]")
-            confirm = typer.confirm("Continue?", abort=True)
+            typer.confirm("Continue?", abort=True)
 
             restored_count = 0
             for doc in deleted_docs:
@@ -710,10 +723,10 @@ def restore(
 
     except typer.Abort:
         console.print("[yellow]Restore cancelled[/yellow]")
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error restoring documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -752,12 +765,13 @@ def purge(
 
         # Show warning
         console.print(
-            f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete {count} document(s) from trash![/red bold]"
+            f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete "
+            f"{count} document(s) from trash![/red bold]"
         )
         console.print("[red]This action cannot be undone![/red]\n")
 
         if not force:
-            confirm = typer.confirm("Are you absolutely sure?", abort=True)
+            typer.confirm("Are you absolutely sure?", abort=True)
 
         # Perform purge
         purged_count = db.purge_deleted_documents(older_than_days=older_than)
@@ -768,7 +782,7 @@ def purge(
 
     except typer.Abort:
         console.print("[yellow]Purge cancelled[/yellow]")
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error purging documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
