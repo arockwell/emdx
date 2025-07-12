@@ -80,5 +80,47 @@ def test_get_git_project_with_custom_path(tmp_path):
     with patch('git.Repo', return_value=mock_repo):
         result = get_git_project(tmp_path)
         assert result == 'custom-repo'
-        
-        assert result == 'custom-repo'
+
+
+def test_get_git_project_exception_handling():
+    """Test that exceptions are handled gracefully."""
+    with patch('git.Repo', side_effect=Exception("Unexpected error")):
+        result = get_git_project()
+        assert result is None
+
+
+def test_get_git_project_no_origin_remote():
+    """Test behavior when there's a remote but not named 'origin'."""
+    mock_remote = Mock()
+    mock_remote.name = 'upstream'
+    mock_remote.url = 'https://github.com/user/upstream-repo.git'
+    
+    mock_repo = Mock()
+    mock_repo.remotes = [mock_remote]
+    mock_repo.working_dir = '/path/to/local-repo'
+    
+    with patch('git.Repo', return_value=mock_repo):
+        result = get_git_project()
+        # Should fall back to directory name
+        assert result == 'local-repo'
+
+
+def test_get_git_project_bitbucket_url():
+    """Test with Bitbucket URL format."""
+    mock_remote = Mock()
+    mock_remote.name = 'origin'
+    mock_remote.url = 'git@bitbucket.org:user/myrepo.git'
+    
+    mock_repo = Mock()
+    mock_repo.remotes = [mock_remote]
+    
+    with patch('git.Repo', return_value=mock_repo):
+        result = get_git_project()
+        assert result == 'myrepo'
+
+
+def test_get_git_project_no_such_path():
+    """Test handling of NoSuchPathError."""
+    with patch('git.Repo', side_effect=git.NoSuchPathError):
+        result = get_git_project()
+        assert result is None
