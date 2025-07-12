@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from . import migrations
 
@@ -136,7 +136,9 @@ class SQLiteDatabase:
             # Create index after columns exist
             conn.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(is_deleted, deleted_at)
+                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(
+                    is_deleted, deleted_at
+                )
             """
             )
 
@@ -185,7 +187,7 @@ class SQLiteDatabase:
             conn.commit()
             return cursor.lastrowid
 
-    def get_document(self, identifier: str) -> Optional[Dict[str, Any]]:
+    def get_document(self, identifier: str) -> Optional[dict[str, Any]]:
         """Get a document by ID or title"""
         with self.get_connection() as conn:
             # Update access tracking
@@ -238,7 +240,7 @@ class SQLiteDatabase:
 
     def list_documents(
         self, project: Optional[str] = None, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List documents with optional project filter"""
         with self.get_connection() as conn:
             if project:
@@ -276,7 +278,7 @@ class SQLiteDatabase:
 
     def search_documents(
         self, query: str, project: Optional[str] = None, limit: int = 10, fuzzy: bool = False
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search documents using FTS5"""
         with self.get_connection() as conn:
             # For now, fuzzy search just uses regular FTS5
@@ -381,7 +383,7 @@ class SQLiteDatabase:
             conn.commit()
             return cursor.rowcount > 0
 
-    def get_recent_documents(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_documents(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get recently accessed documents"""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -405,7 +407,7 @@ class SQLiteDatabase:
                 docs.append(doc)
             return docs
 
-    def get_stats(self, project: Optional[str] = None) -> Dict[str, Any]:
+    def get_stats(self, project: Optional[str] = None) -> dict[str, Any]:
         """Get database statistics"""
         with self.get_connection() as conn:
             if project:
@@ -475,7 +477,7 @@ class SQLiteDatabase:
 
     def list_deleted_documents(
         self, days: Optional[int] = None, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List soft-deleted documents"""
         with self.get_connection() as conn:
             if days:

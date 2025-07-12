@@ -1,6 +1,9 @@
-"""Tests for newly added modules - gist, tag_commands, textual_browser_minimal, nvim_wrapper, markdown_config, mdcat_renderer, gui."""
+"""Tests for newly added modules.
 
-import pytest
+Covering: gist, tag_commands, textual_browser_minimal, nvim_wrapper,
+markdown_config, mdcat_renderer, gui.
+"""
+
 
 
 class TestModuleImports:
@@ -58,10 +61,10 @@ class TestGistBasicFunctionality:
     def test_sanitize_filename(self):
         """Test filename sanitization."""
         from emdx import gist
-        
+
         # Test normal title
         assert gist.sanitize_filename("My Document") == "My Document.md"
-        
+
         # Test title with invalid characters
         assert gist.sanitize_filename("File<>:\"/\\|?*Name") == "File---------Name.md"
 
@@ -72,12 +75,12 @@ class TestMarkdownConfigBasicFunctionality:
     def test_themes_structure(self):
         """Test that themes are properly structured."""
         from emdx import markdown_config
-        
+
         themes = markdown_config.MarkdownConfig.THEMES
-        
+
         assert "dark" in themes
         assert "light" in themes
-        
+
         for theme_type in ["dark", "light"]:
             assert "default" in themes[theme_type]
             assert "alternatives" in themes[theme_type]
@@ -89,7 +92,7 @@ class TestMdcatRendererBasicFunctionality:
     def test_is_available_callable(self):
         """Test that is_available method is callable."""
         from emdx import mdcat_renderer
-        
+
         # Should be callable without errors
         result = mdcat_renderer.MdcatRenderer.is_available()
         assert isinstance(result, bool)
@@ -97,7 +100,7 @@ class TestMdcatRendererBasicFunctionality:
     def test_get_terminal_info_callable(self):
         """Test that get_terminal_info method is callable."""
         from emdx import mdcat_renderer
-        
+
         # Should be callable without errors
         term, supports_images = mdcat_renderer.MdcatRenderer.get_terminal_info()
         assert isinstance(term, str)

@@ -13,9 +13,9 @@ class TestCoreFunctionality:
         db = TestDatabase(":memory:")
 
         # Save some documents
-        doc1 = db.save_document("Python Guide", "Learn Python programming", "tutorials")
-        doc2 = db.save_document("JavaScript Guide", "Learn JavaScript", "tutorials")
-        doc3 = db.save_document("Python Testing", "Testing with pytest", "testing")
+        db.save_document("Python Guide", "Learn Python programming", "tutorials")
+        db.save_document("JavaScript Guide", "Learn JavaScript", "tutorials")
+        db.save_document("Python Testing", "Testing with pytest", "testing")
 
         # Search for Python documents
         results = db.search_documents("Python")

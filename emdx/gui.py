@@ -20,4 +20,4 @@ def gui():
         pass
     except Exception as e:
         console.print(f"❌ Error: {e}", style="red")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e

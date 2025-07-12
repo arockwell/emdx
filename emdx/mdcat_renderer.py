@@ -14,7 +14,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Optional, Tuple
+from typing import Optional
 
 
 class MdcatRenderer:
@@ -26,7 +26,7 @@ class MdcatRenderer:
         return shutil.which("mdcat") is not None
 
     @staticmethod
-    def get_terminal_info() -> Tuple[str, bool]:
+    def get_terminal_info() -> tuple[str, bool]:
         """Get terminal type and whether it supports images."""
         term = os.environ.get("TERM", "")
         term_program = os.environ.get("TERM_PROGRAM", "")
@@ -139,20 +139,20 @@ class MdcatWidget:
 
 if __name__ == "__main__":
     import sys
-    
+
     if not MdcatRenderer.is_available():
         print("mdcat is not installed. Install with:", file=sys.stderr)
         print("  cargo install mdcat", file=sys.stderr)
         print("or", file=sys.stderr)
         print("  brew install mdcat", file=sys.stderr)
         sys.exit(1)
-    
+
     # Read from stdin or file
     if len(sys.argv) > 1:
-        with open(sys.argv[1], 'r') as f:
+        with open(sys.argv[1]) as f:
             content = f.read()
     else:
         content = sys.stdin.read()
-    
+
     # Render and output
     print(MdcatRenderer.render(content))

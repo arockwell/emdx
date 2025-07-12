@@ -183,7 +183,8 @@ class DeleteConfirmScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Grid(id="dialog"):
             yield Label(
-                f'Delete document #{self.doc_id}?\n"{self.doc_title}"\n\n[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]',
+                f'Delete document #{self.doc_id}?\n"{self.doc_title}"\n\n'
+                f'[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]',
                 id="question",
             )
             yield Button("Cancel (n)", variant="primary", id="cancel")

@@ -1,7 +1,8 @@
 """Simple CLI tests that work without complex mocking."""
 
-from typer.testing import CliRunner
 from unittest.mock import Mock, patch
+
+from typer.testing import CliRunner
 
 from emdx.cli import app
 
