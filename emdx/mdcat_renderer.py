@@ -14,7 +14,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Optional
+from typing import Optional, Tuple
 
 
 class MdcatRenderer:
@@ -26,7 +26,7 @@ class MdcatRenderer:
         return shutil.which("mdcat") is not None
 
     @staticmethod
-    def get_terminal_info() -> tuple[str, bool]:
+    def get_terminal_info() -> Tuple[str, bool]:
         """Get terminal type and whether it supports images."""
         term = os.environ.get("TERM", "")
         term_program = os.environ.get("TERM_PROGRAM", "")

@@ -1,5 +1,6 @@
 """Tag management commands for emdx."""
 
+from typing import List
 
 import typer
 from rich.console import Console
@@ -22,7 +23,7 @@ console = Console()
 @app.command()
 def tag(
     doc_id: int = typer.Argument(..., help="Document ID to tag"),
-    tags: list[str] = typer.Argument(None, help="Tags to add (space-separated)"),
+    tags: List[str] = typer.Argument(None, help="Tags to add (space-separated)"),
 ):
     """Add tags to a document"""
     try:
@@ -67,7 +68,7 @@ def tag(
 @app.command()
 def untag(
     doc_id: int = typer.Argument(..., help="Document ID to untag"),
-    tags: list[str] = typer.Argument(..., help="Tags to remove (space-separated)"),
+    tags: List[str] = typer.Argument(..., help="Tags to remove (space-separated)"),
 ):
     """Remove tags from a document"""
     try:
@@ -193,7 +194,7 @@ def retag(
 
 @app.command(name="merge-tags")
 def merge_tags_cmd(
-    source_tags: list[str] = typer.Argument(..., help="Source tags to merge"),
+    source_tags: List[str] = typer.Argument(..., help="Source tags to merge"),
     target: str = typer.Option(..., "--into", "-i", help="Target tag to merge into"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):

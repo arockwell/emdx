@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from rich.console import Console
@@ -37,7 +37,7 @@ class DocumentMetadata:
     """Container for document metadata"""
     title: str
     project: Optional[str] = None
-    tags: Optional[list[str]] = None
+    tags: Optional[List[str]] = None
 
 
 def get_input_content(input_arg: Optional[str]) -> InputContent:
@@ -128,7 +128,7 @@ def create_document(title: str, content: str, project: Optional[str]) -> int:
         raise typer.Exit(1) from e
 
 
-def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
+def apply_tags(doc_id: int, tags_str: Optional[str]) -> List[str]:
     """Parse and apply tags to document"""
     if not tags_str:
         return []
@@ -139,7 +139,7 @@ def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
     return []
 
 
-def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: list[str]) -> None:
+def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
     if metadata.project:
@@ -184,7 +184,7 @@ def save(
 
 @app.command()
 def find(
-    query: Optional[list[str]] = typer.Argument(
+    query: Optional[List[str]] = typer.Argument(
         default=None, help="Search terms (optional if using --tags)"
     ),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
@@ -496,7 +496,7 @@ def edit(
 
 @app.command()
 def delete(
-    identifiers: list[str] = typer.Argument(
+    identifiers: List[str] = typer.Argument(
         help="Document ID(s) or title(s) to delete"
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
@@ -669,7 +669,7 @@ def trash(
 
 @app.command()
 def restore(
-    identifiers: Optional[list[str]] = typer.Argument(
+    identifiers: Optional[List[str]] = typer.Argument(
         default=None, help="Document ID(s) or title(s) to restore"
     ),
     all: bool = typer.Option(False, "--all", help="Restore all deleted documents"),
