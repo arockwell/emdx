@@ -15,7 +15,7 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
+from textual.widgets import Button, DataTable, Input, Label, RichLog, Static
 
 from emdx.sqlite_database import db
 from emdx.tags import (
@@ -26,26 +26,6 @@ from emdx.tags import (
 )
 
 
-class ReadOnlyTextArea(TextArea):
-    """A TextArea that allows selection but not editing."""
-    
-    def _on_key(self, event: events.Key) -> None:
-        """Handle key events, blocking editing keys."""
-        # Allow selection and navigation keys
-        allowed_keys = {
-            "up", "down", "left", "right", "home", "end",
-            "pageup", "pagedown", "ctrl+a", "ctrl+c",
-            "shift+up", "shift+down", "shift+left", "shift+right",
-            "shift+home", "shift+end", "escape", "ctrl+shift+up",
-            "ctrl+shift+down", "ctrl+shift+left", "ctrl+shift+right"
-        }
-        
-        if event.key in allowed_keys:
-            # Let the parent handle navigation/selection
-            super()._on_key(event)
-        else:
-            # Block all other keys
-            event.stop()
 
 
 class FullScreenView(Screen):
@@ -293,9 +273,10 @@ class MinimalDocumentBrowser(App):
         height: 100%;
     }
     
-    TextArea {
+    Static {
         width: 100%;
         height: 100%;
+        padding: 0 1;
     }
 
 
@@ -1100,13 +1081,11 @@ class MinimalDocumentBrowser(App):
                 except Exception:
                     pass
 
-            # Remove RichLog and add ReadOnlyTextArea
+            # Remove RichLog and add Static widget for selection
             preview_container.remove_children()
-            selection_area = ReadOnlyTextArea(
+            selection_area = Static(
                 markdown_content,
                 id="selection-content",
-                theme="monokai",
-                language="markdown",
             )
             preview_container.mount(selection_area)
             selection_area.focus()
