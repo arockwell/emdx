@@ -15,7 +15,7 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, Static
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
 from emdx.sqlite_database import db
 from emdx.tags import (
@@ -273,10 +273,14 @@ class MinimalDocumentBrowser(App):
         height: 100%;
     }
     
-    Static {
+    TextArea {
         width: 100%;
         height: 100%;
-        padding: 0 1;
+    }
+    
+    #selection-content {
+        /* Different styling to indicate selection mode */
+        border: thick $warning;
     }
 
 
@@ -339,7 +343,7 @@ class MinimalDocumentBrowser(App):
         Binding("shift+t", "untag_mode", "Untag", show=False),
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("c", "copy_content", "Copy", key_display="c"),
-        Binding("s", "toggle_copy_mode", "Selection", key_display="s"),
+        Binding("s", "toggle_selection_mode", "Select", key_display="s"),
     ]
 
     mode = reactive("NORMAL")
@@ -623,7 +627,7 @@ class MinimalDocumentBrowser(App):
             if event.key == "escape":
                 event.prevent_default()
                 event.stop()
-                self.action_toggle_copy_mode()
+                self.action_toggle_selection_mode()
         elif self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
@@ -652,7 +656,7 @@ class MinimalDocumentBrowser(App):
             elif event.character == "s":
                 event.prevent_default()
                 event.stop()
-                self.action_toggle_copy_mode()
+                self.action_toggle_selection_mode()
             # Handle keys that require a document
             elif self.current_doc_id:
                 if event.key == "enter":
@@ -1054,7 +1058,7 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update(f"Focus failed: {e}")
 
-    def action_toggle_copy_mode(self):
+    def action_toggle_selection_mode(self):
         """Toggle text selection mode."""
         status = self.query_one("#status", Label)
         preview_container = self.query_one("#preview", ScrollableContainer)
@@ -1081,17 +1085,22 @@ class MinimalDocumentBrowser(App):
                 except Exception:
                     pass
 
-            # Remove RichLog and add Static widget for selection
+            # Remove RichLog and add TextArea for selection
             preview_container.remove_children()
-            selection_area = Static(
-                markdown_content,
+            
+            # Add header to make it clear this is for selection only
+            header_text = "═══ SELECTION MODE - Copy Only (Edits Won't Save) ═══\n\n"
+            selection_area = TextArea(
+                header_text + markdown_content,
                 id="selection-content",
+                theme="github-dark",  # Different theme to indicate different mode
+                language="markdown",
             )
             preview_container.mount(selection_area)
             selection_area.focus()
             
             status.update(
-                "SELECTION MODE: Drag to select text, Ctrl+C to copy, 's'/Esc to exit"
+                "SELECT MODE: Select & copy text (edits are ignored), 's'/Esc to exit"
             )
         else:
             self.selection_mode = False
