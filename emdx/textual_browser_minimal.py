@@ -15,10 +15,15 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
 
 from emdx.sqlite_database import db
-from emdx.tags import add_tags_to_document, get_document_tags, remove_tags_from_document, search_by_tags
+from emdx.tags import (
+    add_tags_to_document,
+    get_document_tags,
+    remove_tags_from_document,
+    search_by_tags,
+)
 
 
 class FullScreenView(Screen):
@@ -59,6 +64,7 @@ class FullScreenView(Screen):
         ("ctrl+u", "page_up", "Page up"),
         ("g", "scroll_top", "Top"),
         ("shift+g", "scroll_bottom", "Bottom"),
+        ("c", "copy_content", "Copy"),
     ]
 
     def __init__(self, doc_id: int):
@@ -134,6 +140,44 @@ class FullScreenView(Screen):
         container = self.query_one("#doc-viewer", ScrollableContainer)
         container.scroll_to(0, container.max_scroll_y, animate=False)
 
+    def action_copy_content(self) -> None:
+        """Copy current document content to clipboard."""
+        try:
+            doc = db.get_document(str(self.doc_id))
+            if doc:
+                self.copy_to_clipboard(doc['content'])
+        except Exception:
+            # Silently ignore copy errors in full screen view
+            pass
+
+    def on_key(self, event: events.Key) -> None:
+        """Handle key events that aren't bindings."""
+        # Ignore 's' key to prevent crashes
+        if event.character == "s":
+            event.prevent_default()
+            event.stop()
+
+
+    def copy_to_clipboard(self, text: str):
+        """Copy text to clipboard with fallback methods."""
+        import subprocess
+
+        # Try pbcopy on macOS first
+        try:
+            subprocess.run(['pbcopy'], input=text, text=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Try xclip on Linux
+            try:
+                subprocess.run(['xclip', '-selection', 'clipboard'],
+                             input=text, text=True, check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Try xsel on Linux as fallback
+                try:
+                    subprocess.run(['xsel', '--clipboard', '--input'],
+                                 input=text, text=True, check=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+
 
 
 
@@ -206,6 +250,8 @@ class DeleteConfirmScreen(ModalScreen):
 class MinimalDocumentBrowser(App):
     """Minimal document browser that signals external wrapper for nvim."""
 
+    ALLOW_SELECT = True  # Enable text selection mode
+
     CSS = """
     #sidebar {
         width: 50%;
@@ -215,12 +261,21 @@ class MinimalDocumentBrowser(App):
     #preview {
         width: 50%;
         padding: 0;
+        overflow: hidden;
     }
 
     RichLog {
         padding: 0 1;
         background: $background;
+        width: 100%;
+        height: 100%;
     }
+    
+    TextArea {
+        width: 100%;
+        height: 100%;
+    }
+
 
     DataTable {
         height: 100%;
@@ -279,12 +334,16 @@ class MinimalDocumentBrowser(App):
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
         Binding("shift+t", "untag_mode", "Untag", show=False),
+        Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
+        Binding("c", "copy_content", "Copy", key_display="c"),
+        Binding("s", "toggle_copy_mode", "Selection", key_display="s"),
     ]
 
     mode = reactive("NORMAL")
     search_query = reactive("")
     tag_action = reactive("")  # "add" or "remove"
     current_tag_completion = reactive(0)  # Current completion index
+    selection_mode = reactive(False)  # Text selection mode
 
     def __init__(self):
         super().__init__()
@@ -293,7 +352,10 @@ class MinimalDocumentBrowser(App):
         self.current_doc_id = None
 
     def compose(self) -> ComposeResult:
-        yield Input(placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')", id="search-input")
+        yield Input(
+            placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')",
+            id="search-input"
+        )
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
         yield Label("", id="tag-selector")
 
@@ -308,21 +370,32 @@ class MinimalDocumentBrowser(App):
         yield Label("", id="status")
 
     def on_mount(self) -> None:
-        self.load_documents()
-        self.setup_table()
-        self.update_status()
-        if self.filtered_docs:
-            self.on_row_selected()
+        try:
+            # Set can_focus property after widget is created
+            preview_log = self.query_one("#preview-content", RichLog)
+            preview_log.can_focus = True
+
+
+            self.load_documents()
+            self.setup_table()
+            self.update_status()
+            if self.filtered_docs:
+                self.on_row_selected()
+        except Exception as e:
+            # If there's any error during mount, ensure we have a usable state
+            import traceback
+            traceback.print_exc()
+            self.exit(message=f"Error during startup: {e}")
 
     def load_documents(self):
         try:
             db.ensure_schema()
             docs = db.list_documents(limit=1000)
-            
+
             # Add tags to each document
             for doc in docs:
                 doc['tags'] = get_document_tags(doc['id'])
-            
+
             self.documents = docs
             self.filtered_docs = docs
         except Exception as e:
@@ -337,21 +410,21 @@ class MinimalDocumentBrowser(App):
         for doc in self.filtered_docs:
             # Format timestamp as MM-DD HH:MM (11 chars)
             timestamp = doc["created_at"].strftime("%m-%d %H:%M")
-            
+
             # Calculate available space for title (50 total - 11 for timestamp)
             title_space = 50 - 11
             title = doc["title"][:title_space]
             if len(doc["title"]) >= title_space:
                 title = title[:title_space-3] + "..."
-            
+
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
-            
+
             # Expanded tag display - limit to 30 chars
             tags_str = ", ".join(doc.get("tags", []))[:30]
             if len(", ".join(doc.get("tags", []))) > 30:
                 tags_str += "..."
-            
+
             table.add_row(
                 str(doc["id"]),
                 formatted_title,
@@ -380,7 +453,6 @@ class MinimalDocumentBrowser(App):
                 preview_log = self.query_one("#preview-content", RichLog)
                 preview_log.clear()
 
-
                 # Smart title handling - avoid double titles
                 content = doc["content"].strip()
 
@@ -400,6 +472,7 @@ class MinimalDocumentBrowser(App):
                 md = Markdown(markdown_content, code_theme="monokai")
                 preview_log.write(md)
                 preview_log.scroll_to(0, 0, animate=False)
+
         except Exception as e:
             preview_log = self.query_one("#preview-content", RichLog)
             preview_log.clear()
@@ -408,12 +481,18 @@ class MinimalDocumentBrowser(App):
     def update_status(self):
         status = self.query_one("#status", Label)
         search_input = self.query_one("#search-input", Input)
-        
+
         if search_input.value and search_input.value.startswith("tags:"):
             tag_query = search_input.value[5:].strip()
-            status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents (tag search: {tag_query})")
+            status.update(
+                f"{len(self.filtered_docs)}/{len(self.documents)} documents "
+                f"(tag search: {tag_query})"
+            )
         elif search_input.value:
-            status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents (search: {search_input.value})")
+            status.update(
+                f"{len(self.filtered_docs)}/{len(self.documents)} documents "
+                f"(search: {search_input.value})"
+            )
         else:
             status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
 
@@ -422,7 +501,7 @@ class MinimalDocumentBrowser(App):
         tag_input = self.query_one("#tag-input", Input)
         tag_selector = self.query_one("#tag-selector", Label)
         table = self.query_one("#doc-table", DataTable)
-        
+
         if new_mode == "SEARCH":
             search.add_class("visible")
             tag_input.remove_class("visible")
@@ -430,13 +509,13 @@ class MinimalDocumentBrowser(App):
             search.focus()
         elif new_mode == "TAG":
             search.remove_class("visible")
-            
+
             # Show current tags in placeholder
             if self.current_doc_id:
                 doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
                 if doc:
                     current_tags = doc.get("tags", [])
-                    
+
                     if self.tag_action == "add":
                         # Show input for adding tags
                         tag_input.add_class("visible")
@@ -461,7 +540,7 @@ class MinimalDocumentBrowser(App):
                             status.update("No tags to remove")
                             self.mode = "NORMAL"
                             return
-                    
+
                     # Only reset completion index for add mode
                     if self.tag_action == "add":
                         self.current_tag_completion = 0
@@ -505,7 +584,7 @@ class MinimalDocumentBrowser(App):
                 table = self.query_one("#doc-table", DataTable)
                 current_row = table.cursor_row
                 current_doc_id = self.current_doc_id
-                
+
                 try:
                     if self.tag_action == "add":
                         added_tags = add_tags_to_document(self.current_doc_id, tags)
@@ -523,20 +602,26 @@ class MinimalDocumentBrowser(App):
                         else:
                             status = self.query_one("#status", Label)
                             status.update("No tags removed (may not exist)")
-                    
+
                     # Refresh document data and restore position
                     self.load_documents()
                     self.filter_documents(self.search_query)
                     self.restore_table_position(current_doc_id, current_row)
-                    
+
                 except Exception as e:
                     status = self.query_one("#status", Label)
                     status.update(f"Error: {e}")
-            
+
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
-        if self.mode == "SEARCH":
+        if self.selection_mode:
+            # In selection mode, handle escape to exit
+            if event.key == "escape":
+                event.prevent_default()
+                event.stop()
+                self.action_toggle_copy_mode()
+        elif self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
                 self.search_query = ""
@@ -550,18 +635,28 @@ class MinimalDocumentBrowser(App):
                 # Tab cycling for tag removal
                 self.complete_tag_removal()
                 event.prevent_default()
+                event.stop()
             elif event.key == "enter" and self.tag_action == "remove":
                 # Remove the highlighted tag
                 self.remove_highlighted_tag()
                 event.prevent_default()
         elif self.mode == "NORMAL":
-            # Handle enter key specially
-            if event.key == "enter" and self.current_doc_id:
+            # Handle keys that don't require a document
+            if event.key == "tab":
                 event.prevent_default()
                 event.stop()
-                self.action_view()
-            elif event.character and self.current_doc_id:
-                if event.character == "e":
+                self.action_focus_preview()
+            elif event.character == "s":
+                event.prevent_default()
+                event.stop()
+                self.action_toggle_copy_mode()
+            # Handle keys that require a document
+            elif self.current_doc_id:
+                if event.key == "enter":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_view()
+                elif event.character == "e":
                     event.prevent_default()
                     event.stop()
                     self.action_edit()
@@ -581,6 +676,10 @@ class MinimalDocumentBrowser(App):
                     event.prevent_default()
                     event.stop()
                     self.action_untag_mode()
+                elif event.character == "c":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_copy_content()
 
     def filter_documents(self, query: str):
         if not query:
@@ -588,7 +687,7 @@ class MinimalDocumentBrowser(App):
         elif query.startswith("tags:"):
             # Tag-based search mode: "tags:docker,kubernetes" or "tags:any:docker,python"
             tag_query = query[5:].strip()  # Remove "tags:" prefix
-            
+
             if tag_query.startswith("any:"):
                 # Search for documents with ANY of the specified tags
                 tags = [tag.strip() for tag in tag_query[4:].split(",") if tag.strip()]
@@ -597,12 +696,12 @@ class MinimalDocumentBrowser(App):
                 # Default: search for documents with ALL specified tags
                 tags = [tag.strip() for tag in tag_query.split(",") if tag.strip()]
                 mode = "all"
-            
+
             if tags:
                 try:
                     # Use the existing search_by_tags function
                     results = search_by_tags(tags, mode=mode, limit=1000)
-                    
+
                     # Convert results to match our document format
                     result_ids = {doc["id"] for doc in results}
                     self.filtered_docs = [doc for doc in self.documents if doc["id"] in result_ids]
@@ -610,7 +709,9 @@ class MinimalDocumentBrowser(App):
                     # Fall back to simple filtering if search_by_tags fails
                     self.filtered_docs = [
                         doc for doc in self.documents
-                        if any(tag.lower() in [t.lower() for t in doc.get("tags", [])] for tag in tags)
+                        if any(
+                            tag.lower() in [t.lower() for t in doc.get("tags", [])] for tag in tags
+                        )
                     ]
             else:
                 self.filtered_docs = self.documents
@@ -631,21 +732,21 @@ class MinimalDocumentBrowser(App):
         for doc in self.filtered_docs:
             # Format timestamp as MM-DD HH:MM (11 chars)
             timestamp = doc["created_at"].strftime("%m-%d %H:%M")
-            
+
             # Calculate available space for title (50 total - 11 for timestamp)
             title_space = 50 - 11
             title = doc["title"][:title_space]
             if len(doc["title"]) >= title_space:
                 title = title[:title_space-3] + "..."
-            
+
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
-            
+
             # Expanded tag display - limit to 30 chars
             tags_str = ", ".join(doc.get("tags", []))[:30]
             if len(", ".join(doc.get("tags", []))) > 30:
                 tags_str += "..."
-            
+
             table.add_row(
                 str(doc["id"]),
                 formatted_title,
@@ -817,44 +918,44 @@ class MinimalDocumentBrowser(App):
         """Update the visual tag selector."""
         if not self.current_doc_id:
             return
-            
+
         doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
         if not doc:
             return
-            
+
         current_tags = doc.get("tags", [])
         if not current_tags:
             return
-            
+
         tag_selector = self.query_one("#tag-selector", Label)
-        
-        # Build visual representation: a  [b]  c  
+
+        # Build visual representation: a  [b]  c
         visual_tags = []
         for i, tag in enumerate(current_tags):
             if i == self.current_tag_completion:
                 visual_tags.append(f"[reverse]{tag}[/reverse]")
             else:
                 visual_tags.append(tag)
-        
+
         tag_selector.update("    ".join(visual_tags))
 
     def complete_tag_removal(self):
         """Handle tab cycling for tag removal."""
         if not self.current_doc_id:
             return
-            
+
         # Get current document tags
         doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
         if not doc:
             return
-            
+
         current_tags = doc.get("tags", [])
         if not current_tags:
             return
-            
+
         # Move to next tag
         self.current_tag_completion = (self.current_tag_completion + 1) % len(current_tags)
-        
+
         # Update visual selector
         self.update_tag_selector()
 
@@ -862,24 +963,24 @@ class MinimalDocumentBrowser(App):
         """Remove the currently highlighted tag."""
         if not self.current_doc_id:
             return
-            
+
         # Save current table position
         table = self.query_one("#doc-table", DataTable)
         current_row = table.cursor_row
         current_doc_id = self.current_doc_id
-        
+
         # Get current document tags
         doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
         if not doc:
             return
-            
+
         current_tags = doc.get("tags", [])
         if not current_tags or self.current_tag_completion >= len(current_tags):
             return
-            
+
         # Get the tag to remove
         tag_to_remove = current_tags[self.current_tag_completion]
-        
+
         try:
             # Remove the tag
             removed_tags = remove_tags_from_document(self.current_doc_id, [tag_to_remove])
@@ -887,14 +988,14 @@ class MinimalDocumentBrowser(App):
                 # Show success message
                 status = self.query_one("#status", Label)
                 status.update(f"Removed tag: {tag_to_remove}")
-                
+
                 # Refresh document data but preserve position
                 self.load_documents()
                 self.filter_documents(self.search_query)
-                
+
                 # Restore table position
                 self.restore_table_position(current_doc_id, current_row)
-                
+
                 # Exit tag mode
                 self.mode = "NORMAL"
             else:
@@ -907,14 +1008,14 @@ class MinimalDocumentBrowser(App):
     def restore_table_position(self, target_doc_id: int, fallback_row: int):
         """Restore table position to specific document or row."""
         table = self.query_one("#doc-table", DataTable)
-        
+
         # First try to find the same document
         for idx, doc in enumerate(self.filtered_docs):
             if doc["id"] == target_doc_id:
                 table.cursor_coordinate = (idx, 0)
                 self.on_row_selected()
                 return
-        
+
         # Document not found (maybe filtered out), restore row position if valid
         if fallback_row is not None and fallback_row < len(self.filtered_docs):
             table.cursor_coordinate = (fallback_row, 0)
@@ -923,6 +1024,154 @@ class MinimalDocumentBrowser(App):
             # Default to first row if available
             table.cursor_coordinate = (0, 0)
             self.on_row_selected()
+
+    def action_copy_content(self):
+        """Copy current document content to clipboard."""
+        if self.current_doc_id:
+            try:
+                doc = db.get_document(str(self.current_doc_id))
+                if doc:
+                    self.copy_to_clipboard(doc['content'])
+            except Exception as e:
+                status = self.query_one("#status", Label)
+                status.update(f"Copy failed: {e}")
+
+
+    def action_focus_preview(self):
+        """Focus the preview pane."""
+        # Allow focus preview to work in any mode
+        try:
+            preview_log = self.query_one("#preview-content", RichLog)
+            preview_log.focus()
+            status = self.query_one("#status", Label)
+            status.update(
+                "Preview focused - press 'c' to copy document content"
+            )
+        except Exception as e:
+            status = self.query_one("#status", Label)
+            status.update(f"Focus failed: {e}")
+
+    def action_toggle_copy_mode(self):
+        """Toggle text selection mode."""
+        status = self.query_one("#status", Label)
+        preview_container = self.query_one("#preview", ScrollableContainer)
+
+        if not self.selection_mode:
+            self.selection_mode = True
+            
+            # Get current document content
+            markdown_content = ""
+            if self.current_doc_id:
+                try:
+                    doc = db.get_document(str(self.current_doc_id))
+                    if doc:
+                        content = doc["content"].strip()
+                        if content.startswith(f"# {doc['title']}"):
+                            markdown_content = content
+                        else:
+                            markdown_content = f"""# {doc['title']}
+
+*Project: {doc['project']} | Tags: {', '.join(doc.get('tags', []))}*
+*Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}*
+
+{content}"""
+                except Exception:
+                    pass
+
+            # Remove RichLog and add TextArea
+            preview_container.remove_children()
+            selection_area = TextArea(
+                markdown_content,
+                id="selection-content",
+                theme="monokai",
+                language="markdown",
+            )
+            preview_container.mount(selection_area)
+            
+            # Textual's TextArea doesn't have read_only, but we can prevent edits
+            # by intercepting key events
+            original_on_key = selection_area.on_key
+            
+            def read_only_on_key(event):
+                # Allow navigation and selection keys
+                allowed_keys = {
+                    "up", "down", "left", "right", "home", "end", 
+                    "pageup", "pagedown", "ctrl+a", "ctrl+c",
+                    "shift+up", "shift+down", "shift+left", "shift+right",
+                    "shift+home", "shift+end", "escape"
+                }
+                
+                # Allow these keys through
+                if event.key in allowed_keys:
+                    return original_on_key(event)
+                
+                # Block all character input and modification keys
+                event.stop()
+                return None
+            
+            selection_area.on_key = read_only_on_key
+            selection_area.focus()
+            
+            status.update(
+                "SELECTION MODE: Drag to select text, Ctrl+C to copy, 's'/Esc to exit"
+            )
+        else:
+            self.selection_mode = False
+            
+            # Remove TextArea and add RichLog back
+            preview_container.remove_children()
+            preview_log = RichLog(
+                id="preview-content", 
+                wrap=True, 
+                highlight=True, 
+                markup=True, 
+                auto_scroll=False
+            )
+            preview_container.mount(preview_log)
+            
+            # Refresh the preview
+            if self.current_doc_id:
+                self.update_preview(self.current_doc_id)
+            
+            # Return focus to table
+            table = self.query_one("#doc-table", DataTable)
+            table.focus()
+            status.update("View mode restored - normal navigation active")
+
+    def watch_selection_mode(self, old_mode: bool, new_mode: bool):
+        """React to selection mode changes."""
+        # Mode switching is now handled in action_toggle_copy_mode
+        pass
+
+    def copy_to_clipboard(self, text: str):
+        """Copy text to clipboard with fallback methods."""
+        import subprocess
+        success = False
+
+        # Try pbcopy on macOS first
+        try:
+            subprocess.run(['pbcopy'], input=text, text=True, check=True)
+            success = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Try xclip on Linux
+            try:
+                subprocess.run(['xclip', '-selection', 'clipboard'],
+                             input=text, text=True, check=True)
+                success = True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Try xsel on Linux as fallback
+                try:
+                    subprocess.run(['xsel', '--clipboard', '--input'],
+                                 input=text, text=True, check=True)
+                    success = True
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+
+        status = self.query_one("#status", Label)
+        if success:
+            status.update("Content copied to clipboard!")
+        else:
+            status.update("Clipboard not available - manual selection required")
 
     def action_quit(self):
         self.exit()
