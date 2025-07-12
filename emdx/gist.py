@@ -148,12 +148,12 @@ def copy_to_clipboard(text: str) -> bool:
         # macOS
         subprocess.run(["pbcopy"], input=text.encode(), check=True)
         return True
-    except:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         try:
             # Linux (X11)
             subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
             return True
-        except:
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
             # Windows or fallback - would need pyperclip
             return False
 

@@ -14,7 +14,7 @@ def save_terminal_state():
     try:
         fd = sys.stdin.fileno()
         return termios.tcgetattr(fd)
-    except:
+    except (OSError, ValueError, termios.error):
         return None
 
 
@@ -24,7 +24,7 @@ def restore_terminal_state(state):
         try:
             fd = sys.stdin.fileno()
             termios.tcsetattr(fd, termios.TCSADRAIN, state)
-        except:
+        except (OSError, ValueError, termios.error):
             pass
 
 
