@@ -24,7 +24,6 @@ def list(
     try:
         import json
 
-
         # Ensure database schema exists
         db.ensure_schema()
 
