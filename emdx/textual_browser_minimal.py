@@ -1093,7 +1093,7 @@ class MinimalDocumentBrowser(App):
             selection_area = TextArea(
                 header_text + markdown_content,
                 id="selection-content",
-                theme="github-dark",  # Different theme to indicate different mode
+                theme="dracula",  # Different theme to indicate different mode
                 language="markdown",
             )
             preview_container.mount(selection_area)
