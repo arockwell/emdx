@@ -162,35 +162,46 @@ pytest
 
 ### Useful Commands
 ```bash
-# Save content
-emdx save document.md                          # Save file
-emdx save "My document content"                # Save text directly
-echo "content" | emdx save --title "Piped"    # Save from stdin
-emdx save file.md --title "Custom Title"       # Save with custom title
+# Save content (IMPORTANT: Use stdin for text, not direct strings)
+emdx save document.md                                  # Save file
+echo "My document content" | emdx save --title "Doc"  # CORRECT: Save text via stdin
+echo "content" | emdx save --title "Piped"            # Save from stdin
+emdx save file.md --title "Custom Title"              # Save with custom title
 
 # Search and browse
-emdx find "search terms"                       # Full-text search
-emdx find --tags "python,cli"                  # Search by tags
-emdx gui                                       # Interactive TUI browser
+emdx find "search terms"                               # Full-text search
+emdx find --tags "🎯,🔧"                               # Search by emoji tags
+emdx gui                                               # Interactive TUI browser
 
 # View and edit
-emdx view 123                                  # View by ID
-emdx edit 123                                  # Edit in your editor
-emdx recent                                    # Show recent documents
-emdx list                                      # List all documents
+emdx view 123                                          # View by ID
+emdx edit 123                                          # Edit in your editor
+emdx recent                                            # Show recent documents
+emdx list                                              # List all documents
 
-# Tag management
-emdx tag 123 python cli devops                 # Add tags
-emdx untag 123 devops                          # Remove tag
-emdx tags                                      # List all tags
-emdx retag old-tag new-tag                     # Rename tag globally
-emdx merge-tags tag1 tag2 --into unified       # Merge tags
+# Emoji tag management (tags are now emojis!)
+emdx tag 123 🎯 🔧 🚀                                  # Add emoji tags
+emdx untag 123 🔧                                      # Remove tag
+emdx tags                                              # List all tags
+emdx retag old-tag 🎯                                  # Convert word tag to emoji
+emdx view 465                                          # View emoji legend
 
 # Statistics
-emdx stats                                     # Overall stats
-emdx project-stats                             # Detailed project breakdown
-emdx projects                                  # List all projects
+emdx stats                                             # Overall stats
+emdx project-stats                                     # Detailed project breakdown
+emdx projects                                          # List all projects
+
+# Cleanup and maintenance
+emdx trash                                             # View deleted documents
+emdx restore 123                                       # Restore from trash
+emdx delete 123                                        # Soft delete to trash
 ```
+
+### ⚠️ Critical Save Syntax
+**WRONG:** `emdx save "text content"` - This creates empty documents!
+**RIGHT:** `echo "text content" | emdx save --title "My Title"`
+
+The wrong syntax was causing ~40 empty documents because emdx was looking for a file named "text content" that didn't exist.
 
 This project emphasizes clean architecture, comprehensive testing, and user-friendly interfaces while maintaining high code quality standards.
 
