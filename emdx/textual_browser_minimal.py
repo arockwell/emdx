@@ -15,7 +15,8 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
+from textual.widget import Widget
 
 from emdx.sqlite_database import db
 from emdx.tags import (
@@ -154,10 +155,8 @@ class FullScreenView(Screen):
 
     def on_key(self, event: events.Key) -> None:
         """Handle key events that aren't bindings."""
-        # Ignore 's' key to prevent crashes
-        if event.character == "s":
-            event.prevent_default()
-            event.stop()
+        # Let 's' key pass through - handled by main app
+        pass
 
 
     def copy_to_clipboard(self, text: str):
@@ -271,6 +270,7 @@ class MinimalDocumentBrowser(App):
         background: $background;
         width: 100%;
         height: 100%;
+        max-width: 100%;
     }
     
     TextArea {
@@ -623,11 +623,14 @@ class MinimalDocumentBrowser(App):
 
     def on_key(self, event: events.Key):
         # Check for 's' in selection mode first
-        if self.selection_mode and event.character == "s":
-            event.prevent_default()
-            event.stop()
-            self.action_toggle_selection_mode()
-            return
+        if event.character == "s":
+            # If we're in selection mode OR if a TextArea has focus, toggle
+            focused = self.focused
+            if self.selection_mode or (focused and focused.id == "selection-content"):
+                event.prevent_default()
+                event.stop()
+                self.action_toggle_selection_mode()
+                return
             
         if self.mode == "SEARCH":
             if event.key == "escape":
@@ -1061,83 +1064,118 @@ class MinimalDocumentBrowser(App):
 
     def action_toggle_selection_mode(self):
         """Toggle text selection mode."""
-        status = self.query_one("#status", Label)
-        preview_container = self.query_one("#preview", ScrollableContainer)
+        try:
+            status = self.query_one("#status", Label)
+            preview_container = self.query_one("#preview", ScrollableContainer)
 
-        if not self.selection_mode:
-            self.selection_mode = True
-            
-            # Get current document content
-            markdown_content = ""
-            if self.current_doc_id:
-                try:
-                    doc = db.get_document(str(self.current_doc_id))
-                    if doc:
-                        content = doc["content"].strip()
-                        if content.startswith(f"# {doc['title']}"):
-                            markdown_content = content
-                        else:
-                            markdown_content = f"""# {doc['title']}
+            if not self.selection_mode:
+                # Entering selection mode
+                self.selection_mode = True
+                
+                # Get current document content
+                markdown_content = ""
+                if self.current_doc_id:
+                    try:
+                        doc = db.get_document(str(self.current_doc_id))
+                        if doc:
+                            content = doc["content"].strip()
+                            if content.startswith(f"# {doc['title']}"):
+                                markdown_content = content
+                            else:
+                                markdown_content = f"""# {doc['title']}
 
 *Project: {doc['project']} | Tags: {', '.join(doc.get('tags', []))}*
 *Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}*
 
 {content}"""
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
 
-            # Remove RichLog and add TextArea for selection
-            preview_container.remove_children()
-            
-            # Add header to make it clear this is for selection only
-            header_text = "═══ SELECTION MODE - Copy Only (Edits Won't Save) ═══\n\n"
-            selection_area = TextArea(
-                header_text + markdown_content,
-                id="selection-content",
-                theme="dracula",  # Different theme to indicate different mode
-                language="markdown",
-            )
-            
-            # Don't override handle_key - let app's on_key handle it
-            
-            preview_container.mount(selection_area)
-            selection_area.focus()
-            
-            status.update(
-                "SELECT MODE: Select & copy text (edits ignored), press 's' to return"
-            )
-        else:
+                # Remove RichLog and add TextArea for selection
+                preview_container.remove_children()
+                
+                # Add header to make it clear this is for selection only
+                header_text = "═══ SELECTION MODE - Select text and Ctrl+C to copy, press 's' to exit ═══\n\n"
+                
+                # Use a simpler approach - just let them select and copy
+                # We'll show a plain text version that's easier to select
+                plain_content = header_text + markdown_content
+                
+                # Create a TextArea for selection
+                selection_area = TextArea(
+                    plain_content,
+                    id="selection-content",
+                    theme="dracula",
+                    language="markdown",
+                )
+                
+                # Try to set read_only after creation if it exists
+                try:
+                    selection_area.read_only = True
+                except AttributeError:
+                    # Fallback if read_only doesn't exist
+                    pass
+                
+                preview_container.mount(selection_area)
+                selection_area.focus()
+                
+                status.update(
+                    "SELECT MODE: Select & copy text (edits ignored), press 's' to return"
+                )
+            else:
+                # Exiting selection mode - do this carefully
+                self.selection_mode = False
+                
+                # First remove the TextArea
+                preview_container.remove_children()
+                
+                # Create new RichLog with proper settings
+                preview_log = RichLog(
+                    id="preview-content", 
+                    wrap=True, 
+                    highlight=True, 
+                    markup=True, 
+                    auto_scroll=False,
+                )
+                preview_log.can_focus = True  # Set this after creation
+                
+                # Mount the new RichLog
+                preview_container.mount(preview_log)
+                
+                # Wait for mount to complete before updating content
+                self.call_after_refresh(self._restore_preview_content)
+                
+        except Exception as e:
+            # If anything goes wrong, try to restore a working state
+            import traceback
+            traceback.print_exc()
             self.selection_mode = False
-            
-            # Remove TextArea and add RichLog back
-            preview_container.remove_children()
-            preview_log = RichLog(
-                id="preview-content", 
-                wrap=True, 
-                highlight=True, 
-                markup=True, 
-                auto_scroll=False,
-                max_width=None,  # Ensure it uses container width
-            )
-            preview_container.mount(preview_log)
-            
-            # Force the app to recalculate layouts
-            self.refresh(layout=True)
-            preview_log.refresh()
-            
-            # Refresh the preview
+            status = self.query_one("#status", Label)
+            status.update(f"Error toggling mode: {e}")
+    
+    def _restore_preview_content(self):
+        """Restore preview content after switching back from selection mode."""
+        try:
+            # Update the preview with current document
             if self.current_doc_id:
                 self.update_preview(self.current_doc_id)
+            
+            # Update status
+            status = self.query_one("#status", Label)
+            status.update("View mode restored - normal navigation active")
             
             # Return focus to table
             table = self.query_one("#doc-table", DataTable)
             table.focus()
-            status.update("View mode restored - normal navigation active")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
 
     def watch_selection_mode(self, old_mode: bool, new_mode: bool):
         """React to selection mode changes."""
-        # Mode switching is now handled in action_toggle_copy_mode
+        # Mode switching is now handled in action_toggle_selection_mode
         pass
+    
 
     def copy_to_clipboard(self, text: str):
         """Copy text to clipboard with fallback methods."""
