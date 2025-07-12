@@ -448,6 +448,11 @@ class MinimalDocumentBrowser(App):
         if message.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[message.cursor_row]
             self.current_doc_id = doc["id"]
+            
+            # Exit selection mode when switching documents
+            if self.selection_mode:
+                self.action_toggle_selection_mode()
+            
             self.update_preview(doc["id"])
 
     def update_preview(self, doc_id: int):
@@ -1176,6 +1181,9 @@ class MinimalDocumentBrowser(App):
                     )
                     # Make it read-only after creation
                     text_area.read_only = True
+                    # Also try setting disabled but keep it focusable for selection
+                    text_area.disabled = False  # Keep enabled for interaction
+                    text_area.can_focus = True  # Ensure it can be focused
                     
                     # FIX: Constrain TextArea to container width
                     text_area.styles.width = "100%"
@@ -1212,6 +1220,10 @@ class MinimalDocumentBrowser(App):
                 
                 # Mount the new widget
                 container.mount(richlog)
+                
+                # FIX: Reset container scroll and refresh layout
+                container.scroll_to(0, 0, animate=False)
+                container.refresh(layout=True)
                 
                 # Restore content with formatting
                 if self.current_doc_id:
