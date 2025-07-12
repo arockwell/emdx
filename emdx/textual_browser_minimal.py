@@ -15,8 +15,7 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
-from textual.widget import Widget
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
 from emdx.sqlite_database import db
 from emdx.tags import (
@@ -28,14 +27,14 @@ from emdx.tags import (
 
 
 class SelectionTextArea(TextArea):
-    """TextArea that captures 's' key to exit selection mode."""
-    
+    """TextArea that captures 's' key and escape to exit selection mode."""
+
     def __init__(self, app_instance, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
-    
+
     def on_key(self, event: events.Key) -> None:
-        if event.character == "s":
+        if event.character == "s" or event.key == "escape":
             event.stop()
             event.prevent_default()
             self.app_instance.action_toggle_selection_mode()
@@ -468,6 +467,10 @@ class MinimalDocumentBrowser(App):
         if message.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[message.cursor_row]
             self.current_doc_id = doc["id"]
+            # If in selection mode, exit it and go back to normal preview
+            if self.selection_mode:
+                self.action_toggle_selection_mode()
+            # Always update preview (after potentially exiting selection mode)
             self.update_preview(doc["id"])
 
     def update_preview(self, doc_id: int):
@@ -498,9 +501,13 @@ class MinimalDocumentBrowser(App):
                 preview_log.scroll_to(0, 0, animate=False)
 
         except Exception as e:
-            preview_log = self.query_one("#preview-content", RichLog)
-            preview_log.clear()
-            preview_log.write(f"[red]Error loading preview: {e}[/red]")
+            try:
+                preview_log = self.query_one("#preview-content", RichLog)
+                preview_log.clear()
+                preview_log.write(f"[red]Error loading preview: {e}[/red]")
+            except Exception:
+                # If we can't find the preview log, we're probably in selection mode
+                pass
 
     def update_status(self):
         status = self.query_one("#status", Label)
@@ -646,7 +653,7 @@ class MinimalDocumentBrowser(App):
             event.prevent_default()
             self.action_toggle_selection_mode()
             return
-            
+
         if self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
@@ -1086,7 +1093,7 @@ class MinimalDocumentBrowser(App):
             if not self.selection_mode:
                 # Entering selection mode
                 self.selection_mode = True
-                
+
                 # Get current document content
                 markdown_content = ""
                 if self.current_doc_id:
@@ -1108,14 +1115,17 @@ class MinimalDocumentBrowser(App):
 
                 # Remove RichLog and add TextArea for selection
                 preview_container.remove_children()
-                
+
                 # Add header to make it clear this is for selection only
-                header_text = "═══ SELECTION MODE - Select text and Ctrl+C to copy, press 's' to exit ═══\n\n"
-                
+                header_text = (
+                    "═══ SELECTION MODE - Select text and Ctrl+C to copy, "
+                    "press 's' or Esc to exit ═══\n\n"
+                )
+
                 # Use a simpler approach - just let them select and copy
                 # We'll show a plain text version that's easier to select
                 plain_content = header_text + markdown_content
-                
+
                 # Create a custom TextArea for selection that captures 's' key
                 selection_area = SelectionTextArea(
                     self,  # Pass app instance so it can call toggle method
@@ -1124,43 +1134,43 @@ class MinimalDocumentBrowser(App):
                     theme="dracula",
                     language="markdown",
                 )
-                
+
                 # Try to set read_only after creation if it exists
                 try:
                     selection_area.read_only = True
                 except AttributeError:
                     # Fallback if read_only doesn't exist
                     pass
-                
+
                 preview_container.mount(selection_area)
                 selection_area.focus()
-                
+
                 status.update(
-                    "SELECT MODE: Select & copy text (edits ignored), press 's' to return"
+                    "SELECT MODE: Select & copy text (edits ignored), press 's' or Esc to exit"
                 )
             else:
                 # Exiting selection mode - do this carefully
                 self.selection_mode = False
-                
+
                 # First remove the TextArea
                 preview_container.remove_children()
-                
+
                 # Create new RichLog with proper settings
                 preview_log = RichLog(
-                    id="preview-content", 
-                    wrap=True, 
-                    highlight=True, 
-                    markup=True, 
+                    id="preview-content",
+                    wrap=True,
+                    highlight=True,
+                    markup=True,
                     auto_scroll=False,
                 )
                 preview_log.can_focus = True  # Set this after creation
-                
+
                 # Mount the new RichLog
                 preview_container.mount(preview_log)
-                
+
                 # Wait for mount to complete before updating content
                 self.call_after_refresh(self._restore_preview_content)
-                
+
         except Exception as e:
             # If anything goes wrong, try to restore a working state
             import traceback
@@ -1168,22 +1178,22 @@ class MinimalDocumentBrowser(App):
             self.selection_mode = False
             status = self.query_one("#status", Label)
             status.update(f"Error toggling mode: {e}")
-    
+
     def _restore_preview_content(self):
         """Restore preview content after switching back from selection mode."""
         try:
             # Update the preview with current document
             if self.current_doc_id:
                 self.update_preview(self.current_doc_id)
-            
+
             # Update status
             status = self.query_one("#status", Label)
             status.update("View mode restored - normal navigation active")
-            
+
             # Return focus to table
             table = self.query_one("#doc-table", DataTable)
             table.focus()
-        except Exception as e:
+        except Exception:
             import traceback
             traceback.print_exc()
 
@@ -1191,7 +1201,7 @@ class MinimalDocumentBrowser(App):
         """React to selection mode changes."""
         # Mode switching is now handled in action_toggle_selection_mode
         pass
-    
+
 
     def copy_to_clipboard(self, text: str):
         """Copy text to clipboard with fallback methods."""
@@ -1223,7 +1233,7 @@ class MinimalDocumentBrowser(App):
         else:
             status.update("Clipboard not available - manual selection required")
 
-    
+
     def action_quit(self):
         self.exit()
 
@@ -1262,3 +1272,4 @@ def run_minimal():
 
 if __name__ == "__main__":
     sys.exit(run_minimal())
+
