@@ -137,46 +137,22 @@ class MdcatWidget:
             return f"Error rendering with mdcat: {e}"
 
 
-# Example usage and testing
 if __name__ == "__main__":
-    test_markdown = """
-# Markdown Test
-
-This is a test of **mdcat** rendering.
-
-## Code Example
-
-```python
-def hello(name: str) -> str:
-    '''Say hello to someone.'''
-    return f"Hello, {name}!"
-
-print(hello("World"))
-```
-
-## Table
-
-| Feature | Supported |
-|---------|-----------|
-| Code    | ✓         |
-| Tables  | ✓         |
-| Images  | ✓ (some terminals) |
-
-## Links
-
-- [Textual](https://textual.textualize.io)
-- [mdcat](https://github.com/lunaryorn/mdcat)
-"""
-
-    if MdcatRenderer.is_available():
-        print("mdcat is available!")
-        term, images = MdcatRenderer.get_terminal_info()
-        print(f"Terminal: {term}, Image support: {images}")
-        print("\nRendered output:")
-        print("-" * 80)
-        print(MdcatRenderer.render(test_markdown))
+    import sys
+    
+    if not MdcatRenderer.is_available():
+        print("mdcat is not installed. Install with:", file=sys.stderr)
+        print("  cargo install mdcat", file=sys.stderr)
+        print("or", file=sys.stderr)
+        print("  brew install mdcat", file=sys.stderr)
+        sys.exit(1)
+    
+    # Read from stdin or file
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], 'r') as f:
+            content = f.read()
     else:
-        print("mdcat is not installed. Install with:")
-        print("  cargo install mdcat")
-        print("or")
-        print("  brew install mdcat")
+        content = sys.stdin.read()
+    
+    # Render and output
+    print(MdcatRenderer.render(content))
