@@ -163,18 +163,33 @@ pytest
 ### Useful Commands
 ```bash
 # Save content
-emdx save "My document" --tags "python,cli"
-echo "content" | emdx save "Piped content"
+emdx save document.md                          # Save file
+emdx save "My document content"                # Save text directly
+echo "content" | emdx save --title "Piped"    # Save from stdin
+emdx save file.md --title "Custom Title"       # Save with custom title
 
 # Search and browse
-emdx find "search terms"
-emdx find --tags "python,cli"
-emdx browse  # Interactive TUI
+emdx find "search terms"                       # Full-text search
+emdx find --tags "python,cli"                  # Search by tags
+emdx gui                                       # Interactive TUI browser
 
-# Management
-emdx browse recent
-emdx browse stats
-emdx tag-list
+# View and edit
+emdx view 123                                  # View by ID
+emdx edit 123                                  # Edit in your editor
+emdx recent                                    # Show recent documents
+emdx list                                      # List all documents
+
+# Tag management
+emdx tag 123 python cli devops                 # Add tags
+emdx untag 123 devops                          # Remove tag
+emdx tags                                      # List all tags
+emdx retag old-tag new-tag                     # Rename tag globally
+emdx merge-tags tag1 tag2 --into unified       # Merge tags
+
+# Statistics
+emdx stats                                     # Overall stats
+emdx project-stats                             # Detailed project breakdown
+emdx projects                                  # List all projects
 ```
 
 This project emphasizes clean architecture, comprehensive testing, and user-friendly interfaces while maintaining high code quality standards.
