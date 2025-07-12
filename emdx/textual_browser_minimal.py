@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Minimal textual browser that signals for external nvim handling.
-"""
+"""Minimal textual browser that signals for external nvim handling."""
 
 import os
 import subprocess
@@ -61,10 +59,17 @@ class FullScreenView(Screen):
     ]
 
     def __init__(self, doc_id: int):
+        """Initialize the full screen viewer.
+
+        Args:
+            doc_id: The ID of the document to display.
+
+        """
         super().__init__()
         self.doc_id = doc_id
 
     def compose(self) -> ComposeResult:
+        """Compose the UI layout for the full screen viewer."""
         # Just the document content - no header metadata
         with ScrollableContainer(id="doc-viewer"):
             yield RichLog(id="content", wrap=True, highlight=True, markup=True, auto_scroll=False)
@@ -166,29 +171,43 @@ class DeleteConfirmScreen(ModalScreen):
     ]
 
     def __init__(self, doc_id: int, doc_title: str):
+        """Initialize the delete confirmation dialog.
+
+        Args:
+            doc_id: The ID of the document to delete.
+            doc_title: The title of the document for display.
+
+        """
         super().__init__()
         self.doc_id = doc_id
         self.doc_title = doc_title
 
     def compose(self) -> ComposeResult:
+        """Compose the UI layout for the delete confirmation dialog."""
         with Grid(id="dialog"):
             yield Label(
-                f'Delete document #{self.doc_id}?\n"{self.doc_title}"\n\n[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]',
+                (
+                    f'Delete document #{self.doc_id}?\n"{self.doc_title}"\n\n'
+                    "[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]"
+                ),
                 id="question",
             )
             yield Button("Cancel (n)", variant="primary", id="cancel")
             yield Button("Delete (y)", variant="error", id="delete")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events in the delete confirmation dialog."""
         if event.button.id == "delete":
             self.dismiss(True)
         else:
             self.dismiss(False)
 
     def action_confirm_delete(self) -> None:
+        """Confirm deletion action (y key)."""
         self.dismiss(True)
 
     def action_cancel(self) -> None:
+        """Cancel deletion action (n key or escape)."""
         self.dismiss(False)
 
 
@@ -251,12 +270,14 @@ class MinimalDocumentBrowser(App):
     search_query = reactive("")
 
     def __init__(self):
+        """Initialize the minimal document browser."""
         super().__init__()
         self.documents = []
         self.filtered_docs = []
         self.current_doc_id = None
 
     def compose(self) -> ComposeResult:
+        """Compose the main UI layout with sidebar and preview."""
         yield Input(placeholder="Type to search...", id="search-input")
 
         with Horizontal():
@@ -270,6 +291,7 @@ class MinimalDocumentBrowser(App):
         yield Label("", id="status")
 
     def on_mount(self) -> None:
+        """Initialize the browser when the app is mounted."""
         self.load_documents()
         self.setup_table()
         self.update_status()
@@ -277,6 +299,7 @@ class MinimalDocumentBrowser(App):
             self.on_row_selected()
 
     def load_documents(self):
+        """Load documents from the database."""
         try:
             db.ensure_schema()
             docs = db.list_documents(limit=1000)
@@ -286,6 +309,7 @@ class MinimalDocumentBrowser(App):
             self.exit(message=f"Error loading documents: {e}")
 
     def setup_table(self):
+        """Set up the document table with columns and data."""
         table = self.query_one("#doc-table", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
@@ -304,6 +328,7 @@ class MinimalDocumentBrowser(App):
         table.focus()
 
     def on_row_selected(self):
+        """Handle row selection in the document table."""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[table.cursor_row]
@@ -311,12 +336,14 @@ class MinimalDocumentBrowser(App):
             self.update_preview(doc["id"])
 
     def on_data_table_row_highlighted(self, message: DataTable.RowHighlighted) -> None:
+        """Handle row highlighting in the document table."""
         if message.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[message.cursor_row]
             self.current_doc_id = doc["id"]
             self.update_preview(doc["id"])
 
     def update_preview(self, doc_id: int):
+        """Update the preview panel with the selected document content."""
         try:
             doc = db.get_document(str(doc_id))
             if doc:
@@ -348,10 +375,12 @@ class MinimalDocumentBrowser(App):
             preview_log.write(f"[red]Error loading preview: {e}[/red]")
 
     def update_status(self):
+        """Update the status bar with document count information."""
         status = self.query_one("#status", Label)
         status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
 
     def watch_mode(self, old_mode: str, new_mode: str):
+        """Handle mode changes between NORMAL and SEARCH modes."""
         if new_mode == "SEARCH":
             search = self.query_one("#search-input", Input)
             search.add_class("visible")
@@ -364,18 +393,22 @@ class MinimalDocumentBrowser(App):
             table.focus()
 
     def action_search_mode(self):
+        """Enter search mode (/ key)."""
         self.mode = "SEARCH"
 
     def on_input_changed(self, event: Input.Changed):
+        """Handle search input changes."""
         if event.input.id == "search-input":
             self.search_query = event.value
             self.filter_documents(event.value)
 
     def on_input_submitted(self, event: Input.Submitted):
+        """Handle search input submission (enter key)."""
         if event.input.id == "search-input":
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
+        """Handle key press events for navigation and actions."""
         if self.mode == "SEARCH":
             if event.key == "escape":
                 self.mode = "NORMAL"
@@ -398,6 +431,7 @@ class MinimalDocumentBrowser(App):
                     self.action_view()
 
     def filter_documents(self, query: str):
+        """Filter documents based on search query."""
         if not query:
             self.filtered_docs = self.documents
         else:
@@ -429,22 +463,26 @@ class MinimalDocumentBrowser(App):
             self.on_row_selected()
 
     def action_cursor_down(self):
+        """Move cursor down in the document table (j key)."""
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.action_cursor_down()
 
     def action_cursor_up(self):
+        """Move cursor up in the document table (k key)."""
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.action_cursor_up()
 
     def action_cursor_top(self):
+        """Move cursor to the top of the document table (g key)."""
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.cursor_coordinate = (0, 0)
             self.on_row_selected()
 
     def action_cursor_bottom(self):
+        """Move cursor to the bottom of the document table (shift+g key)."""
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             if table.row_count > 0:
@@ -494,6 +532,7 @@ class MinimalDocumentBrowser(App):
             status.update(f"Error preparing edit: {e}")
 
     def action_delete(self):
+        """Delete the currently selected document (d key)."""
         if self.mode == "SEARCH" or not self.current_doc_id:
             return
 
@@ -522,12 +561,14 @@ class MinimalDocumentBrowser(App):
             self.push_screen(DeleteConfirmScreen(doc["id"], doc["title"]), check_delete)
 
     def action_view(self):
+        """View the currently selected document in full screen (v key or enter)."""
         if self.mode == "SEARCH" or not self.current_doc_id:
             return
 
         self.push_screen(FullScreenView(self.current_doc_id))
 
     def action_quit(self):
+        """Quit the application (q key)."""
         self.exit()
 
 
