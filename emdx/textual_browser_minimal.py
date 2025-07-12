@@ -356,7 +356,6 @@ class MinimalDocumentBrowser(App):
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("c", "copy_content", "Copy", key_display="c"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
-        Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -656,11 +655,8 @@ class MinimalDocumentBrowser(App):
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
-        # Handle Cmd+C / Ctrl+C for copying in selection mode
-        if self.selection_mode and event.key == "ctrl+c":
-            self.action_copy_content()
-            event.prevent_default()
-            return
+        # Don't intercept Ctrl+C in selection mode - let terminal handle it
+        # The 'c' key can still be used to copy the full document
             
         # Handle global Escape key - quit from any mode
         if event.key == "escape":
@@ -1074,59 +1070,10 @@ class MinimalDocumentBrowser(App):
             table.cursor_coordinate = (0, 0)
             self.on_row_selected()
 
-    def action_copy_selected(self):
-        """Copy selected text when Ctrl+C is pressed."""
-        if self.selection_mode:
-            self.action_copy_content()
-    
     def action_copy_content(self):
-        """Copy selected text or current document content to clipboard."""
+        """Copy current document content to clipboard."""
         if self.current_doc_id:
             try:
-                status = self.query_one("#status", Label)
-                
-                # If in selection mode, check for TextArea selection
-                if self.selection_mode:
-                    try:
-                        # Get the TextArea widget (could be SelectionTextArea)
-                        text_area = self.query_one("#preview-content")
-                        
-                        # Try to get selected text
-                        try:
-                            # Check if selection exists and get selected text
-                            selection_start = text_area.selection.start
-                            selection_end = text_area.selection.end
-                            
-                            if selection_start != selection_end:
-                                # There's a selection - get the text
-                                selection = text_area.get_text_range(selection_start, selection_end)
-                                if selection and selection.strip():
-                                    self.copy_to_clipboard(selection)
-                                    status.update("Selected text copied to clipboard!")
-                                    return
-                        except Exception:
-                            # No selection or selection API issue
-                            pass
-                        
-                        # No selection, copy full document
-                        self.copy_to_clipboard(text_area.text)
-                        status.update("Full document copied! Select text first to copy partial content")
-                        return
-                        
-                    except Exception as e:
-                        # Fallback to full document copy
-                        doc = db.get_document(str(self.current_doc_id))
-                        if doc:
-                            content = doc['content'].strip()
-                            if not content.startswith(f"# {doc['title']}"):
-                                text_content = f"# {doc['title']}\n\n{content}"
-                            else:
-                                text_content = content
-                            self.copy_to_clipboard(text_content)
-                            status.update("Full document copied!")
-                        return
-                
-                # In formatted mode, copy the full document
                 doc = db.get_document(str(self.current_doc_id))
                 if doc:
                     content = doc['content'].strip()
@@ -1136,6 +1083,7 @@ class MinimalDocumentBrowser(App):
                         content_to_copy = content
                     
                     self.copy_to_clipboard(content_to_copy)
+                    status = self.query_one("#status", Label)
                     status.update("Full document copied to clipboard!")
                     
             except Exception as e:
@@ -1210,7 +1158,7 @@ class MinimalDocumentBrowser(App):
                     container.mount(text_area)
                     text_area.focus()
                     
-                    status.update("SELECTION MODE: Select text with mouse, then 'c' to copy. ESC exits")
+                    status.update("SELECTION MODE: Select text with mouse, use terminal's copy (Cmd+C). ESC exits")
                 except Exception as mount_error:
                     status.update(f"Failed to create selection widget: {mount_error}")
                     
