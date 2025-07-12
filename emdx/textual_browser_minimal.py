@@ -26,6 +26,21 @@ from emdx.tags import (
 )
 
 
+class SelectionTextArea(TextArea):
+    """TextArea that captures 's' key to exit selection mode."""
+    
+    def __init__(self, app_instance, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.app_instance = app_instance
+    
+    def on_key(self, event: events.Key) -> None:
+        if event.character == "s":
+            event.stop()
+            event.prevent_default()
+            self.app_instance.action_toggle_selection_mode()
+            return
+        # Let TextArea handle all other keys normally
+        super().on_key(event)
 
 
 class FullScreenView(Screen):
@@ -1175,7 +1190,8 @@ class MinimalDocumentBrowser(App):
                 
                 # Create TextArea for selection
                 try:
-                    text_area = TextArea(
+                    text_area = SelectionTextArea(
+                        self,  # Pass app instance
                         plain_content,
                         id="preview-content"
                     )
@@ -1225,9 +1241,8 @@ class MinimalDocumentBrowser(App):
                 container.scroll_to(0, 0, animate=False)
                 container.refresh(layout=True)
                 
-                # Restore content with formatting
-                if self.current_doc_id:
-                    self.update_preview(self.current_doc_id)
+                # Use deferred content restoration like main branch
+                self.call_after_refresh(self._restore_preview_content)
                 
                 status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
                 
@@ -1257,6 +1272,20 @@ class MinimalDocumentBrowser(App):
             except Exception as recovery_error:
                 status.update(f"Failed to recover preview: {recovery_error}")
 
+    def _restore_preview_content(self):
+        """Restore preview content after switching back from selection mode."""
+        try:
+            # Update the preview with current document
+            if self.current_doc_id:
+                self.update_preview(self.current_doc_id)
+            
+            # Return focus to table
+            table = self.query_one("#doc-table", DataTable)
+            table.focus()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+    
     def action_save_preview(self):
         """Save is now handled by external editor - show message."""
         status = self.query_one("#status", Label)
