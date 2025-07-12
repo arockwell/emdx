@@ -163,18 +163,125 @@ pytest
 ### Useful Commands
 ```bash
 # Save content
-emdx save "My document" --tags "python,cli"
-echo "content" | emdx save "Piped content"
+emdx save document.md                          # Save file
+emdx save "My document content"                # Save text directly
+echo "content" | emdx save --title "Piped"    # Save from stdin
+emdx save file.md --title "Custom Title"       # Save with custom title
 
 # Search and browse
-emdx find "search terms"
-emdx find --tags "python,cli"
-emdx browse  # Interactive TUI
+emdx find "search terms"                       # Full-text search
+emdx find --tags "python,cli"                  # Search by tags
+emdx gui                                       # Interactive TUI browser
 
-# Management
-emdx browse recent
-emdx browse stats
-emdx tag-list
+# View and edit
+emdx view 123                                  # View by ID
+emdx edit 123                                  # Edit in your editor
+emdx recent                                    # Show recent documents
+emdx list                                      # List all documents
+
+# Tag management
+emdx tag 123 python cli devops                 # Add tags
+emdx untag 123 devops                          # Remove tag
+emdx tags                                      # List all tags
+emdx retag old-tag new-tag                     # Rename tag globally
+emdx merge-tags tag1 tag2 --into unified       # Merge tags
+
+# Statistics
+emdx stats                                     # Overall stats
+emdx project-stats                             # Detailed project breakdown
+emdx projects                                  # List all projects
 ```
 
 This project emphasizes clean architecture, comprehensive testing, and user-friendly interfaces while maintaining high code quality standards.
+
+## Claude Code Workflow Integration
+
+### Auto-Tagging for Project Management
+
+When working with EMDX through Claude Code, automatically apply tags to documents based on content patterns to enable sophisticated project tracking and success analytics.
+
+#### Core Tagging Taxonomy
+
+Use these minimal, space-efficient tags:
+
+**Document Types:**
+- `gameplan` - Strategic plans and approaches
+- `analysis` - Investigation results
+- `notes` - General notes and observations
+
+**Workflow Status:**
+- `active` - Currently working on
+- `done` - Completed
+- `blocked` - Stuck/waiting
+
+**Outcomes (Success Tracking):**
+- `success` - Worked as intended
+- `failed` - Didn't work
+- `partial` - Mixed results
+
+**Technical Work:**
+- `refactor` - Code improvement
+- `test` - Testing work
+- `bug` - Bug fixes
+- `feature` - New functionality
+
+**Priority (Optional):**
+- `urgent` - Do now
+- `low` - When time permits
+
+#### Auto-Tagging Rules
+
+Apply tags automatically based on these patterns:
+
+1. **Title Detection:**
+   - "Gameplan:" → `gameplan, active`
+   - "Analysis:" → `analysis`
+   - Test-related content → `test`
+   - Refactoring work → `refactor`
+
+2. **Content Analysis:**
+   - Completion language → `done, success/failed`
+   - Blocking language → `blocked`
+   - Bug descriptions → `bug`
+   - Feature requests → `feature`
+
+3. **Conservative Approach:**
+   - Only tag obvious patterns
+   - Ask permission for ambiguous cases
+   - Suggest tags instead of auto-applying when uncertain
+
+#### Workflow Examples
+
+**Gameplan Lifecycle:**
+```bash
+# Create gameplan
+emdx save "Gameplan: Add user authentication" --tags "gameplan,active"
+
+# Update when blocked
+emdx tag 123 blocked
+
+# Mark complete with outcome
+emdx tag 123 done success
+emdx untag 123 active blocked
+```
+
+**Success Analytics:**
+```bash
+# Track gameplan success rates
+emdx find "tags:gameplan,success"    # Successful plans
+emdx find "tags:gameplan,failed"     # Failed plans
+emdx find "tags:active"              # Current work
+emdx find "tags:blocked"             # Stuck items
+```
+
+#### Integration Guidelines
+
+When Claude Code helps with EMDX:
+
+1. **Suggest tags** during save operations based on content
+2. **Ask permission** before applying tags: "I detected this looks like a gameplan, should I tag it as `gameplan, active`?"
+3. **Update tags** when project status changes
+4. **Generate progress reports** from tag analytics
+5. **Maintain minimal taxonomy** - resist adding too many tags
+
+This enables powerful project management and success tracking while keeping the tag system simple and space-efficient in the GUI.
