@@ -539,33 +539,33 @@ class MinimalDocumentBrowser(App):
         table = self.query_one("#doc-table", DataTable)
         current_row = table.cursor_row
         current_doc_id = None
-        
+
         # Get current document ID if a row is selected
         if current_row is not None and current_row < len(self.filtered_docs):
-            current_doc_id = self.filtered_docs[current_row]['id']
-        
+            current_doc_id = self.filtered_docs[current_row]["id"]
+
         # Save search state
         search_query = self.search_query if self.mode == "SEARCH" else None
-        
+
         # Reload documents
         self.load_documents()
-        
+
         # Clear and rebuild table
         table.clear()
         self.setup_table()
-        
+
         # Restore search if it was active
         if search_query:
             self.search_query = search_query
-            search_input = self.query_one("#search-input", SearchInput)
+            search_input = self.query_one("#search-input", Input)
             search_input.value = search_query
             self.filter_documents(search_query)
-        
+
         # Restore selection
         if current_doc_id:
             # Try to find the same document
             for idx, doc in enumerate(self.filtered_docs):
-                if doc['id'] == current_doc_id:
+                if doc["id"] == current_doc_id:
                     table.cursor_coordinate = (idx, 0)
                     self.on_row_selected()
                     break
@@ -583,7 +583,7 @@ class MinimalDocumentBrowser(App):
             new_row = min(current_row, len(self.filtered_docs) - 1)
             table.cursor_coordinate = (new_row, 0)
             self.on_row_selected()
-        
+
         # Show notification
         status = self.query_one("#status", Label)
         status.update("Documents refreshed")
