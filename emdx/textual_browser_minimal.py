@@ -18,6 +18,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Input, Label, RichLog
 
 from emdx.sqlite_database import db
+from emdx.tags import add_tags_to_document, get_document_tags, remove_tags_from_document, search_by_tags
 
 
 class FullScreenView(Screen):
@@ -134,6 +135,9 @@ class FullScreenView(Screen):
         container.scroll_to(0, container.max_scroll_y, animate=False)
 
 
+
+
+
 class DeleteConfirmScreen(ModalScreen):
     """Modal screen for delete confirmation."""
 
@@ -232,6 +236,26 @@ class MinimalDocumentBrowser(App):
         display: block;
     }
 
+    #tag-input {
+        display: none;
+    }
+
+    #tag-input.visible {
+        display: block;
+    }
+
+    #tag-selector {
+        dock: top;
+        display: none;
+        height: 1;
+        margin: 0 1;
+        text-align: center;
+    }
+
+    #tag-selector.visible {
+        display: block;
+    }
+
     #status {
         dock: bottom;
         height: 1;
@@ -252,10 +276,14 @@ class MinimalDocumentBrowser(App):
         Binding("d", "delete", "Delete", show=False),
         Binding("v", "view", "View", show=False),
         Binding("enter", "view", "View", show=False),
+        Binding("t", "tag_mode", "Tag", key_display="t"),
+        Binding("shift+t", "untag_mode", "Untag", show=False),
     ]
 
     mode = reactive("NORMAL")
     search_query = reactive("")
+    tag_action = reactive("")  # "add" or "remove"
+    current_tag_completion = reactive(0)  # Current completion index
 
     def __init__(self):
         super().__init__()
@@ -264,7 +292,9 @@ class MinimalDocumentBrowser(App):
         self.current_doc_id = None
 
     def compose(self) -> ComposeResult:
-        yield Input(placeholder="Type to search...", id="search-input")
+        yield Input(placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')", id="search-input")
+        yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
+        yield Label("", id="tag-selector")
 
         with Horizontal():
             with Vertical(id="sidebar"):
@@ -287,6 +317,11 @@ class MinimalDocumentBrowser(App):
         try:
             db.ensure_schema()
             docs = db.list_documents(limit=1000)
+            
+            # Add tags to each document
+            for doc in docs:
+                doc['tags'] = get_document_tags(doc['id'])
+            
             self.documents = docs
             self.filtered_docs = docs
         except Exception as e:
@@ -296,16 +331,26 @@ class MinimalDocumentBrowser(App):
         table = self.query_one("#doc-table", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
-        table.add_columns("ID", "Title", "Project", "Created", "Views")
+        table.add_columns("ID", "Title", "Tags", "Created")
 
         for doc in self.filtered_docs:
             created = doc["created_at"].strftime("%Y-%m-%d")
+            
+            # Wider title now that we have more space
+            title = doc["title"][:60]
+            if len(doc["title"]) > 60:
+                title += "..."
+            
+            # Show tags or empty indicator
+            tags_str = ", ".join(doc.get("tags", []))[:40]  # Show actual tags
+            if len(", ".join(doc.get("tags", []))) > 40:
+                tags_str += "..."
+            
             table.add_row(
                 str(doc["id"]),
-                doc["title"][:40] + "..." if len(doc["title"]) > 40 else doc["title"],
-                doc["project"] or "None",
+                title,
+                tags_str or "-",
                 created,
-                str(doc["access_count"]),
             )
 
         table.focus()
@@ -329,6 +374,7 @@ class MinimalDocumentBrowser(App):
             if doc:
                 preview_log = self.query_one("#preview-content", RichLog)
                 preview_log.clear()
+
 
                 # Smart title handling - avoid double titles
                 content = doc["content"].strip()
@@ -356,22 +402,87 @@ class MinimalDocumentBrowser(App):
 
     def update_status(self):
         status = self.query_one("#status", Label)
-        status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
+        search_input = self.query_one("#search-input", Input)
+        
+        if search_input.value and search_input.value.startswith("tags:"):
+            tag_query = search_input.value[5:].strip()
+            status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents (tag search: {tag_query})")
+        elif search_input.value:
+            status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents (search: {search_input.value})")
+        else:
+            status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
 
     def watch_mode(self, old_mode: str, new_mode: str):
+        search = self.query_one("#search-input", Input)
+        tag_input = self.query_one("#tag-input", Input)
+        tag_selector = self.query_one("#tag-selector", Label)
+        table = self.query_one("#doc-table", DataTable)
+        
         if new_mode == "SEARCH":
-            search = self.query_one("#search-input", Input)
             search.add_class("visible")
+            tag_input.remove_class("visible")
+            tag_selector.remove_class("visible")
             search.focus()
-        else:
-            search = self.query_one("#search-input", Input)
+        elif new_mode == "TAG":
             search.remove_class("visible")
+            
+            # Show current tags in placeholder
+            if self.current_doc_id:
+                doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
+                if doc:
+                    current_tags = doc.get("tags", [])
+                    
+                    if self.tag_action == "add":
+                        # Show input for adding tags
+                        tag_input.add_class("visible")
+                        tag_selector.remove_class("visible")
+                        if current_tags:
+                            tag_input.placeholder = f"Add tags (current: {', '.join(current_tags)})"
+                        else:
+                            tag_input.placeholder = "Add tags (no current tags)"
+                        tag_input.focus()
+                    else:  # remove
+                        # Show visual selector for removing tags
+                        tag_input.remove_class("visible")
+                        if current_tags:
+                            tag_selector.add_class("visible")
+                            self.current_tag_completion = 0  # Start with first tag
+                            self.update_tag_selector()
+                            status = self.query_one("#status", Label)
+                            status.update("Tab to navigate, Enter to remove tag, Esc to cancel")
+                        else:
+                            tag_selector.remove_class("visible")
+                            status = self.query_one("#status", Label)
+                            status.update("No tags to remove")
+                            self.mode = "NORMAL"
+                            return
+                    
+                    # Only reset completion index for add mode
+                    if self.tag_action == "add":
+                        self.current_tag_completion = 0
+        else:
+            search.remove_class("visible")
+            tag_input.remove_class("visible")
+            tag_selector.remove_class("visible")
             search.value = ""
-            table = self.query_one("#doc-table", DataTable)
+            tag_input.value = ""
+            self.current_tag_completion = 0  # Reset completion index
             table.focus()
 
     def action_search_mode(self):
         self.mode = "SEARCH"
+
+    def action_tag_mode(self):
+        if not self.current_doc_id:
+            return
+        self.tag_action = "add"
+        self.mode = "TAG"
+
+    def action_untag_mode(self):
+        if not self.current_doc_id:
+            return
+        self.tag_action = "remove"
+        self.mode = "TAG"
 
     def on_input_changed(self, event: Input.Changed):
         if event.input.id == "search-input":
@@ -381,6 +492,43 @@ class MinimalDocumentBrowser(App):
     def on_input_submitted(self, event: Input.Submitted):
         if event.input.id == "search-input":
             self.mode = "NORMAL"
+        elif event.input.id == "tag-input":
+            # Process tag input for both add and remove
+            tags = [tag.strip() for tag in event.value.split() if tag.strip()]
+            if tags and self.current_doc_id:
+                # Save current position
+                table = self.query_one("#doc-table", DataTable)
+                current_row = table.cursor_row
+                current_doc_id = self.current_doc_id
+                
+                try:
+                    if self.tag_action == "add":
+                        added_tags = add_tags_to_document(self.current_doc_id, tags)
+                        if added_tags:
+                            status = self.query_one("#status", Label)
+                            status.update(f"Added tags: {', '.join(added_tags)}")
+                        else:
+                            status = self.query_one("#status", Label)
+                            status.update("No new tags added (may already exist)")
+                    else:  # remove
+                        removed_tags = remove_tags_from_document(self.current_doc_id, tags)
+                        if removed_tags:
+                            status = self.query_one("#status", Label)
+                            status.update(f"Removed tags: {', '.join(removed_tags)}")
+                        else:
+                            status = self.query_one("#status", Label)
+                            status.update("No tags removed (may not exist)")
+                    
+                    # Refresh document data and restore position
+                    self.load_documents()
+                    self.filter_documents(self.search_query)
+                    self.restore_table_position(current_doc_id, current_row)
+                    
+                except Exception as e:
+                    status = self.query_one("#status", Label)
+                    status.update(f"Error: {e}")
+            
+            self.mode = "NORMAL"
 
     def on_key(self, event: events.Key):
         if self.mode == "SEARCH":
@@ -388,6 +536,18 @@ class MinimalDocumentBrowser(App):
                 self.mode = "NORMAL"
                 self.search_query = ""
                 self.filter_documents("")
+                event.prevent_default()
+        elif self.mode == "TAG":
+            if event.key == "escape":
+                self.mode = "NORMAL"
+                event.prevent_default()
+            elif event.key == "tab" and self.tag_action == "remove":
+                # Tab cycling for tag removal
+                self.complete_tag_removal()
+                event.prevent_default()
+            elif event.key == "enter" and self.tag_action == "remove":
+                # Remove the highlighted tag
+                self.remove_highlighted_tag()
                 event.prevent_default()
         elif self.mode == "NORMAL":
             # Handle enter key specially
@@ -408,17 +568,56 @@ class MinimalDocumentBrowser(App):
                     event.prevent_default()
                     event.stop()
                     self.action_view()
+                elif event.character == "t":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_tag_mode()
+                elif event.character == "T":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_untag_mode()
 
     def filter_documents(self, query: str):
         if not query:
             self.filtered_docs = self.documents
+        elif query.startswith("tags:"):
+            # Tag-based search mode: "tags:docker,kubernetes" or "tags:any:docker,python"
+            tag_query = query[5:].strip()  # Remove "tags:" prefix
+            
+            if tag_query.startswith("any:"):
+                # Search for documents with ANY of the specified tags
+                tags = [tag.strip() for tag in tag_query[4:].split(",") if tag.strip()]
+                mode = "any"
+            else:
+                # Default: search for documents with ALL specified tags
+                tags = [tag.strip() for tag in tag_query.split(",") if tag.strip()]
+                mode = "all"
+            
+            if tags:
+                try:
+                    # Use the existing search_by_tags function
+                    results = search_by_tags(tags, mode=mode, limit=1000)
+                    
+                    # Convert results to match our document format
+                    result_ids = {doc["id"] for doc in results}
+                    self.filtered_docs = [doc for doc in self.documents if doc["id"] in result_ids]
+                except Exception:
+                    # Fall back to simple filtering if search_by_tags fails
+                    self.filtered_docs = [
+                        doc for doc in self.documents
+                        if any(tag.lower() in [t.lower() for t in doc.get("tags", [])] for tag in tags)
+                    ]
+            else:
+                self.filtered_docs = self.documents
         else:
+            # Regular search in title, project, and tags
             query_lower = query.lower()
             self.filtered_docs = [
                 doc
                 for doc in self.documents
                 if query_lower in doc["title"].lower()
                 or query_lower in (doc["project"] or "").lower()
+                or any(query_lower in tag.lower() for tag in doc.get("tags", []))
             ]
 
         table = self.query_one("#doc-table", DataTable)
@@ -426,12 +625,22 @@ class MinimalDocumentBrowser(App):
 
         for doc in self.filtered_docs:
             created = doc["created_at"].strftime("%Y-%m-%d")
+            
+            # Wider title now that we have more space
+            title = doc["title"][:60]
+            if len(doc["title"]) > 60:
+                title += "..."
+            
+            # Show tags or empty indicator
+            tags_str = ", ".join(doc.get("tags", []))[:40]  # Show actual tags
+            if len(", ".join(doc.get("tags", []))) > 40:
+                tags_str += "..."
+            
             table.add_row(
                 str(doc["id"]),
-                doc["title"][:40] + "..." if len(doc["title"]) > 40 else doc["title"],
-                doc["project"] or "None",
+                title,
+                tags_str or "-",
                 created,
-                str(doc["access_count"]),
             )
 
         self.update_status()
@@ -593,6 +802,118 @@ class MinimalDocumentBrowser(App):
         # Show notification
         status = self.query_one("#status", Label)
         status.update("Documents refreshed")
+
+
+    def update_tag_selector(self):
+        """Update the visual tag selector."""
+        if not self.current_doc_id:
+            return
+            
+        doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
+        if not doc:
+            return
+            
+        current_tags = doc.get("tags", [])
+        if not current_tags:
+            return
+            
+        tag_selector = self.query_one("#tag-selector", Label)
+        
+        # Build visual representation: a  [b]  c  
+        visual_tags = []
+        for i, tag in enumerate(current_tags):
+            if i == self.current_tag_completion:
+                visual_tags.append(f"[reverse]{tag}[/reverse]")
+            else:
+                visual_tags.append(tag)
+        
+        tag_selector.update("    ".join(visual_tags))
+
+    def complete_tag_removal(self):
+        """Handle tab cycling for tag removal."""
+        if not self.current_doc_id:
+            return
+            
+        # Get current document tags
+        doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
+        if not doc:
+            return
+            
+        current_tags = doc.get("tags", [])
+        if not current_tags:
+            return
+            
+        # Move to next tag
+        self.current_tag_completion = (self.current_tag_completion + 1) % len(current_tags)
+        
+        # Update visual selector
+        self.update_tag_selector()
+
+    def remove_highlighted_tag(self):
+        """Remove the currently highlighted tag."""
+        if not self.current_doc_id:
+            return
+            
+        # Save current table position
+        table = self.query_one("#doc-table", DataTable)
+        current_row = table.cursor_row
+        current_doc_id = self.current_doc_id
+        
+        # Get current document tags
+        doc = next((d for d in self.filtered_docs if d["id"] == self.current_doc_id), None)
+        if not doc:
+            return
+            
+        current_tags = doc.get("tags", [])
+        if not current_tags or self.current_tag_completion >= len(current_tags):
+            return
+            
+        # Get the tag to remove
+        tag_to_remove = current_tags[self.current_tag_completion]
+        
+        try:
+            # Remove the tag
+            removed_tags = remove_tags_from_document(self.current_doc_id, [tag_to_remove])
+            if removed_tags:
+                # Show success message
+                status = self.query_one("#status", Label)
+                status.update(f"Removed tag: {tag_to_remove}")
+                
+                # Refresh document data but preserve position
+                self.load_documents()
+                self.filter_documents(self.search_query)
+                
+                # Restore table position
+                self.restore_table_position(current_doc_id, current_row)
+                
+                # Exit tag mode
+                self.mode = "NORMAL"
+            else:
+                status = self.query_one("#status", Label)
+                status.update("Failed to remove tag")
+        except Exception as e:
+            status = self.query_one("#status", Label)
+            status.update(f"Error removing tag: {e}")
+
+    def restore_table_position(self, target_doc_id: int, fallback_row: int):
+        """Restore table position to specific document or row."""
+        table = self.query_one("#doc-table", DataTable)
+        
+        # First try to find the same document
+        for idx, doc in enumerate(self.filtered_docs):
+            if doc["id"] == target_doc_id:
+                table.cursor_coordinate = (idx, 0)
+                self.on_row_selected()
+                return
+        
+        # Document not found (maybe filtered out), restore row position if valid
+        if fallback_row is not None and fallback_row < len(self.filtered_docs):
+            table.cursor_coordinate = (fallback_row, 0)
+            self.on_row_selected()
+        elif self.filtered_docs:
+            # Default to first row if available
+            table.cursor_coordinate = (0, 0)
+            self.on_row_selected()
 
     def action_quit(self):
         self.exit()
