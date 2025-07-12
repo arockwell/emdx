@@ -332,26 +332,30 @@ class MinimalDocumentBrowser(App):
         table = self.query_one("#doc-table", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
-        table.add_columns("ID", "Title", "Tags", "Created")
+        table.add_columns("ID", "Title", "Tags")
 
         for doc in self.filtered_docs:
-            created = doc["created_at"].strftime("%Y-%m-%d")
+            # Format timestamp as MM-DD HH:MM (11 chars)
+            timestamp = doc["created_at"].strftime("%m-%d %H:%M")
             
-            # Wider title now that we have more space
-            title = doc["title"][:60]
-            if len(doc["title"]) > 60:
-                title += "..."
+            # Calculate available space for title (50 total - 11 for timestamp)
+            title_space = 50 - 11
+            title = doc["title"][:title_space]
+            if len(doc["title"]) >= title_space:
+                title = title[:title_space-3] + "..."
             
-            # Show tags or empty indicator
-            tags_str = ", ".join(doc.get("tags", []))[:40]  # Show actual tags
-            if len(", ".join(doc.get("tags", []))) > 40:
+            # Right-justify timestamp by padding title to full width
+            formatted_title = f"{title:<{title_space}}{timestamp}"
+            
+            # Expanded tag display - limit to 30 chars
+            tags_str = ", ".join(doc.get("tags", []))[:30]
+            if len(", ".join(doc.get("tags", []))) > 30:
                 tags_str += "..."
             
             table.add_row(
                 str(doc["id"]),
-                title,
+                formatted_title,
                 tags_str or "-",
-                created,
             )
 
         table.focus()
@@ -625,23 +629,27 @@ class MinimalDocumentBrowser(App):
         table.clear()
 
         for doc in self.filtered_docs:
-            created = doc["created_at"].strftime("%Y-%m-%d")
+            # Format timestamp as MM-DD HH:MM (11 chars)
+            timestamp = doc["created_at"].strftime("%m-%d %H:%M")
             
-            # Wider title now that we have more space
-            title = doc["title"][:60]
-            if len(doc["title"]) > 60:
-                title += "..."
+            # Calculate available space for title (50 total - 11 for timestamp)
+            title_space = 50 - 11
+            title = doc["title"][:title_space]
+            if len(doc["title"]) >= title_space:
+                title = title[:title_space-3] + "..."
             
-            # Show tags or empty indicator
-            tags_str = ", ".join(doc.get("tags", []))[:40]  # Show actual tags
-            if len(", ".join(doc.get("tags", []))) > 40:
+            # Right-justify timestamp by padding title to full width
+            formatted_title = f"{title:<{title_space}}{timestamp}"
+            
+            # Expanded tag display - limit to 30 chars
+            tags_str = ", ".join(doc.get("tags", []))[:30]
+            if len(", ".join(doc.get("tags", []))) > 30:
                 tags_str += "..."
             
             table.add_row(
                 str(doc["id"]),
-                title,
+                formatted_title,
                 tags_str or "-",
-                created,
             )
 
         self.update_status()
