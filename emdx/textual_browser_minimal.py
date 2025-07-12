@@ -329,6 +329,7 @@ class MinimalDocumentBrowser(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit", key_display="q"),
+        Binding("escape", "handle_escape", "Escape", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
@@ -623,13 +624,8 @@ class MinimalDocumentBrowser(App):
 
     def on_key(self, event: events.Key):
         if self.selection_mode:
-            # In selection mode, handle escape and 's' to exit
-            if event.key == "escape":
-                event.prevent_default()
-                event.stop()
-                self.action_toggle_selection_mode()
-                return  # Don't process further
-            elif event.character == "s":
+            # In selection mode, handle 's' to exit (escape is handled by binding)
+            if event.character == "s":
                 event.prevent_default()
                 event.stop()
                 self.action_toggle_selection_mode()
@@ -1183,6 +1179,14 @@ class MinimalDocumentBrowser(App):
         else:
             status.update("Clipboard not available - manual selection required")
 
+    def action_handle_escape(self):
+        """Handle escape key based on current mode."""
+        if self.selection_mode:
+            self.action_toggle_selection_mode()
+        else:
+            # In normal mode, escape does nothing (no quit)
+            pass
+    
     def action_quit(self):
         self.exit()
 
