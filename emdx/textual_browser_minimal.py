@@ -15,7 +15,7 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
 from emdx.sqlite_database import db
 from emdx.tags import (
@@ -24,6 +24,28 @@ from emdx.tags import (
     remove_tags_from_document,
     search_by_tags,
 )
+
+
+class ReadOnlyTextArea(TextArea):
+    """A TextArea that allows selection but not editing."""
+    
+    def _on_key(self, event: events.Key) -> None:
+        """Handle key events, blocking editing keys."""
+        # Allow selection and navigation keys
+        allowed_keys = {
+            "up", "down", "left", "right", "home", "end",
+            "pageup", "pagedown", "ctrl+a", "ctrl+c",
+            "shift+up", "shift+down", "shift+left", "shift+right",
+            "shift+home", "shift+end", "escape", "ctrl+shift+up",
+            "ctrl+shift+down", "ctrl+shift+left", "ctrl+shift+right"
+        }
+        
+        if event.key in allowed_keys:
+            # Let the parent handle navigation/selection
+            super()._on_key(event)
+        else:
+            # Block all other keys
+            event.stop()
 
 
 class FullScreenView(Screen):
@@ -1078,38 +1100,15 @@ class MinimalDocumentBrowser(App):
                 except Exception:
                     pass
 
-            # Remove RichLog and add TextArea
+            # Remove RichLog and add ReadOnlyTextArea
             preview_container.remove_children()
-            selection_area = TextArea(
+            selection_area = ReadOnlyTextArea(
                 markdown_content,
                 id="selection-content",
                 theme="monokai",
                 language="markdown",
             )
             preview_container.mount(selection_area)
-            
-            # Textual's TextArea doesn't have read_only, but we can prevent edits
-            # by intercepting key events
-            original_on_key = selection_area.on_key
-            
-            def read_only_on_key(event):
-                # Allow navigation and selection keys
-                allowed_keys = {
-                    "up", "down", "left", "right", "home", "end", 
-                    "pageup", "pagedown", "ctrl+a", "ctrl+c",
-                    "shift+up", "shift+down", "shift+left", "shift+right",
-                    "shift+home", "shift+end", "escape"
-                }
-                
-                # Allow these keys through
-                if event.key in allowed_keys:
-                    return original_on_key(event)
-                
-                # Block all character input and modification keys
-                event.stop()
-                return None
-            
-            selection_area.on_key = read_only_on_key
             selection_area.focus()
             
             status.update(
