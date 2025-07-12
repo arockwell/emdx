@@ -3,14 +3,15 @@
 Main CLI entry point for emdx
 """
 
-import typer
 from typing import Optional
 
+import typer
+
 from emdx import __version__
-from emdx.core import app as core_app
 from emdx.browse import app as browse_app
-from emdx.gui import gui
+from emdx.core import app as core_app
 from emdx.gist import app as gist_app
+from emdx.gui import gui
 from emdx.tag_commands import app as tag_app
 
 # Create main app
@@ -41,6 +42,7 @@ for command in tag_app.registered_commands:
 # Add the gui command
 app.command()(gui)
 
+
 # Version command
 @app.command()
 def version():
@@ -54,28 +56,30 @@ def version():
 def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
-    db_url: Optional[str] = typer.Option(None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"),
+    db_url: Optional[str] = typer.Option(
+        None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
+    ),
 ):
     """
     emdx - Documentation Index Management System
-    
+
     A sophisticated SQLite-based knowledge management system with instant full-text search,
     automatic project detection, and seamless integration with daily development workflows.
-    
+
     [bold]Examples:[/bold]
-    
+
     Save a file:
         [cyan]emdx save README.md[/cyan]
-    
+
     Save text directly:
         [cyan]emdx save "Remember to fix the API endpoint"[/cyan]
-    
+
     Save from pipe:
         [cyan]docker ps | emdx save --title "Running containers"[/cyan]
-    
+
     Search for content:
         [cyan]emdx find "docker compose"[/cyan]
-    
+
     View a document:
         [cyan]emdx view 42[/cyan]
         [cyan]emdx view "My Document Title"[/cyan]
@@ -84,7 +88,7 @@ def main(
     if verbose and quiet:
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
-    
+
     # TODO: Set up database connection using db_url
     # TODO: Set up logging based on verbose/quiet flags
 

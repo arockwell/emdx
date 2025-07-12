@@ -2,13 +2,13 @@
 Database connection and operations for emdx
 """
 
-import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables from multiple sources
 # 1. First, try user config directory
-user_config = Path.home() / '.config' / 'emdx' / '.env'
+user_config = Path.home() / ".config" / "emdx" / ".env"
 if user_config.exists():
     load_dotenv(user_config)
 
@@ -22,4 +22,4 @@ from .sqlite_database import SQLiteDatabase, db
 Database = SQLiteDatabase
 
 # Export the global instance
-__all__ = ['Database', 'db']
+__all__ = ["Database", "db"]
