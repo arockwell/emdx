@@ -123,7 +123,7 @@ def process_nvim_changes(temp_file: str, doc_id: int):
         new_content = "".join(lines[content_start:]).strip()
 
         # Update document
-        from emdx.database import db
+        from emdx.sqlite_database import db
 
         db.update_document(doc_id, new_title, new_content)
 

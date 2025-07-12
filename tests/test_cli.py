@@ -51,7 +51,7 @@ class TestCLIBasics:
             or result.exit_code == 2
         )
 
-    @patch("emdx.database.db")
+    @patch("emdx.browse.db")
     def test_list_command(self, mock_db):
         """Test list command."""
         mock_db.ensure_schema = Mock()
