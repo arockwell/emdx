@@ -138,7 +138,7 @@ def apply_tags(doc_id: int, tags_str: Optional[str]) -> List[str]:
     return []
 
 
-def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]):
+def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
     if metadata.project:
@@ -157,7 +157,7 @@ def save(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
-):
+) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
     input_content = get_input_content(input)
@@ -192,7 +192,7 @@ def find(
         None, "--tags", "-t", help="Filter by tags (comma-separated)"
     ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
-):
+) -> None:
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query) if query else ""
 
@@ -305,7 +305,7 @@ def view(
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
-):
+) -> None:
     """View a document from the knowledge base"""
     try:
         # Ensure database schema exists
@@ -380,7 +380,7 @@ def edit(
     editor: Optional[str] = typer.Option(
         None, "--editor", "-e", help="Editor to use (default: $EDITOR)"
     ),
-):
+) -> None:
     """Edit a document in the knowledge base"""
     try:
         # Ensure database schema exists
@@ -497,7 +497,7 @@ def delete(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be deleted without deleting"
     ),
-):
+) -> None:
     """Delete one or more documents (soft delete by default)"""
     try:
         # Ensure database schema exists
@@ -609,7 +609,7 @@ def trash(
         None, "--days", "-d", help="Show items deleted in last N days"
     ),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
-):
+) -> None:
     """List all soft-deleted documents"""
     try:
         # Ensure database schema exists
@@ -660,7 +660,7 @@ def trash(
 def restore(
     identifiers: List[str] = typer.Argument(None, help="Document ID(s) or title(s) to restore"),
     all: bool = typer.Option(False, "--all", help="Restore all deleted documents"),
-):
+) -> None:
     """Restore soft-deleted document(s)"""
     try:
         # Ensure database schema exists
@@ -722,7 +722,7 @@ def purge(
         None, "--older-than", help="Only purge items deleted more than N days ago"
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-):
+) -> None:
     """Permanently delete all items in trash"""
     try:
         # Ensure database schema exists
