@@ -14,7 +14,7 @@ def save_terminal_state():
     try:
         fd = sys.stdin.fileno()
         return termios.tcgetattr(fd)
-    except:
+    except (OSError, ValueError, termios.error):
         return None
 
 
@@ -24,7 +24,7 @@ def restore_terminal_state(state):
         try:
             fd = sys.stdin.fileno()
             termios.tcsetattr(fd, termios.TCSADRAIN, state)
-        except:
+        except (OSError, ValueError, termios.error):
             pass
 
 
@@ -123,7 +123,7 @@ def process_nvim_changes(temp_file: str, doc_id: int):
         new_content = "".join(lines[content_start:]).strip()
 
         # Update document
-        from emdx.database import db
+        from emdx.sqlite_database import db
 
         db.update_document(doc_id, new_title, new_content)
 

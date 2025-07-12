@@ -5,6 +5,7 @@ Core CRUD operations for emdx
 import os
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -23,6 +24,129 @@ app = typer.Typer()
 console = Console(force_terminal=True, color_system="auto")
 
 
+@dataclass
+class InputContent:
+    """Container for input content and its metadata"""
+    content: str
+    source_type: str  # 'stdin', 'file', or 'direct'
+    source_path: Optional[Path] = None
+
+
+@dataclass
+class DocumentMetadata:
+    """Container for document metadata"""
+    title: str
+    project: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+def get_input_content(input_arg: Optional[str]) -> InputContent:
+    """Handle input from stdin, file, or direct text"""
+    import sys
+    
+    # Priority 1: Check if stdin has data
+    if not sys.stdin.isatty():
+        content = sys.stdin.read()
+        return InputContent(content=content, source_type="stdin")
+    
+    # Priority 2: Check if input is provided
+    elif input_arg:
+        # Check if it's a file path
+        file_path = Path(input_arg)
+        if file_path.exists() and file_path.is_file():
+            # It's a file
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                return InputContent(content=content, source_type="file", source_path=file_path)
+            except Exception as e:
+                console.print(f"[red]Error reading file: {e}[/red]")
+                raise typer.Exit(1)
+        else:
+            # Treat as direct content
+            return InputContent(content=input_arg, source_type="direct")
+    
+    # No input provided
+    else:
+        console.print(
+            "[red]Error: No input provided. Provide a file path, text content, or pipe data via stdin[/red]"
+        )
+        raise typer.Exit(1)
+
+
+def generate_title(input_content: InputContent, provided_title: Optional[str]) -> str:
+    """Generate appropriate title based on source and content"""
+    if provided_title:
+        return provided_title
+    
+    if input_content.source_type == "stdin":
+        return f"Piped content - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    
+    elif input_content.source_type == "file" and input_content.source_path:
+        return input_content.source_path.stem  # filename without extension
+    
+    else:  # direct content
+        # Create title from first line or truncated content
+        first_line = input_content.content.split("\n")[0].strip()
+        if first_line:
+            return first_line[:50] + "..." if len(first_line) > 50 else first_line
+        else:
+            return f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+
+def detect_project(input_content: InputContent, provided_project: Optional[str]) -> Optional[str]:
+    """Detect project from git repository"""
+    if provided_project:
+        return provided_project
+    
+    # Try to detect from file path if it's a file
+    if input_content.source_type == "file" and input_content.source_path:
+        detected_project = get_git_project(input_content.source_path.parent)
+        if detected_project:
+            return detected_project
+    
+    # Otherwise try current directory
+    detected_project = get_git_project(Path.cwd())
+    return detected_project
+
+
+def create_document(title: str, content: str, project: Optional[str]) -> int:
+    """Save document to database and return document ID"""
+    # Ensure database schema exists
+    try:
+        db.ensure_schema()
+    except Exception as e:
+        console.print(f"[red]Database error: {e}[/red]")
+        raise typer.Exit(1)
+    
+    # Save to database
+    try:
+        doc_id = db.save_document(title, content, project)
+        return doc_id
+    except Exception as e:
+        console.print(f"[red]Error saving document: {e}[/red]")
+        raise typer.Exit(1)
+
+
+def apply_tags(doc_id: int, tags_str: Optional[str]) -> List[str]:
+    """Parse and apply tags to document"""
+    if not tags_str:
+        return []
+    
+    tag_list = [t.strip() for t in tags_str.split(",") if t.strip()]
+    if tag_list:
+        return add_tags_to_document(doc_id, tag_list)
+    return []
+
+
+def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: List[str]):
+    """Display save result to user"""
+    console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
+    if metadata.project:
+        console.print(f"   [dim]Project:[/dim] {metadata.project}")
+    if applied_tags:
+        console.print(f"   [dim]Tags:[/dim] {', '.join(applied_tags)}")
+
+
 @app.command()
 def save(
     input: Optional[str] = typer.Argument(
@@ -33,88 +157,28 @@ def save(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
-):
+) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
-    import sys
-
-    content = None
-    source_type = None
-
-    # Priority 1: Check if stdin has data
-    if not sys.stdin.isatty():
-        content = sys.stdin.read()
-        source_type = "stdin"
-        if not title:
-            title = f"Piped content - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-
-    # Priority 2: Check if input is provided
-    elif input:
-        # Check if it's a file path
-        file_path = Path(input)
-        if file_path.exists() and file_path.is_file():
-            # It's a file
-            try:
-                content = file_path.read_text(encoding="utf-8")
-                source_type = "file"
-                if not title:
-                    title = file_path.stem  # filename without extension
-                # Auto-detect project from git if not provided
-                if not project:
-                    detected_project = get_git_project(file_path.parent)
-                    if detected_project:
-                        project = detected_project
-            except Exception as e:
-                console.print(f"[red]Error reading file: {e}[/red]")
-                raise typer.Exit(1)
-        else:
-            # Treat as direct content
-            content = input
-            source_type = "direct"
-            if not title:
-                # Create title from first line or truncated content
-                first_line = content.split("\n")[0].strip()
-                if first_line:
-                    title = first_line[:50] + "..." if len(first_line) > 50 else first_line
-                else:
-                    title = f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-
-    # No input provided
-    else:
-        console.print(
-            "[red]Error: No input provided. Provide a file path, text content, or pipe data via stdin[/red]"
-        )
-        raise typer.Exit(1)
-
-    # Auto-detect project from current directory if not provided and not from file
-    if not project and source_type != "file":
-        detected_project = get_git_project(Path.cwd())
-        if detected_project:
-            project = detected_project
-
-    # Ensure database schema exists
-    try:
-        db.ensure_schema()
-    except Exception as e:
-        console.print(f"[red]Database error: {e}[/red]")
-        raise typer.Exit(1)
-
-    # Save to database
-    try:
-        doc_id = db.save_document(title, content, project)
-        console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{title}[/cyan]")
-        if project:
-            console.print(f"   [dim]Project:[/dim] {project}")
-
-        # Add tags if provided
-        if tags:
-            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-            if tag_list:
-                added_tags = add_tags_to_document(doc_id, tag_list)
-                if added_tags:
-                    console.print(f"   [dim]Tags:[/dim] {', '.join(added_tags)}")
-    except Exception as e:
-        console.print(f"[red]Error saving document: {e}[/red]")
-        raise typer.Exit(1)
+    # Step 1: Get input content
+    input_content = get_input_content(input)
+    
+    # Step 2: Generate title
+    final_title = generate_title(input_content, title)
+    
+    # Step 3: Detect project
+    final_project = detect_project(input_content, project)
+    
+    # Step 4: Create metadata object
+    metadata = DocumentMetadata(title=final_title, project=final_project)
+    
+    # Step 5: Create document in database
+    doc_id = create_document(metadata.title, input_content.content, metadata.project)
+    
+    # Step 6: Apply tags
+    applied_tags = apply_tags(doc_id, tags)
+    
+    # Step 7: Display result
+    display_save_result(doc_id, metadata, applied_tags)
 
 
 @app.command()
@@ -128,7 +192,7 @@ def find(
         None, "--tags", "-t", help="Filter by tags (comma-separated)"
     ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
-):
+) -> None:
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query) if query else ""
 
@@ -241,7 +305,7 @@ def view(
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
-):
+) -> None:
     """View a document from the knowledge base"""
     try:
         # Ensure database schema exists
@@ -316,7 +380,7 @@ def edit(
     editor: Optional[str] = typer.Option(
         None, "--editor", "-e", help="Editor to use (default: $EDITOR)"
     ),
-):
+) -> None:
     """Edit a document in the knowledge base"""
     try:
         # Ensure database schema exists
@@ -433,7 +497,7 @@ def delete(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be deleted without deleting"
     ),
-):
+) -> None:
     """Delete one or more documents (soft delete by default)"""
     try:
         # Ensure database schema exists
@@ -545,7 +609,7 @@ def trash(
         None, "--days", "-d", help="Show items deleted in last N days"
     ),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
-):
+) -> None:
     """List all soft-deleted documents"""
     try:
         # Ensure database schema exists
@@ -596,7 +660,7 @@ def trash(
 def restore(
     identifiers: List[str] = typer.Argument(None, help="Document ID(s) or title(s) to restore"),
     all: bool = typer.Option(False, "--all", help="Restore all deleted documents"),
-):
+) -> None:
     """Restore soft-deleted document(s)"""
     try:
         # Ensure database schema exists
@@ -658,7 +722,7 @@ def purge(
         None, "--older-than", help="Only purge items deleted more than N days ago"
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-):
+) -> None:
     """Permanently delete all items in trash"""
     try:
         # Ensure database schema exists
