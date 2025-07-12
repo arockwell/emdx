@@ -170,6 +170,9 @@ class SQLiteDatabase:
             )
 
             conn.commit()
+            
+            # Mark schema as initialized
+            self._schema_initialized = True
 
     def save_document(self, title: str, content: str, project: Optional[str] = None) -> int:
         """Save a document to the knowledge base"""
@@ -561,5 +564,20 @@ class SQLiteDatabase:
             return cursor.rowcount
 
 
-# Global database instance
-db = SQLiteDatabase()
+# Global database instance - lazy initialization with backwards compatibility
+class _DatabaseProxy:
+    """Proxy object that provides lazy initialization."""
+    
+    def __init__(self):
+        self._instance = None
+        
+    def __getattr__(self, name):
+        if self._instance is None:
+            # Import here to avoid circular dependency
+            from .database_factory import get_database
+            self._instance = get_database()
+        return getattr(self._instance, name)
+
+
+# Global database instance - backwards compatible with lazy initialization
+db = _DatabaseProxy()
