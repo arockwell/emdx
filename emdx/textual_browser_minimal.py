@@ -355,7 +355,6 @@ class MinimalDocumentBrowser(App):
         self.documents = []
         self.filtered_docs = []
         self.current_doc_id = None
-        self.selection_mode_transitions = 0  # DEBUG: Track transitions
 
     def compose(self) -> ComposeResult:
         yield Input(
@@ -1150,9 +1149,6 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
             
-            # DEBUG: Log container dimensions before transition
-            self.selection_mode_transitions += 1
-            self.log(f"Transition #{self.selection_mode_transitions} - Before toggle - Container size: {container.size}, Scrollable size: {container.scrollable_size}, Selection mode: {self.selection_mode}")
             
             if not self.selection_mode:
                 # Switch to selection mode - use TextArea for native selection support
@@ -1181,6 +1177,15 @@ class MinimalDocumentBrowser(App):
                     # Make it read-only after creation
                     text_area.read_only = True
                     
+                    # FIX: Constrain TextArea to container width
+                    text_area.styles.width = "100%"
+                    text_area.styles.max_width = "100%"
+                    text_area.styles.overflow_x = "hidden"
+                    
+                    # Try to enable word wrap if the property exists
+                    if hasattr(text_area, 'word_wrap'):
+                        text_area.word_wrap = True
+                    
                     # Mount the widget
                     container.mount(text_area)
                     text_area.focus()
@@ -1208,20 +1213,9 @@ class MinimalDocumentBrowser(App):
                 # Mount the new widget
                 container.mount(richlog)
                 
-                # DEBUG: Log dimensions after mounting RichLog
-                self.log(f"After mounting RichLog - Container size: {container.size}, Scrollable size: {container.scrollable_size}")
-                
-                # FIX: Reset container's virtual size before updating content
-                if self.selection_mode_transitions == 1:
-                    self.log("First transition - resetting container virtual size")
-                    # Reset the virtual size to force recalculation
-                    container.virtual_size = container.size
-                
                 # Restore content with formatting
                 if self.current_doc_id:
                     self.update_preview(self.current_doc_id)
-                
-                self.call_after_refresh(lambda: self.log(f"After refresh - Container size: {container.size}, Scrollable size: {container.scrollable_size}"))
                 
                 status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
                 
