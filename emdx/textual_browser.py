@@ -227,18 +227,6 @@ class DocumentBrowser(App):
         height: 100%;
     }
     
-    #mode-indicator {
-        background: $success;
-        color: $background;
-        padding: 0 2;
-        dock: top;
-        height: 1;
-    }
-    
-    #mode-indicator.search-mode {
-        background: $warning;
-    }
-    
     SearchInput {
         dock: top;
         margin: 0 1;
@@ -264,6 +252,7 @@ class DocumentBrowser(App):
         Binding("g", "cursor_top", "Top", show=False),
         Binding("shift+g", "cursor_bottom", "Bottom", show=False),
         Binding("/", "search_mode", "Search", key_display="/"),
+        Binding("r", "refresh", "Refresh", key_display="r"),
         Binding("e", "edit", "Edit", show=False),
         Binding("d", "delete", "Delete", show=False),
         Binding("v", "view", "View", show=False),
@@ -283,7 +272,6 @@ class DocumentBrowser(App):
         
     def compose(self) -> ComposeResult:
         """Create the UI structure."""
-        yield Label("NORMAL", id="mode-indicator")
         yield SearchInput(placeholder="Type to search...", id="search-input")
         
         with Horizontal():
@@ -388,27 +376,12 @@ class DocumentBrowser(App):
         status = self.query_one("#status", Label)
         status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
     
-    def watch_mode(self, old_mode: str, new_mode: str):
-        """React to mode changes."""
-        mode_label = self.query_one("#mode-indicator", Label)
-        mode_label.update(new_mode)
-        
-        if new_mode == "SEARCH":
-            mode_label.add_class("search-mode")
-            search = self.query_one("#search-input", SearchInput)
-            search.add_class("visible")
-            search.focus()
-        else:
-            mode_label.remove_class("search-mode")
-            search = self.query_one("#search-input", SearchInput)
-            search.remove_class("visible")
-            search.value = ""
-            table = self.query_one("#doc-table", DataTable)
-            table.focus()
-    
     def action_search_mode(self):
         """Enter search mode."""
         self.mode = "SEARCH"
+        search = self.query_one("#search-input", SearchInput)
+        search.add_class("visible")
+        search.focus()
     
     def on_input_changed(self, event: Input.Changed):
         """Handle live search as user types."""
@@ -420,6 +393,10 @@ class DocumentBrowser(App):
         """Handle search input submission."""
         if event.input.id == "search-input":
             self.mode = "NORMAL"
+            search = self.query_one("#search-input", SearchInput)
+            search.remove_class("visible")
+            table = self.query_one("#doc-table", DataTable)
+            table.focus()
     
     def on_key(self, event: events.Key):
         """Handle key presses based on mode."""
@@ -428,6 +405,11 @@ class DocumentBrowser(App):
                 self.mode = "NORMAL"
                 self.search_query = ""
                 self.filter_documents("")
+                search = self.query_one("#search-input", SearchInput)
+                search.remove_class("visible")
+                search.value = ""
+                table = self.query_one("#doc-table", DataTable)
+                table.focus()
                 event.prevent_default()
         elif self.mode == "NORMAL":
             # In normal mode, keys trigger actions
@@ -444,6 +426,10 @@ class DocumentBrowser(App):
                     event.prevent_default()
                     event.stop()
                     self.action_view()
+                elif event.character == "r":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_refresh()
     
     def filter_documents(self, query: str):
         """Filter documents based on search query."""
@@ -562,6 +548,63 @@ class DocumentBrowser(App):
         if self.current_doc_id:
             # Push the full screen viewer
             self.push_screen(FullScreenView(self.current_doc_id))
+    
+    def action_refresh(self):
+        """Refresh the document list."""
+        # Save current state
+        table = self.query_one("#doc-table", DataTable)
+        current_row = table.cursor_row
+        current_doc_id = None
+        
+        # Get current document ID if a row is selected
+        if current_row is not None and current_row < len(self.filtered_docs):
+            current_doc_id = self.filtered_docs[current_row]['id']
+        
+        # Save search state
+        search_query = self.search_query if self.mode == "SEARCH" else None
+        
+        # Reload documents
+        self.load_documents()
+        
+        # Clear and rebuild table
+        table.clear()
+        self.setup_table()
+        
+        # Restore search if it was active
+        if search_query:
+            self.search_query = search_query
+            search_input = self.query_one("#search-input", SearchInput)
+            search_input.value = search_query
+            self.filter_documents(search_query)
+        
+        # Restore selection
+        if current_doc_id:
+            # Try to find the same document
+            for idx, doc in enumerate(self.filtered_docs):
+                if doc['id'] == current_doc_id:
+                    table.cursor_coordinate = (idx, 0)
+                    self.on_row_selected()
+                    break
+            else:
+                # Document not found, restore row position if valid
+                if current_row is not None and current_row < len(self.filtered_docs):
+                    table.cursor_coordinate = (current_row, 0)
+                    self.on_row_selected()
+                elif self.filtered_docs:
+                    # Default to first row if available
+                    table.cursor_coordinate = (0, 0)
+                    self.on_row_selected()
+        elif self.filtered_docs and current_row is not None:
+            # No previous doc ID, just restore row position
+            new_row = min(current_row, len(self.filtered_docs) - 1)
+            table.cursor_coordinate = (new_row, 0)
+            self.on_row_selected()
+        
+        # Update status
+        self.update_status()
+        
+        # Show notification
+        self.notify("Documents refreshed", severity="information", timeout=1)
     
     def action_quit(self):
         """Quit the application."""
