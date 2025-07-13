@@ -816,6 +816,8 @@ class MinimalDocumentBrowser(App):
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
         Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
+        Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
+        Binding("shift+h", "tmux_split_vertical", "Split ↓", key_display="H"),
     ]
 
     mode = reactive("NORMAL")
@@ -2033,6 +2035,84 @@ class MinimalDocumentBrowser(App):
         if self.refresh_timer:
             self.refresh_timer.stop()
             self.refresh_timer = None
+
+    def action_tmux_split_horizontal(self):
+        """Spawn a new tmux pane (horizontal split) with the current document."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for tmux split")
+            return
+            
+        if not os.environ.get('TMUX'):
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Not running in tmux session")
+            return
+            
+        self._spawn_tmux_pane(horizontal=True)
+        
+    def action_tmux_split_vertical(self):
+        """Spawn a new tmux pane (vertical split) with the current document."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for tmux split")
+            return
+            
+        if not os.environ.get('TMUX'):
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Not running in tmux session")
+            return
+            
+        self._spawn_tmux_pane(horizontal=False)
+        
+    def _spawn_tmux_pane(self, horizontal: bool = True):
+        """Internal method to spawn tmux pane with current document."""
+        try:
+            from emdx.models.documents import get_document
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("Document not found")
+                return
+                
+            # Create a temporary file with the document content
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+                f.write(f"# {doc['title']}\n\n")
+                f.write(doc['content'])
+                temp_path = f.name
+            
+            # Determine split direction
+            split_flag = '-h' if horizontal else '-v'
+            
+            # For now, just spawn a shell that shows the document
+            # You can replace this with your Claude command later
+            tmux_command = f"cat {temp_path} && echo '\n\n--- Document loaded ---' && bash"
+            
+            # Spawn the tmux pane
+            result = subprocess.run([
+                'tmux', 'split-window', split_flag, tmux_command
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                direction = "right" if horizontal else "below"
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update(f"Spawned tmux pane {direction} with: {doc['title']}")
+            else:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update(f"Failed to spawn tmux pane: {result.stderr}")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error spawning tmux pane: {e}")
 
     def action_quit(self):
         self.exit()
