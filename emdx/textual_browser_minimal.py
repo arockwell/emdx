@@ -428,6 +428,7 @@ class MinimalDocumentBrowser(App):
         self.documents = []
         self.filtered_docs = []
         self.current_doc_id = None
+        self.refresh_timer = None  # Timer for auto-dismissing refresh status
 
     def compose(self) -> ComposeResult:
         yield Input(
@@ -453,9 +454,6 @@ class MinimalDocumentBrowser(App):
 
     def on_mount(self) -> None:
         try:
-            # Widget is already created in compose(), just get reference to it
-            preview_area = self.query_one("#preview-content", RichLog)
-            
             self.load_documents()
             self.setup_table()
             self.update_status()
@@ -582,6 +580,9 @@ class MinimalDocumentBrowser(App):
                     pass
 
     def update_status(self):
+        # Cancel any pending refresh timer when updating status
+        self.cancel_refresh_timer()
+        
         status = self.query_one("#status", Label)
         search_input = self.query_one("#search-input", Input)
 
@@ -635,10 +636,12 @@ class MinimalDocumentBrowser(App):
                             tag_selector.add_class("visible")
                             self.current_tag_completion = 0  # Start with first tag
                             self.update_tag_selector()
+                            self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update("Tab to navigate, Enter to remove tag, Esc to cancel")
                         else:
                             tag_selector.remove_class("visible")
+                            self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update("No tags to remove")
                             self.mode = "NORMAL"
@@ -692,17 +695,21 @@ class MinimalDocumentBrowser(App):
                     if self.tag_action == "add":
                         added_tags = add_tags_to_document(self.current_doc_id, tags)
                         if added_tags:
+                            self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update(f"Added tags: {', '.join(added_tags)}")
                         else:
+                            self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update("No new tags added (may already exist)")
                     else:  # remove
                         removed_tags = remove_tags_from_document(self.current_doc_id, tags)
                         if removed_tags:
+                            self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update(f"Removed tags: {', '.join(removed_tags)}")
                         else:
+                            self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update("No tags removed (may not exist)")
 
@@ -712,6 +719,7 @@ class MinimalDocumentBrowser(App):
                     self.restore_table_position(current_doc_id, current_row)
 
                 except Exception as e:
+                    self.cancel_refresh_timer()
                     status = self.query_one("#status", Label)
                     status.update(f"Error: {e}")
 
@@ -944,6 +952,7 @@ class MinimalDocumentBrowser(App):
 
         except Exception as e:
             # Show error in status
+            self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error preparing edit: {e}")
 
@@ -1032,9 +1041,16 @@ class MinimalDocumentBrowser(App):
             table.cursor_coordinate = (new_row, 0)
             self.on_row_selected()
 
-        # Show notification
+        # Show notification with auto-dismiss after 3 seconds
         status = self.query_one("#status", Label)
         status.update("Documents refreshed")
+        
+        # Cancel any existing timer
+        if self.refresh_timer:
+            self.refresh_timer.stop()
+        
+        # Set a timer to restore the normal status after 3 seconds
+        self.refresh_timer = self.set_timer(3.0, self.restore_normal_status)
 
 
     def update_tag_selector(self):
@@ -1109,6 +1125,7 @@ class MinimalDocumentBrowser(App):
             removed_tags = remove_tags_from_document(self.current_doc_id, [tag_to_remove])
             if removed_tags:
                 # Show success message
+                self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
                 status.update(f"Removed tag: {tag_to_remove}")
 
@@ -1122,9 +1139,11 @@ class MinimalDocumentBrowser(App):
                 # Exit tag mode
                 self.mode = "NORMAL"
             else:
+                self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
                 status.update("Failed to remove tag")
         except Exception as e:
+            self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error removing tag: {e}")
 
@@ -1163,6 +1182,7 @@ class MinimalDocumentBrowser(App):
                         logger.debug(f"Copying selected text: {len(selected_text)} characters")
                         self.copy_to_clipboard(selected_text)
                         status = self.query_one("#status", Label)
+                        self.cancel_refresh_timer()
                         status.update("Selected text copied to clipboard!")
                     else:
                         logger.debug("No text selected, copying full document")
@@ -1178,6 +1198,7 @@ class MinimalDocumentBrowser(App):
             logger.error(f"Error in action_copy_selected: {e}", exc_info=True)
             # Log error but don't crash
             try:
+                self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
                 status.update(f"Copy error: {str(e)[:30]}...")
             except Exception:
@@ -1199,11 +1220,13 @@ class MinimalDocumentBrowser(App):
                     logger.debug(f"Copying {len(content_to_copy)} characters to clipboard")
                     self.copy_to_clipboard(content_to_copy)
                     status = self.query_one("#status", Label)
+                    self.cancel_refresh_timer()
                     status.update("Full document copied to clipboard!")
 
             except Exception as e:
                 logger.error(f"Error in action_copy_content: {e}", exc_info=True)
                 status = self.query_one("#status", Label)
+                self.cancel_refresh_timer()
                 status.update(f"Copy failed: {e}")
 
 
@@ -1216,10 +1239,13 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
 
             if self.selection_mode:
+                self.cancel_refresh_timer()
                 status.update("TextArea focused - select text with mouse, Esc to return")
             else:
+                self.cancel_refresh_timer()
                 status.update("Preview focused - use 's' for text selection, Esc to return")
         except Exception as e:
+            self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Focus failed: {e}")
 
@@ -1274,10 +1300,12 @@ class MinimalDocumentBrowser(App):
                     container.mount(text_area)
                     text_area.focus()
 
+                    self.cancel_refresh_timer()
                     status.update(
                         "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit (typing disabled)"
                     )
                 except Exception as mount_error:
+                    self.cancel_refresh_timer()
                     status.update(f"Failed to create selection widget: {mount_error}")
 
             else:
@@ -1306,10 +1334,12 @@ class MinimalDocumentBrowser(App):
                 # Use deferred content restoration like main branch
                 self.call_after_refresh(self._restore_preview_content)
 
+                self.cancel_refresh_timer()
                 status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
 
         except Exception as e:
             # Recovery: ensure we have a working widget
+            self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Toggle failed: {e} - restoring view...")
 
@@ -1332,6 +1362,7 @@ class MinimalDocumentBrowser(App):
                     self.update_preview(self.current_doc_id)
 
             except Exception as recovery_error:
+                self.cancel_refresh_timer()
                 status.update(f"Failed to recover preview: {recovery_error}")
 
     def _restore_preview_content(self):
@@ -1350,6 +1381,7 @@ class MinimalDocumentBrowser(App):
 
     def action_save_preview(self):
         """Save is now handled by external editor - show message."""
+        self.cancel_refresh_timer()
         status = self.query_one("#status", Label)
         status.update("Use 'e' to edit document in external editor")
 
@@ -1385,10 +1417,23 @@ class MinimalDocumentBrowser(App):
 
         status = self.query_one("#status", Label)
         if success:
+            self.cancel_refresh_timer()
             status.update("Content copied to clipboard!")
         else:
+            self.cancel_refresh_timer()
             status.update("Clipboard not available - manual selection required")
 
+
+    def restore_normal_status(self):
+        """Restore the normal status display after temporary messages."""
+        self.update_status()
+        self.refresh_timer = None
+
+    def cancel_refresh_timer(self):
+        """Cancel the refresh timer if it's active."""
+        if self.refresh_timer:
+            self.refresh_timer.stop()
+            self.refresh_timer = None
 
     def action_quit(self):
         self.exit()
