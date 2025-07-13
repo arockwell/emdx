@@ -198,11 +198,18 @@ class VimEditTextArea(TextArea):
         except Exception as e:
             key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
             logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
+            # Try to continue without crashing the app
+            try:
+                self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
+            except:
+                pass
     
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""
         key = event.key
         char = event.character if hasattr(event, 'character') else None
+        
+        key_logger.info(f"VimEditTextArea._handle_normal_mode: key={key}, char={char}")
         
         # Stop event from bubbling up
         event.stop()
@@ -211,17 +218,27 @@ class VimEditTextArea(TextArea):
         # Handle repeat counts (e.g., 3j to move down 3 lines)
         if char and char.isdigit() and (self.repeat_count or char != '0'):
             self.repeat_count += char
+            key_logger.info(f"Added to repeat count: {self.repeat_count}")
             return
         
         # Get repeat count as integer
         count = int(self.repeat_count) if self.repeat_count else 1
         self.repeat_count = ""  # Reset after use
         
+        key_logger.info(f"Processing command with count={count}")
+        
         # Movement commands
         if key == "h" or key == "left":
+            key_logger.info(f"Moving left by {count}")
             self.move_cursor_relative(columns=-count)
         elif key == "j" or key == "down":
-            self.move_cursor_relative(rows=count)
+            key_logger.info(f"Moving down by {count} - BEFORE move_cursor_relative")
+            try:
+                self.move_cursor_relative(rows=count)
+                key_logger.info(f"Moving down by {count} - AFTER move_cursor_relative SUCCESS")
+            except Exception as e:
+                key_logger.error(f"CRASH in move_cursor_relative(rows={count}): {e}")
+                raise
         elif key == "k" or key == "up":
             self.move_cursor_relative(rows=-count)
         elif key == "l" or key == "right":
@@ -343,7 +360,7 @@ class VimEditTextArea(TextArea):
     def _handle_insert_mode(self, event: events.Key) -> None:
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
-        pass
+        super().on_key(event)
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
@@ -355,6 +372,9 @@ class VimEditTextArea(TextArea):
             event.stop()
             event.prevent_default()
             self.app_instance._update_vim_status()
+        else:
+            # For other keys, let TextArea handle them
+            super().on_key(event)
     
     def _handle_visual_line_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL LINE mode."""
@@ -366,6 +386,9 @@ class VimEditTextArea(TextArea):
             event.stop()
             event.prevent_default()
             self.app_instance._update_vim_status()
+        else:
+            # For other keys, let TextArea handle them
+            super().on_key(event)
     
     def _handle_command_mode(self, event: events.Key) -> None:
         """Handle keys in COMMAND mode."""
@@ -389,7 +412,7 @@ class VimEditTextArea(TextArea):
                 self.vim_mode = self.VIM_NORMAL
                 self.command_buffer = ""
             self.app_instance._update_vim_status()
-        elif event.character and event.is_printable:
+        elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:
             # Add character to command buffer
             self.command_buffer += event.character
             self.app_instance._update_vim_status()
@@ -2750,17 +2773,12 @@ class MinimalDocumentBrowser(App):
                         event.prevent_default()
                         return
             
-            # Let parent handle other keys
-            super().on_key(event)
+            # Note: App class doesn't have on_key method, so we don't call super()
+            pass
         except Exception as e:
             # Log error but don't crash
             key_logger.error(f"Error in on_key: {e}")
-            # Still let parent handle the key - but safely
-            try:
-                super().on_key(event)
-            except Exception:
-                # If parent also fails, just log and continue
-                pass
+            # Don't try to call super().on_key() as App doesn't have this method
     
     
     async def on_event(self, event) -> None:
