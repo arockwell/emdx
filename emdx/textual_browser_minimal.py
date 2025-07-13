@@ -26,7 +26,7 @@ from emdx.tags import (
     remove_tags_from_document,
     search_by_tags,
 )
-from emdx.tag_display import format_tags, order_tags
+from emdx.tag_display import format_tags, order_tags, truncate_emoji_safe
 
 # Set up logging
 log_dir = Path.home() / ".config" / "emdx"
@@ -453,19 +453,8 @@ class MinimalDocumentBrowser(App):
 
     def on_mount(self) -> None:
         try:
-            # ENSURE CLEAN STATE - remove any existing widgets from preview
-            container = self.query_one("#preview", ScrollableContainer)
-            container.remove_children()
-            
-            # Mount a fresh RichLog widget
-            richlog = RichLog(
-                id="preview-content",
-                wrap=True,
-                highlight=True,
-                markup=True,
-                auto_scroll=False
-            )
-            container.mount(richlog)
+            # Widget is already created in compose(), just get reference to it
+            preview_area = self.query_one("#preview-content", RichLog)
             
             self.load_documents()
             self.setup_table()
@@ -511,9 +500,10 @@ class MinimalDocumentBrowser(App):
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
 
-            # Expanded tag display - limit to 30 chars
-            tags_str = format_tags(doc.get("tags", []))[:30]
-            if len(format_tags(doc.get("tags", []))) > 30:
+            # Expanded tag display - limit to 30 chars with emoji-safe truncation
+            formatted_tags = format_tags(doc.get("tags", []))
+            tags_str, was_truncated = truncate_emoji_safe(formatted_tags, 30)
+            if was_truncated:
                 tags_str += "..."
 
             table.add_row(
@@ -874,9 +864,10 @@ class MinimalDocumentBrowser(App):
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
 
-            # Expanded tag display - limit to 30 chars
-            tags_str = format_tags(doc.get("tags", []))[:30]
-            if len(format_tags(doc.get("tags", []))) > 30:
+            # Expanded tag display - limit to 30 chars with emoji-safe truncation
+            formatted_tags = format_tags(doc.get("tags", []))
+            tags_str, was_truncated = truncate_emoji_safe(formatted_tags, 30)
+            if was_truncated:
                 tags_str += "..."
 
             table.add_row(
