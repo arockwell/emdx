@@ -1238,23 +1238,23 @@ class MinimalDocumentBrowser(App):
             except Exception as e:
                 logger.error(f"Failed to update vim mode indicator: {e}")
             
-            # Build mode indicator text
+            # Build mode indicator text with cursor style hints
             try:
                 if vim_mode == "INSERT":
-                    vim_indicator.update("[bold green]-- INSERT --[/bold green]")
+                    vim_indicator.update("[bold green]-- INSERT -- [dim](cursor: |)[/dim][/bold green]")
                 elif vim_mode == "NORMAL":
                     mode_text = "-- NORMAL --"
                     if repeat:
                         mode_text = f"-- NORMAL ({repeat}) --"
                     if pending:
                         mode_text = f"-- NORMAL ({pending}) --"
-                    vim_indicator.update(f"[bold blue]{mode_text}[/bold blue]")
+                    vim_indicator.update(f"[bold blue]{mode_text}[/bold blue] [dim](cursor: █)[/dim]")
                 elif vim_mode == "VISUAL":
-                    vim_indicator.update("[bold yellow]-- VISUAL --[/bold yellow]")
+                    vim_indicator.update("[bold yellow]-- VISUAL -- [dim](cursor: █)[/dim][/bold yellow]")
                 elif vim_mode == "V-LINE":
-                    vim_indicator.update("[bold yellow]-- VISUAL LINE --[/bold yellow]")
+                    vim_indicator.update("[bold yellow]-- VISUAL LINE -- [dim](cursor: █)[/dim][/bold yellow]")
                 elif vim_mode == "COMMAND":
-                    vim_indicator.update(f"[bold magenta]{command_buffer}[/bold magenta]")
+                    vim_indicator.update(f"[bold magenta]{command_buffer}[/bold magenta] [dim](cursor: |)[/dim]")
             except Exception as e:
                 logger.error(f"Failed to update vim indicator text: {e}")
             
@@ -2155,6 +2155,10 @@ class MinimalDocumentBrowser(App):
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
             logger.info(f"EditTextArea classes: {edit_area.classes}")
             
+            # Store current cursor position before entering edit mode
+            table = self.query_one("#doc-table", DataTable)
+            self.edit_mode_cursor_position = table.cursor_coordinate
+            
             # Update state
             self.edit_mode = True
             self.editing_doc_id = self.current_doc_id
@@ -2254,6 +2258,15 @@ class MinimalDocumentBrowser(App):
             # Use deferred content restoration (SAME AS SELECTION MODE)
             self.call_after_refresh(self._restore_preview_content)
             
+            # Restore cursor position to where it was before edit mode
+            if hasattr(self, 'edit_mode_cursor_position'):
+                table = self.query_one("#doc-table", DataTable)
+                try:
+                    table.cursor_coordinate = self.edit_mode_cursor_position
+                except:
+                    pass  # Position might be invalid after refresh
+                delattr(self, 'edit_mode_cursor_position')
+            
         except Exception as e:
             logger.error(f"Error saving and exiting edit mode: {e}", exc_info=True)
             self.cancel_refresh_timer()
@@ -2278,6 +2291,15 @@ class MinimalDocumentBrowser(App):
                 
                 if self.current_doc_id:
                     self.update_preview(self.current_doc_id)
+                    
+                # Try to restore cursor position even in error recovery
+                if hasattr(self, 'edit_mode_cursor_position'):
+                    table = self.query_one("#doc-table", DataTable)
+                    try:
+                        table.cursor_coordinate = self.edit_mode_cursor_position
+                    except:
+                        pass
+                    delattr(self, 'edit_mode_cursor_position')
             except Exception:
                 pass  # Give up on recovery
 
