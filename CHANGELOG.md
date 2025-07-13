@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Vim-like Editing Mode** - Full vim modal editing directly in the TUI preview pane
+  - Complete modal system: NORMAL, INSERT, VISUAL, and VISUAL LINE modes
+  - Core vim navigation: h/j/k/l, w/b/e (word motions), 0/$ (line), gg/G (document)
+  - Mode switching commands: i/a/I/A/o/O (insert variants), v/V (visual modes)
+  - Editing operations: x (delete char), dd (delete line), yy (yank), p/P (paste)
+  - Repeat count support: 3j, 5w, 2dd etc.
+  - Smart dual ESC behavior: INSERT→NORMAL→EXIT edit mode
+  - Color-coded status bar showing current vim mode and pending commands
+  - Backward compatibility: EditTextArea alias maintains existing functionality
+
+### Changed
+- **TUI Edit Mode Enhanced** - Press 'e' now enters vim editing mode instead of external nvim
+  - Starts in INSERT mode for immediate text editing
+  - Full vim command set available in NORMAL mode
+  - Visual feedback with mode indicators in status bar
+  - Seamless integration with existing width constraint fixes
+
 ## [0.5.0] - 2025-01-10
 
 ### Added

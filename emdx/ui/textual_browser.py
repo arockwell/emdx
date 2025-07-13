@@ -5,6 +5,7 @@ Minimal textual browser that signals for external nvim handling.
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -104,30 +105,368 @@ class SelectionTextArea(TextArea):
             # Don't re-raise - let app continue
 
 
-class EditTextArea(TextArea):
-    """TextArea for editing documents with save-on-escape behavior."""
+class VimEditTextArea(TextArea):
+    """TextArea with vim-like keybindings for EMDX."""
+    
+    # Vim modes
+    VIM_NORMAL = "NORMAL"
+    VIM_INSERT = "INSERT"
+    VIM_VISUAL = "VISUAL"
+    VIM_VISUAL_LINE = "V-LINE"
     
     def __init__(self, app_instance, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
+        self.vim_mode = self.VIM_INSERT  # Start in insert mode
+        self.visual_start = None
+        self.visual_end = None
+        self.last_command = None
+        self.pending_command = ""
+        self.repeat_count = ""
+        self.register = None
+        self.yanked_text = ""
         # Store original content to detect changes
         self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
-    
+        
     def on_key(self, event: events.Key) -> None:
+        """Handle key events with vim-like behavior."""
         try:
-            key_logger.info(f"EditTextArea.on_key: key={event.key}")
+            key_logger.info(f"VimEditTextArea.on_key: key={event.key}, mode={self.vim_mode}")
             
+            # Global ESC handling - exit edit mode from any vim mode
             if event.key == "escape":
-                # Exit edit mode and save
-                event.stop()
-                event.prevent_default()
-                self.app_instance.action_save_and_exit_edit()
-                return
-            # All other keys pass through for normal editing
+                if self.vim_mode == self.VIM_INSERT:
+                    # First ESC goes to normal mode
+                    self.vim_mode = self.VIM_NORMAL
+                    event.stop()
+                    event.prevent_default()
+                    self.app_instance._update_vim_status()
+                    return
+                else:
+                    # Second ESC exits edit mode entirely
+                    event.stop()
+                    event.prevent_default()
+                    self.app_instance.action_save_and_exit_edit()
+                    return
+            
+            # Route to appropriate handler based on mode
+            if self.vim_mode == self.VIM_NORMAL:
+                self._handle_normal_mode(event)
+            elif self.vim_mode == self.VIM_INSERT:
+                self._handle_insert_mode(event)
+            elif self.vim_mode == self.VIM_VISUAL:
+                self._handle_visual_mode(event)
+            elif self.vim_mode == self.VIM_VISUAL_LINE:
+                self._handle_visual_line_mode(event)
                 
         except Exception as e:
-            key_logger.error(f"CRASH in EditTextArea.on_key: {e}")
-            logger.error(f"Error in EditTextArea.on_key: {e}", exc_info=True)
+            key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
+            logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
+    
+    def _handle_normal_mode(self, event: events.Key) -> None:
+        """Handle keys in NORMAL mode."""
+        key = event.key
+        char = event.character if hasattr(event, 'character') else None
+        
+        # Stop event from bubbling up
+        event.stop()
+        event.prevent_default()
+        
+        # Handle repeat counts (e.g., 3j to move down 3 lines)
+        if char and char.isdigit() and (self.repeat_count or char != '0'):
+            self.repeat_count += char
+            return
+        
+        # Get repeat count as integer
+        count = int(self.repeat_count) if self.repeat_count else 1
+        self.repeat_count = ""  # Reset after use
+        
+        # Movement commands
+        if key == "h" or key == "left":
+            self.move_cursor_relative(columns=-count)
+        elif key == "j" or key == "down":
+            self.move_cursor_relative(rows=count)
+        elif key == "k" or key == "up":
+            self.move_cursor_relative(rows=-count)
+        elif key == "l" or key == "right":
+            self.move_cursor_relative(columns=count)
+        
+        # Word movement
+        elif char == "w":
+            self._move_word_forward(count)
+        elif char == "b":
+            self._move_word_backward(count)
+        elif char == "e":
+            self._move_word_end(count)
+        
+        # Line movement
+        elif char == "0":
+            self._cursor_to_line_start()
+        elif char == "$":
+            self._cursor_to_line_end()
+        elif char == "g":
+            if self.pending_command == "g":
+                # gg - go to first line
+                self._cursor_to_start()
+                self.pending_command = ""
+            else:
+                self.pending_command = "g"
+                return
+        elif char == "G":
+            # Go to last line
+            self._cursor_to_end()
+        
+        # Mode changes
+        elif char == "i":
+            self.vim_mode = self.VIM_INSERT
+            self.app_instance._update_vim_status()
+        elif char == "a":
+            self.move_cursor_relative(columns=1)
+            self.vim_mode = self.VIM_INSERT
+            self.app_instance._update_vim_status()
+        elif char == "I":
+            self._cursor_to_line_start()
+            self.vim_mode = self.VIM_INSERT
+            self.app_instance._update_vim_status()
+        elif char == "A":
+            self._cursor_to_line_end()
+            self.vim_mode = self.VIM_INSERT
+            self.app_instance._update_vim_status()
+        elif char == "o":
+            self._cursor_to_line_end()
+            self.insert("\n")
+            self.vim_mode = self.VIM_INSERT
+            self.app_instance._update_vim_status()
+        elif char == "O":
+            self._cursor_to_line_start()
+            self.insert("\n")
+            self.move_cursor_relative(rows=-1)
+            self.vim_mode = self.VIM_INSERT
+            self.app_instance._update_vim_status()
+        
+        # Visual modes
+        elif char == "v":
+            self.vim_mode = self.VIM_VISUAL
+            self.visual_start = self.cursor_location
+            self.app_instance._update_vim_status()
+        elif char == "V":
+            self.vim_mode = self.VIM_VISUAL_LINE
+            self.visual_start = self.cursor_location
+            self.app_instance._update_vim_status()
+        
+        # Editing commands
+        elif char == "x":
+            # Delete character under cursor
+            for _ in range(count):
+                self._delete_right_safe()
+        elif char == "d":
+            if self.pending_command == "d":
+                # dd - delete line
+                self._delete_line(count)
+                self.pending_command = ""
+            else:
+                self.pending_command = "d"
+                return
+        elif char == "y":
+            if self.pending_command == "y":
+                # yy - yank line
+                self._yank_line(count)
+                self.pending_command = ""
+            else:
+                self.pending_command = "y"
+                return
+        elif char == "p":
+            # Paste after cursor
+            if self.yanked_text:
+                self.insert(self.yanked_text)
+        elif char == "P":
+            # Paste before cursor
+            if self.yanked_text:
+                self.move_cursor_relative(columns=-1)
+                self.insert(self.yanked_text)
+        
+        # Clear pending command if not handled
+        if char not in ["g", "d", "y"]:
+            self.pending_command = ""
+    
+    def _handle_insert_mode(self, event: events.Key) -> None:
+        """Handle keys in INSERT mode - just pass through for normal editing."""
+        # Let TextArea handle all keys in insert mode
+        pass
+    
+    def _handle_visual_mode(self, event: events.Key) -> None:
+        """Handle keys in VISUAL mode."""
+        # For now, just handle ESC to return to normal
+        if event.key == "escape":
+            self.vim_mode = self.VIM_NORMAL
+            self.visual_start = None
+            self.visual_end = None
+            event.stop()
+            event.prevent_default()
+            self.app_instance._update_vim_status()
+    
+    def _handle_visual_line_mode(self, event: events.Key) -> None:
+        """Handle keys in VISUAL LINE mode."""
+        # For now, just handle ESC to return to normal
+        if event.key == "escape":
+            self.vim_mode = self.VIM_NORMAL
+            self.visual_start = None
+            self.visual_end = None
+            event.stop()
+            event.prevent_default()
+            self.app_instance._update_vim_status()
+    
+    def _move_word_forward(self, count: int = 1) -> None:
+        """Move cursor forward by word boundaries."""
+        text = self.text
+        lines = text.split('\n')
+        row, col = self.cursor_location
+        
+        for _ in range(count):
+            if row >= len(lines):
+                break
+                
+            line = lines[row]
+            # Find next word boundary
+            remaining = line[col:]
+            match = re.search(r'\b\w', remaining)
+            
+            if match:
+                col += match.start()
+            else:
+                # Move to next line
+                row += 1
+                col = 0
+                if row < len(lines):
+                    # Find first word on next line
+                    match = re.search(r'\b\w', lines[row])
+                    if match:
+                        col = match.start()
+        
+        self.cursor_location = (row, col)
+    
+    def _move_word_backward(self, count: int = 1) -> None:
+        """Move cursor backward by word boundaries."""
+        text = self.text
+        lines = text.split('\n')
+        row, col = self.cursor_location
+        
+        for _ in range(count):
+            if row < 0:
+                break
+                
+            if col > 0:
+                line = lines[row]
+                # Find previous word boundary
+                before = line[:col]
+                matches = list(re.finditer(r'\b\w', before))
+                if matches:
+                    col = matches[-1].start()
+                else:
+                    col = 0
+            else:
+                # Move to previous line
+                row -= 1
+                if row >= 0:
+                    col = len(lines[row])
+        
+        self.cursor_location = (row, col)
+    
+    def _move_word_end(self, count: int = 1) -> None:
+        """Move cursor to end of word."""
+        text = self.text
+        lines = text.split('\n')
+        row, col = self.cursor_location
+        
+        for _ in range(count):
+            if row >= len(lines):
+                break
+                
+            line = lines[row]
+            # Find end of current/next word
+            remaining = line[col:]
+            match = re.search(r'\w+', remaining)
+            
+            if match:
+                col += match.end() - 1
+            else:
+                # Move to next line
+                row += 1
+                col = 0
+                if row < len(lines):
+                    match = re.search(r'\w+', lines[row])
+                    if match:
+                        col = match.end() - 1
+        
+        self.cursor_location = (row, col)
+    
+    def _delete_line(self, count: int = 1) -> None:
+        """Delete entire line(s)."""
+        lines = self.text.split('\n')
+        current_line = self.cursor_location[0]
+        
+        if current_line < len(lines):
+            # Yank before deleting
+            end_line = min(current_line + count, len(lines))
+            self.yanked_text = '\n'.join(lines[current_line:end_line]) + '\n'
+            
+            # Create new text without the deleted lines
+            new_lines = lines[:current_line] + lines[end_line:]
+            new_text = '\n'.join(new_lines)
+            
+            # Replace all text
+            self.text = new_text
+            
+            # Position cursor at start of line (or end if we deleted the last lines)
+            if current_line < len(new_lines):
+                self.cursor_location = (current_line, 0)
+            elif new_lines:
+                self.cursor_location = (len(new_lines) - 1, 0)
+            else:
+                self.cursor_location = (0, 0)
+    
+    def _yank_line(self, count: int = 1) -> None:
+        """Yank (copy) entire line(s)."""
+        lines = self.text.split('\n')
+        current_line = self.cursor_location[0]
+        
+        if current_line < len(lines):
+            end_line = min(current_line + count, len(lines))
+            self.yanked_text = '\n'.join(lines[current_line:end_line]) + '\n'
+    
+    def _cursor_to_line_start(self) -> None:
+        """Move cursor to start of current line."""
+        row, _ = self.cursor_location
+        self.cursor_location = (row, 0)
+    
+    def _cursor_to_line_end(self) -> None:
+        """Move cursor to end of current line."""
+        lines = self.text.split('\n')
+        row, _ = self.cursor_location
+        if row < len(lines):
+            self.cursor_location = (row, len(lines[row]))
+    
+    def _cursor_to_start(self) -> None:
+        """Move cursor to start of document."""
+        self.cursor_location = (0, 0)
+    
+    def _cursor_to_end(self) -> None:
+        """Move cursor to end of document."""
+        lines = self.text.split('\n')
+        last_line = len(lines) - 1
+        self.cursor_location = (last_line, len(lines[last_line]))
+    
+    def _delete_right_safe(self) -> None:
+        """Delete character to the right, safely handling boundaries."""
+        try:
+            self.delete_right()
+        except:
+            # Ignore if at end of document
+            pass
+
+
+# For backward compatibility, alias the old name
+EditTextArea = VimEditTextArea
 
 
 class FullScreenView(Screen):
@@ -680,6 +1019,40 @@ class MinimalDocumentBrowser(App):
             )
         else:
             status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
+
+    def _update_vim_status(self):
+        """Update status bar to show vim mode when in edit mode."""
+        if self.edit_mode and hasattr(self, 'edit_textarea') and hasattr(self.edit_textarea, 'vim_mode'):
+            vim_mode = self.edit_textarea.vim_mode
+            pending = getattr(self.edit_textarea, 'pending_command', '')
+            repeat = getattr(self.edit_textarea, 'repeat_count', '')
+            
+            # Build status message
+            status_parts = [f"EDIT MODE: #{self.editing_doc_id}"]
+            
+            # Show vim mode with color coding
+            if vim_mode == "INSERT":
+                status_parts.append("[bold green]-- INSERT --[/bold green]")
+            elif vim_mode == "NORMAL":
+                mode_text = "-- NORMAL --"
+                if repeat:
+                    mode_text = f"-- NORMAL ({repeat}) --"
+                if pending:
+                    mode_text = f"-- NORMAL ({pending}) --"
+                status_parts.append(f"[bold blue]{mode_text}[/bold blue]")
+            elif vim_mode == "VISUAL":
+                status_parts.append("[bold yellow]-- VISUAL --[/bold yellow]")
+            elif vim_mode == "V-LINE":
+                status_parts.append("[bold yellow]-- VISUAL LINE --[/bold yellow]")
+            
+            # Add instructions
+            if vim_mode == "INSERT":
+                status_parts.append("ESC for normal mode")
+            else:
+                status_parts.append("ESC to save and exit")
+            
+            status = self.query_one("#status", Label)
+            status.update(" | ".join(status_parts))
 
     def watch_mode(self, old_mode: str, new_mode: str):
         search = self.query_one("#search-input", Input)
@@ -1502,9 +1875,9 @@ class MinimalDocumentBrowser(App):
             self.edit_mode = True
             self.editing_doc_id = self.current_doc_id
             
-            # Update status
+            # Update status with vim mode
             self.cancel_refresh_timer()
-            status.update(f"EDIT MODE: Editing #{self.current_doc_id} - ESC to save and exit")
+            self._update_vim_status()
             
         except Exception as e:
             logger.error(f"Error entering edit mode: {e}", exc_info=True)
