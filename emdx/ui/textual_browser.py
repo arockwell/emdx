@@ -175,6 +175,10 @@ class VimEditTextArea(TextArea):
         self.show_cursor = True
         self.cursor_blink = False
         
+        # Enable custom relative line numbers
+        self.show_line_numbers = True
+        self._last_cursor_row = 0
+        
     def _update_cursor_style(self):
         """Update cursor style based on vim mode."""
         # Keep all cursors solid (non-blinking)
@@ -189,7 +193,56 @@ class VimEditTextArea(TextArea):
             self.add_class("vim-insert-mode")
         else:
             self.add_class("vim-normal-mode")
+    
+    def on_mount(self) -> None:
+        """Called when widget is mounted."""
+        self._enable_relative_line_numbers()
+    
+    def _enable_relative_line_numbers(self):
+        """Enable vim-style relative line numbers.""" 
+        # Custom implementation that overrides the default line number rendering
+        # Current line shows absolute line number, others show relative distance
+        self._original_render_line_numbers = getattr(self, '_render_line_numbers', None)
         
+    def _update_relative_line_numbers(self):
+        """Update line numbers when cursor moves."""
+        if hasattr(self, 'cursor_location'):
+            current_row = self.cursor_location[0]
+            if current_row != self._last_cursor_row:
+                self._last_cursor_row = current_row
+                # Force refresh of line numbers
+                self.refresh()
+        
+    def _render_line_numbers(self, *args, **kwargs):
+        """Custom line number rendering with vim-style relative numbers."""
+        if not hasattr(self, 'cursor_location'):
+            # Fallback to default if cursor_location not available
+            if self._original_render_line_numbers:
+                return self._original_render_line_numbers(*args, **kwargs)
+            return super()._render_line_numbers(*args, **kwargs) if hasattr(super(), '_render_line_numbers') else None
+            
+        try:
+            cursor_row = self.cursor_location[0]
+            lines = self.text.split('\n')
+            
+            # Generate relative line numbers
+            line_numbers = []
+            for i, line in enumerate(lines):
+                if i == cursor_row:
+                    # Current line shows absolute line number
+                    line_numbers.append(f"{i + 1:>3}")
+                else:
+                    # Other lines show relative distance from cursor
+                    distance = abs(i - cursor_row)
+                    line_numbers.append(f"{distance:>3}")
+            
+            return line_numbers
+        except Exception as e:
+            logger.debug(f"Error in relative line number rendering: {e}")
+            # Fallback to default rendering
+            if self._original_render_line_numbers:
+                return self._original_render_line_numbers(*args, **kwargs)
+            return None
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
         try:
@@ -526,6 +579,7 @@ class VimEditTextArea(TextArea):
                         col = match.start()
         
         self.cursor_location = (row, col)
+        self._update_relative_line_numbers()
     
     def _move_word_backward(self, count: int = 1) -> None:
         """Move cursor backward by word boundaries."""
@@ -553,6 +607,7 @@ class VimEditTextArea(TextArea):
                     col = len(lines[row])
         
         self.cursor_location = (row, col)
+        self._update_relative_line_numbers()
     
     def _move_word_end(self, count: int = 1) -> None:
         """Move cursor to end of word."""
@@ -581,6 +636,7 @@ class VimEditTextArea(TextArea):
                         col = match.end() - 1
         
         self.cursor_location = (row, col)
+        self._update_relative_line_numbers()
     
     def _delete_line(self, count: int = 1) -> None:
         """Delete entire line(s)."""
@@ -602,10 +658,13 @@ class VimEditTextArea(TextArea):
             # Position cursor at start of line (or end if we deleted the last lines)
             if current_line < len(new_lines):
                 self.cursor_location = (current_line, 0)
+                self._update_relative_line_numbers()
             elif new_lines:
                 self.cursor_location = (len(new_lines) - 1, 0)
+                self._update_relative_line_numbers()
             else:
                 self.cursor_location = (0, 0)
+                self._update_relative_line_numbers()
     
     def _yank_line(self, count: int = 1) -> None:
         """Yank (copy) entire line(s)."""
@@ -627,16 +686,19 @@ class VimEditTextArea(TextArea):
         row, _ = self.cursor_location
         if row < len(lines):
             self.cursor_location = (row, len(lines[row]))
+            self._update_relative_line_numbers()
     
     def _cursor_to_start(self) -> None:
         """Move cursor to start of document."""
         self.cursor_location = (0, 0)
+        self._update_relative_line_numbers()
     
     def _cursor_to_end(self) -> None:
         """Move cursor to end of document."""
         lines = self.text.split('\n')
         last_line = len(lines) - 1
         self.cursor_location = (last_line, len(lines[last_line]))
+        self._update_relative_line_numbers()
     
     def _delete_right_safe(self) -> None:
         """Delete character to the right, safely handling boundaries."""
@@ -2185,7 +2247,7 @@ class MinimalDocumentBrowser(App):
             
             # CRITICAL: Set word wrap BEFORE any other properties
             edit_area.word_wrap = True
-            edit_area.show_line_numbers = False  # Disable line numbers to save space
+            edit_area.show_line_numbers = False  # Will use custom relative line numbers
             
             # Try setting max line length if available
             if hasattr(edit_area, 'max_line_length'):
