@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
+from emdx.models.documents import list_documents, get_recent_documents, get_stats
 
 app = typer.Typer()
 console = Console()
@@ -28,7 +29,7 @@ def list(
         db.ensure_schema()
 
         # Query database
-        docs = db.list_documents(project=project, limit=limit)
+        docs = list_documents(project=project, limit=limit)
 
         if not docs:
             console.print("[yellow]No documents found[/yellow]")
@@ -92,7 +93,7 @@ def recent(
         db.ensure_schema()
 
         # Query database for recently accessed documents
-        docs = db.get_recent_documents(limit=limit)
+        docs = get_recent_documents(limit=limit)
 
         if not docs:
             console.print("[yellow]No recently accessed documents found[/yellow]")
@@ -141,7 +142,7 @@ def stats(
         db.ensure_schema()
 
         # Query database for statistics
-        stats_data = db.get_stats(project=project)
+        stats_data = get_stats(project=project)
 
         if project:
             console.print(f"[bold]Knowledge Base Statistics - Project: {project}[/bold]")
@@ -274,7 +275,7 @@ def project_stats(
             console.print("=" * 50)
 
             # Get project-specific stats
-            stats_data = db.get_stats(project=project)
+            stats_data = get_stats(project=project)
 
             # Display basic project stats
             console.print(f"[blue]Documents:[/blue] {stats_data.get('total_documents', 0)}")

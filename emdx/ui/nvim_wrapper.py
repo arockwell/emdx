@@ -77,7 +77,7 @@ def run_textual_with_nvim_wrapper():
                 continue
 
             # Run textual browser
-            from emdx.textual_browser_minimal import run_minimal
+            from emdx.ui.textual_browser import run_minimal
 
             exit_code = run_minimal()
 
