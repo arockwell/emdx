@@ -50,7 +50,8 @@ class DatabaseConnection:
             conn.execute("PRAGMA foreign_keys = ON")
 
             # Create documents table if it doesn't exist
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
@@ -63,7 +64,8 @@ class DatabaseConnection:
                     deleted_at TIMESTAMP,
                     is_deleted BOOLEAN DEFAULT FALSE
                 )
-            """)
+            """
+            )
 
             # Add soft delete columns to existing databases (migration)
             # Check if columns exist first
@@ -77,17 +79,20 @@ class DatabaseConnection:
                 conn.execute("ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
 
             # Create tags table if it doesn't exist
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS tags (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
                     usage_count INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
 
             # Create document_tags table if it doesn't exist
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS document_tags (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     document_id INTEGER NOT NULL,
@@ -97,51 +102,65 @@ class DatabaseConnection:
                     FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
                     UNIQUE (document_id, tag_id)
                 )
-            """)
+            """
+            )
 
             # Create FTS5 virtual table for full-text search
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
                     title, content, project, content=documents, content_rowid=id,
                     tokenize='porter unicode61'
                 )
-            """)
+            """
+            )
 
             # Create triggers to keep FTS in sync
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
                     INSERT INTO documents_fts(rowid, title, content, project)
                     VALUES (new.id, new.title, new.content, new.project);
                 END
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
                     UPDATE documents_fts
                     SET title = new.title, content = new.content, project = new.project
                     WHERE rowid = old.id;
                 END
-            """)
+            """
+            )
 
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
                     DELETE FROM documents_fts WHERE rowid = old.id;
                 END
-            """)
+            """
+            )
 
             # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)")
-            
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)"
+            )
+
             # Create index after columns exist
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(
                     is_deleted, deleted_at
                 )
-            """)
+            """
+            )
 
             # Create gists table for tracking document-gist relationships
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gists (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     document_id INTEGER NOT NULL,
@@ -152,16 +171,21 @@ class DatabaseConnection:
                     is_public BOOLEAN DEFAULT 0,
                     FOREIGN KEY (document_id) REFERENCES documents (id)
                 )
-            """)
+            """
+            )
 
             # Create indexes for gists table
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)")
-            
+
             # Create indexes for tags tables
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON document_tags(document_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_document_tags_tag_id ON document_tags(tag_id)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON document_tags(document_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_document_tags_tag_id ON document_tags(tag_id)"
+            )
 
             conn.commit()
 

@@ -11,8 +11,8 @@ from emdx import __version__
 from emdx.commands.browse import app as browse_app
 from emdx.commands.core import app as core_app
 from emdx.commands.gist import app as gist_app
-from emdx.ui.gui import gui
 from emdx.commands.tags import app as tag_app
+from emdx.ui.gui import gui
 
 # Create main app
 app = typer.Typer(

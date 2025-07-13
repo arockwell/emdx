@@ -17,8 +17,14 @@ from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import (
-    save_document, get_document, search_documents, update_document,
-    delete_document, list_deleted_documents, restore_document, purge_deleted_documents
+    delete_document,
+    get_document,
+    list_deleted_documents,
+    purge_deleted_documents,
+    restore_document,
+    save_document,
+    search_documents,
+    update_document,
 )
 from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
 from emdx.ui.formatting import format_tags
@@ -33,6 +39,7 @@ console = Console(force_terminal=True, color_system="auto")
 @dataclass
 class InputContent:
     """Container for input content and its metadata"""
+
     content: str
     source_type: str  # 'stdin', 'file', or 'direct'
     source_path: Optional[Path] = None
@@ -41,6 +48,7 @@ class InputContent:
 @dataclass
 class DocumentMetadata:
     """Container for document metadata"""
+
     title: str
     project: Optional[str] = None
     tags: Optional[list[str]] = None
@@ -506,9 +514,7 @@ def edit(
 
 @app.command()
 def delete(
-    identifiers: list[str] = typer.Argument(
-        help="Document ID(s) or title(s) to delete"
-    ),
+    identifiers: list[str] = typer.Argument(help="Document ID(s) or title(s) to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     hard: bool = typer.Option(False, "--hard", help="Permanently delete (cannot be restored)"),
     dry_run: bool = typer.Option(
@@ -603,9 +609,7 @@ def delete(
         # Report results
         if deleted_count > 0:
             if hard:
-                console.print(
-                    f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]"
-                )
+                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")
             else:
                 console.print(f"\n[green]✅ Moved {deleted_count} document(s) to trash[/green]")
                 console.print("[dim]💡 Use 'emdx trash' to view deleted documents[/dim]")

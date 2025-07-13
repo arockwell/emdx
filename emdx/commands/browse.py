@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
-from emdx.models.documents import list_documents, get_recent_documents, get_stats
+from emdx.models.documents import get_recent_documents, get_stats, list_documents
 
 app = typer.Typer()
 console = Console()
@@ -161,8 +161,8 @@ def stats(
         console.print(f"[blue]Database Size:[/blue] {stats_data.get('table_size', '0 MB')}")
 
         # Most viewed document
-        if stats_data.get('most_viewed'):
-            most_viewed = stats_data['most_viewed']
+        if stats_data.get("most_viewed"):
+            most_viewed = stats_data["most_viewed"]
             console.print(
                 f"[blue]Most Viewed:[/blue] \"{most_viewed['title']}\" "
                 f"({most_viewed['access_count']} views)"
@@ -171,10 +171,11 @@ def stats(
             console.print("[blue]Most Viewed:[/blue] N/A")
 
         # Most recent document
-        if stats_data.get('newest_doc'):
-            newest_date = stats_data['newest_doc']
+        if stats_data.get("newest_doc"):
+            newest_date = stats_data["newest_doc"]
             if isinstance(newest_date, str):
                 from datetime import datetime
+
                 newest_date = datetime.fromisoformat(newest_date)
             console.print(f"[blue]Most Recent:[/blue] {newest_date.strftime('%Y-%m-%d %H:%M')}")
         else:
@@ -216,16 +217,14 @@ def stats(
                         if last_updated:
                             if isinstance(last_updated, str):
                                 from datetime import datetime
+
                                 last_updated = datetime.fromisoformat(last_updated)
-                            last_updated_str = last_updated.strftime('%Y-%m-%d')
+                            last_updated_str = last_updated.strftime("%Y-%m-%d")
                         else:
                             last_updated_str = "N/A"
 
                         project_table.add_row(
-                            project_name,
-                            str(doc_count),
-                            str(total_views),
-                            last_updated_str
+                            project_name, str(doc_count), str(total_views), last_updated_str
                         )
 
                     console.print(project_table)
@@ -245,11 +244,13 @@ def stats(
                         COUNT(*) as document_count
                     FROM documents
                     WHERE is_deleted = FALSE
-                    """ + (" AND project = ?" if project else "") + """
+                    """
+                    + (" AND project = ?" if project else "")
+                    + """
                     GROUP BY view_range
                     ORDER BY MIN(access_count)
                     """,
-                    (project,) if project else ()
+                    (project,) if project else (),
                 )
 
                 console.print("\n[bold]Access Patterns[/bold]")
@@ -282,26 +283,28 @@ def project_stats(
             console.print(f"[blue]Total Views:[/blue] {stats_data.get('total_views', 0)}")
             console.print(f"[blue]Average Views:[/blue] {stats_data.get('avg_views', 0):.1f}")
 
-            if stats_data.get('most_viewed'):
-                most_viewed = stats_data['most_viewed']
+            if stats_data.get("most_viewed"):
+                most_viewed = stats_data["most_viewed"]
                 console.print(
                     f"[blue]Most Viewed Document:[/blue] \"{most_viewed['title']}\" "
                     f"({most_viewed['access_count']} views)"
                 )
 
-            if stats_data.get('newest_doc'):
-                newest_date = stats_data['newest_doc']
+            if stats_data.get("newest_doc"):
+                newest_date = stats_data["newest_doc"]
                 if isinstance(newest_date, str):
                     from datetime import datetime
+
                     newest_date = datetime.fromisoformat(newest_date)
                 console.print(
                     f"[blue]Newest Document:[/blue] {newest_date.strftime('%Y-%m-%d %H:%M')}"
                 )
 
-            if stats_data.get('last_accessed'):
-                last_accessed = stats_data['last_accessed']
+            if stats_data.get("last_accessed"):
+                last_accessed = stats_data["last_accessed"]
                 if isinstance(last_accessed, str):
                     from datetime import datetime
+
                     last_accessed = datetime.fromisoformat(last_accessed)
                 console.print(
                     f"[blue]Last Accessed:[/blue] {last_accessed.strftime('%Y-%m-%d %H:%M')}"
@@ -318,7 +321,7 @@ def project_stats(
                     ORDER BY accessed_at DESC
                     LIMIT 10
                     """,
-                    (project,)
+                    (project,),
                 )
 
                 doc_table = Table()
@@ -334,8 +337,9 @@ def project_stats(
                     if accessed_at:
                         if isinstance(accessed_at, str):
                             from datetime import datetime
+
                             accessed_at = datetime.fromisoformat(accessed_at)
-                        accessed_str = accessed_at.strftime('%Y-%m-%d %H:%M')
+                        accessed_str = accessed_at.strftime("%Y-%m-%d %H:%M")
                     else:
                         accessed_str = "Never"
 
@@ -343,7 +347,7 @@ def project_stats(
                         str(doc_id),
                         title[:40] + "..." if len(title) > 40 else title,
                         accessed_str,
-                        str(access_count)
+                        str(access_count),
                     )
 
                 console.print(doc_table)
@@ -391,8 +395,9 @@ def project_stats(
                     if last_updated:
                         if isinstance(last_updated, str):
                             from datetime import datetime
+
                             last_updated = datetime.fromisoformat(last_updated)
-                        last_updated_str = last_updated.strftime('%Y-%m-%d')
+                        last_updated_str = last_updated.strftime("%Y-%m-%d")
                     else:
                         last_updated_str = "N/A"
 
@@ -411,7 +416,7 @@ def project_stats(
                         str(total_views),
                         f"{avg_views:.1f}",
                         last_updated_str,
-                        size_str
+                        size_str,
                     )
 
                 console.print(table)
@@ -448,10 +453,7 @@ def projects():
 
             projects = []
             for row in cursor.fetchall():
-                projects.append({
-                    "project": row[0],
-                    "count": row[1]
-                })
+                projects.append({"project": row[0], "count": row[1]})
 
             if not projects:
                 console.print("[yellow]No projects found[/yellow]")

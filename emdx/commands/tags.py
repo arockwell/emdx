@@ -7,7 +7,6 @@ from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
-from emdx.ui.formatting import format_tags
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -16,6 +15,7 @@ from emdx.models.tags import (
     remove_tags_from_document,
     rename_tag,
 )
+from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_aliases, generate_legend
 
 app = typer.Typer()

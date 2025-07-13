@@ -75,9 +75,7 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
         return None
 
 
-def list_documents(
-    project: Optional[str] = None, limit: int = 50
-) -> list[dict[str, Any]]:
+def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
     """List documents with optional project filter"""
     with db_connection.get_connection() as conn:
         if project:
@@ -268,9 +266,7 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
         return stats
 
 
-def list_deleted_documents(
-    days: Optional[int] = None, limit: int = 50
-) -> list[dict[str, Any]]:
+def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[dict[str, Any]]:
     """List soft-deleted documents"""
     with db_connection.get_connection() as conn:
         if days:

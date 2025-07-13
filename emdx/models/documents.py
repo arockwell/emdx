@@ -1,6 +1,5 @@
 """Document operations for emdx."""
 
-from datetime import datetime
 from typing import Any, Optional
 
 from emdx.database import db
@@ -16,9 +15,7 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
     return db.get_document(identifier)
 
 
-def list_documents(
-    project: Optional[str] = None, limit: int = 50
-) -> list[dict[str, Any]]:
+def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
     """List documents with optional project filter"""
     return db.list_documents(project, limit)
 
@@ -50,9 +47,7 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
     return db.get_stats(project)
 
 
-def list_deleted_documents(
-    days: Optional[int] = None, limit: int = 50
-) -> list[dict[str, Any]]:
+def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[dict[str, Any]]:
     """List soft-deleted documents"""
     return db.list_deleted_documents(days, limit)
 

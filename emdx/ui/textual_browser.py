@@ -3,11 +3,11 @@
 Minimal textual browser that signals for external nvim handling.
 """
 
+import logging
 import os
 import subprocess
 import sys
 import tempfile
-import logging
 from pathlib import Path
 
 from rich.markdown import Markdown
@@ -36,18 +36,18 @@ log_file = log_dir / "tui_debug.log"
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(log_file),
         # logging.StreamHandler()  # Uncomment for console output
-    ]
+    ],
 )
 
 # Also create a dedicated key events log
 key_log_file = log_dir / "key_events.log"
 key_logger = logging.getLogger("key_events")
 key_handler = logging.FileHandler(key_log_file)
-key_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
 key_logger.addHandler(key_handler)
 key_logger.setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -77,7 +77,8 @@ class SelectionTextArea(TextArea):
             # - 'ctrl+c' to copy
             # - Arrow keys and mouse for navigation/selection
             allowed_keys = {'escape', 'ctrl+c', 'up', 'down', 'left', 'right', 
-                          'page_up', 'page_down', 'home', 'end'}
+                          'page_up', 'page_down', 'home', 'end',
+                          'shift+up', 'shift+down', 'shift+left', 'shift+right'}
             
             if event.key == "escape" or (hasattr(event, 'character') and event.character == "s"):
                 # Exit selection mode
@@ -100,8 +101,7 @@ class SelectionTextArea(TextArea):
         except Exception as e:
             key_logger.error(f"CRASH in SelectionTextArea.on_key: {e}")
             logger.error(f"Error in SelectionTextArea.on_key: {e}", exc_info=True)
-            raise  # Re-raise to see full stack trace in logs
-        # Don't call super - TextArea doesn't have on_key in Textual 4.0
+            # Don't re-raise - let app continue
 
 
 class FullScreenView(Screen):
@@ -222,7 +222,7 @@ class FullScreenView(Screen):
         try:
             doc = db.get_document(str(self.doc_id))
             if doc:
-                self.copy_to_clipboard(doc['content'])
+                self.copy_to_clipboard(doc["content"])
         except Exception:
             # Silently ignore copy errors in full screen view
             pass
@@ -232,29 +232,27 @@ class FullScreenView(Screen):
         # Let 's' key pass through - handled by main app
         pass
 
-
     def copy_to_clipboard(self, text: str):
         """Copy text to clipboard with fallback methods."""
         import subprocess
 
         # Try pbcopy on macOS first
         try:
-            subprocess.run(['pbcopy'], input=text, text=True, check=True)
+            subprocess.run(["pbcopy"], input=text, text=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
             # Try xclip on Linux
             try:
-                subprocess.run(['xclip', '-selection', 'clipboard'],
-                             input=text, text=True, check=True)
+                subprocess.run(
+                    ["xclip", "-selection", "clipboard"], input=text, text=True, check=True
+                )
             except (subprocess.CalledProcessError, FileNotFoundError):
                 # Try xsel on Linux as fallback
                 try:
-                    subprocess.run(['xsel', '--clipboard', '--input'],
-                                 input=text, text=True, check=True)
+                    subprocess.run(
+                        ["xsel", "--clipboard", "--input"], input=text, text=True, check=True
+                    )
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     pass
-
-
-
 
 
 class DeleteConfirmScreen(ModalScreen):
@@ -303,7 +301,7 @@ class DeleteConfirmScreen(ModalScreen):
         with Grid(id="dialog"):
             yield Label(
                 f'Delete document #{self.doc_id}?\n"{self.doc_title}"\n\n'
-                f'[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]',
+                f"[dim]Press [bold]y[/bold] to delete, [bold]n[/bold] to cancel[/dim]",
                 id="question",
             )
             yield Button("Cancel (n)", variant="primary", id="cancel")
@@ -353,7 +351,21 @@ class MinimalDocumentBrowser(App):
         border: thick $accent;
     }
 
+    #preview-textarea {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 0 1;
+        background: $background;
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-sizing: border-box;
+    }
 
+    #preview-textarea:focus {
+        border: thick $accent;
+    }
 
     DataTable {
         height: 100%;
@@ -434,7 +446,7 @@ class MinimalDocumentBrowser(App):
     def compose(self) -> ComposeResult:
         yield Input(
             placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')",
-            id="search-input"
+            id="search-input",
         )
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
         yield Label("", id="tag-selector")
@@ -444,11 +456,7 @@ class MinimalDocumentBrowser(App):
                 yield DataTable(id="doc-table")
             with ScrollableContainer(id="preview"):
                 yield RichLog(
-                    id="preview-content",
-                    wrap=True,
-                    highlight=True,
-                    markup=True,
-                    auto_scroll=False
+                    id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
                 )
 
         yield Label("", id="status")
@@ -463,6 +471,7 @@ class MinimalDocumentBrowser(App):
         except Exception as e:
             # If there's any error during mount, ensure we have a usable state
             import traceback
+
             traceback.print_exc()
             self.exit(message=f"Error during startup: {e}")
 
@@ -473,7 +482,7 @@ class MinimalDocumentBrowser(App):
 
             # Add tags to each document
             for doc in docs:
-                doc['tags'] = get_document_tags(doc['id'])
+                doc["tags"] = get_document_tags(doc["id"])
 
             self.documents = docs
             self.filtered_docs = docs
@@ -484,7 +493,7 @@ class MinimalDocumentBrowser(App):
         table = self.query_one("#doc-table", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
-        
+
         # Only add columns if they don't already exist
         if len(table.columns) == 0:
             table.add_columns("ID", "Title", "Tags")
@@ -497,7 +506,7 @@ class MinimalDocumentBrowser(App):
             title_space = 50 - 11
             title = doc["title"][:title_space]
             if len(doc["title"]) >= title_space:
-                title = title[:title_space-3] + "..."
+                title = title[: title_space - 3] + "..."
 
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
@@ -554,6 +563,7 @@ class MinimalDocumentBrowser(App):
                         markdown_content = f"# {doc['title']}\n\n{content}"
 
                     from rich.markdown import Markdown
+
                     md = Markdown(markdown_content, code_theme="monokai")
                     preview_area.write(md)
 
@@ -586,7 +596,7 @@ class MinimalDocumentBrowser(App):
     def update_status(self):
         # Cancel any pending refresh timer when updating status
         self.cancel_refresh_timer()
-        
+
         status = self.query_one("#status", Label)
         search_input = self.query_one("#search-input", Input)
 
@@ -733,20 +743,20 @@ class MinimalDocumentBrowser(App):
         try:
             # Comprehensive logging of ALL key events
             event_attrs = {}
-            for attr in ['key', 'character', 'name', 'is_printable', 'aliases']:
+            for attr in ["key", "character", "name", "is_printable", "aliases"]:
                 if hasattr(event, attr):
                     try:
                         event_attrs[attr] = getattr(event, attr)
                     except Exception as attr_error:
                         event_attrs[attr] = f"ERROR: {attr_error}"
-            
+
             key_logger.info(f"App.on_key: {event_attrs}")
             logger.debug(f"Key event: key={event.key}")
-            
+
             # Handle global Escape key - quit from any mode
             if event.key == "escape":
                 # Selection mode ESC is handled by SelectionTextArea
-                
+
                 # From any mode/state, ESC should quit
                 if self.mode == "SEARCH":
                     self.mode = "NORMAL"
@@ -806,10 +816,10 @@ class MinimalDocumentBrowser(App):
                         event.prevent_default()
                         event.stop()
                         self.action_untag_mode()
-        
-        # Note: In Textual 4.0, we should NOT call super().on_key() 
+
+        # Note: In Textual 4.0, we should NOT call super().on_key()
         # as Textual automatically handles event propagation
-        
+
         except Exception as e:
             key_logger.error(f"CRASH in App.on_key: {e}")
             logger.error(f"Error in App.on_key: {e}", exc_info=True)
@@ -844,7 +854,8 @@ class MinimalDocumentBrowser(App):
                 except Exception:
                     # Fall back to simple filtering if search_by_tags fails
                     self.filtered_docs = [
-                        doc for doc in self.documents
+                        doc
+                        for doc in self.documents
                         if any(
                             tag.lower() in [t.lower() for t in doc.get("tags", [])] for tag in tags
                         )
@@ -873,7 +884,7 @@ class MinimalDocumentBrowser(App):
             title_space = 50 - 11
             title = doc["title"][:title_space]
             if len(doc["title"]) >= title_space:
-                title = title[:title_space-3] + "..."
+                title = title[: title_space - 3] + "..."
 
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
@@ -1050,14 +1061,13 @@ class MinimalDocumentBrowser(App):
         # Show notification with auto-dismiss after 3 seconds
         status = self.query_one("#status", Label)
         status.update("Documents refreshed")
-        
+
         # Cancel any existing timer
         if self.refresh_timer:
             self.refresh_timer.stop()
-        
+
         # Set a timer to restore the normal status after 3 seconds
         self.refresh_timer = self.set_timer(3.0, self.restore_normal_status)
-
 
     def update_tag_selector(self):
         """Update the visual tag selector."""
@@ -1183,7 +1193,7 @@ class MinimalDocumentBrowser(App):
                 try:
                     text_area = self.query_one("#preview-content", SelectionTextArea)
                     selected_text = text_area.selected_text
-                    
+
                     if selected_text:
                         logger.debug(f"Copying selected text: {len(selected_text)} characters")
                         self.copy_to_clipboard(selected_text)
@@ -1194,7 +1204,9 @@ class MinimalDocumentBrowser(App):
                         logger.debug("No text selected, copying full document")
                         self.action_copy_content()
                 except Exception as text_error:
-                    logger.debug(f"Could not get selected text: {text_error}, copying full document")
+                    logger.debug(
+                        f"Could not get selected text: {text_error}, copying full document"
+                    )
                     self.action_copy_content()
             else:
                 logger.debug("Not in selection mode, copying full document")
@@ -1217,7 +1229,7 @@ class MinimalDocumentBrowser(App):
             try:
                 doc = db.get_document(str(self.current_doc_id))
                 if doc:
-                    content = doc['content'].strip()
+                    content = doc["content"].strip()
                     if not content.startswith(f"# {doc['title']}"):
                         content_to_copy = f"# {doc['title']}\n\n{content}"
                     else:
@@ -1234,7 +1246,6 @@ class MinimalDocumentBrowser(App):
                 status = self.query_one("#status", Label)
                 self.cancel_refresh_timer()
                 status.update(f"Copy failed: {e}")
-
 
     def action_focus_preview(self):
         """Focus the preview pane."""
@@ -1261,7 +1272,6 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
 
-
             if not self.selection_mode:
                 # Switch to selection mode - use TextArea for native selection support
                 self.selection_mode = True
@@ -1280,7 +1290,7 @@ class MinimalDocumentBrowser(App):
                 # Remove old widgets
                 container.remove_children()
 
-                # Create TextArea for selection
+                # Create TextArea for selection with improved error handling
                 try:
                     text_area = SelectionTextArea(
                         self,  # Pass app instance
@@ -1289,11 +1299,11 @@ class MinimalDocumentBrowser(App):
                     )
                     # Make it read-only after creation
                     text_area.read_only = True
-                    # Also try setting disabled but keep it focusable for selection
-                    text_area.disabled = False  # Keep enabled for interaction
-                    text_area.can_focus = True  # Ensure it can be focused
+                    # Keep it focusable for selection
+                    text_area.disabled = False
+                    text_area.can_focus = True
 
-                    # FIX: Constrain TextArea to container width
+                    # Set width constraints BEFORE mounting (key fix!)
                     text_area.styles.width = "100%"
                     text_area.styles.max_width = "100%"
                     text_area.styles.overflow_x = "hidden"
@@ -1302,13 +1312,13 @@ class MinimalDocumentBrowser(App):
                     if hasattr(text_area, 'word_wrap'):
                         text_area.word_wrap = True
 
-                    # Mount the widget
+                    # Mount the widget with constraints already applied
                     container.mount(text_area)
                     text_area.focus()
 
                     self.cancel_refresh_timer()
                     status.update(
-                        "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit (typing disabled)"
+                        "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit"
                     )
                 except Exception as mount_error:
                     self.cancel_refresh_timer()
@@ -1333,11 +1343,11 @@ class MinimalDocumentBrowser(App):
                 # Mount the new widget
                 container.mount(richlog)
 
-                # FIX: Reset container scroll and refresh layout
+                # Reset container scroll and refresh layout
                 container.scroll_to(0, 0, animate=False)
                 container.refresh(layout=True)
 
-                # Use deferred content restoration like main branch
+                # Use deferred content restoration
                 self.call_after_refresh(self._restore_preview_content)
 
                 self.cancel_refresh_timer()
@@ -1383,6 +1393,7 @@ class MinimalDocumentBrowser(App):
             table.focus()
         except Exception:
             import traceback
+
             traceback.print_exc()
 
     def action_save_preview(self):
@@ -1396,27 +1407,29 @@ class MinimalDocumentBrowser(App):
         # Edit mode is now handled by external editor via 'e' key
         pass
 
-
     def copy_to_clipboard(self, text: str):
         """Copy text to clipboard with fallback methods."""
         import subprocess
+
         success = False
 
         # Try pbcopy on macOS first
         try:
-            subprocess.run(['pbcopy'], input=text, text=True, check=True)
+            subprocess.run(["pbcopy"], input=text, text=True, check=True)
             success = True
         except (subprocess.CalledProcessError, FileNotFoundError):
             # Try xclip on Linux
             try:
-                subprocess.run(['xclip', '-selection', 'clipboard'],
-                             input=text, text=True, check=True)
+                subprocess.run(
+                    ["xclip", "-selection", "clipboard"], input=text, text=True, check=True
+                )
                 success = True
             except (subprocess.CalledProcessError, FileNotFoundError):
                 # Try xsel on Linux as fallback
                 try:
-                    subprocess.run(['xsel', '--clipboard', '--input'],
-                                 input=text, text=True, check=True)
+                    subprocess.run(
+                        ["xsel", "--clipboard", "--input"], input=text, text=True, check=True
+                    )
                     success = True
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     pass
@@ -1428,7 +1441,6 @@ class MinimalDocumentBrowser(App):
         else:
             self.cancel_refresh_timer()
             status.update("Clipboard not available - manual selection required")
-
 
     def restore_normal_status(self):
         """Restore the normal status display after temporary messages."""
@@ -1479,4 +1491,3 @@ def run_minimal():
 
 if __name__ == "__main__":
     sys.exit(run_minimal())
-

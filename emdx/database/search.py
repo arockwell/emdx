@@ -12,13 +12,13 @@ def search_documents(
     query: str, project: Optional[str] = None, limit: int = 10, fuzzy: bool = False
 ) -> list[dict[str, Any]]:
     """Search documents using FTS5
-    
+
     Args:
         query: The search query string
         project: Optional project filter
         limit: Maximum number of results to return
         fuzzy: Enable fuzzy search (currently uses regular FTS5)
-        
+
     Returns:
         List of document dictionaries with search results including snippets and ranking
     """
