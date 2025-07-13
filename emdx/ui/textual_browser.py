@@ -1323,10 +1323,14 @@ class MinimalDocumentBrowser(App):
                 pass  # Indicator might not exist yet
 
     def watch_mode(self, old_mode: str, new_mode: str):
-        search = self.query_one("#search-input", Input)
-        tag_input = self.query_one("#tag-input", Input)
-        tag_selector = self.query_one("#tag-selector", Label)
-        table = self.query_one("#doc-table", DataTable)
+        try:
+            search = self.query_one("#search-input", Input)
+            tag_input = self.query_one("#tag-input", Input)
+            tag_selector = self.query_one("#tag-selector", Label)
+            table = self.query_one("#doc-table", DataTable)
+        except Exception:
+            # Widgets don't exist yet (during initialization) - skip mode handling
+            return
 
         if new_mode == "SEARCH":
             search.add_class("visible")
@@ -1980,16 +1984,25 @@ class MinimalDocumentBrowser(App):
     def action_toggle_selection_mode(self):
         """Toggle between formatted view and text selection mode."""
         try:
-            container = self.query_one("#preview", ScrollableContainer)
-            status = self.query_one("#status", Label)
+            # Check if we're in the right screen/context
+            try:
+                container = self.query_one("#preview", ScrollableContainer)
+                status = self.query_one("#status", Label)
+            except Exception:
+                # We're not in the main browser screen - selection mode not available
+                return
 
             if not self.selection_mode:
                 # Switch to selection mode - use TextArea for native selection support
                 self.selection_mode = True
 
-                # Get current document content as plain text first
+                # Get content based on current mode
                 plain_content = "Select and copy text here..."
-                if self.current_doc_id:
+                
+                if self.mode == "LOG_BROWSER":
+                    # Extract log content from RichLog
+                    plain_content = self._extract_log_content()
+                elif self.current_doc_id:
                     doc = get_document(str(self.current_doc_id))
                     if doc:
                         content = doc["content"].strip()
@@ -1998,69 +2011,104 @@ class MinimalDocumentBrowser(App):
                         else:
                             plain_content = content
 
-                # Remove old widgets
-                container.remove_children()
-
-                # Create TextArea for selection with improved error handling
+                # Remove old widgets explicitly and safely
                 try:
-                    text_area = SelectionTextArea(
-                        self,  # Pass app instance
-                        plain_content,
-                        id="preview-content"
-                    )
-                    # Make it read-only after creation
-                    text_area.read_only = True
-                    # Keep it focusable for selection
-                    text_area.disabled = False
-                    text_area.can_focus = True
+                    # First try to remove by query
+                    existing_widget = container.query_one("#preview-content")
+                    if existing_widget:
+                        existing_widget.remove()
+                except Exception:
+                    pass
+                
+                # Then remove all children as backup
+                container.remove_children()
+                
+                # Refresh the container to ensure DOM is clean
+                container.refresh(layout=True)
 
-                    # Apply the constrained-textarea CSS class
-                    text_area.add_class("constrained-textarea")
+                # Use deferred mounting to avoid ID conflicts
+                def mount_text_area():
+                    try:
+                        text_area = SelectionTextArea(
+                            self,  # Pass app instance
+                            plain_content,
+                            id="preview-content"
+                        )
+                        # Make it read-only after creation
+                        text_area.read_only = True
+                        # Keep it focusable for selection
+                        text_area.disabled = False
+                        text_area.can_focus = True
 
-                    # Try to enable word wrap if the property exists
-                    if hasattr(text_area, 'word_wrap'):
-                        text_area.word_wrap = True
+                        # Apply the constrained-textarea CSS class
+                        text_area.add_class("constrained-textarea")
 
-                    # Mount the widget with constraints already applied
-                    container.mount(text_area)
-                    text_area.focus()
+                        # Try to enable word wrap if the property exists
+                        if hasattr(text_area, 'word_wrap'):
+                            text_area.word_wrap = True
 
-                    self.cancel_refresh_timer()
-                    status.update(
-                        "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit"
-                    )
-                except Exception as mount_error:
-                    self.cancel_refresh_timer()
-                    status.update(f"Failed to create selection widget: {mount_error}")
+                        # Mount the widget with constraints already applied
+                        container.mount(text_area)
+                        text_area.focus()
+
+                        self.cancel_refresh_timer()
+                        status.update(
+                            "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit"
+                        )
+                    except Exception as mount_error:
+                        self.cancel_refresh_timer()
+                        status.update(f"Failed to create selection widget: {mount_error}")
+
+                # Use call_after_refresh to ensure DOM is clean before mounting
+                self.call_after_refresh(mount_text_area)
 
             else:
                 # Switch back to formatted view
                 self.selection_mode = False
 
-                # Remove old widgets
+                # Remove old widgets explicitly and safely
+                try:
+                    # First try to remove by query
+                    existing_widget = container.query_one("#preview-content")
+                    if existing_widget:
+                        existing_widget.remove()
+                except Exception:
+                    pass
+                
+                # Then remove all children as backup
                 container.remove_children()
-
-                # Create RichLog for formatted display
-                richlog = RichLog(
-                    id="preview-content",
-                    wrap=True,
-                    highlight=True,
-                    markup=True,
-                    auto_scroll=False
-                )
-
-                # Mount the new widget
-                container.mount(richlog)
-
-                # Reset container scroll and refresh layout
-                container.scroll_to(0, 0, animate=False)
+                
+                # Refresh the container to ensure DOM is clean
                 container.refresh(layout=True)
 
-                # Use deferred content restoration
-                self.call_after_refresh(self._restore_preview_content)
+                # Use deferred mounting to avoid ID conflicts
+                def mount_richlog():
+                    richlog = RichLog(
+                        id="preview-content",
+                        wrap=True,
+                        highlight=True,
+                        markup=True,
+                        auto_scroll=False
+                    )
+
+                    # Mount the new widget
+                    container.mount(richlog)
+
+                    # Reset container scroll and refresh layout
+                    container.scroll_to(0, 0, animate=False)
+                    container.refresh(layout=True)
+
+                    # Use deferred content restoration
+                    self.call_after_refresh(self._restore_preview_content)
+
+                # Use call_after_refresh to ensure DOM is clean before mounting
+                self.call_after_refresh(mount_richlog)
 
                 self.cancel_refresh_timer()
-                status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
+                if self.mode == "LOG_BROWSER":
+                    status.update("LOG BROWSER: j/k to navigate logs, 's' for text selection, 'q' to exit")
+                else:
+                    status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
 
         except Exception as e:
             # Recovery: ensure we have a working widget
@@ -2093,8 +2141,12 @@ class MinimalDocumentBrowser(App):
     def _restore_preview_content(self):
         """Restore preview content after switching back from selection mode."""
         try:
-            # Update the preview with current document
-            if self.current_doc_id:
+            if self.mode == "LOG_BROWSER":
+                # Restore log content
+                if hasattr(self, 'current_execution_index') and self.executions:
+                    self.load_execution_log(self.current_execution_index)
+            elif self.current_doc_id:
+                # Update the preview with current document
                 self.update_preview(self.current_doc_id)
 
             # Return focus to table
@@ -2732,6 +2784,44 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update(f"Error setting up log browser: {e}")
     
+    def _extract_log_content(self) -> str:
+        """Extract plain text content from the current log for selection mode."""
+        try:
+            if self.mode == "LOG_BROWSER" and hasattr(self, 'current_log_file') and self.current_log_file:
+                # Get execution info for header
+                execution = self.executions[self.current_execution_index] if self.executions else None
+                
+                # Build header
+                lines = []
+                if execution:
+                    lines.append(f"=== Execution {execution.id} ===")
+                    lines.append(f"Document: {execution.doc_title}")
+                    lines.append(f"Status: {execution.status}")
+                    lines.append(f"Started: {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                    if execution.completed_at:
+                        lines.append(f"Completed: {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                    if execution.duration:
+                        lines.append(f"Duration: {execution.duration:.1f}s")
+                    lines.append("=== Log Output ===")
+                    lines.append("")
+                
+                # Read actual log file content
+                if self.current_log_file.exists():
+                    with open(self.current_log_file, 'r') as f:
+                        log_content = f.read()
+                        if log_content:
+                            lines.append(log_content)
+                        else:
+                            lines.append("(No log content yet)")
+                else:
+                    lines.append("Log file not found")
+                
+                return "\n".join(lines)
+            else:
+                return "No log content available"
+        except Exception as e:
+            return f"Error extracting log content: {e}"
+    
     def start_log_monitoring(self):
         """Start monitoring the log file for changes."""
         if hasattr(self, 'log_monitor_timer'):
@@ -2759,10 +2849,14 @@ class MinimalDocumentBrowser(App):
                     new_content = f.read()
                     
                 if new_content:
-                    preview = self.query_one("#preview-content", RichLog)
-                    preview.write(new_content)
-                    # Auto-scroll to bottom
-                    preview.scroll_end(animate=False)
+                    try:
+                        preview = self.query_one("#preview-content", RichLog)
+                        preview.write(new_content)
+                        # Auto-scroll to bottom
+                        preview.scroll_end(animate=False)
+                    except Exception:
+                        # Widget doesn't exist (different screen) - skip update
+                        pass
                     
                 self.last_log_size = current_size
                 
@@ -2781,7 +2875,12 @@ class MinimalDocumentBrowser(App):
             self.current_log_file = Path(execution.log_file)
             
             # Clear preview and load log content
-            preview = self.query_one("#preview-content", RichLog)
+            try:
+                preview = self.query_one("#preview-content", RichLog)
+            except Exception:
+                # Widget doesn't exist (different screen) - cannot load log
+                return
+            
             preview.clear()
             
             # Show execution header
@@ -2815,13 +2914,21 @@ class MinimalDocumentBrowser(App):
             preview.scroll_end(animate=False)
             
             # Highlight current row in table
-            table = self.query_one("#doc-table", DataTable)
-            table.move_cursor(row=index)
+            try:
+                table = self.query_one("#doc-table", DataTable)
+                table.move_cursor(row=index)
+            except Exception:
+                # Table doesn't exist (different screen) - skip highlighting
+                pass
             
         except Exception as e:
             self.cancel_refresh_timer()
-            status = self.query_one("#status", Label)
-            status.update(f"Error loading execution log: {e}")
+            try:
+                status = self.query_one("#status", Label)
+                status.update(f"Error loading execution log: {e}")
+            except Exception:
+                # Status widget doesn't exist (different screen) - ignore error
+                pass
     
     def action_next_log(self):
         """Switch to next execution log (j in LOG_BROWSER mode)."""
