@@ -483,7 +483,10 @@ class MinimalDocumentBrowser(App):
         table = self.query_one("#doc-table", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
-        table.add_columns("ID", "Title", "Tags")
+        
+        # Only add columns if they don't already exist
+        if table.column_count == 0:
+            table.add_columns("ID", "Title", "Tags")
 
         for doc in self.filtered_docs:
             # Format timestamp as MM-DD HH:MM (11 chars)
