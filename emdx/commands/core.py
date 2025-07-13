@@ -61,10 +61,12 @@ def get_input_content(input_arg: Optional[str]) -> InputContent:
     # Priority 1: Check if stdin has data
     if not sys.stdin.isatty():
         content = sys.stdin.read()
-        return InputContent(content=content, source_type="stdin")
+        if content.strip():  # Only use stdin if it has actual content
+            return InputContent(content=content, source_type="stdin")
+        # Fall through to check input_arg if stdin is empty
 
     # Priority 2: Check if input is provided
-    elif input_arg:
+    if input_arg:
         # Check if it's a file path
         file_path = Path(input_arg)
         if file_path.exists() and file_path.is_file():
