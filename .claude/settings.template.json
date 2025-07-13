@@ -1,0 +1,51 @@
+{
+  "// IMPORTANT": "This template shows proper deny rules for interactive commands - BUT THEY DON'T WORK!",
+  "// BUG": "As of 2025-07-13, deny rules are being ignored by Claude Code",
+  "// ISSUE": "Even with these rules, 'emdx gui' still executes",
+  "permissions": {
+    "allow": [
+      "// List specific commands, not wildcards like 'emdx:*'",
+      "Bash(emdx save*)",
+      "Bash(emdx find*)",
+      "Bash(emdx view*)",
+      "Bash(emdx edit*)",
+      "Bash(emdx delete*)",
+      "Bash(emdx restore*)",
+      "Bash(emdx tag*)",
+      "Bash(emdx untag*)",
+      "Bash(emdx tags*)",
+      "Bash(emdx retag*)",
+      "Bash(emdx merge-tags*)",
+      "Bash(emdx list*)",
+      "Bash(emdx recent*)",
+      "Bash(emdx stats*)",
+      "Bash(emdx project*)",
+      "Bash(emdx trash*)",
+      "// Add poetry run versions of the same",
+      "Bash(poetry run emdx save*)",
+      "Bash(poetry run emdx find*)",
+      "Bash(poetry run emdx view*)",
+      "Bash(poetry run emdx edit*)",
+      "// ... etc"
+    ],
+    "deny": [
+      "// THESE RULES DON'T WORK - BUG IN CLAUDE CODE",
+      "Bash(emdx gui)",
+      "Bash(emdx gui *)",
+      "Bash(emdx tui)",
+      "Bash(emdx tui *)",
+      "Bash(poetry run emdx gui)",
+      "Bash(poetry run emdx gui *)",
+      "Bash(poetry run emdx tui)",
+      "Bash(poetry run emdx tui *)",
+      "// Add other interactive commands here"
+    ]
+  },
+  "hooks": {
+    "// NOTE": "This hook also doesn't prevent execution",
+    "PreToolUse": {
+      "Bash": "if echo \"$1\" | grep -qE '(emdx gui|emdx tui|poetry run emdx gui|poetry run emdx tui)'; then echo 'ERROR: Interactive TUI commands are blocked by user settings for Claude Code'; exit 1; fi"
+    }
+  },
+  "// WORKAROUND": "Until this bug is fixed, DO NOT ask Claude to run 'emdx gui'"
+}

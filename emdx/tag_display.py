@@ -1,6 +1,6 @@
 """Tag display utilities for consistent ordering and formatting."""
 
-from typing import List
+from typing import List, Tuple
 
 
 def order_tags(tags: List[str]) -> List[str]:
@@ -41,3 +41,36 @@ def format_tags(tags: List[str]) -> str:
     
     ordered = order_tags(tags)
     return ' '.join(ordered)
+
+
+def truncate_emoji_safe(text: str, max_chars: int) -> Tuple[str, bool]:
+    """
+    Truncate text at emoji boundaries to avoid breaking multi-char emojis.
+    
+    This is important for emojis like 🏗️ which consist of multiple Unicode
+    code points (base emoji + variation selector).
+    
+    Args:
+        text: Text to truncate
+        max_chars: Maximum character count
+        
+    Returns:
+        Tuple of (truncated_text, was_truncated)
+    """
+    if len(text) <= max_chars:
+        return text, False
+    
+    # Find safe truncation point
+    truncate_at = max_chars
+    
+    # Check if we're in the middle of a multi-char sequence
+    while truncate_at > 0 and truncate_at < len(text):
+        next_char = text[truncate_at]
+        # Check for variation selectors (U+FE00-U+FE0F) and other combining marks
+        if 0xFE00 <= ord(next_char) <= 0xFE0F:
+            # Move back to include the whole emoji
+            truncate_at -= 1
+        else:
+            break
+    
+    return text[:truncate_at], True
