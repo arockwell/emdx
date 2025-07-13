@@ -574,7 +574,7 @@ class VimEditTextArea(TextArea):
     def _delete_right_safe(self) -> None:
         """Delete character to the right, safely handling boundaries."""
         try:
-            self.delete_right()
+            self.action_delete_right()
         except:
             # Ignore if at end of document
             pass
