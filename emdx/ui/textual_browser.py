@@ -121,20 +121,28 @@ class TitleInput(Input):
         self.app_instance = app_instance
     
     def on_key(self, event: events.Key) -> None:
-        """Handle Tab to switch to content editor."""
-        if event.key == "tab":
-            # Try to focus the content editor
+        """Handle Tab and vim keys to switch to content editor."""
+        # Vim keys that should switch focus to content editor
+        vim_keys = {'j', 'k', 'h', 'l', 'i', 'a', 'o', 'x', 'd', 'y', 'p', 'v', 'g', 'w', 'b', 'e', '0', '$', 'u'}
+        vim_special_keys = {'up', 'down', 'left', 'right', 'enter'}
+        
+        char = event.character if hasattr(event, 'character') else None
+        
+        if event.key == "tab" or char in vim_keys or event.key in vim_special_keys:
+            # Switch focus to content editor for vim keys
             try:
                 edit_area = self.app_instance.query_one("#preview-content", VimEditTextArea)
                 edit_area.focus()
+                # Let the edit area handle this key event
+                edit_area.on_key(event)
                 event.stop()
                 event.prevent_default()
                 return
             except:
                 pass  # Editor might not exist
         
+        # For other keys (typing), let Input handle normally
         # Input widget doesn't have on_key method, so don't call super()
-        # Let the event bubble up naturally for Input to handle
 
 
 class VimEditTextArea(TextArea):
