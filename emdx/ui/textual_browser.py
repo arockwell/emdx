@@ -27,6 +27,7 @@ from emdx.models.tags import (
     search_by_tags,
 )
 from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
+from emdx.emoji_aliases import expand_aliases
 
 # Set up logging
 log_dir = Path.home() / ".config" / "emdx"
@@ -832,8 +833,10 @@ class MinimalDocumentBrowser(App):
 
             if tags:
                 try:
+                    # Expand aliases before searching
+                    expanded_tags = expand_aliases(tags)
                     # Use the existing search_by_tags function
-                    results = search_by_tags(tags, mode=mode, limit=1000)
+                    results = search_by_tags(expanded_tags, mode=mode, limit=1000)
 
                     # Convert results to match our document format
                     result_ids = {doc["id"] for doc in results}

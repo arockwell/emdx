@@ -16,6 +16,7 @@ from emdx.models.tags import (
     remove_tags_from_document,
     rename_tag,
 )
+from emdx.emoji_aliases import expand_aliases, generate_legend
 
 app = typer.Typer()
 console = Console()
@@ -240,4 +241,19 @@ def merge_tags_cmd(
         raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error merging tags: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def legend():
+    """Show emoji tag legend with text aliases"""
+    try:
+        from rich.markdown import Markdown
+        
+        legend_content = generate_legend()
+        markdown = Markdown(legend_content)
+        console.print(markdown)
+        
+    except Exception as e:
+        console.print(f"[red]Error displaying legend: {e}[/red]")
         raise typer.Exit(1) from e
