@@ -453,20 +453,6 @@ class MinimalDocumentBrowser(App):
 
     def on_mount(self) -> None:
         try:
-            # ENSURE CLEAN STATE - remove any existing widgets from preview
-            container = self.query_one("#preview", ScrollableContainer)
-            container.remove_children()
-            
-            # Mount a fresh RichLog widget
-            richlog = RichLog(
-                id="preview-content",
-                wrap=True,
-                highlight=True,
-                markup=True,
-                auto_scroll=False
-            )
-            container.mount(richlog)
-            
             self.load_documents()
             self.setup_table()
             self.update_status()
@@ -523,6 +509,13 @@ class MinimalDocumentBrowser(App):
             )
 
         table.focus()
+        
+        # Select the first row to show content in preview
+        if len(self.filtered_docs) > 0:
+            table.move_cursor(row=0)
+            # Manually trigger the first preview update
+            self.current_doc_id = self.filtered_docs[0]["id"]
+            self.update_preview(self.current_doc_id)
 
     def on_row_selected(self):
         table = self.query_one("#doc-table", DataTable)
