@@ -122,13 +122,14 @@ class TitleInput(Input):
     
     def on_key(self, event: events.Key) -> None:
         """Handle Tab and vim keys to switch to content editor."""
+        logger.debug(f"TitleInput.on_key: key={event.key}")
         # Vim keys that should switch focus to content editor
         vim_keys = {'j', 'k', 'h', 'l', 'i', 'a', 'o', 'x', 'd', 'y', 'p', 'v', 'g', 'w', 'b', 'e', '0', '$', 'u'}
         vim_special_keys = {'up', 'down', 'left', 'right', 'enter'}
         
         char = event.character if hasattr(event, 'character') else None
         
-        if event.key == "tab" or char in vim_keys or event.key in vim_special_keys:
+        if event.key == "tab" or event.key == "escape" or char in vim_keys or event.key in vim_special_keys:
             # Switch focus to content editor for vim keys
             try:
                 edit_area = self.app_instance.query_one("#preview-content", VimEditTextArea)
@@ -938,15 +939,13 @@ class MinimalDocumentBrowser(App):
         border: tall $accent;
     }
     
-    /* Try to style cursor colors for different vim modes */
+    /* Vim mode styling - using background colors instead of cursor */
     .vim-insert-mode {
-        caret-color: green;
-        cursor-color: green;
+        background: $background;
     }
     
     .vim-normal-mode {
-        caret-color: blue;
-        cursor-color: blue;
+        background: $background;
     }
 
     RichLog {
@@ -1103,6 +1102,7 @@ class MinimalDocumentBrowser(App):
             # If there's any error during mount, ensure we have a usable state
             import traceback
 
+            logger.error(f"Error during on_mount(): {e}")
             traceback.print_exc()
             self.exit(message=f"Error during startup: {e}")
 
@@ -1513,6 +1513,11 @@ class MinimalDocumentBrowser(App):
 
             # Handle global Escape key - quit from any mode
             if event.key == "escape":
+                # Edit mode ESC is handled by VimEditTextArea - don't interfere
+                if self.edit_mode:
+                    # Let the edit widget handle ESC
+                    return
+                
                 # Selection mode ESC is handled by SelectionTextArea
 
                 # From any mode/state, ESC should quit
@@ -2198,7 +2203,8 @@ class MinimalDocumentBrowser(App):
             container.refresh(layout=True)
             edit_wrapper.refresh(layout=True)
             
-            title_input.focus()  # Start with title focused
+            # Focus the content editor first instead of title input 
+            edit_area.focus()
             
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
