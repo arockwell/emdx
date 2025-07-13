@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from . import migrations
+from .database import migrations
 
 
 class SQLiteDatabase:
