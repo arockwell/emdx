@@ -17,8 +17,8 @@ from rich.table import Table
 
 from emdx.sqlite_database import db
 from emdx.tags import add_tags_to_document, get_document_tags, search_by_tags
-from emdx.tag_display import format_tags
-from emdx.utils import get_git_project
+from emdx.display.formatting import format_tags
+from emdx.utils.git import get_git_project
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal

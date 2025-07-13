@@ -26,7 +26,7 @@ from emdx.tags import (
     remove_tags_from_document,
     search_by_tags,
 )
-from emdx.tag_display import format_tags, order_tags, truncate_emoji_safe
+from emdx.display.formatting import format_tags, order_tags, truncate_emoji_safe
 
 # Set up logging
 log_dir = Path.home() / ".config" / "emdx"

@@ -3,7 +3,7 @@
 import sqlite3
 from typing import Callable
 
-from .config import get_db_path
+from .config.settings import get_db_path
 
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
