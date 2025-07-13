@@ -22,6 +22,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
 from emdx.database import db
+from emdx.models.documents import get_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -643,7 +644,7 @@ class FullScreenView(Screen):
 
     def on_mount(self) -> None:
         """Load document content when mounted."""
-        doc = db.get_document(str(self.doc_id))
+        doc = get_document(str(self.doc_id))
         if doc:
             content_log = self.query_one("#content", RichLog)
             content_log.clear()
@@ -699,7 +700,7 @@ class FullScreenView(Screen):
     def action_copy_content(self) -> None:
         """Copy current document content to clipboard."""
         try:
-            doc = db.get_document(str(self.doc_id))
+            doc = get_document(str(self.doc_id))
             if doc:
                 self.copy_to_clipboard(doc["content"])
         except Exception:
@@ -1109,7 +1110,7 @@ class MinimalDocumentBrowser(App):
 
     def update_preview(self, doc_id: int):
         try:
-            doc = db.get_document(str(doc_id))
+            doc = get_document(str(doc_id))
             if doc:
                 # Check if we're in selection mode or formatted mode
                 try:
@@ -1865,7 +1866,7 @@ class MinimalDocumentBrowser(App):
         logger.debug(f"action_copy_content called, current_doc_id={self.current_doc_id}")
         if self.current_doc_id:
             try:
-                doc = db.get_document(str(self.current_doc_id))
+                doc = get_document(str(self.current_doc_id))
                 if doc:
                     content = doc["content"].strip()
                     if not content.startswith(f"# {doc['title']}"):
@@ -1917,7 +1918,7 @@ class MinimalDocumentBrowser(App):
                 # Get current document content as plain text first
                 plain_content = "Select and copy text here..."
                 if self.current_doc_id:
-                    doc = db.get_document(str(self.current_doc_id))
+                    doc = get_document(str(self.current_doc_id))
                     if doc:
                         content = doc["content"].strip()
                         if not content.startswith(f"# {doc['title']}"):
@@ -2060,7 +2061,7 @@ class MinimalDocumentBrowser(App):
                 self.action_toggle_selection_mode()
             
             # Get document content
-            doc = db.get_document(str(self.current_doc_id))
+            doc = get_document(str(self.current_doc_id))
             if not doc:
                 return
             
@@ -2163,7 +2164,7 @@ class MinimalDocumentBrowser(App):
             new_title = title_input.value if title_input else None
             
             # Get current document for comparison
-            doc = db.get_document(str(self.editing_doc_id))
+            doc = get_document(str(self.editing_doc_id))
             if not doc:
                 return
                 
@@ -2279,7 +2280,7 @@ class MinimalDocumentBrowser(App):
             from emdx.models.documents import update_document
             
             # Get current document for comparison
-            doc = db.get_document(str(self.editing_doc_id))
+            doc = get_document(str(self.editing_doc_id))
             if doc:
                 # Use new title if provided, otherwise keep existing
                 final_title = new_title if new_title else doc["title"]
