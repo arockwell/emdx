@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from rich.markdown import Markdown
@@ -26,6 +27,12 @@ from emdx.models.tags import (
     get_document_tags,
     remove_tags_from_document,
     search_by_tags,
+)
+from emdx.models.executions import (
+    Execution,
+    save_execution,
+    get_recent_executions,
+    update_execution_status,
 )
 from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
@@ -689,6 +696,8 @@ class MinimalDocumentBrowser(App):
     """Minimal document browser that signals external wrapper for nvim."""
 
     ENABLE_COMMAND_PALETTE = False
+    # Disable mouse support to prevent coordinate spam
+    MOUSE_DISABLED = True
     # Enable text selection globally
     ALLOW_SELECT = True
 
@@ -809,13 +818,26 @@ class MinimalDocumentBrowser(App):
         Binding("r", "refresh", "Refresh", key_display="r"),
         Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
         Binding("d", "delete", "Delete", show=False),
-        Binding("v", "view", "View", show=False),
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
         Binding("shift+t", "untag_mode", "Untag", show=False),
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
         Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
+        Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
+        Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
+        Binding("x", "claude_execute", "Execute", key_display="x"),
+        Binding("l", "log_browser", "Log Browser", key_display="l"),
+        # Number key bindings for switching between execution logs (only active in log browser mode)
+        Binding("1", "switch_log", "Log 1", show=False),
+        Binding("2", "switch_log", "Log 2", show=False),
+        Binding("3", "switch_log", "Log 3", show=False),
+        Binding("4", "switch_log", "Log 4", show=False),
+        Binding("5", "switch_log", "Log 5", show=False),
+        Binding("6", "switch_log", "Log 6", show=False),
+        Binding("7", "switch_log", "Log 7", show=False),
+        Binding("8", "switch_log", "Log 8", show=False),
+        Binding("9", "switch_log", "Log 9", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -832,6 +854,10 @@ class MinimalDocumentBrowser(App):
         self.filtered_docs = []
         self.current_doc_id = None
         self.refresh_timer = None  # Timer for auto-dismissing refresh status
+        # Log browser state
+        self.executions = []  # List of Execution objects
+        self.current_execution_index = 0
+        self.current_log_file = None
 
     def compose(self) -> ComposeResult:
         yield Input(
@@ -942,11 +968,6 @@ class MinimalDocumentBrowser(App):
                 return
             
             self.current_doc_id = doc["id"]
-
-            # Exit selection mode when switching documents
-            if self.selection_mode:
-                self.action_toggle_selection_mode()
-
             self.update_preview(doc["id"])
 
     def update_preview(self, doc_id: int):
@@ -1244,10 +1265,6 @@ class MinimalDocumentBrowser(App):
                         event.prevent_default()
                         event.stop()
                         self.action_delete()
-                    elif event.character == "v":
-                        event.prevent_default()
-                        event.stop()
-                        self.action_view()
                     elif event.character == "t":
                         event.prevent_default()
                         event.stop()
@@ -2034,8 +2051,465 @@ class MinimalDocumentBrowser(App):
             self.refresh_timer.stop()
             self.refresh_timer = None
 
+    def action_tmux_split_horizontal(self):
+        """Spawn a new tmux pane (horizontal split) with the current document."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for tmux split")
+            return
+            
+        if not os.environ.get('TMUX'):
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Not running in tmux session")
+            return
+            
+        self._spawn_tmux_pane(horizontal=True)
+        
+    def action_tmux_split_vertical(self):
+        """Spawn a new tmux pane (vertical split) with the current document."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for tmux split")
+            return
+            
+        if not os.environ.get('TMUX'):
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Not running in tmux session")
+            return
+            
+        self._spawn_tmux_pane(horizontal=False)
+        
+    def _spawn_tmux_pane(self, horizontal: bool = True):
+        """Internal method to spawn tmux pane with current document."""
+        try:
+            from emdx.models.documents import get_document
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("Document not found")
+                return
+                
+            # Create a temporary file with the document content
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+                f.write(f"# {doc['title']}\n\n")
+                f.write(doc['content'])
+                temp_path = f.name
+            
+            # Determine split direction
+            split_flag = '-h' if horizontal else '-v'
+            
+            # For now, just spawn a shell that shows the document
+            # You can replace this with your Claude command later
+            tmux_command = f"cat {temp_path} && echo '\n\n--- Document loaded ---' && bash"
+            
+            # Spawn the tmux pane
+            result = subprocess.run([
+                'tmux', 'split-window', split_flag, tmux_command
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                direction = "right" if horizontal else "below"
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update(f"Spawned tmux pane {direction} with: {doc['title']}")
+            else:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update(f"Failed to spawn tmux pane: {result.stderr}")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error spawning tmux pane: {e}")
+    
+    def action_claude_execute(self):
+        """Execute the current document with claude-auto in a tmux pane."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for execution")
+            return
+            
+        if not os.environ.get('TMUX'):
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Not running in tmux session - Claude execution requires tmux")
+            return
+            
+        try:
+            from emdx.models.documents import get_document
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("Document not found")
+                return
+            
+            # Create execution ID
+            exec_id = f"claude-{self.current_doc_id}-{int(time.time())}"
+            
+            # Create temp file with document content
+            temp_path = f"/tmp/emdx-claude-{self.current_doc_id}.md"
+            with open(temp_path, 'w') as f:
+                f.write(f"# {doc['title']}\n\n{doc['content']}")
+            
+            # Create logs directory
+            log_dir = Path.home() / ".config/emdx/logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / f"{exec_id}.log"
+            
+            # Create execution record
+            from datetime import datetime
+            execution = Execution(
+                id=exec_id,
+                doc_id=self.current_doc_id,
+                doc_title=doc['title'],
+                status='running',
+                started_at=datetime.now(),
+                log_file=str(log_path)
+            )
+            save_execution(execution)
+            
+            # Build claude-auto command with proper logging
+            fish_source = "source ~/.config/fish/.clauding-backup-20250706_014139/claude-auto.fish; source ~/.config/fish/.clauding-backup-20250706_014139/claude-pretty-parser.fish"
+            
+            # Create log file with header
+            with open(log_path, 'w') as f:
+                f.write(f"=== EMDX Claude Execution ===\n")
+                f.write(f"ID: {exec_id}\n")
+                f.write(f"Document: {doc['title']}\n")
+                f.write(f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 50 + "\n\n")
+            
+            # Redirect all output to log file
+            claude_cmd = f"claude-auto 'Execute this plan: @{temp_path}'"
+            background_cmd = f"fish -c '{fish_source}; {claude_cmd}' >> {log_path} 2>&1"
+            
+            # Start background process
+            process = subprocess.Popen(
+                background_cmd,
+                shell=True,
+                start_new_session=True
+            )
+            
+            # Always show success since Popen doesn't wait
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"🚀 Claude executing in background: {doc['title'][:30]}... → {exec_id[:8]} (Press 'l' for logs)")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error starting Claude execution: {e}")
+    
+    def action_log_browser(self):
+        """Switch to log browser mode to view and switch between execution logs."""
+        self.mode = "LOG_BROWSER"
+        self.setup_log_browser()
+    
+    def setup_log_browser(self):
+        """Set up the log browser interface with execution list and log viewer."""
+        try:
+            # Load recent executions from database
+            self.executions = get_recent_executions(limit=20)
+            
+            if not self.executions:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("No executions found - Press 'q' to return")
+                return
+            
+            # Start with the most recent execution
+            self.current_execution_index = 0
+            
+            # Replace the documents table with executions table
+            table = self.query_one("#doc-table", DataTable)
+            table.clear(columns=True)
+            table.add_columns("#", "Status", "Document", "Started", "Duration")
+            
+            # Populate executions table
+            for i, execution in enumerate(self.executions):
+                status_icon = {
+                    'running': '🔄',
+                    'completed': '✅',
+                    'failed': '❌'
+                }.get(execution.status, '❓')
+                
+                duration = ""
+                if execution.duration:
+                    if execution.duration < 60:
+                        duration = f"{int(execution.duration)}s"
+                    else:
+                        mins = int(execution.duration // 60)
+                        secs = int(execution.duration % 60)
+                        duration = f"{mins}m{secs}s"
+                elif execution.status == 'running':
+                    duration = "running..."
+                
+                table.add_row(
+                    str(i + 1),  # Number for keyboard selection
+                    f"{status_icon} {execution.status}",
+                    execution.doc_title[:30],
+                    execution.started_at.strftime('%H:%M:%S'),
+                    duration
+                )
+            
+            # Select first row and load its log
+            table.move_cursor(row=0)
+            self.load_execution_log(0)
+            
+            # Update status with instructions
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (Press 1-9 to switch, 'q' to exit, auto-refresh every 2s)")
+            
+            # Start monitoring for log updates
+            self.start_log_monitoring()
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error setting up log browser: {e}")
+    
+    def start_log_monitoring(self):
+        """Start monitoring the log file for changes."""
+        if hasattr(self, 'log_monitor_timer'):
+            self.log_monitor_timer.stop()
+        
+        # Monitor every 2 seconds in log browser mode
+        self.log_monitor_timer = self.set_interval(2.0, self.update_log_content)
+        self.last_log_size = 0
+    
+    def update_log_content(self):
+        """Update log content if file has changed."""
+        if not hasattr(self, 'current_log_file') or self.mode != "LOG_BROWSER":
+            return
+            
+        try:
+            if not self.current_log_file or not self.current_log_file.exists():
+                return
+                
+            # Check if file has grown
+            current_size = self.current_log_file.stat().st_size
+            if current_size > self.last_log_size:
+                # Read new content
+                with open(self.current_log_file, 'r') as f:
+                    f.seek(self.last_log_size)
+                    new_content = f.read()
+                    
+                if new_content:
+                    preview = self.query_one("#preview-content", RichLog)
+                    preview.write(new_content)
+                    # Auto-scroll to bottom
+                    preview.scroll_end(animate=False)
+                    
+                self.last_log_size = current_size
+                
+        except Exception as e:
+            # Silently handle file reading errors
+            pass
+    
+    def load_execution_log(self, index: int):
+        """Load the log file for the execution at the given index."""
+        if index < 0 or index >= len(self.executions):
+            return
+            
+        try:
+            execution = self.executions[index]
+            self.current_execution_index = index
+            self.current_log_file = Path(execution.log_file)
+            
+            # Clear preview and load log content
+            preview = self.query_one("#preview-content", RichLog)
+            preview.clear()
+            
+            # Show execution header
+            preview.write(f"[bold cyan]=== Execution {execution.id} ===[/bold cyan]")
+            preview.write(f"[yellow]Document:[/yellow] {execution.doc_title}")
+            preview.write(f"[yellow]Status:[/yellow] {execution.status}")
+            preview.write(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            if execution.completed_at:
+                preview.write(f"[yellow]Completed:[/yellow] {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            if execution.duration:
+                preview.write(f"[yellow]Duration:[/yellow] {execution.duration:.1f}s")
+            preview.write("[bold cyan]=== Log Output ===[/bold cyan]")
+            preview.write("")
+            
+            # Load log file content
+            if self.current_log_file.exists():
+                with open(self.current_log_file, 'r') as f:
+                    content = f.read()
+                    if content:
+                        preview.write(content)
+                    else:
+                        preview.write("[dim](No log content yet)[/dim]")
+                
+                # Reset size tracking for live updates
+                self.last_log_size = self.current_log_file.stat().st_size
+            else:
+                preview.write("[red]Log file not found[/red]")
+                self.last_log_size = 0
+            
+            # Auto-scroll to bottom
+            preview.scroll_end(animate=False)
+            
+            # Highlight current row in table
+            table = self.query_one("#doc-table", DataTable)
+            table.move_cursor(row=index)
+            
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error loading execution log: {e}")
+    
+    def action_switch_log(self):
+        """Switch to execution log based on number key pressed."""
+        if self.mode != "LOG_BROWSER":
+            return
+            
+        # Get the key that was pressed
+        # This is a bit tricky - we need to capture which number key was pressed
+        # We'll handle this in the key event handler instead
+        pass
+    
+    def on_key(self, event: events.Key) -> None:
+        """Handle key events, especially number keys for log switching."""
+        try:
+            key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
+            
+            # Handle number keys for log switching in log browser mode only
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
+                if hasattr(event, 'key') and event.key and event.key.isdigit():
+                    log_number = int(event.key)
+                    if 1 <= log_number <= min(9, len(self.executions)):
+                        self.load_execution_log(log_number - 1)  # Convert to 0-based index
+                        event.stop()
+                        event.prevent_default()
+                        return
+            
+            # Let parent handle other keys
+            super().on_key(event)
+        except Exception as e:
+            # Log error but don't crash
+            key_logger.error(f"Error in on_key: {e}")
+            # Still let parent handle the key - but safely
+            try:
+                super().on_key(event)
+            except Exception:
+                # If parent also fails, just log and continue
+                pass
+    
+    
+    async def on_event(self, event) -> None:
+        """Handle all events safely."""
+        try:
+            await super().on_event(event)
+        except Exception as e:
+            logger.error(f"Error handling event {type(event).__name__}: {e}")
+            # Don't re-raise, just log and continue
+    
+    def on_data_table_row_highlighted(self, message: DataTable.RowHighlighted) -> None:
+        """Handle row selection in both document and execution modes."""
+        try:
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
+                # In log browser mode, load the selected execution's log
+                if hasattr(self, 'executions') and message.cursor_row < len(self.executions):
+                    self.load_execution_log(message.cursor_row)
+            else:
+                # Original document preview logic
+                if hasattr(self, 'filtered_docs') and message.cursor_row < len(self.filtered_docs):
+                    doc = self.filtered_docs[message.cursor_row]
+                    self.current_doc_id = doc["id"]
+
+                    # Exit selection mode when switching documents
+                    if hasattr(self, 'selection_mode') and self.selection_mode:
+                        self.action_toggle_selection_mode()
+
+                    self.update_preview(doc["id"])
+        except Exception as e:
+            logger.error(f"Error in on_data_table_row_highlighted: {e}")
+            # Don't crash, just log the error
+
     def action_quit(self):
-        self.exit()
+        try:
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
+                # Exit log browser mode and return to document mode
+                self.mode = "NORMAL"
+                self.stop_log_monitoring()
+                self.reload_documents()
+            else:
+                self.exit()
+        except Exception as e:
+            logger.error(f"Error in action_quit: {e}")
+            # Fallback to exit
+            self.exit()
+    
+    def stop_log_monitoring(self):
+        """Stop the log monitoring timer."""
+        if hasattr(self, 'log_monitor_timer'):
+            self.log_monitor_timer.stop()
+            delattr(self, 'log_monitor_timer')
+    
+    def reload_documents(self):
+        """Reload the document view after exiting log browser."""
+        try:
+            # Clear and recreate the table with documents
+            table = self.query_one("#doc-table", DataTable)
+            table.clear(columns=True)
+            table.add_columns("ID", "Title", "Tags")
+            
+            # Reload documents
+            self.load_documents()
+            
+            # Repopulate the table
+            for doc in self.filtered_docs:
+                # Format timestamp as MM-DD HH:MM (11 chars)
+                timestamp = doc["created_at"].strftime("%m-%d %H:%M")
+
+                # Calculate available space for title (50 total - 11 for timestamp)
+                title_space = 50 - 11
+                title = doc["title"][:title_space]
+                if len(doc["title"]) >= title_space:
+                    title = title[:title_space-3] + "..."
+
+                # Right-justify timestamp by padding title to full width
+                formatted_title = f"{title:<{title_space}}{timestamp}"
+
+                # Expanded tag display - limit to 30 chars with emoji-safe truncation
+                formatted_tags = format_tags(doc.get("tags", []))
+                tags_str, was_truncated = truncate_emoji_safe(formatted_tags, 30)
+                if was_truncated:
+                    tags_str += "..."
+
+                table.add_row(
+                    str(doc["id"]),
+                    formatted_title,
+                    tags_str or "-",
+                )
+            
+            # Focus the table and update preview
+            table.focus()
+            if self.filtered_docs:
+                table.move_cursor(row=0)
+                self.current_doc_id = self.filtered_docs[0]["id"]
+                self.update_preview(self.current_doc_id)
+            
+            # Update status
+            self.update_status()
+            
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error reloading documents: {e}")
 
 
 def run_minimal():
