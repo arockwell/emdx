@@ -117,8 +117,8 @@ class FullScreenView(Screen):
         ("escape", "close", "Close"),
         ("j", "scroll_down", "Down"),
         ("k", "scroll_up", "Up"),
-        # TEMPORARILY REMOVED: ("ctrl+d", "page_down", "Page down"),
-        # TEMPORARILY REMOVED: ("ctrl+u", "page_up", "Page up"),
+        ("ctrl+d", "page_down", "Page down"),
+        ("ctrl+u", "page_up", "Page up"),
         ("g", "scroll_top", "Top"),
         ("shift+g", "scroll_bottom", "Bottom"),
         ("c", "copy_content", "Copy"),
@@ -395,7 +395,7 @@ class MinimalDocumentBrowser(App):
         Binding("shift+t", "untag_mode", "Untag", show=False),
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
-        # TEMPORARILY REMOVED: Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
+        Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -1202,11 +1202,6 @@ class MinimalDocumentBrowser(App):
 
     def action_toggle_selection_mode(self):
         """Toggle between formatted view and text selection mode."""
-        # TEMPORARILY DISABLED TO DEBUG CTRL CRASH
-        status = self.query_one("#status", Label)
-        status.update("Selection mode temporarily disabled for debugging")
-        return
-        
         try:
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
