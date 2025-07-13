@@ -2178,17 +2178,17 @@ class MinimalDocumentBrowser(App):
                 # Use new title if provided, otherwise keep existing
                 final_title = new_title if new_title else doc["title"]
                 success = update_document(self.editing_doc_id, final_title, new_content)
+                
+                if success:
+                    self.cancel_refresh_timer()
+                    status.update(f"✅ Saved changes to #{self.editing_doc_id}")
                     
-                    if success:
-                        self.cancel_refresh_timer()
-                        status.update(f"✅ Saved changes to #{self.editing_doc_id}")
-                        
-                        # Refresh the document list to show updated timestamp
-                        self.load_documents()
-                        self.filter_documents(self.search_query)
-                    else:
-                        self.cancel_refresh_timer()
-                        status.update(f"❌ Failed to save changes to #{self.editing_doc_id}")
+                    # Refresh the document list to show updated timestamp
+                    self.load_documents()
+                    self.filter_documents(self.search_query)
+                else:
+                    self.cancel_refresh_timer()
+                    status.update(f"❌ Failed to save changes to #{self.editing_doc_id}")
             else:
                 self.cancel_refresh_timer()
                 status.update("No changes made")
