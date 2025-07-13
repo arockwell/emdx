@@ -170,6 +170,22 @@ class VimEditTextArea(TextArea):
         # Store original content to detect changes
         self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
         
+        # Set initial cursor style for NORMAL mode (solid, non-blinking)
+        self.show_cursor = True
+        self.cursor_blink = False
+        
+    def _update_cursor_style(self):
+        """Update cursor style based on vim mode."""
+        if self.vim_mode == self.VIM_INSERT or self.vim_mode == self.VIM_COMMAND:
+            # Insert/Command mode: thin blinking cursor
+            self.cursor_blink = True
+        else:
+            # Normal/Visual modes: solid block cursor
+            self.cursor_blink = False
+        
+        # Always show cursor in vim mode
+        self.show_cursor = True
+        
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
         try:
@@ -180,6 +196,7 @@ class VimEditTextArea(TextArea):
                 if self.vim_mode == self.VIM_INSERT:
                     # First ESC goes to normal mode
                     self.vim_mode = self.VIM_NORMAL
+                    self._update_cursor_style()
                     event.stop()
                     event.prevent_default()
                     self.app_instance._update_vim_status()
@@ -280,38 +297,46 @@ class VimEditTextArea(TextArea):
         # Mode changes
         elif char == "i":
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "a":
             self.move_cursor_relative(columns=1)
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "I":
             self._cursor_to_line_start()
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "A":
             self._cursor_to_line_end()
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "o":
             self._cursor_to_line_end()
             self.insert("\n")
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "O":
             self._cursor_to_line_start()
             self.insert("\n")
             self.move_cursor_relative(rows=-1)
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         
         # Visual modes
         elif char == "v":
             self.vim_mode = self.VIM_VISUAL
+            self._update_cursor_style()
             self.visual_start = self.cursor_location
             self.app_instance._update_vim_status()
         elif char == "V":
             self.vim_mode = self.VIM_VISUAL_LINE
+            self._update_cursor_style()
             self.visual_start = self.cursor_location
             self.app_instance._update_vim_status()
         
@@ -349,6 +374,7 @@ class VimEditTextArea(TextArea):
         # Command mode
         elif char == ":":
             self.vim_mode = self.VIM_COMMAND
+            self._update_cursor_style()
             self.command_buffer = ":"
             self.app_instance._update_vim_status()
         
@@ -375,6 +401,7 @@ class VimEditTextArea(TextArea):
         # For now, just handle ESC to return to normal
         if event.key == "escape":
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.visual_start = None
             self.visual_end = None
             event.stop()
@@ -389,6 +416,7 @@ class VimEditTextArea(TextArea):
         # For now, just handle ESC to return to normal
         if event.key == "escape":
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.visual_start = None
             self.visual_end = None
             event.stop()
@@ -406,6 +434,7 @@ class VimEditTextArea(TextArea):
         if event.key == "escape":
             # Cancel command
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.command_buffer = ""
             self.app_instance._update_vim_status()
         elif event.key == "enter":
@@ -418,6 +447,7 @@ class VimEditTextArea(TextArea):
             else:
                 # Exit command mode if we delete the colon
                 self.vim_mode = self.VIM_NORMAL
+                self._update_cursor_style()
                 self.command_buffer = ""
             self.app_instance._update_vim_status()
         elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:
@@ -433,6 +463,7 @@ class VimEditTextArea(TextArea):
             # Save
             self.app_instance.action_save_document()
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.command_buffer = ""
         elif cmd in ["q", "quit"]:
             # Quit without saving (check for changes)
@@ -453,6 +484,7 @@ class VimEditTextArea(TextArea):
             # Save all (just save current in our case)
             self.app_instance.action_save_document()
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.command_buffer = ""
         else:
             # Unknown command
@@ -2115,6 +2147,9 @@ class MinimalDocumentBrowser(App):
                 id="title-input"
             )
             title_input.add_class("edit-title-input")
+            # Ensure cursor is visible and blinking in title input (insert mode)
+            title_input.show_cursor = True
+            title_input.cursor_blink = True
             
             # Create VimEditTextArea with constraints BEFORE mounting
             edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
