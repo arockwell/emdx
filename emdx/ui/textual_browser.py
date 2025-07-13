@@ -34,6 +34,7 @@ from emdx.models.executions import (
     get_recent_executions,
     update_execution_status,
 )
+from emdx.commands.claude_execute import monitor_execution
 from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
 
@@ -2157,39 +2158,36 @@ class MinimalDocumentBrowser(App):
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"{exec_id}.log"
             
-            # Create execution record
-            from datetime import datetime
-            execution = Execution(
-                id=exec_id,
-                doc_id=self.current_doc_id,
-                doc_title=doc['title'],
-                status='running',
-                started_at=datetime.now(),
-                log_file=str(log_path)
+            # Start background execution using Python implementation
+            import threading
+            
+            # Debug: Write initial log entry
+            try:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(log_path, 'w') as f:
+                    f.write(f"=== EMDX Claude Execution (TUI) ===\n")
+                    f.write(f"ID: {exec_id}\n")
+                    f.write(f"Document: {doc['title']}\n")
+                    f.write(f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("=" * 50 + "\n\n")
+                    f.write("Starting execution...\n")
+            except Exception as e:
+                self.update_status(f"Error creating log: {e}")
+                return
+                
+            thread = threading.Thread(
+                target=monitor_execution,
+                args=(
+                    exec_id,
+                    f"Execute this plan: @{temp_path}",
+                    str(self.current_doc_id),
+                    doc['title'],
+                    log_path,
+                    None  # Use default allowed tools
+                ),
+                daemon=True
             )
-            save_execution(execution)
-            
-            # Build claude-auto command with proper logging
-            fish_source = "source ~/.config/fish/.clauding-backup-20250706_014139/claude-auto.fish; source ~/.config/fish/.clauding-backup-20250706_014139/claude-pretty-parser.fish"
-            
-            # Create log file with header
-            with open(log_path, 'w') as f:
-                f.write(f"=== EMDX Claude Execution ===\n")
-                f.write(f"ID: {exec_id}\n")
-                f.write(f"Document: {doc['title']}\n")
-                f.write(f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("=" * 50 + "\n\n")
-            
-            # Redirect all output to log file
-            claude_cmd = f"claude-auto 'Execute this plan: @{temp_path}'"
-            background_cmd = f"fish -c '{fish_source}; {claude_cmd}' >> {log_path} 2>&1"
-            
-            # Start background process
-            process = subprocess.Popen(
-                background_cmd,
-                shell=True,
-                start_new_session=True
-            )
+            thread.start()
             
             # Always show success since Popen doesn't wait
             self.cancel_refresh_timer()
