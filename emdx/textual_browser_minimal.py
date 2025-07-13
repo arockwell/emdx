@@ -485,7 +485,7 @@ class MinimalDocumentBrowser(App):
         table.zebra_stripes = True
         
         # Only add columns if they don't already exist
-        if table.column_count == 0:
+        if len(table.columns) == 0:
             table.add_columns("ID", "Title", "Tags")
 
         for doc in self.filtered_docs:
