@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from rich.markdown import Markdown
@@ -817,6 +818,7 @@ class MinimalDocumentBrowser(App):
         Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
+        Binding("x", "claude_execute", "Execute", key_display="x"),
     ]
 
     mode = reactive("NORMAL")
@@ -2108,6 +2110,70 @@ class MinimalDocumentBrowser(App):
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error spawning tmux pane: {e}")
+    
+    def action_claude_execute(self):
+        """Execute the current document with claude-auto in a tmux pane."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for execution")
+            return
+            
+        if not os.environ.get('TMUX'):
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Not running in tmux session - Claude execution requires tmux")
+            return
+            
+        try:
+            from emdx.models.documents import get_document
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("Document not found")
+                return
+            
+            # Create execution ID
+            exec_id = f"claude-{self.current_doc_id}-{int(time.time())}"
+            
+            # Create temp file with document content
+            temp_path = f"/tmp/emdx-claude-{self.current_doc_id}.md"
+            with open(temp_path, 'w') as f:
+                f.write(f"# {doc['title']}\n\n{doc['content']}")
+            
+            # Create logs directory
+            log_dir = Path.home() / ".config/emdx/logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / f"{exec_id}.log"
+            
+            # Build claude-auto command with logging - source fish functions first
+            fish_source = "source ~/.config/fish/.clauding-backup-20250706_014139/claude-auto.fish; source ~/.config/fish/.clauding-backup-20250706_014139/claude-pretty-parser.fish"
+            claude_cmd = f"claude-auto 'Execute this plan: @{temp_path}' 2>&1 | tee {log_path}"
+            
+            # Wrap in fish shell with function sourcing and completion message
+            full_cmd = f"fish -c '{fish_source}; {claude_cmd}; echo; echo \"✅ Claude execution completed! Press any key to close...\"; read'"
+            
+            # Spawn tmux pane with Claude execution
+            result = subprocess.run([
+                'tmux', 'split-window', '-h', '-p', '60', full_cmd
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update(f"🚀 Claude executing: {doc['title'][:30]}... → {exec_id[:8]}")
+            else:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update(f"Failed to start Claude execution: {result.stderr}")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error starting Claude execution: {e}")
 
     def action_quit(self):
         self.exit()
