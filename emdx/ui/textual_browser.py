@@ -133,8 +133,8 @@ class TitleInput(Input):
             except:
                 pass  # Editor might not exist
         
-        # Let Input handle all other keys
-        super().on_key(event)
+        # Input widget doesn't have on_key method, so don't call super()
+        # Let the event bubble up naturally for Input to handle
 
 
 class VimEditTextArea(TextArea):
