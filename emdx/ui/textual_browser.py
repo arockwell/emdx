@@ -1238,23 +1238,23 @@ class MinimalDocumentBrowser(App):
             except Exception as e:
                 logger.error(f"Failed to update vim mode indicator: {e}")
             
-            # Build mode indicator text with cursor style hints
+            # Build mode indicator text with subtle cursor hints (vim-like)
             try:
                 if vim_mode == "INSERT":
-                    vim_indicator.update("[bold green]-- INSERT -- [dim](cursor: |)[/dim][/bold green]")
+                    vim_indicator.update("[bold green]-- INSERT --[/bold green]")
                 elif vim_mode == "NORMAL":
                     mode_text = "-- NORMAL --"
                     if repeat:
                         mode_text = f"-- NORMAL ({repeat}) --"
                     if pending:
                         mode_text = f"-- NORMAL ({pending}) --"
-                    vim_indicator.update(f"[bold blue]{mode_text}[/bold blue] [dim](cursor: █)[/dim]")
+                    vim_indicator.update(f"[bold blue]{mode_text}[/bold blue]")
                 elif vim_mode == "VISUAL":
-                    vim_indicator.update("[bold yellow]-- VISUAL -- [dim](cursor: █)[/dim][/bold yellow]")
+                    vim_indicator.update("[bold yellow]-- VISUAL --[/bold yellow]")
                 elif vim_mode == "V-LINE":
-                    vim_indicator.update("[bold yellow]-- VISUAL LINE -- [dim](cursor: █)[/dim][/bold yellow]")
+                    vim_indicator.update("[bold yellow]-- VISUAL LINE --[/bold yellow]")
                 elif vim_mode == "COMMAND":
-                    vim_indicator.update(f"[bold magenta]{command_buffer}[/bold magenta] [dim](cursor: |)[/dim]")
+                    vim_indicator.update(f"[bold magenta]{command_buffer}[/bold magenta]")
             except Exception as e:
                 logger.error(f"Failed to update vim indicator text: {e}")
             
