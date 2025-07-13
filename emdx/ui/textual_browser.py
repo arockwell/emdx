@@ -2797,21 +2797,17 @@ class MinimalDocumentBrowser(App):
             status.update(f"Error spawning tmux pane: {e}")
     
     def action_claude_execute(self):
-        """Execute the current document with claude-auto in a tmux pane."""
+        """Execute the current document with Python claude execution system."""
         if not self.current_doc_id:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update("No document selected for execution")
             return
             
-        if not os.environ.get('TMUX'):
-            self.cancel_refresh_timer()
-            status = self.query_one("#status", Label)
-            status.update("Not running in tmux session - Claude execution requires tmux")
-            return
-            
         try:
             from emdx.models.documents import get_document
+            from emdx.commands.claude_execute import monitor_execution
+            import threading
             
             # Get the current document
             doc = get_document(str(self.current_doc_id))
@@ -2824,54 +2820,39 @@ class MinimalDocumentBrowser(App):
             # Create execution ID
             exec_id = f"claude-{self.current_doc_id}-{int(time.time())}"
             
-            # Create temp file with document content
-            temp_path = f"/tmp/emdx-claude-{self.current_doc_id}.md"
-            with open(temp_path, 'w') as f:
-                f.write(f"# {doc['title']}\n\n{doc['content']}")
-            
             # Create logs directory
             log_dir = Path.home() / ".config/emdx/logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"{exec_id}.log"
             
-            # Create execution record
-            from datetime import datetime
-            execution = Execution(
-                id=exec_id,
-                doc_id=self.current_doc_id,
-                doc_title=doc['title'],
-                status='running',
-                started_at=datetime.now(),
-                log_file=str(log_path)
-            )
-            save_execution(execution)
+            # Create task content
+            task = f"Execute this plan:\n\n# {doc['title']}\n\n{doc['content']}"
             
-            # Build claude-auto command with proper logging
-            fish_source = "source ~/.config/fish/.clauding-backup-20250706_014139/claude-auto.fish; source ~/.config/fish/.clauding-backup-20250706_014139/claude-pretty-parser.fish"
+            # Start monitoring in background thread
+            def run_execution():
+                monitor_execution(
+                    execution_id=exec_id,
+                    task=task,
+                    doc_id=str(self.current_doc_id),
+                    doc_title=doc['title'],
+                    log_file=log_path,
+                    allowed_tools=None  # Use default tools
+                )
             
-            # Create log file with header
-            with open(log_path, 'w') as f:
-                f.write(f"=== EMDX Claude Execution ===\n")
-                f.write(f"ID: {exec_id}\n")
-                f.write(f"Document: {doc['title']}\n")
-                f.write(f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("=" * 50 + "\n\n")
+            # Start execution in background thread 
+            # Note: Don't use daemon=True as it may cause threads to die prematurely
+            thread = threading.Thread(target=run_execution, daemon=False)
+            thread.start()
             
-            # Redirect all output to log file
-            claude_cmd = f"claude-auto 'Execute this plan: @{temp_path}'"
-            background_cmd = f"fish -c '{fish_source}; {claude_cmd}' >> {log_path} 2>&1"
+            # Store thread reference to prevent garbage collection
+            if not hasattr(self, 'execution_threads'):
+                self.execution_threads = []
+            self.execution_threads.append(thread)
             
-            # Start background process
-            process = subprocess.Popen(
-                background_cmd,
-                shell=True,
-                start_new_session=True
-            )
-            
-            # Always show success since Popen doesn't wait
+            # Show success message with worktree info
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
-            status.update(f"🚀 Claude executing in background: {doc['title'][:30]}... → {exec_id[:8]} (Press 'l' for logs)")
+            status.update(f"🚀 Claude executing in worktree: {doc['title'][:25]}... → {exec_id[:8]} (Press 'l' for logs)")
                 
         except Exception as e:
             self.cancel_refresh_timer()

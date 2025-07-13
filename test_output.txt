@@ -1,0 +1,7 @@
+This is a test file created in the worktree.
+It contains some example content to verify file creation is working.
+
+Test timestamp: 2025-07-13
+Location: emdx-reduce-reuse-recylce worktree
+
+Hello from the test!
