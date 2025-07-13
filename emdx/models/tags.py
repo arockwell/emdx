@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any, Optional
 
 from emdx.database import db
-from emdx.utils.emoji_aliases import expand_aliases
+from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
 
 def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
@@ -102,7 +102,7 @@ def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
 
 
 def get_document_tags(doc_id: int) -> list[str]:
-    """Get all tags for a document."""
+    """Get all tags for a document, automatically converting text aliases to emojis."""
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -115,7 +115,19 @@ def get_document_tags(doc_id: int) -> list[str]:
             (doc_id,),
         )
 
-        return [row[0] for row in cursor.fetchall()]
+        # Convert any text aliases to emojis for display
+        raw_tags = [row[0] for row in cursor.fetchall()]
+        normalized_tags = [normalize_tag_to_emoji(tag) for tag in raw_tags]
+        
+        # Remove duplicates while preserving order (in case both "gameplan" and "🎯" exist)
+        seen = set()
+        unique_tags = []
+        for tag in normalized_tags:
+            if tag not in seen:
+                seen.add(tag)
+                unique_tags.append(tag)
+        
+        return unique_tags
 
 
 def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
@@ -159,10 +171,13 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
             if isinstance(last_used, str):
                 last_used = datetime.fromisoformat(last_used) if last_used else None
 
+            # Normalize tag name to emoji for display
+            normalized_name = normalize_tag_to_emoji(row[1])
+            
             tags.append(
                 {
                     "id": row[0],
-                    "name": row[1],
+                    "name": normalized_name,
                     "count": row[2],
                     "created_at": created_at,
                     "last_used": last_used,
