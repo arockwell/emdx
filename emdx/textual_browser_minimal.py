@@ -24,6 +24,7 @@ from emdx.tags import (
     remove_tags_from_document,
     search_by_tags,
 )
+from emdx.tag_display import format_tags, order_tags
 
 
 class SelectionTextArea(TextArea):
@@ -444,8 +445,8 @@ class MinimalDocumentBrowser(App):
             formatted_title = f"{title:<{title_space}}{timestamp}"
 
             # Expanded tag display - limit to 30 chars
-            tags_str = ", ".join(doc.get("tags", []))[:30]
-            if len(", ".join(doc.get("tags", []))) > 30:
+            tags_str = format_tags(doc.get("tags", []))[:30]
+            if len(format_tags(doc.get("tags", []))) > 30:
                 tags_str += "..."
 
             table.add_row(
@@ -776,8 +777,8 @@ class MinimalDocumentBrowser(App):
             formatted_title = f"{title:<{title_space}}{timestamp}"
 
             # Expanded tag display - limit to 30 chars
-            tags_str = ", ".join(doc.get("tags", []))[:30]
-            if len(", ".join(doc.get("tags", []))) > 30:
+            tags_str = format_tags(doc.get("tags", []))[:30]
+            if len(format_tags(doc.get("tags", []))) > 30:
                 tags_str += "..."
 
             table.add_row(
@@ -1106,7 +1107,7 @@ class MinimalDocumentBrowser(App):
                             else:
                                 markdown_content = f"""# {doc['title']}
 
-*Project: {doc['project']} | Tags: {', '.join(doc.get('tags', []))}*
+*Project: {doc['project']} | Tags: {format_tags(doc.get('tags', []))}*
 *Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}*
 
 {content}"""

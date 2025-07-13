@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 
 from emdx.sqlite_database import db
+from emdx.tag_display import format_tags
 from emdx.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -40,7 +41,7 @@ def tag(
             current_tags = get_document_tags(doc_id)
             if current_tags:
                 console.print(f"\n[bold]Tags for #{doc_id}: {doc['title']}[/bold]")
-                console.print(f"[cyan]{', '.join(current_tags)}[/cyan]")
+                console.print(f"[cyan]{format_tags(current_tags)}[/cyan]")
             else:
                 console.print(f"[yellow]No tags for #{doc_id}: {doc['title']}[/yellow]")
             return
@@ -50,14 +51,14 @@ def tag(
 
         if added_tags:
             console.print(
-                f"[green]✅ Added tags to #{doc_id}:[/green] [cyan]{', '.join(added_tags)}[/cyan]"
+                f"[green]✅ Added tags to #{doc_id}:[/green] [cyan]{format_tags(added_tags)}[/cyan]"
             )
         else:
             console.print("[yellow]No new tags added (may already exist)[/yellow]")
 
         # Show all tags for the document
         all_tags = get_document_tags(doc_id)
-        console.print(f"[dim]All tags:[/dim] {', '.join(all_tags)}")
+        console.print(f"[dim]All tags:[/dim] {format_tags(all_tags)}")
 
     except Exception as e:
         console.print(f"[red]Error adding tags: {e}[/red]")
@@ -86,7 +87,7 @@ def untag(
         if removed_tags:
             console.print(
                 f"[green]✅ Removed tags from #{doc_id}:[/green] "
-                f"[cyan]{', '.join(removed_tags)}[/cyan]"
+                f"[cyan]{format_tags(removed_tags)}[/cyan]"
             )
         else:
             console.print("[yellow]No tags removed (may not exist)[/yellow]")
@@ -94,7 +95,7 @@ def untag(
         # Show remaining tags
         remaining_tags = get_document_tags(doc_id)
         if remaining_tags:
-            console.print(f"[dim]Remaining tags:[/dim] {', '.join(remaining_tags)}")
+            console.print(f"[dim]Remaining tags:[/dim] {format_tags(remaining_tags)}")
         else:
             console.print("[dim]No tags remaining[/dim]")
 
