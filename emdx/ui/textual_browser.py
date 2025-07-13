@@ -176,14 +176,10 @@ class VimEditTextArea(TextArea):
         
     def _update_cursor_style(self):
         """Update cursor style based on vim mode."""
-        if self.vim_mode == self.VIM_INSERT or self.vim_mode == self.VIM_COMMAND:
-            # Insert/Command mode: thin blinking cursor
-            self.cursor_blink = True
-        else:
-            # Normal/Visual modes: solid block cursor
-            self.cursor_blink = False
-        
-        # Always show cursor in vim mode
+        # Since Textual doesn't support cursor shape changes,
+        # we keep all cursors solid (non-blinking) and rely on 
+        # the mode indicator for visual feedback
+        self.cursor_blink = False
         self.show_cursor = True
         
     def on_key(self, event: events.Key) -> None:
@@ -2147,9 +2143,9 @@ class MinimalDocumentBrowser(App):
                 id="title-input"
             )
             title_input.add_class("edit-title-input")
-            # Ensure cursor is visible and blinking in title input (insert mode)
+            # Ensure cursor is visible and solid in title input
             title_input.show_cursor = True
-            title_input.cursor_blink = True
+            title_input.cursor_blink = False
             
             # Create VimEditTextArea with constraints BEFORE mounting
             edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
