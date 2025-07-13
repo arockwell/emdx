@@ -155,6 +155,12 @@ class VimLineNumbers(Static):
         self.add_class("vim-line-numbers")
         self.can_focus = False  # Don't steal focus from text area
         
+    def watch_edit_area_scroll(self):
+        """Sync scroll position with text area."""
+        if hasattr(self.edit_area, 'scroll_offset'):
+            # Sync vertical scroll position
+            self.scroll_to(y=self.edit_area.scroll_offset.y, animate=False)
+        
     def update_line_numbers(self):
         """Update line numbers based on cursor position."""
         if not hasattr(self.edit_area, 'cursor_location') or not hasattr(self.edit_area, 'text'):
@@ -1131,16 +1137,24 @@ class MinimalDocumentBrowser(App):
     
     /* Vim relative line numbers */
     .vim-line-numbers {
-        width: 4;
+        width: 3;
         background: $surface;
         color: $text-muted;
         text-align: right;
-        padding-right: 1;
+        padding-right: 0;
+        margin-right: 0;
         border-right: solid $primary;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
     }
     
     #edit-container {
         height: 100%;
+    }
+    
+    #edit-container TextArea {
+        margin-left: 0;
+        padding-left: 1;
     }
     """
 
