@@ -164,6 +164,7 @@ class VimLineNumbers(Static):
     def update_line_numbers(self):
         """Update line numbers based on cursor position."""
         if not hasattr(self.edit_area, 'cursor_location') or not hasattr(self.edit_area, 'text'):
+            logger.debug("Line numbers: edit_area missing cursor_location or text")
             self.update("")
             return
             
@@ -171,7 +172,7 @@ class VimLineNumbers(Static):
             cursor_row = self.edit_area.cursor_location[0]
             lines = self.edit_area.text.split('\n')
             
-            logger.debug(f"Updating line numbers: cursor_row={cursor_row}, total_lines={len(lines)}")
+            logger.debug(f"Line numbers widget {id(self)}: cursor_row={cursor_row}, total_lines={len(lines)}")
             
             # Generate relative line numbers
             line_numbers = []
@@ -186,7 +187,7 @@ class VimLineNumbers(Static):
             
             # Update the widget content
             content = "\n".join(line_numbers)
-            logger.debug(f"Line numbers content: {content[:100]}...")
+            logger.debug(f"Line numbers widget {id(self)} content first 3 lines: {content.split(chr(10))[:3]}")
             self.update(content)
         except Exception as e:
             logger.error(f"Error updating line numbers: {e}")
@@ -260,8 +261,11 @@ class VimEditTextArea(TextArea):
             current_row = self.cursor_location[0]
             if current_row != self._last_cursor_row:
                 self._last_cursor_row = current_row
+                logger.debug(f"Cursor moved from {self._last_cursor_row} to {current_row}, updating line numbers")
                 # Update the line numbers widget
                 self.line_numbers_widget.update_line_numbers()
+            else:
+                logger.debug(f"Cursor still at row {current_row}, skipping line number update")
         
     def _render_line_numbers(self, *args, **kwargs):
         """Custom line number rendering with vim-style relative numbers."""
@@ -2340,6 +2344,7 @@ class MinimalDocumentBrowser(App):
             # Create line numbers widget
             line_numbers = VimLineNumbers(edit_area, id="line-numbers")
             edit_area.line_numbers_widget = line_numbers
+            logger.debug(f"Created line numbers widget {id(line_numbers)} for edit_area {id(edit_area)}")
             
             # Create horizontal container for line numbers and text area
             edit_container = Horizontal(id="edit-container")
