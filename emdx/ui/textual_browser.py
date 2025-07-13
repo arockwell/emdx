@@ -104,6 +104,32 @@ class SelectionTextArea(TextArea):
             # Don't re-raise - let app continue
 
 
+class EditTextArea(TextArea):
+    """TextArea for editing documents with save-on-escape behavior."""
+    
+    def __init__(self, app_instance, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.app_instance = app_instance
+        # Store original content to detect changes
+        self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
+    
+    def on_key(self, event: events.Key) -> None:
+        try:
+            key_logger.info(f"EditTextArea.on_key: key={event.key}")
+            
+            if event.key == "escape":
+                # Exit edit mode and save
+                event.stop()
+                event.prevent_default()
+                self.app_instance.action_save_and_exit_edit()
+                return
+            # All other keys pass through for normal editing
+                
+        except Exception as e:
+            key_logger.error(f"CRASH in EditTextArea.on_key: {e}")
+            logger.error(f"Error in EditTextArea.on_key: {e}", exc_info=True)
+
+
 class FullScreenView(Screen):
     """Full screen document viewer."""
 
@@ -339,6 +365,29 @@ class MinimalDocumentBrowser(App):
         overflow: auto;
         scrollbar-gutter: stable;
     }
+    
+    #preview TextArea {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+    }
+    
+    .constrained-textarea {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 0 1 !important;
+    }
+    
+    #edit-wrapper {
+        width: 100%;
+        height: 100%;
+        overflow-x: auto;
+        overflow-y: auto;
+    }
 
     RichLog {
         width: 100%;
@@ -419,7 +468,7 @@ class MinimalDocumentBrowser(App):
         Binding("shift+g", "cursor_bottom", "Bottom", show=False),
         Binding("/", "search_mode", "Search", key_display="/"),
         Binding("r", "refresh", "Refresh", key_display="r"),
-        Binding("e", "edit", "Edit", show=False),
+        Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
         Binding("d", "delete", "Delete", show=False),
         Binding("v", "view", "View", show=False),
         Binding("enter", "view", "View", show=False),
@@ -435,6 +484,8 @@ class MinimalDocumentBrowser(App):
     tag_action = reactive("")  # "add" or "remove"
     current_tag_completion = reactive(0)  # Current completion index
     selection_mode = reactive(False)  # Text selection mode
+    edit_mode = reactive(False)  # Edit mode for in-place editing
+    editing_doc_id = None  # Track which document is being edited
 
     def __init__(self):
         super().__init__()
@@ -535,6 +586,22 @@ class MinimalDocumentBrowser(App):
     def on_data_table_row_highlighted(self, message: DataTable.RowHighlighted) -> None:
         if message.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[message.cursor_row]
+            
+            # Don't allow switching documents while in edit mode
+            if self.edit_mode:
+                # Show warning and prevent switch
+                status = self.query_one("#status", Label)
+                self.cancel_refresh_timer()
+                status.update("⚠️ Exit edit mode (ESC) before switching documents")
+                # Move cursor back to editing document
+                if self.editing_doc_id:
+                    for i, d in enumerate(self.filtered_docs):
+                        if d["id"] == self.editing_doc_id:
+                            table = self.query_one("#doc-table", DataTable)
+                            table.cursor_coordinate = (i, 0)
+                            break
+                return
+            
             self.current_doc_id = doc["id"]
 
             # Exit selection mode when switching documents
@@ -799,7 +866,7 @@ class MinimalDocumentBrowser(App):
                     elif event.character == "e":
                         event.prevent_default()
                         event.stop()
-                        self.action_edit()
+                        self.action_toggle_edit_mode()
                     elif event.character == "d":
                         event.prevent_default()
                         event.stop()
@@ -930,48 +997,6 @@ class MinimalDocumentBrowser(App):
                 table.cursor_coordinate = (table.row_count - 1, 0)
                 self.on_row_selected()
 
-    def action_edit(self):
-        """Signal external wrapper for nvim editing."""
-        if self.mode == "SEARCH" or not self.current_doc_id:
-            return
-
-        try:
-            # Get document content
-            doc = db.get_document(str(self.current_doc_id))
-            if not doc:
-                return
-
-            # Create temp file for editing
-            temp_file = tempfile.NamedTemporaryFile(
-                mode="w", suffix=".md", delete=False, prefix=f"emdx_doc_{self.current_doc_id}_"
-            )
-
-            # Write header and content for editing
-            temp_file.write(f"# Editing: {doc['title']} (ID: {doc['id']})\n")
-            temp_file.write(f"# Project: {doc['project'] or 'None'}\n")
-            temp_file.write(f"# Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}\n")
-            temp_file.write("# Lines starting with '#' will be removed\n")
-            temp_file.write("#\n")
-            temp_file.write("# First line (after comments) will be used as the title\n")
-            temp_file.write("# The rest will be the content\n")
-            temp_file.write("#\n")
-            temp_file.write(f"{doc['title']}\n\n")
-            temp_file.write(doc["content"])
-            temp_file.close()
-
-            # Signal external wrapper
-            edit_signal = f"/tmp/emdx_edit_signal_{os.getpid()}"
-            with open(edit_signal, "w") as f:
-                f.write(f"{temp_file.name}|{self.current_doc_id}")
-
-            # Exit to signal edit request
-            self.exit()
-
-        except Exception as e:
-            # Show error in status
-            self.cancel_refresh_timer()
-            status = self.query_one("#status", Label)
-            status.update(f"Error preparing edit: {e}")
 
     def action_delete(self):
         if self.mode == "SEARCH" or not self.current_doc_id:
@@ -1303,10 +1328,8 @@ class MinimalDocumentBrowser(App):
                     text_area.disabled = False
                     text_area.can_focus = True
 
-                    # Set width constraints BEFORE mounting (key fix!)
-                    text_area.styles.width = "100%"
-                    text_area.styles.max_width = "100%"
-                    text_area.styles.overflow_x = "hidden"
+                    # Apply the constrained-textarea CSS class
+                    text_area.add_class("constrained-textarea")
 
                     # Try to enable word wrap if the property exists
                     if hasattr(text_area, 'word_wrap'):
@@ -1396,16 +1419,201 @@ class MinimalDocumentBrowser(App):
 
             traceback.print_exc()
 
+    def action_toggle_edit_mode(self):
+        """Toggle between view and edit modes for current document."""
+        logger.info(f"action_toggle_edit_mode called, current_doc_id={self.current_doc_id}, edit_mode={self.edit_mode}")
+        if not self.current_doc_id:
+            status = self.query_one("#status", Label)
+            self.cancel_refresh_timer()
+            status.update("Select a document first")
+            return
+        
+        if self.edit_mode:
+            # Currently editing - save and exit
+            self.action_save_and_exit_edit()
+        else:
+            # Enter edit mode
+            self.action_enter_edit_mode()
+
+    def action_enter_edit_mode(self):
+        """Enter edit mode for current document."""
+        try:
+            logger.info(f"action_enter_edit_mode called, current_doc_id={self.current_doc_id}")
+            if not self.current_doc_id:
+                return
+            
+            # Exit selection mode if active
+            if self.selection_mode:
+                self.action_toggle_selection_mode()
+            
+            # Get document content
+            doc = db.get_document(str(self.current_doc_id))
+            if not doc:
+                return
+            
+            # Get container and status
+            container = self.query_one("#preview", ScrollableContainer)
+            status = self.query_one("#status", Label)
+            
+            # Remove all widgets from container (same as selection mode fix)
+            container.remove_children()
+            
+            # Create EditTextArea with constraints BEFORE mounting
+            edit_area = EditTextArea(self, doc["content"], id="preview-content")
+            
+            # Make it editable (not read-only like selection mode)
+            edit_area.read_only = False
+            edit_area.disabled = False
+            edit_area.can_focus = True
+            
+            # Apply the constrained-textarea CSS class
+            edit_area.add_class("constrained-textarea")
+            
+            # CRITICAL: Set word wrap BEFORE any other properties
+            edit_area.word_wrap = True
+            edit_area.show_line_numbers = False  # Disable line numbers to save space
+            
+            # Try setting max line length if available
+            if hasattr(edit_area, 'max_line_length'):
+                edit_area.max_line_length = 80  # Enforce maximum line length
+            
+            # Create a wrapper container to enforce width constraints
+            from textual.containers import Container
+            edit_wrapper = Container(id="edit-wrapper")
+            
+            # Mount wrapper in preview container
+            container.mount(edit_wrapper)
+            
+            # Mount TextArea in wrapper
+            edit_wrapper.mount(edit_area)
+            
+            # Reset container scroll and refresh layout (same as selection mode)
+            container.scroll_to(0, 0, animate=False)
+            container.refresh(layout=True)
+            edit_wrapper.refresh(layout=True)
+            
+            edit_area.focus()
+            
+            # Debug logging to understand width issues
+            logger.info(f"EditTextArea mounted - container width: {container.size.width}")
+            logger.info(f"EditTextArea classes: {edit_area.classes}")
+            
+            # Update state
+            self.edit_mode = True
+            self.editing_doc_id = self.current_doc_id
+            
+            # Update status
+            self.cancel_refresh_timer()
+            status.update(f"EDIT MODE: Editing #{self.current_doc_id} - ESC to save and exit")
+            
+        except Exception as e:
+            logger.error(f"Error entering edit mode: {e}", exc_info=True)
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Edit mode failed: {str(e)}")
+
+    def action_save_and_exit_edit(self):
+        """Save changes and exit edit mode."""
+        try:
+            if not self.edit_mode or not self.editing_doc_id:
+                return
+            
+            # Get the container and edit area
+            container = self.query_one("#preview", ScrollableContainer)
+            status = self.query_one("#status", Label)
+            
+            # Find the edit area within the wrapper
+            try:
+                from textual.containers import Container
+                edit_wrapper = self.query_one("#edit-wrapper", Container)
+                edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
+            except:
+                # Fallback if wrapper doesn't exist
+                edit_area = self.query_one("#preview-content", EditTextArea)
+            
+            # Get the edited content
+            new_content = edit_area.text
+            
+            # Check if content changed
+            if new_content != edit_area.original_content:
+                # Update document in database
+                from emdx.models.documents import update_document
+                
+                # Get current document for title
+                doc = db.get_document(str(self.editing_doc_id))
+                if doc:
+                    success = update_document(self.editing_doc_id, doc["title"], new_content)
+                    
+                    if success:
+                        self.cancel_refresh_timer()
+                        status.update(f"✅ Saved changes to #{self.editing_doc_id}")
+                        
+                        # Refresh the document list to show updated timestamp
+                        self.refresh_with_fallback(self.editing_doc_id)
+                    else:
+                        self.cancel_refresh_timer()
+                        status.update(f"❌ Failed to save changes to #{self.editing_doc_id}")
+            else:
+                self.cancel_refresh_timer()
+                status.update("No changes made")
+            
+            # Exit edit mode
+            self.edit_mode = False
+            self.editing_doc_id = None
+            
+            # Remove edit area and restore preview
+            container.remove_children()
+            
+            # Create new RichLog for preview
+            richlog = RichLog(
+                id="preview-content",
+                wrap=True,
+                highlight=True,
+                markup=True,
+                auto_scroll=False
+            )
+            container.mount(richlog)
+            
+            # Reset container scroll and refresh layout (SAME AS SELECTION MODE)
+            container.scroll_to(0, 0, animate=False)
+            container.refresh(layout=True)
+            
+            # Use deferred content restoration (SAME AS SELECTION MODE)
+            self.call_after_refresh(self._restore_preview_content)
+            
+        except Exception as e:
+            logger.error(f"Error saving and exiting edit mode: {e}", exc_info=True)
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Save failed: {str(e)}")
+            
+            # Try to recover
+            try:
+                self.edit_mode = False
+                self.editing_doc_id = None
+                container = self.query_one("#preview", ScrollableContainer)
+                container.remove_children()
+                
+                richlog = RichLog(
+                    id="preview-content",
+                    wrap=True,
+                    highlight=True,
+                    markup=True,
+                    auto_scroll=False
+                )
+                container.mount(richlog)
+                
+                if self.current_doc_id:
+                    self.update_preview(self.current_doc_id)
+            except Exception:
+                pass  # Give up on recovery
+
     def action_save_preview(self):
-        """Save is now handled by external editor - show message."""
+        """Save is now handled by edit mode - show message."""
         self.cancel_refresh_timer()
         status = self.query_one("#status", Label)
-        status.update("Use 'e' to edit document in external editor")
+        status.update("Use 'e' to edit document in place")
 
-    def watch_edit_mode(self, old_mode: bool, new_mode: bool):
-        """React to edit mode changes (simplified - no widget switching)."""
-        # Edit mode is now handled by external editor via 'e' key
-        pass
 
     def copy_to_clipboard(self, text: str):
         """Copy text to clipboard with fallback methods."""
