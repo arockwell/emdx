@@ -19,7 +19,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
-from emdx.sqlite_database import db
+from emdx.database import db
 from emdx.tags import (
     add_tags_to_document,
     get_document_tags,

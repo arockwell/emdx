@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from emdx.sqlite_database import db
+from emdx.database import db
 from emdx.display.formatting import format_tags
 from emdx.tags import (
     add_tags_to_document,
