@@ -6,6 +6,14 @@ default:
 install:
     poetry install
 
+# Check if dependencies are installed and install if needed
+_ensure-installed:
+    @if ! poetry run python -c "import textual" 2>/dev/null; then \
+        echo "📦 Installing dependencies..."; \
+        poetry install; \
+        echo "✅ Dependencies installed!"; \
+    fi
+
 # Run the development version (interactive help)
 dev:
     @echo "EMDX Development Commands:"
@@ -17,7 +25,7 @@ dev:
     @echo "Or run: just run --help"
 
 # Run emdx with arguments
-run *args:
+run *args: _ensure-installed
     poetry run emdx {{args}}
 
 # Run tests
