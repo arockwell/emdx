@@ -176,11 +176,18 @@ class VimEditTextArea(TextArea):
         
     def _update_cursor_style(self):
         """Update cursor style based on vim mode."""
-        # Since Textual doesn't support cursor shape changes,
-        # we keep all cursors solid (non-blinking) and rely on 
-        # the mode indicator for visual feedback
+        # Keep all cursors solid (non-blinking)
         self.cursor_blink = False
         self.show_cursor = True
+        
+        # Try to change cursor color via CSS classes
+        self.remove_class("vim-insert-mode")
+        self.remove_class("vim-normal-mode")
+        
+        if self.vim_mode == self.VIM_INSERT or self.vim_mode == self.VIM_COMMAND:
+            self.add_class("vim-insert-mode")
+        else:
+            self.add_class("vim-normal-mode")
         
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
@@ -929,6 +936,17 @@ class MinimalDocumentBrowser(App):
     }
     .edit-title-input:focus {
         border: tall $accent;
+    }
+    
+    /* Try to style cursor colors for different vim modes */
+    .vim-insert-mode {
+        caret-color: green;
+        cursor-color: green;
+    }
+    
+    .vim-normal-mode {
+        caret-color: blue;
+        cursor-color: blue;
     }
 
     RichLog {
