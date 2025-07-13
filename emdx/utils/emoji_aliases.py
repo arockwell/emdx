@@ -54,7 +54,6 @@ EMOJI_ALIASES: Dict[str, str] = {
     # Outcomes (Success Tracking)
     "success": "🎉",
     "works": "🎉",
-    "working": "🎉",
     "good": "🎉",
     
     "failed": "❌",
@@ -214,6 +213,28 @@ def is_text_alias(tag: str) -> bool:
         True if the tag is a known text alias
     """
     return tag.lower() in EMOJI_ALIASES
+
+
+def normalize_tag_to_emoji(tag: str) -> str:
+    """
+    Convert a tag to its emoji equivalent if it's a known text alias.
+    
+    Args:
+        tag: The tag to normalize (could be text alias or already emoji)
+        
+    Returns:
+        Emoji version of the tag, or original tag if no alias exists
+        
+    Examples:
+        >>> normalize_tag_to_emoji("gameplan")
+        "🎯"
+        >>> normalize_tag_to_emoji("🎯")
+        "🎯"
+        >>> normalize_tag_to_emoji("unknown-tag")
+        "unknown-tag"
+    """
+    tag_lower = tag.strip().lower()
+    return EMOJI_ALIASES.get(tag_lower, tag)
 
 
 def get_all_aliases() -> Dict[str, str]:
