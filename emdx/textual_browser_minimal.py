@@ -40,6 +40,14 @@ logging.basicConfig(
         # logging.StreamHandler()  # Uncomment for console output
     ]
 )
+
+# Also create a dedicated key events log
+key_log_file = log_dir / "key_events.log"
+key_logger = logging.getLogger("key_events")
+key_handler = logging.FileHandler(key_log_file)
+key_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+key_logger.addHandler(key_handler)
+key_logger.setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.info("EMDX TUI starting up")
 
@@ -52,11 +60,26 @@ class SelectionTextArea(TextArea):
         self.app_instance = app_instance
 
     def on_key(self, event: events.Key) -> None:
-        if event.character == "s" or event.key == "escape":
-            event.stop()
-            event.prevent_default()
-            self.app_instance.action_toggle_selection_mode()
-            return
+        try:
+            # Comprehensive logging of key event attributes
+            event_attrs = {}
+            for attr in ['key', 'character', 'name', 'is_printable', 'aliases']:
+                if hasattr(event, attr):
+                    event_attrs[attr] = getattr(event, attr)
+            
+            key_logger.info(f"SelectionTextArea.on_key: {event_attrs}")
+            logger.debug(f"SelectionTextArea.on_key: key={event.key}")
+            
+            # Safely check for 's' or escape
+            if (hasattr(event, 'character') and event.character == "s") or event.key == "escape":
+                event.stop()
+                event.prevent_default()
+                self.app_instance.action_toggle_selection_mode()
+                return
+        except Exception as e:
+            key_logger.error(f"CRASH in SelectionTextArea.on_key: {e}")
+            logger.error(f"Error in SelectionTextArea.on_key: {e}", exc_info=True)
+            raise  # Re-raise to see full stack trace in logs
         # Don't call super - TextArea doesn't have on_key in Textual 4.0
 
 
@@ -94,8 +117,8 @@ class FullScreenView(Screen):
         ("escape", "close", "Close"),
         ("j", "scroll_down", "Down"),
         ("k", "scroll_up", "Up"),
-        ("ctrl+d", "page_down", "Page down"),
-        ("ctrl+u", "page_up", "Page up"),
+        # TEMPORARILY REMOVED: ("ctrl+d", "page_down", "Page down"),
+        # TEMPORARILY REMOVED: ("ctrl+u", "page_up", "Page up"),
         ("g", "scroll_top", "Top"),
         ("shift+g", "scroll_bottom", "Bottom"),
         ("c", "copy_content", "Copy"),
@@ -372,7 +395,7 @@ class MinimalDocumentBrowser(App):
         Binding("shift+t", "untag_mode", "Untag", show=False),
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
-        Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
+        # TEMPORARILY REMOVED: Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -411,6 +434,20 @@ class MinimalDocumentBrowser(App):
 
     def on_mount(self) -> None:
         try:
+            # ENSURE CLEAN STATE - remove any existing widgets from preview
+            container = self.query_one("#preview", ScrollableContainer)
+            container.remove_children()
+            
+            # Mount a fresh RichLog widget
+            richlog = RichLog(
+                id="preview-content",
+                wrap=True,
+                highlight=True,
+                markup=True,
+                auto_scroll=False
+            )
+            container.mount(richlog)
+            
             self.load_documents()
             self.setup_table()
             self.update_status()
@@ -672,75 +709,90 @@ class MinimalDocumentBrowser(App):
             self.mode = "NORMAL"
 
     def on_key(self, event: events.Key) -> None:
-        # Log all key events for debugging
-        logger.debug(f"Key event: key={event.key}, character={event.character}")
-        
-        # Handle global Escape key - quit from any mode
-        if event.key == "escape":
-            # Selection mode ESC is handled by SelectionTextArea
+        try:
+            # Comprehensive logging of ALL key events
+            event_attrs = {}
+            for attr in ['key', 'character', 'name', 'is_printable', 'aliases']:
+                if hasattr(event, attr):
+                    try:
+                        event_attrs[attr] = getattr(event, attr)
+                    except Exception as attr_error:
+                        event_attrs[attr] = f"ERROR: {attr_error}"
+            
+            key_logger.info(f"App.on_key: {event_attrs}")
+            logger.debug(f"Key event: key={event.key}")
+            
+            # Handle global Escape key - quit from any mode
+            if event.key == "escape":
+                # Selection mode ESC is handled by SelectionTextArea
+                
+                # From any mode/state, ESC should quit
+                if self.mode == "SEARCH":
+                    self.mode = "NORMAL"
+                    self.search_query = ""
+                    self.filter_documents("")
+                elif self.mode == "TAG":
+                    self.mode = "NORMAL"
+                else:
+                    # From normal mode or preview focus, quit the app
+                    self.action_quit()
+                event.prevent_default()
+                return
 
-            # From any mode/state, ESC should quit
-            if self.mode == "SEARCH":
-                self.mode = "NORMAL"
-                self.search_query = ""
-                self.filter_documents("")
-            elif self.mode == "TAG":
-                self.mode = "NORMAL"
-            else:
-                # From normal mode or preview focus, quit the app
-                self.action_quit()
-            event.prevent_default()
-            return
-
-        if self.mode == "TAG":
-            if event.key == "tab" and self.tag_action == "remove":
-                # Tab cycling for tag removal
-                self.complete_tag_removal()
-                event.prevent_default()
-                event.stop()
-            elif event.key == "enter" and self.tag_action == "remove":
-                # Remove the highlighted tag
-                self.remove_highlighted_tag()
-                event.prevent_default()
-        elif self.mode == "NORMAL":
-            # Handle keys that don't require a document
-            if event.key == "tab":
-                event.prevent_default()
-                event.stop()
-                self.action_focus_preview()
-            elif event.character == "s":
-                event.prevent_default()
-                event.stop()
-                self.action_toggle_selection_mode()
-            # Handle keys that require a document
-            elif self.current_doc_id:
-                if event.key == "enter":
+            if self.mode == "TAG":
+                if event.key == "tab" and self.tag_action == "remove":
+                    # Tab cycling for tag removal
+                    self.complete_tag_removal()
                     event.prevent_default()
                     event.stop()
-                    self.action_view()
-                elif event.character == "e":
+                elif event.key == "enter" and self.tag_action == "remove":
+                    # Remove the highlighted tag
+                    self.remove_highlighted_tag()
+                    event.prevent_default()
+            elif self.mode == "NORMAL":
+                # Handle keys that don't require a document
+                if event.key == "tab":
                     event.prevent_default()
                     event.stop()
-                    self.action_edit()
-                elif event.character == "d":
+                    self.action_focus_preview()
+                elif event.character == "s":
                     event.prevent_default()
                     event.stop()
-                    self.action_delete()
-                elif event.character == "v":
-                    event.prevent_default()
-                    event.stop()
-                    self.action_view()
-                elif event.character == "t":
-                    event.prevent_default()
-                    event.stop()
-                    self.action_tag_mode()
-                elif event.character == "T":
-                    event.prevent_default()
-                    event.stop()
-                    self.action_untag_mode()
+                    self.action_toggle_selection_mode()
+                # Handle keys that require a document
+                elif self.current_doc_id:
+                    if event.key == "enter":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_view()
+                    elif event.character == "e":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_edit()
+                    elif event.character == "d":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_delete()
+                    elif event.character == "v":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_view()
+                    elif event.character == "t":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_tag_mode()
+                    elif event.character == "T":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_untag_mode()
         
         # Note: In Textual 4.0, we should NOT call super().on_key() 
         # as Textual automatically handles event propagation
+        
+        except Exception as e:
+            key_logger.error(f"CRASH in App.on_key: {e}")
+            logger.error(f"Error in App.on_key: {e}", exc_info=True)
+            # Don't re-raise here - let app continue
 
     def filter_documents(self, query: str):
         if not query:
@@ -1088,15 +1140,19 @@ class MinimalDocumentBrowser(App):
 
     def action_copy_selected(self):
         """Copy selected text or full document when Ctrl+C is pressed."""
+        logger.debug("action_copy_selected called")
         try:
             if self.selection_mode:
+                logger.debug("In selection mode, copying full document")
                 # Just copy the full document for now
                 # Avoid accessing TextArea properties that might not exist
                 self.action_copy_content()
             else:
+                logger.debug("Not in selection mode, copying full document")
                 # Not in selection mode, copy full document
                 self.action_copy_content()
         except Exception as e:
+            logger.error(f"Error in action_copy_selected: {e}", exc_info=True)
             # Log error but don't crash
             try:
                 status = self.query_one("#status", Label)
@@ -1106,6 +1162,7 @@ class MinimalDocumentBrowser(App):
 
     def action_copy_content(self):
         """Copy current document content to clipboard."""
+        logger.debug(f"action_copy_content called, current_doc_id={self.current_doc_id}")
         if self.current_doc_id:
             try:
                 doc = db.get_document(str(self.current_doc_id))
@@ -1116,11 +1173,13 @@ class MinimalDocumentBrowser(App):
                     else:
                         content_to_copy = content
 
+                    logger.debug(f"Copying {len(content_to_copy)} characters to clipboard")
                     self.copy_to_clipboard(content_to_copy)
                     status = self.query_one("#status", Label)
                     status.update("Full document copied to clipboard!")
 
             except Exception as e:
+                logger.error(f"Error in action_copy_content: {e}", exc_info=True)
                 status = self.query_one("#status", Label)
                 status.update(f"Copy failed: {e}")
 
@@ -1143,6 +1202,11 @@ class MinimalDocumentBrowser(App):
 
     def action_toggle_selection_mode(self):
         """Toggle between formatted view and text selection mode."""
+        # TEMPORARILY DISABLED TO DEBUG CTRL CRASH
+        status = self.query_one("#status", Label)
+        status.update("Selection mode temporarily disabled for debugging")
+        return
+        
         try:
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
