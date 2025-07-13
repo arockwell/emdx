@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -146,6 +146,57 @@ class TitleInput(Input):
         # Input widget doesn't have on_key method, so don't call super()
 
 
+class VimLineNumbers(Static):
+    """Widget that displays vim-style relative line numbers."""
+    
+    def __init__(self, edit_area, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.edit_area = edit_area
+        self.add_class("vim-line-numbers")
+        self.can_focus = False  # Don't steal focus from text area
+        
+    def watch_edit_area_scroll(self):
+        """Sync scroll position with text area."""
+        if hasattr(self.edit_area, 'scroll_offset'):
+            # Sync vertical scroll position
+            self.scroll_to(y=self.edit_area.scroll_offset.y, animate=False)
+        
+    def update_line_numbers(self):
+        """Update line numbers based on cursor position."""
+        if not hasattr(self.edit_area, 'cursor_location') or not hasattr(self.edit_area, 'text'):
+            logger.debug("Line numbers: edit_area missing cursor_location or text")
+            self.update("")
+            return
+            
+        try:
+            cursor_row = self.edit_area.cursor_location[0]
+            lines = self.edit_area.text.split('\n')
+            
+            logger.debug(f"Line numbers widget {id(self)}: cursor_row={cursor_row}, total_lines={len(lines)}")
+            logger.debug(f"Line numbers: cursor_location={self.edit_area.cursor_location}")
+            
+            # Generate relative line numbers
+            line_numbers = []
+            for i, line in enumerate(lines):
+                if i == cursor_row:
+                    # Current line shows absolute line number (1-based)
+                    absolute_line = i + 1
+                    line_numbers.append(f"{absolute_line:>3}")
+                    logger.debug(f"Current line {i} -> showing absolute number {absolute_line}")
+                else:
+                    # Other lines show relative distance from cursor
+                    distance = abs(i - cursor_row)
+                    line_numbers.append(f"{distance:>3}")
+            
+            # Update the widget content
+            content = "\n".join(line_numbers)
+            logger.debug(f"Line numbers widget {id(self)} generated: {line_numbers[:5]}...")
+            self.update(content)
+        except Exception as e:
+            logger.error(f"Error updating line numbers: {e}")
+            self.update("")
+
+
 class VimEditTextArea(TextArea):
     """TextArea with vim-like keybindings for EMDX."""
     
@@ -175,6 +226,10 @@ class VimEditTextArea(TextArea):
         self.show_cursor = True
         self.cursor_blink = False
         
+        # Track cursor for relative line numbers (built-in line numbers disabled)
+        self.show_line_numbers = False
+        self._last_cursor_row = 0
+        
     def _update_cursor_style(self):
         """Update cursor style based on vim mode."""
         # Keep all cursors solid (non-blinking)
@@ -189,7 +244,59 @@ class VimEditTextArea(TextArea):
             self.add_class("vim-insert-mode")
         else:
             self.add_class("vim-normal-mode")
+    
+    def on_mount(self) -> None:
+        """Called when widget is mounted."""
+        self._enable_relative_line_numbers()
+        # Initialize line numbers on mount
+        if hasattr(self, 'line_numbers_widget'):
+            self.line_numbers_widget.update_line_numbers()
+    
+    def _enable_relative_line_numbers(self):
+        """Enable vim-style relative line numbers.""" 
+        # Custom implementation that overrides the default line number rendering
+        # Current line shows absolute line number, others show relative distance
+        self._original_render_line_numbers = getattr(self, '_render_line_numbers', None)
         
+    def _update_relative_line_numbers(self):
+        """Update line numbers when cursor moves."""
+        if hasattr(self, 'cursor_location') and hasattr(self, 'line_numbers_widget'):
+            current_row = self.cursor_location[0]
+            logger.debug(f"_update_relative_line_numbers: cursor at {current_row}, last was {self._last_cursor_row}")
+            # Always update for now to debug the issue
+            self._last_cursor_row = current_row
+            self.line_numbers_widget.update_line_numbers()
+        
+    def _render_line_numbers(self, *args, **kwargs):
+        """Custom line number rendering with vim-style relative numbers."""
+        if not hasattr(self, 'cursor_location'):
+            # Fallback to default if cursor_location not available
+            if self._original_render_line_numbers:
+                return self._original_render_line_numbers(*args, **kwargs)
+            return super()._render_line_numbers(*args, **kwargs) if hasattr(super(), '_render_line_numbers') else None
+            
+        try:
+            cursor_row = self.cursor_location[0]
+            lines = self.text.split('\n')
+            
+            # Generate relative line numbers
+            line_numbers = []
+            for i, line in enumerate(lines):
+                if i == cursor_row:
+                    # Current line shows absolute line number
+                    line_numbers.append(f"{i + 1:>3}")
+                else:
+                    # Other lines show relative distance from cursor
+                    distance = abs(i - cursor_row)
+                    line_numbers.append(f"{distance:>3}")
+            
+            return line_numbers
+        except Exception as e:
+            logger.debug(f"Error in relative line number rendering: {e}")
+            # Fallback to default rendering
+            if self._original_render_line_numbers:
+                return self._original_render_line_numbers(*args, **kwargs)
+            return None
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
         try:
@@ -223,6 +330,9 @@ class VimEditTextArea(TextArea):
                 self._handle_visual_line_mode(event)
             elif self.vim_mode == self.VIM_COMMAND:
                 self._handle_command_mode(event)
+            
+            # Update line numbers after any key event
+            self._update_relative_line_numbers()
                 
         except Exception as e:
             key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
@@ -399,6 +509,9 @@ class VimEditTextArea(TextArea):
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
         super().on_key(event)
+        # Update line numbers after any text changes
+        if hasattr(self, 'line_numbers_widget'):
+            self.line_numbers_widget.update_line_numbers()
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
@@ -526,6 +639,7 @@ class VimEditTextArea(TextArea):
                         col = match.start()
         
         self.cursor_location = (row, col)
+        self._update_relative_line_numbers()
     
     def _move_word_backward(self, count: int = 1) -> None:
         """Move cursor backward by word boundaries."""
@@ -553,6 +667,7 @@ class VimEditTextArea(TextArea):
                     col = len(lines[row])
         
         self.cursor_location = (row, col)
+        self._update_relative_line_numbers()
     
     def _move_word_end(self, count: int = 1) -> None:
         """Move cursor to end of word."""
@@ -581,6 +696,7 @@ class VimEditTextArea(TextArea):
                         col = match.end() - 1
         
         self.cursor_location = (row, col)
+        self._update_relative_line_numbers()
     
     def _delete_line(self, count: int = 1) -> None:
         """Delete entire line(s)."""
@@ -602,10 +718,13 @@ class VimEditTextArea(TextArea):
             # Position cursor at start of line (or end if we deleted the last lines)
             if current_line < len(new_lines):
                 self.cursor_location = (current_line, 0)
+                self._update_relative_line_numbers()
             elif new_lines:
                 self.cursor_location = (len(new_lines) - 1, 0)
+                self._update_relative_line_numbers()
             else:
                 self.cursor_location = (0, 0)
+                self._update_relative_line_numbers()
     
     def _yank_line(self, count: int = 1) -> None:
         """Yank (copy) entire line(s)."""
@@ -627,16 +746,19 @@ class VimEditTextArea(TextArea):
         row, _ = self.cursor_location
         if row < len(lines):
             self.cursor_location = (row, len(lines[row]))
+            self._update_relative_line_numbers()
     
     def _cursor_to_start(self) -> None:
         """Move cursor to start of document."""
         self.cursor_location = (0, 0)
+        self._update_relative_line_numbers()
     
     def _cursor_to_end(self) -> None:
         """Move cursor to end of document."""
         lines = self.text.split('\n')
         last_line = len(lines) - 1
         self.cursor_location = (last_line, len(lines[last_line]))
+        self._update_relative_line_numbers()
     
     def _delete_right_safe(self) -> None:
         """Delete character to the right, safely handling boundaries."""
@@ -1015,6 +1137,32 @@ class MinimalDocumentBrowser(App):
         height: 1;
         padding: 0 1;
         background: $surface;
+    }
+    
+    /* Vim relative line numbers */
+    .vim-line-numbers {
+        width: 4;
+        background: $background;
+        color: $text-muted;
+        text-align: right;
+        padding-right: 1;
+        padding-top: 1;
+        margin: 0;
+        border: none;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
+    }
+    
+    #edit-container {
+        height: 100%;
+        background: $background;
+    }
+    
+    #edit-container TextArea {
+        margin: 0;
+        padding-left: 0;
+        border-left: none;
+        background: $background;
     }
     """
 
@@ -2227,7 +2375,7 @@ class MinimalDocumentBrowser(App):
             
             # CRITICAL: Set word wrap BEFORE any other properties
             edit_area.word_wrap = True
-            edit_area.show_line_numbers = False  # Disable line numbers to save space
+            edit_area.show_line_numbers = False  # Disable built-in, using custom relative numbers
             
             # Try setting max line length if available
             if hasattr(edit_area, 'max_line_length'):
@@ -2236,9 +2384,21 @@ class MinimalDocumentBrowser(App):
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
             
+            # Create line numbers widget
+            line_numbers = VimLineNumbers(edit_area, id="line-numbers")
+            edit_area.line_numbers_widget = line_numbers
+            logger.debug(f"Created line numbers widget {id(line_numbers)} for edit_area {id(edit_area)}")
+            
+            # Create horizontal container for line numbers and text area
+            edit_container = Horizontal(id="edit-container")
+            
             # Mount title and content in wrapper
             edit_wrapper.mount(title_input)
-            edit_wrapper.mount(edit_area)
+            edit_wrapper.mount(edit_container)
+            
+            # Now mount widgets in the container after it's mounted
+            edit_container.mount(line_numbers)
+            edit_container.mount(edit_area)
             
             # Reset container scroll and refresh layout (same as selection mode)
             container.scroll_to(0, 0, animate=False)
@@ -2247,6 +2407,9 @@ class MinimalDocumentBrowser(App):
             
             # Focus the content editor first instead of title input 
             edit_area.focus()
+            
+            # Initialize line numbers
+            line_numbers.update_line_numbers()
             
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
