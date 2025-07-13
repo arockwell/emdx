@@ -454,9 +454,6 @@ class MinimalDocumentBrowser(App):
 
     def on_mount(self) -> None:
         try:
-            # Widget is already created in compose(), just get reference to it
-            preview_area = self.query_one("#preview-content", RichLog)
-            
             self.load_documents()
             self.setup_table()
             self.update_status()
