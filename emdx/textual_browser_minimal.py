@@ -70,12 +70,31 @@ class SelectionTextArea(TextArea):
             key_logger.info(f"SelectionTextArea.on_key: {event_attrs}")
             logger.debug(f"SelectionTextArea.on_key: key={event.key}")
             
-            # Safely check for 's' or escape
-            if (hasattr(event, 'character') and event.character == "s") or event.key == "escape":
+            # Only allow specific keys in selection mode:
+            # - 's' and 'escape' to exit selection mode
+            # - 'ctrl+c' to copy
+            # - Arrow keys and mouse for navigation/selection
+            allowed_keys = {'escape', 'ctrl+c', 'up', 'down', 'left', 'right', 
+                          'page_up', 'page_down', 'home', 'end'}
+            
+            if event.key == "escape" or (hasattr(event, 'character') and event.character == "s"):
+                # Exit selection mode
                 event.stop()
                 event.prevent_default()
                 self.app_instance.action_toggle_selection_mode()
                 return
+            elif event.key == "ctrl+c":
+                # Allow copy operation - let it bubble up to main app
+                return
+            elif event.key in allowed_keys:
+                # Allow navigation keys for text selection
+                return
+            else:
+                # Block ALL other keys (typing, shortcuts, etc.)
+                event.stop()
+                event.prevent_default()
+                return
+                
         except Exception as e:
             key_logger.error(f"CRASH in SelectionTextArea.on_key: {e}")
             logger.error(f"Error in SelectionTextArea.on_key: {e}", exc_info=True)
@@ -1264,7 +1283,7 @@ class MinimalDocumentBrowser(App):
                     text_area.focus()
 
                     status.update(
-                        "SELECTION MODE: Select text with mouse, Ctrl+C to copy full doc. ESC exits"
+                        "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit (typing disabled)"
                     )
                 except Exception as mount_error:
                     status.update(f"Failed to create selection widget: {mount_error}")
