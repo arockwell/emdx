@@ -1146,6 +1146,7 @@ class MinimalDocumentBrowser(App):
         color: $text-muted;
         text-align: right;
         padding-right: 1;
+        padding-top: 1;
         margin: 0;
         border: none;
         overflow-y: hidden;
