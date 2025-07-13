@@ -22,6 +22,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
 from emdx.database import db
+from emdx.models.documents import get_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -112,6 +113,39 @@ class SelectionTextArea(TextArea):
             # Don't re-raise - let app continue
 
 
+class TitleInput(Input):
+    """Custom Input that handles Tab to switch to content editor."""
+    
+    def __init__(self, app_instance, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.app_instance = app_instance
+    
+    def on_key(self, event: events.Key) -> None:
+        """Handle Tab and vim keys to switch to content editor."""
+        logger.debug(f"TitleInput.on_key: key={event.key}")
+        # Vim keys that should switch focus to content editor
+        vim_keys = {'j', 'k', 'h', 'l', 'i', 'a', 'o', 'x', 'd', 'y', 'p', 'v', 'g', 'w', 'b', 'e', '0', '$', 'u'}
+        vim_special_keys = {'up', 'down', 'left', 'right', 'enter'}
+        
+        char = event.character if hasattr(event, 'character') else None
+        
+        if event.key == "tab" or event.key == "escape" or char in vim_keys or event.key in vim_special_keys:
+            # Switch focus to content editor for vim keys
+            try:
+                edit_area = self.app_instance.query_one("#preview-content", VimEditTextArea)
+                edit_area.focus()
+                # Let the edit area handle this key event
+                edit_area.on_key(event)
+                event.stop()
+                event.prevent_default()
+                return
+            except:
+                pass  # Editor might not exist
+        
+        # For other keys (typing), let Input handle normally
+        # Input widget doesn't have on_key method, so don't call super()
+
+
 class VimEditTextArea(TextArea):
     """TextArea with vim-like keybindings for EMDX."""
     
@@ -120,11 +154,12 @@ class VimEditTextArea(TextArea):
     VIM_INSERT = "INSERT"
     VIM_VISUAL = "VISUAL"
     VIM_VISUAL_LINE = "V-LINE"
+    VIM_COMMAND = "COMMAND"
     
     def __init__(self, app_instance, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
-        self.vim_mode = self.VIM_INSERT  # Start in insert mode
+        self.vim_mode = self.VIM_NORMAL  # Start in normal mode like vim
         self.visual_start = None
         self.visual_end = None
         self.last_command = None
@@ -132,8 +167,28 @@ class VimEditTextArea(TextArea):
         self.repeat_count = ""
         self.register = None
         self.yanked_text = ""
+        self.command_buffer = ""  # For vim commands like :w, :q, etc.
         # Store original content to detect changes
         self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
+        
+        # Set initial cursor style for NORMAL mode (solid, non-blinking)
+        self.show_cursor = True
+        self.cursor_blink = False
+        
+    def _update_cursor_style(self):
+        """Update cursor style based on vim mode."""
+        # Keep all cursors solid (non-blinking)
+        self.cursor_blink = False
+        self.show_cursor = True
+        
+        # Try to change cursor color via CSS classes
+        self.remove_class("vim-insert-mode")
+        self.remove_class("vim-normal-mode")
+        
+        if self.vim_mode == self.VIM_INSERT or self.vim_mode == self.VIM_COMMAND:
+            self.add_class("vim-insert-mode")
+        else:
+            self.add_class("vim-normal-mode")
         
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
@@ -145,6 +200,7 @@ class VimEditTextArea(TextArea):
                 if self.vim_mode == self.VIM_INSERT:
                     # First ESC goes to normal mode
                     self.vim_mode = self.VIM_NORMAL
+                    self._update_cursor_style()
                     event.stop()
                     event.prevent_default()
                     self.app_instance._update_vim_status()
@@ -165,15 +221,24 @@ class VimEditTextArea(TextArea):
                 self._handle_visual_mode(event)
             elif self.vim_mode == self.VIM_VISUAL_LINE:
                 self._handle_visual_line_mode(event)
+            elif self.vim_mode == self.VIM_COMMAND:
+                self._handle_command_mode(event)
                 
         except Exception as e:
             key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
             logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
+            # Try to continue without crashing the app
+            try:
+                self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
+            except:
+                pass
     
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""
         key = event.key
         char = event.character if hasattr(event, 'character') else None
+        
+        key_logger.info(f"VimEditTextArea._handle_normal_mode: key={key}, char={char}")
         
         # Stop event from bubbling up
         event.stop()
@@ -182,17 +247,27 @@ class VimEditTextArea(TextArea):
         # Handle repeat counts (e.g., 3j to move down 3 lines)
         if char and char.isdigit() and (self.repeat_count or char != '0'):
             self.repeat_count += char
+            key_logger.info(f"Added to repeat count: {self.repeat_count}")
             return
         
         # Get repeat count as integer
         count = int(self.repeat_count) if self.repeat_count else 1
         self.repeat_count = ""  # Reset after use
         
+        key_logger.info(f"Processing command with count={count}")
+        
         # Movement commands
         if key == "h" or key == "left":
+            key_logger.info(f"Moving left by {count}")
             self.move_cursor_relative(columns=-count)
         elif key == "j" or key == "down":
-            self.move_cursor_relative(rows=count)
+            key_logger.info(f"Moving down by {count} - BEFORE move_cursor_relative")
+            try:
+                self.move_cursor_relative(rows=count)
+                key_logger.info(f"Moving down by {count} - AFTER move_cursor_relative SUCCESS")
+            except Exception as e:
+                key_logger.error(f"CRASH in move_cursor_relative(rows={count}): {e}")
+                raise
         elif key == "k" or key == "up":
             self.move_cursor_relative(rows=-count)
         elif key == "l" or key == "right":
@@ -226,38 +301,46 @@ class VimEditTextArea(TextArea):
         # Mode changes
         elif char == "i":
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "a":
             self.move_cursor_relative(columns=1)
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "I":
             self._cursor_to_line_start()
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "A":
             self._cursor_to_line_end()
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "o":
             self._cursor_to_line_end()
             self.insert("\n")
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "O":
             self._cursor_to_line_start()
             self.insert("\n")
             self.move_cursor_relative(rows=-1)
             self.vim_mode = self.VIM_INSERT
+            self._update_cursor_style()
             self.app_instance._update_vim_status()
         
         # Visual modes
         elif char == "v":
             self.vim_mode = self.VIM_VISUAL
+            self._update_cursor_style()
             self.visual_start = self.cursor_location
             self.app_instance._update_vim_status()
         elif char == "V":
             self.vim_mode = self.VIM_VISUAL_LINE
+            self._update_cursor_style()
             self.visual_start = self.cursor_location
             self.app_instance._update_vim_status()
         
@@ -292,6 +375,22 @@ class VimEditTextArea(TextArea):
                 self.move_cursor_relative(columns=-1)
                 self.insert(self.yanked_text)
         
+        # Command mode
+        elif char == ":":
+            self.vim_mode = self.VIM_COMMAND
+            self._update_cursor_style()
+            self.command_buffer = ":"
+            self.app_instance._update_vim_status()
+        
+        # Handle Tab to switch to title input
+        elif key == "tab":
+            # Try to focus title input
+            try:
+                title_input = self.app_instance.query_one("#title-input", TitleInput)
+                title_input.focus()
+            except:
+                pass  # Title input might not exist
+        
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:
             self.pending_command = ""
@@ -299,29 +398,105 @@ class VimEditTextArea(TextArea):
     def _handle_insert_mode(self, event: events.Key) -> None:
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
-        pass
+        super().on_key(event)
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
         # For now, just handle ESC to return to normal
         if event.key == "escape":
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.visual_start = None
             self.visual_end = None
             event.stop()
             event.prevent_default()
             self.app_instance._update_vim_status()
+        else:
+            # For other keys, let TextArea handle them
+            super().on_key(event)
     
     def _handle_visual_line_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL LINE mode."""
         # For now, just handle ESC to return to normal
         if event.key == "escape":
             self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
             self.visual_start = None
             self.visual_end = None
             event.stop()
             event.prevent_default()
             self.app_instance._update_vim_status()
+        else:
+            # For other keys, let TextArea handle them
+            super().on_key(event)
+    
+    def _handle_command_mode(self, event: events.Key) -> None:
+        """Handle keys in COMMAND mode."""
+        event.stop()
+        event.prevent_default()
+        
+        if event.key == "escape":
+            # Cancel command
+            self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
+            self.command_buffer = ""
+            self.app_instance._update_vim_status()
+        elif event.key == "enter":
+            # Execute command
+            self._execute_vim_command()
+        elif event.key == "backspace":
+            # Remove last character
+            if len(self.command_buffer) > 1:
+                self.command_buffer = self.command_buffer[:-1]
+            else:
+                # Exit command mode if we delete the colon
+                self.vim_mode = self.VIM_NORMAL
+                self._update_cursor_style()
+                self.command_buffer = ""
+            self.app_instance._update_vim_status()
+        elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:
+            # Add character to command buffer
+            self.command_buffer += event.character
+            self.app_instance._update_vim_status()
+    
+    def _execute_vim_command(self):
+        """Execute the vim command in the buffer."""
+        cmd = self.command_buffer[1:].strip()  # Remove the colon
+        
+        if cmd in ["w", "write"]:
+            # Save
+            self.app_instance.action_save_document()
+            self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
+            self.command_buffer = ""
+        elif cmd in ["q", "quit"]:
+            # Quit without saving (check for changes)
+            if self.text != self.original_content:
+                # Show error - changes not saved
+                self.app_instance._update_vim_status("No write since last change (add ! to override)")
+                self.command_buffer = ""
+                return
+            else:
+                self.app_instance.action_save_and_exit_edit()
+        elif cmd in ["q!", "quit!"]:
+            # Force quit without saving
+            self.app_instance.action_cancel_edit()
+        elif cmd in ["wq", "x"]:
+            # Save and quit
+            self.app_instance.action_save_and_exit_edit()
+        elif cmd in ["wa", "wall"]:
+            # Save all (just save current in our case)
+            self.app_instance.action_save_document()
+            self.vim_mode = self.VIM_NORMAL
+            self._update_cursor_style()
+            self.command_buffer = ""
+        else:
+            # Unknown command
+            self.app_instance._update_vim_status(f"Not an editor command: {cmd}")
+            self.command_buffer = ""
+            return
+        
+        self.app_instance._update_vim_status()
     
     def _move_word_forward(self, count: int = 1) -> None:
         """Move cursor forward by word boundaries."""
@@ -466,7 +641,7 @@ class VimEditTextArea(TextArea):
     def _delete_right_safe(self) -> None:
         """Delete character to the right, safely handling boundaries."""
         try:
-            self.delete_right()
+            self.action_delete_right()
         except:
             # Ignore if at end of document
             pass
@@ -536,7 +711,7 @@ class FullScreenView(Screen):
 
     def on_mount(self) -> None:
         """Load document content when mounted."""
-        doc = db.get_document(str(self.doc_id))
+        doc = get_document(str(self.doc_id))
         if doc:
             content_log = self.query_one("#content", RichLog)
             content_log.clear()
@@ -592,7 +767,7 @@ class FullScreenView(Screen):
     def action_copy_content(self) -> None:
         """Copy current document content to clipboard."""
         try:
-            doc = db.get_document(str(self.doc_id))
+            doc = get_document(str(self.doc_id))
             if doc:
                 self.copy_to_clipboard(doc["content"])
         except Exception:
@@ -707,8 +882,26 @@ class MinimalDocumentBrowser(App):
         border-right: solid $primary;
     }
 
-    #preview {
+    #preview-container {
         width: 50%;
+    }
+    
+    #vim-mode-indicator {
+        height: 1;
+        background: $primary;
+        padding: 0 1;
+        text-align: center;
+        color: $text;
+        display: none;
+        border-bottom: solid $accent;
+    }
+    
+    #vim-mode-indicator.visible {
+        display: block;
+    }
+    
+    #preview {
+        width: 100%;
         padding: 0;
         overflow: auto;
         scrollbar-gutter: stable;
@@ -735,6 +928,24 @@ class MinimalDocumentBrowser(App):
         height: 100%;
         overflow-x: auto;
         overflow-y: auto;
+    }
+    .edit-title-input {
+        width: 100%;
+        margin-bottom: 1;
+        background: $background;
+        border: tall $primary;
+    }
+    .edit-title-input:focus {
+        border: tall $accent;
+    }
+    
+    /* Vim mode styling - using background colors instead of cursor */
+    .vim-insert-mode {
+        background: $background;
+    }
+    
+    .vim-normal-mode {
+        background: $background;
     }
 
     RichLog {
@@ -816,6 +1027,7 @@ class MinimalDocumentBrowser(App):
         Binding("shift+g", "cursor_bottom", "Bottom", show=False),
         Binding("/", "search_mode", "Search", key_display="/"),
         Binding("r", "refresh", "Refresh", key_display="r"),
+        Binding("n", "new_note", "New Note", key_display="n"),
         Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
         Binding("d", "delete", "Delete", show=False),
         Binding("enter", "view", "View", show=False),
@@ -860,10 +1072,12 @@ class MinimalDocumentBrowser(App):
         with Horizontal():
             with Vertical(id="sidebar"):
                 yield DataTable(id="doc-table")
-            with ScrollableContainer(id="preview"):
-                yield RichLog(
-                    id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
-                )
+            with Vertical(id="preview-container"):
+                yield Label("", id="vim-mode-indicator")
+                with ScrollableContainer(id="preview"):
+                    yield RichLog(
+                        id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+                    )
 
         yield Label("", id="status")
 
@@ -878,6 +1092,7 @@ class MinimalDocumentBrowser(App):
             # If there's any error during mount, ensure we have a usable state
             import traceback
 
+            logger.error(f"Error during on_mount(): {e}")
             traceback.print_exc()
             self.exit(message=f"Error during startup: {e}")
 
@@ -962,7 +1177,7 @@ class MinimalDocumentBrowser(App):
 
     def update_preview(self, doc_id: int):
         try:
-            doc = db.get_document(str(doc_id))
+            doc = get_document(str(doc_id))
             if doc:
                 # Check if we're in selection mode or formatted mode
                 try:
@@ -1017,53 +1232,95 @@ class MinimalDocumentBrowser(App):
         status = self.query_one("#status", Label)
         search_input = self.query_one("#search-input", Input)
 
+        # Build status with document count
+        status_parts = []
         if search_input.value and search_input.value.startswith("tags:"):
             tag_query = search_input.value[5:].strip()
-            status.update(
-                f"{len(self.filtered_docs)}/{len(self.documents)} documents "
-                f"(tag search: {tag_query})"
+            status_parts.append(
+                f"{len(self.filtered_docs)}/{len(self.documents)} docs (tag: {tag_query})"
             )
         elif search_input.value:
-            status.update(
-                f"{len(self.filtered_docs)}/{len(self.documents)} documents "
-                f"(search: {search_input.value})"
+            status_parts.append(
+                f"{len(self.filtered_docs)}/{len(self.documents)} docs (search: {search_input.value})"
             )
         else:
-            status.update(f"{len(self.filtered_docs)}/{len(self.documents)} documents")
+            status_parts.append(f"{len(self.filtered_docs)}/{len(self.documents)} docs")
+        
+        # Add key hints for normal mode
+        if self.mode == "NORMAL":
+            status_parts.append("n=new | e=edit | /=search | t=tag | q=quit")
+        elif self.mode == "SEARCH":
+            status_parts.append("Enter=apply | ESC=cancel")
+        elif self.mode == "TAG":
+            if self.tag_action == "add":
+                status_parts.append("Enter=add tags | ESC=cancel")
+            else:
+                status_parts.append("Tab=select | Enter=remove | ESC=cancel")
+        
+        status.update(" | ".join(status_parts))
 
-    def _update_vim_status(self):
+    def _update_vim_status(self, message=None):
         """Update status bar to show vim mode when in edit mode."""
         if self.edit_mode and hasattr(self, 'edit_textarea') and hasattr(self.edit_textarea, 'vim_mode'):
             vim_mode = self.edit_textarea.vim_mode
             pending = getattr(self.edit_textarea, 'pending_command', '')
             repeat = getattr(self.edit_textarea, 'repeat_count', '')
+            command_buffer = getattr(self.edit_textarea, 'command_buffer', '')
+            
+            # Update vim mode indicator in preview pane
+            try:
+                vim_indicator = self.query_one("#vim-mode-indicator", Label)
+                vim_indicator.add_class("visible")
+            except Exception as e:
+                logger.error(f"Failed to update vim mode indicator: {e}")
+            
+            # Build mode indicator text with subtle cursor hints (vim-like)
+            try:
+                if vim_mode == "INSERT":
+                    vim_indicator.update("[bold green]-- INSERT --[/bold green]")
+                elif vim_mode == "NORMAL":
+                    mode_text = "-- NORMAL --"
+                    if repeat:
+                        mode_text = f"-- NORMAL ({repeat}) --"
+                    if pending:
+                        mode_text = f"-- NORMAL ({pending}) --"
+                    vim_indicator.update(f"[bold blue]{mode_text}[/bold blue]")
+                elif vim_mode == "VISUAL":
+                    vim_indicator.update("[bold yellow]-- VISUAL --[/bold yellow]")
+                elif vim_mode == "V-LINE":
+                    vim_indicator.update("[bold yellow]-- VISUAL LINE --[/bold yellow]")
+                elif vim_mode == "COMMAND":
+                    vim_indicator.update(f"[bold magenta]{command_buffer}[/bold magenta]")
+            except Exception as e:
+                logger.error(f"Failed to update vim indicator text: {e}")
             
             # Build status message
             status_parts = [f"EDIT MODE: #{self.editing_doc_id}"]
             
-            # Show vim mode with color coding
-            if vim_mode == "INSERT":
-                status_parts.append("[bold green]-- INSERT --[/bold green]")
-            elif vim_mode == "NORMAL":
-                mode_text = "-- NORMAL --"
-                if repeat:
-                    mode_text = f"-- NORMAL ({repeat}) --"
-                if pending:
-                    mode_text = f"-- NORMAL ({pending}) --"
-                status_parts.append(f"[bold blue]{mode_text}[/bold blue]")
-            elif vim_mode == "VISUAL":
-                status_parts.append("[bold yellow]-- VISUAL --[/bold yellow]")
-            elif vim_mode == "V-LINE":
-                status_parts.append("[bold yellow]-- VISUAL LINE --[/bold yellow]")
-            
-            # Add instructions
-            if vim_mode == "INSERT":
-                status_parts.append("ESC for normal mode")
+            # Add message if provided
+            if message:
+                status_parts.append(f"[red]{message}[/red]")
             else:
-                status_parts.append("ESC to save and exit")
+                # Add instructions
+                if vim_mode == "INSERT":
+                    status_parts.append("ESC=normal | Ctrl+S=save")
+                elif vim_mode == "COMMAND":
+                    status_parts.append("Enter=execute | ESC=cancel")
+                elif vim_mode == "NORMAL":
+                    status_parts.append("i=insert | :=command | ESC=exit | Tab=switch title/content")
+                else:
+                    status_parts.append("ESC=normal/exit")
             
             status = self.query_one("#status", Label)
             status.update(" | ".join(status_parts))
+        else:
+            # Hide vim mode indicator when not in edit mode
+            try:
+                vim_indicator = self.query_one("#vim-mode-indicator", Label)
+                vim_indicator.remove_class("visible")
+                vim_indicator.update("")
+            except Exception:
+                pass  # Indicator might not exist yet
 
     def watch_mode(self, old_mode: str, new_mode: str):
         search = self.query_one("#search-input", Input)
@@ -1138,6 +1395,46 @@ class MinimalDocumentBrowser(App):
             return
         self.tag_action = "remove"
         self.mode = "TAG"
+    
+    def action_new_note(self):
+        """Create a new note in the TUI."""
+        try:
+            # Generate title with timestamp
+            from datetime import datetime
+            title = f"New Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            
+            # Detect project from current directory
+            from emdx.utils.git import get_git_project
+            from pathlib import Path
+            project = get_git_project(Path.cwd())
+            
+            # Create new document in database
+            from emdx.models.documents import save_document
+            doc_id = save_document(title, "", project)
+            
+            # Refresh documents list
+            self.load_documents()
+            self.filter_documents(self.search_query)
+            
+            # Find the new document in the list and select it
+            for i, doc in enumerate(self.filtered_docs):
+                if doc["id"] == doc_id:
+                    table = self.query_one("#doc-table", DataTable)
+                    table.cursor_coordinate = (i, 0)
+                    self.on_row_selected()
+                    break
+            
+            # Immediately enter edit mode
+            self.action_toggle_edit_mode()
+            
+            # Update status to show user they're in new note (NORMAL mode)
+            self._update_vim_status("New note created - press 'i' to insert")
+            
+        except Exception as e:
+            logger.error(f"Error creating new note: {e}", exc_info=True)
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error creating new note: {str(e)[:50]}...")
 
     def on_input_changed(self, event: Input.Changed):
         if event.input.id == "search-input":
@@ -1206,6 +1503,11 @@ class MinimalDocumentBrowser(App):
 
             # Handle global Escape key - quit from any mode
             if event.key == "escape":
+                # Edit mode ESC is handled by VimEditTextArea - don't interfere
+                if self.edit_mode:
+                    # Let the edit widget handle ESC
+                    return
+                
                 # Selection mode ESC is handled by SelectionTextArea
 
                 # From any mode/state, ESC should quit
@@ -1241,6 +1543,10 @@ class MinimalDocumentBrowser(App):
                     event.prevent_default()
                     event.stop()
                     self.action_toggle_selection_mode()
+                elif event.character == "n":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_new_note()
                 # Handle keys that require a document
                 elif self.current_doc_id:
                     if event.key == "enter":
@@ -1632,7 +1938,7 @@ class MinimalDocumentBrowser(App):
         logger.debug(f"action_copy_content called, current_doc_id={self.current_doc_id}")
         if self.current_doc_id:
             try:
-                doc = db.get_document(str(self.current_doc_id))
+                doc = get_document(str(self.current_doc_id))
                 if doc:
                     content = doc["content"].strip()
                     if not content.startswith(f"# {doc['title']}"):
@@ -1684,7 +1990,7 @@ class MinimalDocumentBrowser(App):
                 # Get current document content as plain text first
                 plain_content = "Select and copy text here..."
                 if self.current_doc_id:
-                    doc = db.get_document(str(self.current_doc_id))
+                    doc = get_document(str(self.current_doc_id))
                     if doc:
                         content = doc["content"].strip()
                         if not content.startswith(f"# {doc['title']}"):
@@ -1827,7 +2133,7 @@ class MinimalDocumentBrowser(App):
                 self.action_toggle_selection_mode()
             
             # Get document content
-            doc = db.get_document(str(self.current_doc_id))
+            doc = get_document(str(self.current_doc_id))
             if not doc:
                 return
             
@@ -1838,8 +2144,26 @@ class MinimalDocumentBrowser(App):
             # Remove all widgets from container (same as selection mode fix)
             container.remove_children()
             
-            # Create EditTextArea with constraints BEFORE mounting
-            edit_area = EditTextArea(self, doc["content"], id="preview-content")
+            # Create a wrapper container to enforce width constraints
+            from textual.containers import Container
+            edit_wrapper = Container(id="edit-wrapper")
+            
+            # Create title input
+            title_input = TitleInput(
+                self,
+                value=doc["title"],
+                placeholder="Enter title...",
+                id="title-input"
+            )
+            title_input.add_class("edit-title-input")
+            # Ensure cursor is visible and solid in title input
+            title_input.show_cursor = True
+            title_input.cursor_blink = False
+            
+            # Create VimEditTextArea with constraints BEFORE mounting
+            edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
+            self.edit_textarea = edit_area  # Store reference for vim status updates
+            self.edit_title_input = title_input  # Store reference for title input
             
             # Make it editable (not read-only like selection mode)
             edit_area.read_only = False
@@ -1857,14 +2181,11 @@ class MinimalDocumentBrowser(App):
             if hasattr(edit_area, 'max_line_length'):
                 edit_area.max_line_length = 80  # Enforce maximum line length
             
-            # Create a wrapper container to enforce width constraints
-            from textual.containers import Container
-            edit_wrapper = Container(id="edit-wrapper")
-            
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
             
-            # Mount TextArea in wrapper
+            # Mount title and content in wrapper
+            edit_wrapper.mount(title_input)
             edit_wrapper.mount(edit_area)
             
             # Reset container scroll and refresh layout (same as selection mode)
@@ -1872,17 +2193,22 @@ class MinimalDocumentBrowser(App):
             container.refresh(layout=True)
             edit_wrapper.refresh(layout=True)
             
+            # Focus the content editor first instead of title input 
             edit_area.focus()
             
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
             logger.info(f"EditTextArea classes: {edit_area.classes}")
             
+            # Store current cursor position before entering edit mode
+            table = self.query_one("#doc-table", DataTable)
+            self.edit_mode_cursor_position = table.cursor_coordinate
+            
             # Update state
             self.edit_mode = True
             self.editing_doc_id = self.current_doc_id
             
-            # Update status with vim mode
+            # Update status with vim mode and tab hint
             self.cancel_refresh_timer()
             self._update_vim_status()
             
@@ -1902,37 +2228,48 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
             
-            # Find the edit area within the wrapper
+            # Find the edit area and title input within the wrapper
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
+                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 # Fallback if wrapper doesn't exist
                 edit_area = self.query_one("#preview-content", EditTextArea)
+                title_input = None
             
-            # Get the edited content
+            # Get the edited content and title
             new_content = edit_area.text
+            new_title = title_input.value if title_input else None
             
-            # Check if content changed
-            if new_content != edit_area.original_content:
+            # Get current document for comparison
+            doc = get_document(str(self.editing_doc_id))
+            if not doc:
+                return
+                
+            # Check if content or title changed
+            content_changed = new_content != edit_area.original_content
+            title_changed = new_title and new_title != doc["title"]
+            
+            if content_changed or title_changed:
                 # Update document in database
                 from emdx.models.documents import update_document
                 
-                # Get current document for title
-                doc = db.get_document(str(self.editing_doc_id))
-                if doc:
-                    success = update_document(self.editing_doc_id, doc["title"], new_content)
+                # Use new title if provided, otherwise keep existing
+                final_title = new_title if new_title else doc["title"]
+                success = update_document(self.editing_doc_id, final_title, new_content)
+                
+                if success:
+                    self.cancel_refresh_timer()
+                    status.update(f"✅ Saved changes to #{self.editing_doc_id}")
                     
-                    if success:
-                        self.cancel_refresh_timer()
-                        status.update(f"✅ Saved changes to #{self.editing_doc_id}")
-                        
-                        # Refresh the document list to show updated timestamp
-                        self.refresh_with_fallback(self.editing_doc_id)
-                    else:
-                        self.cancel_refresh_timer()
-                        status.update(f"❌ Failed to save changes to #{self.editing_doc_id}")
+                    # Refresh the document list to show updated timestamp
+                    self.load_documents()
+                    self.filter_documents(self.search_query)
+                else:
+                    self.cancel_refresh_timer()
+                    status.update(f"❌ Failed to save changes to #{self.editing_doc_id}")
             else:
                 self.cancel_refresh_timer()
                 status.update("No changes made")
@@ -1940,6 +2277,11 @@ class MinimalDocumentBrowser(App):
             # Exit edit mode
             self.edit_mode = False
             self.editing_doc_id = None
+            
+            # Hide vim mode indicator
+            vim_indicator = self.query_one("#vim-mode-indicator", Label)
+            vim_indicator.remove_class("visible")
+            vim_indicator.update("")
             
             # Remove edit area and restore preview
             container.remove_children()
@@ -1960,6 +2302,15 @@ class MinimalDocumentBrowser(App):
             
             # Use deferred content restoration (SAME AS SELECTION MODE)
             self.call_after_refresh(self._restore_preview_content)
+            
+            # Restore cursor position to where it was before edit mode
+            if hasattr(self, 'edit_mode_cursor_position'):
+                table = self.query_one("#doc-table", DataTable)
+                try:
+                    table.cursor_coordinate = self.edit_mode_cursor_position
+                except:
+                    pass  # Position might be invalid after refresh
+                delattr(self, 'edit_mode_cursor_position')
             
         except Exception as e:
             logger.error(f"Error saving and exiting edit mode: {e}", exc_info=True)
@@ -1985,6 +2336,15 @@ class MinimalDocumentBrowser(App):
                 
                 if self.current_doc_id:
                     self.update_preview(self.current_doc_id)
+                    
+                # Try to restore cursor position even in error recovery
+                if hasattr(self, 'edit_mode_cursor_position'):
+                    table = self.query_one("#doc-table", DataTable)
+                    try:
+                        table.cursor_coordinate = self.edit_mode_cursor_position
+                    except:
+                        pass
+                    delattr(self, 'edit_mode_cursor_position')
             except Exception:
                 pass  # Give up on recovery
 
@@ -1993,6 +2353,108 @@ class MinimalDocumentBrowser(App):
         self.cancel_refresh_timer()
         status = self.query_one("#status", Label)
         status.update("Use 'e' to edit document in place")
+    
+    def action_save_document(self):
+        """Save the current document without exiting edit mode."""
+        try:
+            if not self.edit_mode or not self.editing_doc_id:
+                return
+            
+            # Get the edit area and title input
+            try:
+                from textual.containers import Container
+                edit_wrapper = self.query_one("#edit-wrapper", Container)
+                edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
+                title_input = edit_wrapper.query_one("#title-input", TitleInput)
+            except:
+                edit_area = self.query_one("#preview-content", EditTextArea)
+                title_input = None
+            
+            # Get the edited content and title
+            new_content = edit_area.text
+            new_title = title_input.value if title_input else None
+            
+            # Update document in database
+            from emdx.models.documents import update_document
+            
+            # Get current document for comparison
+            doc = get_document(str(self.editing_doc_id))
+            if doc:
+                # Use new title if provided, otherwise keep existing
+                final_title = new_title if new_title else doc["title"]
+                success = update_document(self.editing_doc_id, final_title, new_content)
+                
+                if success:
+                    # Update original content to mark as saved
+                    edit_area.original_content = new_content
+                    self._update_vim_status("Document saved")
+                    
+                    # Refresh the document list to show updated timestamp
+                    self.load_documents()
+                    self.filter_documents(self.search_query)
+                else:
+                    self._update_vim_status("Failed to save document")
+        except Exception as e:
+            logger.error(f"Error saving document: {e}", exc_info=True)
+            self._update_vim_status(f"Save failed: {str(e)[:30]}...")
+    
+    def action_cancel_edit(self):
+        """Cancel edit mode without saving changes."""
+        try:
+            if not self.edit_mode:
+                return
+            
+            # Exit edit mode
+            self.edit_mode = False
+            self.editing_doc_id = None
+            
+            # Hide vim mode indicator
+            vim_indicator = self.query_one("#vim-mode-indicator", Label)
+            vim_indicator.remove_class("visible")
+            vim_indicator.update("")
+            
+            # Get container
+            container = self.query_one("#preview", ScrollableContainer)
+            
+            # Remove edit area and restore preview
+            container.remove_children()
+            
+            # Create new RichLog for preview
+            richlog = RichLog(
+                id="preview-content",
+                wrap=True,
+                highlight=True,
+                markup=True,
+                auto_scroll=False
+            )
+            container.mount(richlog)
+            
+            # Reset container scroll and refresh layout
+            container.scroll_to(0, 0, animate=False)
+            container.refresh(layout=True)
+            
+            # Use deferred content restoration
+            self.call_after_refresh(self._restore_preview_content)
+            
+            # Update status
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("Edit cancelled - changes discarded")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling edit: {e}", exc_info=True)
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Cancel failed: {str(e)}")
+            
+            # Try to recover
+            try:
+                self.edit_mode = False
+                self.editing_doc_id = None
+                if self.current_doc_id:
+                    self.update_preview(self.current_doc_id)
+            except Exception:
+                pass
 
 
     def copy_to_clipboard(self, text: str):
@@ -2400,17 +2862,12 @@ class MinimalDocumentBrowser(App):
                         event.prevent_default()
                         return
             
-            # Let parent handle other keys
-            super().on_key(event)
+            # Note: App class doesn't have on_key method, so we don't call super()
+            pass
         except Exception as e:
             # Log error but don't crash
             key_logger.error(f"Error in on_key: {e}")
-            # Still let parent handle the key - but safely
-            try:
-                super().on_key(event)
-            except Exception:
-                # If parent also fails, just log and continue
-                pass
+            # Don't try to call super().on_key() as App doesn't have this method
     
     
     async def on_event(self, event) -> None:
