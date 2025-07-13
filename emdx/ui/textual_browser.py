@@ -828,16 +828,6 @@ class MinimalDocumentBrowser(App):
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
-        # Number key bindings for switching between execution logs (only active in log browser mode)
-        Binding("1", "switch_log", "Log 1", show=False),
-        Binding("2", "switch_log", "Log 2", show=False),
-        Binding("3", "switch_log", "Log 3", show=False),
-        Binding("4", "switch_log", "Log 4", show=False),
-        Binding("5", "switch_log", "Log 5", show=False),
-        Binding("6", "switch_log", "Log 6", show=False),
-        Binding("7", "switch_log", "Log 7", show=False),
-        Binding("8", "switch_log", "Log 8", show=False),
-        Binding("9", "switch_log", "Log 9", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -2270,7 +2260,7 @@ class MinimalDocumentBrowser(App):
             # Update status with instructions
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
-            status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (Press 1-9 to switch, 'q' to exit, auto-refresh every 2s)")
+            status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'q' to exit, auto-refresh every 2s)")
             
             # Start monitoring for log updates
             self.start_log_monitoring()
@@ -2371,27 +2361,41 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update(f"Error loading execution log: {e}")
     
-    def action_switch_log(self):
-        """Switch to execution log based on number key pressed."""
+    def action_next_log(self):
+        """Switch to next execution log (j in LOG_BROWSER mode)."""
         if self.mode != "LOG_BROWSER":
             return
             
-        # Get the key that was pressed
-        # This is a bit tricky - we need to capture which number key was pressed
-        # We'll handle this in the key event handler instead
-        pass
+        if hasattr(self, 'current_execution_index') and hasattr(self, 'executions') and self.executions:
+            self.current_execution_index = (self.current_execution_index + 1) % len(self.executions)
+            self.load_execution_log(self.current_execution_index)
+            self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
+    
+    def action_prev_log(self):
+        """Switch to previous execution log (k in LOG_BROWSER mode)."""
+        if self.mode != "LOG_BROWSER":
+            return
+            
+        if hasattr(self, 'current_execution_index') and hasattr(self, 'executions') and self.executions:
+            self.current_execution_index = (self.current_execution_index - 1) % len(self.executions)
+            self.load_execution_log(self.current_execution_index)
+            self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
     
     def on_key(self, event: events.Key) -> None:
-        """Handle key events, especially number keys for log switching."""
+        """Handle key events, especially j/k for log switching in LOG_BROWSER mode."""
         try:
             key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
             
-            # Handle number keys for log switching in log browser mode only
+            # Handle j/k keys for log switching in log browser mode only
             if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
-                if hasattr(event, 'key') and event.key and event.key.isdigit():
-                    log_number = int(event.key)
-                    if 1 <= log_number <= min(9, len(self.executions)):
-                        self.load_execution_log(log_number - 1)  # Convert to 0-based index
+                if hasattr(event, 'key') and event.key:
+                    if event.key == "j":
+                        self.action_next_log()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "k":
+                        self.action_prev_log()
                         event.stop()
                         event.prevent_default()
                         return
