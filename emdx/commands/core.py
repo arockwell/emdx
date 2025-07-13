@@ -800,3 +800,5 @@ def purge(
     except Exception as e:
         console.print(f"[red]Error purging documents: {e}[/red]")
         raise typer.Exit(1) from e
+
+
