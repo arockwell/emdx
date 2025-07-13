@@ -1,7 +1,7 @@
 # emdx - Documentation Index Management System
 
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/arockwell/emdx/releases)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a modern terminal interface with seamless nvim integration.
@@ -18,13 +18,14 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
 - ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
 - 📊 **Export Options**: Export your knowledge base as JSON or CSV
-- 🏷️ **Tag System**: Organize documents with tags for better categorization and discovery
+- 🏷️ **Emoji Tag System**: Organize with emoji tags + intuitive text aliases (gameplan→🎯, active→🚀)
+- 📖 **Emoji Legend**: `emdx legend` command for quick emoji reference and aliases
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.9+
 - textual (for interactive GUI - installed automatically)
 - nvim (for seamless editing integration)
 
@@ -69,8 +70,8 @@ emdx uses SQLite and stores your knowledge base at `~/.config/emdx/knowledge.db`
 # Save a markdown file
 emdx save README.md
 
-# Save text directly
-emdx save "Remember to fix the API endpoint"
+# Save text directly (use stdin for text)
+echo "Remember to fix the API endpoint" | emdx save --title "API Note"
 
 # Save from pipe
 docker ps | emdx save --title "Running containers"
@@ -84,8 +85,8 @@ ls -la | emdx save --title "Directory listing"
 # With custom project
 emdx save notes.md --title "Project Notes" --project "my-app"
 
-# With tags
-emdx save README.md --tags "documentation,python,api"
+# With tags (using text aliases - auto-converts to emojis!)
+emdx save README.md --tags "docs,feature,done"
 ```
 
 ### Search documents
@@ -102,9 +103,9 @@ emdx find "todo" --project "my-app"
 # Fuzzy search (typo-tolerant)
 emdx find "datbase" --fuzzy
 
-# Search by tags
-emdx find --tags "python,tutorial"  # Documents with ALL tags
-emdx find --tags "python,tutorial" --any-tags  # Documents with ANY tag
+# Search by tags (using text aliases!)
+emdx find --tags "gameplan,active"  # Documents with ALL tags
+emdx find --tags "bug,urgent" --any-tags  # Documents with ANY tag
 
 # Combine text and tag search
 emdx find "async" --tags "python"
@@ -142,27 +143,51 @@ emdx restore 42
 emdx purge 42
 ```
 
+### Emoji Tag System & Text Aliases
+
+emdx uses a powerful emoji tag system with intuitive text aliases for easy typing:
+
+```bash
+# View emoji legend and all text aliases
+emdx legend
+
+# Use text aliases (auto-converts to emojis)
+emdx save plan.md --tags "gameplan,active,urgent"  # → 🎯,🚀,🚨
+emdx find --tags "bug,blocked"                     # → finds 🐛,🚧 tagged docs
+emdx tag 42 feature test success                   # → adds ✨,🧪,🎉
+
+# Mixed emoji/text usage works too
+emdx find --tags "gameplan,🚀,bug"                 # Mix and match!
+
+# Common text aliases:
+# gameplan → 🎯, active → 🚀, done → ✅, bug → 🐛, urgent → 🚨
+# docs → 📚, test → 🧪, feature → ✨, success → 🎉, refactor → 🔧
+```
+
 ### Tag management
 ```bash
-# Add tags to a document
-emdx tag 42 python tutorial api
+# Add tags to a document (using aliases)
+emdx tag 42 gameplan active feature
 
 # View tags for a document
 emdx tag 42
 
 # Remove tags from a document
-emdx untag 42 tutorial
+emdx untag 42 feature
 
 # List all tags with statistics
 emdx tags
 emdx tags --sort usage  # Sort by usage count
 emdx tags --sort name   # Sort alphabetically
 
+# View emoji legend (shows all emoji meanings and aliases)
+emdx legend
+
 # Rename a tag globally
-emdx retag "python3" "python"
+emdx retag "old-tag" "new-tag"
 
 # Merge multiple tags into one
-emdx merge-tags py python3 --into python
+emdx merge-tags old1 old2 --into newtag
 ```
 
 ### List documents
@@ -243,9 +268,10 @@ The GUI browser provides:
 - `emdx purge <id|title> [--force]` - Permanently delete
 
 ### Tag Commands
-- `emdx tag <id> [tags...]` - Add tags to a document (or view if no tags given)
+- `emdx tag <id> [tags...]` - Add tags using text aliases (or view if no tags given)
 - `emdx untag <id> <tags...>` - Remove tags from a document
 - `emdx tags [--sort] [--limit]` - List all tags with usage statistics
+- `emdx legend` - View emoji legend with text aliases
 - `emdx retag <old_tag> <new_tag> [--force]` - Rename a tag globally
 - `emdx merge-tags <tags...> --into <target> [--force]` - Merge multiple tags
 
@@ -304,18 +330,38 @@ emdx uses SQLite with FTS5 (Full-Text Search 5) for powerful search capabilities
 ```
 emdx/
 ├── __init__.py
-├── cli.py              # Main CLI entry point using Typer
-├── core.py             # Core commands (save, find, view, edit, delete)
-├── browse.py           # Browse and stats commands
-├── gist.py             # GitHub Gist integration
-├── gui.py              # Interactive FZF browser
-├── tags.py             # Core tag functionality
-├── tag_commands.py     # Tag-related CLI commands
-├── database.py         # Database abstraction layer
-├── sqlite_database.py  # SQLite implementation
-├── migrations.py       # Database migration system
-├── config.py           # Configuration management
-└── utils.py            # Shared utilities
+├── main.py                    # Main CLI entry point using Typer
+├── commands/                  # CLI command implementations
+│   ├── __init__.py
+│   ├── core.py               # Core commands (save, find, view, edit, delete)
+│   ├── browse.py             # Browse and stats commands
+│   ├── gist.py               # GitHub Gist integration
+│   └── tags.py               # Tag-related CLI commands
+├── models/                   # Data models and business logic
+│   ├── __init__.py
+│   ├── documents.py          # Document model operations
+│   └── tags.py               # Tag model operations
+├── database/                 # Database layer (split from sqlite_database.py)
+│   ├── __init__.py
+│   ├── connection.py         # Database connection management
+│   ├── documents.py          # Document database operations
+│   ├── search.py             # Search functionality
+│   └── migrations.py         # Database migration system
+├── ui/                       # User interface components
+│   ├── __init__.py
+│   ├── formatting.py         # Tag display and formatting
+│   ├── gui.py                # GUI wrapper
+│   ├── textual_browser.py    # Interactive TUI browser
+│   ├── nvim_wrapper.py       # Neovim integration
+│   ├── markdown_config.py    # Markdown rendering
+│   └── mdcat_renderer.py     # External mdcat integration
+├── utils/                    # Shared utilities
+│   ├── __init__.py
+│   ├── git.py                # Git project detection utilities
+│   └── emoji_aliases.py      # Emoji alias system (NEW!)
+└── config/                   # Configuration management
+    ├── __init__.py
+    └── settings.py
 ```
 
 ## Data Management
@@ -409,12 +455,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ### Development Priorities
 
+- [x] ~~Add tagging system~~ - **COMPLETED** with emoji tags + text aliases
+- [x] ~~Implement search operators~~ - **COMPLETED** with tag search modes
 - [ ] Add comprehensive test suite
-- [ ] Set up GitHub Actions CI/CD
+- [ ] Set up GitHub Actions CI/CD  
 - [ ] Add more export formats (Markdown, HTML)
-- [ ] Implement search operators (AND, OR, NOT)
-- [ ] Add tagging system
 - [ ] Create web UI companion
+- [ ] Add fuzzy alias matching for typos
 
 ## License
 

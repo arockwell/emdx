@@ -25,16 +25,18 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 ## Architecture
 
 ### Core Components
-- **CLI Interface** (`emdx/cli.py`) - Main entry point and command orchestration
-- **Database Layer** (`emdx/sqlite_database.py`) - SQLite with FTS5 full-text search
-- **Core Operations** (`emdx/core.py`) - Save, find, view, edit, delete operations
-- **Tagging System** (`emdx/tags.py`, `emdx/tag_commands.py`) - Tag management and search
-- **Browse Commands** (`emdx/browse.py`) - List, stats, recent documents
-- **TUI Browser** (`emdx/textual_browser_minimal.py`) - Interactive terminal interface
-- **Integrations** (`emdx/gist.py`, `emdx/nvim_wrapper.py`) - External tool integrations
+- **CLI Interface** (`emdx/main.py`) - Main entry point and command orchestration
+- **Database Layer** (`emdx/database/`) - Modular SQLite with FTS5 full-text search
+- **Core Operations** (`emdx/commands/core.py`) - Save, find, view, edit, delete operations
+- **Tagging System** (`emdx/models/tags.py`, `emdx/commands/tags.py`) - Tag management and search
+- **Emoji Aliases** (`emdx/utils/emoji_aliases.py`) - Text-to-emoji alias system
+- **Browse Commands** (`emdx/commands/browse.py`) - List, stats, recent documents
+- **TUI Browser** (`emdx/ui/textual_browser.py`) - Interactive terminal interface
+- **Integrations** (`emdx/commands/gist.py`, `emdx/ui/nvim_wrapper.py`) - External tool integrations
 
 ### Key Features
 - **Full-text search** with SQLite FTS5 and fuzzy matching
+- **Emoji tag system** with intuitive text aliases (gameplan→🎯, active→🚀)
 - **Tag-based organization** with flexible search (all/any tag modes)
 - **Project detection** from git repositories
 - **Multiple interfaces**: CLI commands, interactive TUI browser
@@ -67,23 +69,29 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 ## Common Development Tasks
 
 ### Adding New Commands
-1. Add command function to appropriate module (`core.py`, `browse.py`, etc.)
+1. Add command function to appropriate module in `commands/` directory
 2. Register with typer app in the module
-3. Include in main CLI app (`cli.py`)
+3. Include in main CLI app (`main.py`)
 4. Add tests in corresponding test file
 5. Update help documentation
 
 ### Database Changes
-1. Create migration function in `emdx/migrations.py`
+1. Create migration function in `emdx/database/migrations.py`
 2. Add to MIGRATIONS list with incremented version
 3. Test migration with existing databases
-4. Update SQLiteDatabase methods as needed
+4. Update database methods in `database/` modules as needed
 
 ### UI Changes (TUI Browser)
-1. Modify `textual_browser_minimal.py`
+1. Modify `ui/textual_browser.py`
 2. Update CSS styling in class definitions
 3. Add key bindings in BINDINGS list
 4. Test with various document sets and edge cases
+
+### Adding Emoji Aliases
+1. Update `utils/emoji_aliases.py` with new alias mappings
+2. Test alias expansion across CLI and TUI interfaces
+3. Update legend display and documentation
+4. Add comprehensive test coverage
 
 ### External Integrations
 1. Add new integration module (follow `gist.py` pattern)
@@ -94,27 +102,29 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 ## Key Files and Their Purpose
 
 ### Core System
-- `emdx/cli.py` - Main CLI entry point, command routing
-- `emdx/core.py` - Core CRUD operations (save, find, view, edit, delete)
-- `emdx/sqlite_database.py` - Database abstraction layer
-- `emdx/config.py` - Configuration management
+- `emdx/main.py` - Main CLI entry point, command routing
+- `emdx/commands/core.py` - Core CRUD operations (save, find, view, edit, delete)
+- `emdx/database/` - Modular database layer (connection, documents, search)
+- `emdx/config/` - Configuration management
 
 ### User Interfaces
-- `emdx/browse.py` - Browse commands (list, recent, stats, projects)
-- `emdx/textual_browser_minimal.py` - Interactive TUI with vim-like keybindings
-- `emdx/gui.py` - Simple GUI wrapper (basic implementation)
+- `emdx/commands/browse.py` - Browse commands (list, recent, stats, projects)
+- `emdx/ui/textual_browser.py` - Interactive TUI with vim-like keybindings
+- `emdx/ui/gui.py` - Simple GUI wrapper (basic implementation)
 
 ### Feature Modules
-- `emdx/tags.py` - Tag operations and search
-- `emdx/tag_commands.py` - Tag management CLI commands
-- `emdx/gist.py` - GitHub Gist integration
-- `emdx/nvim_wrapper.py` - Neovim integration for editing
+- `emdx/models/tags.py` - Tag data operations and search
+- `emdx/commands/tags.py` - Tag management CLI commands
+- `emdx/utils/emoji_aliases.py` - Emoji alias system (NEW!)
+- `emdx/commands/gist.py` - GitHub Gist integration
+- `emdx/ui/nvim_wrapper.py` - Neovim integration for editing
 
-### Utilities
-- `emdx/utils.py` - Git project detection, file utilities
-- `emdx/markdown_config.py` - Markdown rendering configuration
-- `emdx/mdcat_renderer.py` - External mdcat tool integration
-- `emdx/migrations.py` - Database schema migrations
+### Utilities and UI Components
+- `emdx/utils/git.py` - Git project detection, file utilities
+- `emdx/ui/formatting.py` - Tag display and formatting
+- `emdx/ui/markdown_config.py` - Markdown rendering configuration
+- `emdx/ui/mdcat_renderer.py` - External mdcat tool integration
+- `emdx/database/migrations.py` - Database schema migrations
 
 ## Important Implementation Details
 
@@ -186,9 +196,10 @@ echo "My document content" | emdx save --title "Doc"  # CORRECT: Save text via s
 echo "content" | emdx save --title "Piped"            # Save from stdin
 emdx save file.md --title "Custom Title"              # Save with custom title
 
-# Search and browse
+# Search and browse (using text aliases!)
 emdx find "search terms"                               # Full-text search
-emdx find --tags "🎯,🔧"                               # Search by emoji tags
+emdx find --tags "gameplan,refactor"                   # Search by text aliases
+emdx legend                                            # View emoji legend and aliases
 emdx gui                                               # Interactive TUI browser
 
 # View and edit
@@ -197,12 +208,12 @@ emdx edit 123                                          # Edit in your editor
 emdx recent                                            # Show recent documents
 emdx list                                              # List all documents
 
-# Emoji tag management (tags are now emojis!)
-emdx tag 123 🎯 🔧 🚀                                  # Add emoji tags
-emdx untag 123 🔧                                      # Remove tag
+# Emoji tag management with text aliases!
+emdx tag 123 gameplan refactor active                  # Add tags via aliases
+emdx untag 123 refactor                                # Remove tag
 emdx tags                                              # List all tags
-emdx retag old-tag 🎯                                  # Convert word tag to emoji
-emdx view 465                                          # View emoji legend
+emdx legend                                            # View emoji legend and aliases
+emdx find --tags "🎯,active"                           # Mixed emoji/alias usage
 
 # Statistics
 emdx stats                                             # Overall stats
