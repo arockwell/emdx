@@ -58,9 +58,31 @@ class DatabaseConnection:
                     project TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     access_count INTEGER DEFAULT 0,
-                    last_accessed TIMESTAMP,
-                    deleted_at TIMESTAMP NULL
+                    deleted_at TIMESTAMP,
+                    is_deleted BOOLEAN DEFAULT FALSE
+                )
+            """)
+
+            # Add soft delete columns to existing databases (migration)
+            # Check if columns exist first
+            cursor = conn.execute("PRAGMA table_info(documents)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if "deleted_at" not in columns:
+                conn.execute("ALTER TABLE documents ADD COLUMN deleted_at TIMESTAMP")
+
+            if "is_deleted" not in columns:
+                conn.execute("ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
+
+            # Create tags table if it doesn't exist
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    usage_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
@@ -69,10 +91,11 @@ class DatabaseConnection:
                 CREATE TABLE IF NOT EXISTS document_tags (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     document_id INTEGER NOT NULL,
-                    tag TEXT NOT NULL,
+                    tag_id INTEGER NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE,
-                    UNIQUE (document_id, tag)
+                    FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
+                    UNIQUE (document_id, tag_id)
                 )
             """)
 
@@ -84,38 +107,61 @@ class DatabaseConnection:
                 )
             """)
 
-            # Create triggers to keep FTS table synchronized
+            # Create triggers to keep FTS in sync
             conn.execute("""
-                CREATE TRIGGER IF NOT EXISTS documents_fts_insert AFTER INSERT ON documents
-                BEGIN
-                    INSERT INTO documents_fts(rowid, title, content, project) 
+                CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
+                    INSERT INTO documents_fts(rowid, title, content, project)
                     VALUES (new.id, new.title, new.content, new.project);
                 END
             """)
 
             conn.execute("""
-                CREATE TRIGGER IF NOT EXISTS documents_fts_delete AFTER DELETE ON documents
-                BEGIN
-                    DELETE FROM documents_fts WHERE rowid = old.id;
+                CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
+                    UPDATE documents_fts
+                    SET title = new.title, content = new.content, project = new.project
+                    WHERE rowid = old.id;
                 END
             """)
 
             conn.execute("""
-                CREATE TRIGGER IF NOT EXISTS documents_fts_update AFTER UPDATE ON documents
-                BEGIN
+                CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
                     DELETE FROM documents_fts WHERE rowid = old.id;
-                    INSERT INTO documents_fts(rowid, title, content, project) 
-                    VALUES (new.id, new.title, new.content, new.project);
                 END
             """)
 
-            # Create indexes for better performance
+            # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_deleted_at ON documents(deleted_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)")
+            
+            # Create index after columns exist
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(
+                    is_deleted, deleted_at
+                )
+            """)
+
+            # Create gists table for tracking document-gist relationships
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS gists (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id INTEGER NOT NULL,
+                    gist_id TEXT NOT NULL,
+                    gist_url TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_public BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (document_id) REFERENCES documents (id)
+                )
+            """)
+
+            # Create indexes for gists table
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)")
+            
+            # Create indexes for tags tables
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON document_tags(document_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_document_tags_tag ON document_tags(tag)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_document_tags_tag_id ON document_tags(tag_id)")
 
             conn.commit()
 
