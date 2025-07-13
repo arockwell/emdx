@@ -1,5 +1,23 @@
 # EMDX - Knowledge Base CLI Tool
 
+## ⚠️ CRITICAL BUG: Interactive Commands (2025-07-13)
+
+**NEVER run these commands as they will hang Claude Code:**
+- `emdx gui` - Interactive TUI browser
+- `emdx tui` - Alternative TUI interface
+- `poetry run emdx gui`
+- `poetry run emdx tui`
+- Any command that opens an interactive terminal UI
+
+**KNOWN BUG**: As of July 2025, Claude Code's deny rules are NOT working. Even with:
+- Explicit deny patterns in settings.json
+- PreToolUse hooks
+- Multiple pattern formats
+
+These commands STILL execute and hang the session. This is a critical bug in Claude Code's permission system.
+
+**WORKAROUND**: Simply don't ask Claude to run these commands until the bug is fixed.
+
 ## Project Overview
 
 EMDX is a powerful command-line knowledge base and documentation management system built in Python. It provides full-text search, tagging, project organization, and multiple interfaces (CLI, TUI, web) for managing and accessing your knowledge base.
