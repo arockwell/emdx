@@ -28,6 +28,12 @@ from emdx.models.tags import (
     remove_tags_from_document,
     search_by_tags,
 )
+from emdx.models.executions import (
+    Execution,
+    save_execution,
+    get_recent_executions,
+    update_execution_status,
+)
 from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
 
@@ -690,6 +696,8 @@ class MinimalDocumentBrowser(App):
     """Minimal document browser that signals external wrapper for nvim."""
 
     ENABLE_COMMAND_PALETTE = False
+    # Disable mouse support to prevent coordinate spam
+    MOUSE_DISABLED = True
     # Enable text selection globally
     ALLOW_SELECT = True
 
@@ -819,7 +827,17 @@ class MinimalDocumentBrowser(App):
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
-        Binding("l", "log_mode", "Logs", key_display="l"),
+        Binding("l", "log_browser", "Log Browser", key_display="l"),
+        # Number key bindings for switching between execution logs (only active in log browser mode)
+        Binding("1", "switch_log", "Log 1", show=False),
+        Binding("2", "switch_log", "Log 2", show=False),
+        Binding("3", "switch_log", "Log 3", show=False),
+        Binding("4", "switch_log", "Log 4", show=False),
+        Binding("5", "switch_log", "Log 5", show=False),
+        Binding("6", "switch_log", "Log 6", show=False),
+        Binding("7", "switch_log", "Log 7", show=False),
+        Binding("8", "switch_log", "Log 8", show=False),
+        Binding("9", "switch_log", "Log 9", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -836,6 +854,10 @@ class MinimalDocumentBrowser(App):
         self.filtered_docs = []
         self.current_doc_id = None
         self.refresh_timer = None  # Timer for auto-dismissing refresh status
+        # Log browser state
+        self.executions = []  # List of Execution objects
+        self.current_execution_index = 0
+        self.current_log_file = None
 
     def compose(self) -> ComposeResult:
         yield Input(
@@ -946,11 +968,6 @@ class MinimalDocumentBrowser(App):
                 return
             
             self.current_doc_id = doc["id"]
-
-            # Exit selection mode when switching documents
-            if self.selection_mode:
-                self.action_toggle_selection_mode()
-
             self.update_preview(doc["id"])
 
     def update_preview(self, doc_id: int):
@@ -2150,6 +2167,18 @@ class MinimalDocumentBrowser(App):
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"{exec_id}.log"
             
+            # Create execution record
+            from datetime import datetime
+            execution = Execution(
+                id=exec_id,
+                doc_id=self.current_doc_id,
+                doc_title=doc['title'],
+                status='running',
+                started_at=datetime.now(),
+                log_file=str(log_path)
+            )
+            save_execution(execution)
+            
             # Build claude-auto command with proper logging
             fish_source = "source ~/.config/fish/.clauding-backup-20250706_014139/claude-auto.fish; source ~/.config/fish/.clauding-backup-20250706_014139/claude-pretty-parser.fish"
             
@@ -2182,74 +2211,91 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update(f"Error starting Claude execution: {e}")
     
-    def action_log_mode(self):
-        """Switch to live log viewing mode."""
-        self.mode = "LOG_MODE"
-        self.setup_log_viewer()
+    def action_log_browser(self):
+        """Switch to log browser mode to view and switch between execution logs."""
+        self.mode = "LOG_BROWSER"
+        self.setup_log_browser()
     
-    def setup_log_viewer(self):
-        """Set up the log viewer interface."""
+    def setup_log_browser(self):
+        """Set up the log browser interface with execution list and log viewer."""
         try:
-            # Get log directory
-            log_dir = Path.home() / ".config/emdx/logs"
-            log_dir.mkdir(parents=True, exist_ok=True)
+            # Load recent executions from database
+            self.executions = get_recent_executions(limit=20)
             
-            # Find all log files
-            log_files = list(log_dir.glob("claude-*.log"))
-            
-            if not log_files:
+            if not self.executions:
                 self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
-                status.update("No execution logs found - Press 'q' to return")
+                status.update("No executions found - Press 'q' to return")
                 return
             
-            # Sort by modification time (newest first)
-            log_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            self.current_log_file = log_files[0]
+            # Start with the most recent execution
+            self.current_execution_index = 0
             
-            # Clear preview and show log content
-            preview = self.query_one("#preview-content", RichLog)
-            preview.clear()
+            # Replace the documents table with executions table
+            table = self.query_one("#doc-table", DataTable)
+            table.clear(columns=True)
+            table.add_columns("#", "Status", "Document", "Started", "Duration")
             
-            # Load existing log content
-            if self.current_log_file.exists():
-                with open(self.current_log_file, 'r') as f:
-                    content = f.read()
-                    if content:
-                        preview.write(content)
-                        # Auto-scroll to bottom
-                        preview.scroll_end(animate=False)
+            # Populate executions table
+            for i, execution in enumerate(self.executions):
+                status_icon = {
+                    'running': '🔄',
+                    'completed': '✅',
+                    'failed': '❌'
+                }.get(execution.status, '❓')
+                
+                duration = ""
+                if execution.duration:
+                    if execution.duration < 60:
+                        duration = f"{int(execution.duration)}s"
+                    else:
+                        mins = int(execution.duration // 60)
+                        secs = int(execution.duration % 60)
+                        duration = f"{mins}m{secs}s"
+                elif execution.status == 'running':
+                    duration = "running..."
+                
+                table.add_row(
+                    str(i + 1),  # Number for keyboard selection
+                    f"{status_icon} {execution.status}",
+                    execution.doc_title[:30],
+                    execution.started_at.strftime('%H:%M:%S'),
+                    duration
+                )
             
-            # Start live monitoring
-            self.start_log_monitoring()
+            # Select first row and load its log
+            table.move_cursor(row=0)
+            self.load_execution_log(0)
             
-            # Update status
-            exec_id = self.current_log_file.stem
+            # Update status with instructions
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
-            status.update(f"📋 LIVE LOG MODE: {exec_id[:8]}... (Press 'q' to exit, auto-refresh every 1s)")
+            status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (Press 1-9 to switch, 'q' to exit, auto-refresh every 2s)")
+            
+            # Start monitoring for log updates
+            self.start_log_monitoring()
                 
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
-            status.update(f"Error setting up log viewer: {e}")
+            status.update(f"Error setting up log browser: {e}")
     
     def start_log_monitoring(self):
         """Start monitoring the log file for changes."""
         if hasattr(self, 'log_monitor_timer'):
             self.log_monitor_timer.stop()
         
-        # Monitor every 1 second
-        self.log_monitor_timer = self.set_interval(1.0, self.update_log_content)
+        # Monitor every 2 seconds in log browser mode
+        self.log_monitor_timer = self.set_interval(2.0, self.update_log_content)
         self.last_log_size = 0
     
     def update_log_content(self):
         """Update log content if file has changed."""
-        if not hasattr(self, 'current_log_file') or self.mode != "LOG_MODE":
+        if not hasattr(self, 'current_log_file') or self.mode != "LOG_BROWSER":
             return
             
         try:
-            if not self.current_log_file.exists():
+            if not self.current_log_file or not self.current_log_file.exists():
                 return
                 
             # Check if file has grown
@@ -2271,9 +2317,199 @@ class MinimalDocumentBrowser(App):
         except Exception as e:
             # Silently handle file reading errors
             pass
+    
+    def load_execution_log(self, index: int):
+        """Load the log file for the execution at the given index."""
+        if index < 0 or index >= len(self.executions):
+            return
+            
+        try:
+            execution = self.executions[index]
+            self.current_execution_index = index
+            self.current_log_file = Path(execution.log_file)
+            
+            # Clear preview and load log content
+            preview = self.query_one("#preview-content", RichLog)
+            preview.clear()
+            
+            # Show execution header
+            preview.write(f"[bold cyan]=== Execution {execution.id} ===[/bold cyan]")
+            preview.write(f"[yellow]Document:[/yellow] {execution.doc_title}")
+            preview.write(f"[yellow]Status:[/yellow] {execution.status}")
+            preview.write(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            if execution.completed_at:
+                preview.write(f"[yellow]Completed:[/yellow] {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            if execution.duration:
+                preview.write(f"[yellow]Duration:[/yellow] {execution.duration:.1f}s")
+            preview.write("[bold cyan]=== Log Output ===[/bold cyan]")
+            preview.write("")
+            
+            # Load log file content
+            if self.current_log_file.exists():
+                with open(self.current_log_file, 'r') as f:
+                    content = f.read()
+                    if content:
+                        preview.write(content)
+                    else:
+                        preview.write("[dim](No log content yet)[/dim]")
+                
+                # Reset size tracking for live updates
+                self.last_log_size = self.current_log_file.stat().st_size
+            else:
+                preview.write("[red]Log file not found[/red]")
+                self.last_log_size = 0
+            
+            # Auto-scroll to bottom
+            preview.scroll_end(animate=False)
+            
+            # Highlight current row in table
+            table = self.query_one("#doc-table", DataTable)
+            table.move_cursor(row=index)
+            
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error loading execution log: {e}")
+    
+    def action_switch_log(self):
+        """Switch to execution log based on number key pressed."""
+        if self.mode != "LOG_BROWSER":
+            return
+            
+        # Get the key that was pressed
+        # This is a bit tricky - we need to capture which number key was pressed
+        # We'll handle this in the key event handler instead
+        pass
+    
+    def on_key(self, event: events.Key) -> None:
+        """Handle key events, especially number keys for log switching."""
+        try:
+            key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
+            
+            # Handle number keys for log switching in log browser mode only
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
+                if hasattr(event, 'key') and event.key and event.key.isdigit():
+                    log_number = int(event.key)
+                    if 1 <= log_number <= min(9, len(self.executions)):
+                        self.load_execution_log(log_number - 1)  # Convert to 0-based index
+                        event.stop()
+                        event.prevent_default()
+                        return
+            
+            # Let parent handle other keys
+            super().on_key(event)
+        except Exception as e:
+            # Log error but don't crash
+            key_logger.error(f"Error in on_key: {e}")
+            # Still let parent handle the key - but safely
+            try:
+                super().on_key(event)
+            except Exception:
+                # If parent also fails, just log and continue
+                pass
+    
+    
+    async def on_event(self, event) -> None:
+        """Handle all events safely."""
+        try:
+            await super().on_event(event)
+        except Exception as e:
+            logger.error(f"Error handling event {type(event).__name__}: {e}")
+            # Don't re-raise, just log and continue
+    
+    def on_data_table_row_highlighted(self, message: DataTable.RowHighlighted) -> None:
+        """Handle row selection in both document and execution modes."""
+        try:
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
+                # In log browser mode, load the selected execution's log
+                if hasattr(self, 'executions') and message.cursor_row < len(self.executions):
+                    self.load_execution_log(message.cursor_row)
+            else:
+                # Original document preview logic
+                if hasattr(self, 'filtered_docs') and message.cursor_row < len(self.filtered_docs):
+                    doc = self.filtered_docs[message.cursor_row]
+                    self.current_doc_id = doc["id"]
+
+                    # Exit selection mode when switching documents
+                    if hasattr(self, 'selection_mode') and self.selection_mode:
+                        self.action_toggle_selection_mode()
+
+                    self.update_preview(doc["id"])
+        except Exception as e:
+            logger.error(f"Error in on_data_table_row_highlighted: {e}")
+            # Don't crash, just log the error
 
     def action_quit(self):
-        self.exit()
+        try:
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
+                # Exit log browser mode and return to document mode
+                self.mode = "NORMAL"
+                self.stop_log_monitoring()
+                self.reload_documents()
+            else:
+                self.exit()
+        except Exception as e:
+            logger.error(f"Error in action_quit: {e}")
+            # Fallback to exit
+            self.exit()
+    
+    def stop_log_monitoring(self):
+        """Stop the log monitoring timer."""
+        if hasattr(self, 'log_monitor_timer'):
+            self.log_monitor_timer.stop()
+            delattr(self, 'log_monitor_timer')
+    
+    def reload_documents(self):
+        """Reload the document view after exiting log browser."""
+        try:
+            # Clear and recreate the table with documents
+            table = self.query_one("#doc-table", DataTable)
+            table.clear(columns=True)
+            table.add_columns("ID", "Title", "Tags")
+            
+            # Reload documents
+            self.load_documents()
+            
+            # Repopulate the table
+            for doc in self.filtered_docs:
+                # Format timestamp as MM-DD HH:MM (11 chars)
+                timestamp = doc["created_at"].strftime("%m-%d %H:%M")
+
+                # Calculate available space for title (50 total - 11 for timestamp)
+                title_space = 50 - 11
+                title = doc["title"][:title_space]
+                if len(doc["title"]) >= title_space:
+                    title = title[:title_space-3] + "..."
+
+                # Right-justify timestamp by padding title to full width
+                formatted_title = f"{title:<{title_space}}{timestamp}"
+
+                # Expanded tag display - limit to 30 chars with emoji-safe truncation
+                formatted_tags = format_tags(doc.get("tags", []))
+                tags_str, was_truncated = truncate_emoji_safe(formatted_tags, 30)
+                if was_truncated:
+                    tags_str += "..."
+
+                table.add_row(
+                    str(doc["id"]),
+                    formatted_title,
+                    tags_str or "-",
+                )
+            
+            # Focus the table and update preview
+            table.focus()
+            if self.filtered_docs:
+                table.move_cursor(row=0)
+                self.current_doc_id = self.filtered_docs[0]["id"]
+                self.update_preview(self.current_doc_id)
+            
+            # Update status
+            self.update_status()
+            
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error reloading documents: {e}")
 
 
 def run_minimal():

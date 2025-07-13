@@ -70,9 +70,40 @@ def migration_001_add_tags(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_002_add_executions(conn: sqlite3.Connection):
+    """Add executions table for tracking Claude executions."""
+    cursor = conn.cursor()
+
+    # Create executions table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS executions (
+            id TEXT PRIMARY KEY,
+            doc_id INTEGER NOT NULL,
+            doc_title TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            started_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP,
+            log_file TEXT NOT NULL,
+            exit_code INTEGER,
+            working_dir TEXT,
+            FOREIGN KEY (doc_id) REFERENCES documents(id)
+        )
+    """
+    )
+
+    # Create indexes for efficient queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (1, "Add tags system", migration_001_add_tags),
+    (2, "Add executions tracking", migration_002_add_executions),
 ]
 
 

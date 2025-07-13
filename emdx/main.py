@@ -12,6 +12,7 @@ from emdx.commands.browse import app as browse_app
 from emdx.commands.core import app as core_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.tags import app as tag_app
+from emdx.commands.executions import app as executions_app
 from emdx.ui.gui import gui
 
 # Create main app
@@ -38,6 +39,9 @@ for command in gist_app.registered_commands:
 # Tag commands are added directly to the main app
 for command in tag_app.registered_commands:
     app.registered_commands.append(command)
+
+# Add executions as a subcommand group
+app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 
 # Add the gui command
 app.command()(gui)
