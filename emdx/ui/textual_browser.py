@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
+from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -146,6 +146,42 @@ class TitleInput(Input):
         # Input widget doesn't have on_key method, so don't call super()
 
 
+class VimLineNumbers(Static):
+    """Widget that displays vim-style relative line numbers."""
+    
+    def __init__(self, edit_area, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.edit_area = edit_area
+        self.add_class("vim-line-numbers")
+        
+    def update_line_numbers(self):
+        """Update line numbers based on cursor position."""
+        if not hasattr(self.edit_area, 'cursor_location') or not hasattr(self.edit_area, 'text'):
+            self.update("")
+            return
+            
+        try:
+            cursor_row = self.edit_area.cursor_location[0]
+            lines = self.edit_area.text.split('\n')
+            
+            # Generate relative line numbers
+            line_numbers = []
+            for i, line in enumerate(lines):
+                if i == cursor_row:
+                    # Current line shows absolute line number
+                    line_numbers.append(f"{i + 1:>3}")
+                else:
+                    # Other lines show relative distance from cursor
+                    distance = abs(i - cursor_row)
+                    line_numbers.append(f"{distance:>3}")
+            
+            # Update the widget content
+            self.update("\n".join(line_numbers))
+        except Exception as e:
+            logger.debug(f"Error updating line numbers: {e}")
+            self.update("")
+
+
 class VimEditTextArea(TextArea):
     """TextArea with vim-like keybindings for EMDX."""
     
@@ -175,8 +211,8 @@ class VimEditTextArea(TextArea):
         self.show_cursor = True
         self.cursor_blink = False
         
-        # Enable custom relative line numbers
-        self.show_line_numbers = True
+        # Track cursor for relative line numbers (built-in line numbers disabled)
+        self.show_line_numbers = False
         self._last_cursor_row = 0
         
     def _update_cursor_style(self):
@@ -206,12 +242,12 @@ class VimEditTextArea(TextArea):
         
     def _update_relative_line_numbers(self):
         """Update line numbers when cursor moves."""
-        if hasattr(self, 'cursor_location'):
+        if hasattr(self, 'cursor_location') and hasattr(self, 'line_numbers_widget'):
             current_row = self.cursor_location[0]
             if current_row != self._last_cursor_row:
                 self._last_cursor_row = current_row
-                # Force refresh of line numbers
-                self.refresh()
+                # Update the line numbers widget
+                self.line_numbers_widget.update_line_numbers()
         
     def _render_line_numbers(self, *args, **kwargs):
         """Custom line number rendering with vim-style relative numbers."""
@@ -452,6 +488,9 @@ class VimEditTextArea(TextArea):
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
         super().on_key(event)
+        # Update line numbers after any text changes
+        if hasattr(self, 'line_numbers_widget'):
+            self.line_numbers_widget.update_line_numbers()
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
@@ -1077,6 +1116,20 @@ class MinimalDocumentBrowser(App):
         height: 1;
         padding: 0 1;
         background: $surface;
+    }
+    
+    /* Vim relative line numbers */
+    .vim-line-numbers {
+        width: 4;
+        background: $surface;
+        color: $text-muted;
+        text-align: right;
+        padding-right: 1;
+        border-right: solid $primary;
+    }
+    
+    #edit-container {
+        height: 100%;
     }
     """
 
@@ -2247,7 +2300,7 @@ class MinimalDocumentBrowser(App):
             
             # CRITICAL: Set word wrap BEFORE any other properties
             edit_area.word_wrap = True
-            edit_area.show_line_numbers = False  # Will use custom relative line numbers
+            edit_area.show_line_numbers = False  # Disable built-in, using custom relative numbers
             
             # Try setting max line length if available
             if hasattr(edit_area, 'max_line_length'):
@@ -2256,9 +2309,18 @@ class MinimalDocumentBrowser(App):
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
             
+            # Create line numbers widget
+            line_numbers = VimLineNumbers(edit_area, id="line-numbers")
+            edit_area.line_numbers_widget = line_numbers
+            
+            # Create horizontal container for line numbers and text area
+            edit_container = Horizontal(id="edit-container")
+            edit_container.mount(line_numbers)
+            edit_container.mount(edit_area)
+            
             # Mount title and content in wrapper
             edit_wrapper.mount(title_input)
-            edit_wrapper.mount(edit_area)
+            edit_wrapper.mount(edit_container)
             
             # Reset container scroll and refresh layout (same as selection mode)
             container.scroll_to(0, 0, animate=False)
@@ -2267,6 +2329,9 @@ class MinimalDocumentBrowser(App):
             
             # Focus the content editor first instead of title input 
             edit_area.focus()
+            
+            # Initialize line numbers
+            line_numbers.update_line_numbers()
             
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
