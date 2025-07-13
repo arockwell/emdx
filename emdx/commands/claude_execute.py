@@ -155,7 +155,8 @@ def execute_with_claude(
     execution_id: str,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
-    verbose: bool = True
+    verbose: bool = True,
+    working_dir: Optional[str] = None
 ) -> int:
     """Execute a task with Claude, streaming output to log file.
     
@@ -205,6 +206,7 @@ def execute_with_claude(
             text=True,
             bufsize=0,  # Unbuffered
             universal_newlines=True,
+            cwd=working_dir,  # Run in specified working directory
             env={**os.environ, 'PYTHONUNBUFFERED': '1'}  # Force unbuffered for any Python subprocesses
         )
         
@@ -250,6 +252,78 @@ def execute_with_claude(
         return 1
 
 
+def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Path]:
+    """Create a dedicated git worktree for Claude execution.
+    
+    Args:
+        execution_id: Unique execution ID  
+        doc_title: Document title for branch naming
+        
+    Returns:
+        Path to created worktree or None if creation failed
+    """
+    try:
+        # Get project name from git remote
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd()
+        )
+        
+        if result.returncode == 0:
+            remote_url = result.stdout.strip()
+            # Extract project name from URL
+            import re
+            match = re.search(r'([^/]+)(\.git)?$', remote_url)
+            if match:
+                project_name = match.group(1).replace('.git', '')
+            else:
+                project_name = Path.cwd().name
+        else:
+            project_name = Path.cwd().name
+        
+        # Create branch name from execution ID and doc title
+        # Extract doc ID from execution_id (format: "claude-{doc_id}-{timestamp}")
+        exec_parts = execution_id.split('-')
+        doc_id = exec_parts[1] if len(exec_parts) > 1 else "unknown"
+        
+        # Sanitize doc title for git branch name
+        safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
+        branch_name = f"exec-{doc_id}-{safe_title}"
+        
+        # Worktree directory
+        worktrees_dir = Path.home() / "dev" / "worktrees"
+        worktrees_dir.mkdir(parents=True, exist_ok=True)
+        worktree_name = f"{project_name}-{branch_name}"
+        worktree_path = worktrees_dir / worktree_name
+        
+        # Create branch from current HEAD
+        subprocess.run(
+            ["git", "branch", branch_name],
+            check=True,
+            capture_output=True
+        )
+        
+        # Create worktree
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree_path), branch_name],
+            check=True,
+            capture_output=True
+        )
+        
+        console.print(f"[green]✅ Created execution worktree: {worktree_path}[/green]")
+        return worktree_path
+        
+    except subprocess.CalledProcessError as e:
+        console.print(f"[yellow]Warning: Could not create worktree: {e}[/yellow]")
+        console.print(f"[yellow]Execution will run in current directory[/yellow]")
+        return None
+    except Exception as e:
+        console.print(f"[yellow]Warning: Worktree creation failed: {e}[/yellow]")
+        return None
+
+
 def monitor_execution(
     execution_id: str,
     task: str,
@@ -269,6 +343,10 @@ def monitor_execution(
         allowed_tools: List of allowed tools
     """
     try:
+        # Create dedicated worktree for this execution
+        worktree_path = create_execution_worktree(execution_id, doc_title)
+        working_dir = str(worktree_path) if worktree_path else os.getcwd()
+        
         # Create and save initial execution record
         execution = Execution(
             id=execution_id,
@@ -277,17 +355,18 @@ def monitor_execution(
             status="running",
             started_at=datetime.now(),
             log_file=str(log_file),
-            working_dir=os.getcwd()
+            working_dir=working_dir
         )
         save_execution(execution)
         
-        # Execute with Claude
+        # Execute with Claude in the worktree
         exit_code = execute_with_claude(
             task=task,
             execution_id=execution_id,
             log_file=log_file,
             allowed_tools=allowed_tools,
-            verbose=False  # Don't show output when running in background
+            verbose=False,  # Don't show output when running in background
+            working_dir=working_dir
         )
         
         # Update execution status
@@ -349,6 +428,10 @@ def execute(
         console.print(f"Log file: [dim]{log_file}[/dim]")
         console.print()
         
+        # Create worktree for execution
+        worktree_path = create_execution_worktree(execution_id, doc['title'])
+        working_dir = str(worktree_path) if worktree_path else os.getcwd()
+        
         # Create execution record
         execution = Execution(
             id=execution_id,
@@ -357,17 +440,18 @@ def execute(
             status="running",
             started_at=datetime.now(),
             log_file=str(log_file),
-            working_dir=os.getcwd()
+            working_dir=working_dir
         )
         save_execution(execution)
         
-        # Execute
+        # Execute in worktree
         exit_code = execute_with_claude(
             task=doc['content'],
             execution_id=execution_id,
             log_file=log_file,
             allowed_tools=allowed_tools,
-            verbose=True
+            verbose=True,
+            working_dir=working_dir
         )
         
         # Update status

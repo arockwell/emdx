@@ -2686,10 +2686,10 @@ class MinimalDocumentBrowser(App):
                 self.execution_threads = []
             self.execution_threads.append(thread)
             
-            # Show success message
+            # Show success message with worktree info
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
-            status.update(f"🚀 Python Claude executing: {doc['title'][:30]}... → {exec_id[:8]} (Press 'l' for logs)")
+            status.update(f"🚀 Claude executing in worktree: {doc['title'][:25]}... → {exec_id[:8]} (Press 'l' for logs)")
                 
         except Exception as e:
             self.cancel_refresh_timer()
