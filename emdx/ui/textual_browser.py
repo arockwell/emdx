@@ -1137,24 +1137,27 @@ class MinimalDocumentBrowser(App):
     
     /* Vim relative line numbers */
     .vim-line-numbers {
-        width: 3;
-        background: $surface;
+        width: 4;
+        background: $background;
         color: $text-muted;
         text-align: right;
-        padding-right: 0;
-        margin-right: 0;
-        border-right: solid $primary;
+        padding-right: 1;
+        margin: 0;
+        border: none;
         overflow-y: hidden;
         scrollbar-size: 0 0;
     }
     
     #edit-container {
         height: 100%;
+        background: $background;
     }
     
     #edit-container TextArea {
-        margin-left: 0;
-        padding-left: 1;
+        margin: 0;
+        padding-left: 0;
+        border-left: none;
+        background: $background;
     }
     """
 
