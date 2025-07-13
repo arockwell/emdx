@@ -809,7 +809,6 @@ class MinimalDocumentBrowser(App):
         Binding("r", "refresh", "Refresh", key_display="r"),
         Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
         Binding("d", "delete", "Delete", show=False),
-        Binding("v", "view", "View", show=False),
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
         Binding("shift+t", "untag_mode", "Untag", show=False),
@@ -817,7 +816,7 @@ class MinimalDocumentBrowser(App):
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
         Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
-        Binding("shift+h", "tmux_split_vertical", "Split ↓", key_display="H"),
+        Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
     ]
 
     mode = reactive("NORMAL")
@@ -1246,10 +1245,6 @@ class MinimalDocumentBrowser(App):
                         event.prevent_default()
                         event.stop()
                         self.action_delete()
-                    elif event.character == "v":
-                        event.prevent_default()
-                        event.stop()
-                        self.action_view()
                     elif event.character == "t":
                         event.prevent_default()
                         event.stop()
