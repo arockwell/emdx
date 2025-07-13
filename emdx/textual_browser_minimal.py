@@ -121,7 +121,6 @@ class FullScreenView(Screen):
         ("ctrl+u", "page_up", "Page up"),
         ("g", "scroll_top", "Top"),
         ("shift+g", "scroll_bottom", "Bottom"),
-        ("c", "copy_content", "Copy"),
     ]
 
     def __init__(self, doc_id: int):
@@ -1143,10 +1142,23 @@ class MinimalDocumentBrowser(App):
         logger.debug("action_copy_selected called")
         try:
             if self.selection_mode:
-                logger.debug("In selection mode, copying full document")
-                # Just copy the full document for now
-                # Avoid accessing TextArea properties that might not exist
-                self.action_copy_content()
+                logger.debug("In selection mode, trying to copy selected text")
+                # Try to get selected text from TextArea
+                try:
+                    text_area = self.query_one("#preview-content", SelectionTextArea)
+                    selected_text = text_area.selected_text
+                    
+                    if selected_text:
+                        logger.debug(f"Copying selected text: {len(selected_text)} characters")
+                        self.copy_to_clipboard(selected_text)
+                        status = self.query_one("#status", Label)
+                        status.update("Selected text copied to clipboard!")
+                    else:
+                        logger.debug("No text selected, copying full document")
+                        self.action_copy_content()
+                except Exception as text_error:
+                    logger.debug(f"Could not get selected text: {text_error}, copying full document")
+                    self.action_copy_content()
             else:
                 logger.debug("Not in selection mode, copying full document")
                 # Not in selection mode, copy full document
