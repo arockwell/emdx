@@ -153,6 +153,7 @@ class VimLineNumbers(Static):
         super().__init__(*args, **kwargs)
         self.edit_area = edit_area
         self.add_class("vim-line-numbers")
+        self.can_focus = False  # Don't steal focus from text area
         
     def update_line_numbers(self):
         """Update line numbers based on cursor position."""
@@ -163,6 +164,8 @@ class VimLineNumbers(Static):
         try:
             cursor_row = self.edit_area.cursor_location[0]
             lines = self.edit_area.text.split('\n')
+            
+            logger.debug(f"Updating line numbers: cursor_row={cursor_row}, total_lines={len(lines)}")
             
             # Generate relative line numbers
             line_numbers = []
@@ -176,9 +179,11 @@ class VimLineNumbers(Static):
                     line_numbers.append(f"{distance:>3}")
             
             # Update the widget content
-            self.update("\n".join(line_numbers))
+            content = "\n".join(line_numbers)
+            logger.debug(f"Line numbers content: {content[:100]}...")
+            self.update(content)
         except Exception as e:
-            logger.debug(f"Error updating line numbers: {e}")
+            logger.error(f"Error updating line numbers: {e}")
             self.update("")
 
 
@@ -233,6 +238,9 @@ class VimEditTextArea(TextArea):
     def on_mount(self) -> None:
         """Called when widget is mounted."""
         self._enable_relative_line_numbers()
+        # Initialize line numbers on mount
+        if hasattr(self, 'line_numbers_widget'):
+            self.line_numbers_widget.update_line_numbers()
     
     def _enable_relative_line_numbers(self):
         """Enable vim-style relative line numbers.""" 
@@ -312,6 +320,9 @@ class VimEditTextArea(TextArea):
                 self._handle_visual_line_mode(event)
             elif self.vim_mode == self.VIM_COMMAND:
                 self._handle_command_mode(event)
+            
+            # Update line numbers after any key event
+            self._update_relative_line_numbers()
                 
         except Exception as e:
             key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
