@@ -7,6 +7,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import logging
+from pathlib import Path
 
 from rich.markdown import Markdown
 from textual import events
@@ -24,6 +26,22 @@ from emdx.tags import (
     remove_tags_from_document,
     search_by_tags,
 )
+
+# Set up logging
+log_dir = Path.home() / ".config" / "emdx"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "tui_debug.log"
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        # logging.StreamHandler()  # Uncomment for console output
+    ]
+)
+logger = logging.getLogger(__name__)
+logger.info("EMDX TUI starting up")
 
 
 class SelectionTextArea(TextArea):
@@ -653,7 +671,10 @@ class MinimalDocumentBrowser(App):
 
             self.mode = "NORMAL"
 
-    def on_key(self, event: events.Key):
+    def on_key(self, event: events.Key) -> None:
+        # Log all key events for debugging
+        logger.debug(f"Key event: key={event.key}, character={event.character}, ctrl={event.ctrl}, alt={event.alt}, shift={event.shift}")
+        
         # Handle global Escape key - quit from any mode
         if event.key == "escape":
             # Selection mode ESC is handled by SelectionTextArea
@@ -717,6 +738,12 @@ class MinimalDocumentBrowser(App):
                     event.prevent_default()
                     event.stop()
                     self.action_untag_mode()
+        
+        # Pass unhandled events to parent
+        try:
+            super().on_key(event)
+        except Exception as e:
+            logger.error(f"Error in super().on_key: {e}", exc_info=True)
 
     def filter_documents(self, query: str):
         if not query:
