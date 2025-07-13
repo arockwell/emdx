@@ -17,6 +17,7 @@ from rich.table import Table
 
 from emdx.sqlite_database import db
 from emdx.tags import add_tags_to_document, get_document_tags, search_by_tags
+from emdx.tag_display import format_tags
 from emdx.utils import get_git_project
 
 app = typer.Typer()
@@ -145,7 +146,7 @@ def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: l
     if metadata.project:
         console.print(f"   [dim]Project:[/dim] {metadata.project}")
     if applied_tags:
-        console.print(f"   [dim]Tags:[/dim] {', '.join(applied_tags)}")
+        console.print(f"   [dim]Tags:[/dim] {format_tags(applied_tags)}")
 
 
 @app.command()
@@ -279,7 +280,7 @@ def find(
             # Display tags
             doc_tags = get_document_tags(result["id"])
             if doc_tags:
-                console.print(f"[dim]Tags: {', '.join(doc_tags)}[/dim]")
+                console.print(f"[dim]Tags: {format_tags(doc_tags)}[/dim]")
 
             # Display snippet if requested
             if snippets and "snippet" in result:
@@ -335,7 +336,7 @@ def view(
                 # Show tags
                 doc_tags = get_document_tags(doc["id"])
                 if doc_tags:
-                    console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
+                    console.print(f"[dim]Tags:[/dim] {format_tags(doc_tags)}")
                 console.print("=" * 60 + "\n")
 
             if raw:
@@ -362,7 +363,7 @@ def view(
                     # Show tags
                     doc_tags = get_document_tags(doc["id"])
                     if doc_tags:
-                        console.print(f"[dim]Tags:[/dim] {', '.join(doc_tags)}")
+                        console.print(f"[dim]Tags:[/dim] {format_tags(doc_tags)}")
                     console.print("=" * 60 + "\n")
 
                 if raw:
