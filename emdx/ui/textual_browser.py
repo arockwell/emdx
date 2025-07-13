@@ -2029,8 +2029,8 @@ class MinimalDocumentBrowser(App):
             # Remove all widgets from container (same as selection mode fix)
             container.remove_children()
             
-            # Create EditTextArea with constraints BEFORE mounting
-            edit_area = EditTextArea(self, doc["content"], id="preview-content")
+            # Create VimEditTextArea with constraints BEFORE mounting
+            edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
             
             # Make it editable (not read-only like selection mode)
