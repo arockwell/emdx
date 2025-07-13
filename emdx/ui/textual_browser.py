@@ -819,6 +819,7 @@ class MinimalDocumentBrowser(App):
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
+        Binding("l", "log_mode", "Logs", key_display="l"),
     ]
 
     mode = reactive("NORMAL")
@@ -2149,31 +2150,127 @@ class MinimalDocumentBrowser(App):
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"{exec_id}.log"
             
-            # Build claude-auto command with logging - source fish functions first
+            # Build claude-auto command with proper logging
             fish_source = "source ~/.config/fish/.clauding-backup-20250706_014139/claude-auto.fish; source ~/.config/fish/.clauding-backup-20250706_014139/claude-pretty-parser.fish"
-            claude_cmd = f"claude-auto 'Execute this plan: @{temp_path}' 2>&1 | tee {log_path}"
             
-            # Wrap in fish shell with function sourcing and completion message
-            full_cmd = f"fish -c '{fish_source}; {claude_cmd}; echo; echo \"✅ Claude execution completed! Press any key to close...\"; read'"
+            # Create log file with header
+            with open(log_path, 'w') as f:
+                f.write(f"=== EMDX Claude Execution ===\n")
+                f.write(f"ID: {exec_id}\n")
+                f.write(f"Document: {doc['title']}\n")
+                f.write(f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 50 + "\n\n")
             
-            # Spawn tmux pane with Claude execution
-            result = subprocess.run([
-                'tmux', 'split-window', '-h', '-p', '60', full_cmd
-            ], capture_output=True, text=True)
+            # Redirect all output to log file
+            claude_cmd = f"claude-auto 'Execute this plan: @{temp_path}'"
+            background_cmd = f"fish -c '{fish_source}; {claude_cmd}' >> {log_path} 2>&1"
             
-            if result.returncode == 0:
-                self.cancel_refresh_timer()
-                status = self.query_one("#status", Label)
-                status.update(f"🚀 Claude executing: {doc['title'][:30]}... → {exec_id[:8]}")
-            else:
-                self.cancel_refresh_timer()
-                status = self.query_one("#status", Label)
-                status.update(f"Failed to start Claude execution: {result.stderr}")
+            # Start background process
+            process = subprocess.Popen(
+                background_cmd,
+                shell=True,
+                start_new_session=True
+            )
+            
+            # Always show success since Popen doesn't wait
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"🚀 Claude executing in background: {doc['title'][:30]}... → {exec_id[:8]} (Press 'l' for logs)")
                 
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error starting Claude execution: {e}")
+    
+    def action_log_mode(self):
+        """Switch to live log viewing mode."""
+        self.mode = "LOG_MODE"
+        self.setup_log_viewer()
+    
+    def setup_log_viewer(self):
+        """Set up the log viewer interface."""
+        try:
+            # Get log directory
+            log_dir = Path.home() / ".config/emdx/logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Find all log files
+            log_files = list(log_dir.glob("claude-*.log"))
+            
+            if not log_files:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("No execution logs found - Press 'q' to return")
+                return
+            
+            # Sort by modification time (newest first)
+            log_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            self.current_log_file = log_files[0]
+            
+            # Clear preview and show log content
+            preview = self.query_one("#preview-content", RichLog)
+            preview.clear()
+            
+            # Load existing log content
+            if self.current_log_file.exists():
+                with open(self.current_log_file, 'r') as f:
+                    content = f.read()
+                    if content:
+                        preview.write(content)
+                        # Auto-scroll to bottom
+                        preview.scroll_end(animate=False)
+            
+            # Start live monitoring
+            self.start_log_monitoring()
+            
+            # Update status
+            exec_id = self.current_log_file.stem
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"📋 LIVE LOG MODE: {exec_id[:8]}... (Press 'q' to exit, auto-refresh every 1s)")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error setting up log viewer: {e}")
+    
+    def start_log_monitoring(self):
+        """Start monitoring the log file for changes."""
+        if hasattr(self, 'log_monitor_timer'):
+            self.log_monitor_timer.stop()
+        
+        # Monitor every 1 second
+        self.log_monitor_timer = self.set_interval(1.0, self.update_log_content)
+        self.last_log_size = 0
+    
+    def update_log_content(self):
+        """Update log content if file has changed."""
+        if not hasattr(self, 'current_log_file') or self.mode != "LOG_MODE":
+            return
+            
+        try:
+            if not self.current_log_file.exists():
+                return
+                
+            # Check if file has grown
+            current_size = self.current_log_file.stat().st_size
+            if current_size > self.last_log_size:
+                # Read new content
+                with open(self.current_log_file, 'r') as f:
+                    f.seek(self.last_log_size)
+                    new_content = f.read()
+                    
+                if new_content:
+                    preview = self.query_one("#preview-content", RichLog)
+                    preview.write(new_content)
+                    # Auto-scroll to bottom
+                    preview.scroll_end(animate=False)
+                    
+                self.last_log_size = current_size
+                
+        except Exception as e:
+            # Silently handle file reading errors
+            pass
 
     def action_quit(self):
         self.exit()
