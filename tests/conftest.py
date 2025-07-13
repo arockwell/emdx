@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from test_fixtures import TestDatabase
 
-from emdx.tags import add_tags_to_document
+from emdx.models.tags import add_tags_to_document
 
 
 @pytest.fixture
