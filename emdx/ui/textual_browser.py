@@ -2315,12 +2315,14 @@ class MinimalDocumentBrowser(App):
             
             # Create horizontal container for line numbers and text area
             edit_container = Horizontal(id="edit-container")
-            edit_container.mount(line_numbers)
-            edit_container.mount(edit_area)
             
             # Mount title and content in wrapper
             edit_wrapper.mount(title_input)
             edit_wrapper.mount(edit_container)
+            
+            # Now mount widgets in the container after it's mounted
+            edit_container.mount(line_numbers)
+            edit_container.mount(edit_area)
             
             # Reset container scroll and refresh layout (same as selection mode)
             container.scroll_to(0, 0, animate=False)
