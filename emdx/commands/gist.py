@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
+from emdx.models.documents import get_document
 
 app = typer.Typer()
 console = Console()
@@ -192,7 +193,7 @@ def create(
         raise typer.Exit(1)
 
     # Get the document
-    doc = db.get_document(identifier)
+    doc = get_document(identifier)
     if not doc:
         console.print(f"[red]Error: Document '{identifier}' not found[/red]")
         raise typer.Exit(1)

@@ -46,7 +46,7 @@ mypy = "^1.0.0"
 pre-commit = "^3.0.0"
 
 [tool.poetry.scripts]
-emdx = "emdx.cli:run"
+emdx = "emdx.main:run"
 
 [build-system]
 requires = ["poetry-core"]

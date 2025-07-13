@@ -8,11 +8,11 @@ from typing import Optional
 import typer
 
 from emdx import __version__
-from emdx.browse import app as browse_app
-from emdx.core import app as core_app
-from emdx.gist import app as gist_app
-from emdx.gui import gui
-from emdx.tag_commands import app as tag_app
+from emdx.commands.browse import app as browse_app
+from emdx.commands.core import app as core_app
+from emdx.commands.gist import app as gist_app
+from emdx.ui.gui import gui
+from emdx.commands.tags import app as tag_app
 
 # Create main app
 app = typer.Typer(

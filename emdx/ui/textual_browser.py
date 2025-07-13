@@ -20,13 +20,13 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea
 
 from emdx.database import db
-from emdx.tags import (
+from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
     remove_tags_from_document,
     search_by_tags,
 )
-from emdx.display.formatting import format_tags, order_tags, truncate_emoji_safe
+from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
 
 # Set up logging
 log_dir = Path.home() / ".config" / "emdx"

@@ -3,7 +3,7 @@
 import sqlite3
 from typing import Any, Optional
 
-from .database import db
+from emdx.database import db
 
 
 def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:

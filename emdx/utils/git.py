@@ -1,5 +1,5 @@
 """
-Utility functions for emdx
+Git utility functions for emdx
 """
 
 from pathlib import Path

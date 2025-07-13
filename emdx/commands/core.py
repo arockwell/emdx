@@ -16,8 +16,12 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from emdx.database import db
-from emdx.tags import add_tags_to_document, get_document_tags, search_by_tags
-from emdx.display.formatting import format_tags
+from emdx.models.documents import (
+    save_document, get_document, search_documents, update_document,
+    delete_document, list_deleted_documents, restore_document, purge_deleted_documents
+)
+from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
+from emdx.ui.formatting import format_tags
 from emdx.utils.git import get_git_project
 
 app = typer.Typer()
@@ -122,7 +126,7 @@ def create_document(title: str, content: str, project: Optional[str]) -> int:
 
     # Save to database
     try:
-        doc_id = db.save_document(title, content, project)
+        doc_id = save_document(title, content, project)
         return doc_id
     except Exception as e:
         console.print(f"[red]Error saving document: {e}[/red]")
@@ -221,7 +225,7 @@ def find(
                 tag_doc_ids = {doc["id"] for doc in tag_results}
 
                 # Get documents matching search query
-                search_results = db.search_documents(
+                search_results = search_documents(
                     search_query, project=project, limit=limit * 2, fuzzy=fuzzy
                 )
 
@@ -247,7 +251,7 @@ def find(
                 search_query = f"tags: {', '.join(tag_list)}"
         else:
             # Regular search without tags
-            results = db.search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
+            results = search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
 
             if not results:
                 console.print(
@@ -318,7 +322,7 @@ def view(
         db.ensure_schema()
 
         # Fetch document
-        doc = db.get_document(identifier)
+        doc = get_document(identifier)
 
         if not doc:
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
@@ -393,7 +397,7 @@ def edit(
         db.ensure_schema()
 
         # Fetch document
-        doc = db.get_document(identifier)
+        doc = get_document(identifier)
 
         if not doc:
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
@@ -401,7 +405,7 @@ def edit(
 
         # Quick title update without editing content
         if title:
-            success = db.update_document(doc["id"], title, doc["content"])
+            success = update_document(doc["id"], title, doc["content"])
             if success:
                 console.print(
                     f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]"
@@ -475,7 +479,7 @@ def edit(
                 return
 
             # Update document
-            success = db.update_document(doc["id"], new_title, new_content)
+            success = update_document(doc["id"], new_title, new_content)
 
             if success:
                 console.print(f"[green]✅ Updated #{doc['id']}:[/green] [cyan]{new_title}[/cyan]")
@@ -516,7 +520,7 @@ def delete(
         not_found = []
 
         for identifier in identifiers:
-            doc = db.get_document(identifier)
+            doc = get_document(identifier)
             if doc:
                 docs_to_delete.append(doc)
             else:
@@ -585,7 +589,7 @@ def delete(
         failed = []
 
         for doc in docs_to_delete:
-            success = db.delete_document(str(doc["id"]), hard_delete=hard)
+            success = delete_document(str(doc["id"]), hard_delete=hard)
             if success:
                 deleted_count += 1
             else:
@@ -628,7 +632,7 @@ def trash(
         db.ensure_schema()
 
         # Get deleted documents
-        deleted_docs = db.list_deleted_documents(days=days, limit=limit)
+        deleted_docs = list_deleted_documents(days=days, limit=limit)
 
         if not deleted_docs:
             if days:
@@ -687,7 +691,7 @@ def restore(
 
         if all:
             # Restore all deleted documents
-            deleted_docs = db.list_deleted_documents()
+            deleted_docs = list_deleted_documents()
             if not deleted_docs:
                 console.print("[yellow]No documents to restore[/yellow]")
                 return
@@ -697,7 +701,7 @@ def restore(
 
             restored_count = 0
             for doc in deleted_docs:
-                if db.restore_document(str(doc["id"])):
+                if restore_document(str(doc["id"])):
                     restored_count += 1
 
             console.print(f"\n[green]✅ Restored {restored_count} document(s)[/green]")
@@ -707,7 +711,7 @@ def restore(
             not_found = []
 
             for identifier in identifiers:
-                if db.restore_document(identifier):
+                if restore_document(identifier):
                     restored.append(identifier)
                 else:
                     not_found.append(identifier)
@@ -744,7 +748,7 @@ def purge(
 
         # Get count of documents to purge
         if older_than:
-            deleted_docs = db.list_deleted_documents()
+            deleted_docs = list_deleted_documents()
             # Filter by age
             from datetime import datetime, timedelta
 
@@ -752,7 +756,7 @@ def purge(
             docs_to_purge = [d for d in deleted_docs if d["deleted_at"] < cutoff]
             count = len(docs_to_purge)
         else:
-            deleted_docs = db.list_deleted_documents()
+            deleted_docs = list_deleted_documents()
             count = len(deleted_docs)
 
         if count == 0:
@@ -775,7 +779,7 @@ def purge(
             typer.confirm("Are you absolutely sure?", abort=True)
 
         # Perform purge
-        purged_count = db.purge_deleted_documents(older_than_days=older_than)
+        purged_count = purge_deleted_documents(older_than_days=older_than)
 
         console.print(
             f"\n[green]✅ Permanently deleted {purged_count} document(s) from trash[/green]"

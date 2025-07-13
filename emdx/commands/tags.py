@@ -6,8 +6,9 @@ from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
-from emdx.display.formatting import format_tags
-from emdx.tags import (
+from emdx.models.documents import get_document
+from emdx.ui.formatting import format_tags
+from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
     list_all_tags,
@@ -31,7 +32,7 @@ def tag(
         db.ensure_schema()
 
         # Check if document exists
-        doc = db.get_document(str(doc_id))
+        doc = get_document(str(doc_id))
         if not doc:
             console.print(f"[red]Error: Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
@@ -76,7 +77,7 @@ def untag(
         db.ensure_schema()
 
         # Check if document exists
-        doc = db.get_document(str(doc_id))
+        doc = get_document(str(doc_id))
         if not doc:
             console.print(f"[red]Error: Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
