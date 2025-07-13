@@ -739,11 +739,8 @@ class MinimalDocumentBrowser(App):
                     event.stop()
                     self.action_untag_mode()
         
-        # Pass unhandled events to parent
-        try:
-            super().on_key(event)
-        except Exception as e:
-            logger.error(f"Error in super().on_key: {e}", exc_info=True)
+        # Note: In Textual 4.0, we should NOT call super().on_key() 
+        # as Textual automatically handles event propagation
 
     def filter_documents(self, query: str):
         if not query:
