@@ -13,7 +13,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 📝 **Flexible Input**: Save files, text, or piped input with one command
 - 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
-- 🖥️ **Modern TUI Browser**: Textual-based browser with vim-style navigation and zero-flash nvim editing
+- 🖥️ **Modern TUI Browser**: Textual-based browser with vim-style navigation and in-place vim editing
 - 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
 - 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
 - ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
@@ -240,7 +240,7 @@ emdx gui
 ```
 
 The GUI browser provides:
-- **Zero-flash nvim editing**: Seamless transition to nvim without terminal flash
+- **In-place vim editing**: Full vim modal editing directly in the preview pane
 - **Modal interface**: True vim-style NORMAL/SEARCH modes  
 - **Live search**: Real-time document filtering as you type
 - **Rich markdown preview**: Clean document rendering with syntax highlighting
@@ -249,10 +249,53 @@ The GUI browser provides:
   - `j/k` - Move up/down through documents
   - `g/G` - Go to first/last document
   - `/` - Enter search mode
-  - `e` - Edit document in nvim (seamless, no flash)
+  - `e` - Edit document with vim keybindings (in-place)
+  - `s` - Text selection mode
   - `d` - Delete document (modal confirmation)
   - `v` or `Enter` - View document in full-screen
   - `q` or `Esc` - Exit browser
+
+### **🎯 Vim Editing Mode**
+
+When you press `e` to edit a document, you enter a powerful vim-like editing experience:
+
+#### **Vim Modes**
+- **INSERT** mode (default) - Normal text editing, press `ESC` to enter NORMAL mode
+- **NORMAL** mode - Vim commands and navigation, press `ESC` again to save and exit
+- **VISUAL** mode - Character-wise selection (`v` from NORMAL mode)
+- **VISUAL LINE** mode - Line-wise selection (`V` from NORMAL mode)
+
+#### **Core Vim Commands**
+```bash
+# Navigation (NORMAL mode)
+h/j/k/l         # Left/Down/Up/Right
+w/b/e           # Word forward/backward/end
+0/$             # Start/end of line
+gg/G            # Start/end of document
+
+# Mode switching
+i/a/I/A/o/O     # Enter INSERT mode (various positions)
+v/V             # Enter VISUAL/VISUAL LINE mode
+ESC             # INSERT→NORMAL→EXIT edit mode
+
+# Editing (NORMAL mode)
+x               # Delete character
+dd              # Delete line
+yy              # Yank (copy) line
+p/P             # Paste after/before cursor
+
+# With repeat counts
+3j              # Move down 3 lines
+5w              # Move forward 5 words
+2dd             # Delete 2 lines
+```
+
+#### **Smart Status Bar**
+The status bar shows your current vim mode with color coding:
+- 🟢 `-- INSERT --` (ready to type)
+- 🔵 `-- NORMAL --` (command mode)
+- 🟡 `-- VISUAL --` (selection mode)
+- Shows pending commands and repeat counts
 
 ## Command Reference
 
@@ -457,6 +500,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - [x] ~~Add tagging system~~ - **COMPLETED** with emoji tags + text aliases
 - [x] ~~Implement search operators~~ - **COMPLETED** with tag search modes
+- [x] ~~Add vim-like editing~~ - **COMPLETED** with full modal editing in TUI
 - [ ] Add comprehensive test suite
 - [ ] Set up GitHub Actions CI/CD  
 - [ ] Add more export formats (Markdown, HTML)

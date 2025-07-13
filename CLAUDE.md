@@ -234,6 +234,35 @@ The wrong syntax was causing ~40 empty documents because emdx was looking for a 
 
 This project emphasizes clean architecture, comprehensive testing, and user-friendly interfaces while maintaining high code quality standards.
 
+## Vim Editing Mode
+
+### In-Place Vim Editor (NEW!)
+
+EMDX TUI now features a complete vim-like editing mode accessible by pressing 'e' on any document:
+
+#### Core Features
+- **Full modal editing**: NORMAL, INSERT, VISUAL, and VISUAL LINE modes
+- **Complete vim command set**: h/j/k/l, w/b/e, 0/$, gg/G, i/a/I/A/o/O, x/dd/yy/p
+- **Repeat counts**: 3j, 5w, 2dd, etc.
+- **Smart dual ESC**: INSERT→NORMAL→EXIT edit mode
+- **Color-coded status**: Shows current mode with visual indicators
+- **Seamless integration**: No external editor needed
+
+#### Implementation Architecture
+- `VimEditTextArea` extends Textual's TextArea with vim behavior
+- Modal key routing based on current vim mode
+- Reactive state management for UI updates
+- Direct text manipulation for reliable operations
+- Comprehensive error handling and boundary checks
+
+#### User Experience Philosophy
+- **Starts in INSERT mode** - Users expect to type immediately
+- **Progressive vim adoption** - Casual users stay in INSERT, power users use NORMAL
+- **Clear visual feedback** - Status bar shows mode and pending commands
+- **Backward compatible** - Existing code continues to work
+
+This implementation demonstrates how good architecture enables rapid feature development - the vim mode was implemented in a single session by leveraging existing modal patterns.
+
 ## Claude Code Workflow Integration
 
 ### Auto-Tagging for Project Management
