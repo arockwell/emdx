@@ -23,6 +23,7 @@ from emdx.models.documents import (
 from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
 from emdx.ui.formatting import format_tags
 from emdx.utils.git import get_git_project
+from emdx.utils.emoji_aliases import expand_alias_string
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -138,7 +139,9 @@ def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
     if not tags_str:
         return []
 
-    tag_list = [t.strip() for t in tags_str.split(",") if t.strip()]
+    # Expand aliases in the tag string before parsing
+    expanded_tags_str = expand_alias_string(tags_str)
+    tag_list = [t.strip() for t in expanded_tags_str.split(",") if t.strip()]
     if tag_list:
         return add_tags_to_document(doc_id, tag_list)
     return []
@@ -215,7 +218,9 @@ def find(
 
         # Handle tag-based search
         if tags:
-            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+            # Expand aliases in the tag string before parsing
+            expanded_tags = expand_alias_string(tags)
+            tag_list = [t.strip() for t in expanded_tags.split(",") if t.strip()]
             tag_mode = "any" if any_tags else "all"
 
             # If we have both tags and search query, we need to combine results

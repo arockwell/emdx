@@ -4,6 +4,7 @@ import sqlite3
 from typing import Any, Optional
 
 from emdx.database import db
+from emdx.utils.emoji_aliases import expand_aliases
 
 
 def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
@@ -23,11 +24,14 @@ def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
 
 def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Add tags to a document. Returns list of newly added tags."""
+    # Expand aliases before processing
+    expanded_tags = expand_aliases(tag_names)
+    
     with db.get_connection() as conn:
         conn.execute("PRAGMA foreign_keys = ON")
 
         added_tags = []
-        for tag_name in tag_names:
+        for tag_name in expanded_tags:
             tag_name = tag_name.lower().strip()
             if not tag_name:
                 continue
@@ -62,10 +66,13 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
 
 def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Remove tags from a document. Returns list of removed tags."""
+    # Expand aliases before processing
+    expanded_tags = expand_aliases(tag_names)
+    
     with db.get_connection() as conn:
         removed_tags = []
 
-        for tag_name in tag_names:
+        for tag_name in expanded_tags:
             tag_name = tag_name.lower().strip()
 
             cursor = conn.execute(
@@ -176,8 +183,11 @@ def search_by_tags(
         project: Optional project filter
         limit: Maximum results to return
     """
+    # Expand aliases before processing
+    expanded_tags = expand_aliases(tag_names)
+    
     with db.get_connection() as conn:
-        tag_names = [tag.lower().strip() for tag in tag_names]
+        tag_names = [tag.lower().strip() for tag in expanded_tags]
 
         if mode == "all":
             # Documents must have ALL specified tags
