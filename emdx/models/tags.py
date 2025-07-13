@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any, Optional
 
 from emdx.database import db
-from emdx.emoji_aliases import expand_aliases
+from emdx.utils.emoji_aliases import expand_aliases
 
 
 def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:

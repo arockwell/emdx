@@ -16,7 +16,7 @@ from emdx.models.tags import (
     remove_tags_from_document,
     rename_tag,
 )
-from emdx.emoji_aliases import expand_aliases, generate_legend
+from emdx.utils.emoji_aliases import expand_aliases, generate_legend
 
 app = typer.Typer()
 console = Console()

@@ -23,7 +23,7 @@ from emdx.models.documents import (
 from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
 from emdx.ui.formatting import format_tags
 from emdx.utils.git import get_git_project
-from emdx.emoji_aliases import expand_alias_string
+from emdx.utils.emoji_aliases import expand_alias_string
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal

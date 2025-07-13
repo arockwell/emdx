@@ -27,7 +27,7 @@ from emdx.models.tags import (
     search_by_tags,
 )
 from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
-from emdx.emoji_aliases import expand_aliases
+from emdx.utils.emoji_aliases import expand_aliases
 
 # Set up logging
 log_dir = Path.home() / ".config" / "emdx"
