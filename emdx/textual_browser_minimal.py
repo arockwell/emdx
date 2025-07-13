@@ -372,7 +372,7 @@ class MinimalDocumentBrowser(App):
         Binding("shift+t", "untag_mode", "Untag", show=False),
         Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
-        Binding("ctrl+c", "copy_selected", "Copy Selection"),
+        Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -673,7 +673,7 @@ class MinimalDocumentBrowser(App):
 
     def on_key(self, event: events.Key) -> None:
         # Log all key events for debugging
-        logger.debug(f"Key event: key={event.key}, character={event.character}, ctrl={event.ctrl}, alt={event.alt}, shift={event.shift}")
+        logger.debug(f"Key event: key={event.key}, character={event.character}")
         
         # Handle global Escape key - quit from any mode
         if event.key == "escape":
