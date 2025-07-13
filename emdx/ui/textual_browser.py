@@ -112,6 +112,30 @@ class SelectionTextArea(TextArea):
             # Don't re-raise - let app continue
 
 
+class TitleInput(Input):
+    """Custom Input that handles Tab to switch to content editor."""
+    
+    def __init__(self, app_instance, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.app_instance = app_instance
+    
+    def on_key(self, event: events.Key) -> None:
+        """Handle Tab to switch to content editor."""
+        if event.key == "tab":
+            # Try to focus the content editor
+            try:
+                edit_area = self.app_instance.query_one("#preview-content", VimEditTextArea)
+                edit_area.focus()
+                event.stop()
+                event.prevent_default()
+                return
+            except:
+                pass  # Editor might not exist
+        
+        # Let Input handle all other keys
+        super().on_key(event)
+
+
 class VimEditTextArea(TextArea):
     """TextArea with vim-like keybindings for EMDX."""
     
@@ -301,6 +325,15 @@ class VimEditTextArea(TextArea):
             self.vim_mode = self.VIM_COMMAND
             self.command_buffer = ":"
             self.app_instance._update_vim_status()
+        
+        # Handle Tab to switch to title input
+        elif key == "tab":
+            # Try to focus title input
+            try:
+                title_input = self.app_instance.query_one("#title-input", TitleInput)
+                title_input.focus()
+            except:
+                pass  # Title input might not exist
         
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:
@@ -828,6 +861,15 @@ class MinimalDocumentBrowser(App):
         overflow-x: auto;
         overflow-y: auto;
     }
+    .edit-title-input {
+        width: 100%;
+        margin-bottom: 1;
+        background: $background;
+        border: tall $primary;
+    }
+    .edit-title-input:focus {
+        border: tall $accent;
+    }
 
     RichLog {
         width: 100%;
@@ -1197,7 +1239,7 @@ class MinimalDocumentBrowser(App):
                 elif vim_mode == "COMMAND":
                     status_parts.append("Enter=execute | ESC=cancel")
                 elif vim_mode == "NORMAL":
-                    status_parts.append("i=insert | :=command | ESC=exit")
+                    status_parts.append("i=insert | :=command | ESC=exit | Tab=switch title/content")
                 else:
                     status_parts.append("ESC=normal/exit")
             
@@ -2029,9 +2071,23 @@ class MinimalDocumentBrowser(App):
             # Remove all widgets from container (same as selection mode fix)
             container.remove_children()
             
+            # Create a wrapper container to enforce width constraints
+            from textual.containers import Container
+            edit_wrapper = Container(id="edit-wrapper")
+            
+            # Create title input
+            title_input = TitleInput(
+                self,
+                value=doc["title"],
+                placeholder="Enter title...",
+                id="title-input"
+            )
+            title_input.add_class("edit-title-input")
+            
             # Create VimEditTextArea with constraints BEFORE mounting
             edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
+            self.edit_title_input = title_input  # Store reference for title input
             
             # Make it editable (not read-only like selection mode)
             edit_area.read_only = False
@@ -2049,14 +2105,11 @@ class MinimalDocumentBrowser(App):
             if hasattr(edit_area, 'max_line_length'):
                 edit_area.max_line_length = 80  # Enforce maximum line length
             
-            # Create a wrapper container to enforce width constraints
-            from textual.containers import Container
-            edit_wrapper = Container(id="edit-wrapper")
-            
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
             
-            # Mount TextArea in wrapper
+            # Mount title and content in wrapper
+            edit_wrapper.mount(title_input)
             edit_wrapper.mount(edit_area)
             
             # Reset container scroll and refresh layout (same as selection mode)
@@ -2064,7 +2117,7 @@ class MinimalDocumentBrowser(App):
             container.refresh(layout=True)
             edit_wrapper.refresh(layout=True)
             
-            edit_area.focus()
+            title_input.focus()  # Start with title focused
             
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
@@ -2074,7 +2127,7 @@ class MinimalDocumentBrowser(App):
             self.edit_mode = True
             self.editing_doc_id = self.current_doc_id
             
-            # Update status with vim mode
+            # Update status with vim mode and tab hint
             self.cancel_refresh_timer()
             self._update_vim_status()
             
@@ -2094,27 +2147,37 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
             
-            # Find the edit area within the wrapper
+            # Find the edit area and title input within the wrapper
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
+                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 # Fallback if wrapper doesn't exist
                 edit_area = self.query_one("#preview-content", EditTextArea)
+                title_input = None
             
-            # Get the edited content
+            # Get the edited content and title
             new_content = edit_area.text
+            new_title = title_input.value if title_input else None
             
-            # Check if content changed
-            if new_content != edit_area.original_content:
+            # Get current document for comparison
+            doc = db.get_document(str(self.editing_doc_id))
+            if not doc:
+                return
+                
+            # Check if content or title changed
+            content_changed = new_content != edit_area.original_content
+            title_changed = new_title and new_title != doc["title"]
+            
+            if content_changed or title_changed:
                 # Update document in database
                 from emdx.models.documents import update_document
                 
-                # Get current document for title
-                doc = db.get_document(str(self.editing_doc_id))
-                if doc:
-                    success = update_document(self.editing_doc_id, doc["title"], new_content)
+                # Use new title if provided, otherwise keep existing
+                final_title = new_title if new_title else doc["title"]
+                success = update_document(self.editing_doc_id, final_title, new_content)
                     
                     if success:
                         self.cancel_refresh_timer()
@@ -2198,24 +2261,29 @@ class MinimalDocumentBrowser(App):
             if not self.edit_mode or not self.editing_doc_id:
                 return
             
-            # Get the edit area
+            # Get the edit area and title input
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
+                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 edit_area = self.query_one("#preview-content", EditTextArea)
+                title_input = None
             
-            # Get the edited content
+            # Get the edited content and title
             new_content = edit_area.text
+            new_title = title_input.value if title_input else None
             
             # Update document in database
             from emdx.models.documents import update_document
             
-            # Get current document for title
+            # Get current document for comparison
             doc = db.get_document(str(self.editing_doc_id))
             if doc:
-                success = update_document(self.editing_doc_id, doc["title"], new_content)
+                # Use new title if provided, otherwise keep existing
+                final_title = new_title if new_title else doc["title"]
+                success = update_document(self.editing_doc_id, final_title, new_content)
                 
                 if success:
                     # Update original content to mark as saved
