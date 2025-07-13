@@ -173,13 +173,16 @@ class VimLineNumbers(Static):
             lines = self.edit_area.text.split('\n')
             
             logger.debug(f"Line numbers widget {id(self)}: cursor_row={cursor_row}, total_lines={len(lines)}")
+            logger.debug(f"Line numbers: cursor_location={self.edit_area.cursor_location}")
             
             # Generate relative line numbers
             line_numbers = []
             for i, line in enumerate(lines):
                 if i == cursor_row:
-                    # Current line shows absolute line number
-                    line_numbers.append(f"{i + 1:>3}")
+                    # Current line shows absolute line number (1-based)
+                    absolute_line = i + 1
+                    line_numbers.append(f"{absolute_line:>3}")
+                    logger.debug(f"Current line {i} -> showing absolute number {absolute_line}")
                 else:
                     # Other lines show relative distance from cursor
                     distance = abs(i - cursor_row)
@@ -187,7 +190,7 @@ class VimLineNumbers(Static):
             
             # Update the widget content
             content = "\n".join(line_numbers)
-            logger.debug(f"Line numbers widget {id(self)} content first 3 lines: {content.split(chr(10))[:3]}")
+            logger.debug(f"Line numbers widget {id(self)} generated: {line_numbers[:5]}...")
             self.update(content)
         except Exception as e:
             logger.error(f"Error updating line numbers: {e}")
@@ -259,13 +262,10 @@ class VimEditTextArea(TextArea):
         """Update line numbers when cursor moves."""
         if hasattr(self, 'cursor_location') and hasattr(self, 'line_numbers_widget'):
             current_row = self.cursor_location[0]
-            if current_row != self._last_cursor_row:
-                self._last_cursor_row = current_row
-                logger.debug(f"Cursor moved from {self._last_cursor_row} to {current_row}, updating line numbers")
-                # Update the line numbers widget
-                self.line_numbers_widget.update_line_numbers()
-            else:
-                logger.debug(f"Cursor still at row {current_row}, skipping line number update")
+            logger.debug(f"_update_relative_line_numbers: cursor at {current_row}, last was {self._last_cursor_row}")
+            # Always update for now to debug the issue
+            self._last_cursor_row = current_row
+            self.line_numbers_widget.update_line_numbers()
         
     def _render_line_numbers(self, *args, **kwargs):
         """Custom line number rendering with vim-style relative numbers."""
