@@ -81,21 +81,31 @@ class VimLineNumbers(Static):
         """Update the line numbers display based on cursor position."""
         try:
             if not hasattr(self.edit_textarea, 'cursor_location'):
+                logger.debug("edit_textarea has no cursor_location")
                 return
 
             current_line = self.edit_textarea.cursor_location[0]
-            total_lines = len(self.edit_textarea.text.split('\n'))
+            text_lines = self.edit_textarea.text.split('\n')
+            total_lines = len(text_lines)
+            
+            logger.debug(f"Current line: {current_line}, total lines: {total_lines}")
 
             # Build relative line numbers like vim
             lines = []
             for i in range(total_lines):
                 if i == current_line:
-                    lines.append(f"{i+1:3}")  # Current line shows absolute number
+                    # Current line shows absolute number (1-based)
+                    line_num = f"{i+1:>3}"
+                    lines.append(line_num)
                 else:
+                    # Other lines show relative distance
                     relative = abs(i - current_line)
-                    lines.append(f"{relative:3}")
+                    line_num = f"{relative:>3}"
+                    lines.append(line_num)
 
-            self.update("\n".join(lines))
+            result = "\n".join(lines)
+            logger.debug(f"Line numbers result (first 3 lines): {repr(result.split(chr(10))[:3])}")
+            self.update(result)
 
             # Sync scroll position with the text area
             try:

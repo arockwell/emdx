@@ -138,7 +138,8 @@ class VimEditTextArea(TextArea):
         """Update line numbers widget if it exists."""
         try:
             if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
-                self.line_numbers_widget.update_line_numbers()
+                # Add a small delay to ensure cursor position is updated
+                self.call_after_refresh(self.line_numbers_widget.update_line_numbers)
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
