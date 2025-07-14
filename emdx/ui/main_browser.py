@@ -36,7 +36,6 @@ from emdx.utils.git_ops import is_git_repository
 
 from .document_viewer import FullScreenView
 from .git_browser import GitBrowserMixin
-from .inputs import TitleInput
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 from .worktree_picker import WorktreePickerScreen
@@ -84,24 +83,24 @@ class SimpleVimLineNumbers(Static):
     def set_line_numbers(self, current_line, total_lines, text_area=None):
         """Set line numbers given current line (0-based) and total lines."""
         logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
-        
+
         # Store text area reference if provided
         if text_area:
             self.text_area = text_area
-        
+
         from rich.text import Text
-        
+
         # Check if text area has focus - only highlight current line if it does
         # In vim edit mode, the text area should always be considered focused
         has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
-        
+
         # Force focus to True when in vim edit mode (vim editing implies focus)
         if self.text_area and hasattr(self.text_area, 'vim_mode'):
             has_focus = True
-            logger.debug(f"🔢 Vim edit mode detected - forcing focus to True")
-        
+            logger.debug("🔢 Vim edit mode detected - forcing focus to True")
+
         logger.debug(f"🔢 Text area has focus: {has_focus}")
-        
+
         lines = []
         for i in range(total_lines):
             if i == current_line:
@@ -120,15 +119,15 @@ class SimpleVimLineNumbers(Static):
                 line_text = Text(f"{distance:>3}", style="dim cyan")
                 logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
                 lines.append(line_text)
-        
+
         # Join with Rich Text newlines
         result = Text("\n").join(lines)
         logger.debug(f"🔢 Rich Text result created with {len(lines)} lines")
         logger.debug(f"🔢 Widget content BEFORE update: {repr(self.renderable)}")
-        
+
         # Update widget content with Rich Text
         self.update(result)
-        
+
         logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")
 
 class MinimalDocumentBrowser(GitBrowserMixin, App):
@@ -381,7 +380,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
         Binding("d", "git_diff_browser", "Git Diff", key_display="d"),
         Binding("a", "git_stage_file", "Stage File", show=False),
-        Binding("u", "git_unstage_file", "Unstage File", show=False), 
+        Binding("u", "git_unstage_file", "Unstage File", show=False),
         Binding("c", "git_commit", "Commit", show=False),
         Binding("R", "git_discard_changes", "Discard Changes", show=False),
         Binding("enter", "view", "View", show=False),
@@ -445,13 +444,13 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Disable focus on widgets to prevent Tab navigation
             preview_content = self.query_one("#preview-content")
             preview_content.can_focus = False
-            
+
             # Also disable focus on input widgets when not in use
             search_input = self.query_one("#search-input")
             search_input.can_focus = False
             tag_input = self.query_one("#tag-input")
             tag_input.can_focus = False
-            
+
             self.load_documents()
             logger.info("Documents loaded, scheduling delayed setup")
             # Delay table setup until after widgets are mounted
@@ -463,7 +462,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             logger.error(f"Error during on_mount(): {e}")
             traceback.print_exc()
             self.exit(message=f"Error during startup: {e}")
-    
+
     def _delayed_setup(self):
         """Setup table and UI after widgets are fully mounted."""
         logger.info("_delayed_setup called")
@@ -578,15 +577,15 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
     def get_related_documents(self, doc_id: int) -> str:
         """Find related documents and show the generation chain."""
         from emdx.models.documents import list_documents
-        
+
         # Get current document to extract base title
         current_doc = get_document(str(doc_id))
         if not current_doc:
             return ""
-            
+
         title = current_doc['title']
         current_tags = set(current_doc.get('tags', []))
-        
+
         # Determine current document type
         if 'notes' in current_tags or '📝' in current_tags or title.startswith("New Note"):
             current_type = 'note'
@@ -596,21 +595,21 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             current_type = 'gameplan'
         else:
             current_type = 'unknown'
-        
+
         base_title = (title
                      .replace("New Note - ", "")
                      .replace("Analysis: ", "")
                      .replace("Gameplan: ", "")
                      .split(" - ")[0])  # Remove timestamp if present
-        
+
         # Find documents with similar base titles
         all_docs = list_documents(limit=1000)  # Get all docs
         related = {'note': [], 'analysis': [], 'gameplan': [], 'other': []}
-        
+
         for doc in all_docs:
             if doc['id'] == doc_id:
                 continue
-                
+
             doc_title = doc['title']
             if base_title.lower() in doc_title.lower():
                 # Determine document type by tags or title
@@ -623,10 +622,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     related['gameplan'].append(doc['id'])
                 else:
                     related['other'].append(doc['id'])
-        
+
         # Build the chain display
         result_lines = []
-        
+
         # Show generation source (what created this)
         if current_type == 'analysis' and related['note']:
             result_lines.append(f"**Generated from:** 📝 #{related['note'][0]}")
@@ -634,7 +633,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             result_lines.append(f"**Generated from:** 🔍 #{related['analysis'][0]}")
             if related['note']:
                 result_lines.append(f"**Original note:** 📝 #{related['note'][0]}")
-        
+
         # Show generation outputs (what this created)
         if current_type == 'note' and related['analysis']:
             result_lines.append(f"**Generated analysis:** 🔍 #{related['analysis'][0]}")
@@ -642,7 +641,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 result_lines.append(f"**Generated gameplan:** 🎯 #{related['gameplan'][0]}")
         elif current_type == 'analysis' and related['gameplan']:
             result_lines.append(f"**Generated gameplan:** 🎯 #{related['gameplan'][0]}")
-        
+
         # Show all related if there are multiple
         all_related = []
         for note_id in related['note']:
@@ -653,10 +652,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             all_related.append(f"🎯 #{gameplan_id}")
         for other_id in related['other']:
             all_related.append(f"📄 #{other_id}")
-        
+
         if len(all_related) > 1:  # More than just direct parent/child
             result_lines.append(f"**All related:** {', '.join(all_related)}")
-        
+
         if result_lines:
             return "\n\n" + "\n".join(result_lines)
         return ""
@@ -739,12 +738,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 self.refresh_timer = None
 
         status = self.query_one("#status", Label)
-        
+
         # If custom message provided, use it directly
         if custom_message:
             status.update(custom_message)
             return
-            
+
         search_input = self.query_one("#search-input", Input)
 
         # Build status with document count
@@ -842,7 +841,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Check if we're mounted first
             if not self.is_mounted:
                 return
-                
+
             search = self.query_one("#search-input", Input)
             tag_input = self.query_one("#tag-input", Input)
             tag_selector = self.query_one("#tag-selector", Label)
@@ -943,7 +942,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Create new document in database
             from emdx.models.documents import save_document
             doc_id = save_document(title, "", project)
-            
+
             # Add auto-tag after creation
             from emdx.models.tags import add_tags_to_document
             add_tags_to_document(str(doc_id), ['notes'])
@@ -1032,7 +1031,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 screen_type = type(active_screen).__name__
                 key_logger.info(f"{screen_type} active, passing key event through: key={event.key}")
                 return
-            
+
             # Comprehensive logging of ALL key events
             event_attrs = {}
             for attr in ["key", "character", "name", "is_printable", "aliases"]:
@@ -1052,11 +1051,11 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 logger.info(f"DEBUG: Global Tab handler, mode={self.mode}, tag_action={getattr(self, 'tag_action', 'None')}")
                 # Only allow Tab in TAG mode for tag cycling
                 if self.mode == "TAG" and self.tag_action == "remove":
-                    logger.info(f"DEBUG: Allowing Tab to fall through to TAG handler")
+                    logger.info("DEBUG: Allowing Tab to fall through to TAG handler")
                     # Let it fall through to the TAG mode handler below
                     pass
                 else:
-                    logger.info(f"DEBUG: Blocking Tab in non-untag mode")
+                    logger.info("DEBUG: Blocking Tab in non-untag mode")
                     # Block Tab in all other modes
                     event.prevent_default()
                     event.stop()
@@ -1087,21 +1086,21 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             if self.mode == "TAG":
                 logger.info(f"DEBUG: In TAG mode, key={event.key}, tag_action={self.tag_action}")
                 if event.key == "tab" and self.tag_action == "remove":
-                    logger.info(f"DEBUG: Tab pressed in remove mode, calling complete_tag_removal")
+                    logger.info("DEBUG: Tab pressed in remove mode, calling complete_tag_removal")
                     # Tab cycling for tag removal
                     self.complete_tag_removal()
                     event.prevent_default()
                     event.stop()
                     return
                 elif event.key == "enter" and self.tag_action == "remove":
-                    logger.info(f"DEBUG: Enter pressed in remove mode, calling remove_highlighted_tag")
+                    logger.info("DEBUG: Enter pressed in remove mode, calling remove_highlighted_tag")
                     # Remove the highlighted tag
                     self.remove_highlighted_tag()
                     event.prevent_default()
                     event.stop()
                     return
                 else:
-                    logger.info(f"DEBUG: Other key in TAG mode, blocking")
+                    logger.info("DEBUG: Other key in TAG mode, blocking")
                     # In TAG mode, block all other keys except ESC (handled above)
                     event.prevent_default()
                     event.stop()
@@ -1135,7 +1134,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         event.stop()
                         self.action_tag_mode()
                     elif event.character == "T":
-                        logger.info(f"DEBUG: Manual T character handler triggered")
+                        logger.info("DEBUG: Manual T character handler triggered")
                         event.prevent_default()
                         event.stop()
                         self.action_untag_mode()
@@ -1793,7 +1792,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 content_without_title = content[len(title_header):].lstrip('\n')
             else:
                 content_without_title = content
-            
+
             # Create VimEditTextArea with title-stripped content
             edit_area = VimEditTextArea(self, text=content_without_title, id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
@@ -1845,11 +1844,11 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             total_lines = len(edit_area.text.split('\n'))
             logger.info(f"📍 INITIAL SETUP: cursor_location={edit_area.cursor_location if hasattr(edit_area, 'cursor_location') else 'None'}")
             logger.info(f"📍 INITIAL SETUP: current_line={current_line}, total_lines={total_lines}")
-            
+
             # Force cursor to start at beginning if needed
             if current_line == 0:
                 edit_area.cursor_location = (0, 0)
-                
+
             line_numbers.set_line_numbers(current_line, total_lines, edit_area)
 
             # Debug logging to understand width issues
@@ -2173,12 +2172,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             if hasattr(self, 'current_execution_index') and hasattr(self, 'executions') and self.executions:
                 if self.current_execution_index < len(self.executions):
                     old_execution_id = self.executions[self.current_execution_index].id
-            
+
             # Get fresh executions
             old_count = len(self.executions) if hasattr(self, 'executions') else 0
             fresh_executions = get_recent_executions(limit=50)
             new_count = len(fresh_executions)
-            
+
             # Only update if there are actual changes to avoid disrupting user interaction
             if old_count == new_count and hasattr(self, 'executions'):
                 # Check if any status changed
@@ -2187,18 +2186,18 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     if old_exec.id == new_exec.id and old_exec.status != new_exec.status:
                         status_changed = True
                         break
-                
+
                 if not status_changed:
                     logger.debug("No execution changes detected, skipping refresh")
                     return
-            
+
             logger.debug(f"Refreshing executions: {old_count} -> {new_count}")
             self.executions = fresh_executions
-            
+
             # Clear and repopulate table
             table.clear(columns=True)
             table.add_columns("Recent", "Status", "Document", "Started")
-            
+
             # Populate executions table with fresh data
             for i, execution in enumerate(self.executions):
                 status_icon = {
@@ -2218,7 +2217,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 elif execution.status == 'running':
                     duration = "running..."
 
-                # Create recency indicator  
+                # Create recency indicator
                 if i == 0:
                     recency = "Latest"
                 elif i == 1:
@@ -2227,14 +2226,14 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     recency = "3rd"
                 else:
                     recency = f"{i+1}th"
-                
+
                 table.add_row(
                     recency,
                     f"{status_icon} {execution.status}",
                     execution.doc_title[:30],
                     execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
                 )
-            
+
             # Try to restore the same execution if it still exists
             new_row = 0
             if old_execution_id:
@@ -2244,12 +2243,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         break
             else:
                 new_row = min(old_row, len(self.executions) - 1) if self.executions else 0
-            
+
             # Restore cursor position without changing the current log view
             if self.executions and new_row < len(self.executions):
                 table.move_cursor(row=new_row)
                 self.current_execution_index = new_row
-                
+
         except Exception as e:
             logger.error(f"Error refreshing execution list: {e}", exc_info=True)
 
@@ -2258,7 +2257,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         if self.refresh_timer:
             self.refresh_timer.stop()
             self.refresh_timer = None
-    
+
     def cancel_log_monitor_timer(self):
         """Cancel the log monitor timer if it's active."""
         if hasattr(self, 'log_monitor_timer'):
@@ -2355,9 +2354,8 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             return
 
         try:
-            import threading
 
-            from emdx.commands.claude_execute import execute_document_smart, get_execution_context
+            from emdx.commands.claude_execute import get_execution_context
             from emdx.models.documents import get_document
 
             # Get the current document
@@ -2408,11 +2406,16 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             status = self.query_one("#status", Label)
             status.update("No document selected for gist creation")
             return
-        
+
         try:
-            from emdx.commands.gist import create_gist_with_gh, create_gist_with_api, get_github_auth, sanitize_filename
+            from emdx.commands.gist import (
+                create_gist_with_api,
+                create_gist_with_gh,
+                get_github_auth,
+                sanitize_filename,
+            )
             from emdx.models.documents import get_document
-            
+
             # Get the current document
             doc = get_document(str(self.current_doc_id))
             if not doc:
@@ -2420,7 +2423,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 status = self.query_one("#status", Label)
                 status.update("Document not found")
                 return
-            
+
             # Check for GitHub authentication
             token = get_github_auth()
             if not token:
@@ -2428,27 +2431,27 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 status = self.query_one("#status", Label)
                 status.update("GitHub auth required: Set GITHUB_TOKEN or run 'gh auth login'")
                 return
-            
+
             # Show creating status
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Creating gist for: {doc['title'][:30]}...")
-            
+
             # Prepare gist content
             filename = sanitize_filename(doc["title"])
             content = doc["content"]
             description = f"{doc['title']} - emdx knowledge base"
             if doc.get("project"):
                 description += f" (Project: {doc['project']})"
-            
+
             # Create gist (try gh CLI first, fallback to API)
             result = create_gist_with_gh(content, filename, description, public=False)
             if not result:
                 result = create_gist_with_api(content, filename, description, public=False, token=token)
-            
+
             if result:
                 gist_url = result["url"]
-                
+
                 # Save to database
                 from emdx.database import db
                 with db.get_connection() as conn:
@@ -2460,7 +2463,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         (doc["id"], result["id"], gist_url, False),
                     )
                     conn.commit()
-                
+
                 # Copy URL to clipboard
                 from emdx.commands.gist import copy_to_clipboard
                 if copy_to_clipboard(gist_url):
@@ -2469,7 +2472,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     status.update(f"✓ Gist created: {gist_url}")
             else:
                 status.update("Failed to create gist")
-                
+
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
@@ -2479,28 +2482,28 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         """Switch to log browser mode to view and switch between execution logs."""
         self.mode = "LOG_BROWSER"
         self.setup_log_browser()
-    
+
     def action_mark_execution_complete(self):
         """Mark the currently selected execution as complete (in LOG_BROWSER mode)."""
         if self.mode != "LOG_BROWSER" or not hasattr(self, 'executions') or not self.executions:
             return
-        
+
         try:
             # Get currently selected execution
             if hasattr(self, 'current_execution_index') and 0 <= self.current_execution_index < len(self.executions):
                 execution = self.executions[self.current_execution_index]
-                
+
                 # Only mark running executions as complete
                 if execution.status == 'running':
                     update_execution_status(execution.id, "completed", 130)
-                    
+
                     # Show confirmation message
                     status = self.query_one("#status", Label)
                     status.update(f"✅ Marked execution {execution.id[:8]}... as complete!")
-                    
+
                     # Refresh the execution list to show updated status
                     self.refresh_execution_list()
-                    
+
                     # Restore normal status after 2 seconds
                     self.set_timer(2.0, self.restore_log_browser_status)
                 else:
@@ -2513,28 +2516,28 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             status = self.query_one("#status", Label)
             status.update(f"❌ Error marking execution complete: {str(e)}")
             self.set_timer(2.0, self.restore_log_browser_status)
-    
+
     def action_open_file_browser(self):
         """Open file browser mode."""
         logger.info("🗂️ Opening file browser mode")
-        
+
         # If already in file browser mode, just refresh
         if hasattr(self, 'mode') and self.mode == "FILE_BROWSER":
             logger.info("🗂️ Already in file browser mode, refreshing")
             if hasattr(self, 'file_browser'):
                 self.file_browser.refresh_files()
             return
-        
+
         # Set mode first, then setup
         self.mode = "FILE_BROWSER"
         logger.info(f"🗂️ Mode set to: {self.mode}")
         self.setup_file_browser()
-    
+
     def setup_file_browser(self):
         """Set up the file browser interface."""
         try:
             logger.info("🗂️ Setting up file browser interface")
-            
+
             # Clean up any existing file browser first
             if hasattr(self, 'file_browser'):
                 logger.info("🗂️ Removing existing file browser")
@@ -2543,25 +2546,25 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 except Exception as e:
                     logger.warning(f"🗂️ Error removing existing file browser: {e}")
                 delattr(self, 'file_browser')
-            
+
             # Import the standalone file browser
             from .file_browser import FileBrowser
             logger.info("🗂️ FileBrowser imported successfully")
-            
+
             # Hide search inputs
             self.query_one("#search-input", Input).display = False
             logger.info("🗂️ Search input hidden")
             self.query_one("#tag-input", Input).display = False
             self.query_one("#tag-selector", Label).display = False
             self.query_one("#vim-mode-indicator", Label).display = False
-            
+
             # Hide the entire document area
             sidebar = self.query_one("#sidebar", Vertical)
             sidebar.display = False
-            
+
             preview_container = self.query_one("#preview-container", Vertical)
             preview_container.display = False
-            
+
             # Create and mount file browser in full width container
             logger.info("🗂️ Getting main horizontal container")
             # Find the horizontal container that contains sidebar and preview
@@ -2571,20 +2574,20 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             logger.info("🗂️ Mounting FileBrowser in full container")
             horizontal_container.mount(self.file_browser)
             logger.info("🗂️ FileBrowser mounted successfully")
-            
+
             # Focus the file browser after mounting is complete
             self.call_after_refresh(lambda: self._focus_file_browser())
-            
+
             # Update status
             status = self.query_one("#status", Label)
             status.update("FILE BROWSER: Navigate with j/k/h/l, 's' to save, 'x' to execute, 'q' to exit")
             logger.info("🗂️ File browser setup complete")
-            
+
         except Exception as e:
             logger.error(f"Error setting up file browser: {e}")
             status = self.query_one("#status", Label)
             status.update(f"Error setting up file browser: {e}")
-    
+
     def _focus_file_browser(self):
         """Focus the file browser widget."""
         try:
@@ -2593,8 +2596,8 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 logger.info("🗂️ FileBrowser focused")
         except Exception as e:
             logger.error(f"🗂️ Error focusing file browser: {e}")
-    
-    
+
+
     def exit_file_browser(self):
         """Exit file browser and return to document browser."""
         try:
@@ -2603,30 +2606,30 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             if hasattr(self, 'file_browser'):
                 self.file_browser.remove()
                 logger.info("🗂️ File browser widget removed")
-            
+
             # Show hidden widgets
             self.query_one("#search-input", Input).display = True
             self.query_one("#tag-input", Input).display = True
             self.query_one("#tag-selector", Label).display = True
             self.query_one("#vim-mode-indicator", Label).display = True
             logger.info("🗂️ Input widgets restored")
-            
+
             self.query_one("#sidebar", Vertical).display = True
             self.query_one("#preview-container", Vertical).display = True
             logger.info("🗂️ Document table and preview restored")
-            
+
             # Reset mode and reload
             self.mode = "NORMAL"
             logger.info("🗂️ Mode reset to NORMAL")
             self.reload_documents()
-            
+
         except Exception as e:
             logger.error(f"Error exiting file browser: {e}")
             # Fallback
             self.mode = "NORMAL"
             self.reload_documents()
-    
-    
+
+
     def on_file_browser_quit_file_browser(self, event):
         """Handle file browser quit event."""
         self.exit_file_browser()
@@ -2670,7 +2673,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 elif execution.status == 'running':
                     duration = "running..."
 
-                # Create recency indicator  
+                # Create recency indicator
                 if i == 0:
                     recency = "Latest"
                 elif i == 1:
@@ -2679,7 +2682,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     recency = "3rd"
                 else:
                     recency = f"{i+1}th"
-                
+
                 table.add_row(
                     recency,
                     f"{status_icon} {execution.status}",
@@ -2754,9 +2757,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
     def update_log_content(self):
         """Update log content if file has changed and refresh execution list."""
         logger.debug(f"update_log_content called: mode={getattr(self, 'mode', 'unknown')}, has_file={hasattr(self, 'current_log_file')}")
-        
+
         # Auto-refresh fires silently - no visual indicators
-        
+
         if not hasattr(self, 'current_log_file') or self.mode != "LOG_BROWSER":
             logger.debug("Skipping log update: not in LOG_BROWSER mode or no log file")
             # Skip update silently
@@ -2766,7 +2769,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         if not hasattr(self, 'refresh_counter'):
             self.refresh_counter = 0
         self.refresh_counter += 1
-        
+
         if self.refresh_counter >= 5:  # Every 10 seconds
             self.refresh_counter = 0
             self.refresh_execution_list()
@@ -2780,26 +2783,26 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             file_stat = self.current_log_file.stat()
             current_size = file_stat.st_size
             current_mtime = file_stat.st_mtime
-            
+
             # Initialize tracking variables if not set
             if not hasattr(self, 'last_log_mtime'):
                 self.last_log_mtime = 0
-            
+
             size_changed = current_size != self.last_log_size
             time_changed = current_mtime != self.last_log_mtime
-            
+
             logger.debug(f"File check: size={current_size} (was {self.last_log_size}), "
                         f"mtime={current_mtime} (was {self.last_log_mtime}), "
                         f"size_changed={size_changed}, time_changed={time_changed}")
-            
+
             if size_changed or time_changed:
                 # Update in progress silently
-                
+
                 # Handle file truncation or full rewrite
                 if current_size < self.last_log_size:
                     logger.debug("Log file was truncated, reloading from beginning")
                     self.last_log_size = 0
-                
+
                 # Read new content
                 with open(self.current_log_file) as f:
                     f.seek(self.last_log_size)
@@ -2921,7 +2924,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
 
             # j/k keys are handled by the app-level key handler, not here
-            
+
             # Handle j/k/w keys for git diff switching in git diff browser mode
             if hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
                 if hasattr(event, 'key') and event.key:
@@ -3014,30 +3017,30 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             status = self.query_one("#status", Label)
             status.update("Not in a git repository - cannot show git diff")
             return
-        
+
         self.mode = "GIT_DIFF_BROWSER"
         self.setup_git_diff_browser()
 
-    
-    
+
+
     def action_git_diff_next(self):
         """Switch to next git file (j in GIT_DIFF_BROWSER mode)."""
         self.navigate_git_diff(1)
-    
+
     def action_git_diff_prev(self):
         """Switch to previous git file (k in GIT_DIFF_BROWSER mode)."""
         self.navigate_git_diff(-1)
-    
+
     def action_switch_worktree(self):
         """Show worktree picker modal (w key)."""
         if self.mode != "GIT_DIFF_BROWSER":
             return
-        
+
         if not hasattr(self, 'worktrees') or len(self.worktrees) <= 1:
             status = self.query_one("#status", Label)
             status.update("No other worktrees available")
             return
-        
+
         # Show worktree picker modal
         def on_worktree_selected(new_index: int):
             """Handle worktree selection from picker."""
@@ -3046,26 +3049,26 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 self.current_worktree_index = new_index
                 new_worktree = self.worktrees[new_index]
                 old_worktree = self.worktrees[old_index]
-                
+
                 # Show detailed switching info
                 status = self.query_one("#status", Label)
                 status.update(f"🔄 Switching: {old_worktree.name} → {new_worktree.name} | Path: {new_worktree.path}")
-                
+
                 # Update the current worktree path
                 old_path = self.current_worktree_path
                 self.current_worktree_path = new_worktree.path
-                
+
                 # Debug info
                 logger.info(f"Worktree switch: {old_path} → {new_worktree.path}")
-                
+
                 # Reload git status for new worktree
                 self.setup_git_diff_browser()
-                
+
             except Exception as e:
                 logger.error(f"Error switching worktree: {e}")
                 status = self.query_one("#status", Label)
                 status.update(f"❌ Error switching worktree: {e}")
-        
+
         # Launch the worktree picker modal
         picker = WorktreePickerScreen(
             worktrees=self.worktrees,
@@ -3106,7 +3109,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         # Placeholder for file browser functionality that will come from main
         self.mode = "NORMAL"
         self.reload_documents()
-    
+
     def stop_log_monitoring(self):
         """Stop the log monitoring timer."""
         self.cancel_log_monitor_timer()
