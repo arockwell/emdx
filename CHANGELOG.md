@@ -5,7 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2025-07-14
+
+### 🔥 Major Features Added
+
+#### File System Integration
+- **Yazi-Inspired File Browser** - Built-in file system navigation with vim keybindings
+- **File Preview** - Real-time file content preview in file browser
+- **Seamless File Editing** - Edit files directly from browser with vim integration
+
+#### Git Integration Enhancements  
+- **Git Diff Browser** - Visual git diff viewer with syntax highlighting
+- **Worktree Support** - Switch between git worktrees interactively with 'w' key
+- **Git Operations** - Enhanced git project detection and repository management
+
+#### Advanced TUI Features
+- **Complete Vim Editor** - Full modal editing (NORMAL/INSERT/VISUAL/VISUAL LINE modes)
+- **Vim Line Numbers** - Relative line numbers with proper cursor positioning
+- **Enhanced Text Selection** - Robust text selection mode with copy/paste
+- **Modal Navigation** - Multiple browser modes (documents, files, git diffs)
+
+#### Execution System
+- **Claude Execution Integration** - Execute prompts directly from TUI with 'x' key
+- **Live Streaming Logs** - Real-time execution log viewer with 'l' key  
+- **Execution History** - Track and view all execution attempts
+- **Contextual Prompts** - Smart prompt selection based on document content
+
+### 🏗️ Architecture Improvements
+
+#### Modular Refactoring
+- **Split Monolithic Browser** - Broke 3,097-line textual_browser.py into focused modules
+- **Clean Component Architecture** - Separate modules for file browser, git browser, vim editor
+- **Mixin Pattern** - Reusable GitBrowserMixin for git functionality across components
+
+#### Database Enhancements  
+- **Modular Database Layer** - Split database operations into focused modules
+- **Migration System** - Robust schema migration support
+- **Performance Optimizations** - Improved query performance and indexing
+
+### 🐛 Critical Bug Fixes
+
+#### TUI Stability
+- **Keyboard Crash Fixes** - Resolved crashes with Ctrl+C, ESC, and modal key handling
+- **Selection Mode Stability** - Fixed text selection mode crashes and escape handling
+- **Widget Lifecycle** - Proper widget mounting/unmounting to prevent ID conflicts
+
+#### Data Integrity  
+- **Empty Documents Bug** - Fixed critical save command bug creating empty documents
+- **Tag Display Issues** - Resolved tag formatting and display problems in TUI
+- **Database Consistency** - Fixed schema migration issues and data corruption
+
+#### Editor Improvements
+- **Vim Line Numbers** - Fixed alignment and positioning issues with relative line numbers
+- **Cursor Positioning** - Accurate cursor tracking across edit modes
+- **Text Area Integration** - Seamless vim editor integration with Textual framework
+
+### 🎨 User Experience
+
+#### Enhanced UI/UX
+- **Clean Mode Indicators** - Minimal, vim-style mode indicators
+- **Better Error Handling** - Comprehensive error messages and recovery
+- **Responsive Design** - Improved layout and spacing across all modes
+- **Visual Feedback** - Real-time status updates and operation confirmation
+
+#### Workflow Improvements
+- **Quick Actions** - Fast gist creation with 'g' key in TUI
+- **Smart Defaults** - Intelligent mode switching and content detection
+- **Keyboard Efficiency** - Comprehensive vim-style keybindings throughout
+
+### 🔧 Developer Experience
+
+#### Code Quality
+- **Python 3.9+ Modernization** - Full type annotations using built-in generics
+- **Comprehensive Testing** - Expanded test suite with vim editor testing
+- **Code Formatting** - Consistent black/ruff formatting throughout codebase
+- **Documentation Updates** - Enhanced inline documentation and examples
+
+#### Development Tools
+- **justfile Integration** - Streamlined development workflow commands
+- **Pre-commit Hooks** - Automated code quality checks
+- **CI/CD Improvements** - Enhanced testing and release automation
+
+## [0.5.0] - Previous Release
 
 ### Added
 - **Vim-like Editing Mode** - Full vim modal editing directly in the TUI preview pane
