@@ -2801,9 +2801,21 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 if new_content:
                     try:
                         preview = self.query_one("#preview-content", RichLog)
-                        # Preserve emojis and formatting by writing line by line
+                        # Process new log content to format JSON lines with emojis
+                        from ..commands.claude_execute import format_claude_output
+                        import time
+                        
                         for line in new_content.splitlines():
-                            preview.write(line)
+                            # Skip header lines and non-JSON lines
+                            if line.startswith('=') or line.startswith('-') or line.startswith('Version:') or line.startswith('Doc ID:') or line.startswith('Execution ID:') or line.startswith('Worktree:') or line.startswith('Started:') or not line.strip():
+                                preview.write(line)
+                            else:
+                                # Try to format JSON lines with emojis
+                                formatted = format_claude_output(line, time.time())
+                                if formatted:
+                                    preview.write(formatted)
+                                else:
+                                    preview.write(line)
                         # Auto-scroll to bottom
                         preview.scroll_end(animate=False)
                         logger.debug(f"Updated log content: {len(new_content)} characters")
@@ -2856,9 +2868,21 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 with open(self.current_log_file, encoding='utf-8') as f:
                     content = f.read()
                     if content:
-                        # Preserve emojis and formatting by writing line by line
+                        # Process log content to format JSON lines with emojis
+                        from ..commands.claude_execute import format_claude_output
+                        import time
+                        
                         for line in content.splitlines():
-                            preview.write(line)
+                            # Skip header lines and non-JSON lines
+                            if line.startswith('=') or line.startswith('-') or line.startswith('Version:') or line.startswith('Doc ID:') or line.startswith('Execution ID:') or line.startswith('Worktree:') or line.startswith('Started:') or not line.strip():
+                                preview.write(line)
+                            else:
+                                # Try to format JSON lines with emojis
+                                formatted = format_claude_output(line, time.time())
+                                if formatted:
+                                    preview.write(formatted)
+                                else:
+                                    preview.write(line)
                     else:
                         preview.write("[dim](No log content yet)[/dim]")
 
