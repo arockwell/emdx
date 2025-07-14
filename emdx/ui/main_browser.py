@@ -1038,18 +1038,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             key_logger.info(f"App.on_key: {event_attrs}")
             logger.debug(f"Key event: key={event.key}")
 
-            # Handle j/k keys for log switching in log browser mode
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
-                if event.key == "j":
-                    self.action_next_log()
-                    event.stop()
-                    event.prevent_default()
-                    return
-                elif event.key == "k":
-                    self.action_prev_log()
-                    event.stop()
-                    event.prevent_default()
-                    return
+            # j/k keys are handled by the binding system via action_cursor_down/up
 
             # Globally handle Tab to prevent default focus behavior
             if event.key == "tab":
@@ -1238,11 +1227,15 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.action_cursor_down()
+        elif self.mode == "LOG_BROWSER":
+            self.action_next_log()
 
     def action_cursor_up(self):
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.action_cursor_up()
+        elif self.mode == "LOG_BROWSER":
+            self.action_prev_log()
 
     def action_cursor_top(self):
         if self.mode == "NORMAL":
