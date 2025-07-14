@@ -138,8 +138,8 @@ class VimEditTextArea(TextArea):
         """Update line numbers widget if it exists."""
         try:
             if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
-                # Add a small delay to ensure cursor position is updated
-                self.call_after_refresh(self.line_numbers_widget.update_line_numbers)
+                # Update immediately since we now have duplicate protection
+                self.line_numbers_widget.update_line_numbers()
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
@@ -369,8 +369,9 @@ class VimEditTextArea(TextArea):
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
         super().on_key(event)
-        # Update line numbers after any insert mode operation
-        self._update_line_numbers()
+        # Only update line numbers for operations that might change line count
+        if event.key in ["enter", "backspace", "delete"]:
+            self._update_line_numbers()
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""

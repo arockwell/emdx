@@ -76,6 +76,8 @@ class VimLineNumbers(Static):
         super().__init__(*args, **kwargs)
         self.edit_textarea = edit_textarea
         self.add_class("vim-line-numbers")
+        self._last_cursor_line = None  # Track cursor to avoid unnecessary updates
+        self._last_total_lines = None
 
     def update_line_numbers(self):
         """Update the line numbers display based on cursor position."""
@@ -88,7 +90,15 @@ class VimLineNumbers(Static):
             text_lines = self.edit_textarea.text.split('\n')
             total_lines = len(text_lines)
             
-            logger.debug(f"Current line: {current_line}, total lines: {total_lines}")
+            # Skip update if nothing changed
+            if (current_line == self._last_cursor_line and 
+                total_lines == self._last_total_lines):
+                return
+                
+            self._last_cursor_line = current_line
+            self._last_total_lines = total_lines
+            
+            logger.debug(f"Updating line numbers: current={current_line}, total={total_lines}")
 
             # Build relative line numbers like vim
             lines = []
@@ -104,17 +114,10 @@ class VimLineNumbers(Static):
                     lines.append(line_num)
 
             result = "\n".join(lines)
-            logger.debug(f"Line numbers result (first 3 lines): {repr(result.split(chr(10))[:3])}")
+            logger.debug(f"Setting line numbers: {repr(result[:20])}...")
+            
+            # Clear and update content
             self.update(result)
-
-            # Sync scroll position with the text area
-            try:
-                # Try to match the scroll position of the text area
-                container = self.edit_textarea.parent
-                if container and hasattr(container, 'scroll_offset'):
-                    self.scroll_to(y=container.scroll_offset.y, animate=False)
-            except:
-                pass  # Scroll sync is nice-to-have
 
         except Exception as e:
             logger.error(f"Error updating line numbers: {e}")
