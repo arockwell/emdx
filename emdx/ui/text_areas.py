@@ -137,10 +137,16 @@ class VimEditTextArea(TextArea):
     def _update_line_numbers(self):
         """Update line numbers widget if it exists."""
         try:
+            import traceback
+            logger.debug(f"📍 _update_line_numbers called from: {traceback.format_stack()[-2].strip()}")
+            
             if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
                 current_line = self.cursor_location[0] if hasattr(self, 'cursor_location') else 0
                 total_lines = len(self.text.split('\n'))
+                logger.debug(f"📍 TextArea data: cursor={self.cursor_location if hasattr(self, 'cursor_location') else 'None'}, text_len={len(self.text)}")
                 self.line_numbers_widget.set_line_numbers(current_line, total_lines)
+            else:
+                logger.debug(f"📍 No line_numbers_widget found")
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         

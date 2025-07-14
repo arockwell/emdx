@@ -78,18 +78,30 @@ class SimpleVimLineNumbers(Static):
 
     def set_line_numbers(self, current_line, total_lines):
         """Set line numbers given current line (0-based) and total lines."""
+        logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
+        
         lines = []
         for i in range(total_lines):
             if i == current_line:
                 # Current line shows absolute number (1-based)
-                lines.append(f"{i+1:>3}")
+                line_str = f"{i+1:>3}"
+                lines.append(line_str)
+                logger.debug(f"  Line {i}: CURRENT -> '{line_str}'")
             else:
                 # Other lines show distance from current line
                 distance = abs(i - current_line)
-                lines.append(f"{distance:>3}")
+                line_str = f"{distance:>3}"
+                lines.append(line_str)
+                logger.debug(f"  Line {i}: distance {distance} -> '{line_str}'")
+        
+        result = "\n".join(lines)
+        logger.debug(f"🔢 Final result: {repr(result)}")
+        logger.debug(f"🔢 Widget content BEFORE update: {repr(self.renderable)}")
         
         # Update widget content
-        self.update("\n".join(lines))
+        self.update(result)
+        
+        logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")
 
 class MinimalDocumentBrowser(App):
     """Minimal document browser that signals external wrapper for nvim."""
