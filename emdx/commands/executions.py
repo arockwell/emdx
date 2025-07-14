@@ -17,7 +17,7 @@ console = Console()
 
 
 @app.command(name="list")
-def list_executions(limit: int = typer.Option(20, help="Number of executions to show")):
+def list_executions(limit: int = typer.Option(50, help="Number of executions to show")):
     """List recent executions."""
     executions = get_recent_executions(limit)
     
@@ -30,7 +30,6 @@ def list_executions(limit: int = typer.Option(20, help="Number of executions to 
     table.add_column("Document", style="white")
     table.add_column("Status", style="bold")
     table.add_column("Started", style="green")
-    table.add_column("Duration", style="blue")
     
     for exec in executions:
         status_style = {
@@ -39,14 +38,15 @@ def list_executions(limit: int = typer.Option(20, help="Number of executions to 
             'failed': 'red'
         }.get(exec.status, 'white')
         
-        duration = f"{exec.duration:.1f}s" if exec.duration else "-"
+        # Format timestamp in local timezone
+        local_time = exec.started_at.astimezone()
+        formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
         
         table.add_row(
             exec.id[:8] + "...",  # Show first 8 chars of UUID
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
             f"[{status_style}]{exec.status}[/{status_style}]",
-            exec.started_at.strftime("%Y-%m-%d %H:%M:%S"),
-            duration
+            formatted_time
         )
     
     console.print(table)
@@ -67,10 +67,14 @@ def running():
     table.add_column("Started", style="green")
     
     for exec in executions:
+        # Format timestamp in local timezone
+        local_time = exec.started_at.astimezone()
+        formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+        
         table.add_row(
             exec.id[:8] + "...",
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
-            exec.started_at.strftime("%Y-%m-%d %H:%M:%S")
+            formatted_time
         )
     
     console.print(table)
@@ -110,10 +114,12 @@ def show(exec_id: str):
     }.get(execution.status, 'white')
     console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
     
-    console.print(f"Started: {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    # Format timestamps in local timezone
+    local_started = execution.started_at.astimezone()
+    console.print(f"Started: {local_started.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     if execution.completed_at:
-        console.print(f"Completed: {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
-        console.print(f"Duration: {execution.duration:.1f} seconds")
+        local_completed = execution.completed_at.astimezone()
+        console.print(f"Completed: {local_completed.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     if execution.exit_code is not None:
         console.print(f"Exit Code: {execution.exit_code}")
