@@ -145,8 +145,20 @@ class MinimalDocumentBrowser(App):
     #preview {
         width: 100%;
         padding: 0;
-        overflow: auto;
-        scrollbar-gutter: stable;
+        overflow: hidden;
+        border: none;
+        scrollbar-size: 0 0;
+    }
+    
+    ScrollableContainer {
+        border: none;
+        scrollbar-size: 0 0;
+    }
+    
+    Horizontal {
+        border: none;
+        padding: 0;
+        margin: 0;
     }
 
     #preview TextArea {
@@ -168,8 +180,35 @@ class MinimalDocumentBrowser(App):
     #edit-wrapper {
         width: 100%;
         height: 100%;
-        overflow-x: auto;
+        overflow: hidden;
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    #edit-container {
+        width: 100%;
+        height: 100%;
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    #line-numbers {
+        border: none;
+        scrollbar-size: 0 0;
+        overflow: hidden;
+    }
+    
+    #preview-content {
+        border: none !important;
+        scrollbar-size: 0 0;
+        overflow-x: hidden;
         overflow-y: auto;
+    }
+    
+    #preview-content:focus {
+        border: none !important;
     }
     .edit-title-input {
         width: 100%;
