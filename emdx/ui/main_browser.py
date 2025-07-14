@@ -384,6 +384,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
+        Binding("f", "open_file_browser", "Files", key_display="f"),
         Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
         Binding("D", "delete", "Delete", key_display="D"),
@@ -2173,7 +2174,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             
             # Get fresh executions
             old_count = len(self.executions) if hasattr(self, 'executions') else 0
-            fresh_executions = get_recent_executions(limit=20)
+            fresh_executions = get_recent_executions(limit=50)
             new_count = len(fresh_executions)
             
             # Only update if there are actual changes to avoid disrupting user interaction
@@ -2194,7 +2195,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             
             # Clear and repopulate table
             table.clear(columns=True)
-            table.add_columns("Recent", "Status", "Document", "Started", "Duration")
+            table.add_columns("Recent", "Status", "Document", "Started")
             
             # Populate executions table with fresh data
             for i, execution in enumerate(self.executions):
@@ -2229,8 +2230,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     recency,
                     f"{status_icon} {execution.status}",
                     execution.doc_title[:30],
-                    execution.started_at.strftime('%H:%M:%S'),
-                    duration
+                    execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
                 )
             
             # Try to restore the same execution if it still exists
@@ -2477,12 +2477,129 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         """Switch to log browser mode to view and switch between execution logs."""
         self.mode = "LOG_BROWSER"
         self.setup_log_browser()
+    
+    def action_open_file_browser(self):
+        """Open file browser mode."""
+        logger.info("🗂️ Opening file browser mode")
+        
+        # If already in file browser mode, just refresh
+        if hasattr(self, 'mode') and self.mode == "FILE_BROWSER":
+            logger.info("🗂️ Already in file browser mode, refreshing")
+            if hasattr(self, 'file_browser'):
+                self.file_browser.refresh_files()
+            return
+        
+        # Set mode first, then setup
+        self.mode = "FILE_BROWSER"
+        logger.info(f"🗂️ Mode set to: {self.mode}")
+        self.setup_file_browser()
+    
+    def setup_file_browser(self):
+        """Set up the file browser interface."""
+        try:
+            logger.info("🗂️ Setting up file browser interface")
+            
+            # Clean up any existing file browser first
+            if hasattr(self, 'file_browser'):
+                logger.info("🗂️ Removing existing file browser")
+                try:
+                    self.file_browser.remove()
+                except Exception as e:
+                    logger.warning(f"🗂️ Error removing existing file browser: {e}")
+                delattr(self, 'file_browser')
+            
+            # Import the standalone file browser
+            from .file_browser import FileBrowser
+            logger.info("🗂️ FileBrowser imported successfully")
+            
+            # Hide search inputs
+            self.query_one("#search-input", Input).display = False
+            logger.info("🗂️ Search input hidden")
+            self.query_one("#tag-input", Input).display = False
+            self.query_one("#tag-selector", Label).display = False
+            self.query_one("#vim-mode-indicator", Label).display = False
+            
+            # Hide the entire document area
+            sidebar = self.query_one("#sidebar", Vertical)
+            sidebar.display = False
+            
+            preview_container = self.query_one("#preview-container", Vertical)
+            preview_container.display = False
+            
+            # Create and mount file browser in full width container
+            logger.info("🗂️ Getting main horizontal container")
+            # Find the horizontal container that contains sidebar and preview
+            horizontal_container = self.query_one("#sidebar").parent
+            logger.info("🗂️ Creating FileBrowser widget")
+            self.file_browser = FileBrowser(id="file-browser-widget")
+            logger.info("🗂️ Mounting FileBrowser in full container")
+            horizontal_container.mount(self.file_browser)
+            logger.info("🗂️ FileBrowser mounted successfully")
+            
+            # Focus the file browser after mounting is complete
+            self.call_after_refresh(lambda: self._focus_file_browser())
+            
+            # Update status
+            status = self.query_one("#status", Label)
+            status.update("FILE BROWSER: Navigate with j/k/h/l, 's' to save, 'x' to execute, 'q' to exit")
+            logger.info("🗂️ File browser setup complete")
+            
+        except Exception as e:
+            logger.error(f"Error setting up file browser: {e}")
+            status = self.query_one("#status", Label)
+            status.update(f"Error setting up file browser: {e}")
+    
+    def _focus_file_browser(self):
+        """Focus the file browser widget."""
+        try:
+            if hasattr(self, 'file_browser') and self.file_browser:
+                self.file_browser.focus()
+                logger.info("🗂️ FileBrowser focused")
+        except Exception as e:
+            logger.error(f"🗂️ Error focusing file browser: {e}")
+    
+    
+    def exit_file_browser(self):
+        """Exit file browser and return to document browser."""
+        try:
+            logger.info("🗂️ Exiting file browser mode")
+            # Remove file browser
+            if hasattr(self, 'file_browser'):
+                self.file_browser.remove()
+                logger.info("🗂️ File browser widget removed")
+            
+            # Show hidden widgets
+            self.query_one("#search-input", Input).display = True
+            self.query_one("#tag-input", Input).display = True
+            self.query_one("#tag-selector", Label).display = True
+            self.query_one("#vim-mode-indicator", Label).display = True
+            logger.info("🗂️ Input widgets restored")
+            
+            self.query_one("#sidebar", Vertical).display = True
+            self.query_one("#preview-container", Vertical).display = True
+            logger.info("🗂️ Document table and preview restored")
+            
+            # Reset mode and reload
+            self.mode = "NORMAL"
+            logger.info("🗂️ Mode reset to NORMAL")
+            self.reload_documents()
+            
+        except Exception as e:
+            logger.error(f"Error exiting file browser: {e}")
+            # Fallback
+            self.mode = "NORMAL"
+            self.reload_documents()
+    
+    
+    def on_file_browser_quit_file_browser(self, event):
+        """Handle file browser quit event."""
+        self.exit_file_browser()
 
     def setup_log_browser(self):
         """Set up the log browser interface with execution list and log viewer."""
         try:
             # Load recent executions from database
-            self.executions = get_recent_executions(limit=20)
+            self.executions = get_recent_executions(limit=50)
 
             if not self.executions:
                 self.cancel_refresh_timer()
@@ -2496,7 +2613,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Replace the documents table with executions table
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
-            table.add_columns("Recent", "Status", "Document", "Started", "Duration")
+            table.add_columns("Recent", "Status", "Document", "Started")
 
             # Populate executions table
             for i, execution in enumerate(self.executions):
@@ -2531,8 +2648,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     recency,
                     f"{status_icon} {execution.status}",
                     execution.doc_title[:30],
-                    execution.started_at.strftime('%H:%M:%S'),
-                    duration
+                    execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
                 )
 
             # Select first row and load its log
@@ -2565,11 +2681,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     lines.append(f"=== Execution {execution.id} ===")
                     lines.append(f"Document: {execution.doc_title}")
                     lines.append(f"Status: {execution.status}")
-                    lines.append(f"Started: {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                    lines.append(f"Started: {execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     if execution.completed_at:
-                        lines.append(f"Completed: {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
-                    if execution.duration:
-                        lines.append(f"Duration: {execution.duration:.1f}s")
+                        lines.append(f"Completed: {execution.completed_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     lines.append("=== Log Output ===")
                     lines.append("")
 
@@ -2700,11 +2814,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             preview.write(f"[bold cyan]=== Execution {execution.id} ===[/bold cyan]")
             preview.write(f"[yellow]Document:[/yellow] {execution.doc_title}")
             preview.write(f"[yellow]Status:[/yellow] {execution.status}")
-            preview.write(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            preview.write(f"[yellow]Started:[/yellow] {execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
             if execution.completed_at:
-                preview.write(f"[yellow]Completed:[/yellow] {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
-            if execution.duration:
-                preview.write(f"[yellow]Duration:[/yellow] {execution.duration:.1f}s")
+                preview.write(f"[yellow]Completed:[/yellow] {execution.completed_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
             preview.write("[bold cyan]=== Log Output ===[/bold cyan]")
             preview.write("")
 
@@ -2832,7 +2944,6 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Log error but don't crash
             key_logger.error(f"Error in on_key: {e}")
             # Don't try to call super().on_key() as App doesn't have this method
-
 
     async def on_event(self, event) -> None:
         """Handle all events safely."""
