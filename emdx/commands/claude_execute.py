@@ -41,11 +41,15 @@ DEFAULT_ALLOWED_TOOLS = [
 STAGE_TOOLS = {
     ExecutionType.NOTE: [
         "Read", "Grep", "Glob", "LS",  # Analysis needs to read/search
-        "Bash"  # For piping to emdx save
+        "Write",  # For creating temporary files to pipe to emdx save
+        "Bash",  # For piping to emdx save
+        "WebFetch", "WebSearch"  # For research during analysis
     ],
     ExecutionType.ANALYSIS: [
         "Read", "Grep", "Glob", "LS",  # Gameplan creation needs to read
-        "Bash"  # For piping to emdx save
+        "Write",  # For creating temporary files to pipe to emdx save
+        "Bash",  # For piping to emdx save
+        "WebFetch", "WebSearch"  # For research during gameplan creation
     ],
     ExecutionType.GAMEPLAN: DEFAULT_ALLOWED_TOOLS,  # Full tools for implementation
     ExecutionType.GENERIC: DEFAULT_ALLOWED_TOOLS  # Legacy behavior
@@ -217,13 +221,107 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
     return None
 
 
+def execute_with_claude_detached(
+    task: str,
+    execution_id: str,
+    log_file: Path,
+    allowed_tools: Optional[List[str]] = None,
+    working_dir: Optional[str] = None,
+    doc_id: Optional[str] = None
+) -> None:
+    """Execute a task with Claude in a fully detached background process.
+    
+    This function starts Claude and returns immediately without waiting.
+    The subprocess continues running independently of the parent process.
+    """
+    if allowed_tools is None:
+        allowed_tools = DEFAULT_ALLOWED_TOOLS
+    
+    # Expand @filename references
+    expanded_task = parse_task_content(task)
+    
+    # Build Claude command
+    cmd = [
+        "claude",
+        "--print", expanded_task,
+        "--allowedTools", ",".join(allowed_tools),
+        "--output-format", "stream-json",
+        "--verbose"
+    ]
+    
+    # Ensure log directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Write initial log header
+    from emdx import __version__
+    start_time = datetime.now()
+    with open(log_file, 'w') as f:
+        f.write("=== EMDX Claude Execution ===\n")
+        f.write(f"Version: {__version__}\n")
+        f.write(f"Doc ID: {doc_id or 'unknown'}\n")
+        f.write(f"Execution ID: {execution_id}\n")
+        if working_dir:
+            f.write(f"Worktree: {working_dir}\n")
+        f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
+        f.write(f"{'=' * 50}\n\n")
+        f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
+        f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
+        f.write(f"{format_timestamp()} 📝 Prompt being sent to Claude:\n")
+        f.write(f"{'─' * 60}\n")
+        f.write(f"{expanded_task}\n")
+        f.write(f"{'─' * 60}\n\n")
+    
+    # Start subprocess in detached mode
+    try:
+        # Use nohup for true detachment
+        nohup_cmd = ["nohup"] + cmd
+        
+        process = subprocess.Popen(
+            nohup_cmd,
+            stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
+            stdout=open(log_file, 'a'),  # Direct to file, no pipe
+            stderr=subprocess.STDOUT,
+            cwd=working_dir,
+            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            start_new_session=True,  # Better than preexec_fn
+            close_fds=True  # Don't inherit file descriptors
+        )
+        
+        # Log the PID for tracking
+        with open(log_file, 'a') as f:
+            f.write(f"\n{format_timestamp()} 🔧 Background process started with PID: {process.pid}\n")
+            f.write(f"{format_timestamp()} 📄 Output is being written to this log file\n")
+        
+        # Return immediately - don't wait or read from pipes
+        console.print(f"[green]✅ Claude started in background (PID: {process.pid})[/green]")
+        
+    except FileNotFoundError as e:
+        # Handle missing nohup
+        if "nohup" in str(e):
+            # Fallback without nohup
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=open(log_file, 'a'),
+                stderr=subprocess.STDOUT,
+                cwd=working_dir,
+                env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+                start_new_session=True,
+                close_fds=True
+            )
+            console.print(f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]")
+        else:
+            raise
+
+
 def execute_with_claude(
     task: str,
     execution_id: str,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     verbose: bool = True,
-    working_dir: Optional[str] = None
+    working_dir: Optional[str] = None,
+    doc_id: Optional[str] = None
 ) -> int:
     """Execute a task with Claude, streaming output to log file.
 
@@ -256,13 +354,23 @@ def execute_with_claude(
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Write initial log header
+    from emdx import __version__
+    start_time = datetime.now()
     with open(log_file, 'w') as f:
         f.write("=== EMDX Claude Execution ===\n")
-        f.write(f"ID: {execution_id}\n")
-        f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Version: {__version__}\n")
+        f.write(f"Doc ID: {doc_id or 'unknown'}\n")
+        f.write(f"Execution ID: {execution_id}\n")
+        if working_dir:
+            f.write(f"Worktree: {working_dir}\n")
+        f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
         f.write(f"{'=' * 50}\n\n")
         f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
         f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
+        f.write(f"{format_timestamp()} 📝 Prompt being sent to Claude:\n")
+        f.write(f"{'─' * 60}\n")
+        f.write(f"{expanded_task}\n")
+        f.write(f"{'─' * 60}\n\n")
 
     # Start subprocess
     try:
@@ -275,15 +383,17 @@ def execute_with_claude(
             universal_newlines=True,
             cwd=working_dir,  # Run in specified working directory
             # Force unbuffered for any Python subprocesses
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'}
+            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            # Detach from parent process group so it survives parent exit
+            preexec_fn=os.setsid if os.name != 'nt' else None
         )
 
-        start_time = time.time()
+        exec_start_time = time.time()
 
         # Stream output
         with open(log_file, 'a') as log:
             for line in process.stdout:
-                formatted = format_claude_output(line, start_time)
+                formatted = format_claude_output(line, exec_start_time)
                 if formatted:
                     log.write(formatted + "\n")
                     log.flush()
@@ -295,12 +405,14 @@ def execute_with_claude(
 
         # Write completion status
         with open(log_file, 'a') as log:
-            duration = time.time() - start_time
+            duration = time.time() - exec_start_time
+            end_time = datetime.now()
             if exit_code == 0:
-                log.write(f"\n{format_timestamp()} ✅ Using Max subscription (no API charges)\n")
+                log.write(f"\n{format_timestamp()} ✅ Execution completed successfully\n")
             else:
                 log.write(f"\n{format_timestamp()} ❌ Process exited with code {exit_code}\n")
-            log.write(f"{format_timestamp()} ⏱️  Total duration: {duration:.2f}s\n")
+            log.write(f"{format_timestamp()} ⏱️  Duration: {duration:.1f}s\n")
+            log.write(f"{format_timestamp()} 🏁 Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
 
         return exit_code
 
@@ -319,6 +431,65 @@ def execute_with_claude(
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
         return 1
+
+
+def execute_document_smart_background(
+    doc_id: int,
+    execution_id: str,
+    log_file: Path,
+    allowed_tools: Optional[List[str]] = None,
+    use_stage_tools: bool = True
+) -> None:
+    """Execute a document in background with context-aware behavior.
+    
+    This function starts execution and returns immediately.
+    """
+    # Get document
+    doc = get_document(str(doc_id))
+    if not doc:
+        raise ValueError(f"Document {doc_id} not found")
+
+    # Get document tags
+    from ..models.tags import get_document_tags
+    doc_tags = get_document_tags(str(doc_id))
+    
+    # Get execution context based on tags
+    context = get_execution_context(doc_tags)
+
+    # Build prompt with template
+    prompt = build_prompt(context['prompt_template'], doc['content'])
+
+    # Use stage-specific tools if enabled and no custom tools provided
+    if use_stage_tools and allowed_tools is None:
+        allowed_tools = STAGE_TOOLS.get(context['type'], DEFAULT_ALLOWED_TOOLS)
+    elif allowed_tools is None:
+        allowed_tools = DEFAULT_ALLOWED_TOOLS
+
+    # Create worktree
+    worktree_path = create_execution_worktree(execution_id, doc['title'])
+    working_dir = str(worktree_path) if worktree_path else os.getcwd()
+
+    # Create execution record
+    execution = Execution(
+        id=execution_id,
+        doc_id=doc_id,
+        doc_title=doc['title'],
+        status="running",
+        started_at=datetime.now(),
+        log_file=str(log_file),
+        working_dir=working_dir
+    )
+    save_execution(execution)
+
+    # Execute with Claude in detached mode
+    execute_with_claude_detached(
+        task=prompt,
+        execution_id=execution_id,
+        log_file=log_file,
+        allowed_tools=allowed_tools,
+        working_dir=working_dir,
+        doc_id=str(doc_id)
+    )
 
 
 def execute_document_smart(
@@ -397,7 +568,8 @@ def execute_document_smart(
         log_file=log_file,
         allowed_tools=allowed_tools,
         verbose=verbose,
-        working_dir=working_dir
+        working_dir=working_dir,
+        doc_id=str(doc_id)
     )
 
     # Update execution status
@@ -485,6 +657,52 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         return None
 
 
+def monitor_execution_detached(
+    execution_id: str,
+    task: str,
+    doc_id: str,
+    doc_title: str,
+    log_file: Path,
+    allowed_tools: Optional[List[str]] = None
+) -> None:
+    """Start Claude execution in detached mode and return immediately."""
+    try:
+        # Create dedicated worktree for this execution
+        worktree_path = create_execution_worktree(execution_id, doc_title)
+        working_dir = str(worktree_path) if worktree_path else os.getcwd()
+
+        # Create and save initial execution record
+        execution = Execution(
+            id=execution_id,
+            doc_id=int(doc_id),
+            doc_title=doc_title,
+            status="running",
+            started_at=datetime.now(),
+            log_file=str(log_file),
+            working_dir=working_dir
+        )
+        save_execution(execution)
+
+        # Execute with Claude in detached mode
+        execute_with_claude_detached(
+            task=task,
+            execution_id=execution_id,
+            log_file=log_file,
+            allowed_tools=allowed_tools,
+            working_dir=working_dir,
+            doc_id=doc_id
+        )
+    except Exception as e:
+        # Log error
+        try:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_file, 'a') as f:
+                f.write(f"\n❌ Error in monitor_execution_detached: {e}\n")
+            update_execution_status(execution_id, "failed", 1)
+        except Exception:
+            pass  # Silent fail if we can't even log the error
+
+
 def monitor_execution(
     execution_id: str,
     task: str,
@@ -527,7 +745,8 @@ def monitor_execution(
             log_file=log_file,
             allowed_tools=allowed_tools,
             verbose=False,  # Don't show output when running in background
-            working_dir=working_dir
+            working_dir=working_dir,
+            doc_id=doc_id
         )
 
         # Update execution status
@@ -586,12 +805,14 @@ def execute(
             context = get_execution_context(doc_tags)
             console.print(f"[cyan]Type: {context['type'].value} - {context['description']}[/cyan]")
 
-            thread = threading.Thread(
-                target=execute_document_smart,
-                args=(int(doc_id), execution_id, log_file, allowed_tools, False, True),
-                daemon=True
+            # Execute in background without blocking
+            execute_document_smart_background(
+                doc_id=int(doc_id),
+                execution_id=execution_id,
+                log_file=log_file,
+                allowed_tools=allowed_tools,
+                use_stage_tools=True
             )
-            thread.start()
 
             console.print("\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
         else:
@@ -615,13 +836,15 @@ def execute(
             console.print(f"Execution ID: [cyan]{execution_id}[/cyan]")
             console.print(f"Log file: [dim]{log_file}[/dim]")
 
-            thread = threading.Thread(
-                target=monitor_execution,
-                args=(execution_id, doc['content'], str(doc['id']),
-                      doc['title'], log_file, allowed_tools),
-                daemon=True
+            # Execute in background without blocking
+            monitor_execution_detached(
+                execution_id=execution_id,
+                task=doc['content'],
+                doc_id=str(doc['id']),
+                doc_title=doc['title'],
+                log_file=log_file,
+                allowed_tools=allowed_tools
             )
-            thread.start()
 
             console.print("\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
         else:
@@ -654,7 +877,8 @@ def execute(
                 log_file=log_file,
                 allowed_tools=allowed_tools,
                 verbose=True,
-                working_dir=working_dir
+                working_dir=working_dir,
+                doc_id=doc_id
             )
 
             # Update status

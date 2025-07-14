@@ -8,13 +8,6 @@ from textual.containers import Grid
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label
 
-import logging
-
-# Set up logging for debugging
-logger = logging.getLogger(__name__)
-key_logger = logging.getLogger("key_events")
-
-
 
 class DeleteConfirmScreen(ModalScreen):
     """Modal screen for delete confirmation."""
@@ -57,7 +50,6 @@ class DeleteConfirmScreen(ModalScreen):
         super().__init__()
         self.doc_id = doc_id
         self.doc_title = doc_title
-        logger.info(f"DeleteConfirmScreen initialized for doc #{doc_id}: {doc_title}")
 
     def compose(self) -> ComposeResult:
         with Grid(id="dialog"):
@@ -70,35 +62,13 @@ class DeleteConfirmScreen(ModalScreen):
             yield Button("Delete (y)", variant="error", id="delete")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        logger.info(f"Button pressed: {event.button.id}")
         if event.button.id == "delete":
             self.dismiss(True)
         else:
             self.dismiss(False)
 
     def action_confirm_delete(self) -> None:
-        logger.info("action_confirm_delete called")
         self.dismiss(True)
 
     def action_cancel(self) -> None:
-        logger.info("action_cancel called")
         self.dismiss(False)
-    
-    def on_dismiss(self, result) -> None:
-        """Log when modal is dismissed."""
-        logger.info(f"DeleteConfirmScreen dismissed with result: {result}")
-
-    def on_mount(self) -> None:
-        """Ensure modal has focus when mounted."""
-        logger.info(f"DeleteConfirmScreen mounted for doc #{self.doc_id}")
-        self.focus()
-        # Log the current screen stack for debugging
-        if hasattr(self.app, 'screen_stack'):
-            logger.info(f"Screen stack after mount: {len(self.app.screen_stack)} screens")
-
-    def on_key(self, event) -> None:
-        """Log key events for debugging."""
-        key_logger.info(f"DeleteConfirmScreen.on_key: key={event.key}, character={event.character}")
-        # Don't consume the event - let bindings handle it
-        # Important: Don't call event.stop() or event.prevent_default() here
-        # as that would prevent the bindings from working

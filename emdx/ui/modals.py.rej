@@ -1,0 +1,31 @@
+@@ -62,13 +70,30 @@
+             yield Button("Delete (y)", variant="error", id="delete")
+ 
+     def on_button_pressed(self, event: Button.Pressed) -> None:
++        logger.info(f"Button pressed: {event.button.id}")
+         if event.button.id == "delete":
+             self.dismiss(True)
+         else:
+             self.dismiss(False)
+ 
+     def action_confirm_delete(self) -> None:
++        logger.info("action_confirm_delete called")
+         self.dismiss(True)
+ 
+     def action_cancel(self) -> None:
++        logger.info("action_cancel called")
+         self.dismiss(False)
++
++    def on_mount(self) -> None:
++        """Ensure modal has focus when mounted."""
++        logger.info("DeleteConfirmScreen mounted")
++        self.focus()
++
++    def on_key(self, event) -> None:
++        """Log key events for debugging."""
++        key_logger.info(f"DeleteConfirmScreen.on_key: key={event.key}, character={event.character}")
++        # Don't consume the event - let bindings handle it
++        # Important: Don't call event.stop() or event.prevent_default() here
++        # as that would prevent the bindings from working
++        
++--- a/emdx/ui/main_browser.py
