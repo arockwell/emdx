@@ -34,52 +34,34 @@ class FileEditTextArea(TextArea):
         # TextArea doesn't have on_key method, so we don't call super()
 
 
-class FileVimEditTextArea(object):
-    """Wrapper to adapt VimEditTextArea for file browser use."""
+class FileBrowserVimApp:
+    """Mock app instance for vim editor in file browser context."""
     
-    def __init__(self, file_browser, *args, **kwargs):
-        # Import here to avoid circular imports
-        from .text_areas import VimEditTextArea
-        
-        # Create a mock app instance that VimEditTextArea expects
-        class MockApp:
-            def __init__(self, file_browser):
-                self.file_browser = file_browser
-                
-            def action_save_and_exit_edit(self):
-                self.file_browser.action_handle_escape()
-                
-            def action_cancel_edit(self):
-                self.file_browser.action_handle_escape()
-                
-            def action_save_document(self):
-                # Just update status - file will be saved when exiting
-                pass
-                
-            def _update_vim_status(self, message=""):
-                # Update file browser status with vim info
-                try:
-                    if hasattr(self.file_browser, 'vim_area'):
-                        mode = self.file_browser.vim_area.vim_mode
-                        if message:
-                            status = f"📝 VIM {mode}: {message}"
-                        else:
-                            status = f"📝 VIM {mode} - ESC to save and exit"
-                        self.file_browser.query_one("#file-status-bar").update(status)
-                except:
-                    pass
-        
-        self.mock_app = MockApp(file_browser)
-        self.vim_area = VimEditTextArea(self.mock_app, *args, **kwargs)
+    def __init__(self, file_browser):
         self.file_browser = file_browser
         
-        # Store file path for saving
-        if hasattr(self, 'file_path'):
-            self.vim_area.file_path = self.file_path
-    
-    def __getattr__(self, name):
-        # Delegate all other attributes to the vim area
-        return getattr(self.vim_area, name)
+    def action_save_and_exit_edit(self):
+        self.file_browser.action_handle_escape()
+        
+    def action_cancel_edit(self):
+        self.file_browser.action_handle_escape()
+        
+    def action_save_document(self):
+        # Just update status - file will be saved when exiting
+        pass
+        
+    def _update_vim_status(self, message=""):
+        # Update file browser status with vim info
+        try:
+            if hasattr(self.file_browser, 'vim_editor'):
+                mode = self.file_browser.vim_editor.vim_mode
+                if message:
+                    status = f"📝 VIM {mode}: {message}"
+                else:
+                    status = f"📝 VIM {mode} - ESC to save and exit"
+                self.file_browser.query_one("#file-status-bar", Static).update(status)
+        except Exception as e:
+            logger.debug(f"Error updating vim status: {e}")
 
 
 class FileSelectionTextArea(TextArea):
@@ -188,6 +170,34 @@ class FileBrowser(Container):
     
     .warning-text {
         color: $warning;
+    }
+    
+    /* Vim editor styling */
+    .constrained-textarea {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 0 1 !important;
+    }
+    
+    .vim-line-numbers {
+        width: 4;
+        background: $background;
+        color: $text-muted;
+        text-align: right;
+        padding-right: 1;
+        padding-top: 1;
+        margin: 0;
+        border: none;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
+    }
+    
+    #vim-edit-container {
+        height: 100%;
+        background: $background;
     }
     """
     
@@ -474,32 +484,31 @@ class FileBrowser(Container):
             except Exception as e:
                 logger.warning(f"🗂️ Could not remove old preview: {e}")
             
-            # Create a simple container for editing with unique ID
-            from textual.containers import ScrollableContainer
+            # Use unified vim editor with line numbers
+            from .vim_editor import VimEditor
             
-            edit_container = ScrollableContainer(id="edit-preview-container", classes="file-preview-pane")
+            # Create mock app instance for vim editor
+            vim_app = FileBrowserVimApp(self)
             
-            # Use vim-enabled text area that starts in NORMAL mode
-            vim_wrapper = FileVimEditTextArea(
-                self,
-                text=content,
-                read_only=False,
-                id="edit-content"
+            # Create unified vim editor with line numbers
+            self.vim_editor = VimEditor(
+                vim_app,
+                content=content,
+                id="edit-preview-container",
+                classes="file-preview-pane"
             )
-            edit_area = vim_wrapper.vim_area  # Get the actual TextArea widget
-            edit_area.can_focus = True
-            edit_area.file_path = selected_file  # Store file path for saving
             
-            # Store vim wrapper for status updates
-            self.vim_area = vim_wrapper.vim_area
+            # Store file path for saving
+            self.vim_editor.text_area.file_path = selected_file
             
-            # Mount the edit container and area
-            horizontal_container.mount(edit_container)
-            edit_container.mount(edit_area)
-            edit_area.focus()
+            # Mount the vim editor
+            horizontal_container.mount(self.vim_editor)
+            
+            # Focus after mounting
+            self.call_after_refresh(lambda: self.vim_editor.focus_editor())
             
             # Update status with vim mode info
-            mode = vim_wrapper.vim_area.vim_mode
+            mode = self.vim_editor.vim_mode
             self.query_one("#file-status-bar", Static).update(
                 f"📝 VIM {mode}: {selected_file.name} - ESC to save and exit"
             )
@@ -518,12 +527,9 @@ class FileBrowser(Container):
     def _exit_edit_mode(self) -> None:
         """Exit edit mode and save file."""
         try:
-            # Find the edit area
-            from textual.widgets import TextArea
-            edit_area = self.query_one("#edit-content", TextArea)
-            
-            # Save and exit
-            self.save_and_exit_edit_mode(edit_area)
+            # Save and exit using vim editor
+            if hasattr(self, 'vim_editor'):
+                self.save_and_exit_edit_mode(self.vim_editor.text_area)
             self.edit_mode = False
             
         except Exception as e:
@@ -572,9 +578,10 @@ class FileBrowser(Container):
             # Exit edit mode - restore FilePreview widget
             horizontal_container = self.query_one(".file-browser-content", Horizontal)
             
-            # Remove the edit container
-            edit_container = self.query_one("#edit-preview-container")
-            edit_container.remove()
+            # Remove the vim editor
+            if hasattr(self, 'vim_editor'):
+                self.vim_editor.remove()
+                delattr(self, 'vim_editor')
             
             # Recreate the FilePreview widget
             from .file_preview import FilePreview
