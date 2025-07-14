@@ -443,6 +443,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             tag_input = self.query_one("#tag-input")
             tag_input.can_focus = False
             
+            # Hide tag input/selector by default (only show in TAG mode)
+            tag_input.display = False
+            self.query_one("#tag-selector", Label).display = False
+            
             self.load_documents()
             logger.info("Documents loaded, scheduling delayed setup")
             # Delay table setup until after widgets are mounted
@@ -860,7 +864,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     if self.tag_action == "add":
                         # Show input for adding tags
                         tag_input.add_class("visible")
+                        tag_input.display = True
                         tag_selector.remove_class("visible")
+                        tag_selector.display = False
                         if current_tags:
                             tag_input.placeholder = f"Add tags (current: {', '.join(current_tags)})"
                         else:
@@ -870,8 +876,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     else:  # remove
                         # Show visual selector for removing tags
                         tag_input.remove_class("visible")
+                        tag_input.display = False
                         if current_tags:
                             tag_selector.add_class("visible")
+                            tag_selector.display = True
                             self.current_tag_completion = 0  # Start with first tag
                             self.update_tag_selector()
                             self.cancel_refresh_timer()
@@ -879,6 +887,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                             status.update("Tab to navigate, Enter to remove tag, Esc to cancel")
                         else:
                             tag_selector.remove_class("visible")
+                            tag_selector.display = False
                             self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update("No tags to remove")
@@ -889,16 +898,23 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     if self.tag_action == "add":
                         self.current_tag_completion = 0
         else:
+            # For all other modes (NORMAL, FILE_BROWSER, LOG_BROWSER, etc.)
             search.remove_class("visible")
             tag_input.remove_class("visible")
             tag_selector.remove_class("visible")
+            # Also ensure tag inputs are hidden via display property
+            tag_input.display = False
+            tag_selector.display = False
             search.value = ""
             tag_input.value = ""
             # Disable focus on inputs when not in use
             search.can_focus = False
             tag_input.can_focus = False
             self.current_tag_completion = 0  # Reset completion index
-            table.focus()
+            
+            # Only focus table if we're in NORMAL mode
+            if new_mode == "NORMAL":
+                table.focus()
 
     def action_search_mode(self):
         self.mode = "SEARCH"
@@ -908,6 +924,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             return
         self.tag_action = "add"
         self.mode = "TAG"
+        # Show tag input when entering TAG mode
+        tag_input = self.query_one("#tag-input", Input)
+        tag_input.display = True
+        self.query_one("#tag-selector", Label).display = True
 
     def action_untag_mode(self):
         if not self.current_doc_id:
@@ -916,6 +936,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         logger.info("DEBUG: action_untag_mode called, setting mode to TAG")
         self.tag_action = "remove"
         self.mode = "TAG"
+        # Show tag input when entering TAG mode
+        tag_input = self.query_one("#tag-input", Input)
+        tag_input.display = True
+        self.query_one("#tag-selector", Label).display = True
         logger.info(f"DEBUG: mode set to {self.mode}, tag_action set to {self.tag_action}")
 
     def action_new_note(self):
@@ -1013,6 +1037,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     status.update(f"Error: {e}")
 
             self.mode = "NORMAL"
+            # Hide tag input when exiting TAG mode
+            self.query_one("#tag-input", Input).display = False
+            self.query_one("#tag-selector", Label).display = False
 
     def on_key(self, event: events.Key) -> None:
         try:
@@ -1080,6 +1107,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     self.filter_documents("")
                 elif self.mode == "TAG":
                     self.mode = "NORMAL"
+                    # Hide tag input when exiting TAG mode
+                    self.query_one("#tag-input", Input).display = False
+                    self.query_one("#tag-selector", Label).display = False
                 else:
                     # From normal mode or preview focus, quit the app
                     self.action_quit()
@@ -2512,12 +2542,15 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             from .file_browser import FileBrowser
             logger.info("🗂️ FileBrowser imported successfully")
             
-            # Hide search inputs
-            self.query_one("#search-input", Input).display = False
-            logger.info("🗂️ Search input hidden")
-            self.query_one("#tag-input", Input).display = False
-            self.query_one("#tag-selector", Label).display = False
-            self.query_one("#vim-mode-indicator", Label).display = False
+            # Remove problematic widgets entirely to avoid visibility conflicts
+            try:
+                self.query_one("#search-input", Input).remove()
+                self.query_one("#tag-input", Input).remove()
+                self.query_one("#tag-selector", Label).remove()
+                self.query_one("#vim-mode-indicator", Label).remove()
+                logger.info("🗂️ Input widgets removed")
+            except Exception as e:
+                logger.error(f"🗂️ Error removing widgets: {e}")
             
             # Hide the entire document area
             sidebar = self.query_one("#sidebar", Vertical)
@@ -2568,25 +2601,57 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 self.file_browser.remove()
                 logger.info("🗂️ File browser widget removed")
             
-            # Show hidden widgets
-            self.query_one("#search-input", Input).display = True
-            self.query_one("#tag-input", Input).display = True
-            self.query_one("#tag-selector", Label).display = True
-            self.query_one("#vim-mode-indicator", Label).display = True
-            logger.info("🗂️ Input widgets restored")
+            # Recreate the removed widgets
+            try:
+                # Find the container that holds these widgets (before the horizontal layout)
+                # They should be mounted before the main horizontal container
+                horizontal_container = self.query_one(Horizontal)
+                
+                # Create widgets with proper initial state
+                search_input = Input(placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')", id="search-input")
+                tag_input = Input(placeholder="Enter tags separated by spaces...", id="tag-input")
+                tag_selector = Label("", id="tag-selector")
+                
+                # Set initial state BEFORE mounting to prevent visibility issues
+                search_input.can_focus = False
+                tag_input.can_focus = False
+                tag_input.display = False  # Hide by default
+                tag_selector.display = False  # Hide by default
+                
+                # Ensure widgets are created without the visible class
+                search_input.remove_class("visible")
+                tag_input.remove_class("visible")
+                tag_selector.remove_class("visible")
+                
+                # Mount the widgets before the horizontal container
+                horizontal_container.mount_before(search_input)
+                horizontal_container.mount_before(tag_input)
+                horizontal_container.mount_before(tag_selector)
+                
+                # Mount vim indicator inside the preview container
+                preview_container = self.query_one("#preview-container", Vertical)
+                vim_indicator = Label("", id="vim-mode-indicator")
+                # Mount it as the first child (before the preview)
+                preview_container.mount(vim_indicator, before=0)
+                
+                logger.info("🗂️ Input widgets configured")
+            except Exception as e:
+                logger.error(f"🗂️ Error recreating widgets: {e}")
+                # Fallback - just show what we can
+                pass
             
             self.query_one("#sidebar", Vertical).display = True
             self.query_one("#preview-container", Vertical).display = True
             logger.info("🗂️ Document table and preview restored")
             
-            # Reset mode and reload
+            # Reset mode and reload (watch_mode will handle tag input visibility)
             self.mode = "NORMAL"
             logger.info("🗂️ Mode reset to NORMAL")
             self.reload_documents()
             
         except Exception as e:
             logger.error(f"Error exiting file browser: {e}")
-            # Fallback
+            # Fallback (watch_mode will handle tag input visibility)
             self.mode = "NORMAL"
             self.reload_documents()
     
@@ -3073,12 +3138,6 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Fallback to exit
             self.exit()
 
-    def exit_file_browser(self):
-        """Exit file browser mode and return to document mode."""
-        # Placeholder for file browser functionality that will come from main
-        self.mode = "NORMAL"
-        self.reload_documents()
-    
     def stop_log_monitoring(self):
         """Stop the log monitoring timer."""
         self.cancel_log_monitor_timer()
