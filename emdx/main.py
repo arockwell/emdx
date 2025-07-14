@@ -7,7 +7,7 @@ from typing import Optional
 
 import typer
 
-from emdx import __version__
+from emdx import __version__, __build_id__
 from emdx.commands.browse import app as browse_app
 from emdx.commands.core import app as core_app
 from emdx.commands.gist import app as gist_app
@@ -56,6 +56,7 @@ app.command()(gui)
 def version():
     """Show emdx version"""
     typer.echo(f"emdx version {__version__}")
+    typer.echo(f"Build ID: {__build_id__}")
     typer.echo("Documentation Index Management System")
 
 

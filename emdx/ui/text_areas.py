@@ -176,16 +176,16 @@ class VimEditTextArea(TextArea):
                     event.stop()
                     event.prevent_default()
                     # Use call_after_refresh to avoid blocking the UI
-                    # Call the file browser's exit method directly
+                    # Call the appropriate exit method
                     try:
-                        # For FileBrowserVimApp, we need to access the file_browser attribute
                         if hasattr(self.app_instance, 'file_browser'):
-                            self.app_instance.file_browser.call_after_refresh(self.app_instance.file_browser._exit_edit_mode)
+                            # For FileBrowserVimApp, call the method directly
+                            self.app_instance.file_browser.call_after_refresh(self.app_instance.action_save_and_exit_edit)
                         else:
                             # For main browser, call the action directly
                             self.app_instance.call_after_refresh(self.app_instance.action_save_and_exit_edit)
-                    except AttributeError:
-                        # Fallback - just call the action method
+                    except Exception as e:
+                        # Fallback - just call the action method directly
                         self.app_instance.action_save_and_exit_edit()
                     return
             

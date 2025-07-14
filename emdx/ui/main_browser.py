@@ -65,7 +65,10 @@ try:
     key_logger.addHandler(key_handler)
     key_logger.setLevel(logging.DEBUG)
     logger = logging.getLogger(__name__)
-    logger.info("EMDX TUI starting up")
+    
+    # Import build ID for version tracking
+    from emdx import __build_id__
+    logger.info(f"EMDX TUI starting up - Build: {__build_id__}")
 except Exception:
     # Fallback if logging setup fails
     import logging
