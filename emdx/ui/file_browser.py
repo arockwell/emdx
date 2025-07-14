@@ -1,14 +1,13 @@
 """File browser widget for EMDX TUI."""
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.widgets import Static, TextArea
 
@@ -233,7 +232,6 @@ class FileBrowser(Container):
         Binding("s", "toggle_selection_mode", "Select", show=True),
         Binding("x", "execute_file", "Execute", show=True),
         Binding("e", "edit_file", "Edit", show=True),
-        Binding("escape", "handle_escape", "Exit Mode", show=False),
         Binding("/", "search", "Search", show=True),
     ]
     
@@ -545,6 +543,29 @@ class FileBrowser(Container):
         else:
             # If not in any special mode, exit file browser back to main
             self.action_quit()
+    
+    def on_key(self, event: events.Key) -> None:
+        """Handle key events, especially ESC for mode switching."""
+        if event.key == "escape":
+            if self.edit_mode:
+                self._exit_edit_mode()
+                event.stop()
+                event.prevent_default()
+                return
+            elif self.selection_mode:
+                self._exit_selection_mode()
+                event.stop()
+                event.prevent_default()
+                return
+            else:
+                # If not in any special mode, exit file browser back to main
+                self.action_quit()
+                event.stop()
+                event.prevent_default()
+                return
+        
+        # For all other keys, use default handling
+        super().on_key(event)
     
     def _exit_edit_mode(self) -> None:
         """Exit edit mode and save file."""
