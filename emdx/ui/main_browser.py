@@ -69,58 +69,27 @@ except Exception:
     logger = logging.getLogger(__name__)
 
 
-class VimLineNumbers(Static):
-    """Line numbers widget for vim editing mode."""
+class SimpleVimLineNumbers(Static):
+    """Dead simple vim-style line numbers widget."""
 
-    def __init__(self, edit_textarea, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.edit_textarea = edit_textarea
         self.add_class("vim-line-numbers")
-        self._last_cursor_line = None  # Track cursor to avoid unnecessary updates
-        self._last_total_lines = None
 
-    def update_line_numbers(self):
-        """Update the line numbers display based on cursor position."""
-        try:
-            if not hasattr(self.edit_textarea, 'cursor_location'):
-                logger.debug("edit_textarea has no cursor_location")
-                return
-
-            current_line = self.edit_textarea.cursor_location[0]
-            text_lines = self.edit_textarea.text.split('\n')
-            total_lines = len(text_lines)
-            
-            # Skip update if nothing changed
-            if (current_line == self._last_cursor_line and 
-                total_lines == self._last_total_lines):
-                return
-                
-            self._last_cursor_line = current_line
-            self._last_total_lines = total_lines
-            
-            logger.debug(f"Updating line numbers: current={current_line}, total={total_lines}")
-
-            # Build relative line numbers like vim
-            lines = []
-            for i in range(total_lines):
-                if i == current_line:
-                    # Current line shows absolute number (1-based)
-                    line_num = f"{i+1:>3}"
-                    lines.append(line_num)
-                else:
-                    # Other lines show relative distance
-                    relative = abs(i - current_line)
-                    line_num = f"{relative:>3}"
-                    lines.append(line_num)
-
-            result = "\n".join(lines)
-            logger.debug(f"Setting line numbers: {repr(result[:20])}...")
-            
-            # Clear and update content
-            self.update(result)
-
-        except Exception as e:
-            logger.error(f"Error updating line numbers: {e}")
+    def set_line_numbers(self, current_line, total_lines):
+        """Set line numbers given current line (0-based) and total lines."""
+        lines = []
+        for i in range(total_lines):
+            if i == current_line:
+                # Current line shows absolute number (1-based)
+                lines.append(f"{i+1:>3}")
+            else:
+                # Other lines show distance from current line
+                distance = abs(i - current_line)
+                lines.append(f"{distance:>3}")
+        
+        # Update widget content
+        self.update("\n".join(lines))
 
 class MinimalDocumentBrowser(App):
     """Minimal document browser that signals external wrapper for nvim."""
@@ -1589,10 +1558,9 @@ class MinimalDocumentBrowser(App):
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
 
-            # Create line numbers widget for vim-style relative numbers
-            line_numbers = VimLineNumbers(edit_area, id="line-numbers")
+            # Create simple line numbers widget
+            line_numbers = SimpleVimLineNumbers(id="line-numbers")
             edit_area.line_numbers_widget = line_numbers
-            logger.debug(f"Created line numbers widget {id(line_numbers)} for edit_area {id(edit_area)}")
 
             # Create horizontal container for line numbers and text area
             edit_container = Horizontal(id="edit-container")
@@ -1613,8 +1581,10 @@ class MinimalDocumentBrowser(App):
             # Focus the content editor first instead of title input
             edit_area.focus()
 
-            # Initialize line numbers
-            line_numbers.update_line_numbers()
+            # Initialize line numbers with current cursor position
+            current_line = edit_area.cursor_location[0] if hasattr(edit_area, 'cursor_location') else 0
+            total_lines = len(edit_area.text.split('\n'))
+            line_numbers.set_line_numbers(current_line, total_lines)
 
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")

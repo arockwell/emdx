@@ -138,8 +138,9 @@ class VimEditTextArea(TextArea):
         """Update line numbers widget if it exists."""
         try:
             if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
-                # Update immediately since we now have duplicate protection
-                self.line_numbers_widget.update_line_numbers()
+                current_line = self.cursor_location[0] if hasattr(self, 'cursor_location') else 0
+                total_lines = len(self.text.split('\n'))
+                self.line_numbers_widget.set_line_numbers(current_line, total_lines)
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
