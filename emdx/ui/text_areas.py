@@ -137,17 +137,19 @@ class VimEditTextArea(TextArea):
     def _update_line_numbers(self):
         """Update line numbers widget if it exists."""
         try:
-            import traceback
-            logger.debug(f"📍 _update_line_numbers called from: {traceback.format_stack()[-2].strip()}")
-            
             if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
-                current_line = self.cursor_location[0] if hasattr(self, 'cursor_location') else 0
+                # Use selection.end for cursor position as it's more reliable
+                if hasattr(self, 'selection') and self.selection:
+                    current_line = self.selection.end[0]
+                elif hasattr(self, 'cursor_location'):
+                    current_line = self.cursor_location[0]
+                else:
+                    current_line = 0
+                
                 total_lines = len(self.text.split('\n'))
-                logger.debug(f"📍 TextArea data: cursor={self.cursor_location if hasattr(self, 'cursor_location') else 'None'}, text_len={len(self.text)}")
+                
                 # Pass self reference so line numbers can check focus
                 self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
-            else:
-                logger.debug(f"📍 No line_numbers_widget found")
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
@@ -223,15 +225,11 @@ class VimEditTextArea(TextArea):
             self.move_cursor_relative(columns=-count)
             self._update_line_numbers()
         elif key == "j" or key == "down":
-            key_logger.info(f"Moving down by {count} - BEFORE move_cursor_relative")
-            try:
-                self.move_cursor_relative(rows=count)
-                self._update_line_numbers()
-                key_logger.info(f"Moving down by {count} - AFTER move_cursor_relative SUCCESS")
-            except Exception as e:
-                key_logger.error(f"CRASH in move_cursor_relative(rows={count}): {e}")
-                raise
+            key_logger.info(f"Moving down by {count}")
+            self.move_cursor_relative(rows=count)
+            self._update_line_numbers()
         elif key == "k" or key == "up":
+            key_logger.info(f"Moving up by {count}")
             self.move_cursor_relative(rows=-count)
             self._update_line_numbers()
         elif key == "l" or key == "right":
