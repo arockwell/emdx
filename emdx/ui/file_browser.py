@@ -587,25 +587,26 @@ class FileBrowser(Container):
             # Exit edit mode - restore FilePreview widget
             horizontal_container = self.query_one(".file-browser-content", Horizontal)
             
-            # Remove the vim editor
-            if hasattr(self, 'vim_editor'):
-                try:
-                    # Use call_after_refresh to safely remove the widget
-                    self.call_after_refresh(lambda: self.vim_editor.remove())
-                except Exception as e:
-                    logger.error(f"🗂️ Error removing vim editor: {e}")
-                    # Force removal by setting display to none
-                    try:
-                        self.vim_editor.display = False
-                    except Exception:
-                        pass
+            # Remove all children from the container (safer than widget.remove())
+            horizontal_container.remove_children()
+            
+            # Reset edit mode flag
+            self.edit_mode = False
+            if hasattr(self, "vim_editor"):
                 delattr(self, "vim_editor")
-
-            # Recreate the FilePreview widget
+            # Recreate both FileList and FilePreview widgets
+            from .file_list import FileList
             from .file_preview import FilePreview
+            
+            file_list = FileList(id="file-list", classes="file-list-pane")
             new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
+            
+            horizontal_container.mount(file_list)
             horizontal_container.mount(new_preview)
-
+            
+            # Refresh the file list
+            file_list.refresh_files(self.current_path)
+            
             # Use call_after_refresh to ensure widget is mounted before previewing
             def _preview_after_save():
                 try:
@@ -615,8 +616,7 @@ class FileBrowser(Container):
                 except Exception as e:
                     logger.error(f"🗂️ Error in delayed preview after save: {e}")
             self.call_after_refresh(_preview_after_save)
-            
-            # Update status
+
             file_count = len(self.query_one("#file-list", FileList).files)
             status = f"✅ Saved {file_path.name} - {file_count} items"
             if not self.show_hidden:
