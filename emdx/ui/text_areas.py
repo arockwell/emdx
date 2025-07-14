@@ -119,6 +119,16 @@ class VimEditTextArea(TextArea):
         self.show_cursor = True
         self.cursor_blink = False
         
+        # Hook into TextArea's cursor position changes
+        self.watch_cursor_position = True
+        
+        # Watch for cursor position changes
+        self.watch("cursor_location", self._on_cursor_changed)
+        self.watch("selection", self._on_selection_changed)
+        
+        # Watch for text changes to update line count
+        self.watch("text", self._on_text_changed)
+        
     def _update_cursor_style(self):
         """Update cursor style based on vim mode."""
         # Keep all cursors solid (non-blinking)
@@ -134,10 +144,38 @@ class VimEditTextArea(TextArea):
         else:
             self.add_class("vim-normal-mode")
     
-    def _update_line_numbers(self):
-        """Update line numbers widget if it exists."""
+    def _on_cursor_changed(self, old_cursor, new_cursor):
+        """Handle cursor position changes via TextArea watcher."""
         try:
-            key_logger.info(f"🔍 STEP 1: Starting line numbers update")
+            key_logger.info(f"🔍 CURSOR WATCHER: cursor_location changed from {old_cursor} to {new_cursor}")
+            self._update_line_numbers()
+        except Exception as e:
+            key_logger.error(f"💥 ERROR in _on_cursor_changed: {e}")
+    
+    def _on_selection_changed(self, old_selection, new_selection):
+        """Handle selection changes via TextArea watcher."""
+        try:
+            key_logger.info(f"🔍 SELECTION WATCHER: selection changed from {old_selection} to {new_selection}")
+            self._update_line_numbers()
+        except Exception as e:
+            key_logger.error(f"💥 ERROR in _on_selection_changed: {e}")
+    
+    def _on_text_changed(self, old_text, new_text):
+        """Handle text changes via TextArea watcher."""
+        try:
+            old_lines = len(old_text.split('\n')) if old_text else 0
+            new_lines = len(new_text.split('\n')) if new_text else 0
+            key_logger.info(f"🔍 TEXT WATCHER: text changed, lines: {old_lines} -> {new_lines}")
+            
+            # Update line numbers when text changes (for line count changes)
+            self._update_line_numbers()
+        except Exception as e:
+            key_logger.error(f"💥 ERROR in _on_text_changed: {e}")
+    
+    def _update_line_numbers(self):
+        """Update line numbers widget - SIMPLIFIED to use only TextArea's native cursor."""
+        try:
+            key_logger.info(f"🔍 STEP 1: Starting SIMPLIFIED line numbers update")
             
             # Check if line numbers widget exists
             if not hasattr(self, 'line_numbers_widget'):
@@ -150,35 +188,16 @@ class VimEditTextArea(TextArea):
                 
             key_logger.info(f"✅ STEP 2: line_numbers_widget exists")
             
-            # Test TextArea method availability
-            available_methods = []
-            for method in ['selection', 'cursor_location', 'move_cursor_relative', 'text']:
-                if hasattr(self, method):
-                    available_methods.append(method)
-                    
-            key_logger.info(f"📋 Available TextArea methods: {available_methods}")
-            
-            # Get cursor position with priority order
-            current_line = None
-            
-            # Method 1: Use selection.end (most reliable according to comment)
-            if hasattr(self, 'selection') and self.selection:
-                current_line = self.selection.end[0]
-                key_logger.info(f"✅ STEP 3a: Got cursor from selection.end: {current_line}")
-            # Method 2: Use cursor_location
-            elif hasattr(self, 'cursor_location'):
-                current_line = self.cursor_location[0]
-                key_logger.info(f"✅ STEP 3b: Got cursor from cursor_location: {current_line}")
-            else:
-                current_line = 0
-                key_logger.info(f"⚠️ STEP 3c: Fallback to line 0")
-                
-            # Get total lines
+            # SIMPLIFIED: Get cursor position directly from TextArea
+            # This is the single source of truth - no dual cursor tracking
+            current_line = self.cursor_location[0]
             total_lines = len(self.text.split('\n'))
+            
+            key_logger.info(f"✅ STEP 3: SIMPLIFIED cursor from cursor_location: {current_line}")
             key_logger.info(f"✅ STEP 4: total_lines={total_lines}")
             
             # Log the actual cursor position to debug
-            logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
+            logger.debug(f"🔍 SIMPLIFIED LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
             
             # Call the line numbers widget
             key_logger.info(f"🚀 STEP 5: Calling set_line_numbers({current_line}, {total_lines}, self)")
@@ -186,7 +205,7 @@ class VimEditTextArea(TextArea):
             key_logger.info(f"✅ STEP 6: set_line_numbers completed")
             
         except Exception as e:
-            key_logger.error(f"💥 ERROR in _update_line_numbers: {e}")
+            key_logger.error(f"💥 ERROR in SIMPLIFIED _update_line_numbers: {e}")
             logger.error(f"Error updating line numbers: {e}", exc_info=True)
         
     def on_key(self, event: events.Key) -> None:
@@ -436,9 +455,8 @@ class VimEditTextArea(TextArea):
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
         super().on_key(event)
-        # Only update line numbers for operations that might change line count
-        if event.key in ["enter", "backspace", "delete"]:
-            self._update_line_numbers()
+        # Line numbers will be updated automatically by watchers
+        # No need for manual calls - the watchers will handle it
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
