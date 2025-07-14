@@ -2938,15 +2938,22 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
     def action_quit(self):
         try:
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
-                # Exit log browser mode and return to document mode
-                self.mode = "NORMAL"
-                self.stop_log_monitoring()
-                self.reload_documents()
-            elif hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
-                # Exit git diff browser mode and return to document mode
-                self.mode = "NORMAL"
-                self.reload_documents()
+            if hasattr(self, 'mode'):
+                if self.mode == "LOG_BROWSER":
+                    # Exit log browser mode and return to document mode
+                    self.mode = "NORMAL"
+                    self.stop_log_monitoring()
+                    self.reload_documents()
+                elif self.mode == "FILE_BROWSER":
+                    # Exit file browser mode and return to document mode
+                    self.exit_file_browser()
+                elif self.mode == "GIT_DIFF_BROWSER":
+                    # Exit git diff browser mode and return to document mode
+                    self.mode = "NORMAL"
+                    self.reload_documents()
+                else:
+                    # Clean exit - subprocess are detached and will continue running
+                    self.exit()
             else:
                 # Clean exit - subprocess are detached and will continue running
                 self.exit()
@@ -2955,6 +2962,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Fallback to exit
             self.exit()
 
+    def exit_file_browser(self):
+        """Exit file browser mode and return to document mode."""
+        # Placeholder for file browser functionality that will come from main
+        self.mode = "NORMAL"
+        self.reload_documents()
+    
     def stop_log_monitoring(self):
         """Stop the log monitoring timer."""
         self.cancel_log_monitor_timer()
