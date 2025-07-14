@@ -39,8 +39,8 @@ class VimEditor(Vertical):
             id="vim-text-area"
         )
         
-        # Apply styling
-        self.text_area.add_class("constrained-textarea")
+        # Apply styling - use file-browser specific class for proper alignment
+        self.text_area.add_class("file-browser-vim-textarea")
         self.text_area.word_wrap = True
         self.text_area.show_line_numbers = False  # Using custom vim relative numbers
         

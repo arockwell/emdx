@@ -182,6 +182,15 @@ class FileBrowser(Container):
         padding: 0 1 !important;
     }
     
+    .file-browser-vim-textarea {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 1 1 0 1 !important;
+    }
+    
     .vim-line-numbers {
         width: 4;
         background: $background;
