@@ -2801,7 +2801,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 if new_content:
                     try:
                         preview = self.query_one("#preview-content", RichLog)
-                        preview.write(new_content)
+                        # Preserve emojis and formatting by writing line by line
+                        for line in new_content.splitlines():
+                            preview.write(line)
                         # Auto-scroll to bottom
                         preview.scroll_end(animate=False)
                         logger.debug(f"Updated log content: {len(new_content)} characters")
@@ -2851,10 +2853,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
             # Load log file content
             if self.current_log_file.exists():
-                with open(self.current_log_file) as f:
+                with open(self.current_log_file, encoding='utf-8') as f:
                     content = f.read()
                     if content:
-                        preview.write(content)
+                        # Preserve emojis and formatting by writing line by line
+                        for line in content.splitlines():
+                            preview.write(line)
                     else:
                         preview.write("[dim](No log content yet)[/dim]")
 
