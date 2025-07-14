@@ -69,45 +69,56 @@ except Exception:
     logger = logging.getLogger(__name__)
 
 
-class VimLineNumbers(Static):
-    """Line numbers widget for vim editing mode."""
+class SimpleVimLineNumbers(Static):
+    """Dead simple vim-style line numbers widget."""
 
-    def __init__(self, edit_textarea, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.edit_textarea = edit_textarea
         self.add_class("vim-line-numbers")
+        self.text_area = None  # Reference to associated text area
 
-    def update_line_numbers(self):
-        """Update the line numbers display based on cursor position."""
-        try:
-            if not hasattr(self.edit_textarea, 'cursor_location'):
-                return
-
-            current_line = self.edit_textarea.cursor_location[0]
-            total_lines = len(self.edit_textarea.text.split('\n'))
-
-            # Build relative line numbers like vim
-            lines = []
-            for i in range(total_lines):
-                if i == current_line:
-                    lines.append(f"{i+1:3}")  # Current line shows absolute number
+    def set_line_numbers(self, current_line, total_lines, text_area=None):
+        """Set line numbers given current line (0-based) and total lines."""
+        logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
+        
+        # Store text area reference if provided
+        if text_area:
+            self.text_area = text_area
+        
+        from rich.text import Text
+        
+        # Check if text area has focus - only highlight current line if it does
+        has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
+        logger.debug(f"🔢 Text area has focus: {has_focus}")
+        
+        lines = []
+        for i in range(total_lines):
+            if i == current_line:
+                # Current line always shows absolute number (1-based)
+                line_num = i + 1
+                if has_focus:
+                    line_text = Text(f"{line_num:>3}", style="bold yellow")
+                    logger.debug(f"  Line {i}: CURRENT (focused) -> bold yellow '{line_num}'")
                 else:
-                    relative = abs(i - current_line)
-                    lines.append(f"{relative:3}")
-
-            self.update("\n".join(lines))
-
-            # Sync scroll position with the text area
-            try:
-                # Try to match the scroll position of the text area
-                container = self.edit_textarea.parent
-                if container and hasattr(container, 'scroll_offset'):
-                    self.scroll_to(y=container.scroll_offset.y, animate=False)
-            except:
-                pass  # Scroll sync is nice-to-have
-
-        except Exception as e:
-            logger.error(f"Error updating line numbers: {e}")
+                    line_text = Text(f"{line_num:>3}", style="dim yellow")
+                    logger.debug(f"  Line {i}: CURRENT (not focused) -> dim yellow '{line_num}'")
+                lines.append(line_text)
+            else:
+                # Other lines show distance from current line
+                distance = abs(i - current_line)
+                line_text = Text(f"{distance:>3}", style="dim cyan")
+                logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
+                lines.append(line_text)
+        
+        # Join with Rich Text newlines
+        result = Text("\n").join(lines)
+        logger.debug(f"🔢 Rich Text result created with {len(lines)} lines")
+        logger.debug(f"🔢 Widget content BEFORE update: {repr(self.renderable)}")
+        
+        # Update widget content with Rich Text
+        self.update(result)
+        
+        logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")
 
 class MinimalDocumentBrowser(App):
     """Minimal document browser that signals external wrapper for nvim."""
@@ -117,6 +128,8 @@ class MinimalDocumentBrowser(App):
     MOUSE_DISABLED = True
     # Enable text selection globally
     ALLOW_SELECT = True
+    # Disable default Tab focus navigation
+    AUTO_FOCUS = False
 
     CSS = """
     #sidebar {
@@ -145,8 +158,20 @@ class MinimalDocumentBrowser(App):
     #preview {
         width: 100%;
         padding: 0;
-        overflow: auto;
-        scrollbar-gutter: stable;
+        overflow: hidden;
+        border: none;
+        scrollbar-size: 0 0;
+    }
+    
+    ScrollableContainer {
+        border: none;
+        scrollbar-size: 0 0;
+    }
+    
+    Horizontal {
+        border: none;
+        padding: 0;
+        margin: 0;
     }
 
     #preview TextArea {
@@ -168,8 +193,54 @@ class MinimalDocumentBrowser(App):
     #edit-wrapper {
         width: 100%;
         height: 100%;
-        overflow-x: auto;
+        overflow: hidden;
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    #edit-container {
+        width: 100%;
+        height: 100%;
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    #edit-container > * {
+        padding: 0;
+        margin: 0;
+    }
+    
+    #line-numbers {
+        border: none;
+        scrollbar-size: 0 0;
+        overflow: hidden;
+        padding-top: 0;  /* Reset padding */
+        padding-left: 0;
+        padding-right: 1;
+        padding-bottom: 0;
+        margin-top: 0;  /* No margin adjustment */
+        margin-left: 0;
+        margin-right: 0;
+        margin-bottom: 0;
+        width: 4;
+        min-width: 4;
+        max-width: 4;
+        height: 100%;
+    }
+    
+    #preview-content {
+        border: none !important;
+        scrollbar-size: 0 0;
+        overflow-x: hidden;
         overflow-y: auto;
+        padding: 0;
+        margin: 0;
+    }
+    
+    #preview-content:focus {
+        border: none !important;
     }
     .edit-title-input {
         width: 100%;
@@ -291,7 +362,7 @@ class MinimalDocumentBrowser(App):
         Binding("escape", "quit", "Quit", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
-        Binding("g", "cursor_top", "Top", show=False),
+        Binding("ctrl+g", "cursor_top", "Top", show=False),
         Binding("shift+g", "cursor_bottom", "Bottom", show=False),
         Binding("/", "search_mode", "Search", key_display="/"),
         Binding("r", "refresh", "Refresh", key_display="r"),
@@ -300,14 +371,14 @@ class MinimalDocumentBrowser(App):
         Binding("d", "delete", "Delete", show=False),
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
-        Binding("shift+t", "untag_mode", "Untag", show=False),
-        Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
+        Binding("T", "untag_mode", "Untag", show=False),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
         Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
         Binding("f", "open_file_browser", "Files", key_display="f"),
+        Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
     ]
 
@@ -351,18 +422,40 @@ class MinimalDocumentBrowser(App):
         yield Label("", id="status")
 
     def on_mount(self) -> None:
+        logger.info("on_mount called")
         try:
+            # Disable focus on widgets to prevent Tab navigation
+            preview_content = self.query_one("#preview-content")
+            preview_content.can_focus = False
+            
+            # Also disable focus on input widgets when not in use
+            search_input = self.query_one("#search-input")
+            search_input.can_focus = False
+            tag_input = self.query_one("#tag-input")
+            tag_input.can_focus = False
+            
             self.load_documents()
-            self.setup_table()
-            self.update_status()
-            if self.filtered_docs:
-                self.on_row_selected()
+            logger.info("Documents loaded, scheduling delayed setup")
+            # Delay table setup until after widgets are mounted
+            self.call_after_refresh(self._delayed_setup)
         except Exception as e:
             # If there's any error during mount, ensure we have a usable state
             import traceback
 
             logger.error(f"Error during on_mount(): {e}")
             traceback.print_exc()
+            self.exit(message=f"Error during startup: {e}")
+    
+    def _delayed_setup(self):
+        """Setup table and UI after widgets are fully mounted."""
+        logger.info("_delayed_setup called")
+        try:
+            self.setup_table()
+            self.update_status()
+            if self.filtered_docs:
+                self.on_row_selected()
+        except Exception as e:
+            logger.error(f"Error in delayed setup: {e}", exc_info=True)
             self.exit(message=f"Error during startup: {e}")
 
     def load_documents(self):
@@ -380,7 +473,13 @@ class MinimalDocumentBrowser(App):
             self.exit(message=f"Error loading documents: {e}")
 
     def setup_table(self):
-        table = self.query_one("#doc-table", DataTable)
+        logger.info("setup_table called")
+        try:
+            table = self.query_one("#doc-table", DataTable)
+            logger.info("Successfully found #doc-table")
+        except Exception as e:
+            logger.error(f"Failed to find #doc-table: {e}")
+            raise
         table.cursor_type = "row"
         table.zebra_stripes = True
 
@@ -665,12 +764,12 @@ class MinimalDocumentBrowser(App):
             repeat = getattr(self.edit_textarea, 'repeat_count', '')
             command_buffer = getattr(self.edit_textarea, 'command_buffer', '')
 
-            # Update vim mode indicator in preview pane
+            # Hide vim mode indicator in preview pane (use status bar instead)
             try:
                 vim_indicator = self.query_one("#vim-mode-indicator", Label)
-                vim_indicator.add_class("visible")
+                vim_indicator.remove_class("visible")
             except Exception as e:
-                logger.error(f"Failed to update vim mode indicator: {e}")
+                logger.error(f"Failed to hide vim mode indicator: {e}")
 
             # Build mode indicator text with subtle cursor hints (vim-like)
             try:
@@ -722,6 +821,10 @@ class MinimalDocumentBrowser(App):
 
     def watch_mode(self, old_mode: str, new_mode: str):
         try:
+            # Check if we're mounted first
+            if not self.is_mounted:
+                return
+                
             search = self.query_one("#search-input", Input)
             tag_input = self.query_one("#tag-input", Input)
             tag_selector = self.query_one("#tag-selector", Label)
@@ -734,6 +837,7 @@ class MinimalDocumentBrowser(App):
             search.add_class("visible")
             tag_input.remove_class("visible")
             tag_selector.remove_class("visible")
+            search.can_focus = True
             search.focus()
         elif new_mode == "TAG":
             search.remove_class("visible")
@@ -752,6 +856,7 @@ class MinimalDocumentBrowser(App):
                             tag_input.placeholder = f"Add tags (current: {', '.join(current_tags)})"
                         else:
                             tag_input.placeholder = "Add tags (no current tags)"
+                        tag_input.can_focus = True
                         tag_input.focus()
                     else:  # remove
                         # Show visual selector for removing tags
@@ -780,6 +885,9 @@ class MinimalDocumentBrowser(App):
             tag_selector.remove_class("visible")
             search.value = ""
             tag_input.value = ""
+            # Disable focus on inputs when not in use
+            search.can_focus = False
+            tag_input.can_focus = False
             self.current_tag_completion = 0  # Reset completion index
             table.focus()
 
@@ -794,9 +902,12 @@ class MinimalDocumentBrowser(App):
 
     def action_untag_mode(self):
         if not self.current_doc_id:
+            logger.info("DEBUG: action_untag_mode called but no current_doc_id")
             return
+        logger.info("DEBUG: action_untag_mode called, setting mode to TAG")
         self.tag_action = "remove"
         self.mode = "TAG"
+        logger.info(f"DEBUG: mode set to {self.mode}, tag_action set to {self.tag_action}")
 
     def action_new_note(self):
         """Create a new note in the TUI."""
@@ -916,6 +1027,34 @@ class MinimalDocumentBrowser(App):
             key_logger.info(f"App.on_key: {event_attrs}")
             logger.debug(f"Key event: key={event.key}")
 
+            # Handle j/k keys for log switching in log browser mode
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
+                if event.key == "j":
+                    self.action_next_log()
+                    event.stop()
+                    event.prevent_default()
+                    return
+                elif event.key == "k":
+                    self.action_prev_log()
+                    event.stop()
+                    event.prevent_default()
+                    return
+
+            # Globally handle Tab to prevent default focus behavior
+            if event.key == "tab":
+                logger.info(f"DEBUG: Global Tab handler, mode={self.mode}, tag_action={getattr(self, 'tag_action', 'None')}")
+                # Only allow Tab in TAG mode for tag cycling
+                if self.mode == "TAG" and self.tag_action == "remove":
+                    logger.info(f"DEBUG: Allowing Tab to fall through to TAG handler")
+                    # Let it fall through to the TAG mode handler below
+                    pass
+                else:
+                    logger.info(f"DEBUG: Blocking Tab in non-untag mode")
+                    # Block Tab in all other modes
+                    event.prevent_default()
+                    event.stop()
+                    return
+
             # Handle global Escape key - quit from any mode
             if event.key == "escape":
                 # Edit mode ESC is handled by VimEditTextArea - don't interfere
@@ -939,22 +1078,30 @@ class MinimalDocumentBrowser(App):
                 return
 
             if self.mode == "TAG":
+                logger.info(f"DEBUG: In TAG mode, key={event.key}, tag_action={self.tag_action}")
                 if event.key == "tab" and self.tag_action == "remove":
+                    logger.info(f"DEBUG: Tab pressed in remove mode, calling complete_tag_removal")
                     # Tab cycling for tag removal
                     self.complete_tag_removal()
                     event.prevent_default()
                     event.stop()
+                    return
                 elif event.key == "enter" and self.tag_action == "remove":
+                    logger.info(f"DEBUG: Enter pressed in remove mode, calling remove_highlighted_tag")
                     # Remove the highlighted tag
                     self.remove_highlighted_tag()
                     event.prevent_default()
-            elif self.mode == "NORMAL":
-                # Handle keys that don't require a document
-                if event.key == "tab":
+                    event.stop()
+                    return
+                else:
+                    logger.info(f"DEBUG: Other key in TAG mode, blocking")
+                    # In TAG mode, block all other keys except ESC (handled above)
                     event.prevent_default()
                     event.stop()
-                    self.action_focus_preview()
-                elif event.character == "s":
+                    return
+            elif self.mode == "NORMAL":
+                # Handle keys that don't require a document
+                if event.character == "s":
                     event.prevent_default()
                     event.stop()
                     self.action_toggle_selection_mode()
@@ -981,6 +1128,7 @@ class MinimalDocumentBrowser(App):
                         event.stop()
                         self.action_tag_mode()
                     elif event.character == "T":
+                        logger.info(f"DEBUG: Manual T character handler triggered")
                         event.prevent_default()
                         event.stop()
                         self.action_untag_mode()
@@ -1539,6 +1687,8 @@ class MinimalDocumentBrowser(App):
                 # Emergency recovery - ensure we have a preview widget
                 container = self.query_one("#preview", ScrollableContainer)
                 container.remove_children()
+                # Clear artifacts before mounting
+                container.refresh()
 
                 richlog = RichLog(
                     id="preview-content",
@@ -1612,29 +1762,31 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
 
-            # Remove all widgets from container (same as selection mode fix)
+            # Clear container with better timing to prevent artifacts
             container.remove_children()
+            # Force immediate layout refresh to clear any artifacts
+            container.refresh()
 
             # Create a wrapper container to enforce width constraints
             from textual.containers import Container
             edit_wrapper = Container(id="edit-wrapper")
 
-            # Create title input
-            title_input = TitleInput(
-                self,
-                value=doc["title"],
-                placeholder="Enter title...",
-                id="title-input"
-            )
-            title_input.add_class("edit-title-input")
-            # Ensure cursor is visible and solid in title input
-            title_input.show_cursor = True
-            title_input.cursor_blink = False
+            # Skip title input for now to simplify line number positioning
+            # title_input = TitleInput(...)  # Commented out
 
-            # Create VimEditTextArea with constraints BEFORE mounting
-            edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
+            # Strip title from content for editing (user shouldn't edit the title inline)
+            content = doc["content"].strip()
+            title_header = f"# {doc['title']}"
+            if content.startswith(title_header):
+                # Remove title header and any following newlines
+                content_without_title = content[len(title_header):].lstrip('\n')
+            else:
+                content_without_title = content
+            
+            # Create VimEditTextArea with title-stripped content
+            edit_area = VimEditTextArea(self, text=content_without_title, id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
-            self.edit_title_input = title_input  # Store reference for title input
+            # self.edit_title_input = title_input  # No title input anymore
 
             # Make it editable (not read-only like selection mode)
             edit_area.read_only = False
@@ -1646,7 +1798,7 @@ class MinimalDocumentBrowser(App):
 
             # CRITICAL: Set word wrap BEFORE any other properties
             edit_area.word_wrap = True
-            edit_area.show_line_numbers = False  # Disable built-in, using custom relative numbers
+            edit_area.show_line_numbers = False  # Disable built-in, using custom vim relative numbers
 
             # Try setting max line length if available
             if hasattr(edit_area, 'max_line_length'):
@@ -1655,32 +1807,39 @@ class MinimalDocumentBrowser(App):
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
 
-            # Create line numbers widget
-            line_numbers = VimLineNumbers(edit_area, id="line-numbers")
+            # Create simple line numbers widget
+            line_numbers = SimpleVimLineNumbers(id="line-numbers")
             edit_area.line_numbers_widget = line_numbers
-            logger.debug(f"Created line numbers widget {id(line_numbers)} for edit_area {id(edit_area)}")
 
             # Create horizontal container for line numbers and text area
             edit_container = Horizontal(id="edit-container")
 
-            # Mount title and content in wrapper
-            edit_wrapper.mount(title_input)
+            # Mount only the edit container (no title)
             edit_wrapper.mount(edit_container)
 
             # Now mount widgets in the container after it's mounted
             edit_container.mount(line_numbers)
             edit_container.mount(edit_area)
 
-            # Reset container scroll and refresh layout (same as selection mode)
+            # Reset container scroll with single refresh to prevent artifacts
             container.scroll_to(0, 0, animate=False)
-            container.refresh(layout=True)
-            edit_wrapper.refresh(layout=True)
+            # Single refresh call to reduce visual artifacts
+            self.refresh(layout=True)
 
             # Focus the content editor first instead of title input
             edit_area.focus()
 
-            # Initialize line numbers
-            line_numbers.update_line_numbers()
+            # Initialize line numbers with current cursor position and text area reference
+            current_line = edit_area.cursor_location[0] if hasattr(edit_area, 'cursor_location') else 0
+            total_lines = len(edit_area.text.split('\n'))
+            logger.info(f"📍 INITIAL SETUP: cursor_location={edit_area.cursor_location if hasattr(edit_area, 'cursor_location') else 'None'}")
+            logger.info(f"📍 INITIAL SETUP: current_line={current_line}, total_lines={total_lines}")
+            
+            # Force cursor to start at beginning if needed
+            if current_line == 0:
+                edit_area.cursor_location = (0, 0)
+                
+            line_numbers.set_line_numbers(current_line, total_lines, edit_area)
 
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
@@ -1714,20 +1873,18 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
 
-            # Find the edit area and title input within the wrapper
+            # Find the edit area within the wrapper
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
-                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 # Fallback if wrapper doesn't exist
                 edit_area = self.query_one("#preview-content", EditTextArea)
-                title_input = None
 
-            # Get the edited content and title
+            # Get the edited content (no title editing for now)
             new_content = edit_area.text
-            new_title = title_input.value if title_input else None
+            new_title = None  # Keep original title for now
 
             # Get current document for comparison
             doc = get_document(str(self.editing_doc_id))
@@ -1769,8 +1926,10 @@ class MinimalDocumentBrowser(App):
             vim_indicator.remove_class("visible")
             vim_indicator.update("")
 
-            # Remove edit area and restore preview
+            # Clear edit interface with better timing to prevent artifacts
             container.remove_children()
+            # Force immediate refresh to clear artifacts
+            container.refresh()
 
             # Create new RichLog for preview
             richlog = RichLog(
@@ -1782,9 +1941,10 @@ class MinimalDocumentBrowser(App):
             )
             container.mount(richlog)
 
-            # Reset container scroll and refresh layout (SAME AS SELECTION MODE)
+            # Reset container scroll with single refresh to prevent artifacts
             container.scroll_to(0, 0, animate=False)
-            container.refresh(layout=True)
+            # Single refresh call to reduce visual artifacts
+            self.refresh(layout=True)
 
             # Use deferred content restoration (SAME AS SELECTION MODE)
             self.call_after_refresh(self._restore_preview_content)
@@ -1810,6 +1970,8 @@ class MinimalDocumentBrowser(App):
                 self.editing_doc_id = None
                 container = self.query_one("#preview", ScrollableContainer)
                 container.remove_children()
+                # Clear artifacts before mounting
+                container.refresh()
 
                 richlog = RichLog(
                     id="preview-content",
@@ -1846,19 +2008,17 @@ class MinimalDocumentBrowser(App):
             if not self.edit_mode or not self.editing_doc_id:
                 return
 
-            # Get the edit area and title input
+            # Get the edit area
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
-                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 edit_area = self.query_one("#preview-content", EditTextArea)
-                title_input = None
 
-            # Get the edited content and title
+            # Get the edited content (no title editing for now)
             new_content = edit_area.text
-            new_title = title_input.value if title_input else None
+            new_title = None  # Keep original title
 
             # Update document in database
             from emdx.models.documents import update_document
@@ -2230,6 +2390,80 @@ class MinimalDocumentBrowser(App):
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error starting Claude execution: {e}")
+
+    def action_create_gist(self):
+        """Create a GitHub Gist from the current document."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for gist creation")
+            return
+        
+        try:
+            from emdx.commands.gist import create_gist_with_gh, create_gist_with_api, get_github_auth, sanitize_filename
+            from emdx.models.documents import get_document
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("Document not found")
+                return
+            
+            # Check for GitHub authentication
+            token = get_github_auth()
+            if not token:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("GitHub auth required: Set GITHUB_TOKEN or run 'gh auth login'")
+                return
+            
+            # Show creating status
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Creating gist for: {doc['title'][:30]}...")
+            
+            # Prepare gist content
+            filename = sanitize_filename(doc["title"])
+            content = doc["content"]
+            description = f"{doc['title']} - emdx knowledge base"
+            if doc.get("project"):
+                description += f" (Project: {doc['project']})"
+            
+            # Create gist (try gh CLI first, fallback to API)
+            result = create_gist_with_gh(content, filename, description, public=False)
+            if not result:
+                result = create_gist_with_api(content, filename, description, public=False, token=token)
+            
+            if result:
+                gist_url = result["url"]
+                
+                # Save to database
+                from emdx.database import db
+                with db.get_connection() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO gists (document_id, gist_id, gist_url, is_public)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (doc["id"], result["id"], gist_url, False),
+                    )
+                    conn.commit()
+                
+                # Copy URL to clipboard
+                from emdx.commands.gist import copy_to_clipboard
+                if copy_to_clipboard(gist_url):
+                    status.update(f"✓ Gist created & copied: {gist_url}")
+                else:
+                    status.update(f"✓ Gist created: {gist_url}")
+            else:
+                status.update("Failed to create gist")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error creating gist: {e}")
 
     def action_log_browser(self):
         """Switch to log browser mode to view and switch between execution logs."""
@@ -2638,37 +2872,6 @@ class MinimalDocumentBrowser(App):
             self.load_execution_log(self.current_execution_index)
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
 
-    def on_key(self, event: events.Key) -> None:
-        """Handle key events, especially j/k for log switching in LOG_BROWSER mode."""
-        try:
-            key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
-
-            # Handle j/k keys for log switching in log browser mode only
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
-                if hasattr(event, 'key') and event.key:
-                    if event.key == "j":
-                        self.action_next_log()
-                        event.stop()
-                        event.prevent_default()
-                        return
-                    elif event.key == "k":
-                        self.action_prev_log()
-                        event.stop()
-                        event.prevent_default()
-                        return
-            
-            # Handle file browser navigation keys - let FileBrowser handle its own keys
-            elif hasattr(self, 'mode') and self.mode == "FILE_BROWSER":
-                # Let the FileBrowser widget handle its own keys
-                pass
-
-            # Note: App class doesn't have on_key method, so we don't call super()
-            pass
-        except Exception as e:
-            # Log error but don't crash
-            key_logger.error(f"Error in on_key: {e}")
-            # Don't try to call super().on_key() as App doesn't have this method
-
 
     async def on_event(self, event) -> None:
         """Handle all events safely."""
@@ -2795,9 +2998,16 @@ def run_minimal():
             print("  emdx note 'quick note'   - Save a quick note")
             return 0
 
-        # Run the browser
-        app = MinimalDocumentBrowser()
-        app.run()
+        # Run the browser with better error handling
+        try:
+            app = MinimalDocumentBrowser()
+            app.run()
+        except Exception as e:
+            import traceback
+            logger.error(f"Error during app startup: {e}")
+            logger.error(traceback.format_exc())
+            # Re-raise with original traceback
+            raise
 
         # Check if edit signal exists to determine return code
         edit_signal = f"/tmp/emdx_edit_signal_{os.getpid()}"
