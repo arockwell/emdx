@@ -146,6 +146,14 @@ class VimEditTextArea(TextArea):
                 else:
                     current_line = 0
                 
+                # Fix for initial cursor position offset:
+                # When editing content with title removed, the initial cursor position
+                # is off by 2 lines. After any movement, it syncs correctly.
+                # This only applies to the initial state before any cursor movement.
+                if not hasattr(self, '_cursor_moved'):
+                    # Initial position needs +2 offset to match visual position
+                    current_line = current_line + 2
+                
                 total_lines = len(self.text.split('\n'))
                 
                 # Pass self reference so line numbers can check focus
@@ -227,10 +235,12 @@ class VimEditTextArea(TextArea):
         elif key == "j" or key == "down":
             key_logger.info(f"Moving down by {count}")
             self.move_cursor_relative(rows=count)
+            self._cursor_moved = True  # Mark that cursor has moved
             self._update_line_numbers()
         elif key == "k" or key == "up":
             key_logger.info(f"Moving up by {count}")
             self.move_cursor_relative(rows=-count)
+            self._cursor_moved = True  # Mark that cursor has moved
             self._update_line_numbers()
         elif key == "l" or key == "right":
             self.move_cursor_relative(columns=count)
