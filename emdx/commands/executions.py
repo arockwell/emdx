@@ -10,6 +10,7 @@ from ..models.executions import (
     get_execution,
     get_execution_stats,
     get_running_executions,
+    update_execution_status,
 )
 
 app = typer.Typer()
@@ -129,6 +130,81 @@ def show(exec_id: str):
     
     if execution.working_dir:
         console.print(f"Working Dir: {execution.working_dir}")
+
+
+@app.command(name="kill")
+def kill_execution(exec_id: Optional[str] = typer.Argument(None)):
+    """Kill a running execution and mark it as completed.
+    
+    If no exec_id provided, shows running executions to choose from.
+    Use partial exec_id (first 8+ chars) for convenience.
+    """
+    if not exec_id:
+        # Show running executions for user to choose
+        executions = get_running_executions()
+        
+        if not executions:
+            console.print("[green]No running executions to kill.[/green]")
+            return
+        
+        console.print("\n[bold]Running Executions:[/bold]")
+        for i, exec in enumerate(executions, 1):
+            console.print(f"{i}. [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
+        
+        console.print(f"\n[dim]Usage: emdx exec kill <exec_id>[/dim]")
+        console.print(f"[dim]Example: emdx exec kill {executions[0].id[:8]}[/dim]")
+        return
+    
+    # Find execution by partial or full ID
+    all_running = get_running_executions()
+    matching_executions = [e for e in all_running if e.id.startswith(exec_id)]
+    
+    if not matching_executions:
+        console.print(f"[red]No running execution found with ID starting with '{exec_id}'[/red]")
+        return
+    
+    if len(matching_executions) > 1:
+        console.print(f"[yellow]Multiple executions match '{exec_id}':[/yellow]")
+        for exec in matching_executions:
+            console.print(f"  [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
+        console.print("[dim]Use more characters to uniquely identify the execution.[/dim]")
+        return
+    
+    execution = matching_executions[0]
+    
+    # Mark as completed with exit code 130 (interrupted)
+    update_execution_status(execution.id, "completed", 130)
+    
+    console.print(f"[green]✅ Killed execution {execution.id[:8]}...[/green]")
+    console.print(f"[dim]Document: {execution.doc_title}[/dim]")
+    console.print(f"[dim]Marked as completed with exit code 130 (interrupted)[/dim]")
+
+
+@app.command(name="killall")
+def kill_all_executions():
+    """Kill ALL running executions at once."""
+    executions = get_running_executions()
+    
+    if not executions:
+        console.print("[green]No running executions to kill.[/green]")
+        return
+    
+    console.print(f"[yellow]About to kill {len(executions)} running execution(s):[/yellow]")
+    for exec in executions:
+        console.print(f"  [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
+    
+    # Ask for confirmation
+    confirm = typer.confirm("Are you sure you want to kill all running executions?")
+    if not confirm:
+        console.print("[yellow]Cancelled.[/yellow]")
+        return
+    
+    # Kill all running executions
+    for execution in executions:
+        update_execution_status(execution.id, "completed", 130)
+    
+    console.print(f"[green]✅ Killed {len(executions)} execution(s)[/green]")
+    console.print("[dim]All marked as completed with exit code 130 (interrupted)[/dim]")
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.models.executions import (
     get_recent_executions,
+    update_execution_status,
 )
 from emdx.models.tags import (
     add_tags_to_document,
@@ -363,8 +364,8 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
     BINDINGS = [
         Binding("q", "quit", "Quit", key_display="q"),
         Binding("escape", "quit", "Quit", show=False),
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
+        Binding("j", "cursor_down", "Down", key_display="j"),
+        Binding("k", "cursor_up", "Up", key_display="k"),
         Binding("ctrl+g", "cursor_top", "Top", show=False),
         Binding("shift+g", "cursor_bottom", "Bottom", show=False),
         Binding("/", "search_mode", "Search", key_display="/"),
@@ -387,6 +388,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         Binding("f", "open_file_browser", "Files", key_display="f"),
         Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
+        Binding("m", "mark_execution_complete", "Kill Exec", key_display="m"),
         Binding("D", "delete", "Delete", key_display="D"),
         Binding("w", "switch_worktree", "Switch Worktree", show=False),
     ]
@@ -1063,18 +1065,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             key_logger.info(f"App.on_key: {event_attrs}")
             logger.debug(f"Key event: key={event.key}")
 
-            # Handle j/k keys for log switching in log browser mode
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
-                if event.key == "j":
-                    self.action_next_log()
-                    event.stop()
-                    event.prevent_default()
-                    return
-                elif event.key == "k":
-                    self.action_prev_log()
-                    event.stop()
-                    event.prevent_default()
-                    return
+            # j/k keys are handled by the binding system via action_cursor_down/up
 
             # Globally handle Tab to prevent default focus behavior
             if event.key == "tab":
@@ -1266,11 +1257,15 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.action_cursor_down()
+        elif self.mode == "LOG_BROWSER":
+            self.action_next_log()
 
     def action_cursor_up(self):
         if self.mode == "NORMAL":
             table = self.query_one("#doc-table", DataTable)
             table.action_cursor_up()
+        elif self.mode == "LOG_BROWSER":
+            self.action_prev_log()
 
     def action_cursor_top(self):
         if self.mode == "NORMAL":
@@ -1712,7 +1707,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
                 self.cancel_refresh_timer()
                 if self.mode == "LOG_BROWSER":
-                    status.update("LOG BROWSER: j/k to navigate logs, 's' for text selection, 'q' to exit")
+                    status.update("LOG BROWSER: j/k to navigate logs, 'm' to kill exec, 's' for text selection, 'q' to exit")
                 else:
                     status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
 
@@ -2187,7 +2182,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         try:
             if hasattr(self, 'executions') and self.mode == "LOG_BROWSER":
                 status = self.query_one("#status", Label)
-                status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'q' to exit, auto-refresh every 2s)")
+                status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'm' to mark complete, 'q' to exit, auto-refresh every 2s)")
         except Exception:
             pass
 
@@ -2508,6 +2503,40 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         self.mode = "LOG_BROWSER"
         self.setup_log_browser()
     
+    def action_mark_execution_complete(self):
+        """Mark the currently selected execution as complete (in LOG_BROWSER mode)."""
+        if self.mode != "LOG_BROWSER" or not hasattr(self, 'executions') or not self.executions:
+            return
+        
+        try:
+            # Get currently selected execution
+            if hasattr(self, 'current_execution_index') and 0 <= self.current_execution_index < len(self.executions):
+                execution = self.executions[self.current_execution_index]
+                
+                # Only mark running executions as complete
+                if execution.status == 'running':
+                    update_execution_status(execution.id, "completed", 130)
+                    
+                    # Show confirmation message
+                    status = self.query_one("#status", Label)
+                    status.update(f"✅ Marked execution {execution.id[:8]}... as complete!")
+                    
+                    # Refresh the execution list to show updated status
+                    self.refresh_execution_list()
+                    
+                    # Restore normal status after 2 seconds
+                    self.set_timer(2.0, self.restore_log_browser_status)
+                else:
+                    # Show message if execution is not running
+                    status = self.query_one("#status", Label)
+                    status.update(f"⚠️ Execution {execution.id[:8]}... is already {execution.status}")
+                    self.set_timer(2.0, self.restore_log_browser_status)
+        except Exception as e:
+            # Show error message
+            status = self.query_one("#status", Label)
+            status.update(f"❌ Error marking execution complete: {str(e)}")
+            self.set_timer(2.0, self.restore_log_browser_status)
+    
     def action_open_file_browser(self):
         """Open file browser mode."""
         logger.info("🗂️ Opening file browser mode")
@@ -2723,7 +2752,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Update status with instructions
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
-            status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'q' to exit, auto-refresh every 2s)")
+            status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'm' to mark complete, 'q' to exit, auto-refresh every 2s)")
 
             # Start monitoring for log updates
             self.start_log_monitoring()
@@ -2837,7 +2866,21 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 if new_content:
                     try:
                         preview = self.query_one("#preview-content", RichLog)
-                        preview.write(new_content)
+                        # Process new log content to format JSON lines with emojis
+                        from ..commands.claude_execute import format_claude_output
+                        import time
+                        
+                        for line in new_content.splitlines():
+                            # Skip header lines and non-JSON lines
+                            if line.startswith('=') or line.startswith('-') or line.startswith('Version:') or line.startswith('Doc ID:') or line.startswith('Execution ID:') or line.startswith('Worktree:') or line.startswith('Started:') or not line.strip():
+                                preview.write(line)
+                            else:
+                                # Try to format JSON lines with emojis
+                                formatted = format_claude_output(line, time.time())
+                                if formatted:
+                                    preview.write(formatted)
+                                else:
+                                    preview.write(line)
                         # Auto-scroll to bottom
                         preview.scroll_end(animate=False)
                         logger.debug(f"Updated log content: {len(new_content)} characters")
@@ -2887,10 +2930,24 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
             # Load log file content
             if self.current_log_file.exists():
-                with open(self.current_log_file) as f:
+                with open(self.current_log_file, encoding='utf-8') as f:
                     content = f.read()
                     if content:
-                        preview.write(content)
+                        # Process log content to format JSON lines with emojis
+                        from ..commands.claude_execute import format_claude_output
+                        import time
+                        
+                        for line in content.splitlines():
+                            # Skip header lines and non-JSON lines
+                            if line.startswith('=') or line.startswith('-') or line.startswith('Version:') or line.startswith('Doc ID:') or line.startswith('Execution ID:') or line.startswith('Worktree:') or line.startswith('Started:') or not line.strip():
+                                preview.write(line)
+                            else:
+                                # Try to format JSON lines with emojis
+                                formatted = format_claude_output(line, time.time())
+                                if formatted:
+                                    preview.write(formatted)
+                                else:
+                                    preview.write(line)
                     else:
                         preview.write("[dim](No log content yet)[/dim]")
 
@@ -2945,19 +3002,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         try:
             key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
 
-            # Handle j/k keys for log switching in log browser mode only
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
-                if hasattr(event, 'key') and event.key:
-                    if event.key == "j":
-                        self.action_next_log()
-                        event.stop()
-                        event.prevent_default()
-                        return
-                    elif event.key == "k":
-                        self.action_prev_log()
-                        event.stop()
-                        event.prevent_default()
-                        return
+            # j/k keys are handled by the app-level key handler, not here
             
             # Handle j/k/w keys for git diff switching in git diff browser mode
             if hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
