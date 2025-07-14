@@ -1417,6 +1417,8 @@ class MinimalDocumentBrowser(App):
                 # Emergency recovery - ensure we have a preview widget
                 container = self.query_one("#preview", ScrollableContainer)
                 container.remove_children()
+                # Clear artifacts before mounting
+                container.refresh()
 
                 richlog = RichLog(
                     id="preview-content",
@@ -1490,8 +1492,10 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
 
-            # Remove all widgets from container (same as selection mode fix)
+            # Clear container with better timing to prevent artifacts
             container.remove_children()
+            # Force immediate layout refresh to clear any artifacts
+            container.refresh()
 
             # Create a wrapper container to enforce width constraints
             from textual.containers import Container
@@ -1549,10 +1553,10 @@ class MinimalDocumentBrowser(App):
             edit_container.mount(line_numbers)
             edit_container.mount(edit_area)
 
-            # Reset container scroll and refresh layout (same as selection mode)
+            # Reset container scroll with single refresh to prevent artifacts
             container.scroll_to(0, 0, animate=False)
-            container.refresh(layout=True)
-            edit_wrapper.refresh(layout=True)
+            # Single refresh call to reduce visual artifacts
+            self.refresh(layout=True)
 
             # Focus the content editor first instead of title input
             edit_area.focus()
@@ -1647,8 +1651,10 @@ class MinimalDocumentBrowser(App):
             vim_indicator.remove_class("visible")
             vim_indicator.update("")
 
-            # Remove edit area and restore preview
+            # Clear edit interface with better timing to prevent artifacts
             container.remove_children()
+            # Force immediate refresh to clear artifacts
+            container.refresh()
 
             # Create new RichLog for preview
             richlog = RichLog(
@@ -1660,9 +1666,10 @@ class MinimalDocumentBrowser(App):
             )
             container.mount(richlog)
 
-            # Reset container scroll and refresh layout (SAME AS SELECTION MODE)
+            # Reset container scroll with single refresh to prevent artifacts
             container.scroll_to(0, 0, animate=False)
-            container.refresh(layout=True)
+            # Single refresh call to reduce visual artifacts
+            self.refresh(layout=True)
 
             # Use deferred content restoration (SAME AS SELECTION MODE)
             self.call_after_refresh(self._restore_preview_content)
@@ -1688,6 +1695,8 @@ class MinimalDocumentBrowser(App):
                 self.editing_doc_id = None
                 container = self.query_one("#preview", ScrollableContainer)
                 container.remove_children()
+                # Clear artifacts before mounting
+                container.refresh()
 
                 richlog = RichLog(
                     id="preview-content",
