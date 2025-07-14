@@ -215,18 +215,19 @@ class MinimalDocumentBrowser(App):
     #line-numbers {
         border: none;
         scrollbar-size: 0 0;
-        overflow: hidden;
-        padding-top: 0;
+        overflow: visible;
+        padding-top: 0;  /* Reset padding */
         padding-left: 0;
         padding-right: 1;
         padding-bottom: 0;
-        margin-top: -1;
+        margin-top: -1;  /* Slight adjustment for visual alignment */
         margin-left: 0;
         margin-right: 0;
         margin-bottom: 0;
         width: 4;
         min-width: 4;
         max-width: 4;
+        height: 100%;
     }
     
     #preview-content {

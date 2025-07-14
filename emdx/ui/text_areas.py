@@ -146,18 +146,18 @@ class VimEditTextArea(TextArea):
                 else:
                     current_line = 0
                 
-                # Fix for initial cursor position offset:
-                # When editing content with title removed, the initial cursor position
-                # is off by 2 lines. After any movement, it syncs correctly.
-                # This only applies to the initial state before any cursor movement.
-                if not hasattr(self, '_cursor_moved'):
-                    # Initial position needs +2 offset to match visual position
-                    current_line = current_line + 2
+                # The cursor position is consistently 2 lines ahead of visual position
+                # This happens because the content has the title removed but cursor
+                # position still references the original document structure
+                # We need to adjust by subtracting 2 to match visual position
+                visual_current_line = max(0, current_line - 2)
                 
                 total_lines = len(self.text.split('\n'))
                 
+                logger.debug(f"🔍 LINE NUMBERS: cursor={current_line}, visual={visual_current_line}, total={total_lines}")
+                
                 # Pass self reference so line numbers can check focus
-                self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
+                self.line_numbers_widget.set_line_numbers(visual_current_line, total_lines, self)
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
@@ -235,12 +235,10 @@ class VimEditTextArea(TextArea):
         elif key == "j" or key == "down":
             key_logger.info(f"Moving down by {count}")
             self.move_cursor_relative(rows=count)
-            self._cursor_moved = True  # Mark that cursor has moved
             self._update_line_numbers()
         elif key == "k" or key == "up":
             key_logger.info(f"Moving up by {count}")
             self.move_cursor_relative(rows=-count)
-            self._cursor_moved = True  # Mark that cursor has moved
             self._update_line_numbers()
         elif key == "l" or key == "right":
             self.move_cursor_relative(columns=count)
