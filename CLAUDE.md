@@ -1,5 +1,11 @@
 # EMDX - Knowledge Base CLI Tool
 
+## 🧪 Git Diff Browser Testing (2025-07-14)
+Test the new git diff browser functionality:
+- Press 'd' in TUI to enter git diff browser mode
+- Press 'w' to switch worktrees interactively
+- Use j/k to navigate between changed files
+
 ## ⚠️ CRITICAL BUG: Interactive Commands (2025-07-13)
 
 **NEVER run these commands as they will hang Claude Code:**
