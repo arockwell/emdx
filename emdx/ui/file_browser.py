@@ -589,14 +589,23 @@ class FileBrowser(Container):
             
             # Remove the vim editor
             if hasattr(self, 'vim_editor'):
-                self.vim_editor.remove()
-                delattr(self, 'vim_editor')
-            
+                try:
+                    # Use call_after_refresh to safely remove the widget
+                    self.call_after_refresh(lambda: self.vim_editor.remove())
+                except Exception as e:
+                    logger.error(f"🗂️ Error removing vim editor: {e}")
+                    # Force removal by setting display to none
+                    try:
+                        self.vim_editor.display = False
+                    except Exception:
+                        pass
+                delattr(self, "vim_editor")
+
             # Recreate the FilePreview widget
             from .file_preview import FilePreview
             new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
             horizontal_container.mount(new_preview)
-            
+
             # Use call_after_refresh to ensure widget is mounted before previewing
             def _preview_after_save():
                 try:
@@ -605,7 +614,6 @@ class FileBrowser(Container):
                     new_preview.scroll_to(0, 0, animate=False)
                 except Exception as e:
                     logger.error(f"🗂️ Error in delayed preview after save: {e}")
-            
             self.call_after_refresh(_preview_after_save)
             
             # Update status
