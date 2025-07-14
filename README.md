@@ -1,6 +1,6 @@
 # emdx - Documentation Index Management System
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -13,7 +13,11 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 📝 **Flexible Input**: Save files, text, or piped input with one command
 - 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
 - 🔧 **Git Integration**: Automatically detects project names from Git repositories
-- 🖥️ **Modern TUI Browser**: Textual-based browser with vim-style navigation and in-place vim editing
+- 🖥️ **Advanced TUI Browser**: Multiple browser modes (documents, files, git diffs) with full vim editing
+- 📁 **File Browser**: Yazi-inspired file navigation with real-time preview and vim integration
+- 🔀 **Git Diff Browser**: Visual git diff viewer with worktree switching (press 'd' and 'w')
+- ⚡ **Claude Execution**: Execute prompts directly from TUI with live streaming logs
+- ✨ **Complete Vim Editor**: Full modal editing (NORMAL/INSERT/VISUAL modes) with line numbers
 - 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
 - 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
 - ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
