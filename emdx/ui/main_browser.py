@@ -93,23 +93,21 @@ class SimpleVimLineNumbers(Static):
         
         lines = []
         for i in range(total_lines):
-            if i == current_line and has_focus:
-                # Current line shows absolute number (1-based) with highlighting ONLY when focused
+            if i == current_line:
+                # Current line always shows absolute number (1-based)
                 line_num = i + 1
-                line_text = Text(f"{line_num:>3}", style="bold yellow")
-                lines.append(line_text)
-                logger.debug(f"  Line {i}: CURRENT (focused) -> bold yellow '{line_num}'")
-            else:
-                # Other lines show distance from current line in muted color
-                # OR current line shows distance when not focused
-                if i == current_line and not has_focus:
-                    # Current line but no focus - show as distance 0
-                    line_text = Text(f"  0", style="dim cyan")
-                    logger.debug(f"  Line {i}: CURRENT (not focused) -> dim cyan '0'")
+                if has_focus:
+                    line_text = Text(f"{line_num:>3}", style="bold yellow")
+                    logger.debug(f"  Line {i}: CURRENT (focused) -> bold yellow '{line_num}'")
                 else:
-                    distance = abs(i - current_line)
-                    line_text = Text(f"{distance:>3}", style="dim cyan")
-                    logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
+                    line_text = Text(f"{line_num:>3}", style="dim yellow")
+                    logger.debug(f"  Line {i}: CURRENT (not focused) -> dim yellow '{line_num}'")
+                lines.append(line_text)
+            else:
+                # Other lines show distance from current line
+                distance = abs(i - current_line)
+                line_text = Text(f"{distance:>3}", style="dim cyan")
+                logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
                 lines.append(line_text)
         
         # Join with Rich Text newlines
@@ -220,7 +218,7 @@ class MinimalDocumentBrowser(App):
         padding-left: 0;
         padding-right: 1;
         padding-bottom: 0;
-        margin-top: 2;  /* Push line numbers DOWN by 2 to align with text */
+        margin-top: 0;  /* No margin adjustment */
         margin-left: 0;
         margin-right: 0;
         margin-bottom: 0;
