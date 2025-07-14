@@ -3,20 +3,29 @@
 import pytest
 
 
-def calculate_vim_line_numbers(current_line, total_lines):
+def calculate_vim_line_numbers(current_line, total_lines, has_focus=True):
     """Pure function to calculate vim-style line numbers.
     
     This matches the logic in SimpleVimLineNumbers.set_line_numbers()
+    
+    Args:
+        current_line: 0-based line number
+        total_lines: total number of lines
+        has_focus: whether the text area has focus (affects current line display)
     """
     lines = []
     for i in range(total_lines):
-        if i == current_line:
-            # Current line shows absolute number (1-based)
+        if i == current_line and has_focus:
+            # Current line shows absolute number (1-based) ONLY when focused
             lines.append(f"{i+1:>3}")
         else:
             # Other lines show distance from current line
-            distance = abs(i - current_line)
-            lines.append(f"{distance:>3}")
+            # OR current line shows distance 0 when not focused
+            if i == current_line and not has_focus:
+                lines.append("  0")  # Current line but no focus
+            else:
+                distance = abs(i - current_line)
+                lines.append(f"{distance:>3}")
     return lines
 
 
@@ -116,6 +125,35 @@ class TestVimLineNumbers:
             # Should be right-aligned (spaces on left if needed)
             assert line_num.isdigit() or line_num.startswith(" "), \
                 f"Line number '{line_num}' should be right-aligned"
+    
+    def test_focus_detection(self):
+        """Test that line numbers behave differently when text area has/doesn't have focus."""
+        current_line = 1
+        total_lines = 4
+        
+        # When focused - current line shows absolute number
+        focused_result = calculate_vim_line_numbers(current_line, total_lines, has_focus=True)
+        expected_focused = ["  1", "  2", "  1", "  2"]  # Line 1 shows "2" (absolute)
+        assert focused_result == expected_focused
+        
+        # When not focused - current line shows distance 0
+        unfocused_result = calculate_vim_line_numbers(current_line, total_lines, has_focus=False)
+        expected_unfocused = ["  1", "  0", "  1", "  2"]  # Line 1 shows "0" (distance)
+        assert unfocused_result == expected_unfocused
+    
+    def test_focus_detection_edge_cases(self):
+        """Test focus detection with edge cases."""
+        # Single line file
+        assert calculate_vim_line_numbers(0, 1, has_focus=True) == ["  1"]
+        assert calculate_vim_line_numbers(0, 1, has_focus=False) == ["  0"]
+        
+        # First line of multi-line file
+        assert calculate_vim_line_numbers(0, 3, has_focus=True) == ["  1", "  1", "  2"]
+        assert calculate_vim_line_numbers(0, 3, has_focus=False) == ["  0", "  1", "  2"]
+        
+        # Last line of multi-line file
+        assert calculate_vim_line_numbers(2, 3, has_focus=True) == ["  2", "  1", "  3"]
+        assert calculate_vim_line_numbers(2, 3, has_focus=False) == ["  2", "  1", "  0"]
 
 
 if __name__ == "__main__":

@@ -75,28 +75,42 @@ class SimpleVimLineNumbers(Static):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_class("vim-line-numbers")
+        self.text_area = None  # Reference to associated text area
 
-    def set_line_numbers(self, current_line, total_lines):
+    def set_line_numbers(self, current_line, total_lines, text_area=None):
         """Set line numbers given current line (0-based) and total lines."""
         logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
         
+        # Store text area reference if provided
+        if text_area:
+            self.text_area = text_area
+        
         from rich.text import Text
+        
+        # Check if text area has focus - only highlight current line if it does
+        has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
+        logger.debug(f"🔢 Text area has focus: {has_focus}")
         
         lines = []
         for i in range(total_lines):
-            if i == current_line:
-                # Current line shows absolute number (1-based) with highlighting
+            if i == current_line and has_focus:
+                # Current line shows absolute number (1-based) with highlighting ONLY when focused
                 line_num = i + 1
-                # Make current line visually distinct with bold and different color
                 line_text = Text(f"{line_num:>3}", style="bold yellow")
                 lines.append(line_text)
-                logger.debug(f"  Line {i}: CURRENT -> bold yellow '{line_num}'")
+                logger.debug(f"  Line {i}: CURRENT (focused) -> bold yellow '{line_num}'")
             else:
                 # Other lines show distance from current line in muted color
-                distance = abs(i - current_line)
-                line_text = Text(f"{distance:>3}", style="dim cyan")
+                # OR current line shows distance when not focused
+                if i == current_line and not has_focus:
+                    # Current line but no focus - show as distance 0
+                    line_text = Text(f"  0", style="dim cyan")
+                    logger.debug(f"  Line {i}: CURRENT (not focused) -> dim cyan '0'")
+                else:
+                    distance = abs(i - current_line)
+                    line_text = Text(f"{distance:>3}", style="dim cyan")
+                    logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
                 lines.append(line_text)
-                logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
         
         # Join with Rich Text newlines
         result = Text("\n").join(lines)
@@ -193,10 +207,26 @@ class MinimalDocumentBrowser(App):
         margin: 0;
     }
     
+    #edit-container > * {
+        padding: 0;
+        margin: 0;
+    }
+    
     #line-numbers {
         border: none;
         scrollbar-size: 0 0;
         overflow: hidden;
+        padding-top: 0;
+        padding-left: 0;
+        padding-right: 1;
+        padding-bottom: 0;
+        margin-top: -1;
+        margin-left: 0;
+        margin-right: 0;
+        margin-bottom: 0;
+        width: 4;
+        min-width: 4;
+        max-width: 4;
     }
     
     #preview-content {
@@ -204,6 +234,8 @@ class MinimalDocumentBrowser(App):
         scrollbar-size: 0 0;
         overflow-x: hidden;
         overflow-y: auto;
+        padding: 0;
+        margin: 0;
     }
     
     #preview-content:focus {
@@ -389,18 +421,30 @@ class MinimalDocumentBrowser(App):
         yield Label("", id="status")
 
     def on_mount(self) -> None:
+        logger.info("on_mount called")
         try:
             self.load_documents()
-            self.setup_table()
-            self.update_status()
-            if self.filtered_docs:
-                self.on_row_selected()
+            logger.info("Documents loaded, scheduling delayed setup")
+            # Delay table setup until after widgets are mounted
+            self.call_after_refresh(self._delayed_setup)
         except Exception as e:
             # If there's any error during mount, ensure we have a usable state
             import traceback
 
             logger.error(f"Error during on_mount(): {e}")
             traceback.print_exc()
+            self.exit(message=f"Error during startup: {e}")
+    
+    def _delayed_setup(self):
+        """Setup table and UI after widgets are fully mounted."""
+        logger.info("_delayed_setup called")
+        try:
+            self.setup_table()
+            self.update_status()
+            if self.filtered_docs:
+                self.on_row_selected()
+        except Exception as e:
+            logger.error(f"Error in delayed setup: {e}", exc_info=True)
             self.exit(message=f"Error during startup: {e}")
 
     def load_documents(self):
@@ -418,7 +462,13 @@ class MinimalDocumentBrowser(App):
             self.exit(message=f"Error loading documents: {e}")
 
     def setup_table(self):
-        table = self.query_one("#doc-table", DataTable)
+        logger.info("setup_table called")
+        try:
+            table = self.query_one("#doc-table", DataTable)
+            logger.info("Successfully found #doc-table")
+        except Exception as e:
+            logger.error(f"Failed to find #doc-table: {e}")
+            raise
         table.cursor_type = "row"
         table.zebra_stripes = True
 
@@ -597,12 +647,12 @@ class MinimalDocumentBrowser(App):
             repeat = getattr(self.edit_textarea, 'repeat_count', '')
             command_buffer = getattr(self.edit_textarea, 'command_buffer', '')
 
-            # Update vim mode indicator in preview pane
+            # Hide vim mode indicator in preview pane (use status bar instead)
             try:
                 vim_indicator = self.query_one("#vim-mode-indicator", Label)
-                vim_indicator.add_class("visible")
+                vim_indicator.remove_class("visible")
             except Exception as e:
-                logger.error(f"Failed to update vim mode indicator: {e}")
+                logger.error(f"Failed to hide vim mode indicator: {e}")
 
             # Build mode indicator text with subtle cursor hints (vim-like)
             try:
@@ -654,6 +704,10 @@ class MinimalDocumentBrowser(App):
 
     def watch_mode(self, old_mode: str, new_mode: str):
         try:
+            # Check if we're mounted first
+            if not self.is_mounted:
+                return
+                
             search = self.query_one("#search-input", Input)
             tag_input = self.query_one("#tag-input", Input)
             tag_selector = self.query_one("#tag-selector", Label)
@@ -1542,8 +1596,17 @@ class MinimalDocumentBrowser(App):
             # Skip title input for now to simplify line number positioning
             # title_input = TitleInput(...)  # Commented out
 
-            # Create VimEditTextArea with constraints BEFORE mounting
-            edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
+            # Strip title from content for editing (user shouldn't edit the title inline)
+            content = doc["content"].strip()
+            title_header = f"# {doc['title']}"
+            if content.startswith(title_header):
+                # Remove title header and any following newlines
+                content_without_title = content[len(title_header):].lstrip('\n')
+            else:
+                content_without_title = content
+            
+            # Create VimEditTextArea with title-stripped content
+            edit_area = VimEditTextArea(self, text=content_without_title, id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
             # self.edit_title_input = title_input  # No title input anymore
 
@@ -1588,10 +1651,10 @@ class MinimalDocumentBrowser(App):
             # Focus the content editor first instead of title input
             edit_area.focus()
 
-            # Initialize line numbers with current cursor position
+            # Initialize line numbers with current cursor position and text area reference
             current_line = edit_area.cursor_location[0] if hasattr(edit_area, 'cursor_location') else 0
             total_lines = len(edit_area.text.split('\n'))
-            line_numbers.set_line_numbers(current_line, total_lines)
+            line_numbers.set_line_numbers(current_line, total_lines, edit_area)
 
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
@@ -2498,9 +2561,16 @@ def run_minimal():
             print("  emdx note 'quick note'   - Save a quick note")
             return 0
 
-        # Run the browser
-        app = MinimalDocumentBrowser()
-        app.run()
+        # Run the browser with better error handling
+        try:
+            app = MinimalDocumentBrowser()
+            app.run()
+        except Exception as e:
+            import traceback
+            logger.error(f"Error during app startup: {e}")
+            logger.error(traceback.format_exc())
+            # Re-raise with original traceback
+            raise
 
         # Check if edit signal exists to determine return code
         edit_signal = f"/tmp/emdx_edit_signal_{os.getpid()}"

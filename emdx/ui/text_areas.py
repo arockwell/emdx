@@ -144,7 +144,8 @@ class VimEditTextArea(TextArea):
                 current_line = self.cursor_location[0] if hasattr(self, 'cursor_location') else 0
                 total_lines = len(self.text.split('\n'))
                 logger.debug(f"📍 TextArea data: cursor={self.cursor_location if hasattr(self, 'cursor_location') else 'None'}, text_len={len(self.text)}")
-                self.line_numbers_widget.set_line_numbers(current_line, total_lines)
+                # Pass self reference so line numbers can check focus
+                self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
             else:
                 logger.debug(f"📍 No line_numbers_widget found")
         except Exception as e:
