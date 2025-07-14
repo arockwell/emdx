@@ -215,12 +215,12 @@ class MinimalDocumentBrowser(App):
     #line-numbers {
         border: none;
         scrollbar-size: 0 0;
-        overflow: visible;
+        overflow: hidden;
         padding-top: 0;  /* Reset padding */
         padding-left: 0;
         padding-right: 1;
         padding-bottom: 0;
-        margin-top: -1;  /* Slight adjustment for visual alignment */
+        margin-top: 2;  /* Push line numbers DOWN by 2 to align with text */
         margin-left: 0;
         margin-right: 0;
         margin-bottom: 0;
@@ -1655,6 +1655,13 @@ class MinimalDocumentBrowser(App):
             # Initialize line numbers with current cursor position and text area reference
             current_line = edit_area.cursor_location[0] if hasattr(edit_area, 'cursor_location') else 0
             total_lines = len(edit_area.text.split('\n'))
+            logger.info(f"📍 INITIAL SETUP: cursor_location={edit_area.cursor_location if hasattr(edit_area, 'cursor_location') else 'None'}")
+            logger.info(f"📍 INITIAL SETUP: current_line={current_line}, total_lines={total_lines}")
+            
+            # Force cursor to start at beginning if needed
+            if current_line == 0:
+                edit_area.cursor_location = (0, 0)
+                
             line_numbers.set_line_numbers(current_line, total_lines, edit_area)
 
             # Debug logging to understand width issues

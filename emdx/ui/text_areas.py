@@ -146,18 +146,13 @@ class VimEditTextArea(TextArea):
                 else:
                     current_line = 0
                 
-                # The cursor position is consistently 2 lines ahead of visual position
-                # This happens because the content has the title removed but cursor
-                # position still references the original document structure
-                # We need to adjust by subtracting 2 to match visual position
-                visual_current_line = max(0, current_line - 2)
-                
+                # Log the actual cursor position to debug
                 total_lines = len(self.text.split('\n'))
+                logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
                 
-                logger.debug(f"🔍 LINE NUMBERS: cursor={current_line}, visual={visual_current_line}, total={total_lines}")
-                
-                # Pass self reference so line numbers can check focus
-                self.line_numbers_widget.set_line_numbers(visual_current_line, total_lines, self)
+                # Pass the raw cursor position - no adjustment
+                # The issue might be in the display, not the data
+                self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
