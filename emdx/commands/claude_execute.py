@@ -270,11 +270,12 @@ def execute_with_claude_detached(
     log_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Write initial log header
-    from emdx import __version__
+    from emdx import __version__, __build_id__
     start_time = datetime.now()
     with open(log_file, 'w') as f:
         f.write("=== EMDX Claude Execution ===\n")
         f.write(f"Version: {__version__}\n")
+        f.write(f"Build ID: {__build_id__}\n")
         f.write(f"Doc ID: {doc_id or 'unknown'}\n")
         f.write(f"Execution ID: {execution_id}\n")
         if working_dir:
@@ -380,11 +381,12 @@ def execute_with_claude(
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Write initial log header
-    from emdx import __version__
+    from emdx import __version__, __build_id__
     start_time = datetime.now()
     with open(log_file, 'w') as f:
         f.write("=== EMDX Claude Execution ===\n")
         f.write(f"Version: {__version__}\n")
+        f.write(f"Build ID: {__build_id__}\n")
         f.write(f"Doc ID: {doc_id or 'unknown'}\n")
         f.write(f"Execution ID: {execution_id}\n")
         if working_dir:

@@ -175,7 +175,18 @@ class VimEditTextArea(TextArea):
                     # Second ESC exits edit mode entirely
                     event.stop()
                     event.prevent_default()
-                    self.app_instance.action_save_and_exit_edit()
+                    # Use call_after_refresh to avoid blocking the UI
+                    # Call the appropriate exit method
+                    try:
+                        if hasattr(self.app_instance, 'file_browser'):
+                            # For FileBrowserVimApp, call the method directly
+                            self.app_instance.file_browser.call_after_refresh(self.app_instance.action_save_and_exit_edit)
+                        else:
+                            # For main browser, call the action directly
+                            self.app_instance.call_after_refresh(self.app_instance.action_save_and_exit_edit)
+                    except Exception as e:
+                        # Fallback - just call the action method directly
+                        self.app_instance.action_save_and_exit_edit()
                     return
             
             # Route to appropriate handler based on mode

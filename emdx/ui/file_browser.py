@@ -40,10 +40,20 @@ class FileBrowserVimApp:
         self.file_browser = file_browser
         
     def action_save_and_exit_edit(self):
-        self.file_browser.action_handle_escape()
+        try:
+            # Call _exit_edit_mode directly since action_handle_escape doesn't exist
+            self.file_browser._exit_edit_mode()
+        except AttributeError as e:
+            # Fallback if file_browser not accessible
+            logger.error(f"FileBrowserVimApp: Cannot access file_browser._exit_edit_mode: {e}")
+            pass
         
     def action_cancel_edit(self):
-        self.file_browser.action_handle_escape()
+        try:
+            self.file_browser.action_handle_escape()
+        except AttributeError:
+            # Fallback if file_browser not accessible
+            self.file_browser._exit_edit_mode()
         
     def action_save_document(self):
         # Just update status - file will be saved when exiting
@@ -524,6 +534,16 @@ class FileBrowser(Container):
             logger.error(f"🗂️ Error switching to edit mode: {e}")
             raise
     
+    def action_handle_escape(self) -> None:
+        """Handle escape key - exit current mode."""
+        if self.edit_mode:
+            self._exit_edit_mode()
+        elif self.selection_mode:
+            self._exit_selection_mode()
+        else:
+            # If not in any special mode, exit file browser back to main
+            self.action_quit()
+    
     def on_key(self, event: events.Key) -> None:
         """Handle key events, especially ESC for mode switching."""
         if event.key == "escape":
@@ -537,8 +557,12 @@ class FileBrowser(Container):
                 event.stop()
                 event.prevent_default()
                 return
-            # If no special mode is active, let ESC bubble up to main browser
-            # Don't stop or prevent_default - let it reach the main browser's ESC handler
+            else:
+                # If not in any special mode, exit file browser back to main
+                self.action_quit()
+                event.stop()
+                event.prevent_default()
+                return
         
         # For all other keys, use default handling
         super().on_key(event)
@@ -597,39 +621,82 @@ class FileBrowser(Container):
             # Exit edit mode - restore FilePreview widget
             horizontal_container = self.query_one(".file-browser-content", Horizontal)
             
-            # Remove the vim editor
-            if hasattr(self, 'vim_editor'):
-                self.vim_editor.remove()
-                delattr(self, 'vim_editor')
+            # Reset edit mode flag
+            self.edit_mode = False
+            if hasattr(self, "vim_editor"):
+                delattr(self, "vim_editor")
             
-            # Recreate the FilePreview widget
-            from .file_preview import FilePreview
-            new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
-            horizontal_container.mount(new_preview)
-            
-            # Use call_after_refresh to ensure widget is mounted before previewing
-            def _preview_after_save():
+            # Use call_after_refresh to ensure proper widget cleanup and recreation
+            def _recreate_widgets():
                 try:
-                    new_preview.preview_file(file_path)
-                    # Ensure preview starts at the top
-                    new_preview.scroll_to(0, 0, animate=False)
+                    # Save current cursor position
+                    current_cursor_row = self.selected_index
+                    
+                    # Remove vim editor widget if it exists
+                    try:
+                        vim_editor = self.query_one("#edit-preview-container")
+                        vim_editor.remove()
+                    except Exception:
+                        pass
+                    
+                    # Just recreate the FilePreview widget to replace the vim editor
+                    from .file_preview import FilePreview
+                    new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
+                    
+                    # Mount the new preview widget
+                    horizontal_container.mount(new_preview)
+                    
+                    # Refresh the existing file list and restore cursor position
+                    try:
+                        file_list = self.query_one("#file-list", FileList)
+                        file_list.populate_files(self.current_path, self.show_hidden)
+                        
+                        # Restore cursor position carefully to avoid infinite loops
+                        if file_list.row_count > current_cursor_row:
+                            # Use call_after_refresh to ensure populate_files is complete
+                            def _restore_cursor():
+                                try:
+                                    file_list.cursor_coordinate = (current_cursor_row, 0)
+                                    # Don't set self.selected_index here - let the selection event handle it
+                                except Exception as e:
+                                    logger.error(f"🗂️ Error restoring cursor: {e}")
+                            self.call_after_refresh(_restore_cursor)
+                    except Exception as e:
+                        logger.error(f"🗂️ Error refreshing file list: {e}")
+                    
+                    # Preview the file after everything is mounted
+                    self.call_after_refresh(lambda: self._preview_after_save(new_preview, file_path))
+                    
                 except Exception as e:
-                    logger.error(f"🗂️ Error in delayed preview after save: {e}")
-            
-            self.call_after_refresh(_preview_after_save)
-            
-            # Update status
-            file_count = len(self.query_one("#file-list", FileList).files)
-            status = f"✅ Saved {file_path.name} - {file_count} items"
-            if not self.show_hidden:
-                status += " (hidden files excluded)"
-            self.query_one("#file-status-bar", Static).update(status)
+                    logger.error(f"🗂️ Error recreating widgets: {e}")
+                    
+            self.call_after_refresh(_recreate_widgets)
             
         except Exception as e:
             logger.error(f"🗂️ Error saving and exiting edit mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Save error: {e}"
             )
+    
+    def _preview_after_save(self, new_preview, file_path):
+        """Preview file after saving and widget recreation."""
+        try:
+            new_preview.preview_file(file_path)
+            # Ensure preview starts at the top
+            new_preview.scroll_to(0, 0, animate=False)
+            
+            # Update status with success message
+            try:
+                file_count = len(self.query_one("#file-list", FileList).files)
+                status = f"✅ Saved {file_path.name} - {file_count} items"
+                if not self.show_hidden:
+                    status += " (hidden files excluded)"
+                self.query_one("#file-status-bar", Static).update(status)
+            except Exception as e:
+                logger.error(f"🗂️ Error updating status after save: {e}")
+                
+        except Exception as e:
+            logger.error(f"🗂️ Error in delayed preview after save: {e}")
     
     def action_search(self) -> None:
         """Search for files."""
