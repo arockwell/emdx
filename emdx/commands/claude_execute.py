@@ -388,6 +388,9 @@ def execute_document_smart(
     save_execution(execution)
 
     # Execute with Claude
+    if verbose:
+        console.print(f"[dim]Passing {len(allowed_tools)} tools to Claude: {', '.join(allowed_tools)}[/dim]")
+    
     exit_code = execute_with_claude(
         task=prompt,
         execution_id=execution_id,
