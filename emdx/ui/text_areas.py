@@ -137,24 +137,57 @@ class VimEditTextArea(TextArea):
     def _update_line_numbers(self):
         """Update line numbers widget if it exists."""
         try:
-            if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
-                # Use selection.end for cursor position as it's more reliable
-                if hasattr(self, 'selection') and self.selection:
-                    current_line = self.selection.end[0]
-                elif hasattr(self, 'cursor_location'):
-                    current_line = self.cursor_location[0]
-                else:
-                    current_line = 0
+            key_logger.info(f"🔍 STEP 1: Starting line numbers update")
+            
+            # Check if line numbers widget exists
+            if not hasattr(self, 'line_numbers_widget'):
+                key_logger.info(f"❌ No line_numbers_widget attribute")
+                return
+            
+            if not self.line_numbers_widget:
+                key_logger.info(f"❌ line_numbers_widget is None")
+                return
                 
-                # Log the actual cursor position to debug
-                total_lines = len(self.text.split('\n'))
-                logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
+            key_logger.info(f"✅ STEP 2: line_numbers_widget exists")
+            
+            # Test TextArea method availability
+            available_methods = []
+            for method in ['selection', 'cursor_location', 'move_cursor_relative', 'text']:
+                if hasattr(self, method):
+                    available_methods.append(method)
+                    
+            key_logger.info(f"📋 Available TextArea methods: {available_methods}")
+            
+            # Get cursor position with priority order
+            current_line = None
+            
+            # Method 1: Use selection.end (most reliable according to comment)
+            if hasattr(self, 'selection') and self.selection:
+                current_line = self.selection.end[0]
+                key_logger.info(f"✅ STEP 3a: Got cursor from selection.end: {current_line}")
+            # Method 2: Use cursor_location
+            elif hasattr(self, 'cursor_location'):
+                current_line = self.cursor_location[0]
+                key_logger.info(f"✅ STEP 3b: Got cursor from cursor_location: {current_line}")
+            else:
+                current_line = 0
+                key_logger.info(f"⚠️ STEP 3c: Fallback to line 0")
                 
-                # Pass the raw cursor position - no adjustment
-                # The issue might be in the display, not the data
-                self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
+            # Get total lines
+            total_lines = len(self.text.split('\n'))
+            key_logger.info(f"✅ STEP 4: total_lines={total_lines}")
+            
+            # Log the actual cursor position to debug
+            logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
+            
+            # Call the line numbers widget
+            key_logger.info(f"🚀 STEP 5: Calling set_line_numbers({current_line}, {total_lines}, self)")
+            self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
+            key_logger.info(f"✅ STEP 6: set_line_numbers completed")
+            
         except Exception as e:
-            logger.debug(f"Error updating line numbers: {e}")
+            key_logger.error(f"💥 ERROR in _update_line_numbers: {e}")
+            logger.error(f"Error updating line numbers: {e}", exc_info=True)
         
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
@@ -224,20 +257,45 @@ class VimEditTextArea(TextArea):
         
         # Movement commands
         if key == "h" or key == "left":
-            key_logger.info(f"Moving left by {count}")
-            self.move_cursor_relative(columns=-count)
-            self._update_line_numbers()
+            try:
+                key_logger.info(f"🚀 STEP 1: Moving left by {count}")
+                self.move_cursor_relative(columns=-count)
+                key_logger.info(f"✅ STEP 2: Move left completed")
+                self._update_line_numbers()
+                key_logger.info(f"✅ STEP 3: Line numbers updated after left")
+            except Exception as e:
+                key_logger.error(f"💥 ERROR in left movement: {e}")
+                logger.error(f"Exception in left movement: {e}", exc_info=True)
         elif key == "j" or key == "down":
-            key_logger.info(f"Moving down by {count}")
-            self.move_cursor_relative(rows=count)
-            self._update_line_numbers()
+            try:
+                key_logger.info(f"🚀 STEP 1: Moving down by {count}")
+                self.move_cursor_relative(rows=count)
+                key_logger.info(f"✅ STEP 2: Move down completed")
+                self._update_line_numbers()
+                key_logger.info(f"✅ STEP 3: Line numbers updated after down")
+            except Exception as e:
+                key_logger.error(f"💥 ERROR in down movement: {e}")
+                logger.error(f"Exception in down movement: {e}", exc_info=True)
         elif key == "k" or key == "up":
-            key_logger.info(f"Moving up by {count}")
-            self.move_cursor_relative(rows=-count)
-            self._update_line_numbers()
+            try:
+                key_logger.info(f"🚀 STEP 1: Moving up by {count}")
+                self.move_cursor_relative(rows=-count)
+                key_logger.info(f"✅ STEP 2: Move up completed")
+                self._update_line_numbers()
+                key_logger.info(f"✅ STEP 3: Line numbers updated after up")
+            except Exception as e:
+                key_logger.error(f"💥 ERROR in up movement: {e}")
+                logger.error(f"Exception in up movement: {e}", exc_info=True)
         elif key == "l" or key == "right":
-            self.move_cursor_relative(columns=count)
-            self._update_line_numbers()
+            try:
+                key_logger.info(f"🚀 STEP 1: Moving right by {count}")
+                self.move_cursor_relative(columns=count)
+                key_logger.info(f"✅ STEP 2: Move right completed")
+                self._update_line_numbers()
+                key_logger.info(f"✅ STEP 3: Line numbers updated after right")
+            except Exception as e:
+                key_logger.error(f"💥 ERROR in right movement: {e}")
+                logger.error(f"Exception in right movement: {e}", exc_info=True)
         
         # Word movement
         elif char == "w":
@@ -267,9 +325,15 @@ class VimEditTextArea(TextArea):
                 self.pending_command = "g"
                 return
         elif char == "G":
-            # Go to last line
-            self._cursor_to_end()
-            self._update_line_numbers()
+            try:
+                key_logger.info(f"🚀 STEP 1: G command - going to last line")
+                self._cursor_to_end()
+                key_logger.info(f"✅ STEP 2: G command - cursor moved to end")
+                self._update_line_numbers()
+                key_logger.info(f"✅ STEP 3: G command - line numbers updated")
+            except Exception as e:
+                key_logger.error(f"💥 ERROR in G command: {e}")
+                logger.error(f"Exception in G command: {e}", exc_info=True)
         
         # Mode changes
         elif char == "i":
