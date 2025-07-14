@@ -31,11 +31,21 @@ from emdx.models.tags import (
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
+from emdx.utils.git_ops import (
+    GitFileStatus,
+    GitWorktree,
+    get_git_diff,
+    get_git_status,
+    get_worktrees,
+    is_git_repository,
+    get_current_branch,
+)
 
 from .document_viewer import FullScreenView
 from .inputs import TitleInput
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from .worktree_picker import WorktreePickerScreen
 
 # Set up logging
 log_dir = None
@@ -368,7 +378,7 @@ class MinimalDocumentBrowser(App):
         Binding("r", "refresh", "Refresh", key_display="r"),
         Binding("n", "new_note", "New Note", key_display="n"),
         Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
-        Binding("d", "delete", "Delete", show=False),
+        Binding("d", "git_diff_browser", "Git Diff", key_display="d"),
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
         Binding("T", "untag_mode", "Untag", show=False),
@@ -379,6 +389,8 @@ class MinimalDocumentBrowser(App):
         Binding("x", "claude_execute", "Execute", key_display="x"),
         Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
+        Binding("D", "delete", "Delete", key_display="D"),
+        Binding("w", "switch_worktree", "Switch Worktree", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -2754,6 +2766,51 @@ class MinimalDocumentBrowser(App):
             self.load_execution_log(self.current_execution_index)
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
 
+    def on_key(self, event: events.Key) -> None:
+        """Handle key events, especially j/k for log switching in LOG_BROWSER mode."""
+        try:
+            key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
+
+            # Handle j/k keys for log switching in log browser mode only
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
+                if hasattr(event, 'key') and event.key:
+                    if event.key == "j":
+                        self.action_next_log()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "k":
+                        self.action_prev_log()
+                        event.stop()
+                        event.prevent_default()
+                        return
+            
+            # Handle j/k/w keys for git diff switching in git diff browser mode
+            if hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
+                if hasattr(event, 'key') and event.key:
+                    if event.key == "j" and hasattr(self, 'git_files'):
+                        self.action_git_diff_next()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "k" and hasattr(self, 'git_files'):
+                        self.action_git_diff_prev()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "w":
+                        # Handle worktree switching
+                        self.action_switch_worktree()
+                        event.stop()
+                        event.prevent_default()
+                        return
+
+            # Note: App class doesn't have on_key method, so we don't call super()
+            pass
+        except Exception as e:
+            # Log error but don't crash
+            key_logger.error(f"Error in on_key: {e}")
+            # Don't try to call super().on_key() as App doesn't have this method
 
 
     async def on_event(self, event) -> None:
@@ -2771,6 +2828,10 @@ class MinimalDocumentBrowser(App):
                 # In log browser mode, load the selected execution's log
                 if hasattr(self, 'executions') and message.cursor_row < len(self.executions):
                     self.load_execution_log(message.cursor_row)
+            elif hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
+                # In git diff browser mode, load the selected file's diff
+                if hasattr(self, 'git_files') and message.cursor_row < len(self.git_files):
+                    self.load_git_diff(message.cursor_row)
             else:
                 # Original document preview logic
                 if hasattr(self, 'filtered_docs') and message.cursor_row < len(self.filtered_docs):
@@ -2786,12 +2847,235 @@ class MinimalDocumentBrowser(App):
             logger.error(f"Error in on_data_table_row_highlighted: {e}")
             # Don't crash, just log the error
 
+    def action_git_diff_browser(self):
+        """Switch to git diff browser mode to view file changes."""
+        # Check if we're in a git repository
+        if not is_git_repository():
+            status = self.query_one("#status", Label)
+            status.update("Not in a git repository - cannot show git diff")
+            return
+        
+        self.mode = "GIT_DIFF_BROWSER"
+        self.setup_git_diff_browser()
+
+    def setup_git_diff_browser(self):
+        """Set up the git diff browser interface."""
+        try:
+            # Get current worktree info (only set if not already set for worktree switching)
+            if not hasattr(self, 'current_worktree_path'):
+                self.current_worktree_path = os.getcwd()
+            
+            current_branch = get_current_branch(self.current_worktree_path)
+            
+            # Get list of all worktrees for switching
+            self.worktrees = get_worktrees()
+            
+            # Find current worktree in the list (based on current_worktree_path, not os.getcwd())
+            if not hasattr(self, 'current_worktree_index'):
+                self.current_worktree_index = 0
+                for i, wt in enumerate(self.worktrees):
+                    if wt.path == self.current_worktree_path:
+                        self.current_worktree_index = i
+                        break
+            
+            # Load git status for current worktree
+            self.git_files = get_git_status(self.current_worktree_path)
+            logger.info(f"📁 Git files from {self.current_worktree_path}: {len(self.git_files)} files")
+            for f in self.git_files:
+                logger.info(f"  {f.status} {f.path} (staged: {f.staged})")
+            
+            # Replace the documents table with git files table
+            table = self.query_one("#doc-table", DataTable)
+            table.clear(columns=True)
+            table.add_columns("Status", "File", "Type")
+            logger.info("🔄 Table cleared and columns added")
+            
+            # Clear preview first to remove document content
+            try:
+                preview = self.query_one("#preview-content", RichLog)
+                preview.clear()
+            except Exception:
+                pass
+            
+            if not self.git_files:
+                # No files but still set up empty table and allow worktree switching
+                preview.write("[dim]No git changes in this worktree[/dim]")
+                preview.write("")
+                preview.write("[yellow]Press 'w' to switch to another worktree[/yellow]")
+                preview.write("[yellow]Press 'q' to return to document browser[/yellow]")
+                
+                self.current_file_index = -1  # No files
+                
+                # Update status with instructions
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                worktree_name = Path(self.current_worktree_path).name
+                status.update(f"📄 GIT DIFF [{worktree_name}:{current_branch}]: No changes ('w' switch worktree, 'q' exit)")
+                return
+            
+            # Populate git files table
+            logger.info(f"📋 Populating table with {len(self.git_files)} files")
+            for i, file_status in enumerate(self.git_files):
+                file_type = "Staged" if file_status.staged else "Unstaged"
+                row_data = (
+                    f"{file_status.status_icon} {file_status.status}",
+                    file_status.path,
+                    file_type
+                )
+                table.add_row(*row_data)
+                logger.info(f"  Added row {i}: {row_data}")
+            
+            logger.info(f"🎯 Table now has {table.row_count} rows")
+            
+            # Start with the first file
+            self.current_file_index = 0
+            
+            # Select first row and load its diff
+            table.move_cursor(row=0)
+            logger.info(f"🔍 About to load git diff for index 0, git_files length: {len(self.git_files)}")
+            if self.git_files:
+                logger.info(f"  First file: {self.git_files[0].path} ({self.git_files[0].status})")
+            self.load_git_diff(0)
+            
+            # Update status with instructions
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            worktree_name = Path(self.current_worktree_path).name
+            status.update(f"📄 GIT DIFF [{worktree_name}:{current_branch}]: {len(self.git_files)} changes (j/k navigate, 'w' switch worktree, 'q' exit)")
+            
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error setting up git diff browser: {e}")
+    
+    def load_git_diff(self, index: int):
+        """Load the git diff for the file at the given index."""
+        logger.info(f"🔍 load_git_diff called with index {index}, git_files length: {len(self.git_files)}")
+        if index < 0 or index >= len(self.git_files):
+            logger.warning(f"❌ Index {index} out of range for {len(self.git_files)} files")
+            return
+        
+        try:
+            file_status = self.git_files[index]
+            self.current_file_index = index
+            
+            # Clear preview and load diff content
+            try:
+                preview = self.query_one("#preview-content", RichLog)
+            except Exception:
+                # Widget doesn't exist (different screen) - cannot load diff
+                return
+            
+            preview.clear()
+            
+            # Show file header
+            preview.write(f"[bold cyan]=== {file_status.path} ===[/bold cyan]")
+            preview.write(f"[yellow]Status:[/yellow] {file_status.status_description} ({file_status.status})")
+            preview.write(f"[yellow]Type:[/yellow] {'Staged' if file_status.staged else 'Unstaged'}")
+            preview.write(f"[yellow]Worktree:[/yellow] {Path(self.current_worktree_path).name}")
+            preview.write("[bold cyan]=== Diff Content ===[/bold cyan]")
+            preview.write("")
+            
+            # Load git diff content
+            logger.info(f"🔍 Getting diff for {file_status.path} (staged: {file_status.staged}) from {self.current_worktree_path}")
+            diff_content = get_git_diff(file_status.path, file_status.staged, self.current_worktree_path)
+            logger.info(f"📄 Diff content length: {len(diff_content)} chars")
+            if diff_content.strip():
+                preview.write(diff_content)
+                logger.info("✅ Diff content written to preview")
+            else:
+                if file_status.status == '??':
+                    preview.write("[dim](Untracked file - no diff available)[/dim]")
+                    logger.info("ℹ️ Untracked file - no diff shown")
+                else:
+                    preview.write("[dim](No diff content - file may be binary or empty)[/dim]")
+                    logger.warning("⚠️ No diff content available")
+            
+            # Highlight current row in table
+            table = self.query_one("#doc-table", DataTable)
+            table.move_cursor(row=index)
+            
+        except Exception as e:
+            logger.error(f"Error loading git diff: {e}")
+            try:
+                preview = self.query_one("#preview-content", RichLog)
+                preview.clear()
+                preview.write(f"[red]Error loading diff: {e}[/red]")
+            except:
+                pass
+    
+    def action_git_diff_next(self):
+        """Switch to next git file (j in GIT_DIFF_BROWSER mode)."""
+        if self.mode != "GIT_DIFF_BROWSER":
+            return
+        
+        if hasattr(self, 'git_files') and self.current_file_index < len(self.git_files) - 1:
+            self.load_git_diff(self.current_file_index + 1)
+    
+    def action_git_diff_prev(self):
+        """Switch to previous git file (k in GIT_DIFF_BROWSER mode)."""
+        if self.mode != "GIT_DIFF_BROWSER":
+            return
+        
+        if hasattr(self, 'git_files') and self.current_file_index > 0:
+            self.load_git_diff(self.current_file_index - 1)
+    
+    def action_switch_worktree(self):
+        """Show worktree picker modal (w key)."""
+        if self.mode != "GIT_DIFF_BROWSER":
+            return
+        
+        if not hasattr(self, 'worktrees') or len(self.worktrees) <= 1:
+            status = self.query_one("#status", Label)
+            status.update("No other worktrees available")
+            return
+        
+        # Show worktree picker modal
+        def on_worktree_selected(new_index: int):
+            """Handle worktree selection from picker."""
+            try:
+                old_index = self.current_worktree_index
+                self.current_worktree_index = new_index
+                new_worktree = self.worktrees[new_index]
+                old_worktree = self.worktrees[old_index]
+                
+                # Show detailed switching info
+                status = self.query_one("#status", Label)
+                status.update(f"🔄 Switching: {old_worktree.name} → {new_worktree.name} | Path: {new_worktree.path}")
+                
+                # Update the current worktree path
+                old_path = self.current_worktree_path
+                self.current_worktree_path = new_worktree.path
+                
+                # Debug info
+                logger.info(f"Worktree switch: {old_path} → {new_worktree.path}")
+                
+                # Reload git status for new worktree
+                self.setup_git_diff_browser()
+                
+            except Exception as e:
+                logger.error(f"Error switching worktree: {e}")
+                status = self.query_one("#status", Label)
+                status.update(f"❌ Error switching worktree: {e}")
+        
+        # Launch the worktree picker modal
+        picker = WorktreePickerScreen(
+            worktrees=self.worktrees,
+            current_index=self.current_worktree_index,
+            callback=on_worktree_selected
+        )
+        self.push_screen(picker)
+
     def action_quit(self):
         try:
             if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
                 # Exit log browser mode and return to document mode
                 self.mode = "NORMAL"
                 self.stop_log_monitoring()
+                self.reload_documents()
+            elif hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
+                # Exit git diff browser mode and return to document mode
+                self.mode = "NORMAL"
                 self.reload_documents()
             else:
                 # Clean exit - subprocess are detached and will continue running
