@@ -128,6 +128,8 @@ class MinimalDocumentBrowser(App):
     MOUSE_DISABLED = True
     # Enable text selection globally
     ALLOW_SELECT = True
+    # Disable default Tab focus navigation
+    AUTO_FOCUS = False
 
     CSS = """
     #sidebar {
@@ -369,8 +371,7 @@ class MinimalDocumentBrowser(App):
         Binding("d", "delete", "Delete", show=False),
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
-        Binding("shift+t", "untag_mode", "Untag", show=False),
-        Binding("tab", "focus_preview", "Focus Preview", key_display="Tab"),
+        Binding("T", "untag_mode", "Untag", show=False),
         Binding("s", "toggle_selection_mode", "Select Text", key_display="s"),
         Binding("ctrl+c", "copy_selected", "Copy Selection", show=False),
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
@@ -422,6 +423,16 @@ class MinimalDocumentBrowser(App):
     def on_mount(self) -> None:
         logger.info("on_mount called")
         try:
+            # Disable focus on widgets to prevent Tab navigation
+            preview_content = self.query_one("#preview-content")
+            preview_content.can_focus = False
+            
+            # Also disable focus on input widgets when not in use
+            search_input = self.query_one("#search-input")
+            search_input.can_focus = False
+            tag_input = self.query_one("#tag-input")
+            tag_input.can_focus = False
+            
             self.load_documents()
             logger.info("Documents loaded, scheduling delayed setup")
             # Delay table setup until after widgets are mounted
@@ -825,6 +836,7 @@ class MinimalDocumentBrowser(App):
             search.add_class("visible")
             tag_input.remove_class("visible")
             tag_selector.remove_class("visible")
+            search.can_focus = True
             search.focus()
         elif new_mode == "TAG":
             search.remove_class("visible")
@@ -843,6 +855,7 @@ class MinimalDocumentBrowser(App):
                             tag_input.placeholder = f"Add tags (current: {', '.join(current_tags)})"
                         else:
                             tag_input.placeholder = "Add tags (no current tags)"
+                        tag_input.can_focus = True
                         tag_input.focus()
                     else:  # remove
                         # Show visual selector for removing tags
@@ -871,6 +884,9 @@ class MinimalDocumentBrowser(App):
             tag_selector.remove_class("visible")
             search.value = ""
             tag_input.value = ""
+            # Disable focus on inputs when not in use
+            search.can_focus = False
+            tag_input.can_focus = False
             self.current_tag_completion = 0  # Reset completion index
             table.focus()
 
@@ -885,9 +901,12 @@ class MinimalDocumentBrowser(App):
 
     def action_untag_mode(self):
         if not self.current_doc_id:
+            logger.info("DEBUG: action_untag_mode called but no current_doc_id")
             return
+        logger.info("DEBUG: action_untag_mode called, setting mode to TAG")
         self.tag_action = "remove"
         self.mode = "TAG"
+        logger.info(f"DEBUG: mode set to {self.mode}, tag_action set to {self.tag_action}")
 
     def action_new_note(self):
         """Create a new note in the TUI."""
@@ -1007,6 +1026,34 @@ class MinimalDocumentBrowser(App):
             key_logger.info(f"App.on_key: {event_attrs}")
             logger.debug(f"Key event: key={event.key}")
 
+            # Handle j/k keys for log switching in log browser mode
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
+                if event.key == "j":
+                    self.action_next_log()
+                    event.stop()
+                    event.prevent_default()
+                    return
+                elif event.key == "k":
+                    self.action_prev_log()
+                    event.stop()
+                    event.prevent_default()
+                    return
+
+            # Globally handle Tab to prevent default focus behavior
+            if event.key == "tab":
+                logger.info(f"DEBUG: Global Tab handler, mode={self.mode}, tag_action={getattr(self, 'tag_action', 'None')}")
+                # Only allow Tab in TAG mode for tag cycling
+                if self.mode == "TAG" and self.tag_action == "remove":
+                    logger.info(f"DEBUG: Allowing Tab to fall through to TAG handler")
+                    # Let it fall through to the TAG mode handler below
+                    pass
+                else:
+                    logger.info(f"DEBUG: Blocking Tab in non-untag mode")
+                    # Block Tab in all other modes
+                    event.prevent_default()
+                    event.stop()
+                    return
+
             # Handle global Escape key - quit from any mode
             if event.key == "escape":
                 # Edit mode ESC is handled by VimEditTextArea - don't interfere
@@ -1030,22 +1077,30 @@ class MinimalDocumentBrowser(App):
                 return
 
             if self.mode == "TAG":
+                logger.info(f"DEBUG: In TAG mode, key={event.key}, tag_action={self.tag_action}")
                 if event.key == "tab" and self.tag_action == "remove":
+                    logger.info(f"DEBUG: Tab pressed in remove mode, calling complete_tag_removal")
                     # Tab cycling for tag removal
                     self.complete_tag_removal()
                     event.prevent_default()
                     event.stop()
+                    return
                 elif event.key == "enter" and self.tag_action == "remove":
+                    logger.info(f"DEBUG: Enter pressed in remove mode, calling remove_highlighted_tag")
                     # Remove the highlighted tag
                     self.remove_highlighted_tag()
                     event.prevent_default()
-            elif self.mode == "NORMAL":
-                # Handle keys that don't require a document
-                if event.key == "tab":
+                    event.stop()
+                    return
+                else:
+                    logger.info(f"DEBUG: Other key in TAG mode, blocking")
+                    # In TAG mode, block all other keys except ESC (handled above)
                     event.prevent_default()
                     event.stop()
-                    self.action_focus_preview()
-                elif event.character == "s":
+                    return
+            elif self.mode == "NORMAL":
+                # Handle keys that don't require a document
+                if event.character == "s":
                     event.prevent_default()
                     event.stop()
                     self.action_toggle_selection_mode()
@@ -1072,6 +1127,7 @@ class MinimalDocumentBrowser(App):
                         event.stop()
                         self.action_tag_mode()
                     elif event.character == "T":
+                        logger.info(f"DEBUG: Manual T character handler triggered")
                         event.prevent_default()
                         event.stop()
                         self.action_untag_mode()
@@ -2698,31 +2754,6 @@ class MinimalDocumentBrowser(App):
             self.load_execution_log(self.current_execution_index)
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
 
-    def on_key(self, event: events.Key) -> None:
-        """Handle key events, especially j/k for log switching in LOG_BROWSER mode."""
-        try:
-            key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
-
-            # Handle j/k keys for log switching in log browser mode only
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
-                if hasattr(event, 'key') and event.key:
-                    if event.key == "j":
-                        self.action_next_log()
-                        event.stop()
-                        event.prevent_default()
-                        return
-                    elif event.key == "k":
-                        self.action_prev_log()
-                        event.stop()
-                        event.prevent_default()
-                        return
-
-            # Note: App class doesn't have on_key method, so we don't call super()
-            pass
-        except Exception as e:
-            # Log error but don't crash
-            key_logger.error(f"Error in on_key: {e}")
-            # Don't try to call super().on_key() as App doesn't have this method
 
 
     async def on_event(self, event) -> None:
