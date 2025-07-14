@@ -1528,16 +1528,30 @@ class MinimalDocumentBrowser(App):
 
             # CRITICAL: Set word wrap BEFORE any other properties
             edit_area.word_wrap = True
-            edit_area.show_line_numbers = True  # Enable built-in line numbers
+            edit_area.show_line_numbers = False  # Disable built-in, using custom vim relative numbers
 
             # Try setting max line length if available
             if hasattr(edit_area, 'max_line_length'):
                 edit_area.max_line_length = 80  # Enforce maximum line length
 
-            # Mount wrapper and widgets directly (no custom line numbers)
+            # Mount wrapper in preview container
             container.mount(edit_wrapper)
+
+            # Create line numbers widget for vim-style relative numbers
+            line_numbers = VimLineNumbers(edit_area, id="line-numbers")
+            edit_area.line_numbers_widget = line_numbers
+            logger.debug(f"Created line numbers widget {id(line_numbers)} for edit_area {id(edit_area)}")
+
+            # Create horizontal container for line numbers and text area
+            edit_container = Horizontal(id="edit-container")
+
+            # Mount title and content in wrapper
             edit_wrapper.mount(title_input)
-            edit_wrapper.mount(edit_area)
+            edit_wrapper.mount(edit_container)
+
+            # Now mount widgets in the container after it's mounted
+            edit_container.mount(line_numbers)
+            edit_container.mount(edit_area)
 
             # Reset container scroll with single refresh to prevent artifacts
             container.scroll_to(0, 0, animate=False)
@@ -1546,6 +1560,9 @@ class MinimalDocumentBrowser(App):
 
             # Focus the content editor first instead of title input
             edit_area.focus()
+
+            # Initialize line numbers
+            line_numbers.update_line_numbers()
 
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")

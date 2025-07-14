@@ -133,6 +133,14 @@ class VimEditTextArea(TextArea):
             self.add_class("vim-insert-mode")
         else:
             self.add_class("vim-normal-mode")
+    
+    def _update_line_numbers(self):
+        """Update line numbers widget if it exists."""
+        try:
+            if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
+                self.line_numbers_widget.update_line_numbers()
+        except Exception as e:
+            logger.debug(f"Error updating line numbers: {e}")
         
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
@@ -204,36 +212,46 @@ class VimEditTextArea(TextArea):
         if key == "h" or key == "left":
             key_logger.info(f"Moving left by {count}")
             self.move_cursor_relative(columns=-count)
+            self._update_line_numbers()
         elif key == "j" or key == "down":
             key_logger.info(f"Moving down by {count} - BEFORE move_cursor_relative")
             try:
                 self.move_cursor_relative(rows=count)
+                self._update_line_numbers()
                 key_logger.info(f"Moving down by {count} - AFTER move_cursor_relative SUCCESS")
             except Exception as e:
                 key_logger.error(f"CRASH in move_cursor_relative(rows={count}): {e}")
                 raise
         elif key == "k" or key == "up":
             self.move_cursor_relative(rows=-count)
+            self._update_line_numbers()
         elif key == "l" or key == "right":
             self.move_cursor_relative(columns=count)
+            self._update_line_numbers()
         
         # Word movement
         elif char == "w":
             self._move_word_forward(count)
+            self._update_line_numbers()
         elif char == "b":
             self._move_word_backward(count)
+            self._update_line_numbers()
         elif char == "e":
             self._move_word_end(count)
+            self._update_line_numbers()
         
         # Line movement
         elif char == "0":
             self._cursor_to_line_start()
+            self._update_line_numbers()
         elif char == "$":
             self._cursor_to_line_end()
+            self._update_line_numbers()
         elif char == "g":
             if self.pending_command == "g":
                 # gg - go to first line
                 self._cursor_to_start()
+                self._update_line_numbers()
                 self.pending_command = ""
             else:
                 self.pending_command = "g"
@@ -241,6 +259,7 @@ class VimEditTextArea(TextArea):
         elif char == "G":
             # Go to last line
             self._cursor_to_end()
+            self._update_line_numbers()
         
         # Mode changes
         elif char == "i":
@@ -249,22 +268,26 @@ class VimEditTextArea(TextArea):
             self.app_instance._update_vim_status()
         elif char == "a":
             self.move_cursor_relative(columns=1)
+            self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "I":
             self._cursor_to_line_start()
+            self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "A":
             self._cursor_to_line_end()
+            self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
             self.app_instance._update_vim_status()
         elif char == "o":
             self._cursor_to_line_end()
             self.insert("\n")
+            self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
             self.app_instance._update_vim_status()
@@ -272,6 +295,7 @@ class VimEditTextArea(TextArea):
             self._cursor_to_line_start()
             self.insert("\n")
             self.move_cursor_relative(rows=-1)
+            self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
             self.app_instance._update_vim_status()
@@ -344,6 +368,8 @@ class VimEditTextArea(TextArea):
         """Handle keys in INSERT mode - just pass through for normal editing."""
         # Let TextArea handle all keys in insert mode
         super().on_key(event)
+        # Update line numbers after any insert mode operation
+        self._update_line_numbers()
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
