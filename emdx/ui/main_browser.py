@@ -5,42 +5,37 @@ Main browser application for EMDX TUI.
 
 import logging
 import os
-import re
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-from rich.markdown import Markdown
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, ScrollableContainer, Vertical
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
-from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Input, Label, RichLog, TextArea, Static
+from textual.widgets import DataTable, Input, Label, RichLog, Static
 
 from emdx.database import db
 from emdx.models.documents import get_document
+from emdx.models.executions import (
+    get_recent_executions,
+)
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
     remove_tags_from_document,
     search_by_tags,
 )
-from emdx.models.executions import (
-    Execution,
-    save_execution,
-    get_recent_executions,
-    update_execution_status,
-)
-from emdx.ui.formatting import format_tags, order_tags, truncate_emoji_safe
+from emdx.ui.formatting import format_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
-from .text_areas import SelectionTextArea, VimEditTextArea, EditTextArea
-from .inputs import TitleInput
+
 from .document_viewer import FullScreenView
+from .inputs import TitleInput
 from .modals import DeleteConfirmScreen
+from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 
 # Set up logging
 log_dir = None
@@ -48,7 +43,7 @@ try:
     log_dir = Path.home() / ".config" / "emdx"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "tui_debug.log"
-    
+
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -57,7 +52,7 @@ try:
             # logging.StreamHandler()  # Uncomment for console output
         ],
     )
-    
+
     # Also create a dedicated key events log
     key_log_file = log_dir / "key_events.log"
     key_logger = logging.getLogger("key_events")
@@ -76,21 +71,21 @@ except Exception:
 
 class VimLineNumbers(Static):
     """Line numbers widget for vim editing mode."""
-    
+
     def __init__(self, edit_textarea, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.edit_textarea = edit_textarea
         self.add_class("vim-line-numbers")
-    
+
     def update_line_numbers(self):
         """Update the line numbers display based on cursor position."""
         try:
             if not hasattr(self.edit_textarea, 'cursor_location'):
                 return
-            
+
             current_line = self.edit_textarea.cursor_location[0]
             total_lines = len(self.edit_textarea.text.split('\n'))
-            
+
             # Build relative line numbers like vim
             lines = []
             for i in range(total_lines):
@@ -99,9 +94,9 @@ class VimLineNumbers(Static):
                 else:
                     relative = abs(i - current_line)
                     lines.append(f"{relative:3}")
-            
+
             self.update("\n".join(lines))
-            
+
             # Sync scroll position with the text area
             try:
                 # Try to match the scroll position of the text area
@@ -110,7 +105,7 @@ class VimLineNumbers(Static):
                     self.scroll_to(y=container.scroll_offset.y, animate=False)
             except:
                 pass  # Scroll sync is nice-to-have
-                
+
         except Exception as e:
             logger.error(f"Error updating line numbers: {e}")
 
@@ -132,7 +127,7 @@ class MinimalDocumentBrowser(App):
     #preview-container {
         width: 50%;
     }
-    
+
     #vim-mode-indicator {
         height: 1;
         background: $primary;
@@ -142,25 +137,25 @@ class MinimalDocumentBrowser(App):
         display: none;
         border-bottom: solid $accent;
     }
-    
+
     #vim-mode-indicator.visible {
         display: block;
     }
-    
+
     #preview {
         width: 100%;
         padding: 0;
         overflow: auto;
         scrollbar-gutter: stable;
     }
-    
+
     #preview TextArea {
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
         overflow-x: hidden !important;
     }
-    
+
     .constrained-textarea {
         width: 100% !important;
         max-width: 100% !important;
@@ -169,7 +164,7 @@ class MinimalDocumentBrowser(App):
         box-sizing: border-box !important;
         padding: 0 1 !important;
     }
-    
+
     #edit-wrapper {
         width: 100%;
         height: 100%;
@@ -185,12 +180,12 @@ class MinimalDocumentBrowser(App):
     .edit-title-input:focus {
         border: tall $accent;
     }
-    
+
     /* Vim mode styling - using background colors instead of cursor */
     .vim-insert-mode {
         background: $background;
     }
-    
+
     .vim-normal-mode {
         background: $background;
     }
@@ -263,7 +258,7 @@ class MinimalDocumentBrowser(App):
         padding: 0 1;
         background: $surface;
     }
-    
+
     /* Vim relative line numbers */
     .vim-line-numbers {
         width: 4;
@@ -277,12 +272,12 @@ class MinimalDocumentBrowser(App):
         overflow-y: hidden;
         scrollbar-size: 0 0;
     }
-    
+
     #edit-container {
         height: 100%;
         background: $background;
     }
-    
+
     #edit-container TextArea {
         margin: 0;
         padding-left: 0;
@@ -429,7 +424,7 @@ class MinimalDocumentBrowser(App):
     def on_data_table_row_highlighted(self, message: DataTable.RowHighlighted) -> None:
         if message.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[message.cursor_row]
-            
+
             # Don't allow switching documents while in edit mode
             if self.edit_mode:
                 # Show warning and prevent switch
@@ -444,9 +439,23 @@ class MinimalDocumentBrowser(App):
                             table.cursor_coordinate = (i, 0)
                             break
                 return
-            
+
             self.current_doc_id = doc["id"]
             self.update_preview(doc["id"])
+
+    def get_execution_hint(self, tags: list[str]) -> str:
+        """Get execution hint based on document tags."""
+        from emdx.commands.claude_execute import ExecutionType, get_execution_context
+        context = get_execution_context(tags)
+
+        if context['type'] == ExecutionType.NOTE:
+            return "→ Press 'x' to generate analysis"
+        elif context['type'] == ExecutionType.ANALYSIS:
+            return "→ Press 'x' to generate gameplan"
+        elif context['type'] == ExecutionType.GAMEPLAN:
+            return "→ Press 'x' to implement & create PR"
+        else:
+            return ""
 
     def update_preview(self, doc_id: int):
         try:
@@ -458,14 +467,23 @@ class MinimalDocumentBrowser(App):
                     # We're in formatted mode
                     preview_area.clear()
 
+                    # Add execution hint if applicable
+                    hint = self.get_execution_hint(doc.get('tags', []))
+
                     content = doc["content"].strip()
                     content_lines = content.split("\n")
                     first_line = content_lines[0].strip() if content_lines else ""
 
                     if first_line == f"# {doc['title']}":
-                        markdown_content = content
+                        if hint:
+                            markdown_content = f"# {doc['title']}\n\n*{hint}*\n\n{content[len(first_line)+1:].strip()}"
+                        else:
+                            markdown_content = content
                     else:
-                        markdown_content = f"# {doc['title']}\n\n{content}"
+                        if hint:
+                            markdown_content = f"# {doc['title']}\n\n*{hint}*\n\n{content}"
+                        else:
+                            markdown_content = f"# {doc['title']}\n\n{content}"
 
                     from rich.markdown import Markdown
 
@@ -518,7 +536,7 @@ class MinimalDocumentBrowser(App):
             )
         else:
             status_parts.append(f"{len(self.filtered_docs)}/{len(self.documents)} docs")
-        
+
         # Add key hints for normal mode
         if self.mode == "NORMAL":
             status_parts.append("n=new | e=edit | /=search | t=tag | q=quit")
@@ -529,7 +547,7 @@ class MinimalDocumentBrowser(App):
                 status_parts.append("Enter=add tags | ESC=cancel")
             else:
                 status_parts.append("Tab=select | Enter=remove | ESC=cancel")
-        
+
         status.update(" | ".join(status_parts))
 
     def _update_vim_status(self, message=None):
@@ -539,14 +557,14 @@ class MinimalDocumentBrowser(App):
             pending = getattr(self.edit_textarea, 'pending_command', '')
             repeat = getattr(self.edit_textarea, 'repeat_count', '')
             command_buffer = getattr(self.edit_textarea, 'command_buffer', '')
-            
+
             # Update vim mode indicator in preview pane
             try:
                 vim_indicator = self.query_one("#vim-mode-indicator", Label)
                 vim_indicator.add_class("visible")
             except Exception as e:
                 logger.error(f"Failed to update vim mode indicator: {e}")
-            
+
             # Build mode indicator text with subtle cursor hints (vim-like)
             try:
                 if vim_mode == "INSERT":
@@ -566,10 +584,10 @@ class MinimalDocumentBrowser(App):
                     vim_indicator.update(f"[bold magenta]{command_buffer}[/bold magenta]")
             except Exception as e:
                 logger.error(f"Failed to update vim indicator text: {e}")
-            
+
             # Build status message
             status_parts = [f"EDIT MODE: #{self.editing_doc_id}"]
-            
+
             # Add message if provided
             if message:
                 status_parts.append(f"[red]{message}[/red]")
@@ -583,7 +601,7 @@ class MinimalDocumentBrowser(App):
                     status_parts.append("i=insert | :=command | ESC=exit | Tab=switch title/content")
                 else:
                     status_parts.append("ESC=normal/exit")
-            
+
             status = self.query_one("#status", Label)
             status.update(" | ".join(status_parts))
         else:
@@ -672,27 +690,32 @@ class MinimalDocumentBrowser(App):
             return
         self.tag_action = "remove"
         self.mode = "TAG"
-    
+
     def action_new_note(self):
         """Create a new note in the TUI."""
         try:
             # Generate title with timestamp
             from datetime import datetime
             title = f"New Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            
+
             # Detect project from current directory
-            from emdx.utils.git import get_git_project
             from pathlib import Path
+
+            from emdx.utils.git import get_git_project
             project = get_git_project(Path.cwd())
-            
+
             # Create new document in database
             from emdx.models.documents import save_document
             doc_id = save_document(title, "", project)
             
+            # Add auto-tag after creation
+            from emdx.models.tags import add_tags_to_document
+            add_tags_to_document(str(doc_id), ['notes'])
+
             # Refresh documents list
             self.load_documents()
             self.filter_documents(self.search_query)
-            
+
             # Find the new document in the list and select it
             for i, doc in enumerate(self.filtered_docs):
                 if doc["id"] == doc_id:
@@ -700,13 +723,13 @@ class MinimalDocumentBrowser(App):
                     table.cursor_coordinate = (i, 0)
                     self.on_row_selected()
                     break
-            
+
             # Immediately enter edit mode
             self.action_toggle_edit_mode()
-            
+
             # Update status to show user they're in new note (NORMAL mode)
             self._update_vim_status("New note created - press 'i' to insert")
-            
+
         except Exception as e:
             logger.error(f"Error creating new note: {e}", exc_info=True)
             self.cancel_refresh_timer()
@@ -784,7 +807,7 @@ class MinimalDocumentBrowser(App):
                 if self.edit_mode:
                     # Let the edit widget handle ESC
                     return
-                
+
                 # Selection mode ESC is handled by SelectionTextArea
 
                 # From any mode/state, ESC should quit
@@ -975,7 +998,7 @@ class MinimalDocumentBrowser(App):
                         [
                             sys.executable,
                             "-m",
-                            "emdx.cli",
+                            "emdx.main",
                             "delete",
                             str(self.current_doc_id),
                             "--force",
@@ -1271,7 +1294,7 @@ class MinimalDocumentBrowser(App):
 
                 # Get content based on current mode
                 plain_content = "Select and copy text here..."
-                
+
                 if self.mode == "LOG_BROWSER":
                     # Extract log content from RichLog
                     plain_content = self._extract_log_content()
@@ -1292,10 +1315,10 @@ class MinimalDocumentBrowser(App):
                         existing_widget.remove()
                 except Exception:
                     pass
-                
+
                 # Then remove all children as backup
                 container.remove_children()
-                
+
                 # Refresh the container to ensure DOM is clean
                 container.refresh(layout=True)
 
@@ -1347,10 +1370,10 @@ class MinimalDocumentBrowser(App):
                         existing_widget.remove()
                 except Exception:
                     pass
-                
+
                 # Then remove all children as backup
                 container.remove_children()
-                
+
                 # Refresh the container to ensure DOM is clean
                 container.refresh(layout=True)
 
@@ -1438,7 +1461,7 @@ class MinimalDocumentBrowser(App):
             self.cancel_refresh_timer()
             status.update("Select a document first")
             return
-        
+
         if self.edit_mode:
             # Currently editing - save and exit
             self.action_save_and_exit_edit()
@@ -1452,27 +1475,27 @@ class MinimalDocumentBrowser(App):
             logger.info(f"action_enter_edit_mode called, current_doc_id={self.current_doc_id}")
             if not self.current_doc_id:
                 return
-            
+
             # Exit selection mode if active
             if self.selection_mode:
                 self.action_toggle_selection_mode()
-            
+
             # Get document content
             doc = get_document(str(self.current_doc_id))
             if not doc:
                 return
-            
+
             # Get container and status
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
-            
+
             # Remove all widgets from container (same as selection mode fix)
             container.remove_children()
-            
+
             # Create a wrapper container to enforce width constraints
             from textual.containers import Container
             edit_wrapper = Container(id="edit-wrapper")
-            
+
             # Create title input
             title_input = TitleInput(
                 self,
@@ -1484,74 +1507,74 @@ class MinimalDocumentBrowser(App):
             # Ensure cursor is visible and solid in title input
             title_input.show_cursor = True
             title_input.cursor_blink = False
-            
+
             # Create VimEditTextArea with constraints BEFORE mounting
             edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
             self.edit_title_input = title_input  # Store reference for title input
-            
+
             # Make it editable (not read-only like selection mode)
             edit_area.read_only = False
             edit_area.disabled = False
             edit_area.can_focus = True
-            
+
             # Apply the constrained-textarea CSS class
             edit_area.add_class("constrained-textarea")
-            
+
             # CRITICAL: Set word wrap BEFORE any other properties
             edit_area.word_wrap = True
             edit_area.show_line_numbers = False  # Disable built-in, using custom relative numbers
-            
+
             # Try setting max line length if available
             if hasattr(edit_area, 'max_line_length'):
                 edit_area.max_line_length = 80  # Enforce maximum line length
-            
+
             # Mount wrapper in preview container
             container.mount(edit_wrapper)
-            
+
             # Create line numbers widget
             line_numbers = VimLineNumbers(edit_area, id="line-numbers")
             edit_area.line_numbers_widget = line_numbers
             logger.debug(f"Created line numbers widget {id(line_numbers)} for edit_area {id(edit_area)}")
-            
+
             # Create horizontal container for line numbers and text area
             edit_container = Horizontal(id="edit-container")
-            
+
             # Mount title and content in wrapper
             edit_wrapper.mount(title_input)
             edit_wrapper.mount(edit_container)
-            
+
             # Now mount widgets in the container after it's mounted
             edit_container.mount(line_numbers)
             edit_container.mount(edit_area)
-            
+
             # Reset container scroll and refresh layout (same as selection mode)
             container.scroll_to(0, 0, animate=False)
             container.refresh(layout=True)
             edit_wrapper.refresh(layout=True)
-            
-            # Focus the content editor first instead of title input 
+
+            # Focus the content editor first instead of title input
             edit_area.focus()
-            
+
             # Initialize line numbers
             line_numbers.update_line_numbers()
-            
+
             # Debug logging to understand width issues
             logger.info(f"EditTextArea mounted - container width: {container.size.width}")
             logger.info(f"EditTextArea classes: {edit_area.classes}")
-            
+
             # Store current cursor position before entering edit mode
             table = self.query_one("#doc-table", DataTable)
             self.edit_mode_cursor_position = table.cursor_coordinate
-            
+
             # Update state
             self.edit_mode = True
             self.editing_doc_id = self.current_doc_id
-            
+
             # Update status with vim mode and tab hint
             self.cancel_refresh_timer()
             self._update_vim_status()
-            
+
         except Exception as e:
             logger.error(f"Error entering edit mode: {e}", exc_info=True)
             self.cancel_refresh_timer()
@@ -1563,11 +1586,11 @@ class MinimalDocumentBrowser(App):
         try:
             if not self.edit_mode or not self.editing_doc_id:
                 return
-            
+
             # Get the container and edit area
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
-            
+
             # Find the edit area and title input within the wrapper
             try:
                 from textual.containers import Container
@@ -1578,32 +1601,32 @@ class MinimalDocumentBrowser(App):
                 # Fallback if wrapper doesn't exist
                 edit_area = self.query_one("#preview-content", EditTextArea)
                 title_input = None
-            
+
             # Get the edited content and title
             new_content = edit_area.text
             new_title = title_input.value if title_input else None
-            
+
             # Get current document for comparison
             doc = get_document(str(self.editing_doc_id))
             if not doc:
                 return
-                
+
             # Check if content or title changed
             content_changed = new_content != edit_area.original_content
             title_changed = new_title and new_title != doc["title"]
-            
+
             if content_changed or title_changed:
                 # Update document in database
                 from emdx.models.documents import update_document
-                
+
                 # Use new title if provided, otherwise keep existing
                 final_title = new_title if new_title else doc["title"]
                 success = update_document(self.editing_doc_id, final_title, new_content)
-                
+
                 if success:
                     self.cancel_refresh_timer()
                     status.update(f"✅ Saved changes to #{self.editing_doc_id}")
-                    
+
                     # Refresh the document list to show updated timestamp
                     self.load_documents()
                     self.filter_documents(self.search_query)
@@ -1613,19 +1636,19 @@ class MinimalDocumentBrowser(App):
             else:
                 self.cancel_refresh_timer()
                 status.update("No changes made")
-            
+
             # Exit edit mode
             self.edit_mode = False
             self.editing_doc_id = None
-            
+
             # Hide vim mode indicator
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.remove_class("visible")
             vim_indicator.update("")
-            
+
             # Remove edit area and restore preview
             container.remove_children()
-            
+
             # Create new RichLog for preview
             richlog = RichLog(
                 id="preview-content",
@@ -1635,14 +1658,14 @@ class MinimalDocumentBrowser(App):
                 auto_scroll=False
             )
             container.mount(richlog)
-            
+
             # Reset container scroll and refresh layout (SAME AS SELECTION MODE)
             container.scroll_to(0, 0, animate=False)
             container.refresh(layout=True)
-            
+
             # Use deferred content restoration (SAME AS SELECTION MODE)
             self.call_after_refresh(self._restore_preview_content)
-            
+
             # Restore cursor position to where it was before edit mode
             if hasattr(self, 'edit_mode_cursor_position'):
                 table = self.query_one("#doc-table", DataTable)
@@ -1651,20 +1674,20 @@ class MinimalDocumentBrowser(App):
                 except:
                     pass  # Position might be invalid after refresh
                 delattr(self, 'edit_mode_cursor_position')
-            
+
         except Exception as e:
             logger.error(f"Error saving and exiting edit mode: {e}", exc_info=True)
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Save failed: {str(e)}")
-            
+
             # Try to recover
             try:
                 self.edit_mode = False
                 self.editing_doc_id = None
                 container = self.query_one("#preview", ScrollableContainer)
                 container.remove_children()
-                
+
                 richlog = RichLog(
                     id="preview-content",
                     wrap=True,
@@ -1673,10 +1696,10 @@ class MinimalDocumentBrowser(App):
                     auto_scroll=False
                 )
                 container.mount(richlog)
-                
+
                 if self.current_doc_id:
                     self.update_preview(self.current_doc_id)
-                    
+
                 # Try to restore cursor position even in error recovery
                 if hasattr(self, 'edit_mode_cursor_position'):
                     table = self.query_one("#doc-table", DataTable)
@@ -1693,13 +1716,13 @@ class MinimalDocumentBrowser(App):
         self.cancel_refresh_timer()
         status = self.query_one("#status", Label)
         status.update("Use 'e' to edit document in place")
-    
+
     def action_save_document(self):
         """Save the current document without exiting edit mode."""
         try:
             if not self.edit_mode or not self.editing_doc_id:
                 return
-            
+
             # Get the edit area and title input
             try:
                 from textual.containers import Container
@@ -1709,26 +1732,26 @@ class MinimalDocumentBrowser(App):
             except:
                 edit_area = self.query_one("#preview-content", EditTextArea)
                 title_input = None
-            
+
             # Get the edited content and title
             new_content = edit_area.text
             new_title = title_input.value if title_input else None
-            
+
             # Update document in database
             from emdx.models.documents import update_document
-            
+
             # Get current document for comparison
             doc = get_document(str(self.editing_doc_id))
             if doc:
                 # Use new title if provided, otherwise keep existing
                 final_title = new_title if new_title else doc["title"]
                 success = update_document(self.editing_doc_id, final_title, new_content)
-                
+
                 if success:
                     # Update original content to mark as saved
                     edit_area.original_content = new_content
                     self._update_vim_status("Document saved")
-                    
+
                     # Refresh the document list to show updated timestamp
                     self.load_documents()
                     self.filter_documents(self.search_query)
@@ -1737,28 +1760,28 @@ class MinimalDocumentBrowser(App):
         except Exception as e:
             logger.error(f"Error saving document: {e}", exc_info=True)
             self._update_vim_status(f"Save failed: {str(e)[:30]}...")
-    
+
     def action_cancel_edit(self):
         """Cancel edit mode without saving changes."""
         try:
             if not self.edit_mode:
                 return
-            
+
             # Exit edit mode
             self.edit_mode = False
             self.editing_doc_id = None
-            
+
             # Hide vim mode indicator
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.remove_class("visible")
             vim_indicator.update("")
-            
+
             # Get container
             container = self.query_one("#preview", ScrollableContainer)
-            
+
             # Remove edit area and restore preview
             container.remove_children()
-            
+
             # Create new RichLog for preview
             richlog = RichLog(
                 id="preview-content",
@@ -1768,25 +1791,25 @@ class MinimalDocumentBrowser(App):
                 auto_scroll=False
             )
             container.mount(richlog)
-            
+
             # Reset container scroll and refresh layout
             container.scroll_to(0, 0, animate=False)
             container.refresh(layout=True)
-            
+
             # Use deferred content restoration
             self.call_after_refresh(self._restore_preview_content)
-            
+
             # Update status
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update("Edit cancelled - changes discarded")
-            
+
         except Exception as e:
             logger.error(f"Error cancelling edit: {e}", exc_info=True)
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Cancel failed: {str(e)}")
-            
+
             # Try to recover
             try:
                 self.edit_mode = False
@@ -1850,15 +1873,15 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update("No document selected for tmux split")
             return
-            
+
         if not os.environ.get('TMUX'):
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update("Not running in tmux session")
             return
-            
+
         self._spawn_tmux_pane(horizontal=True)
-        
+
     def action_tmux_split_vertical(self):
         """Spawn a new tmux pane (vertical split) with the current document."""
         if not self.current_doc_id:
@@ -1866,20 +1889,20 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update("No document selected for tmux split")
             return
-            
+
         if not os.environ.get('TMUX'):
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update("Not running in tmux session")
             return
-            
+
         self._spawn_tmux_pane(horizontal=False)
-        
+
     def _spawn_tmux_pane(self, horizontal: bool = True):
         """Internal method to spawn tmux pane with current document."""
         try:
             from emdx.models.documents import get_document
-            
+
             # Get the current document
             doc = get_document(str(self.current_doc_id))
             if not doc:
@@ -1887,25 +1910,25 @@ class MinimalDocumentBrowser(App):
                 status = self.query_one("#status", Label)
                 status.update("Document not found")
                 return
-                
+
             # Create a temporary file with the document content
             with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
                 f.write(f"# {doc['title']}\n\n")
                 f.write(doc['content'])
                 temp_path = f.name
-            
+
             # Determine split direction
             split_flag = '-h' if horizontal else '-v'
-            
+
             # For now, just spawn a shell that shows the document
             # You can replace this with your Claude command later
             tmux_command = f"cat {temp_path} && echo '\n\n--- Document loaded ---' && bash"
-            
+
             # Spawn the tmux pane
             result = subprocess.run([
                 'tmux', 'split-window', split_flag, tmux_command
             ], capture_output=True, text=True)
-            
+
             if result.returncode == 0:
                 direction = "right" if horizontal else "below"
                 self.cancel_refresh_timer()
@@ -1915,12 +1938,12 @@ class MinimalDocumentBrowser(App):
                 self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
                 status.update(f"Failed to spawn tmux pane: {result.stderr}")
-                
+
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error spawning tmux pane: {e}")
-    
+
     def action_claude_execute(self):
         """Execute the current document with Python claude execution system."""
         if not self.current_doc_id:
@@ -1928,12 +1951,13 @@ class MinimalDocumentBrowser(App):
             status = self.query_one("#status", Label)
             status.update("No document selected for execution")
             return
-            
+
         try:
-            from emdx.models.documents import get_document
-            from emdx.commands.claude_execute import monitor_execution
             import threading
-            
+
+            from emdx.commands.claude_execute import execute_document_smart, get_execution_context
+            from emdx.models.documents import get_document
+
             # Get the current document
             doc = get_document(str(self.current_doc_id))
             if not doc:
@@ -1941,74 +1965,76 @@ class MinimalDocumentBrowser(App):
                 status = self.query_one("#status", Label)
                 status.update("Document not found")
                 return
-            
+
+            # Get execution context to show what will happen
+            context = get_execution_context(doc.get('tags', []))
+            status = self.query_one("#status", Label)
+            status.update(f"Executing {context['type'].value}: {context['description']}")
+
             # Create execution ID
             exec_id = f"claude-{self.current_doc_id}-{int(time.time())}"
-            
+
             # Create logs directory
             log_dir = Path.home() / ".config/emdx/logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"{exec_id}.log"
-            
-            # Create task content
-            task = f"Execute this plan:\n\n# {doc['title']}\n\n{doc['content']}"
-            
+
             # Start monitoring in background thread
             def run_execution():
-                monitor_execution(
+                execute_document_smart(
+                    doc_id=self.current_doc_id,
                     execution_id=exec_id,
-                    task=task,
-                    doc_id=str(self.current_doc_id),
-                    doc_title=doc['title'],
                     log_file=log_path,
-                    allowed_tools=None  # Use default tools
+                    allowed_tools=None,  # Use default tools
+                    verbose=False,  # Background execution
+                    background=True
                 )
-            
-            # Start execution in background thread 
+
+            # Start execution in background thread
             # Note: Don't use daemon=True as it may cause threads to die prematurely
             thread = threading.Thread(target=run_execution, daemon=False)
             thread.start()
-            
+
             # Store thread reference to prevent garbage collection
             if not hasattr(self, 'execution_threads'):
                 self.execution_threads = []
             self.execution_threads.append(thread)
-            
+
             # Show success message with worktree info
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"🚀 Claude executing in worktree: {doc['title'][:25]}... → {exec_id[:8]} (Press 'l' for logs)")
-                
+
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error starting Claude execution: {e}")
-    
+
     def action_log_browser(self):
         """Switch to log browser mode to view and switch between execution logs."""
         self.mode = "LOG_BROWSER"
         self.setup_log_browser()
-    
+
     def setup_log_browser(self):
         """Set up the log browser interface with execution list and log viewer."""
         try:
             # Load recent executions from database
             self.executions = get_recent_executions(limit=20)
-            
+
             if not self.executions:
                 self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
                 status.update("No executions found - Press 'q' to return")
                 return
-            
+
             # Start with the most recent execution
             self.current_execution_index = 0
-            
+
             # Replace the documents table with executions table
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
             table.add_columns("#", "Status", "Document", "Started", "Duration")
-            
+
             # Populate executions table
             for i, execution in enumerate(self.executions):
                 status_icon = {
@@ -2016,7 +2042,7 @@ class MinimalDocumentBrowser(App):
                     'completed': '✅',
                     'failed': '❌'
                 }.get(execution.status, '❓')
-                
+
                 duration = ""
                 if execution.duration:
                     if execution.duration < 60:
@@ -2027,7 +2053,7 @@ class MinimalDocumentBrowser(App):
                         duration = f"{mins}m{secs}s"
                 elif execution.status == 'running':
                     duration = "running..."
-                
+
                 table.add_row(
                     str(i + 1),  # Number for keyboard selection
                     f"{status_icon} {execution.status}",
@@ -2035,31 +2061,31 @@ class MinimalDocumentBrowser(App):
                     execution.started_at.strftime('%H:%M:%S'),
                     duration
                 )
-            
+
             # Select first row and load its log
             table.move_cursor(row=0)
             self.load_execution_log(0)
-            
+
             # Update status with instructions
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'q' to exit, auto-refresh every 2s)")
-            
+
             # Start monitoring for log updates
             self.start_log_monitoring()
-                
+
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error setting up log browser: {e}")
-    
+
     def _extract_log_content(self) -> str:
         """Extract plain text content from the current log for selection mode."""
         try:
             if self.mode == "LOG_BROWSER" and hasattr(self, 'current_log_file') and self.current_log_file:
                 # Get execution info for header
                 execution = self.executions[self.current_execution_index] if self.executions else None
-                
+
                 # Build header
                 lines = []
                 if execution:
@@ -2073,10 +2099,10 @@ class MinimalDocumentBrowser(App):
                         lines.append(f"Duration: {execution.duration:.1f}s")
                     lines.append("=== Log Output ===")
                     lines.append("")
-                
+
                 # Read actual log file content
                 if self.current_log_file.exists():
-                    with open(self.current_log_file, 'r') as f:
+                    with open(self.current_log_file) as f:
                         log_content = f.read()
                         if log_content:
                             lines.append(log_content)
@@ -2084,39 +2110,39 @@ class MinimalDocumentBrowser(App):
                             lines.append("(No log content yet)")
                 else:
                     lines.append("Log file not found")
-                
+
                 return "\n".join(lines)
             else:
                 return "No log content available"
         except Exception as e:
             return f"Error extracting log content: {e}"
-    
+
     def start_log_monitoring(self):
         """Start monitoring the log file for changes."""
         if hasattr(self, 'log_monitor_timer'):
             self.log_monitor_timer.stop()
-        
+
         # Monitor every 2 seconds in log browser mode
         self.log_monitor_timer = self.set_interval(2.0, self.update_log_content)
         self.last_log_size = 0
-    
+
     def update_log_content(self):
         """Update log content if file has changed."""
         if not hasattr(self, 'current_log_file') or self.mode != "LOG_BROWSER":
             return
-            
+
         try:
             if not self.current_log_file or not self.current_log_file.exists():
                 return
-                
+
             # Check if file has grown
             current_size = self.current_log_file.stat().st_size
             if current_size > self.last_log_size:
                 # Read new content
-                with open(self.current_log_file, 'r') as f:
+                with open(self.current_log_file) as f:
                     f.seek(self.last_log_size)
                     new_content = f.read()
-                    
+
                 if new_content:
                     try:
                         preview = self.query_one("#preview-content", RichLog)
@@ -2126,32 +2152,32 @@ class MinimalDocumentBrowser(App):
                     except Exception:
                         # Widget doesn't exist (different screen) - skip update
                         pass
-                    
+
                 self.last_log_size = current_size
-                
-        except Exception as e:
+
+        except Exception:
             # Silently handle file reading errors
             pass
-    
+
     def load_execution_log(self, index: int):
         """Load the log file for the execution at the given index."""
         if index < 0 or index >= len(self.executions):
             return
-            
+
         try:
             execution = self.executions[index]
             self.current_execution_index = index
             self.current_log_file = Path(execution.log_file)
-            
+
             # Clear preview and load log content
             try:
                 preview = self.query_one("#preview-content", RichLog)
             except Exception:
                 # Widget doesn't exist (different screen) - cannot load log
                 return
-            
+
             preview.clear()
-            
+
             # Show execution header
             preview.write(f"[bold cyan]=== Execution {execution.id} ===[/bold cyan]")
             preview.write(f"[yellow]Document:[/yellow] {execution.doc_title}")
@@ -2163,25 +2189,25 @@ class MinimalDocumentBrowser(App):
                 preview.write(f"[yellow]Duration:[/yellow] {execution.duration:.1f}s")
             preview.write("[bold cyan]=== Log Output ===[/bold cyan]")
             preview.write("")
-            
+
             # Load log file content
             if self.current_log_file.exists():
-                with open(self.current_log_file, 'r') as f:
+                with open(self.current_log_file) as f:
                     content = f.read()
                     if content:
                         preview.write(content)
                     else:
                         preview.write("[dim](No log content yet)[/dim]")
-                
+
                 # Reset size tracking for live updates
                 self.last_log_size = self.current_log_file.stat().st_size
             else:
                 preview.write("[red]Log file not found[/red]")
                 self.last_log_size = 0
-            
+
             # Auto-scroll to bottom
             preview.scroll_end(animate=False)
-            
+
             # Highlight current row in table
             try:
                 table = self.query_one("#doc-table", DataTable)
@@ -2189,7 +2215,7 @@ class MinimalDocumentBrowser(App):
             except Exception:
                 # Table doesn't exist (different screen) - skip highlighting
                 pass
-            
+
         except Exception as e:
             self.cancel_refresh_timer()
             try:
@@ -2198,32 +2224,32 @@ class MinimalDocumentBrowser(App):
             except Exception:
                 # Status widget doesn't exist (different screen) - ignore error
                 pass
-    
+
     def action_next_log(self):
         """Switch to next execution log (j in LOG_BROWSER mode)."""
         if self.mode != "LOG_BROWSER":
             return
-            
+
         if hasattr(self, 'current_execution_index') and hasattr(self, 'executions') and self.executions:
             self.current_execution_index = (self.current_execution_index + 1) % len(self.executions)
             self.load_execution_log(self.current_execution_index)
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
-    
+
     def action_prev_log(self):
         """Switch to previous execution log (k in LOG_BROWSER mode)."""
         if self.mode != "LOG_BROWSER":
             return
-            
+
         if hasattr(self, 'current_execution_index') and hasattr(self, 'executions') and self.executions:
             self.current_execution_index = (self.current_execution_index - 1) % len(self.executions)
             self.load_execution_log(self.current_execution_index)
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
-    
+
     def on_key(self, event: events.Key) -> None:
         """Handle key events, especially j/k for log switching in LOG_BROWSER mode."""
         try:
             key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
-            
+
             # Handle j/k keys for log switching in log browser mode only
             if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
                 if hasattr(event, 'key') and event.key:
@@ -2237,15 +2263,15 @@ class MinimalDocumentBrowser(App):
                         event.stop()
                         event.prevent_default()
                         return
-            
+
             # Note: App class doesn't have on_key method, so we don't call super()
             pass
         except Exception as e:
             # Log error but don't crash
             key_logger.error(f"Error in on_key: {e}")
             # Don't try to call super().on_key() as App doesn't have this method
-    
-    
+
+
     async def on_event(self, event) -> None:
         """Handle all events safely."""
         try:
@@ -2253,7 +2279,7 @@ class MinimalDocumentBrowser(App):
         except Exception as e:
             logger.error(f"Error handling event {type(event).__name__}: {e}")
             # Don't re-raise, just log and continue
-    
+
     def on_data_table_row_highlighted(self, message: DataTable.RowHighlighted) -> None:
         """Handle row selection in both document and execution modes."""
         try:
@@ -2289,13 +2315,13 @@ class MinimalDocumentBrowser(App):
             logger.error(f"Error in action_quit: {e}")
             # Fallback to exit
             self.exit()
-    
+
     def stop_log_monitoring(self):
         """Stop the log monitoring timer."""
         if hasattr(self, 'log_monitor_timer'):
             self.log_monitor_timer.stop()
             delattr(self, 'log_monitor_timer')
-    
+
     def reload_documents(self):
         """Reload the document view after exiting log browser."""
         try:
@@ -2303,10 +2329,10 @@ class MinimalDocumentBrowser(App):
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
             table.add_columns("ID", "Title", "Tags")
-            
+
             # Reload documents
             self.load_documents()
-            
+
             # Repopulate the table
             for doc in self.filtered_docs:
                 # Format timestamp as MM-DD HH:MM (11 chars)
@@ -2332,17 +2358,17 @@ class MinimalDocumentBrowser(App):
                     formatted_title,
                     tags_str or "-",
                 )
-            
+
             # Focus the table and update preview
             table.focus()
             if self.filtered_docs:
                 table.move_cursor(row=0)
                 self.current_doc_id = self.filtered_docs[0]["id"]
                 self.update_preview(self.current_doc_id)
-            
+
             # Update status
             self.update_status()
-            
+
         except Exception as e:
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
