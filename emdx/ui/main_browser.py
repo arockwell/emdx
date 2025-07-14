@@ -31,11 +31,14 @@ from emdx.models.tags import (
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
+from emdx.utils.git_ops import is_git_repository
 
 from .document_viewer import FullScreenView
+from .git_browser import GitBrowserMixin
 from .inputs import TitleInput
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from .worktree_picker import WorktreePickerScreen
 
 # Set up logging
 log_dir = None
@@ -120,7 +123,7 @@ class SimpleVimLineNumbers(Static):
         
         logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")
 
-class MinimalDocumentBrowser(App):
+class MinimalDocumentBrowser(GitBrowserMixin, App):
     """Minimal document browser that signals external wrapper for nvim."""
 
     ENABLE_COMMAND_PALETTE = False
@@ -368,7 +371,11 @@ class MinimalDocumentBrowser(App):
         Binding("r", "refresh", "Refresh", key_display="r"),
         Binding("n", "new_note", "New Note", key_display="n"),
         Binding("e", "toggle_edit_mode", "Edit in place", key_display="e"),
-        Binding("d", "delete", "Delete", show=False),
+        Binding("d", "git_diff_browser", "Git Diff", key_display="d"),
+        Binding("a", "git_stage_file", "Stage File", show=False),
+        Binding("u", "git_unstage_file", "Unstage File", show=False), 
+        Binding("c", "git_commit", "Commit", show=False),
+        Binding("R", "git_discard_changes", "Discard Changes", show=False),
         Binding("enter", "view", "View", show=False),
         Binding("t", "tag_mode", "Tag", key_display="t"),
         Binding("T", "untag_mode", "Untag", show=False),
@@ -380,6 +387,8 @@ class MinimalDocumentBrowser(App):
         Binding("f", "open_file_browser", "Files", key_display="f"),
         Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
+        Binding("D", "delete", "Delete", key_display="D"),
+        Binding("w", "switch_worktree", "Switch Worktree", show=False),
     ]
 
     mode = reactive("NORMAL")
@@ -2866,6 +2875,75 @@ class MinimalDocumentBrowser(App):
             self.load_execution_log(self.current_execution_index)
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
 
+    def on_key(self, event: events.Key) -> None:
+        """Handle key events, especially j/k for log switching in LOG_BROWSER mode."""
+        try:
+            key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
+
+            # Handle j/k keys for log switching in log browser mode only
+            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER" and hasattr(self, 'executions'):
+                if hasattr(event, 'key') and event.key:
+                    if event.key == "j":
+                        self.action_next_log()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "k":
+                        self.action_prev_log()
+                        event.stop()
+                        event.prevent_default()
+                        return
+            
+            # Handle j/k/w keys for git diff switching in git diff browser mode
+            if hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
+                if hasattr(event, 'key') and event.key:
+                    if event.key == "j" and hasattr(self, 'git_files'):
+                        self.action_git_diff_next()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "k" and hasattr(self, 'git_files'):
+                        self.action_git_diff_prev()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "w":
+                        # Handle worktree switching
+                        self.action_switch_worktree()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "a":
+                        # Stage current file
+                        self.action_git_stage_file()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "u":
+                        # Unstage current file
+                        self.action_git_unstage_file()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "c":
+                        # Commit staged changes
+                        self.action_git_commit()
+                        event.stop()
+                        event.prevent_default()
+                        return
+                    elif event.key == "R":
+                        # Discard changes to current file
+                        self.action_git_discard_changes()
+                        event.stop()
+                        event.prevent_default()
+                        return
+
+            # Note: App class doesn't have on_key method, so we don't call super()
+            pass
+        except Exception as e:
+            # Log error but don't crash
+            key_logger.error(f"Error in on_key: {e}")
+            # Don't try to call super().on_key() as App doesn't have this method
 
     async def on_event(self, event) -> None:
         """Handle all events safely."""
@@ -2882,6 +2960,10 @@ class MinimalDocumentBrowser(App):
                 # In log browser mode, load the selected execution's log
                 if hasattr(self, 'executions') and message.cursor_row < len(self.executions):
                     self.load_execution_log(message.cursor_row)
+            elif hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
+                # In git diff browser mode, load the selected file's diff
+                if hasattr(self, 'git_files') and message.cursor_row < len(self.git_files):
+                    self.load_git_diff(message.cursor_row)
             else:
                 # Original document preview logic
                 if hasattr(self, 'filtered_docs') and message.cursor_row < len(self.filtered_docs):
@@ -2897,6 +2979,74 @@ class MinimalDocumentBrowser(App):
             logger.error(f"Error in on_data_table_row_highlighted: {e}")
             # Don't crash, just log the error
 
+    def action_git_diff_browser(self):
+        """Switch to git diff browser mode to view file changes."""
+        # Check if we're in a git repository
+        if not is_git_repository():
+            status = self.query_one("#status", Label)
+            status.update("Not in a git repository - cannot show git diff")
+            return
+        
+        self.mode = "GIT_DIFF_BROWSER"
+        self.setup_git_diff_browser()
+
+    
+    
+    def action_git_diff_next(self):
+        """Switch to next git file (j in GIT_DIFF_BROWSER mode)."""
+        self.navigate_git_diff(1)
+    
+    def action_git_diff_prev(self):
+        """Switch to previous git file (k in GIT_DIFF_BROWSER mode)."""
+        self.navigate_git_diff(-1)
+    
+    def action_switch_worktree(self):
+        """Show worktree picker modal (w key)."""
+        if self.mode != "GIT_DIFF_BROWSER":
+            return
+        
+        if not hasattr(self, 'worktrees') or len(self.worktrees) <= 1:
+            status = self.query_one("#status", Label)
+            status.update("No other worktrees available")
+            return
+        
+        # Show worktree picker modal
+        def on_worktree_selected(new_index: int):
+            """Handle worktree selection from picker."""
+            try:
+                old_index = self.current_worktree_index
+                self.current_worktree_index = new_index
+                new_worktree = self.worktrees[new_index]
+                old_worktree = self.worktrees[old_index]
+                
+                # Show detailed switching info
+                status = self.query_one("#status", Label)
+                status.update(f"🔄 Switching: {old_worktree.name} → {new_worktree.name} | Path: {new_worktree.path}")
+                
+                # Update the current worktree path
+                old_path = self.current_worktree_path
+                self.current_worktree_path = new_worktree.path
+                
+                # Debug info
+                logger.info(f"Worktree switch: {old_path} → {new_worktree.path}")
+                
+                # Reload git status for new worktree
+                self.setup_git_diff_browser()
+                
+            except Exception as e:
+                logger.error(f"Error switching worktree: {e}")
+                status = self.query_one("#status", Label)
+                status.update(f"❌ Error switching worktree: {e}")
+        
+        # Launch the worktree picker modal
+        picker = WorktreePickerScreen(
+            worktrees=self.worktrees,
+            current_index=self.current_worktree_index,
+            callback=on_worktree_selected
+        )
+        self.push_screen(picker)
+
+
     def action_quit(self):
         try:
             if hasattr(self, 'mode'):
@@ -2908,6 +3058,10 @@ class MinimalDocumentBrowser(App):
                 elif self.mode == "FILE_BROWSER":
                     # Exit file browser mode and return to document mode
                     self.exit_file_browser()
+                elif self.mode == "GIT_DIFF_BROWSER":
+                    # Exit git diff browser mode and return to document mode
+                    self.mode = "NORMAL"
+                    self.reload_documents()
                 else:
                     # Clean exit - subprocess are detached and will continue running
                     self.exit()
@@ -2919,6 +3073,12 @@ class MinimalDocumentBrowser(App):
             # Fallback to exit
             self.exit()
 
+    def exit_file_browser(self):
+        """Exit file browser mode and return to document mode."""
+        # Placeholder for file browser functionality that will come from main
+        self.mode = "NORMAL"
+        self.reload_documents()
+    
     def stop_log_monitoring(self):
         """Stop the log monitoring timer."""
         self.cancel_log_monitor_timer()
