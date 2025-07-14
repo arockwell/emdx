@@ -41,8 +41,8 @@ class SQLiteDatabase:
         return self._connection.ensure_schema()
 
     # Document operations - delegate to documents module
-    def save_document(self, title, content, project=None):
-        return save_document(title, content, project)
+    def save_document(self, title, content, project=None, tags=None, parent_id=None):
+        return save_document(title, content, project, tags, parent_id)
 
     def get_document(self, identifier):
         return get_document(identifier)

@@ -174,18 +174,24 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 
 ### Development Setup
 ```bash
-# Install with poetry (recommended)
-poetry install
+# Install with pipx (recommended for global CLI usage)
+pipx install -e . --python python3.13
 emdx --help
 
-# Or with pip
+# Or with poetry (for development)
+poetry install
+poetry run emdx --help
+
+# Or with pip in a virtual environment
+python3 -m venv venv
+source venv/bin/activate
 pip install -e .
 emdx --help
 
 # Run tests
 pytest
 # or
-pytest
+poetry run pytest
 ```
 
 ### Useful Commands

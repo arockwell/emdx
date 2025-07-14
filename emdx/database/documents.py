@@ -8,19 +8,26 @@ from typing import Any, Optional
 from .connection import db_connection
 
 
-def save_document(title: str, content: str, project: Optional[str] = None) -> int:
+def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
     """Save a document to the knowledge base"""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO documents (title, content, project)
-            VALUES (?, ?, ?)
+            INSERT INTO documents (title, content, project, parent_id)
+            VALUES (?, ?, ?, ?)
         """,
-            (title, content, project),
+            (title, content, project, parent_id),
         )
 
         conn.commit()
-        return cursor.lastrowid
+        doc_id = cursor.lastrowid
+        
+        # Add tags if provided
+        if tags:
+            from emdx.models.tags import add_tags_to_document
+            add_tags_to_document(doc_id, tags)
+        
+        return doc_id
 
 
 def get_document(identifier: str) -> Optional[dict[str, Any]]:
