@@ -71,6 +71,14 @@ TOOL_EMOJIS = {
     "WebFetch": "🌐",
 }
 
+# Emoji mappings for execution types
+EXECUTION_TYPE_EMOJIS = {
+    ExecutionType.NOTE: "📝",
+    ExecutionType.ANALYSIS: "🔍", 
+    ExecutionType.GAMEPLAN: "🎯",
+    ExecutionType.GENERIC: "⚡"
+}
+
 
 def get_execution_context(doc_tags: list[str]) -> dict[str, Any]:
     """Determine execution behavior based on document tags."""
@@ -168,7 +176,14 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
         data = json.loads(line)
 
         # Handle different event types
-        if data.get("type") == "assistant" and "message" in data:
+        if data.get("type") == "system":
+            # Handle system initialization messages
+            if data.get("subtype") == "init":
+                return f"{format_timestamp()} 🚀 Claude Code session started"
+            # Skip other system messages for now
+            return None
+
+        elif data.get("type") == "assistant" and "message" in data:
             # Extract text content from assistant messages
             msg = data.get("message", {})
             content = msg.get("content", [])
@@ -204,19 +219,20 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
             # Handle the final result message
             if data.get("subtype") == "success":
                 duration = time.time() - start_time
-                msg = f"{format_timestamp()} ✅ Task completed!\n"
-                msg += f"{format_timestamp()} ⏱️  Duration: {duration:.2f}s"
-                return msg
+                return f"{format_timestamp()} ✅ Task completed successfully! Duration: {duration:.2f}s"
             else:
                 return f"{format_timestamp()} ❌ Task failed: {data.get('result', 'Unknown error')}"
 
-        # Return raw JSON for unhandled types (for debugging)
-        return None
+        # For debugging: show unhandled JSON types (this was the source of "JSON shit")
+        return f"{format_timestamp()} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
 
     except json.JSONDecodeError:
         # Not JSON - return as plain text if it's not empty
         if line and not line.startswith("{"):
             return f"{format_timestamp()} 💬 {line}"
+        else:
+            # Malformed JSON - show for debugging
+            return f"{format_timestamp()} ⚠️  Malformed JSON: {line[:100]}..."
 
     return None
 
@@ -227,7 +243,8 @@ def execute_with_claude_detached(
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None
+    doc_id: Optional[str] = None,
+    context: Optional[dict] = None
 ) -> None:
     """Execute a task with Claude in a fully detached background process.
     
@@ -264,7 +281,15 @@ def execute_with_claude_detached(
             f.write(f"Worktree: {working_dir}\n")
         f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
         f.write(f"{'=' * 50}\n\n")
-        f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
+        # Get execution type emoji and description
+        if context and context.get('type'):
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+            exec_type = context['type'].value.upper()
+            exec_desc = context.get('description', 'Executing document')
+            f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
+            f.write(f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n")
+        else:
+            f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
         f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
         f.write(f"{format_timestamp()} 📝 Prompt being sent to Claude:\n")
         f.write(f"{'─' * 60}\n")
@@ -321,7 +346,8 @@ def execute_with_claude(
     allowed_tools: Optional[List[str]] = None,
     verbose: bool = True,
     working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None
+    doc_id: Optional[str] = None,
+    context: Optional[dict] = None
 ) -> int:
     """Execute a task with Claude, streaming output to log file.
 
@@ -365,7 +391,15 @@ def execute_with_claude(
             f.write(f"Worktree: {working_dir}\n")
         f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
         f.write(f"{'=' * 50}\n\n")
-        f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
+        # Get execution type emoji and description
+        if context and context.get('type'):
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+            exec_type = context['type'].value.upper()
+            exec_desc = context.get('description', 'Executing document')
+            f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
+            f.write(f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n")
+        else:
+            f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
         f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
         f.write(f"{format_timestamp()} 📝 Prompt being sent to Claude:\n")
         f.write(f"{'─' * 60}\n")
@@ -408,7 +442,13 @@ def execute_with_claude(
             duration = time.time() - exec_start_time
             end_time = datetime.now()
             if exit_code == 0:
-                log.write(f"\n{format_timestamp()} ✅ Execution completed successfully\n")
+                if context and context.get('type'):
+                    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+                    exec_type = context['type'].value.upper()
+                    log.write(f"\n{format_timestamp()} ✅ {exec_type} execution completed successfully!\n")
+                    log.write(f"{format_timestamp()} {exec_emoji} All tasks finished\n")
+                else:
+                    log.write(f"\n{format_timestamp()} ✅ Execution completed successfully\n")
             else:
                 log.write(f"\n{format_timestamp()} ❌ Process exited with code {exit_code}\n")
             log.write(f"{format_timestamp()} ⏱️  Duration: {duration:.1f}s\n")
@@ -488,7 +528,8 @@ def execute_document_smart_background(
         log_file=log_file,
         allowed_tools=allowed_tools,
         working_dir=working_dir,
-        doc_id=str(doc_id)
+        doc_id=str(doc_id),
+        context=context
     )
 
 
@@ -538,7 +579,10 @@ def execute_document_smart(
         console.print(f"[dim]Using default tools (stage-specific disabled)[/dim]")
 
     # Log execution type
-    console.print(f"[cyan]Executing {context['type'].value}: {context['description']}[/cyan]")
+    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+    exec_type = context['type'].value.upper()
+    console.print(f"[bold cyan]{exec_emoji} {exec_type} EXECUTION[/bold cyan]")
+    console.print(f"[cyan]📋 {context['description']}[/cyan]")
     if verbose and allowed_tools:
         console.print(f"[dim]Allowed tools: {', '.join(allowed_tools)}[/dim]")
 
@@ -569,7 +613,8 @@ def execute_document_smart(
         allowed_tools=allowed_tools,
         verbose=verbose,
         working_dir=working_dir,
-        doc_id=str(doc_id)
+        doc_id=str(doc_id),
+        context=context
     )
 
     # Update execution status
@@ -577,10 +622,19 @@ def execute_document_smart(
     update_execution_status(execution_id, status, exit_code)
 
     # Handle output based on context
-    if exit_code == 0 and context['type'] == ExecutionType.GAMEPLAN:
-        # Update original gameplan tags
-        add_tags_to_document(str(doc_id), ['done', 'success'])
-        console.print("[green]Gameplan implemented successfully![/green]")
+    if exit_code == 0:
+        if context['type'] == ExecutionType.GAMEPLAN:
+            # Update original gameplan tags
+            add_tags_to_document(str(doc_id), ['done', 'success'])
+            console.print(f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.GAMEPLAN]} Gameplan implemented successfully![/green]")
+        elif context['type'] == ExecutionType.ANALYSIS:
+            console.print(f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.ANALYSIS]} Analysis completed successfully![/green]")
+        elif context['type'] == ExecutionType.NOTE:
+            console.print(f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.NOTE]} Note analysis completed successfully![/green]")
+        else:
+            console.print("[green]✅ Execution completed successfully![/green]")
+    else:
+        console.print(f"[red]❌ Execution failed with exit code {exit_code}[/red]")
 
     return None
 
@@ -690,7 +744,8 @@ def monitor_execution_detached(
             log_file=log_file,
             allowed_tools=allowed_tools,
             working_dir=working_dir,
-            doc_id=doc_id
+            doc_id=doc_id,
+            context=None  # Context not available in these functions yet
         )
     except Exception as e:
         # Log error
@@ -746,7 +801,8 @@ def monitor_execution(
             allowed_tools=allowed_tools,
             verbose=False,  # Don't show output when running in background
             working_dir=working_dir,
-            doc_id=doc_id
+            doc_id=doc_id,
+            context=None  # Context not available in these functions yet
         )
 
         # Update execution status
@@ -803,7 +859,10 @@ def execute(
 
             # Get execution context to show what will happen
             context = get_execution_context(doc_tags)
-            console.print(f"[cyan]Type: {context['type'].value} - {context['description']}[/cyan]")
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+            exec_type = context['type'].value.upper()
+            console.print(f"[bold cyan]{exec_emoji} {exec_type} EXECUTION[/bold cyan]")
+            console.print(f"[cyan]📋 {context['description']}[/cyan]")
 
             # Execute in background without blocking
             execute_document_smart_background(
@@ -878,7 +937,8 @@ def execute(
                 allowed_tools=allowed_tools,
                 verbose=True,
                 working_dir=working_dir,
-                doc_id=doc_id
+                doc_id=doc_id,
+                context=None  # Direct execution - no context analysis
             )
 
             # Update status
