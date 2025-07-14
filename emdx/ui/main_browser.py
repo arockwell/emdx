@@ -80,25 +80,30 @@ class SimpleVimLineNumbers(Static):
         """Set line numbers given current line (0-based) and total lines."""
         logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
         
+        from rich.text import Text
+        
         lines = []
         for i in range(total_lines):
             if i == current_line:
-                # Current line shows absolute number (1-based)
-                line_str = f"{i+1:>3}"
-                lines.append(line_str)
-                logger.debug(f"  Line {i}: CURRENT -> '{line_str}'")
+                # Current line shows absolute number (1-based) with highlighting
+                line_num = i + 1
+                # Make current line visually distinct with bold and different color
+                line_text = Text(f"{line_num:>3}", style="bold yellow")
+                lines.append(line_text)
+                logger.debug(f"  Line {i}: CURRENT -> bold yellow '{line_num}'")
             else:
-                # Other lines show distance from current line
+                # Other lines show distance from current line in muted color
                 distance = abs(i - current_line)
-                line_str = f"{distance:>3}"
-                lines.append(line_str)
-                logger.debug(f"  Line {i}: distance {distance} -> '{line_str}'")
+                line_text = Text(f"{distance:>3}", style="dim cyan")
+                lines.append(line_text)
+                logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
         
-        result = "\n".join(lines)
-        logger.debug(f"🔢 Final result: {repr(result)}")
+        # Join with Rich Text newlines
+        result = Text("\n").join(lines)
+        logger.debug(f"🔢 Rich Text result created with {len(lines)} lines")
         logger.debug(f"🔢 Widget content BEFORE update: {repr(self.renderable)}")
         
-        # Update widget content
+        # Update widget content with Rich Text
         self.update(result)
         
         logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")
