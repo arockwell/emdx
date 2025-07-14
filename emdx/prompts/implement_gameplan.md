@@ -12,7 +12,7 @@ Important:
 - Include the gameplan document ID in the PR description
 - Update any relevant documentation
 - Run tests and linters before completing
-- Mark the gameplan as complete by running: just run tag [gameplan_id] done success
+- Mark the gameplan as complete by running: emdx tag [gameplan_id] done success
 
 Gameplan content:
 ---

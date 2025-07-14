@@ -100,10 +100,24 @@ def migration_002_add_executions(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_003_add_document_relationships(conn: sqlite3.Connection):
+    """Add parent_id column to track document generation relationships."""
+    cursor = conn.cursor()
+
+    # Add parent_id column to documents table
+    cursor.execute("ALTER TABLE documents ADD COLUMN parent_id INTEGER")
+    
+    # Add foreign key constraint (SQLite doesn't support adding FK constraints later)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_parent_id ON documents(parent_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (1, "Add tags system", migration_001_add_tags),
     (2, "Add executions tracking", migration_002_add_executions),
+    (3, "Add document relationships", migration_003_add_document_relationships),
 ]
 
 

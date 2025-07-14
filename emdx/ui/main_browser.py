@@ -458,6 +458,92 @@ class MinimalDocumentBrowser(App):
         else:
             return ""
 
+    def get_related_documents(self, doc_id: int) -> str:
+        """Find related documents and show the generation chain."""
+        from emdx.models.documents import list_documents
+        
+        # Get current document to extract base title
+        current_doc = get_document(str(doc_id))
+        if not current_doc:
+            return ""
+            
+        title = current_doc['title']
+        current_tags = set(current_doc.get('tags', []))
+        
+        # Determine current document type
+        if 'notes' in current_tags or '📝' in current_tags or title.startswith("New Note"):
+            current_type = 'note'
+        elif 'analysis' in current_tags or '🔍' in current_tags or title.startswith("Analysis:"):
+            current_type = 'analysis'
+        elif 'gameplan' in current_tags or '🎯' in current_tags or title.startswith("Gameplan:"):
+            current_type = 'gameplan'
+        else:
+            current_type = 'unknown'
+        
+        base_title = (title
+                     .replace("New Note - ", "")
+                     .replace("Analysis: ", "")
+                     .replace("Gameplan: ", "")
+                     .split(" - ")[0])  # Remove timestamp if present
+        
+        # Find documents with similar base titles
+        all_docs = list_documents(limit=1000)  # Get all docs
+        related = {'note': [], 'analysis': [], 'gameplan': [], 'other': []}
+        
+        for doc in all_docs:
+            if doc['id'] == doc_id:
+                continue
+                
+            doc_title = doc['title']
+            if base_title.lower() in doc_title.lower():
+                # Determine document type by tags or title
+                tags = set(doc.get('tags', []))
+                if 'notes' in tags or '📝' in tags or doc_title.startswith("New Note"):
+                    related['note'].append(doc['id'])
+                elif 'analysis' in tags or '🔍' in tags or doc_title.startswith("Analysis:"):
+                    related['analysis'].append(doc['id'])
+                elif 'gameplan' in tags or '🎯' in tags or doc_title.startswith("Gameplan:"):
+                    related['gameplan'].append(doc['id'])
+                else:
+                    related['other'].append(doc['id'])
+        
+        # Build the chain display
+        result_lines = []
+        
+        # Show generation source (what created this)
+        if current_type == 'analysis' and related['note']:
+            result_lines.append(f"**Generated from:** 📝 #{related['note'][0]}")
+        elif current_type == 'gameplan' and related['analysis']:
+            result_lines.append(f"**Generated from:** 🔍 #{related['analysis'][0]}")
+            if related['note']:
+                result_lines.append(f"**Original note:** 📝 #{related['note'][0]}")
+        
+        # Show generation outputs (what this created)
+        if current_type == 'note' and related['analysis']:
+            result_lines.append(f"**Generated analysis:** 🔍 #{related['analysis'][0]}")
+            if related['gameplan']:
+                result_lines.append(f"**Generated gameplan:** 🎯 #{related['gameplan'][0]}")
+        elif current_type == 'analysis' and related['gameplan']:
+            result_lines.append(f"**Generated gameplan:** 🎯 #{related['gameplan'][0]}")
+        
+        # Show all related if there are multiple
+        all_related = []
+        for note_id in related['note']:
+            all_related.append(f"📝 #{note_id}")
+        for analysis_id in related['analysis']:
+            all_related.append(f"🔍 #{analysis_id}")
+        for gameplan_id in related['gameplan']:
+            all_related.append(f"🎯 #{gameplan_id}")
+        for other_id in related['other']:
+            all_related.append(f"📄 #{other_id}")
+        
+        if len(all_related) > 1:  # More than just direct parent/child
+            result_lines.append(f"**All related:** {', '.join(all_related)}")
+        
+        if result_lines:
+            return "\n\n" + "\n".join(result_lines)
+        return ""
+
     def update_preview(self, doc_id: int):
         try:
             doc = get_document(str(doc_id))
@@ -468,21 +554,29 @@ class MinimalDocumentBrowser(App):
                     # We're in formatted mode
                     preview_area.clear()
 
-                    # Add execution hint if applicable
+                    # Add execution hint and related documents
                     hint = self.get_execution_hint(doc.get('tags', []))
+                    related = self.get_related_documents(doc_id)
 
                     content = doc["content"].strip()
                     content_lines = content.split("\n")
                     first_line = content_lines[0].strip() if content_lines else ""
 
+                    # Build the full content with hint and related docs
+                    extra_content = ""
+                    if hint:
+                        extra_content += f"*{hint}*\n\n"
+                    if related:
+                        extra_content += related + "\n\n"
+
                     if first_line == f"# {doc['title']}":
-                        if hint:
-                            markdown_content = f"# {doc['title']}\n\n*{hint}*\n\n{content[len(first_line)+1:].strip()}"
+                        if extra_content:
+                            markdown_content = f"# {doc['title']}\n\n{extra_content}{content[len(first_line)+1:].strip()}"
                         else:
                             markdown_content = content
                     else:
-                        if hint:
-                            markdown_content = f"# {doc['title']}\n\n*{hint}*\n\n{content}"
+                        if extra_content:
+                            markdown_content = f"# {doc['title']}\n\n{extra_content}{content}"
                         else:
                             markdown_content = f"# {doc['title']}\n\n{content}"
 
@@ -517,11 +611,23 @@ class MinimalDocumentBrowser(App):
                 except Exception:
                     pass
 
-    def update_status(self):
-        # Cancel any pending refresh timer when updating status
-        self.cancel_refresh_timer()
+    def update_status(self, custom_message=None):
+        # Cancel refresh timer, but preserve log monitoring in LOG_BROWSER mode
+        if self.mode != "LOG_BROWSER":
+            self.cancel_refresh_timer()
+        else:
+            # In log browser mode, only cancel the status refresh timer, not log monitoring
+            if self.refresh_timer:
+                self.refresh_timer.stop()
+                self.refresh_timer = None
 
         status = self.query_one("#status", Label)
+        
+        # If custom message provided, use it directly
+        if custom_message:
+            status.update(custom_message)
+            return
+            
         search_input = self.query_one("#search-input", Input)
 
         # Build status with document count
@@ -790,6 +896,14 @@ class MinimalDocumentBrowser(App):
 
     def on_key(self, event: events.Key) -> None:
         try:
+            # Check if any modal or screen is active (screen stack > 1 means another screen is pushed)
+            if len(self.screen_stack) > 1:
+                # Another screen is active, let it handle the key event
+                active_screen = self.screen_stack[-1]
+                screen_type = type(active_screen).__name__
+                key_logger.info(f"{screen_type} active, passing key event through: key={event.key}")
+                return
+            
             # Comprehensive logging of ALL key events
             event_attrs = {}
             for attr in ["key", "character", "name", "is_printable", "aliases"]:
@@ -986,6 +1100,7 @@ class MinimalDocumentBrowser(App):
 
 
     def action_delete(self):
+        logger.info(f"action_delete called, mode={self.mode}, current_doc_id={self.current_doc_id}")
         if self.mode == "SEARCH" or not self.current_doc_id:
             return
 
@@ -994,6 +1109,7 @@ class MinimalDocumentBrowser(App):
             doc = self.filtered_docs[table.cursor_row]
 
             def check_delete(should_delete: bool) -> None:
+                logger.info(f"check_delete callback called with: {should_delete}")
                 if should_delete:
                     result = subprocess.run(
                         [
@@ -1010,7 +1126,13 @@ class MinimalDocumentBrowser(App):
                     if result.returncode == 0:
                         self.load_documents()
                         self.filter_documents(self.search_query)
+                        status = self.query_one("#status", Label)
+                        status.update(f"Document #{self.current_doc_id} deleted")
+                else:
+                    status = self.query_one("#status", Label)
+                    status.update("Delete cancelled")
 
+            logger.info(f"Pushing DeleteConfirmScreen for doc #{doc['id']}: {doc['title']}")
             self.push_screen(DeleteConfirmScreen(doc["id"], doc["title"]), check_delete)
 
     def action_view(self):
@@ -1861,11 +1983,120 @@ class MinimalDocumentBrowser(App):
         self.update_status()
         self.refresh_timer = None
 
+    def restore_log_browser_status(self):
+        """Restore the log browser status display after auto-refresh messages."""
+        try:
+            if hasattr(self, 'executions') and self.mode == "LOG_BROWSER":
+                status = self.query_one("#status", Label)
+                status.update(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'q' to exit, auto-refresh every 2s)")
+        except Exception:
+            pass
+
+    def refresh_execution_list(self):
+        """Refresh the execution list to catch status changes and new executions."""
+        try:
+            # Get current position and selected execution
+            table = self.query_one("#doc-table", DataTable)
+            old_row = table.cursor_row if hasattr(table, 'cursor_row') else 0
+            old_execution_id = None
+            if hasattr(self, 'current_execution_index') and hasattr(self, 'executions') and self.executions:
+                if self.current_execution_index < len(self.executions):
+                    old_execution_id = self.executions[self.current_execution_index].id
+            
+            # Get fresh executions
+            old_count = len(self.executions) if hasattr(self, 'executions') else 0
+            fresh_executions = get_recent_executions(limit=20)
+            new_count = len(fresh_executions)
+            
+            # Only update if there are actual changes to avoid disrupting user interaction
+            if old_count == new_count and hasattr(self, 'executions'):
+                # Check if any status changed
+                status_changed = False
+                for i, (old_exec, new_exec) in enumerate(zip(self.executions, fresh_executions)):
+                    if old_exec.id == new_exec.id and old_exec.status != new_exec.status:
+                        status_changed = True
+                        break
+                
+                if not status_changed:
+                    logger.debug("No execution changes detected, skipping refresh")
+                    return
+            
+            logger.debug(f"Refreshing executions: {old_count} -> {new_count}")
+            self.executions = fresh_executions
+            
+            # Clear and repopulate table
+            table.clear(columns=True)
+            table.add_columns("Recent", "Status", "Document", "Started", "Duration")
+            
+            # Populate executions table with fresh data
+            for i, execution in enumerate(self.executions):
+                status_icon = {
+                    'running': '🔄',
+                    'completed': '✅',
+                    'failed': '❌'
+                }.get(execution.status, '❓')
+
+                duration = ""
+                if execution.duration:
+                    if execution.duration < 60:
+                        duration = f"{int(execution.duration)}s"
+                    else:
+                        mins = int(execution.duration // 60)
+                        secs = int(execution.duration % 60)
+                        duration = f"{mins}m{secs}s"
+                elif execution.status == 'running':
+                    duration = "running..."
+
+                # Create recency indicator  
+                if i == 0:
+                    recency = "Latest"
+                elif i == 1:
+                    recency = "2nd"
+                elif i == 2:
+                    recency = "3rd"
+                else:
+                    recency = f"{i+1}th"
+                
+                table.add_row(
+                    recency,
+                    f"{status_icon} {execution.status}",
+                    execution.doc_title[:30],
+                    execution.started_at.strftime('%H:%M:%S'),
+                    duration
+                )
+            
+            # Try to restore the same execution if it still exists
+            new_row = 0
+            if old_execution_id:
+                for i, execution in enumerate(self.executions):
+                    if execution.id == old_execution_id:
+                        new_row = i
+                        break
+            else:
+                new_row = min(old_row, len(self.executions) - 1) if self.executions else 0
+            
+            # Restore cursor position without changing the current log view
+            if self.executions and new_row < len(self.executions):
+                table.move_cursor(row=new_row)
+                self.current_execution_index = new_row
+                
+        except Exception as e:
+            logger.error(f"Error refreshing execution list: {e}", exc_info=True)
+
     def cancel_refresh_timer(self):
         """Cancel the refresh timer if it's active."""
         if self.refresh_timer:
             self.refresh_timer.stop()
             self.refresh_timer = None
+    
+    def cancel_log_monitor_timer(self):
+        """Cancel the log monitor timer if it's active."""
+        if hasattr(self, 'log_monitor_timer'):
+            logger.debug("Stopping log monitor timer")
+            self.log_monitor_timer.stop()
+            delattr(self, 'log_monitor_timer')
+        else:
+            logger.debug("No log monitor timer to cancel")
 
     def action_tmux_split_horizontal(self):
         """Spawn a new tmux pane (horizontal split) with the current document."""
@@ -1980,26 +2211,15 @@ class MinimalDocumentBrowser(App):
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"{exec_id}.log"
 
-            # Start monitoring in background thread
-            def run_execution():
-                execute_document_smart(
-                    doc_id=self.current_doc_id,
-                    execution_id=exec_id,
-                    log_file=log_path,
-                    allowed_tools=None,  # Use default tools
-                    verbose=False,  # Background execution
-                    background=True
-                )
-
-            # Start execution in background thread
-            # Note: Don't use daemon=True as it may cause threads to die prematurely
-            thread = threading.Thread(target=run_execution, daemon=False)
-            thread.start()
-
-            # Store thread reference to prevent garbage collection
-            if not hasattr(self, 'execution_threads'):
-                self.execution_threads = []
-            self.execution_threads.append(thread)
+            # Use the new detached execution directly
+            from emdx.commands.claude_execute import execute_document_smart_background
+            execute_document_smart_background(
+                doc_id=self.current_doc_id,
+                execution_id=exec_id,
+                log_file=log_path,
+                allowed_tools=None,  # Use default tools
+                use_stage_tools=True
+            )
 
             # Show success message with worktree info
             self.cancel_refresh_timer()
@@ -2108,7 +2328,7 @@ class MinimalDocumentBrowser(App):
             # Replace the documents table with executions table
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
-            table.add_columns("#", "Status", "Document", "Started", "Duration")
+            table.add_columns("Recent", "Status", "Document", "Started", "Duration")
 
             # Populate executions table
             for i, execution in enumerate(self.executions):
@@ -2129,8 +2349,18 @@ class MinimalDocumentBrowser(App):
                 elif execution.status == 'running':
                     duration = "running..."
 
+                # Create recency indicator  
+                if i == 0:
+                    recency = "Latest"
+                elif i == 1:
+                    recency = "2nd"
+                elif i == 2:
+                    recency = "3rd"
+                else:
+                    recency = f"{i+1}th"
+                
                 table.add_row(
-                    str(i + 1),  # Number for keyboard selection
+                    recency,
                     f"{status_icon} {execution.status}",
                     execution.doc_title[:30],
                     execution.started_at.strftime('%H:%M:%S'),
@@ -2200,19 +2430,58 @@ class MinimalDocumentBrowser(App):
         # Monitor every 2 seconds in log browser mode
         self.log_monitor_timer = self.set_interval(2.0, self.update_log_content)
         self.last_log_size = 0
+        self.last_log_mtime = 0
+        logger.debug(f"Started log monitoring for {getattr(self, 'current_log_file', 'unknown file')}")
 
     def update_log_content(self):
-        """Update log content if file has changed."""
+        """Update log content if file has changed and refresh execution list."""
+        logger.debug(f"update_log_content called: mode={getattr(self, 'mode', 'unknown')}, has_file={hasattr(self, 'current_log_file')}")
+        
+        # Auto-refresh fires silently - no visual indicators
+        
         if not hasattr(self, 'current_log_file') or self.mode != "LOG_BROWSER":
+            logger.debug("Skipping log update: not in LOG_BROWSER mode or no log file")
+            # Skip update silently
             return
+
+        # Refresh execution list every 10 seconds (every 5th call) to avoid interfering with scrolling
+        if not hasattr(self, 'refresh_counter'):
+            self.refresh_counter = 0
+        self.refresh_counter += 1
+        
+        if self.refresh_counter >= 5:  # Every 10 seconds
+            self.refresh_counter = 0
+            self.refresh_execution_list()
 
         try:
             if not self.current_log_file or not self.current_log_file.exists():
+                logger.debug(f"Log file doesn't exist: {self.current_log_file}")
                 return
 
-            # Check if file has grown
-            current_size = self.current_log_file.stat().st_size
-            if current_size > self.last_log_size:
+            # Check if file has grown or modified
+            file_stat = self.current_log_file.stat()
+            current_size = file_stat.st_size
+            current_mtime = file_stat.st_mtime
+            
+            # Initialize tracking variables if not set
+            if not hasattr(self, 'last_log_mtime'):
+                self.last_log_mtime = 0
+            
+            size_changed = current_size != self.last_log_size
+            time_changed = current_mtime != self.last_log_mtime
+            
+            logger.debug(f"File check: size={current_size} (was {self.last_log_size}), "
+                        f"mtime={current_mtime} (was {self.last_log_mtime}), "
+                        f"size_changed={size_changed}, time_changed={time_changed}")
+            
+            if size_changed or time_changed:
+                # Update in progress silently
+                
+                # Handle file truncation or full rewrite
+                if current_size < self.last_log_size:
+                    logger.debug("Log file was truncated, reloading from beginning")
+                    self.last_log_size = 0
+                
                 # Read new content
                 with open(self.current_log_file) as f:
                     f.seek(self.last_log_size)
@@ -2224,15 +2493,21 @@ class MinimalDocumentBrowser(App):
                         preview.write(new_content)
                         # Auto-scroll to bottom
                         preview.scroll_end(animate=False)
-                    except Exception:
+                        logger.debug(f"Updated log content: {len(new_content)} characters")
+                        # Content updated silently
+                    except Exception as e:
+                        logger.debug(f"Failed to update preview widget: {e}")
                         # Widget doesn't exist (different screen) - skip update
-                        pass
+                        # Widget error handled silently
 
                 self.last_log_size = current_size
+                self.last_log_mtime = current_mtime
+            else:
+                logger.debug("No file changes detected")
+                # No changes detected, continue silently
 
-        except Exception:
-            # Silently handle file reading errors
-            pass
+        except Exception as e:
+            logger.error(f"Error in update_log_content: {e}", exc_info=True)
 
     def load_execution_log(self, index: int):
         """Load the log file for the execution at the given index."""
@@ -2385,6 +2660,7 @@ class MinimalDocumentBrowser(App):
                 self.stop_log_monitoring()
                 self.reload_documents()
             else:
+                # Clean exit - subprocess are detached and will continue running
                 self.exit()
         except Exception as e:
             logger.error(f"Error in action_quit: {e}")
@@ -2393,9 +2669,7 @@ class MinimalDocumentBrowser(App):
 
     def stop_log_monitoring(self):
         """Stop the log monitoring timer."""
-        if hasattr(self, 'log_monitor_timer'):
-            self.log_monitor_timer.stop()
-            delattr(self, 'log_monitor_timer')
+        self.cancel_log_monitor_timer()
 
     def reload_documents(self):
         """Reload the document view after exiting log browser."""
@@ -2437,6 +2711,8 @@ class MinimalDocumentBrowser(App):
             # Focus the table and update preview
             table.focus()
             if self.filtered_docs:
+                # Ensure we scroll to top and select first document
+                table.scroll_home(animate=False)
                 table.move_cursor(row=0)
                 self.current_doc_id = self.filtered_docs[0]["id"]
                 self.update_preview(self.current_doc_id)
