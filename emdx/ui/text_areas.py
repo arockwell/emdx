@@ -167,6 +167,16 @@ class VimEditTextArea(TextArea):
             new_lines = len(new_text.split('\n')) if new_text else 0
             key_logger.info(f"🔍 TEXT WATCHER: text changed, lines: {old_lines} -> {new_lines}")
             
+            # Special handling for line count changes
+            if old_lines != new_lines:
+                key_logger.info(f"📈 LINE COUNT CHANGED: {old_lines} -> {new_lines}")
+                
+                # Check if this was a new line addition
+                if new_lines > old_lines:
+                    key_logger.info(f"✅ NEW LINE ADDED: +{new_lines - old_lines} lines")
+                else:
+                    key_logger.info(f"❌ LINES REMOVED: -{old_lines - new_lines} lines")
+            
             # Update line numbers when text changes (for line count changes)
             self._update_line_numbers()
         except Exception as e:
@@ -694,7 +704,18 @@ class VimEditTextArea(TextArea):
         """Move cursor to end of document."""
         lines = self.text.split('\n')
         last_line = len(lines) - 1
-        self.cursor_location = (last_line, len(lines[last_line]))
+        last_col = len(lines[last_line]) if last_line >= 0 else 0
+        
+        key_logger.info(f"🔍 _cursor_to_end: moving to line {last_line}, col {last_col}")
+        
+        # Ensure we're moving to a valid position
+        if last_line >= 0:
+            self.cursor_location = (last_line, last_col)
+            key_logger.info(f"✅ _cursor_to_end: cursor set to ({last_line}, {last_col})")
+        else:
+            # Empty document
+            self.cursor_location = (0, 0)
+            key_logger.info(f"✅ _cursor_to_end: empty document, cursor set to (0, 0)")
     
     def _delete_right_safe(self) -> None:
         """Delete character to the right, safely handling boundaries."""

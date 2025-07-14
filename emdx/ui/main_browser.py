@@ -92,7 +92,14 @@ class SimpleVimLineNumbers(Static):
         from rich.text import Text
         
         # Check if text area has focus - only highlight current line if it does
+        # In vim edit mode, the text area should always be considered focused
         has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
+        
+        # Force focus to True when in vim edit mode (vim editing implies focus)
+        if self.text_area and hasattr(self.text_area, 'vim_mode'):
+            has_focus = True
+            logger.debug(f"🔢 Vim edit mode detected - forcing focus to True")
+        
         logger.debug(f"🔢 Text area has focus: {has_focus}")
         
         lines = []
