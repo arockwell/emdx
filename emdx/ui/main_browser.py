@@ -2876,6 +2876,9 @@ class MinimalDocumentBrowser(App):
             
             # Select first row and load its diff
             table.move_cursor(row=0)
+            logger.info(f"🔍 About to load git diff for index 0, git_files length: {len(self.git_files)}")
+            if self.git_files:
+                logger.info(f"  First file: {self.git_files[0].path} ({self.git_files[0].status})")
             self.load_git_diff(0)
             
             # Update status with instructions
@@ -2891,7 +2894,9 @@ class MinimalDocumentBrowser(App):
     
     def load_git_diff(self, index: int):
         """Load the git diff for the file at the given index."""
+        logger.info(f"🔍 load_git_diff called with index {index}, git_files length: {len(self.git_files)}")
         if index < 0 or index >= len(self.git_files):
+            logger.warning(f"❌ Index {index} out of range for {len(self.git_files)} files")
             return
         
         try:
@@ -2916,14 +2921,19 @@ class MinimalDocumentBrowser(App):
             preview.write("")
             
             # Load git diff content
+            logger.info(f"🔍 Getting diff for {file_status.path} (staged: {file_status.staged}) from {self.current_worktree_path}")
             diff_content = get_git_diff(file_status.path, file_status.staged, self.current_worktree_path)
+            logger.info(f"📄 Diff content length: {len(diff_content)} chars")
             if diff_content.strip():
                 preview.write(diff_content)
+                logger.info("✅ Diff content written to preview")
             else:
                 if file_status.status == '??':
                     preview.write("[dim](Untracked file - no diff available)[/dim]")
+                    logger.info("ℹ️ Untracked file - no diff shown")
                 else:
                     preview.write("[dim](No diff content - file may be binary or empty)[/dim]")
+                    logger.warning("⚠️ No diff content available")
             
             # Highlight current row in table
             table = self.query_one("#doc-table", DataTable)

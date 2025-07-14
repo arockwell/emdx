@@ -128,7 +128,7 @@ def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
                 continue
                 
             status_chars = line[:2]
-            filename = line[3:]
+            filename = line[2:].lstrip()  # Remove status chars and strip leading whitespace
             
             # Git status always uses 2 characters
             staged_char = status_chars[0]
