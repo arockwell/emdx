@@ -291,7 +291,7 @@ class MinimalDocumentBrowser(App):
         Binding("escape", "quit", "Quit", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
-        Binding("g", "cursor_top", "Top", show=False),
+        Binding("ctrl+g", "cursor_top", "Top", show=False),
         Binding("shift+g", "cursor_bottom", "Bottom", show=False),
         Binding("/", "search_mode", "Search", key_display="/"),
         Binding("r", "refresh", "Refresh", key_display="r"),
@@ -307,6 +307,7 @@ class MinimalDocumentBrowser(App):
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
+        Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
     ]
 
@@ -2009,6 +2010,80 @@ class MinimalDocumentBrowser(App):
             self.cancel_refresh_timer()
             status = self.query_one("#status", Label)
             status.update(f"Error starting Claude execution: {e}")
+
+    def action_create_gist(self):
+        """Create a GitHub Gist from the current document."""
+        if not self.current_doc_id:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update("No document selected for gist creation")
+            return
+        
+        try:
+            from emdx.commands.gist import create_gist_with_gh, create_gist_with_api, get_github_auth, sanitize_filename
+            from emdx.models.documents import get_document
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("Document not found")
+                return
+            
+            # Check for GitHub authentication
+            token = get_github_auth()
+            if not token:
+                self.cancel_refresh_timer()
+                status = self.query_one("#status", Label)
+                status.update("GitHub auth required: Set GITHUB_TOKEN or run 'gh auth login'")
+                return
+            
+            # Show creating status
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Creating gist for: {doc['title'][:30]}...")
+            
+            # Prepare gist content
+            filename = sanitize_filename(doc["title"])
+            content = doc["content"]
+            description = f"{doc['title']} - emdx knowledge base"
+            if doc.get("project"):
+                description += f" (Project: {doc['project']})"
+            
+            # Create gist (try gh CLI first, fallback to API)
+            result = create_gist_with_gh(content, filename, description, public=False)
+            if not result:
+                result = create_gist_with_api(content, filename, description, public=False, token=token)
+            
+            if result:
+                gist_url = result["url"]
+                
+                # Save to database
+                from emdx.database import db
+                with db.get_connection() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO gists (document_id, gist_id, gist_url, is_public)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (doc["id"], result["id"], gist_url, False),
+                    )
+                    conn.commit()
+                
+                # Copy URL to clipboard
+                from emdx.commands.gist import copy_to_clipboard
+                if copy_to_clipboard(gist_url):
+                    status.update(f"✓ Gist created & copied: {gist_url}")
+                else:
+                    status.update(f"✓ Gist created: {gist_url}")
+            else:
+                status.update("Failed to create gist")
+                
+        except Exception as e:
+            self.cancel_refresh_timer()
+            status = self.query_one("#status", Label)
+            status.update(f"Error creating gist: {e}")
 
     def action_log_browser(self):
         """Switch to log browser mode to view and switch between execution logs."""
