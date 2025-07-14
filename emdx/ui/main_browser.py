@@ -1539,22 +1539,13 @@ class MinimalDocumentBrowser(App):
             from textual.containers import Container
             edit_wrapper = Container(id="edit-wrapper")
 
-            # Create title input
-            title_input = TitleInput(
-                self,
-                value=doc["title"],
-                placeholder="Enter title...",
-                id="title-input"
-            )
-            title_input.add_class("edit-title-input")
-            # Ensure cursor is visible and solid in title input
-            title_input.show_cursor = True
-            title_input.cursor_blink = False
+            # Skip title input for now to simplify line number positioning
+            # title_input = TitleInput(...)  # Commented out
 
             # Create VimEditTextArea with constraints BEFORE mounting
             edit_area = VimEditTextArea(self, text=doc["content"], id="preview-content")
             self.edit_textarea = edit_area  # Store reference for vim status updates
-            self.edit_title_input = title_input  # Store reference for title input
+            # self.edit_title_input = title_input  # No title input anymore
 
             # Make it editable (not read-only like selection mode)
             edit_area.read_only = False
@@ -1582,8 +1573,7 @@ class MinimalDocumentBrowser(App):
             # Create horizontal container for line numbers and text area
             edit_container = Horizontal(id="edit-container")
 
-            # Mount title and content in wrapper
-            edit_wrapper.mount(title_input)
+            # Mount only the edit container (no title)
             edit_wrapper.mount(edit_container)
 
             # Now mount widgets in the container after it's mounted
@@ -1635,20 +1625,18 @@ class MinimalDocumentBrowser(App):
             container = self.query_one("#preview", ScrollableContainer)
             status = self.query_one("#status", Label)
 
-            # Find the edit area and title input within the wrapper
+            # Find the edit area within the wrapper
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
-                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 # Fallback if wrapper doesn't exist
                 edit_area = self.query_one("#preview-content", EditTextArea)
-                title_input = None
 
-            # Get the edited content and title
+            # Get the edited content (no title editing for now)
             new_content = edit_area.text
-            new_title = title_input.value if title_input else None
+            new_title = None  # Keep original title for now
 
             # Get current document for comparison
             doc = get_document(str(self.editing_doc_id))
@@ -1772,19 +1760,17 @@ class MinimalDocumentBrowser(App):
             if not self.edit_mode or not self.editing_doc_id:
                 return
 
-            # Get the edit area and title input
+            # Get the edit area
             try:
                 from textual.containers import Container
                 edit_wrapper = self.query_one("#edit-wrapper", Container)
                 edit_area = edit_wrapper.query_one("#preview-content", EditTextArea)
-                title_input = edit_wrapper.query_one("#title-input", TitleInput)
             except:
                 edit_area = self.query_one("#preview-content", EditTextArea)
-                title_input = None
 
-            # Get the edited content and title
+            # Get the edited content (no title editing for now)
             new_content = edit_area.text
-            new_title = title_input.value if title_input else None
+            new_title = None  # Keep original title
 
             # Update document in database
             from emdx.models.documents import update_document

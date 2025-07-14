@@ -358,15 +358,9 @@ class VimEditTextArea(TextArea):
             self.command_buffer = ":"
             self.app_instance._update_vim_status()
         
-        # Handle Tab to switch to title input
+        # Tab key - no special handling needed without title input
         elif key == "tab":
-            # Try to focus title input - import here to avoid circular imports
-            try:
-                from .inputs import TitleInput
-                title_input = self.app_instance.query_one("#title-input", TitleInput)
-                title_input.focus()
-            except:
-                pass  # Title input might not exist
+            pass  # Could add tab functionality later
         
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:
