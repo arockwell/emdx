@@ -5,9 +5,9 @@ from typing import Any, Optional
 from emdx.database import db
 
 
-def save_document(title: str, content: str, project: Optional[str] = None) -> int:
+def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
     """Save a document to the knowledge base"""
-    return db.save_document(title, content, project)
+    return db.save_document(title, content, project, tags, parent_id)
 
 
 def get_document(identifier: str) -> Optional[dict[str, Any]]:

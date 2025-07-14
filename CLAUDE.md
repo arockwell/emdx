@@ -5,8 +5,8 @@
 **NEVER run these commands as they will hang Claude Code:**
 - `emdx gui` - Interactive TUI browser
 - `emdx tui` - Alternative TUI interface
-- `poetry run emdx gui`
-- `poetry run emdx tui`
+- `emdx gui`
+- `emdx tui`
 - Any command that opens an interactive terminal UI
 
 **KNOWN BUG**: As of July 2025, Claude Code's deny rules are NOT working. Even with:
@@ -176,14 +176,14 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 ```bash
 # Install with poetry (recommended)
 poetry install
-poetry run emdx --help
+emdx --help
 
 # Or with pip
 pip install -e .
 emdx --help
 
 # Run tests
-poetry run pytest
+pytest
 # or
 pytest
 ```
