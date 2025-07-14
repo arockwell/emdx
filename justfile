@@ -10,6 +10,11 @@ install:
 _ensure-installed:
     @if ! poetry run python -c "import textual" 2>/dev/null; then \
         echo "📦 Installing dependencies..."; \
+        if ! poetry env info | grep -q "Python 3.13"; then \
+            echo "🔄 Updating to Python 3.13..."; \
+            poetry env use python3.13; \
+            poetry lock; \
+        fi; \
         poetry install; \
         echo "✅ Dependencies installed!"; \
     fi

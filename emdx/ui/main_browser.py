@@ -377,6 +377,7 @@ class MinimalDocumentBrowser(App):
         Binding("h", "tmux_split_horizontal", "Split →", key_display="h"),
         Binding("v", "tmux_split_vertical", "Split ↓", key_display="v"),
         Binding("x", "claude_execute", "Execute", key_display="x"),
+        Binding("f", "open_file_browser", "Files", key_display="f"),
         Binding("g", "create_gist", "Gist", key_display="g"),
         Binding("l", "log_browser", "Log Browser", key_display="l"),
     ]
@@ -2468,6 +2469,123 @@ class MinimalDocumentBrowser(App):
         """Switch to log browser mode to view and switch between execution logs."""
         self.mode = "LOG_BROWSER"
         self.setup_log_browser()
+    
+    def action_open_file_browser(self):
+        """Open file browser mode."""
+        logger.info("🗂️ Opening file browser mode")
+        
+        # If already in file browser mode, just refresh
+        if hasattr(self, 'mode') and self.mode == "FILE_BROWSER":
+            logger.info("🗂️ Already in file browser mode, refreshing")
+            if hasattr(self, 'file_browser'):
+                self.file_browser.refresh_files()
+            return
+        
+        # Set mode first, then setup
+        self.mode = "FILE_BROWSER"
+        logger.info(f"🗂️ Mode set to: {self.mode}")
+        self.setup_file_browser()
+    
+    def setup_file_browser(self):
+        """Set up the file browser interface."""
+        try:
+            logger.info("🗂️ Setting up file browser interface")
+            
+            # Clean up any existing file browser first
+            if hasattr(self, 'file_browser'):
+                logger.info("🗂️ Removing existing file browser")
+                try:
+                    self.file_browser.remove()
+                except Exception as e:
+                    logger.warning(f"🗂️ Error removing existing file browser: {e}")
+                delattr(self, 'file_browser')
+            
+            # Import the standalone file browser
+            from .file_browser import FileBrowser
+            logger.info("🗂️ FileBrowser imported successfully")
+            
+            # Hide search inputs
+            self.query_one("#search-input", Input).display = False
+            logger.info("🗂️ Search input hidden")
+            self.query_one("#tag-input", Input).display = False
+            self.query_one("#tag-selector", Label).display = False
+            self.query_one("#vim-mode-indicator", Label).display = False
+            
+            # Hide the entire document area
+            sidebar = self.query_one("#sidebar", Vertical)
+            sidebar.display = False
+            
+            preview_container = self.query_one("#preview-container", Vertical)
+            preview_container.display = False
+            
+            # Create and mount file browser in full width container
+            logger.info("🗂️ Getting main horizontal container")
+            # Find the horizontal container that contains sidebar and preview
+            horizontal_container = self.query_one("#sidebar").parent
+            logger.info("🗂️ Creating FileBrowser widget")
+            self.file_browser = FileBrowser(id="file-browser-widget")
+            logger.info("🗂️ Mounting FileBrowser in full container")
+            horizontal_container.mount(self.file_browser)
+            logger.info("🗂️ FileBrowser mounted successfully")
+            
+            # Focus the file browser after mounting is complete
+            self.call_after_refresh(lambda: self._focus_file_browser())
+            
+            # Update status
+            status = self.query_one("#status", Label)
+            status.update("FILE BROWSER: Navigate with j/k/h/l, 's' to save, 'x' to execute, 'q' to exit")
+            logger.info("🗂️ File browser setup complete")
+            
+        except Exception as e:
+            logger.error(f"Error setting up file browser: {e}")
+            status = self.query_one("#status", Label)
+            status.update(f"Error setting up file browser: {e}")
+    
+    def _focus_file_browser(self):
+        """Focus the file browser widget."""
+        try:
+            if hasattr(self, 'file_browser') and self.file_browser:
+                self.file_browser.focus()
+                logger.info("🗂️ FileBrowser focused")
+        except Exception as e:
+            logger.error(f"🗂️ Error focusing file browser: {e}")
+    
+    
+    def exit_file_browser(self):
+        """Exit file browser and return to document browser."""
+        try:
+            logger.info("🗂️ Exiting file browser mode")
+            # Remove file browser
+            if hasattr(self, 'file_browser'):
+                self.file_browser.remove()
+                logger.info("🗂️ File browser widget removed")
+            
+            # Show hidden widgets
+            self.query_one("#search-input", Input).display = True
+            self.query_one("#tag-input", Input).display = True
+            self.query_one("#tag-selector", Label).display = True
+            self.query_one("#vim-mode-indicator", Label).display = True
+            logger.info("🗂️ Input widgets restored")
+            
+            self.query_one("#sidebar", Vertical).display = True
+            self.query_one("#preview-container", Vertical).display = True
+            logger.info("🗂️ Document table and preview restored")
+            
+            # Reset mode and reload
+            self.mode = "NORMAL"
+            logger.info("🗂️ Mode reset to NORMAL")
+            self.reload_documents()
+            
+        except Exception as e:
+            logger.error(f"Error exiting file browser: {e}")
+            # Fallback
+            self.mode = "NORMAL"
+            self.reload_documents()
+    
+    
+    def on_file_browser_quit_file_browser(self, event):
+        """Handle file browser quit event."""
+        self.exit_file_browser()
 
     def setup_log_browser(self):
         """Set up the log browser interface with execution list and log viewer."""
@@ -2755,7 +2873,6 @@ class MinimalDocumentBrowser(App):
             self.update_status(f"Viewing log {self.current_execution_index + 1}/{len(self.executions)}")
 
 
-
     async def on_event(self, event) -> None:
         """Handle all events safely."""
         try:
@@ -2788,11 +2905,18 @@ class MinimalDocumentBrowser(App):
 
     def action_quit(self):
         try:
-            if hasattr(self, 'mode') and self.mode == "LOG_BROWSER":
-                # Exit log browser mode and return to document mode
-                self.mode = "NORMAL"
-                self.stop_log_monitoring()
-                self.reload_documents()
+            if hasattr(self, 'mode'):
+                if self.mode == "LOG_BROWSER":
+                    # Exit log browser mode and return to document mode
+                    self.mode = "NORMAL"
+                    self.stop_log_monitoring()
+                    self.reload_documents()
+                elif self.mode == "FILE_BROWSER":
+                    # Exit file browser mode and return to document mode
+                    self.exit_file_browser()
+                else:
+                    # Clean exit - subprocess are detached and will continue running
+                    self.exit()
             else:
                 # Clean exit - subprocess are detached and will continue running
                 self.exit()
