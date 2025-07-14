@@ -41,10 +41,18 @@ class FileBrowserVimApp:
         self.file_browser = file_browser
         
     def action_save_and_exit_edit(self):
-        self.file_browser.action_handle_escape()
+        try:
+            self.file_browser.action_handle_escape()
+        except AttributeError:
+            # Fallback if file_browser not accessible
+            self.file_browser._exit_edit_mode()
         
     def action_cancel_edit(self):
-        self.file_browser.action_handle_escape()
+        try:
+            self.file_browser.action_handle_escape()
+        except AttributeError:
+            # Fallback if file_browser not accessible
+            self.file_browser._exit_edit_mode()
         
     def action_save_document(self):
         # Just update status - file will be saved when exiting
