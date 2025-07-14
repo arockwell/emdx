@@ -13,47 +13,8 @@ from .text_areas import VimEditTextArea
 logger = logging.getLogger(__name__)
 
 
-# Import the line numbers from main browser to avoid duplication
-try:
-    from .main_browser import SimpleVimLineNumbers
-except ImportError:
-    # Fallback in case of circular imports
-    class SimpleVimLineNumbers(Static):
-        """Dead simple vim-style line numbers widget."""
-
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.add_class("vim-line-numbers")
-            self.text_area = None  # Reference to associated text area
-
-        def set_line_numbers(self, current_line, total_lines, text_area=None):
-            """Set line numbers given current line (0-based) and total lines."""
-            logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
-            
-            # Store text area reference if provided
-            if text_area:
-                self.text_area = text_area
-            
-            # Clamp values to safe ranges
-            current_line = max(0, min(current_line, total_lines - 1)) if total_lines > 0 else 0
-            total_lines = max(1, total_lines)
-            
-            logger.debug(f"🔢 After clamping: current={current_line}, total={total_lines}")
-            
-            # Generate relative line numbers
-            lines = []
-            for i in range(total_lines):
-                if i == current_line:
-                    # Current line shows absolute number
-                    lines.append(f"{i + 1:>3}")
-                else:
-                    # Other lines show relative distance
-                    relative = abs(i - current_line)
-                    lines.append(f"{relative:>3}")
-            
-            # Update display with newlines
-            self.update("\n".join(lines))
-            logger.debug(f"🔢 Line numbers updated successfully")
+# Import the exact same line numbers implementation from main browser
+from .main_browser import SimpleVimLineNumbers
 
 
 class VimEditor(Vertical):
@@ -104,9 +65,9 @@ class VimEditor(Vertical):
         self.edit_container.mount(self.line_numbers)
         self.edit_container.mount(self.text_area)
         
-        # Focus the text area
+        # Focus the text area and initialize line numbers
         self.text_area.can_focus = True
-        self.call_after_refresh(lambda: self.text_area.focus())
+        self.call_after_refresh(lambda: self._initialize_editor())
     
     def get_text(self):
         """Get the current text content."""
@@ -119,6 +80,48 @@ class VimEditor(Vertical):
     def focus_editor(self):
         """Focus the text editor."""
         self.text_area.focus()
+    
+    def _initialize_editor(self):
+        """Initialize editor after mounting - focus and set up line numbers."""
+        try:
+            # Focus the text area first
+            self.text_area.focus()
+            
+            # Force cursor to start at beginning (files should start at top)
+            self.text_area.cursor_location = (0, 0)
+            
+            # Use the same cursor detection logic as VimEditTextArea._update_line_numbers
+            if hasattr(self.text_area, 'selection') and self.text_area.selection:
+                current_line = self.text_area.selection.end[0]
+                logger.debug(f"🔢   Using selection.end[0]: {current_line}")
+            elif hasattr(self.text_area, 'cursor_location'):
+                current_line = self.text_area.cursor_location[0]
+                logger.debug(f"🔢   Using cursor_location[0]: {current_line}")
+            else:
+                current_line = 0
+                logger.debug(f"🔢   Fallback to 0")
+            
+            # Get actual cursor position for logging
+            actual_cursor = getattr(self.text_area, 'cursor_location', (0, 0))
+            actual_selection = getattr(self.text_area, 'selection', None)
+            total_lines = len(self.text_area.text.split('\n'))
+            
+            logger.debug(f"🔢 VimEditor INITIAL SETUP:")
+            logger.debug(f"🔢   Set cursor to: (0, 0)")
+            logger.debug(f"🔢   Actual cursor: {actual_cursor}")
+            logger.debug(f"🔢   Actual selection: {actual_selection}")
+            logger.debug(f"🔢   current_line={current_line}, total_lines={total_lines}")
+            
+            # Set initial line numbers
+            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            
+            # Double-check by calling text area's update method if it exists
+            if hasattr(self.text_area, '_update_line_numbers'):
+                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+                self.text_area._update_line_numbers()
+            
+        except Exception as e:
+            logger.error(f"Error initializing vim editor: {e}")
     
     @property
     def vim_mode(self):
