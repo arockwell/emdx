@@ -27,4 +27,4 @@ This is a test file to create some git changes for testing the git diff browser 
 - Staged changes
 - Multiple worktrees
 
-This file will appear as a new untracked file when you test the git diff browser.
+This file will appear as a new untracked file when you test the git diff browser.Testing mixed staged/unstaged
