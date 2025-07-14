@@ -2165,7 +2165,7 @@ class MinimalDocumentBrowser(App):
             
             # Get fresh executions
             old_count = len(self.executions) if hasattr(self, 'executions') else 0
-            fresh_executions = get_recent_executions(limit=20)
+            fresh_executions = get_recent_executions(limit=50)
             new_count = len(fresh_executions)
             
             # Only update if there are actual changes to avoid disrupting user interaction
@@ -2186,7 +2186,7 @@ class MinimalDocumentBrowser(App):
             
             # Clear and repopulate table
             table.clear(columns=True)
-            table.add_columns("Recent", "Status", "Document", "Started", "Duration")
+            table.add_columns("Recent", "Status", "Document", "Started")
             
             # Populate executions table with fresh data
             for i, execution in enumerate(self.executions):
@@ -2221,8 +2221,7 @@ class MinimalDocumentBrowser(App):
                     recency,
                     f"{status_icon} {execution.status}",
                     execution.doc_title[:30],
-                    execution.started_at.strftime('%H:%M:%S'),
-                    duration
+                    execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
                 )
             
             # Try to restore the same execution if it still exists
@@ -2591,7 +2590,7 @@ class MinimalDocumentBrowser(App):
         """Set up the log browser interface with execution list and log viewer."""
         try:
             # Load recent executions from database
-            self.executions = get_recent_executions(limit=20)
+            self.executions = get_recent_executions(limit=50)
 
             if not self.executions:
                 self.cancel_refresh_timer()
@@ -2605,7 +2604,7 @@ class MinimalDocumentBrowser(App):
             # Replace the documents table with executions table
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
-            table.add_columns("Recent", "Status", "Document", "Started", "Duration")
+            table.add_columns("Recent", "Status", "Document", "Started")
 
             # Populate executions table
             for i, execution in enumerate(self.executions):
@@ -2640,8 +2639,7 @@ class MinimalDocumentBrowser(App):
                     recency,
                     f"{status_icon} {execution.status}",
                     execution.doc_title[:30],
-                    execution.started_at.strftime('%H:%M:%S'),
-                    duration
+                    execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
                 )
 
             # Select first row and load its log
@@ -2674,11 +2672,9 @@ class MinimalDocumentBrowser(App):
                     lines.append(f"=== Execution {execution.id} ===")
                     lines.append(f"Document: {execution.doc_title}")
                     lines.append(f"Status: {execution.status}")
-                    lines.append(f"Started: {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                    lines.append(f"Started: {execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     if execution.completed_at:
-                        lines.append(f"Completed: {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
-                    if execution.duration:
-                        lines.append(f"Duration: {execution.duration:.1f}s")
+                        lines.append(f"Completed: {execution.completed_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     lines.append("=== Log Output ===")
                     lines.append("")
 
@@ -2809,11 +2805,9 @@ class MinimalDocumentBrowser(App):
             preview.write(f"[bold cyan]=== Execution {execution.id} ===[/bold cyan]")
             preview.write(f"[yellow]Document:[/yellow] {execution.doc_title}")
             preview.write(f"[yellow]Status:[/yellow] {execution.status}")
-            preview.write(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            preview.write(f"[yellow]Started:[/yellow] {execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
             if execution.completed_at:
-                preview.write(f"[yellow]Completed:[/yellow] {execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')}")
-            if execution.duration:
-                preview.write(f"[yellow]Duration:[/yellow] {execution.duration:.1f}s")
+                preview.write(f"[yellow]Completed:[/yellow] {execution.completed_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
             preview.write("[bold cyan]=== Log Output ===[/bold cyan]")
             preview.write("")
 
