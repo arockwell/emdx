@@ -2861,11 +2861,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 with open(self.current_log_file) as f:
                     content = f.read()
                     if content:
-                        # Split content into lines and preserve emoji formatting
-                        lines = content.splitlines()
-                        for line in lines:
-                            # Write each line individually to preserve formatting
-                            preview.write(line)
+                        preview.write(content)
                     else:
                         preview.write("[dim](No log content yet)[/dim]")
 
@@ -2920,7 +2916,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         try:
             key_logger.info(f"MinimalBrowser.on_key: key={event.key}")
 
-            # j/k keys are handled by the global key handler above, no need to duplicate here
+            # j/k keys are handled by the app-level key handler, not here
             
             # Handle j/k/w keys for git diff switching in git diff browser mode
             if hasattr(self, 'mode') and self.mode == "GIT_DIFF_BROWSER":
