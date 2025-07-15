@@ -49,11 +49,17 @@ class EditMixin:
         line_numbers = Static("", id="line-numbers", classes="vim-line-numbers")
         
         # Create edit area
+        content = doc.get("content", "")
+        logger.info(f"EditMixin: Creating VimEditTextArea with {len(content)} chars of content")
         edit_area = VimEditTextArea(
             self, 
-            text=doc["content"], 
+            text=content, 
             id="edit-area"
         )
+        # Ensure the text area takes up available space
+        edit_area.styles.width = "1fr"
+        edit_area.styles.height = "100%"
+        logger.info(f"EditMixin: VimEditTextArea created, mounting in container")
         # Set up line numbers update callback
         edit_area.line_numbers_widget = line_numbers
         

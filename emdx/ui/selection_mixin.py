@@ -37,15 +37,18 @@ class SelectionMixin:
             
             if self.selection_mode:
                 from .text_areas import SelectionTextArea
+                content = self.get_current_document_content()
+                logger.info(f"SelectionMixin: Creating SelectionTextArea with {len(content)} chars")
                 text_area = SelectionTextArea(
                     self, 
-                    text=self.get_current_document_content(), 
+                    text=content, 
                     id="preview-content"
                 )
                 text_area.read_only = True
                 text_area.can_focus = True
                 container.mount(text_area)
                 text_area.focus()
+                logger.info("SelectionMixin: SelectionTextArea mounted and focused")
             else:
                 from textual.widgets import RichLog
                 richlog = RichLog(
