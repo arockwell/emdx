@@ -30,7 +30,9 @@ class SelectionMixin:
             self.selection_mode = not self.selection_mode
             
             # Remove all children to ensure clean state
-            for child in container.children:
+            # Make a copy of children list to avoid modification during iteration
+            children_to_remove = list(container.children)
+            for child in children_to_remove:
                 child.remove()
             
             if self.selection_mode:
