@@ -37,56 +37,41 @@ class EditMixin:
         container = self.query_one("#preview")
         container.remove_children()
         
-        # Create a horizontal container for line numbers + text area
-        from textual.containers import Horizontal
-        from .text_areas import VimEditTextArea
+        # Use the same VimEditor that works in file browser
+        from .vim_editor import VimEditor
         
-        edit_container = Horizontal(id="edit-container")
-        # Ensure container takes full space
-        edit_container.styles.width = "100%"
-        edit_container.styles.height = "100%"
-        container.mount(edit_container)
-        
-        # Create line numbers widget
-        from textual.widgets import Static
-        line_numbers = Static("", id="line-numbers", classes="vim-line-numbers")
-        
-        # Create edit area
         content = doc.get("content", "")
-        logger.info(f"EditMixin: Creating VimEditTextArea with {len(content)} chars of content")
-        edit_area = VimEditTextArea(
-            self, 
-            text=content, 
-            id="edit-area"
+        logger.info(f"EditMixin: Creating VimEditor with {len(content)} chars of content")
+        
+        # Create a mock app instance for vim callbacks
+        class EditMixinVimApp:
+            def __init__(self, parent):
+                self.parent = parent
+            
+            def action_save_and_exit_edit(self):
+                self.parent.action_save_and_exit_edit()
+            
+            def _update_vim_status(self, message=""):
+                self.parent._update_vim_status(message)
+        
+        vim_app = EditMixinVimApp(self)
+        
+        # Create vim editor
+        vim_editor = VimEditor(
+            vim_app,
+            content=content,
+            id="edit-container"
         )
-        # Ensure the text area takes up available space and is visible
-        edit_area.styles.width = "1fr"
-        edit_area.styles.height = "100%"
-        edit_area.styles.color = "white"  # Force text color to white
-        edit_area.styles.background = "black"  # Force background to black
-        edit_area.styles.padding = 1  # Add some padding
-        logger.info(f"EditMixin: VimEditTextArea created, mounting in container")
-        # Set up line numbers update callback
-        edit_area.line_numbers_widget = line_numbers
         
-        # Monkey-patch the line numbers update method
-        def update_line_numbers(current, total, area):
-            line_numbers.update(self._format_line_numbers(current, total))
+        # Store reference for save/exit
+        self.vim_editor = vim_editor
         
-        line_numbers.set_line_numbers = update_line_numbers
+        container.mount(vim_editor)
         
-        # Mount both widgets
-        edit_container.mount(line_numbers)
-        edit_container.mount(edit_area)
+        # Focus after mounting
+        self.call_after_refresh(lambda: vim_editor.focus_editor())
         
-        # Initialize line numbers with simple implementation
-        total_lines = len(doc["content"].splitlines())
-        line_numbers.update(self._format_line_numbers(0, total_lines))
-        
-        edit_area.focus()
-        
-        # Force refresh to ensure content is displayed
-        self.call_after_refresh(lambda: edit_area.refresh())
+        logger.info(f"EditMixin: VimEditor mounted and focused")
     
     def action_save_and_exit_edit(self) -> None:
         """Save and exit edit mode."""
@@ -104,6 +89,12 @@ class EditMixin:
             return
             
         container = self.query_one("#preview")
+        
+        # Remove vim editor if it exists
+        if hasattr(self, 'vim_editor'):
+            self.vim_editor.remove()
+            delattr(self, 'vim_editor')
+        
         container.remove_children()
         
         from textual.widgets import RichLog
@@ -126,15 +117,3 @@ class EditMixin:
     def _update_vim_status(self, message: str = "") -> None:
         """Update status with vim mode information. Override in subclass."""
         pass
-    
-    def _format_line_numbers(self, current_line: int, total_lines: int) -> str:
-        """Format line numbers for display."""
-        from rich.text import Text
-        lines = []
-        for i in range(total_lines):
-            if i == current_line:
-                lines.append(f"[bold yellow]{i+1:>3}[/bold yellow]")
-            else:
-                rel = abs(i - current_line)
-                lines.append(f"[dim]{rel:>3}[/dim]" if rel > 0 else f"{i+1:>3}")
-        return "\n".join(lines)
