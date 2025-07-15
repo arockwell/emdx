@@ -113,11 +113,22 @@ def migration_003_add_document_relationships(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_004_add_execution_pid(conn: sqlite3.Connection):
+    """Add process ID tracking to executions table."""
+    cursor = conn.cursor()
+    
+    # Add pid column to executions table
+    cursor.execute("ALTER TABLE executions ADD COLUMN pid INTEGER")
+    
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (1, "Add tags system", migration_001_add_tags),
     (2, "Add executions tracking", migration_002_add_executions),
     (3, "Add document relationships", migration_003_add_document_relationships),
+    (4, "Add execution PID tracking", migration_004_add_execution_pid),
 ]
 
 

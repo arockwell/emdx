@@ -117,7 +117,12 @@ def display_execution_metadata(execution) -> None:
         'completed': 'green',
         'failed': 'red'
     }.get(execution.status, 'white')
-    console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
+    
+    # Check for zombie process
+    if execution.is_zombie:
+        console.print(f"Status: [{status_style}]{execution.status}[/{status_style}] [red](process dead - zombie!)[/red]")
+    else:
+        console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
     
     # Format timestamps in local timezone
     local_started = execution.started_at.astimezone()
@@ -162,10 +167,15 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         local_time = exec.started_at.astimezone()
         formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
         
+        # Check for zombie
+        status_display = f"[{status_style}]{exec.status}[/{status_style}]"
+        if exec.is_zombie:
+            status_display += " [red]💀[/red]"
+        
         table.add_row(
             exec.id[:8] + "...",  # Show first 8 chars of UUID
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
-            f"[{status_style}]{exec.status}[/{status_style}]",
+            status_display,
             formatted_time
         )
     

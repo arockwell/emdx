@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
-from ..models.executions import Execution, save_execution, update_execution_status
+from ..models.executions import Execution, save_execution, update_execution_status, update_execution_pid
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
 
@@ -246,11 +246,14 @@ def execute_with_claude_detached(
     working_dir: Optional[str] = None,
     doc_id: Optional[str] = None,
     context: Optional[dict] = None
-) -> None:
+) -> int:
     """Execute a task with Claude in a fully detached background process.
     
     This function starts Claude and returns immediately without waiting.
     The subprocess continues running independently of the parent process.
+    
+    Returns:
+        The process ID of the started subprocess.
     """
     if allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
@@ -340,6 +343,8 @@ def execute_with_claude_detached(
         # Return immediately - don't wait or read from pipes
         console.print(f"[green]✅ Claude started in background (PID: {process.pid})[/green]")
         
+        return process.pid
+        
     except FileNotFoundError as e:
         # Handle missing nohup
         if "nohup" in str(e):
@@ -360,6 +365,7 @@ def execute_with_claude_detached(
             log_handle.close()
             
             console.print(f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]")
+            return process.pid
         else:
             raise
 
@@ -548,7 +554,7 @@ def execute_document_smart_background(
     save_execution(execution)
 
     # Execute with Claude in detached mode
-    execute_with_claude_detached(
+    pid = execute_with_claude_detached(
         task=prompt,
         execution_id=execution_id,
         log_file=log_file,
@@ -557,6 +563,9 @@ def execute_document_smart_background(
         doc_id=str(doc_id),
         context=context
     )
+    
+    # Update execution with PID
+    update_execution_pid(execution_id, pid)
 
 
 def execute_document_smart(
@@ -764,7 +773,7 @@ def monitor_execution_detached(
         save_execution(execution)
 
         # Execute with Claude in detached mode
-        execute_with_claude_detached(
+        pid = execute_with_claude_detached(
             task=task,
             execution_id=execution_id,
             log_file=log_file,
@@ -773,6 +782,9 @@ def monitor_execution_detached(
             doc_id=doc_id,
             context=None  # Context not available in these functions yet
         )
+        
+        # Update execution with PID
+        update_execution_pid(execution_id, pid)
     except Exception as e:
         # Log error
         try:
