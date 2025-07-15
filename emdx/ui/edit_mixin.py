@@ -44,14 +44,9 @@ class EditMixin:
         edit_container = Horizontal(id="edit-container")
         container.mount(edit_container)
         
-        # Create line numbers widget if available
-        try:
-            from .main_browser import SimpleVimLineNumbers
-            line_numbers = SimpleVimLineNumbers(id="line-numbers")
-        except ImportError:
-            # If SimpleVimLineNumbers is not available, create a placeholder
-            from textual.widgets import Static
-            line_numbers = Static("", id="line-numbers")
+        # Create line numbers widget
+        from textual.widgets import Static
+        line_numbers = Static("", id="line-numbers", classes="vim-line-numbers")
         
         # Create edit area
         edit_area = VimEditTextArea(
@@ -59,16 +54,22 @@ class EditMixin:
             text=doc["content"], 
             id="edit-area"
         )
+        # Set up line numbers update callback
         edit_area.line_numbers_widget = line_numbers
+        
+        # Monkey-patch the line numbers update method
+        def update_line_numbers(current, total, area):
+            line_numbers.update(self._format_line_numbers(current, total))
+        
+        line_numbers.set_line_numbers = update_line_numbers
         
         # Mount both widgets
         edit_container.mount(line_numbers)
         edit_container.mount(edit_area)
         
-        # Initialize line numbers
-        if hasattr(line_numbers, 'set_line_numbers'):
-            total_lines = len(doc["content"].splitlines())
-            line_numbers.set_line_numbers(0, total_lines, edit_area)
+        # Initialize line numbers with simple implementation
+        total_lines = len(doc["content"].splitlines())
+        line_numbers.update(self._format_line_numbers(0, total_lines))
         
         edit_area.focus()
     
@@ -110,3 +111,15 @@ class EditMixin:
     def _update_vim_status(self, message: str = "") -> None:
         """Update status with vim mode information. Override in subclass."""
         pass
+    
+    def _format_line_numbers(self, current_line: int, total_lines: int) -> str:
+        """Format line numbers for display."""
+        from rich.text import Text
+        lines = []
+        for i in range(total_lines):
+            if i == current_line:
+                lines.append(f"[bold yellow]{i+1:>3}[/bold yellow]")
+            else:
+                rel = abs(i - current_line)
+                lines.append(f"[dim]{rel:>3}[/dim]" if rel > 0 else f"{i+1:>3}")
+        return "\n".join(lines)
