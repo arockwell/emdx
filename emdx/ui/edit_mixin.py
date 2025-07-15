@@ -66,12 +66,23 @@ class EditMixin:
         # Store reference for save/exit
         self.vim_editor = vim_editor
         
+        logger.info(f"EditMixin: About to mount VimEditor, content starts with: {content[:50]}")
         container.mount(vim_editor)
         
-        # Focus after mounting
-        self.call_after_refresh(lambda: vim_editor.focus_editor())
+        # Debug: Check if text area actually has content after mounting
+        def debug_check():
+            if hasattr(vim_editor, 'text_area'):
+                actual_text = vim_editor.text_area.text
+                logger.info(f"EditMixin: After mount - text_area has {len(actual_text)} chars")
+                logger.info(f"EditMixin: Text area content starts with: {actual_text[:50]}")
+            else:
+                logger.error("EditMixin: No text_area found in vim_editor!")
+            vim_editor.focus_editor()
         
-        logger.info(f"EditMixin: VimEditor mounted and focused")
+        # Focus after mounting
+        self.call_after_refresh(debug_check)
+        
+        logger.info(f"EditMixin: VimEditor mounted")
     
     def action_save_and_exit_edit(self) -> None:
         """Save and exit edit mode."""

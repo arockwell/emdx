@@ -182,6 +182,22 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
         overflow-y: hidden;
         scrollbar-size: 0 0;
     }
+    
+    /* VimEditor inside preview container */
+    #preview VimEditor {
+        width: 100%;
+        height: 100%;
+    }
+    
+    #preview #vim-edit-container {
+        width: 100%;
+        height: 100%;
+    }
+    
+    #preview #vim-text-area {
+        color: $text;
+        background: $background;
+    }
     """
     
     # Reactive properties
