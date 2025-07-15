@@ -3,6 +3,7 @@
 
 import logging
 from textual.binding import Binding
+from .widget_ids import PREVIEW_CONTAINER, PREVIEW_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +24,30 @@ class SelectionMixin:
         """Get current document content. Override in subclass."""
         return "Select and copy text here..."
     
-    def action_toggle_selection_mode(self) -> None:
+    async def action_toggle_selection_mode(self) -> None:
         """Toggle between formatted view and text selection mode."""
         try:
-            container = self.query_one("#preview")
+            container = self.query_one(f"#{PREVIEW_CONTAINER}")
             self.selection_mode = not self.selection_mode
             
             # Remove all children to ensure clean state
-            # Make a copy of children list to avoid modification during iteration
-            children_to_remove = list(container.children)
-            for child in children_to_remove:
-                child.remove()
+            logger.info(f"SelectionMixin: Container has {len(container.children)} children before removal")
+            
+            # Remove all children one by one
+            removed_count = 0
+            while container.children:
+                try:
+                    child = container.children[0]
+                    child_type = type(child).__name__
+                    child_id = getattr(child, 'id', 'no-id')
+                    child.remove()
+                    removed_count += 1
+                    logger.info(f"SelectionMixin: Removed child {removed_count}: {child_type} with id={child_id}")
+                except Exception as e:
+                    logger.error(f"SelectionMixin: Failed to remove child: {e}")
+                    break
+            
+            logger.info(f"SelectionMixin: Container has {len(container.children)} children after removal")
             
             if self.selection_mode:
                 from .text_areas import SelectionTextArea
@@ -42,11 +56,12 @@ class SelectionMixin:
                 text_area = SelectionTextArea(
                     self, 
                     text=content, 
-                    id="preview-content"
+                    id=PREVIEW_CONTENT
                 )
                 text_area.read_only = True
                 text_area.can_focus = True
-                container.mount(text_area)
+                # Use await to ensure proper mounting
+                await container.mount(text_area)
                 text_area.focus()
                 logger.info("SelectionMixin: SelectionTextArea mounted and focused")
                 
@@ -55,12 +70,12 @@ class SelectionMixin:
             else:
                 from textual.widgets import RichLog
                 richlog = RichLog(
-                    id="preview-content", 
+                    id=PREVIEW_CONTENT, 
                     wrap=True, 
                     highlight=True, 
                     markup=True
                 )
-                container.mount(richlog)
+                await container.mount(richlog)
                 self._restore_preview_content()
                 
         except Exception as e:
