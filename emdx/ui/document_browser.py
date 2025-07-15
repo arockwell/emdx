@@ -198,6 +198,18 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
         color: $text;
         background: $background;
     }
+    
+    /* Copy file browser vim textarea styling */
+    .file-browser-vim-textarea {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 1 1 0 1 !important;
+        color: $text !important;  /* Force text color */
+        background: $background !important;  /* Force background */
+    }
     """
     
     # Reactive properties

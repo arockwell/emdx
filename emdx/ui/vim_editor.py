@@ -44,6 +44,10 @@ class VimEditor(Vertical):
         self.text_area.word_wrap = True
         self.text_area.show_line_numbers = False  # Using custom vim relative numbers
         
+        # Force text visibility in case CSS isn't working
+        self.text_area.styles.color = "white"
+        self.text_area.styles.background = "rgb(0, 0, 0)"
+        
         # Try setting max line length if available
         if hasattr(self.text_area, 'max_line_length'):
             self.text_area.max_line_length = 80
