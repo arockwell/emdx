@@ -395,7 +395,7 @@ class DocumentBrowser(Widget):
         # Clear preview container completely
         preview_container = self.query_one("#preview-container", Vertical)
         
-        # Remove all children
+        # Remove all children except vim indicator
         for child in list(preview_container.children):
             if child.id not in ["vim-mode-indicator"]:  # Keep vim indicator
                 await child.remove()
@@ -404,15 +404,16 @@ class DocumentBrowser(Widget):
         from textual.containers import ScrollableContainer
         from textual.widgets import RichLog
         
-        # Create preview container with proper structure
+        # Create preview container and mount directly to the attached container
         preview = ScrollableContainer(id="preview")
+        await preview_container.mount(preview)
+        
+        # Now create and mount the content to the attached preview
         preview_content = RichLog(
             id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
         )
         preview_content.can_focus = False  # Disable focus like original
-        
         await preview.mount(preview_content)
-        await preview_container.mount(preview)
         
         self.edit_mode = False
         
@@ -628,22 +629,26 @@ class DocumentBrowser(Widget):
         # Load full document for preview
         full_doc = get_document(str(doc["id"]))
             
-        if full_doc:
-            preview = self.query_one("#preview-content", RichLog)
-            preview.clear()
-            
-            # Render content as markdown
-            from rich.markdown import Markdown
+        if full_doc and not self.edit_mode:
             try:
-                content = full_doc["content"]
-                if content.strip():
-                    markdown = Markdown(content)
-                    preview.write(markdown)
-                else:
-                    preview.write("[dim]Empty document[/dim]")
+                preview = self.query_one("#preview-content", RichLog)
+                preview.clear()
+                
+                # Render content as markdown
+                from rich.markdown import Markdown
+                try:
+                    content = full_doc["content"]
+                    if content.strip():
+                        markdown = Markdown(content)
+                        preview.write(markdown)
+                    else:
+                        preview.write("[dim]Empty document[/dim]")
+                except Exception as e:
+                    # Fallback to plain text if markdown fails
+                    preview.write(full_doc["content"])
             except Exception as e:
-                # Fallback to plain text if markdown fails
-                preview.write(full_doc["content"])
+                # Preview widget not found or not ready - ignore
+                pass
                 
     async def on_input_submitted(self, event) -> None:
         """Handle input submission."""
