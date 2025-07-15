@@ -1257,16 +1257,15 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             self.on_row_selected()
 
     def action_cursor_down(self):
+        # Navigation pattern inspired by NavigationMixin
         if self.mode == "NORMAL":
-            table = self.query_one("#doc-table", DataTable)
-            table.action_cursor_down()
+            self.query_one("#doc-table", DataTable).action_cursor_down()
         elif self.mode == "LOG_BROWSER":
             self.action_next_log()
 
     def action_cursor_up(self):
         if self.mode == "NORMAL":
-            table = self.query_one("#doc-table", DataTable)
-            table.action_cursor_up()
+            self.query_one("#doc-table", DataTable).action_cursor_up()
         elif self.mode == "LOG_BROWSER":
             self.action_prev_log()
 
@@ -1585,167 +1584,48 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             status = self.query_one("#status", Label)
             status.update(f"Focus failed: {e}")
 
+
     def action_toggle_selection_mode(self):
-        """Toggle between formatted view and text selection mode."""
+        """Toggle between formatted view and text selection mode. 
+        
+        Note: Simplified version inspired by SelectionMixin pattern.
+        """
         try:
-            # Check if we're in the right screen/context
-            try:
-                container = self.query_one("#preview", ScrollableContainer)
-                status = self.query_one("#status", Label)
-            except Exception:
-                # We're not in the main browser screen - selection mode not available
-                return
-
-            if not self.selection_mode:
-                # Switch to selection mode - use TextArea for native selection support
-                self.selection_mode = True
-
+            container = self.query_one("#preview", ScrollableContainer)
+            status = self.query_one("#status", Label)
+            self.selection_mode = not self.selection_mode
+            
+            container.remove_children()
+            
+            if self.selection_mode:
                 # Get content based on current mode
-                plain_content = "Select and copy text here..."
-
                 if self.mode == "LOG_BROWSER":
-                    # Extract log content from RichLog
-                    plain_content = self._extract_log_content()
+                    content = self._extract_log_content()
                 elif self.current_doc_id:
                     doc = get_document(str(self.current_doc_id))
-                    if doc:
-                        content = doc["content"].strip()
-                        if not content.startswith(f"# {doc['title']}"):
-                            plain_content = f"# {doc['title']}\n\n{content}"
-                        else:
-                            plain_content = content
-
-                # Remove old widgets explicitly and safely
-                try:
-                    # First try to remove by query
-                    existing_widget = container.query_one("#preview-content")
-                    if existing_widget:
-                        existing_widget.remove()
-                except Exception:
-                    pass
-
-                # Then remove all children as backup
-                container.remove_children()
-
-                # Refresh the container to ensure DOM is clean
-                container.refresh(layout=True)
-
-                # Use deferred mounting to avoid ID conflicts
-                def mount_text_area():
-                    try:
-                        text_area = SelectionTextArea(
-                            self,  # Pass app instance
-                            plain_content,
-                            id="preview-content"
-                        )
-                        # Make it read-only after creation
-                        text_area.read_only = True
-                        # Keep it focusable for selection
-                        text_area.disabled = False
-                        text_area.can_focus = True
-
-                        # Apply the constrained-textarea CSS class
-                        text_area.add_class("constrained-textarea")
-
-                        # Try to enable word wrap if the property exists
-                        if hasattr(text_area, 'word_wrap'):
-                            text_area.word_wrap = True
-
-                        # Mount the widget with constraints already applied
-                        container.mount(text_area)
-                        text_area.focus()
-
-                        self.cancel_refresh_timer()
-                        status.update(
-                            "SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit"
-                        )
-                    except Exception as mount_error:
-                        self.cancel_refresh_timer()
-                        status.update(f"Failed to create selection widget: {mount_error}")
-
-                # Use call_after_refresh to ensure DOM is clean before mounting
-                self.call_after_refresh(mount_text_area)
-
-            else:
-                # Switch back to formatted view
-                self.selection_mode = False
-
-                # Remove old widgets explicitly and safely
-                try:
-                    # First try to remove by query
-                    existing_widget = container.query_one("#preview-content")
-                    if existing_widget:
-                        existing_widget.remove()
-                except Exception:
-                    pass
-
-                # Then remove all children as backup
-                container.remove_children()
-
-                # Refresh the container to ensure DOM is clean
-                container.refresh(layout=True)
-
-                # Use deferred mounting to avoid ID conflicts
-                def mount_richlog():
-                    richlog = RichLog(
-                        id="preview-content",
-                        wrap=True,
-                        highlight=True,
-                        markup=True,
-                        auto_scroll=False
-                    )
-
-                    # Mount the new widget
-                    container.mount(richlog)
-
-                    # Reset container scroll and refresh layout
-                    container.scroll_to(0, 0, animate=False)
-                    container.refresh(layout=True)
-
-                    # Use deferred content restoration
-                    self.call_after_refresh(self._restore_preview_content)
-
-                # Use call_after_refresh to ensure DOM is clean before mounting
-                self.call_after_refresh(mount_richlog)
-
-                self.cancel_refresh_timer()
-                if self.mode == "LOG_BROWSER":
-                    status.update("LOG BROWSER: j/k to navigate logs, 'm' to kill exec, 's' for text selection, 'q' to exit")
+                    content = f"# {doc['title']}\n\n{doc['content']}" if doc else "No content"
                 else:
-                    status.update("FORMATTED MODE: Nice display, 's' for text selection, ESC to quit")
-
-        except Exception as e:
-            # Recovery: ensure we have a working widget
-            self.cancel_refresh_timer()
-            status = self.query_one("#status", Label)
-            status.update(f"Toggle failed: {e} - restoring view...")
-
-            try:
-                # Emergency recovery - ensure we have a preview widget
-                container = self.query_one("#preview", ScrollableContainer)
-                container.remove_children()
-                # Clear artifacts before mounting
-                container.refresh()
-
-                richlog = RichLog(
-                    id="preview-content",
-                    wrap=True,
-                    highlight=True,
-                    markup=True,
-                    auto_scroll=False
-                )
+                    content = "Select and copy text here..."
+                
+                text_area = SelectionTextArea(self, text=content, id="preview-content")
+                text_area.read_only = True
+                text_area.can_focus = True
+                container.mount(text_area)
+                text_area.focus()
+                status.update("SELECTION MODE: Select text, Ctrl+C to copy, ESC or 's' to exit")
+            else:
+                richlog = RichLog(id="preview-content", wrap=True, highlight=True, markup=True)
                 container.mount(richlog)
-                self.selection_mode = False
-
-                if self.current_doc_id:
-                    self.update_preview(self.current_doc_id)
-
-            except Exception as recovery_error:
-                self.cancel_refresh_timer()
-                status.update(f"Failed to recover preview: {recovery_error}")
-
-    def _restore_preview_content(self):
-        """Restore preview content after switching back from selection mode."""
+                self._restore_preview_content()
+                status.update("NORMAL MODE: j/k navigate, s=select, /=search, f=files, d=git")
+                
+        except Exception as e:
+            logger.error(f"Selection mode toggle error: {e}")
+            try:
+                self.query_one("#status", Label).update(f"Toggle failed: {e}")
+            except:
+                pass
+EOF < /dev/null        """Restore preview content after switching back from selection mode."""
         try:
             if self.mode == "LOG_BROWSER":
                 # Restore log content
