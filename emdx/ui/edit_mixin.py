@@ -37,13 +37,39 @@ class EditMixin:
         container = self.query_one("#preview")
         container.remove_children()
         
+        # Create a horizontal container for line numbers + text area
+        from textual.containers import Horizontal
         from .text_areas import VimEditTextArea
+        
+        edit_container = Horizontal(id="edit-container")
+        container.mount(edit_container)
+        
+        # Create line numbers widget if available
+        try:
+            from .main_browser import SimpleVimLineNumbers
+            line_numbers = SimpleVimLineNumbers(id="line-numbers")
+        except ImportError:
+            # If SimpleVimLineNumbers is not available, create a placeholder
+            from textual.widgets import Static
+            line_numbers = Static("", id="line-numbers")
+        
+        # Create edit area
         edit_area = VimEditTextArea(
             self, 
             text=doc["content"], 
             id="edit-area"
         )
-        container.mount(edit_area)
+        edit_area.line_numbers_widget = line_numbers
+        
+        # Mount both widgets
+        edit_container.mount(line_numbers)
+        edit_container.mount(edit_area)
+        
+        # Initialize line numbers
+        if hasattr(line_numbers, 'set_line_numbers'):
+            total_lines = len(doc["content"].splitlines())
+            line_numbers.set_line_numbers(0, total_lines, edit_area)
+        
         edit_area.focus()
     
     def action_save_and_exit_edit(self) -> None:

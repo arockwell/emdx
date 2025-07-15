@@ -29,7 +29,9 @@ class SelectionMixin:
             container = self.query_one("#preview")
             self.selection_mode = not self.selection_mode
             
-            container.remove_children()
+            # Remove all children to ensure clean state
+            for child in container.children:
+                child.remove()
             
             if self.selection_mode:
                 from .text_areas import SelectionTextArea
