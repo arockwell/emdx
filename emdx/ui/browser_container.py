@@ -130,7 +130,7 @@ class BrowserContainer(App):
             await self.switch_browser("git")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git"]:
+        elif key in ["q", "escape"] and self.current_browser in ["file", "git"]:
             await self.switch_browser("document")
             event.stop()
             return

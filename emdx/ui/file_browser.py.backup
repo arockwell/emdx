@@ -75,6 +75,22 @@ class FileBrowserVimApp:
             logger.debug(f"Error updating vim status: {e}")
 
 
+class FileSelectionTextArea(TextArea):
+    """TextArea for file selection that handles ESC key."""
+    
+    def __init__(self, file_browser, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.file_browser = file_browser
+    
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "escape":
+            # Let the FileBrowser handle ESC
+            self.file_browser.action_handle_escape()
+            event.stop()
+            return
+        # TextArea doesn't have on_key method, so we don't call super()
+
+
 class FileBrowser(Container, NavigationMixin, SelectionMixin):
     """File browser widget with dual-pane layout."""
     
@@ -254,13 +270,13 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
         """Get current file content for selection mode."""
         try:
             file_list = self.query_one(FileList)
-            selected_file = file_list.get_selected_file()
-            if selected_file and selected_file.is_file():
+            selected_path = file_list.get_selected_path()
+            if selected_path and selected_path.is_file():
                 try:
-                    content = selected_file.read_text(encoding='utf-8')
-                    return f"# {selected_file.name}\n\n{content}"
+                    content = selected_path.read_text(encoding='utf-8')
+                    return f"# {selected_path.name}\n\n{content}"
                 except Exception as e:
-                    return f"# {selected_file.name}\n\nError reading file: {e}"
+                    return f"# {selected_path.name}\n\nError reading file: {e}"
             return "No file selected for copying"
         except:
             return "File browser not ready for selection"
@@ -270,63 +286,42 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
         try:
             # Check if we have a file selected
             file_list = self.query_one(FileList)  
-            selected_file = file_list.get_selected_file()
-            if not selected_file or not selected_file.is_file():
-                logger.info(f"🗂️ No file selected for selection mode: {selected_file}")
+            selected_path = file_list.get_selected_path()
+            if not selected_path or not selected_path.is_file():
                 return
                 
-            # Get the parent container that holds both file-list and file-preview
-            horizontal_container = self.query_one(".file-browser-content", Horizontal)
+            # Use FileBrowser's preview container instead of #preview
+            container = self.query_one("#file-preview", FilePreview)
             app = self.app
             
             if not self.selection_mode:
                 # Enter selection mode
-                logger.info(f"🗂️ Entering selection mode for: {selected_file}")
                 self.selection_mode = True
-                self._enter_selection_mode_file_browser(horizontal_container, app)
+                self._enter_selection_mode_file_browser(container, app)
             else:
                 # Exit selection mode
-                logger.info(f"🗂️ Exiting selection mode for: {selected_file}")
                 self.selection_mode = False
-                self._exit_selection_mode_file_browser(horizontal_container, app)
+                self._exit_selection_mode_file_browser(container, app)
                 
         except Exception as e:
-            logger.error(f"🗂️ Error in file browser selection mode: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"Error in file browser selection mode: {e}")
     
-    def _enter_selection_mode_file_browser(self, horizontal_container, app) -> None:
+    def _enter_selection_mode_file_browser(self, container, app) -> None:
         """FileBrowser-specific selection mode entry."""
         # Get content from current file
         plain_content = self.get_current_document_content()
         
-        # Save the current scroll position before removing the preview
-        self.saved_scroll_x = 0
-        self.saved_scroll_y = 0
-        try:
-            old_preview = self.query_one("#file-preview", FilePreview)
-            self.saved_scroll_x = old_preview.scroll_x
-            self.saved_scroll_y = old_preview.scroll_y
-            logger.info(f"🗂️ Saved scroll position: x={self.saved_scroll_x}, y={self.saved_scroll_y}")
-            old_preview.remove()
-        except Exception as e:
-            logger.warning(f"🗂️ Could not remove old preview: {e}")
+        # Remove old widgets
+        container.remove_children()
+        container.refresh(layout=True)
         
-        # Create and mount TextArea for selection in the same spot
+        # Create and mount TextArea for selection
         def mount_text_area():
             try:
                 from .text_areas import SelectionTextArea
-                from textual.containers import ScrollableContainer
-                
-                # Create a container with the same classes as the original FilePreview
-                selection_container = ScrollableContainer(
-                    id="file-selection-container", 
-                    classes="file-preview-pane"
-                )
-                
                 text_area = SelectionTextArea(
                     self,  # Pass host instance
-                    text=plain_content,
+                    plain_content,
                     id="file-selection-content"
                 )
                 text_area.read_only = True
@@ -336,95 +331,24 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
                 if hasattr(text_area, 'word_wrap'):
                     text_area.word_wrap = True
                 
-                # First mount the container to the horizontal container
-                horizontal_container.mount(selection_container)
-                # Then mount the text area to the container
-                selection_container.mount(text_area)
-                
-                # Focus after another refresh to ensure mounting is complete
-                def focus_text_area():
-                    try:
-                        text_area.can_focus = True
-                        text_area.focus()
-                        logger.info(f"🗂️ Selection text area focused: {text_area.has_focus}")
-                    except Exception as e:
-                        logger.error(f"🗂️ Error focusing text area: {e}")
-                
-                self.call_after_refresh(focus_text_area)
+                container.mount(text_area)
+                text_area.focus()
                 
                 if hasattr(app, 'update_status'):
                     app.update_status("SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit")
             except Exception as mount_error:
-                logger.error(f"🗂️ Failed to create selection widget: {mount_error}")
-                import traceback
-                logger.error(traceback.format_exc())
+                logger.error(f"Failed to create selection widget: {mount_error}")
         
         self.call_after_refresh(mount_text_area)
     
-    def _exit_selection_mode_file_browser(self, horizontal_container, app) -> None:
+    def _exit_selection_mode_file_browser(self, container, app) -> None:
         """FileBrowser-specific selection mode exit."""
-        try:
-            # Remove the selection container specifically
-            try:
-                selection_container = self.query_one("#file-selection-container")
-                selection_container.remove()
-            except Exception as e:
-                logger.warning(f"🗂️ Could not remove selection container: {e}")
-            
-            # Recreate the FilePreview widget and restore content
-            def restore_preview():
-                try:
-                    from .file_preview import FilePreview
-                    new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
-                    horizontal_container.mount(new_preview)
-                    
-                    # Wait for the FilePreview widget to be fully mounted before calling preview_file
-                    def call_preview_file():
-                        try:
-                            # Get the currently selected file
-                            file_list = self.query_one(FileList)
-                            selected_file = file_list.get_selected_file()
-                            
-                            if selected_file:
-                                logger.info(f"🗂️ Restoring preview for: {selected_file}")
-                                # Now the FilePreview should have its internal widgets ready
-                                new_preview.preview_file(selected_file)
-                                
-                                # Restore scroll position after another refresh to ensure content is loaded
-                                def restore_scroll():
-                                    try:
-                                        if hasattr(self, 'saved_scroll_x') and hasattr(self, 'saved_scroll_y'):
-                                            logger.info(f"🗂️ Restoring scroll position: x={self.saved_scroll_x}, y={self.saved_scroll_y}")
-                                            new_preview.scroll_to(self.saved_scroll_x, self.saved_scroll_y, animate=False)
-                                        else:
-                                            # Default to top if no saved position
-                                            logger.info("🗂️ No saved scroll position, scrolling to top")
-                                            new_preview.scroll_to(0, 0, animate=False)
-                                    except Exception as e:
-                                        logger.error(f"🗂️ Error restoring scroll: {e}")
-                                
-                                self.call_after_refresh(restore_scroll)
-                            else:
-                                logger.info("🗂️ No file selected for preview restoration")
-                        except Exception as e:
-                            logger.error(f"🗂️ Error calling preview_file: {e}")
-                            import traceback
-                            logger.error(traceback.format_exc())
-                    
-                    # Use call_after_refresh again to ensure FilePreview is fully composed
-                    self.call_after_refresh(call_preview_file)
-                        
-                except Exception as e:
-                    logger.error(f"🗂️ Error restoring preview: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            
-            self.call_after_refresh(restore_preview)
-            
-        except Exception as e:
-            logger.error(f"🗂️ Error in _exit_selection_mode_file_browser: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        # Remove selection widget
+        container.remove_children()
+        container.refresh(layout=True)
+        
+        # Restore preview content
+        self.call_after_refresh(lambda: self.update_preview())
     
     def compose(self) -> ComposeResult:
         """Compose the file browser layout."""
@@ -764,9 +688,13 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     def _exit_selection_mode(self) -> None:
         """Exit selection mode and return to preview."""
         try:
-            if self.selection_mode:
-                # Use the mixin-based toggle method
-                self.action_toggle_selection_mode()
+            file_list = self.query_one("#file-list", FileList)
+            selected_file = file_list.get_selected_file()
+            
+            if selected_file:
+                # Use the existing toggle method to exit selection mode
+                self.selection_mode = False
+                self._switch_to_formatted_mode(None, selected_file)
             
         except Exception as e:
             logger.error(f"🗂️ Error exiting selection mode: {e}")
@@ -880,6 +808,123 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
         self.query_one("#file-status-bar", Static).update(
             "Search coming soon..."
         )
+    
+    def action_toggle_selection_mode(self) -> None:
+        """Toggle between formatted view and text selection mode."""
+        try:
+            file_list = self.query_one("#file-list", FileList)
+            selected_file = file_list.get_selected_file()
+            
+            if not selected_file or not selected_file.is_file():
+                self.query_one("#file-status-bar", Static).update(
+                    "❌ No file selected for text selection"
+                )
+                return
+            
+            preview_container = self.query_one("#file-preview", FilePreview)
+            
+            if not self.selection_mode:
+                logger.info("🗂️ Entering selection mode")
+                self.selection_mode = True
+                self._switch_to_selection_mode(preview_container, selected_file)
+            else:
+                logger.info("🗂️ Exiting selection mode")
+                self.selection_mode = False
+                self._switch_to_formatted_mode(preview_container, selected_file)
+                
+        except Exception as e:
+            logger.error(f"🗂️ Error toggling selection mode: {e}")
+            self.query_one("#file-status-bar", Static).update(
+                f"❌ Selection mode error: {e}"
+            )
+    
+    def _switch_to_selection_mode(self, preview_container, selected_file: Path) -> None:
+        """Switch preview to selection mode by replacing FilePreview widget."""
+        try:
+            # Read file content
+            if selected_file.suffix.lower() in {'.md', '.txt', '.py', '.js', '.json', '.yaml', '.yml'}:
+                content = selected_file.read_text(encoding='utf-8', errors='ignore')
+            else:
+                content = f"Binary file: {selected_file.name}\nSize: {selected_file.stat().st_size} bytes"
+            
+            # Get the horizontal container that holds file-list and file-preview
+            horizontal_container = self.query_one(".file-browser-content", Horizontal)
+            
+            # Remove the existing FilePreview
+            try:
+                old_preview = self.query_one("#file-preview", FilePreview)
+                old_preview.remove()
+            except Exception as e:
+                logger.warning(f"🗂️ Could not remove old preview: {e}")
+            
+            # Create a simple container for selection with unique ID
+            from textual.containers import ScrollableContainer
+            
+            selection_container = ScrollableContainer(id="selection-preview-container", classes="file-preview-pane")
+            text_area = FileSelectionTextArea(
+                self,
+                text=content,
+                read_only=True,
+                id="selection-content"
+            )
+            
+            # Mount the selection container and area
+            horizontal_container.mount(selection_container)
+            selection_container.mount(text_area)
+            
+            # Update status
+            self.query_one("#file-status-bar", Static).update(
+                "📝 SELECTION MODE: Select text with mouse, 's' to exit"
+            )
+            
+        except Exception as e:
+            logger.error(f"🗂️ Error switching to selection mode: {e}")
+            raise
+    
+    def _switch_to_formatted_mode(self, preview_container, selected_file: Path) -> None:
+        """Switch preview back to formatted mode."""
+        try:
+            # Get the horizontal container that holds file-list and file-preview
+            horizontal_container = self.query_one(".file-browser-content", Horizontal)
+            
+            # Remove the selection container
+            selection_container = self.query_one("#selection-preview-container")
+            selection_container.remove()
+            
+            # Recreate the FilePreview widget
+            from .file_preview import FilePreview
+            new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
+            horizontal_container.mount(new_preview)
+            
+            # Use call_after_refresh to ensure widget is mounted before previewing
+            def _preview_after_mount():
+                try:
+                    new_preview.preview_file(selected_file)
+                    # Ensure preview starts at the top
+                    new_preview.scroll_to(0, 0, animate=False)
+                except Exception as e:
+                    logger.error(f"🗂️ Error in delayed preview: {e}")
+            
+            self.call_after_refresh(_preview_after_mount)
+            
+            # Update status  
+            file_count = len(self.query_one("#file-list", FileList).files)
+            status = f"{file_count} items"
+            if not self.show_hidden:
+                status += " (hidden files excluded)"
+            self.query_one("#file-status-bar", Static).update(status)
+            
+        except Exception as e:
+            logger.error(f"🗂️ Error switching to formatted mode: {e}")
+            # Fallback: just clear and show basic info
+            try:
+                horizontal_container = self.query_one(".file-browser-content", Horizontal)
+                fallback_container = ScrollableContainer(id="file-preview", classes="file-preview-pane")
+                from textual.widgets import Static
+                fallback_container.mount(Static(f"Preview of {selected_file.name}"))
+                horizontal_container.mount(fallback_container)
+            except Exception:
+                pass
     
     def handle_save_result(self, result: Optional[dict]) -> None:
         """Handle result from save modal."""

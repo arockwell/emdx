@@ -48,9 +48,17 @@ class FileList(DataTable):
             self.index = index
     
     def watch_selected_index(self, old: int, new: int) -> None:
-        """Update cursor position when selection changes."""
+        """Update cursor position when selection changes programmatically."""
         if 0 <= new < len(self.files) and self.row_count > 0:
-            self.move_cursor(row=new)
+            # Only move cursor if it's different from current position to avoid loops
+            current_row = self.cursor_coordinate[0] if self.cursor_coordinate else -1
+            if current_row != new:
+                logger.debug(f"📁 Moving cursor to row {new} (was {current_row})")
+                self.move_cursor(row=new)
+            else:
+                logger.debug(f"📁 Cursor already at row {new}, skipping move")
+        else:
+            logger.debug(f"📁 Invalid selection index: {new} (files: {len(self.files)})")
     
     def populate_files(self, path: Path, show_hidden: bool = False) -> None:
         """Populate the file list with directory contents.

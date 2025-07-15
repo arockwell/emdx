@@ -6,12 +6,17 @@ Standalone git browser - extracted from the mixin.
 import logging
 import os
 from pathlib import Path
+from typing import Optional, Any
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.widgets import DataTable, Label, RichLog
 from textual.widget import Widget
+from textual import events
+
+from .navigation_mixin import NavigationMixin, TableProvider
+from .browser_types import BrowserState, BrowserMode, GitFileInfo
 
 from emdx.utils.git_ops import (
     get_git_status,
@@ -27,8 +32,8 @@ from emdx.utils.git_ops import (
 logger = logging.getLogger(__name__)
 
 
-class GitBrowser(Widget):
-    """Git diff browser widget."""
+class GitBrowser(Widget, NavigationMixin):
+    """Git diff browser widget with vim-style navigation."""
     
     CSS = """
     GitBrowser {
@@ -51,13 +56,17 @@ class GitBrowser(Widget):
     }
     """
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.git_files = []
-        self.current_worktree_path = os.getcwd()
-        self.current_worktree_index = 0
-        self.worktrees = []
-        self.file_statuses = {}
+        self.git_files: list[dict[str, Any]] = []
+        self.current_worktree_path: str = os.getcwd()
+        self.current_worktree_index: int = 0
+        self.worktrees: list[dict[str, str]] = []
+        self.file_statuses: dict[str, str] = {}
+    
+    def get_primary_table(self) -> DataTable:
+        """Return the git files table for navigation."""
+        return self.query_one("#git-table", DataTable)
         
     def compose(self) -> ComposeResult:
         """Compose the git browser UI."""
@@ -154,15 +163,32 @@ class GitBrowser(Widget):
         
         if "cursor_position" in state:
             try:
-                table = self.query_one("#git-table", DataTable)
+                table: DataTable = self.query_one("#git-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except:
+            except Exception:
                 pass
+    
+    def save_state(self) -> BrowserState:
+        """Save current git browser state."""
+        try:
+            table: DataTable = self.query_one("#git-table", DataTable)
+            return BrowserState(
+                mode="NORMAL",
+                cursor_position=(table.cursor_row, table.cursor_column)
+            )
+        except Exception:
+            return BrowserState(mode="NORMAL", cursor_position=(0, 0))
                 
-    async def on_key(self, event) -> None:
-        """Handle key events."""
-        key = event.key
+    async def on_key(self, event: events.Key) -> None:
+        """Handle key events with navigation mixin and git-specific functionality."""
+        key: str = event.key
         
+        # Use navigation mixin for standard keys
+        if self.handle_navigation_key(key):
+            event.stop()
+            return
+        
+        # Git-specific keys
         if key == "a":
             # Stage file
             await self.stage_current_file()
@@ -174,7 +200,7 @@ class GitBrowser(Widget):
         elif key == "c":
             # Commit - quick and dirty for now
             from emdx.ui.git_browser import CommitMessageScreen
-            result = await self.app.push_screen_wait(CommitMessageScreen())
+            result: Optional[str] = await self.app.push_screen_wait(CommitMessageScreen())
             if result:
                 git_commit(result, self.current_worktree_path)
                 await self.refresh_git_status()
@@ -186,7 +212,7 @@ class GitBrowser(Widget):
             
     async def stage_current_file(self) -> None:
         """Stage the currently selected file."""
-        table = self.query_one("#git-table", DataTable)
+        table: DataTable = self.query_one("#git-table", DataTable)
         if not table.cursor_row or table.cursor_row >= len(self.git_files):
             return
             

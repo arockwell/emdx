@@ -10,6 +10,11 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Protocol
 
+from .navigation_mixin import NavigationMixin
+from .selection_mixin import SelectionMixin
+from .edit_mixin import EditMixin
+from .browser_types import BrowserState, BrowserMode, DocumentDict, DocumentRow
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
@@ -51,7 +56,7 @@ class TextAreaHost(Protocol):
         ...
 
 
-class DocumentBrowser(Widget):
+class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
     """Document browser widget that can host text areas."""
     
     BINDINGS = [
@@ -63,7 +68,7 @@ class DocumentBrowser(Widget):
         Binding("/", "search", "Search"),
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
-        Binding("s", "selection_mode", "Select"),
+        Binding("s", "toggle_selection_mode", "Select"),
     ]
     
     CSS = """
@@ -113,6 +118,11 @@ class DocumentBrowser(Widget):
         height: 1;
         background: $boost;
         text-align: center;
+        display: none;
+    }
+    
+    #vim-mode-indicator.visible {
+        display: block;
     }
     
     #preview {
@@ -124,10 +134,61 @@ class DocumentBrowser(Widget):
         height: 1fr;
         padding: 1;
     }
+    
+    /* Edit mode layout */
+    #edit-container {
+        width: 100%;
+        height: 100%;
+        border: none;
+        padding: 0;
+        margin: 0;
+        background: $background;
+    }
+    
+    #edit-container > * {
+        padding: 0;
+        margin: 0;
+    }
+    
+    #edit-container TextArea {
+        margin: 0;
+        padding-left: 0;
+        border-left: none;
+        background: $background;
+        width: 1fr;
+    }
+    
+    #line-numbers {
+        border: none;
+        scrollbar-size: 0 0;
+        overflow: hidden;
+        padding-top: 0;
+        padding-left: 0;
+        padding-right: 1;
+        padding-bottom: 0;
+        margin-top: 0;
+        margin-left: 0;
+        margin-right: 0;
+    }
+    
+    /* Vim relative line numbers */
+    .vim-line-numbers {
+        width: 4;
+        background: $background;
+        color: $text-muted;
+        text-align: right;
+        padding-right: 1;
+        padding-top: 1;
+        margin: 0;
+        border: none;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
+    }
     """
     
     # Reactive properties
     mode = reactive("NORMAL")
+    selection_mode = reactive(False)
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -137,6 +198,80 @@ class DocumentBrowser(Widget):
         self.edit_mode: bool = False
         self.editing_doc_id: Optional[int] = None
         self.tag_action: Optional[str] = None
+    
+    def get_primary_table(self) -> DataTable:
+        """Return the document table for navigation."""
+        return self.query_one("#doc-table", DataTable)
+    
+    def get_current_document_content(self) -> str:
+        """Get current document content for selection mode."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+            doc = self.filtered_docs[table.cursor_row]
+            full_doc = get_document(str(doc["id"]))
+            if full_doc:
+                content = full_doc["content"].strip()
+                if not content.startswith(f"# {full_doc['title']}"):
+                    return f"# {full_doc['title']}\n\n{content}"
+                else:
+                    return content
+        return "Select and copy text here..."
+    
+    def get_current_document_for_edit(self) -> Optional[Dict[str, Any]]:
+        """Get current document for editing."""
+        table = self.query_one("#doc-table", DataTable)
+        if not table.cursor_row:
+            return None
+            
+        row_idx = table.cursor_row
+        if row_idx >= len(self.filtered_docs):
+            return None
+            
+        doc = self.filtered_docs[row_idx]
+        
+        # Load full document
+        full_doc = get_document(str(doc["id"]))
+        return full_doc
+    
+    def _restore_preview_content(self) -> None:
+        """Restore preview content after exiting selection mode."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+            doc = self.filtered_docs[table.cursor_row]
+            full_doc = get_document(str(doc["id"]))
+            
+            if full_doc:
+                from rich.markdown import Markdown
+                try:
+                    preview_content = self.query_one("#preview-content", RichLog)
+                    content = full_doc["content"]
+                    if content.strip():
+                        markdown = Markdown(content)
+                        preview_content.write(markdown)
+                    else:
+                        preview_content.write("[dim]Empty document[/dim]")
+                except Exception as e:
+                    preview_content.write(full_doc["content"])
+    
+    async def _restore_edit_preview(self) -> None:
+        """Restore preview content after exiting edit mode."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+            doc = self.filtered_docs[table.cursor_row]
+            full_doc = get_document(str(doc["id"]))
+            
+            if full_doc:
+                from rich.markdown import Markdown
+                try:
+                    preview_content = self.query_one("#preview-content", RichLog)
+                    content = full_doc["content"]
+                    if content.strip():
+                        markdown = Markdown(content)
+                        preview_content.write(markdown)
+                    else:
+                        preview_content.write("[dim]Empty document[/dim]")
+                except Exception as e:
+                    preview_content.write(full_doc["content"])
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
@@ -287,105 +422,8 @@ class DocumentBrowser(Widget):
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
                 
-    async def enter_edit_mode(self) -> None:
-        """Enter edit mode for the selected document."""
-        table = self.query_one("#doc-table", DataTable)
-        if not table.cursor_row:
-            return
+        
             
-        row_idx = table.cursor_row
-        if row_idx >= len(self.filtered_docs):
-            return
-            
-        doc = self.filtered_docs[row_idx]
-        self.editing_doc_id = doc["id"]
-        
-        # Load full document
-        full_doc = get_document(str(doc["id"]))
-            
-        if not full_doc:
-            return
-            
-        # Store original preview for restoration
-        self.original_preview_content = full_doc["content"]
-        
-        # Replace preview with edit area
-        preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for edit mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create edit area with proper app instance (self implements TextAreaHost)
-        edit_area: VimEditTextArea = VimEditTextArea(self, full_doc["content"], id="edit-area")
-        await preview_container.mount(edit_area)
-        edit_area.focus()
-        
-        self.edit_mode = True
-        
-        # Show vim mode indicator immediately - use call_after_refresh to ensure widget is ready
-        self.call_after_refresh(lambda: self._update_vim_status(f"{edit_area.vim_mode} | ESC=exit"))
-        
-    def action_save_and_exit_edit(self) -> None:
-        """Save document and exit edit mode (called by VimEditTextArea)."""
-        # For now, just exit edit mode - saving would need to be implemented
-        logger.info("action_save_and_exit_edit called")
-        try:
-            # Use call_after_refresh to avoid timing issues
-            self.call_after_refresh(self._async_exit_edit_mode)
-        except Exception as e:
-            logger.error(f"Error in action_save_and_exit_edit: {e}")
-            # Fallback - try direct call
-            try:
-                import asyncio
-                asyncio.create_task(self.exit_edit_mode())
-            except:
-                pass
-            
-    def _async_exit_edit_mode(self) -> None:
-        """Async wrapper for exit_edit_mode."""
-        logger.info("_async_exit_edit_mode called")
-        import asyncio
-        asyncio.create_task(self.exit_edit_mode())
-        
-    def _update_vim_status(self, message: str = "") -> None:
-        """Update status bar with vim mode info (called by VimEditTextArea)."""
-        try:
-            # Update vim mode indicator
-            vim_indicator = self.query_one("#vim-mode-indicator", Label)
-            if message:
-                vim_indicator.update(f"VIM: {message}")
-            else:
-                vim_indicator.update("VIM: NORMAL | ESC=exit")
-                
-            # Also update main status
-            app = self.app
-            if hasattr(app, 'update_status'):
-                if message:
-                    app.update_status(f"Edit Mode | {message}")
-                else:
-                    app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except:
-            pass
-            
-    def action_toggle_selection_mode(self) -> None:
-        """Toggle selection mode (called by SelectionTextArea)."""
-        if self.mode == "SELECTION":
-            # Exit selection mode
-            try:
-                self.call_after_refresh(self._async_exit_selection_mode)
-            except:
-                pass
-        
-    def _async_exit_selection_mode(self) -> None:
-        """Async wrapper for exit_selection_mode."""
-        import asyncio
-        asyncio.create_task(self.exit_selection_mode())
         
     async def exit_edit_mode(self) -> None:
         """Exit edit mode and restore preview."""
@@ -423,6 +461,11 @@ class DocumentBrowser(Widget):
             vim_indicator.update("")
         except:
             pass
+            
+        # Reset main status bar to normal
+        app = self.app
+        if hasattr(app, 'update_status'):
+            app.update_status("Document Browser | f=files | d=git | q=quit")
         
         # Refresh the current document's preview
         table = self.query_one("#doc-table", DataTable)
@@ -509,52 +552,120 @@ class DocumentBrowser(Widget):
         tag_input.can_focus = True
         tag_input.focus()
         
-    async def action_selection_mode(self) -> None:
-        """Enter selection mode for document content."""
-        table = self.query_one("#doc-table", DataTable)
-        if not table.cursor_row or table.cursor_row >= len(self.filtered_docs):
-            return
-            
-        doc = self.filtered_docs[table.cursor_row]
-        
-        # Load full document for selection
-        full_doc = get_document(str(doc["id"]))
-        if not full_doc:
-            return
-            
-        # Replace preview with selection text area
-        preview_container = self.query_one("#preview-container", Vertical)
+    def action_toggle_selection_mode(self):
+        """Toggle between formatted view and text selection mode."""
         try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
+            # Check if we're in the right screen/context
+            try:
+                container = self.query_one("#preview", ScrollableContainer)
+                app = self.app
+            except Exception:
+                # We're not in the main browser screen - selection mode not available
+                return
+
+            if not self.selection_mode:
+                # Switch to selection mode - use TextArea for native selection support
+                self.selection_mode = True
+
+                # Get content based on current document
+                plain_content = "Select and copy text here..."
+                if hasattr(self, 'filtered_docs') and hasattr(self, 'current_doc_id'):
+                    table = self.query_one("#doc-table", DataTable)
+                    if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+                        doc = self.filtered_docs[table.cursor_row]
+                        full_doc = get_document(str(doc["id"]))
+                        if full_doc:
+                            content = full_doc["content"].strip()
+                            if not content.startswith(f"# {full_doc['title']}"):
+                                plain_content = f"# {full_doc['title']}\n\n{content}"
+                            else:
+                                plain_content = content
+
+                # Remove old widgets explicitly and safely
+                try:
+                    existing_widget = container.query_one("#preview-content")
+                    if existing_widget:
+                        existing_widget.remove()
+                except Exception:
+                    pass
+
+                # Then remove all children as backup
+                container.remove_children()
+                container.refresh(layout=True)
+
+                # Create and mount TextArea for selection
+                from .text_areas import SelectionTextArea
+                def mount_text_area():
+                    try:
+                        text_area = SelectionTextArea(
+                            self,  # Pass app instance
+                            plain_content,
+                            id="preview-content"
+                        )
+                        text_area.read_only = True
+                        text_area.disabled = False
+                        text_area.can_focus = True
+                        text_area.add_class("constrained-textarea")
+
+                        if hasattr(text_area, 'word_wrap'):
+                            text_area.word_wrap = True
+
+                        container.mount(text_area)
+                        text_area.focus()
+
+                        if hasattr(app, 'update_status'):
+                            app.update_status("SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit")
+                    except Exception as mount_error:
+                        if hasattr(app, 'update_status'):
+                            app.update_status(f"Failed to create selection widget: {mount_error}")
+
+                # Use call_after_refresh to ensure DOM is clean before mounting
+                self.call_after_refresh(mount_text_area)
+
+            else:
+                # Switch back to formatted view
+                self.selection_mode = False
+
+                # Remove old widgets
+                try:
+                    existing_widget = container.query_one("#preview-content")
+                    if existing_widget:
+                        existing_widget.remove()
+                except Exception:
+                    pass
+
+                container.remove_children()
+                container.refresh(layout=True)
+
+                # Restore RichLog
+                def mount_richlog():
+                    from textual.widgets import RichLog
+                    richlog = RichLog(
+                        id="preview-content",
+                        wrap=True,
+                        highlight=True,
+                        markup=True,
+                        auto_scroll=False
+                    )
+                    container.mount(richlog)
+                    
+                    # Restore current document preview
+                    self.call_after_refresh(self._restore_preview_content)
+
+                self.call_after_refresh(mount_richlog)
+
+                if hasattr(app, 'update_status'):
+                    app.update_status("Document Browser | f=files | d=git | q=quit")
+
         except Exception as e:
-            logger.error(f"Error removing preview for selection mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create selection text area with proper app instance (self implements TextAreaHost)
-        from .text_areas import SelectionTextArea
-        selection_area: SelectionTextArea = SelectionTextArea(
-            self,
-            full_doc["content"], 
-            id="selection-area",
-            read_only=True
-        )
-        await preview_container.mount(selection_area)
-        selection_area.focus()
-        
-        # Update mode
-        self.mode = "SELECTION"
-        
-        # Update status
-        try:
-            app = self.app
-            if hasattr(app, 'update_status'):
-                app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
-        except:
-            pass
+            # Recovery: ensure we have a working widget
+            logger.error(f"Error in action_toggle_selection_mode: {e}", exc_info=True)
+            try:
+                app = self.app
+                if hasattr(app, 'update_status'):
+                    app.update_status(f"Toggle failed: {e} - try refreshing")
+            except:
+                pass
             
     async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore preview."""
