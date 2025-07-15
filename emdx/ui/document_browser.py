@@ -579,8 +579,8 @@ class DocumentBrowser(Widget):
         )
         preview_content.can_focus = False
         
-        await preview.mount(preview_content)
         await preview_container.mount(preview)
+        await preview.mount(preview_content)
         
         self.mode = "NORMAL"
         

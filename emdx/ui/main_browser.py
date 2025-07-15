@@ -1758,10 +1758,19 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Return focus to table
             table = self.query_one("#doc-table", DataTable)
             table.focus()
-        except Exception:
-            import traceback
-
-            traceback.print_exc()
+        except Exception as e:
+            # Better error handling - don't leave preview blank
+            logger.error(f"Error restoring preview content: {e}", exc_info=True)
+            try:
+                # Fallback - ensure we have a visible error message in preview
+                container = self.query_one("#preview", ScrollableContainer)
+                richlog = container.query_one("#preview-content", RichLog)
+                richlog.write(f"[red]Error loading content: {e}[/red]")
+                richlog.write("\n[yellow]Try refreshing (r) or selecting another document[/yellow]")
+            except Exception:
+                # Last resort fallback
+                status = self.query_one("#status", Label)
+                status.update(f"Preview error: {e} - try refreshing")
 
     def action_toggle_edit_mode(self):
         """Toggle between view and edit modes for current document."""
