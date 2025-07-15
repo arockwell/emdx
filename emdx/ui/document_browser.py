@@ -328,6 +328,9 @@ class DocumentBrowser(Widget):
         
         self.edit_mode = True
         
+        # Show vim mode indicator immediately - use call_after_refresh to ensure widget is ready
+        self.call_after_refresh(lambda: self._update_vim_status(f"{edit_area.vim_mode} | ESC=exit"))
+        
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
         # For now, just exit edit mode - saving would need to be implemented

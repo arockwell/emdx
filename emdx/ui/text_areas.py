@@ -169,7 +169,7 @@ class VimEditTextArea(TextArea):
                     self._update_cursor_style()
                     event.stop()
                     event.prevent_default()
-                    self.app_instance._update_vim_status()
+                    self.app_instance._update_vim_status("NORMAL | ESC=exit")
                     return
                 else:
                     # Second ESC exits edit mode entirely
@@ -286,32 +286,32 @@ class VimEditTextArea(TextArea):
         elif char == "i":
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("INSERT")
         elif char == "a":
             self.move_cursor_relative(columns=1)
             self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("INSERT")
         elif char == "I":
             self._cursor_to_line_start()
             self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("INSERT")
         elif char == "A":
             self._cursor_to_line_end()
             self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("INSERT")
         elif char == "o":
             self._cursor_to_line_end()
             self.insert("\n")
             self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("INSERT")
         elif char == "O":
             self._cursor_to_line_start()
             self.insert("\n")
@@ -319,19 +319,19 @@ class VimEditTextArea(TextArea):
             self._update_line_numbers()
             self.vim_mode = self.VIM_INSERT
             self._update_cursor_style()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("INSERT")
         
         # Visual modes
         elif char == "v":
             self.vim_mode = self.VIM_VISUAL
             self._update_cursor_style()
             self.visual_start = self.cursor_location
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("VISUAL")
         elif char == "V":
             self.vim_mode = self.VIM_VISUAL_LINE
             self._update_cursor_style()
             self.visual_start = self.cursor_location
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("V-LINE")
         
         # Editing commands
         elif char == "x":
@@ -369,7 +369,7 @@ class VimEditTextArea(TextArea):
             self.vim_mode = self.VIM_COMMAND
             self._update_cursor_style()
             self.command_buffer = ":"
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("COMMAND :")
         
         # Tab key - no special handling needed without title input
         elif key == "tab":
@@ -397,7 +397,7 @@ class VimEditTextArea(TextArea):
             self.visual_end = None
             event.stop()
             event.prevent_default()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("NORMAL | ESC=exit")
         else:
             # For other keys, let TextArea handle them
             super().on_key(event)
@@ -412,7 +412,7 @@ class VimEditTextArea(TextArea):
             self.visual_end = None
             event.stop()
             event.prevent_default()
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("NORMAL | ESC=exit")
         else:
             # For other keys, let TextArea handle them
             super().on_key(event)
@@ -427,7 +427,7 @@ class VimEditTextArea(TextArea):
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status("NORMAL | ESC=exit")
         elif event.key == "enter":
             # Execute command
             self._execute_vim_command()
@@ -435,16 +435,17 @@ class VimEditTextArea(TextArea):
             # Remove last character
             if len(self.command_buffer) > 1:
                 self.command_buffer = self.command_buffer[:-1]
+                self.app_instance._update_vim_status(f"COMMAND {self.command_buffer}")
             else:
                 # Exit command mode if we delete the colon
                 self.vim_mode = self.VIM_NORMAL
                 self._update_cursor_style()
                 self.command_buffer = ""
-            self.app_instance._update_vim_status()
+                self.app_instance._update_vim_status("NORMAL | ESC=exit")
         elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:
             # Add character to command buffer
             self.command_buffer += event.character
-            self.app_instance._update_vim_status()
+            self.app_instance._update_vim_status(f"COMMAND {self.command_buffer}")
     
     def _execute_vim_command(self):
         """Execute the vim command in the buffer."""
@@ -483,7 +484,7 @@ class VimEditTextArea(TextArea):
             self.command_buffer = ""
             return
         
-        self.app_instance._update_vim_status()
+        self.app_instance._update_vim_status("NORMAL | ESC=exit")
     
     def _move_word_forward(self, count: int = 1) -> None:
         """Move cursor forward by word boundaries."""
