@@ -152,6 +152,7 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
         padding-left: 0;
         border-left: none;
         background: $background;
+        color: $text;  /* Fix: Set text color to be visible */
         width: 1fr;
     }
     
