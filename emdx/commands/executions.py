@@ -1,9 +1,13 @@
 """CLI commands for managing executions."""
 
+import subprocess
+import time
+from pathlib import Path
+from typing import Optional
+
 import typer
 from rich.console import Console
 from rich.table import Table
-from typing import Optional
 
 from ..models.executions import (
     get_recent_executions,
@@ -15,6 +19,121 @@ from ..models.executions import (
 
 app = typer.Typer()
 console = Console()
+
+
+def tail_log_subprocess(log_path: Path, follow: bool = False, lines: int = 50) -> None:
+    """Tail a log file using system tail command."""
+    cmd = ['tail', f'-n{lines}']
+    if follow:
+        cmd.append('-f')
+    cmd.append(str(log_path))
+    
+    try:
+        if follow:
+            # Stream output for follow mode
+            console.print("\n[dim]Following log file... Press Ctrl+C to stop[/dim]\n")
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, 
+                                     stderr=subprocess.PIPE, text=True)
+            try:
+                for line in process.stdout:
+                    console.print(line.rstrip())
+            except KeyboardInterrupt:
+                process.terminate()
+                console.print("\n[yellow]Stopped following log[/yellow]")
+        else:
+            # Get static output
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                console.print(result.stdout)
+            else:
+                raise FileNotFoundError("tail command failed")
+    except (FileNotFoundError, OSError):
+        # Fallback to Python implementation
+        tail_log_python(log_path, follow, lines)
+
+
+def tail_log_python(log_path: Path, follow: bool = False, lines: int = 50) -> None:
+    """Pure Python log tailing implementation."""
+    if not log_path.exists():
+        console.print(f"[red]Log file not found: {log_path}[/red]")
+        return
+    
+    # Read last N lines efficiently
+    with open(log_path, 'rb') as f:
+        # Seek to end and work backwards
+        f.seek(0, 2)  # Go to end
+        file_size = f.tell()
+        
+        # Read chunks from end until we have enough lines
+        chunk_size = 8192
+        chunks = []
+        lines_found = 0
+        
+        while lines_found < lines and f.tell() > 0:
+            # Read chunk
+            read_size = min(chunk_size, f.tell())
+            f.seek(-read_size, 1)
+            chunk = f.read(read_size)
+            f.seek(-read_size, 1)
+            
+            # Count lines
+            lines_found += chunk.count(b'\n')
+            chunks.append(chunk)
+        
+        # Combine chunks and get last N lines
+        content = b''.join(reversed(chunks))
+        all_lines = content.decode('utf-8', errors='replace').splitlines()
+        display_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        
+        for line in display_lines:
+            console.print(line)
+    
+    # Follow mode
+    if follow:
+        console.print("\n[dim]Following log file... Press Ctrl+C to stop[/dim]\n")
+        with open(log_path, 'r') as f:
+            # Seek to end
+            f.seek(0, 2)
+            
+            try:
+                while True:
+                    line = f.readline()
+                    if line:
+                        console.print(line.rstrip())
+                    else:
+                        time.sleep(0.1)
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Stopped following log[/yellow]")
+
+
+def display_execution_metadata(execution) -> None:
+    """Display execution metadata in a formatted way."""
+    console.print(f"\n[bold]Execution Details[/bold]")
+    console.print(f"ID: [cyan]{execution.id}[/cyan]")
+    console.print(f"Document: {execution.doc_title} (ID: {execution.doc_id})")
+    
+    status_style = {
+        'running': 'yellow',
+        'completed': 'green',
+        'failed': 'red'
+    }.get(execution.status, 'white')
+    console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
+    
+    # Format timestamps in local timezone
+    local_started = execution.started_at.astimezone()
+    console.print(f"Started: {local_started.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    if execution.completed_at:
+        local_completed = execution.completed_at.astimezone()
+        console.print(f"Completed: {local_completed.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    
+    if execution.exit_code is not None:
+        console.print(f"Exit Code: {execution.exit_code}")
+    
+    if execution.log_file:
+        console.print(f"Log File: {execution.log_file}")
+    
+    if execution.working_dir:
+        console.print(f"Working Dir: {execution.working_dir}")
 
 
 @app.command(name="list")
@@ -96,40 +215,70 @@ def stats():
 
 
 @app.command()
-def show(exec_id: str):
-    """Show details of a specific execution."""
+def show(
+    exec_id: str,
+    follow: bool = typer.Option(None, "--follow", "-f", 
+                               help="Follow log output (auto for running)"),
+    lines: int = typer.Option(50, "--lines", "-n", 
+                             help="Number of log lines to show"),
+    no_header: bool = typer.Option(False, "--no-header", 
+                                  help="Skip metadata, show only logs"),
+    full: bool = typer.Option(False, "--full", 
+                             help="Show entire log file")
+):
+    """Show execution details with integrated log viewer."""
     execution = get_execution(exec_id)
     
     if not execution:
         console.print(f"[red]Execution {exec_id} not found.[/red]")
         raise typer.Exit(1)
     
-    console.print(f"\n[bold]Execution Details[/bold]")
-    console.print(f"ID: [cyan]{execution.id}[/cyan]")
-    console.print(f"Document: {execution.doc_title} (ID: {execution.doc_id})")
+    # Show metadata unless suppressed
+    if not no_header:
+        display_execution_metadata(execution)
     
-    status_style = {
-        'running': 'yellow',
-        'completed': 'green',
-        'failed': 'red'
-    }.get(execution.status, 'white')
-    console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
-    
-    # Format timestamps in local timezone
-    local_started = execution.started_at.astimezone()
-    console.print(f"Started: {local_started.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    if execution.completed_at:
-        local_completed = execution.completed_at.astimezone()
-        console.print(f"Completed: {local_completed.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    
-    if execution.exit_code is not None:
-        console.print(f"Exit Code: {execution.exit_code}")
-    
+    # Handle log display
     if execution.log_file:
-        console.print(f"Log File: {execution.log_file}")
-    
-    if execution.working_dir:
-        console.print(f"Working Dir: {execution.working_dir}")
+        log_path = Path(execution.log_file)
+        
+        if not log_path.exists():
+            console.print("\n[yellow]Log file not yet created[/yellow]")
+            if execution.is_running:
+                console.print("[dim]Execution just started, waiting for log...[/dim]")
+            return
+        
+        # Determine display mode
+        if full:
+            # Show entire log file
+            console.print(f"\n[bold]📋 Full Execution Log:[/bold]\n")
+            with open(log_path, 'r') as f:
+                console.print(f.read())
+        else:
+            # Auto-follow for running executions unless explicitly disabled
+            should_follow = follow if follow is not None else execution.is_running
+            
+            if should_follow and execution.is_running:
+                console.print(f"\n[bold]📋 Following Execution Log:[/bold]")
+                tail_log_subprocess(log_path, follow=True, lines=lines)
+            else:
+                console.print(f"\n[bold]📋 Execution Log (last {lines} lines):[/bold]\n")
+                tail_log_subprocess(log_path, follow=False, lines=lines)
+
+
+@app.command()
+def logs(
+    exec_id: str,
+    follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
+    lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show")
+):
+    """Show only the logs for an execution (no metadata)."""
+    show(exec_id, follow=follow, lines=lines, no_header=True, full=False)
+
+
+@app.command()
+def tail(exec_id: str):
+    """Follow the log of a running execution (alias for show -f)."""
+    show(exec_id, follow=True)
 
 
 @app.command(name="kill")
