@@ -40,7 +40,7 @@ class EditMixin:
         from .text_areas import VimEditTextArea
         edit_area = VimEditTextArea(
             self, 
-            content=doc["content"], 
+            text=doc["content"], 
             id="edit-area"
         )
         container.mount(edit_area)
