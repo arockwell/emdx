@@ -77,9 +77,11 @@ def run_textual_with_nvim_wrapper():
                 continue
 
             # Run textual browser
-            from emdx.ui.textual_browser import run_minimal
+            from emdx.ui.run_browser import run_browser
 
-            exit_code = run_minimal()
+            # For now, just run the browser - no special exit codes yet
+            run_browser()
+            exit_code = 0
 
             # Check exit code to see if we should continue
             if exit_code == 42:  # Special code for edit request
