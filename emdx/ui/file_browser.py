@@ -294,134 +294,61 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     
     def _enter_selection_mode_file_browser(self, horizontal_container, app) -> None:
         """FileBrowser-specific selection mode entry."""
-        # Get content from current file
+        # Get content and save scroll position
         plain_content = self.get_current_document_content()
-        
-        # Save the current scroll position before removing the preview
         self.saved_scroll_x = 0
         self.saved_scroll_y = 0
+        
         try:
             old_preview = self.query_one("#file-preview", FilePreview)
             self.saved_scroll_x = old_preview.scroll_x
             self.saved_scroll_y = old_preview.scroll_y
-            logger.info(f"🗂️ Saved scroll position: x={self.saved_scroll_x}, y={self.saved_scroll_y}")
             old_preview.remove()
-        except Exception as e:
-            logger.warning(f"🗂️ Could not remove old preview: {e}")
+        except:
+            pass
         
-        # Create and mount TextArea for selection in the same spot
-        def mount_text_area():
-            try:
-                from .text_areas import SelectionTextArea
-                from textual.containers import ScrollableContainer
-                
-                # Create a container with the same classes as the original FilePreview
-                selection_container = ScrollableContainer(
-                    id="file-selection-container", 
-                    classes="file-preview-pane"
-                )
-                
-                text_area = SelectionTextArea(
-                    self,  # Pass host instance
-                    text=plain_content,
-                    id="file-selection-content"
-                )
-                text_area.read_only = True
-                text_area.disabled = False
-                text_area.can_focus = True
-                
-                if hasattr(text_area, 'word_wrap'):
-                    text_area.word_wrap = True
-                
-                # First mount the container to the horizontal container
-                horizontal_container.mount(selection_container)
-                # Then mount the text area to the container
-                selection_container.mount(text_area)
-                
-                # Focus after another refresh to ensure mounting is complete
-                def focus_text_area():
-                    try:
-                        text_area.can_focus = True
-                        text_area.focus()
-                        logger.info(f"🗂️ Selection text area focused: {text_area.has_focus}")
-                    except Exception as e:
-                        logger.error(f"🗂️ Error focusing text area: {e}")
-                
-                self.call_after_refresh(focus_text_area)
-                
-                if hasattr(app, 'update_status'):
-                    app.update_status("SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit")
-            except Exception as mount_error:
-                logger.error(f"🗂️ Failed to create selection widget: {mount_error}")
-                import traceback
-                logger.error(traceback.format_exc())
+        # Create selection widgets
+        from .text_areas import SelectionTextArea
+        from textual.containers import ScrollableContainer
         
-        self.call_after_refresh(mount_text_area)
+        selection_container = ScrollableContainer(id="file-selection-container", classes="file-preview-pane")
+        text_area = SelectionTextArea(self, text=plain_content, id="file-selection-content")
+        text_area.read_only = True
+        text_area.can_focus = True
+        text_area.word_wrap = True
+        
+        horizontal_container.mount(selection_container)
+        selection_container.mount(text_area)
+        
+        self.call_after_refresh(lambda: text_area.focus())
+        
+        if hasattr(app, 'update_status'):
+            app.update_status("SELECTION MODE: Select text, Ctrl+C to copy, ESC to exit")
     
     def _exit_selection_mode_file_browser(self, horizontal_container, app) -> None:
         """FileBrowser-specific selection mode exit."""
+        # Remove selection container
         try:
-            # Remove the selection container specifically
-            try:
-                selection_container = self.query_one("#file-selection-container")
-                selection_container.remove()
-            except Exception as e:
-                logger.warning(f"🗂️ Could not remove selection container: {e}")
+            self.query_one("#file-selection-container").remove()
+        except:
+            pass
+        
+        # Recreate FilePreview widget
+        from .file_preview import FilePreview
+        new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
+        horizontal_container.mount(new_preview)
+        
+        # Restore preview content and scroll position
+        file_list = self.query_one(FileList)
+        selected_file = file_list.get_selected_file()
+        
+        if selected_file:
+            self.call_after_refresh(lambda: new_preview.preview_file(selected_file))
             
-            # Recreate the FilePreview widget and restore content
-            def restore_preview():
-                try:
-                    from .file_preview import FilePreview
-                    new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
-                    horizontal_container.mount(new_preview)
-                    
-                    # Wait for the FilePreview widget to be fully mounted before calling preview_file
-                    def call_preview_file():
-                        try:
-                            # Get the currently selected file
-                            file_list = self.query_one(FileList)
-                            selected_file = file_list.get_selected_file()
-                            
-                            if selected_file:
-                                logger.info(f"🗂️ Restoring preview for: {selected_file}")
-                                # Now the FilePreview should have its internal widgets ready
-                                new_preview.preview_file(selected_file)
-                                
-                                # Restore scroll position after another refresh to ensure content is loaded
-                                def restore_scroll():
-                                    try:
-                                        if hasattr(self, 'saved_scroll_x') and hasattr(self, 'saved_scroll_y'):
-                                            logger.info(f"🗂️ Restoring scroll position: x={self.saved_scroll_x}, y={self.saved_scroll_y}")
-                                            new_preview.scroll_to(self.saved_scroll_x, self.saved_scroll_y, animate=False)
-                                        else:
-                                            # Default to top if no saved position
-                                            logger.info("🗂️ No saved scroll position, scrolling to top")
-                                            new_preview.scroll_to(0, 0, animate=False)
-                                    except Exception as e:
-                                        logger.error(f"🗂️ Error restoring scroll: {e}")
-                                
-                                self.call_after_refresh(restore_scroll)
-                            else:
-                                logger.info("🗂️ No file selected for preview restoration")
-                        except Exception as e:
-                            logger.error(f"🗂️ Error calling preview_file: {e}")
-                            import traceback
-                            logger.error(traceback.format_exc())
-                    
-                    # Use call_after_refresh again to ensure FilePreview is fully composed
-                    self.call_after_refresh(call_preview_file)
-                        
-                except Exception as e:
-                    logger.error(f"🗂️ Error restoring preview: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            
-            self.call_after_refresh(restore_preview)
-            
-        except Exception as e:
-            logger.error(f"🗂️ Error in _exit_selection_mode_file_browser: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            # Restore scroll position
+            scroll_x = getattr(self, 'saved_scroll_x', 0)
+            scroll_y = getattr(self, 'saved_scroll_y', 0)
+            self.call_after_refresh(lambda: new_preview.scroll_to(scroll_x, scroll_y, animate=False))
     
     def compose(self) -> ComposeResult:
         """Compose the file browser layout."""
@@ -636,58 +563,39 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     
     def _switch_to_edit_mode(self, selected_file: Path) -> None:
         """Switch preview to edit mode by replacing FilePreview widget."""
+        # Read file content
         try:
-            # Read file content
-            try:
-                content = selected_file.read_text(encoding='utf-8', errors='ignore')
-            except Exception as e:
-                self.query_one("#file-status-bar", Static).update(
-                    f"❌ Cannot read file: {e}"
-                )
-                return
-            
-            # Get the horizontal container that holds file-list and file-preview
-            horizontal_container = self.query_one(".file-browser-content", Horizontal)
-            
-            # Remove the existing FilePreview
-            try:
-                old_preview = self.query_one("#file-preview", FilePreview)
-                old_preview.remove()
-            except Exception as e:
-                logger.warning(f"🗂️ Could not remove old preview: {e}")
-            
-            # Use unified vim editor with line numbers
-            from .vim_editor import VimEditor
-            
-            # Create mock app instance for vim editor
-            vim_app = FileBrowserVimApp(self)
-            
-            # Create unified vim editor with line numbers
-            self.vim_editor = VimEditor(
-                vim_app,
-                content=content,
-                id="edit-preview-container",
-                classes="file-preview-pane"
-            )
-            
-            # Store file path for saving
-            self.vim_editor.text_area.file_path = selected_file
-            
-            # Mount the vim editor
-            horizontal_container.mount(self.vim_editor)
-            
-            # Focus after mounting
-            self.call_after_refresh(lambda: self.vim_editor.focus_editor())
-            
-            # Update status with vim mode info
-            mode = self.vim_editor.vim_mode
-            self.query_one("#file-status-bar", Static).update(
-                f"📝 VIM {mode}: {selected_file.name} - ESC to save and exit"
-            )
-            
+            content = selected_file.read_text(encoding='utf-8', errors='ignore')
         except Exception as e:
-            logger.error(f"🗂️ Error switching to edit mode: {e}")
-            raise
+            self.query_one("#file-status-bar", Static).update(f"❌ Cannot read file: {e}")
+            return
+        
+        # Remove existing preview
+        horizontal_container = self.query_one(".file-browser-content", Horizontal)
+        try:
+            self.query_one("#file-preview", FilePreview).remove()
+        except:
+            pass
+        
+        # Create vim editor
+        from .vim_editor import VimEditor
+        vim_app = FileBrowserVimApp(self)
+        
+        self.vim_editor = VimEditor(
+            vim_app, content=content, 
+            id="edit-preview-container", 
+            classes="file-preview-pane"
+        )
+        self.vim_editor.text_area.file_path = selected_file
+        
+        horizontal_container.mount(self.vim_editor)
+        self.call_after_refresh(lambda: self.vim_editor.focus_editor())
+        
+        # Update status
+        mode = self.vim_editor.vim_mode
+        self.query_one("#file-status-bar", Static).update(
+            f"📝 VIM {mode}: {selected_file.name} - ESC to save and exit"
+        )
     
     def action_handle_escape(self) -> None:
         """Handle escape key - exit current mode."""
@@ -751,83 +659,44 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     
     def save_and_exit_edit_mode(self, edit_area) -> None:
         """Save edited file and exit edit mode."""
+        if not hasattr(edit_area, 'file_path'):
+            return
+        
+        # Save file
         try:
-            if not hasattr(edit_area, 'file_path'):
-                logger.error("🗂️ Edit area missing file_path")
-                return
-            
-            file_path = edit_area.file_path
-            new_content = edit_area.text
-            
-            # Save file
-            try:
-                file_path.write_text(new_content, encoding='utf-8')
-                logger.info(f"🗂️ Saved file: {file_path}")
-            except Exception as e:
-                self.query_one("#file-status-bar", Static).update(
-                    f"❌ Save failed: {e}"
-                )
-                return
-            
-            # Exit edit mode - restore FilePreview widget
-            horizontal_container = self.query_one(".file-browser-content", Horizontal)
-            
-            # Reset edit mode flag
-            self.edit_mode = False
-            if hasattr(self, "vim_editor"):
-                delattr(self, "vim_editor")
-            
-            # Use call_after_refresh to ensure proper widget cleanup and recreation
-            def _recreate_widgets():
-                try:
-                    # Save current cursor position
-                    current_cursor_row = self.selected_index
-                    
-                    # Remove vim editor widget if it exists
-                    try:
-                        vim_editor = self.query_one("#edit-preview-container")
-                        vim_editor.remove()
-                    except Exception:
-                        pass
-                    
-                    # Just recreate the FilePreview widget to replace the vim editor
-                    from .file_preview import FilePreview
-                    new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
-                    
-                    # Mount the new preview widget
-                    horizontal_container.mount(new_preview)
-                    
-                    # Refresh the existing file list and restore cursor position
-                    try:
-                        file_list = self.query_one("#file-list", FileList)
-                        file_list.populate_files(self.current_path, self.show_hidden)
-                        
-                        # Restore cursor position carefully to avoid infinite loops
-                        if file_list.row_count > current_cursor_row:
-                            # Use call_after_refresh to ensure populate_files is complete
-                            def _restore_cursor():
-                                try:
-                                    file_list.cursor_coordinate = (current_cursor_row, 0)
-                                    # Don't set self.selected_index here - let the selection event handle it
-                                except Exception as e:
-                                    logger.error(f"🗂️ Error restoring cursor: {e}")
-                            self.call_after_refresh(_restore_cursor)
-                    except Exception as e:
-                        logger.error(f"🗂️ Error refreshing file list: {e}")
-                    
-                    # Preview the file after everything is mounted
-                    self.call_after_refresh(lambda: self._preview_after_save(new_preview, file_path))
-                    
-                except Exception as e:
-                    logger.error(f"🗂️ Error recreating widgets: {e}")
-                    
-            self.call_after_refresh(_recreate_widgets)
-            
+            edit_area.file_path.write_text(edit_area.text, encoding='utf-8')
         except Exception as e:
-            logger.error(f"🗂️ Error saving and exiting edit mode: {e}")
-            self.query_one("#file-status-bar", Static).update(
-                f"❌ Save error: {e}"
-            )
+            self.query_one("#file-status-bar", Static).update(f"❌ Save failed: {e}")
+            return
+        
+        # Exit edit mode
+        self.edit_mode = False
+        if hasattr(self, "vim_editor"):
+            delattr(self, "vim_editor")
+        
+        # Recreate widgets
+        horizontal_container = self.query_one(".file-browser-content", Horizontal)
+        current_cursor_row = self.selected_index
+        
+        # Remove vim editor and mount new preview
+        try:
+            self.query_one("#edit-preview-container").remove()
+        except:
+            pass
+        
+        from .file_preview import FilePreview
+        new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
+        horizontal_container.mount(new_preview)
+        
+        # Refresh file list and restore cursor
+        file_list = self.query_one("#file-list", FileList)
+        file_list.populate_files(self.current_path, self.show_hidden)
+        
+        if file_list.row_count > current_cursor_row:
+            self.call_after_refresh(lambda: setattr(file_list, 'cursor_coordinate', (current_cursor_row, 0)))
+        
+        # Preview the file
+        self.call_after_refresh(lambda: self._preview_after_save(new_preview, edit_area.file_path))
     
     def _preview_after_save(self, new_preview, file_path):
         """Preview file after saving and widget recreation."""
