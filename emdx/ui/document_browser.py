@@ -43,6 +43,11 @@ class DocumentBrowser(Widget):
         Binding("k", "cursor_up", "Up"),
         Binding("g", "cursor_top", "Top"),
         Binding("G", "cursor_bottom", "Bottom"),
+        Binding("e", "edit_document", "Edit"),
+        Binding("/", "search", "Search"),
+        Binding("t", "add_tags", "Add Tags"),
+        Binding("T", "remove_tags", "Remove Tags"),
+        Binding("s", "selection_mode", "Select"),
     ]
     
     CSS = """
@@ -55,24 +60,53 @@ class DocumentBrowser(Widget):
         display: none;
         height: 3;
         margin: 1;
+        border: solid $primary;
     }
     
     #search-input.visible, #tag-input.visible {
         display: block;
     }
     
-    #doc-table {
-        width: 45%;
-        margin: 0;
+    #tag-selector {
+        display: none;
+        height: 1;
+        margin: 0 1;
     }
     
-    #preview-container {
-        width: 55%;
-        padding: 0 1;
+    Horizontal {
+        height: 1fr;
     }
     
     #sidebar {
-        width: 45%;
+        width: 40%;
+        min-width: 40;
+    }
+    
+    #doc-table {
+        height: 1fr;
+        min-height: 10;
+    }
+    
+    #preview-container {
+        width: 60%;
+        min-width: 40;
+        padding: 0 1;
+    }
+    
+    #vim-mode-indicator {
+        height: 1;
+        background: $boost;
+        text-align: center;
+    }
+    
+    #preview {
+        height: 1fr;
+        border: solid $primary;
+    }
+    
+    #preview-content {
+        height: 1fr;
+        padding: 1;
     }
     """
     
@@ -129,6 +163,9 @@ class DocumentBrowser(Widget):
         # Hide inputs initially
         search_input.display = False
         tag_input.display = False
+        
+        # Set focus to table so keys work immediately
+        table.focus()
         
         # Load documents
         await self.load_documents()
@@ -220,47 +257,16 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
-        if self.mode == "NORMAL":
-            if key == "/":
-                # Enter search mode
-                self.mode = "SEARCH"
-                search_input = self.query_one("#search-input", Input)
-                search_input.display = True
-                search_input.can_focus = True
-                search_input.focus()
+        # Handle escape key to exit modes
+        if key == "escape":
+            if self.edit_mode:
+                await self.exit_edit_mode()
                 event.stop()
-            elif key == "t":
-                # Tag mode
-                self.mode = "TAG"
-                self.tag_action = "add"
-                tag_input = self.query_one("#tag-input", Input)
-                tag_input.display = True
-                tag_input.can_focus = True
-                tag_input.focus()
+            elif self.mode == "SEARCH":
+                self.exit_search_mode()
                 event.stop()
-            elif key == "e":
-                # Edit mode
-                await self.enter_edit_mode()
-                event.stop()
-        elif self.mode == "SEARCH":
-            if key == "escape":
-                # Exit search
-                self.mode = "NORMAL"
-                search_input = self.query_one("#search-input", Input)
-                search_input.display = False
-                search_input.can_focus = False
-                table = self.query_one("#doc-table", DataTable)
-                table.focus()
-                event.stop()
-        elif self.mode == "TAG":
-            if key == "escape":
-                # Exit tag mode
-                self.mode = "NORMAL"
-                tag_input = self.query_one("#tag-input", Input)
-                tag_input.display = False
-                tag_input.can_focus = False
-                table = self.query_one("#doc-table", DataTable)
-                table.focus()
+            elif self.mode == "TAG":
+                self.exit_tag_mode()
                 event.stop()
                 
     async def enter_edit_mode(self) -> None:
@@ -282,17 +288,59 @@ class DocumentBrowser(Widget):
         if not full_doc:
             return
             
+        # Store original preview for restoration
+        self.original_preview_content = full_doc["content"]
+        
         # Replace preview with edit area
         preview_container = self.query_one("#preview-container", Vertical)
         preview = self.query_one("#preview", ScrollableContainer)
-        preview.remove()
+        await preview.remove()
         
         # Create edit area
         edit_area = VimEditTextArea(full_doc["content"], id="edit-area")
-        preview_container.mount(edit_area)
+        await preview_container.mount(edit_area)
         edit_area.focus()
         
         self.edit_mode = True
+        
+    async def exit_edit_mode(self) -> None:
+        """Exit edit mode and restore preview."""
+        if not self.edit_mode:
+            return
+            
+        # Remove edit area
+        preview_container = self.query_one("#preview-container", Vertical)
+        try:
+            edit_area = self.query_one("#edit-area")
+            await edit_area.remove()
+        except:
+            pass
+            
+        # Restore preview
+        from textual.containers import ScrollableContainer
+        from textual.widgets import RichLog
+        preview = ScrollableContainer(id="preview")
+        preview_content = RichLog(
+            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+        )
+        await preview.mount(preview_content)
+        await preview_container.mount(preview)
+        
+        # Restore content
+        if hasattr(self, 'original_preview_content'):
+            from rich.markdown import Markdown
+            try:
+                if self.original_preview_content.strip():
+                    markdown = Markdown(self.original_preview_content)
+                    preview_content.write(markdown)
+            except:
+                preview_content.write(self.original_preview_content)
+        
+        self.edit_mode = False
+        
+        # Return focus to table
+        table = self.query_one("#doc-table", DataTable)
+        table.focus()
         
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -315,6 +363,53 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
             table.cursor_coordinate = (table.row_count - 1, 0)
+            
+    async def action_edit_document(self) -> None:
+        """Edit the current document."""
+        await self.enter_edit_mode()
+        
+    def action_search(self) -> None:
+        """Enter search mode."""
+        self.mode = "SEARCH"
+        search_input = self.query_one("#search-input", Input)
+        search_input.display = True
+        search_input.can_focus = True
+        search_input.focus()
+        
+    def action_add_tags(self) -> None:
+        """Enter tag adding mode."""
+        self.mode = "TAG"
+        self.tag_action = "add"
+        tag_input = self.query_one("#tag-input", Input)
+        tag_input.display = True
+        tag_input.can_focus = True
+        tag_input.focus()
+        
+    def action_remove_tags(self) -> None:
+        """Enter tag removal mode."""
+        self.mode = "TAG"
+        self.tag_action = "remove"
+        # Show tag selector with existing tags
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row >= len(self.filtered_docs):
+            return
+        doc = self.filtered_docs[table.cursor_row]
+        tags = get_document_tags(doc["id"])
+        
+        if not tags:
+            return  # No tags to remove
+            
+        # For now, just use input - proper selector later
+        tag_input = self.query_one("#tag-input", Input)
+        tag_input.placeholder = f"Remove tags: {', '.join(tags)}"
+        tag_input.display = True
+        tag_input.can_focus = True
+        tag_input.focus()
+        
+    def action_selection_mode(self) -> None:
+        """Enter selection mode."""
+        # For now, just a placeholder
+        pass
     
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview when row is highlighted."""
@@ -333,4 +428,91 @@ class DocumentBrowser(Widget):
         if full_doc:
             preview = self.query_one("#preview-content", RichLog)
             preview.clear()
-            preview.write(full_doc["content"])
+            
+            # Render content as markdown
+            from rich.markdown import Markdown
+            try:
+                content = full_doc["content"]
+                if content.strip():
+                    markdown = Markdown(content)
+                    preview.write(markdown)
+                else:
+                    preview.write("[dim]Empty document[/dim]")
+            except Exception as e:
+                # Fallback to plain text if markdown fails
+                preview.write(full_doc["content"])
+                
+    async def on_input_submitted(self, event) -> None:
+        """Handle input submission."""
+        if event.input.id == "search-input":
+            # Handle search
+            query = event.input.value.strip()
+            if query:
+                self.current_search = query
+                await self.apply_search()
+            self.exit_search_mode()
+            
+        elif event.input.id == "tag-input":
+            # Handle tag operations
+            if self.tag_action == "add":
+                await self.add_tags_to_current_doc(event.input.value)
+            elif self.tag_action == "remove":
+                await self.remove_tags_from_current_doc(event.input.value)
+            self.exit_tag_mode()
+            
+    def exit_search_mode(self) -> None:
+        """Exit search mode."""
+        self.mode = "NORMAL"
+        search_input = self.query_one("#search-input", Input)
+        search_input.display = False
+        search_input.can_focus = False
+        search_input.value = ""
+        table = self.query_one("#doc-table", DataTable)
+        table.focus()
+        
+    def exit_tag_mode(self) -> None:
+        """Exit tag mode."""
+        self.mode = "NORMAL"
+        tag_input = self.query_one("#tag-input", Input)
+        tag_input.display = False
+        tag_input.can_focus = False
+        tag_input.value = ""
+        tag_input.placeholder = "Enter tags separated by spaces..."
+        table = self.query_one("#doc-table", DataTable)
+        table.focus()
+        
+    async def apply_search(self) -> None:
+        """Apply current search filter."""
+        if not self.current_search:
+            self.filtered_docs = self.documents
+        else:
+            # Simple title search for now
+            self.filtered_docs = [
+                doc for doc in self.documents
+                if self.current_search.lower() in doc["title"].lower()
+            ]
+        await self.update_table()
+        
+    async def add_tags_to_current_doc(self, tag_text: str) -> None:
+        """Add tags to current document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row >= len(self.filtered_docs):
+            return
+        doc = self.filtered_docs[table.cursor_row]
+        
+        tags = [tag.strip() for tag in tag_text.split() if tag.strip()]
+        if tags:
+            add_tags_to_document(doc["id"], tags)
+            await self.update_table()
+            
+    async def remove_tags_from_current_doc(self, tag_text: str) -> None:
+        """Remove tags from current document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row >= len(self.filtered_docs):
+            return
+        doc = self.filtered_docs[table.cursor_row]
+        
+        tags = [tag.strip() for tag in tag_text.split() if tag.strip()]
+        if tags:
+            remove_tags_from_document(doc["id"], tags)
+            await self.update_table()

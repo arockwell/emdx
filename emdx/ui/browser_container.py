@@ -96,6 +96,10 @@ class BrowserContainer(App):
         browser = self.browsers[browser_type]
         await mount_point.mount(browser)
         
+        # Set focus to the new browser
+        if hasattr(browser, 'focus'):
+            browser.focus()
+        
         # Parent reference is set automatically by Textual during mount
         
         # Restore state if we have it

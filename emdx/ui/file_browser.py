@@ -279,6 +279,14 @@ class FileBrowser(Container):
         logger.info(f"🗂️ Performing initial refresh, is_mounted={self.is_mounted}")
         self.refresh_files()
         self.update_preview()
+        
+        # Set focus to file list so keys work immediately
+        try:
+            file_list = self.query_one("#file-list", FileList)
+            file_list.focus()
+        except:
+            # If that fails, focus the container itself
+            self.focus()
     
     def watch_current_path(self, old_path: Path, new_path: Path) -> None:
         """React to path changes."""
