@@ -42,6 +42,9 @@ class EditMixin:
         from .text_areas import VimEditTextArea
         
         edit_container = Horizontal(id="edit-container")
+        # Ensure container takes full space
+        edit_container.styles.width = "100%"
+        edit_container.styles.height = "100%"
         container.mount(edit_container)
         
         # Create line numbers widget
@@ -78,6 +81,9 @@ class EditMixin:
         line_numbers.update(self._format_line_numbers(0, total_lines))
         
         edit_area.focus()
+        
+        # Force refresh to ensure content is displayed
+        self.call_after_refresh(lambda: edit_area.refresh())
     
     def action_save_and_exit_edit(self) -> None:
         """Save and exit edit mode."""

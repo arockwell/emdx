@@ -49,6 +49,9 @@ class SelectionMixin:
                 container.mount(text_area)
                 text_area.focus()
                 logger.info("SelectionMixin: SelectionTextArea mounted and focused")
+                
+                # Force refresh to ensure content is displayed
+                self.call_after_refresh(lambda: text_area.refresh())
             else:
                 from textual.widgets import RichLog
                 richlog = RichLog(
