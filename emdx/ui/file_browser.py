@@ -206,13 +206,10 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     """
     
     BINDINGS = [
-        Binding("j", "move_down", "Down", show=False),
-        Binding("k", "move_up", "Up", show=False),
+        # Navigation bindings provided by NavigationMixin
         Binding("l", "enter_dir", "Enter/Right", show=False),
         Binding("h", "parent_dir", "Parent/Left", show=False),
         Binding("enter", "enter_dir", "Enter", show=False),
-        Binding("g", "go_top", "Top", show=False),
-        Binding("G", "go_bottom", "Bottom", show=False),
         Binding(".", "toggle_hidden", "Hidden", show=False),
         Binding("q", "quit", "Back", show=True),
         Binding("s", "toggle_selection_mode", "Select", show=True),
@@ -532,29 +529,7 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
             logger.error(f"🗂️ Error in update_preview: {e}")
             pass  # Widgets not ready yet
     
-    def action_move_down(self) -> None:
-        """Move selection down."""
-        try:
-            file_list = self.query_one("#file-list", FileList)
-            if self.selected_index < len(file_list.files) - 1:
-                self.selected_index += 1
-        except Exception:
-            pass
-    
-    def action_move_up(self) -> None:
-        """Move selection up."""
-        if self.selected_index > 0:
-            self.selected_index -= 1
-    
-    def action_go_top(self) -> None:
-        """Go to first item."""
-        self.selected_index = 0
-    
-    def action_go_bottom(self) -> None:
-        """Go to last item."""
-        file_list = self.query_one("#file-list", FileList)
-        if file_list.files:
-            self.selected_index = len(file_list.files) - 1
+    # Navigation methods provided by NavigationMixin
     
     def action_enter_dir(self) -> None:
         """Enter selected directory or save file."""
