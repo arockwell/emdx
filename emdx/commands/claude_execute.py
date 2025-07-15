@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -297,15 +298,29 @@ def execute_with_claude_detached(
         f.write(f"{expanded_task}\n")
         f.write(f"{'─' * 60}\n\n")
     
-    # Start subprocess in detached mode
+    # Start subprocess in detached mode using wrapper
     try:
+        # Get the wrapper script path
+        wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
+        
+        # Build wrapper command: wrapper.py exec_id log_file claude_command...
+        wrapper_cmd = [
+            sys.executable,  # Use current Python interpreter
+            str(wrapper_path),
+            execution_id,
+            str(log_file)
+        ] + cmd
+        
         # Use nohup for true detachment
-        nohup_cmd = ["nohup"] + cmd
+        nohup_cmd = ["nohup"] + wrapper_cmd
+        
+        # Open log file for appending
+        log_handle = open(log_file, 'a')
         
         process = subprocess.Popen(
             nohup_cmd,
             stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
-            stdout=open(log_file, 'a'),  # Direct to file, no pipe
+            stdout=log_handle,  # Direct to file, no pipe
             stderr=subprocess.STDOUT,
             cwd=working_dir,
             env={**os.environ, 'PYTHONUNBUFFERED': '1'},
@@ -313,10 +328,14 @@ def execute_with_claude_detached(
             close_fds=True  # Don't inherit file descriptors
         )
         
+        # Close the file handle in parent process
+        log_handle.close()
+        
         # Log the PID for tracking
         with open(log_file, 'a') as f:
             f.write(f"\n{format_timestamp()} 🔧 Background process started with PID: {process.pid}\n")
             f.write(f"{format_timestamp()} 📄 Output is being written to this log file\n")
+            f.write(f"{format_timestamp()} 🔄 Wrapper will update status on completion\n")
         
         # Return immediately - don't wait or read from pipes
         console.print(f"[green]✅ Claude started in background (PID: {process.pid})[/green]")
@@ -325,16 +344,21 @@ def execute_with_claude_detached(
         # Handle missing nohup
         if "nohup" in str(e):
             # Fallback without nohup
+            log_handle = open(log_file, 'a')
+            
             process = subprocess.Popen(
-                cmd,
+                wrapper_cmd,  # Use wrapper even without nohup
                 stdin=subprocess.DEVNULL,
-                stdout=open(log_file, 'a'),
+                stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 cwd=working_dir,
                 env={**os.environ, 'PYTHONUNBUFFERED': '1'},
                 start_new_session=True,
                 close_fds=True
             )
+            
+            log_handle.close()
+            
             console.print(f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]")
         else:
             raise
