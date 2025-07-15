@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 class GitBrowser(Widget, NavigationMixin):
     """Git diff browser widget with vim-style navigation."""
     
+    BINDINGS = NavigationMixin.NAVIGATION_BINDINGS  # Include j/k/g/G navigation
+    
     CSS = """
     GitBrowser {
         layout: vertical;

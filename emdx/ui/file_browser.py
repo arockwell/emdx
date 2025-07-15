@@ -206,13 +206,13 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     """
     
     BINDINGS = [
-        # Navigation bindings provided by NavigationMixin
+        *NavigationMixin.NAVIGATION_BINDINGS,  # Include j/k/g/G navigation from mixin
+        *SelectionMixin.SELECTION_BINDINGS,    # Include selection mode bindings from mixin
         Binding("l", "enter_dir", "Enter/Right", show=False),
         Binding("h", "parent_dir", "Parent/Left", show=False),
         Binding("enter", "enter_dir", "Enter", show=False),
         Binding(".", "toggle_hidden", "Hidden", show=False),
         Binding("q", "quit", "Back", show=True),
-        Binding("s", "toggle_selection_mode", "Select", show=True),
         Binding("x", "execute_file", "Execute", show=True),
         Binding("e", "edit_file", "Edit", show=True),
         Binding("/", "search", "Search", show=True),

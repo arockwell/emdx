@@ -60,12 +60,12 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
     """Document browser widget that can host text areas."""
     
     BINDINGS = [
-        # Navigation provided by NavigationMixin
-        Binding("e", "edit_document", "Edit"),
+        *NavigationMixin.NAVIGATION_BINDINGS,  # Include navigation bindings from mixin
+        *SelectionMixin.SELECTION_BINDINGS,    # Include selection bindings from mixin
+        *EditMixin.EDIT_BINDINGS,              # Include edit bindings from mixin
         Binding("/", "search", "Search"),
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
-        # Selection provided by SelectionMixin
     ]
     
     CSS = """
