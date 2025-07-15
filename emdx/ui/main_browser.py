@@ -1066,6 +1066,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         event_attrs[attr] = f"ERROR: {attr_error}"
 
             key_logger.info(f"App.on_key: {event_attrs}")
+            key_logger.info(f"TEST: MainBrowser.on_key called with key={event.key}")
             logger.debug(f"Key event: key={event.key}")
 
             # j/k keys are handled by the binding system via action_cursor_down/up
@@ -1132,6 +1133,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     event.prevent_default()
                     event.stop()
                     return
+            elif self.mode == "LOG_BROWSER":
+                # Handle keys specific to LOG_BROWSER mode
+                if event.character == "m":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_mark_execution_complete()
             elif self.mode == "NORMAL":
                 # Handle keys that don't require a document
                 if event.character == "s":
@@ -1142,6 +1149,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     event.prevent_default()
                     event.stop()
                     self.action_new_note()
+                elif event.character == "l":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_log_browser()
                 # Handle keys that require a document
                 elif self.current_doc_id:
                     if event.key == "enter":
@@ -1165,6 +1176,27 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         event.prevent_default()
                         event.stop()
                         self.action_untag_mode()
+                    elif event.character == "g":
+                        logger.info(f"DEBUG: Manual g character handler triggered")
+                        event.prevent_default()
+                        event.stop()
+                        self.action_create_gist()
+                    elif event.character == "f":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_open_file_browser()
+                    elif event.character == "x":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_claude_execute()
+                    elif event.character == "h":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_tmux_split_horizontal()
+                    elif event.character == "v":
+                        event.prevent_default()
+                        event.stop()
+                        self.action_tmux_split_vertical()
 
         # Note: In Textual 4.0, we should NOT call super().on_key()
         # as Textual automatically handles event propagation
@@ -2512,8 +2544,16 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
     def action_log_browser(self):
         """Switch to log browser mode to view and switch between execution logs."""
-        self.mode = "LOG_BROWSER"
-        self.setup_log_browser()
+        logger.info("🔍 action_log_browser called")
+        key_logger.info("action_log_browser triggered")
+        try:
+            self.mode = "LOG_BROWSER"
+            self.setup_log_browser()
+            logger.info("✅ Successfully switched to LOG_BROWSER mode")
+        except Exception as e:
+            logger.error(f"❌ Error in action_log_browser: {e}", exc_info=True)
+            status = self.query_one("#status", Label)
+            status.update(f"Error entering log browser: {e}")
     
     def action_mark_execution_complete(self):
         """Mark the currently selected execution as complete (in LOG_BROWSER mode)."""
@@ -2703,9 +2743,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
     def setup_log_browser(self):
         """Set up the log browser interface with execution list and log viewer."""
+        logger.info("🚀 setup_log_browser called")
         try:
             # Load recent executions from database
+            logger.info("📋 Loading recent executions...")
             self.executions = get_recent_executions(limit=50)
+            logger.info(f"📊 Found {len(self.executions) if self.executions else 0} executions")
 
             if not self.executions:
                 self.cancel_refresh_timer()
