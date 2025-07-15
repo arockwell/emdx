@@ -22,6 +22,7 @@ class Execution:
     log_file: str = ""
     exit_code: Optional[int] = None
     working_dir: Optional[str] = None
+    pid: Optional[int] = None
 
     @property
     def duration(self) -> Optional[float]:
@@ -34,6 +35,23 @@ class Execution:
     def is_running(self) -> bool:
         """Check if execution is still running."""
         return self.status == 'running'
+    
+    @property
+    def is_zombie(self) -> bool:
+        """Check if this is a zombie process (marked running but process is dead)."""
+        if not self.is_running or not self.pid:
+            return False
+        
+        # Check if process exists
+        try:
+            # Send signal 0 to check if process exists
+            os.kill(self.pid, 0)
+            return False  # Process exists
+        except ProcessLookupError:
+            return True  # Process doesn't exist - zombie!
+        except PermissionError:
+            # Process exists but we can't access it
+            return False
 
     @property
     def log_path(self) -> Path:
@@ -46,8 +64,8 @@ def save_execution(execution: Execution) -> None:
     with db_connection.get_connection() as conn:
         conn.execute("""
             INSERT OR REPLACE INTO executions 
-            (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             execution.id,
             execution.doc_id,
@@ -57,7 +75,8 @@ def save_execution(execution: Execution) -> None:
             execution.completed_at.isoformat() if execution.completed_at else None,
             execution.log_file,
             execution.exit_code,
-            execution.working_dir
+            execution.working_dir,
+            execution.pid
         ))
         conn.commit()
 
@@ -67,7 +86,7 @@ def get_execution(exec_id: str) -> Optional[Execution]:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir
+            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions WHERE id = ?
         """, (exec_id,))
         
@@ -93,7 +112,8 @@ def get_execution(exec_id: str) -> Optional[Execution]:
             completed_at=completed_at,
             log_file=row[6],
             exit_code=row[7],
-            working_dir=row[8]
+            working_dir=row[8],
+            pid=row[9] if len(row) > 9 else None  # Handle old records without PID
         )
 
 
@@ -102,7 +122,7 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir
+            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions 
             ORDER BY started_at DESC 
             LIMIT ?
@@ -128,7 +148,8 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
                 completed_at=completed_at,
                 log_file=row[6],
                 exit_code=row[7],
-                working_dir=row[8]
+                working_dir=row[8],
+                pid=row[9] if len(row) > 9 else None
             ))
         
         return executions
@@ -139,7 +160,7 @@ def get_running_executions() -> List[Execution]:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir
+            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions 
             WHERE status = 'running'
             ORDER BY started_at DESC
@@ -165,7 +186,8 @@ def get_running_executions() -> List[Execution]:
                 completed_at=completed_at,
                 log_file=row[6],
                 exit_code=row[7],
-                working_dir=row[8]
+                working_dir=row[8],
+                pid=row[9] if len(row) > 9 else None
             ))
         
         return executions
@@ -186,6 +208,17 @@ def update_execution_status(exec_id: str, status: str, exit_code: Optional[int] 
                 SET status = ?
                 WHERE id = ?
             """, (status, exec_id))
+        conn.commit()
+
+
+def update_execution_pid(exec_id: str, pid: int) -> None:
+    """Update execution PID."""
+    with db_connection.get_connection() as conn:
+        conn.execute("""
+            UPDATE executions 
+            SET pid = ?
+            WHERE id = ?
+        """, (pid, exec_id))
         conn.commit()
 
 
