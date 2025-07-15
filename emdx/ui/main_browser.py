@@ -1066,6 +1066,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         event_attrs[attr] = f"ERROR: {attr_error}"
 
             key_logger.info(f"App.on_key: {event_attrs}")
+            key_logger.info(f"TEST: MainBrowser.on_key called with key={event.key}")
             logger.debug(f"Key event: key={event.key}")
 
             # j/k keys are handled by the binding system via action_cursor_down/up
@@ -1148,6 +1149,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     event.prevent_default()
                     event.stop()
                     self.action_new_note()
+                elif event.character == "l":
+                    event.prevent_default()
+                    event.stop()
+                    self.action_log_browser()
                 # Handle keys that require a document
                 elif self.current_doc_id:
                     if event.key == "enter":
@@ -1171,11 +1176,6 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                         event.prevent_default()
                         event.stop()
                         self.action_untag_mode()
-                    elif event.character == "l":
-                        logger.info(f"DEBUG: Manual l character handler triggered")
-                        event.prevent_default()
-                        event.stop()
-                        self.action_log_browser()
                     elif event.character == "g":
                         logger.info(f"DEBUG: Manual g character handler triggered")
                         event.prevent_default()
