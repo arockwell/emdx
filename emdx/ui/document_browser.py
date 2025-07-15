@@ -8,7 +8,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Protocol
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -35,8 +35,24 @@ from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 logger = logging.getLogger(__name__)
 
 
+class TextAreaHost(Protocol):
+    """Protocol defining what VimEditTextArea and SelectionTextArea expect from their host."""
+    
+    def action_save_and_exit_edit(self) -> None:
+        """Save and exit edit mode."""
+        ...
+    
+    def _update_vim_status(self, message: str = "") -> None:
+        """Update status with vim mode information."""
+        ...
+        
+    def action_toggle_selection_mode(self) -> None:
+        """Toggle selection mode (for SelectionTextArea)."""
+        ...
+
+
 class DocumentBrowser(Widget):
-    """Document browser widget."""
+    """Document browser widget that can host text areas."""
     
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
@@ -258,6 +274,7 @@ class DocumentBrowser(Widget):
         key = event.key
         
         # Handle escape key to exit modes
+        # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
             if self.edit_mode:
                 await self.exit_edit_mode()
@@ -268,6 +285,7 @@ class DocumentBrowser(Widget):
             elif self.mode == "TAG":
                 self.exit_tag_mode()
                 event.stop()
+            # Note: SELECTION mode escape is handled by SelectionTextArea itself
                 
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
@@ -293,53 +311,134 @@ class DocumentBrowser(Widget):
         
         # Replace preview with edit area
         preview_container = self.query_one("#preview-container", Vertical)
-        preview = self.query_one("#preview", ScrollableContainer)
-        await preview.remove()
+        try:
+            preview = self.query_one("#preview", ScrollableContainer)
+            await preview.remove()
+        except Exception as e:
+            logger.error(f"Error removing preview for edit mode: {e}")
+            # Try removing all children instead
+            for child in list(preview_container.children):
+                if child.id in ["preview", "preview-content"]:
+                    await child.remove()
         
-        # Create edit area
-        edit_area = VimEditTextArea(full_doc["content"], id="edit-area")
+        # Create edit area with proper app instance (self implements TextAreaHost)
+        edit_area: VimEditTextArea = VimEditTextArea(self, full_doc["content"], id="edit-area")
         await preview_container.mount(edit_area)
         edit_area.focus()
         
         self.edit_mode = True
+        
+    def action_save_and_exit_edit(self) -> None:
+        """Save document and exit edit mode (called by VimEditTextArea)."""
+        # For now, just exit edit mode - saving would need to be implemented
+        logger.info("action_save_and_exit_edit called")
+        try:
+            # Use call_after_refresh to avoid timing issues
+            self.call_after_refresh(self._async_exit_edit_mode)
+        except Exception as e:
+            logger.error(f"Error in action_save_and_exit_edit: {e}")
+            # Fallback - try direct call
+            try:
+                import asyncio
+                asyncio.create_task(self.exit_edit_mode())
+            except:
+                pass
+            
+    def _async_exit_edit_mode(self) -> None:
+        """Async wrapper for exit_edit_mode."""
+        logger.info("_async_exit_edit_mode called")
+        import asyncio
+        asyncio.create_task(self.exit_edit_mode())
+        
+    def _update_vim_status(self, message: str = "") -> None:
+        """Update status bar with vim mode info (called by VimEditTextArea)."""
+        try:
+            # Update vim mode indicator
+            vim_indicator = self.query_one("#vim-mode-indicator", Label)
+            if message:
+                vim_indicator.update(f"VIM: {message}")
+            else:
+                vim_indicator.update("VIM: NORMAL | ESC=exit")
+                
+            # Also update main status
+            app = self.app
+            if hasattr(app, 'update_status'):
+                if message:
+                    app.update_status(f"Edit Mode | {message}")
+                else:
+                    app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
+        except:
+            pass
+            
+    def action_toggle_selection_mode(self) -> None:
+        """Toggle selection mode (called by SelectionTextArea)."""
+        if self.mode == "SELECTION":
+            # Exit selection mode
+            try:
+                self.call_after_refresh(self._async_exit_selection_mode)
+            except:
+                pass
+        
+    def _async_exit_selection_mode(self) -> None:
+        """Async wrapper for exit_selection_mode."""
+        import asyncio
+        asyncio.create_task(self.exit_selection_mode())
         
     async def exit_edit_mode(self) -> None:
         """Exit edit mode and restore preview."""
         if not self.edit_mode:
             return
             
-        # Remove edit area
+        # Clear preview container completely
         preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            edit_area = self.query_one("#edit-area")
-            await edit_area.remove()
-        except:
-            pass
-            
-        # Restore preview
+        
+        # Remove all children
+        for child in list(preview_container.children):
+            if child.id not in ["vim-mode-indicator"]:  # Keep vim indicator
+                await child.remove()
+        
+        # Restore original preview structure exactly
         from textual.containers import ScrollableContainer
         from textual.widgets import RichLog
+        
+        # Create preview container with proper structure
         preview = ScrollableContainer(id="preview")
         preview_content = RichLog(
             id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
         )
+        preview_content.can_focus = False  # Disable focus like original
+        
         await preview.mount(preview_content)
         await preview_container.mount(preview)
         
-        # Restore content
-        if hasattr(self, 'original_preview_content'):
-            from rich.markdown import Markdown
-            try:
-                if self.original_preview_content.strip():
-                    markdown = Markdown(self.original_preview_content)
-                    preview_content.write(markdown)
-            except:
-                preview_content.write(self.original_preview_content)
-        
         self.edit_mode = False
         
-        # Return focus to table
+        # Clear vim mode indicator
+        try:
+            vim_indicator = self.query_one("#vim-mode-indicator", Label)
+            vim_indicator.update("")
+        except:
+            pass
+        
+        # Refresh the current document's preview
         table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+            doc = self.filtered_docs[table.cursor_row]
+            full_doc = get_document(str(doc["id"]))
+            
+            if full_doc:
+                from rich.markdown import Markdown
+                try:
+                    content = full_doc["content"]
+                    if content.strip():
+                        markdown = Markdown(content)
+                        preview_content.write(markdown)
+                    else:
+                        preview_content.write("[dim]Empty document[/dim]")
+                except Exception as e:
+                    preview_content.write(full_doc["content"])
+        
+        # Return focus to table
         table.focus()
         
     def action_cursor_down(self) -> None:
@@ -406,10 +505,111 @@ class DocumentBrowser(Widget):
         tag_input.can_focus = True
         tag_input.focus()
         
-    def action_selection_mode(self) -> None:
-        """Enter selection mode."""
-        # For now, just a placeholder
-        pass
+    async def action_selection_mode(self) -> None:
+        """Enter selection mode for document content."""
+        table = self.query_one("#doc-table", DataTable)
+        if not table.cursor_row or table.cursor_row >= len(self.filtered_docs):
+            return
+            
+        doc = self.filtered_docs[table.cursor_row]
+        
+        # Load full document for selection
+        full_doc = get_document(str(doc["id"]))
+        if not full_doc:
+            return
+            
+        # Replace preview with selection text area
+        preview_container = self.query_one("#preview-container", Vertical)
+        try:
+            preview = self.query_one("#preview", ScrollableContainer)
+            await preview.remove()
+        except Exception as e:
+            logger.error(f"Error removing preview for selection mode: {e}")
+            # Try removing all children instead
+            for child in list(preview_container.children):
+                if child.id in ["preview", "preview-content"]:
+                    await child.remove()
+        
+        # Create selection text area with proper app instance (self implements TextAreaHost)
+        from .text_areas import SelectionTextArea
+        selection_area: SelectionTextArea = SelectionTextArea(
+            self,
+            full_doc["content"], 
+            id="selection-area",
+            read_only=True
+        )
+        await preview_container.mount(selection_area)
+        selection_area.focus()
+        
+        # Update mode
+        self.mode = "SELECTION"
+        
+        # Update status
+        try:
+            app = self.app
+            if hasattr(app, 'update_status'):
+                app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
+        except:
+            pass
+            
+    async def exit_selection_mode(self) -> None:
+        """Exit selection mode and restore preview."""
+        if self.mode != "SELECTION":
+            return
+            
+        # Clear preview container completely
+        preview_container = self.query_one("#preview-container", Vertical)
+        
+        # Remove all children except vim indicator
+        for child in list(preview_container.children):
+            if child.id not in ["vim-mode-indicator"]:
+                await child.remove()
+        
+        # Restore preview structure
+        from textual.containers import ScrollableContainer
+        from textual.widgets import RichLog
+        
+        preview = ScrollableContainer(id="preview")
+        preview_content = RichLog(
+            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+        )
+        preview_content.can_focus = False
+        
+        await preview.mount(preview_content)
+        await preview_container.mount(preview)
+        
+        self.mode = "NORMAL"
+        
+        # Refresh current document preview
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
+            doc = self.filtered_docs[table.cursor_row]
+            full_doc = get_document(str(doc["id"]))
+            
+            if full_doc:
+                from rich.markdown import Markdown
+                try:
+                    content = full_doc["content"]
+                    if content.strip():
+                        markdown = Markdown(content)
+                        preview_content.write(markdown)
+                    else:
+                        preview_content.write("[dim]Empty document[/dim]")
+                except Exception as e:
+                    preview_content.write(full_doc["content"])
+        
+        # Return focus to table
+        table.focus()
+        
+        # Update status
+        try:
+            app = self.app
+            if hasattr(app, 'update_status'):
+                status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
+                status_text += " | e=edit | /=search | t=tag | q=quit"
+                app.update_status(status_text)
+        except:
+            pass
     
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview when row is highlighted."""

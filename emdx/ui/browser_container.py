@@ -113,11 +113,11 @@ class BrowserContainer(App):
         self.exit()
         
     async def on_key(self, event) -> None:
-        """Global key routing - only handle specific keys."""
+        """Global key routing - only handle browser switching keys."""
         key = event.key
         logger.info(f"BrowserContainer.on_key: {key}")
         
-        # Only handle specific global keys
+        # Only handle browser switching keys, let browsers handle their own keys
         if key == "q" and self.current_browser == "document":
             self.exit()
             event.stop()
@@ -135,5 +135,4 @@ class BrowserContainer(App):
             event.stop()
             return
         
-        # Let everything else bubble to the active browser
-        # Don't stop propagation for other keys
+        # Don't handle any other keys - let them bubble to browsers
