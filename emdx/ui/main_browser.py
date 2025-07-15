@@ -1625,7 +1625,9 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 self.query_one("#status", Label).update(f"Toggle failed: {e}")
             except:
                 pass
-EOF < /dev/null        """Restore preview content after switching back from selection mode."""
+    
+    def _restore_preview_content(self) -> None:
+        """Restore preview content after switching back from selection mode."""
         try:
             if self.mode == "LOG_BROWSER":
                 # Restore log content
