@@ -59,9 +59,12 @@ class EditMixin:
             text=content, 
             id="edit-area"
         )
-        # Ensure the text area takes up available space
+        # Ensure the text area takes up available space and is visible
         edit_area.styles.width = "1fr"
         edit_area.styles.height = "100%"
+        edit_area.styles.color = "white"  # Force text color to white
+        edit_area.styles.background = "black"  # Force background to black
+        edit_area.styles.padding = 1  # Add some padding
         logger.info(f"EditMixin: VimEditTextArea created, mounting in container")
         # Set up line numbers update callback
         edit_area.line_numbers_widget = line_numbers
