@@ -60,15 +60,12 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
     """Document browser widget that can host text areas."""
     
     BINDINGS = [
-        Binding("j", "cursor_down", "Down"),
-        Binding("k", "cursor_up", "Up"),
-        Binding("g", "cursor_top", "Top"),
-        Binding("G", "cursor_bottom", "Bottom"),
+        # Navigation provided by NavigationMixin
         Binding("e", "edit_document", "Edit"),
         Binding("/", "search", "Search"),
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
-        Binding("s", "toggle_selection_mode", "Select"),
+        # Selection provided by SelectionMixin
     ]
     
     CSS = """
@@ -488,31 +485,9 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
         # Return focus to table
         table.focus()
         
-    def action_cursor_down(self) -> None:
-        """Move cursor down."""
-        table = self.query_one("#doc-table", DataTable)
-        table.action_cursor_down()
-        
-    def action_cursor_up(self) -> None:
-        """Move cursor up."""
-        table = self.query_one("#doc-table", DataTable)
-        table.action_cursor_up()
-        
-    def action_cursor_top(self) -> None:
-        """Move cursor to top."""
-        table = self.query_one("#doc-table", DataTable)
-        if table.row_count > 0:
-            table.cursor_coordinate = (0, 0)
+    # Navigation methods provided by NavigationMixin
             
-    def action_cursor_bottom(self) -> None:
-        """Move cursor to bottom."""
-        table = self.query_one("#doc-table", DataTable)
-        if table.row_count > 0:
-            table.cursor_coordinate = (table.row_count - 1, 0)
-            
-    async def action_edit_document(self) -> None:
-        """Edit the current document."""
-        await self.enter_edit_mode()
+    # Edit document action provided by EditMixin
         
     def action_search(self) -> None:
         """Enter search mode."""
@@ -552,179 +527,9 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
         tag_input.can_focus = True
         tag_input.focus()
         
-    def action_toggle_selection_mode(self):
-        """Toggle between formatted view and text selection mode."""
-        try:
-            # Check if we're in the right screen/context
-            try:
-                container = self.query_one("#preview", ScrollableContainer)
-                app = self.app
-            except Exception:
-                # We're not in the main browser screen - selection mode not available
-                return
-
-            if not self.selection_mode:
-                # Switch to selection mode - use TextArea for native selection support
-                self.selection_mode = True
-
-                # Get content based on current document
-                plain_content = "Select and copy text here..."
-                if hasattr(self, 'filtered_docs') and hasattr(self, 'current_doc_id'):
-                    table = self.query_one("#doc-table", DataTable)
-                    if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
-                        doc = self.filtered_docs[table.cursor_row]
-                        full_doc = get_document(str(doc["id"]))
-                        if full_doc:
-                            content = full_doc["content"].strip()
-                            if not content.startswith(f"# {full_doc['title']}"):
-                                plain_content = f"# {full_doc['title']}\n\n{content}"
-                            else:
-                                plain_content = content
-
-                # Remove old widgets explicitly and safely
-                try:
-                    existing_widget = container.query_one("#preview-content")
-                    if existing_widget:
-                        existing_widget.remove()
-                except Exception:
-                    pass
-
-                # Then remove all children as backup
-                container.remove_children()
-                container.refresh(layout=True)
-
-                # Create and mount TextArea for selection
-                from .text_areas import SelectionTextArea
-                def mount_text_area():
-                    try:
-                        text_area = SelectionTextArea(
-                            self,  # Pass app instance
-                            plain_content,
-                            id="preview-content"
-                        )
-                        text_area.read_only = True
-                        text_area.disabled = False
-                        text_area.can_focus = True
-                        text_area.add_class("constrained-textarea")
-
-                        if hasattr(text_area, 'word_wrap'):
-                            text_area.word_wrap = True
-
-                        container.mount(text_area)
-                        text_area.focus()
-
-                        if hasattr(app, 'update_status'):
-                            app.update_status("SELECTION MODE: Select text with mouse, Ctrl+C to copy, ESC or 's' to exit")
-                    except Exception as mount_error:
-                        if hasattr(app, 'update_status'):
-                            app.update_status(f"Failed to create selection widget: {mount_error}")
-
-                # Use call_after_refresh to ensure DOM is clean before mounting
-                self.call_after_refresh(mount_text_area)
-
-            else:
-                # Switch back to formatted view
-                self.selection_mode = False
-
-                # Remove old widgets
-                try:
-                    existing_widget = container.query_one("#preview-content")
-                    if existing_widget:
-                        existing_widget.remove()
-                except Exception:
-                    pass
-
-                container.remove_children()
-                container.refresh(layout=True)
-
-                # Restore RichLog
-                def mount_richlog():
-                    from textual.widgets import RichLog
-                    richlog = RichLog(
-                        id="preview-content",
-                        wrap=True,
-                        highlight=True,
-                        markup=True,
-                        auto_scroll=False
-                    )
-                    container.mount(richlog)
-                    
-                    # Restore current document preview
-                    self.call_after_refresh(self._restore_preview_content)
-
-                self.call_after_refresh(mount_richlog)
-
-                if hasattr(app, 'update_status'):
-                    app.update_status("Document Browser | f=files | d=git | q=quit")
-
-        except Exception as e:
-            # Recovery: ensure we have a working widget
-            logger.error(f"Error in action_toggle_selection_mode: {e}", exc_info=True)
-            try:
-                app = self.app
-                if hasattr(app, 'update_status'):
-                    app.update_status(f"Toggle failed: {e} - try refreshing")
-            except:
-                pass
+    # Selection mode provided by SelectionMixin
             
-    async def exit_selection_mode(self) -> None:
-        """Exit selection mode and restore preview."""
-        if self.mode != "SELECTION":
-            return
-            
-        # Clear preview container completely
-        preview_container = self.query_one("#preview-container", Vertical)
-        
-        # Remove all children except vim indicator
-        for child in list(preview_container.children):
-            if child.id not in ["vim-mode-indicator"]:
-                await child.remove()
-        
-        # Restore preview structure
-        from textual.containers import ScrollableContainer
-        from textual.widgets import RichLog
-        
-        preview = ScrollableContainer(id="preview")
-        preview_content = RichLog(
-            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
-        )
-        preview_content.can_focus = False
-        
-        await preview_container.mount(preview)
-        await preview.mount(preview_content)
-        
-        self.mode = "NORMAL"
-        
-        # Refresh current document preview
-        table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
-            doc = self.filtered_docs[table.cursor_row]
-            full_doc = get_document(str(doc["id"]))
-            
-            if full_doc:
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview_content.write(markdown)
-                    else:
-                        preview_content.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    preview_content.write(full_doc["content"])
-        
-        # Return focus to table
-        table.focus()
-        
-        # Update status
-        try:
-            app = self.app
-            if hasattr(app, 'update_status'):
-                status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
-                status_text += " | e=edit | /=search | t=tag | q=quit"
-                app.update_status(status_text)
-        except:
-            pass
+    # Exit selection mode provided by SelectionMixin
     
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview when row is highlighted."""
