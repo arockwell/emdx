@@ -273,26 +273,17 @@ class DocumentBrowser(Widget):
         height: 100%;
     }
     
-    #table-container {
-        height: 66%;
+    .table-area {
+        height: 2fr;
         min-height: 15;
-    }
-    
-    #doc-table {
-        height: 100%;
         overflow-y: auto;
     }
     
-    #details-container {
-        height: 34%;
+    .details-area {
+        height: 1fr;
         min-height: 10;
-        max-height: 20;
         border-top: thick $primary;
         background: $surface;
-    }
-    
-    #doc-details {
-        height: 100%;
         padding: 1;
         overflow-y: auto;
     }
@@ -343,8 +334,8 @@ class DocumentBrowser(Widget):
         
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield Container(DataTable(id="doc-table"), id="table-container")
-                yield Container(DetailsPanel(id="doc-details"), id="details-container")
+                yield DataTable(id="doc-table", classes="table-area")
+                yield DetailsPanel(id="doc-details", classes="details-area")
             with Vertical(id="preview-container"):
                 yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
