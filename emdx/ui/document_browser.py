@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any, Protocol
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.containers import Horizontal, ScrollableContainer, Vertical, Container
 from textual.reactive import reactive
 from textual.widgets import DataTable, Input, Label, RichLog, Static
 from textual.widget import Widget
@@ -273,19 +273,27 @@ class DocumentBrowser(Widget):
         height: 100%;
     }
     
-    #doc-table {
+    #table-container {
         height: 2fr;
         min-height: 10;
+    }
+    
+    #doc-table {
+        height: 100%;
         overflow-y: auto;
     }
     
-    #doc-details {
+    #details-container {
         height: 1fr;
         min-height: 8;
         border-top: thick $primary;
+        background: $surface;
+    }
+    
+    #doc-details {
+        height: 100%;
         padding: 1;
         overflow-y: auto;
-        background: $surface;
     }
     
     #preview-container {
@@ -334,8 +342,8 @@ class DocumentBrowser(Widget):
         
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield DataTable(id="doc-table")
-                yield DetailsPanel(id="doc-details")
+                yield Container(DataTable(id="doc-table"), id="table-container")
+                yield Container(DetailsPanel(id="doc-details"), id="details-container")
             with Vertical(id="preview-container"):
                 yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
