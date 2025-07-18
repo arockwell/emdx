@@ -16,6 +16,10 @@ from emdx.commands.executions import app as executions_app
 from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.clean import app as clean_app
+from emdx.commands.health import app as health_app
+from emdx.commands.merge import app as merge_app
+from emdx.commands.gc import app as gc_app
+from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.ui.gui import gui
 
 # Create main app
@@ -55,6 +59,18 @@ for command in analyze_app.registered_commands:
 
 # Add clean as a subcommand group
 app.add_typer(clean_app, name="clean", help="Clean and maintain your knowledge base")
+
+# Add health as a subcommand group
+app.add_typer(health_app, name="health", help="Monitor knowledge base health")
+
+# Add merge as a subcommand group
+app.add_typer(merge_app, name="merge", help="Merge related documents")
+
+# Add gc command directly
+app.command(name="gc")(gc_app.registered_commands[0].callback)
+
+# Add lifecycle as a subcommand group
+app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add the gui command
 app.command()(gui)
