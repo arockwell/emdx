@@ -16,6 +16,7 @@ from emdx.commands.executions import app as executions_app
 from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.clean import app as clean_app
+from emdx.commands.health import app as health_app
 from emdx.ui.gui import gui
 
 # Create main app
@@ -55,6 +56,9 @@ for command in analyze_app.registered_commands:
 
 # Add clean as a subcommand group
 app.add_typer(clean_app, name="clean", help="Clean and maintain your knowledge base")
+
+# Add health as a subcommand group
+app.add_typer(health_app, name="health", help="Monitor knowledge base health")
 
 # Add the gui command
 app.command()(gui)
