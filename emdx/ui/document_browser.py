@@ -16,6 +16,7 @@ from textual.reactive import reactive
 from textual.widgets import DataTable, Input, Label, RichLog, Static
 from textual.widget import Widget
 from textual.binding import Binding
+from datetime import datetime
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -26,13 +27,174 @@ from emdx.models.tags import (
     search_by_tags,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
-from emdx.utils.emoji_aliases import expand_aliases
+from emdx.utils.emoji_aliases import expand_aliases, EMOJI_ALIASES
 
 from .document_viewer import FullScreenView
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 
 logger = logging.getLogger(__name__)
+
+
+class DetailsPanel(Static):
+    """Document details panel with reactive updates"""
+    
+    current_doc = reactive(None)
+    
+    def get_project_color(self, project):
+        """Get consistent color for project"""
+        colors = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red']
+        if project:
+            # Simple hash to get consistent color
+            index = sum(ord(c) for c in project) % len(colors)
+            return colors[index]
+        return 'dim'
+    
+    def get_relative_time(self, dt):
+        """Convert datetime to relative time string"""
+        if isinstance(dt, str):
+            dt = datetime.fromisoformat(dt)
+        
+        now = datetime.now()
+        # Ensure both datetimes are naive (no timezone) for comparison
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        if now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
+        delta = now - dt
+        
+        if delta.days == 0:
+            if delta.seconds < 3600:
+                mins = delta.seconds // 60
+                return f"{mins} minutes ago" if mins > 1 else "just now"
+            else:
+                hours = delta.seconds // 3600
+                return f"{hours} hours ago" if hours > 1 else "1 hour ago"
+        elif delta.days == 1:
+            return "yesterday"
+        elif delta.days < 7:
+            return f"{delta.days} days ago"
+        elif delta.days < 30:
+            weeks = delta.days // 7
+            return f"{weeks} weeks ago" if weeks > 1 else "1 week ago"
+        else:
+            return dt.strftime("%Y-%m-%d")
+    
+    def create_progress_bar(self, value, max_value, width=10):
+        """Create a visual progress bar"""
+        if max_value == 0:
+            return "[dim]" + "░" * width + "[/dim]"
+        filled = int((value / max_value) * width)
+        empty = width - filled
+        return f"[green]{'█' * filled}[/green][dim]{'░' * empty}[/dim]"
+    
+    def get_tag_emoji(self, tag):
+        """Get emoji for tag using emoji_aliases.py logic"""
+        # Reverse lookup - find emoji for tag
+        for emoji, aliases in EMOJI_ALIASES.items():
+            if tag in aliases:
+                return emoji
+        return "🏷️"  # Default tag emoji
+    
+    def get_tag_color(self, tag):
+        """Get color styling for tag type"""
+        # Status tags
+        if tag in ['active', 'rocket', 'current', 'working', 'inprogress']:
+            return 'on green'
+        elif tag in ['done', 'complete', 'finished', 'success', 'check']:
+            return 'on blue'
+        elif tag in ['blocked', 'stuck', 'waiting', 'construction', 'wip']:
+            return 'on red'
+        # Document type tags
+        elif tag in ['gameplan', 'plan', 'strategy', 'target']:
+            return 'on magenta'
+        elif tag in ['analysis', 'investigate', 'research', 'explore']:
+            return 'on cyan'
+        elif tag in ['notes', 'note', 'memo', 'thoughts']:
+            return 'on dim white'
+        # Technical tags
+        elif tag in ['bug', 'issue', 'problem', 'defect', 'error']:
+            return 'on red'
+        elif tag in ['feature', 'new', 'enhancement', 'sparkle', 'magic']:
+            return 'on yellow'
+        elif tag in ['refactor', 'improvement', 'tool', 'fix', 'maintenance']:
+            return 'on blue'
+        # Priority tags
+        elif tag in ['urgent', 'critical', 'important', 'alarm', 'emergency']:
+            return 'on bright_red'
+        return ''  # No background for unknown tags
+    
+    def format_tag_badges(self, tags):
+        """Format tags as colored badges with emojis"""
+        badges = []
+        for tag in tags:
+            emoji = self.get_tag_emoji(tag)
+            color = self.get_tag_color(tag)
+            if color:
+                badges.append(f"[{color}] {emoji} {tag} [/{color.replace('on ', '')}]")
+            else:
+                badges.append(f"{emoji} {tag}")
+        return " ".join(badges)
+    
+    def watch_current_doc(self, doc):
+        """React to document selection changes"""
+        if doc:
+            self.update_content(doc)
+        else:
+            self.update("[dim]No document selected[/dim]")
+    
+    def update_content(self, doc):
+        """Update panel with rich formatted document information"""
+        # Get tags for the document
+        tags = get_document_tags(doc["id"])
+        
+        # Get full document for word count
+        full_doc = get_document(str(doc["id"]))
+        
+        # Build sections
+        sections = []
+        
+        # Header with emoji
+        sections.append(f"[bold blue]📄 Document #{doc['id']}[/bold blue]")
+        sections.append("")
+        
+        # Project with color
+        project = doc.get('project', 'default') or 'default'
+        project_color = self.get_project_color(project)
+        sections.append(f"[bold]📁 Project:[/bold] [{project_color}]{project}[/{project_color}]")
+        sections.append("")
+        
+        # Tags with emoji formatting and colored badges
+        if tags:
+            sections.append("[bold]🏷️  Tags:[/bold]")
+            sections.append(self.format_tag_badges(tags))
+            sections.append("")
+        
+        # Timeline section
+        sections.append("[bold]📅 Timeline:[/bold]")
+        created = doc.get("created_at")
+        if created:
+            relative_time = self.get_relative_time(created)
+            sections.append(f"Created: {relative_time}")
+        
+        # Access info with progress bar
+        access_count = doc.get('access_count', 0)
+        if access_count > 0:
+            bar = self.create_progress_bar(min(access_count, 20), 20)
+            sections.append(f"Views: {bar} {access_count}")
+        else:
+            sections.append("Views: [dim]Not viewed yet[/dim]")
+        
+        # Stats section with word count
+        if full_doc and full_doc.get("content"):
+            sections.append("")
+            sections.append("[bold]📊 Stats:[/bold]")
+            words = len(full_doc["content"].split())
+            read_time = max(1, words // 200)  # Average 200 wpm
+            sections.append(f"{words:,} words • {read_time} min read")
+        
+        # Update the widget
+        self.update("\n".join(sections))
 
 
 class TextAreaHost(Protocol):
@@ -99,8 +261,17 @@ class DocumentBrowser(Widget):
     }
     
     #doc-table {
-        height: 1fr;
+        height: 2fr;
         min-height: 10;
+        overflow-y: auto;
+    }
+    
+    #doc-details {
+        height: 1fr;
+        min-height: 8;
+        border-top: solid $primary;
+        padding: 1;
+        overflow-y: auto;
     }
     
     #preview-container {
@@ -150,6 +321,7 @@ class DocumentBrowser(Widget):
         with Horizontal():
             with Vertical(id="sidebar"):
                 yield DataTable(id="doc-table")
+                yield DetailsPanel(id="doc-details")
             with Vertical(id="preview-container"):
                 yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
@@ -163,7 +335,7 @@ class DocumentBrowser(Widget):
         
         # Setup table
         table = self.query_one("#doc-table", DataTable)
-        table.add_columns("ID", "Project", "Title", "Tags", "Created")
+        table.add_columns("ID", "Title")
         table.cursor_type = "row"
         table.show_header = True
         
@@ -185,6 +357,11 @@ class DocumentBrowser(Widget):
         
         # Load documents
         await self.load_documents()
+        
+        # Select first document if available
+        if self.filtered_docs:
+            details = self.query_one("#doc-details", DetailsPanel)
+            details.current_doc = self.filtered_docs[0]
         
     async def load_documents(self) -> None:
         """Load documents from database."""
@@ -211,20 +388,12 @@ class DocumentBrowser(Widget):
         table.clear()
         
         for doc in self.filtered_docs:
-            # Get tags for document
-            tags = get_document_tags(doc["id"])
-            
             # Format row data
-            tags_str = format_tags(tags) if tags else ""
-            title = truncate_emoji_safe(doc["title"], 40)
-            project = doc["project"] or "default"
+            title = truncate_emoji_safe(doc["title"], 60)  # More space for titles now
             
             table.add_row(
                 str(doc["id"]),
-                project,
-                title,
-                tags_str,
-                str(doc["created_at"])[:10],
+                title
             )
             
         # Update status - need to find the app instance
@@ -616,7 +785,7 @@ class DocumentBrowser(Widget):
             pass
     
     async def on_data_table_row_highlighted(self, event) -> None:
-        """Update preview when row is highlighted."""
+        """Update preview and details panel when row is highlighted."""
         if self.edit_mode:
             return
             
@@ -625,6 +794,13 @@ class DocumentBrowser(Widget):
             return
             
         doc = self.filtered_docs[row_idx]
+        
+        # Update details panel
+        try:
+            details = self.query_one("#doc-details", DetailsPanel)
+            details.current_doc = doc
+        except Exception as e:
+            logger.error(f"Error updating details panel: {e}")
         
         # Load full document for preview
         full_doc = get_document(str(doc["id"]))
