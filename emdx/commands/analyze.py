@@ -1,564 +1,497 @@
 """
-Comprehensive analysis commands for EMDX knowledge base.
-Provides insights into document patterns, tag usage, project distribution, and more.
+Unified analyze command for EMDX.
+Consolidates all read-only analysis and inspection operations.
 """
 
-import sqlite3
-import os
-from collections import Counter, defaultdict
-from datetime import datetime
-from pathlib import Path
-import json
-from typing import Dict, List, Tuple, Any, Optional
-
 import typer
+from typing import Optional
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 from rich import box
-from rich.progress import track
+from datetime import datetime, timedelta
 
+from ..services.duplicate_detector import DuplicateDetector
+from ..services.health_monitor import HealthMonitor
+from ..services.lifecycle_tracker import LifecycleTracker
+from ..services.document_merger import DocumentMerger
 from ..config.settings import get_db_path
+import sqlite3
 
 app = typer.Typer()
 console = Console()
 
 
-class KnowledgeBaseAnalyzer:
-    def __init__(self, db_path: str = None):
-        if db_path is None:
-            db_path = get_db_path()
-        self.db_path = db_path
-        self.conn = sqlite3.connect(db_path)
-        self.conn.row_factory = sqlite3.Row
-    
-    def get_overview_stats(self) -> Dict[str, Any]:
-        """Get basic statistics about the knowledge base"""
-        cursor = self.conn.cursor()
-        
-        # Total documents
-        cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
-        total_docs = cursor.fetchone()[0]
-        
-        # Total deleted
-        cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 1")
-        deleted_docs = cursor.fetchone()[0]
-        
-        # Total views
-        cursor.execute("SELECT SUM(access_count) FROM documents WHERE is_deleted = 0")
-        total_views = cursor.fetchone()[0] or 0
-        
-        # Most viewed
-        cursor.execute("""
-            SELECT title, access_count, id 
-            FROM documents 
-            WHERE is_deleted = 0 
-            ORDER BY access_count DESC 
-            LIMIT 10
-        """)
-        most_viewed = cursor.fetchall()
-        
-        # Most recent
-        cursor.execute("""
-            SELECT title, created_at, id 
-            FROM documents 
-            WHERE is_deleted = 0 
-            ORDER BY created_at DESC 
-            LIMIT 10
-        """)
-        most_recent = cursor.fetchall()
-        
-        # Projects
-        cursor.execute("""
-            SELECT project, COUNT(*) as count 
-            FROM documents 
-            WHERE is_deleted = 0 
-            GROUP BY project 
-            ORDER BY count DESC
-        """)
-        projects = cursor.fetchall()
-        
-        return {
-            "total_documents": total_docs,
-            "deleted_documents": deleted_docs,
-            "total_views": total_views,
-            "average_views": total_views / total_docs if total_docs > 0 else 0,
-            "most_viewed": [dict(row) for row in most_viewed],
-            "most_recent": [dict(row) for row in most_recent],
-            "projects": [dict(row) for row in projects]
-        }
-    
-    def analyze_tags(self) -> Dict[str, Any]:
-        """Analyze tag usage patterns"""
-        cursor = self.conn.cursor()
-        
-        # Get all tags with counts
-        cursor.execute("""
-            SELECT t.emoji, t.name, COUNT(dt.document_id) as count
-            FROM tags t
-            LEFT JOIN document_tags dt ON t.id = dt.tag_id
-            LEFT JOIN documents d ON dt.document_id = d.id
-            WHERE d.is_deleted = 0 OR d.is_deleted IS NULL
-            GROUP BY t.id
-            ORDER BY count DESC
-        """)
-        tags = cursor.fetchall()
-        
-        # Documents without tags
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM documents d
-            WHERE d.is_deleted = 0 
-            AND NOT EXISTS (
-                SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
-            )
-        """)
-        untagged = cursor.fetchone()[0]
-        
-        # Tag combinations
-        cursor.execute("""
-            SELECT d.id, GROUP_CONCAT(t.emoji || ':' || t.name) as tags
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0
-            GROUP BY d.id
-        """)
-        combinations = Counter()
-        for row in cursor.fetchall():
-            if row[1]:
-                tag_set = frozenset(row[1].split(','))
-                if len(tag_set) > 1:
-                    combinations[tag_set] += 1
-        
-        return {
-            "tags": [dict(row) for row in tags],
-            "total_tags": len(tags),
-            "untagged_documents": untagged,
-            "top_combinations": combinations.most_common(20)
-        }
-    
-    def analyze_content_patterns(self) -> Dict[str, Any]:
-        """Analyze content patterns and document types"""
-        cursor = self.conn.cursor()
-        
-        # Title patterns
-        cursor.execute("""
-            SELECT title FROM documents WHERE is_deleted = 0
-        """)
-        titles = [row[0] for row in cursor.fetchall()]
-        
-        title_patterns = Counter()
-        for title in titles:
-            if title.startswith("Gameplan:"):
-                title_patterns["gameplan"] += 1
-            elif title.startswith("Analysis:"):
-                title_patterns["analysis"] += 1
-            elif title.startswith("Bug:"):
-                title_patterns["bug"] += 1
-            elif title.startswith("Feature:"):
-                title_patterns["feature"] += 1
-            elif title.startswith("Note:"):
-                title_patterns["note"] += 1
-            elif title.startswith("Issue"):
-                title_patterns["issue"] += 1
-            elif title.startswith("PR "):
-                title_patterns["pr"] += 1
-            else:
-                title_patterns["other"] += 1
-        
-        # Content length distribution
-        cursor.execute("""
-            SELECT LENGTH(content) as length
-            FROM documents 
-            WHERE is_deleted = 0
-        """)
-        lengths = [row[0] for row in cursor.fetchall()]
-        
-        length_dist = {
-            "very_short": sum(1 for l in lengths if l < 100),
-            "short": sum(1 for l in lengths if 100 <= l < 500),
-            "medium": sum(1 for l in lengths if 500 <= l < 2000),
-            "long": sum(1 for l in lengths if 2000 <= l < 5000),
-            "very_long": sum(1 for l in lengths if l >= 5000)
-        }
-        
-        return {
-            "title_patterns": dict(title_patterns),
-            "length_distribution": length_dist,
-            "average_length": sum(lengths) / len(lengths) if lengths else 0
-        }
-    
-    def analyze_temporal_patterns(self) -> Dict[str, Any]:
-        """Analyze when documents are created and accessed"""
-        cursor = self.conn.cursor()
-        
-        # Creation patterns by month
-        cursor.execute("""
-            SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as count
-            FROM documents
-            WHERE is_deleted = 0
-            GROUP BY month
-            ORDER BY month
-        """)
-        creation_by_month = cursor.fetchall()
-        
-        # Access patterns
-        cursor.execute("""
-            SELECT strftime('%Y-%m', accessed_at) as month, COUNT(*) as count
-            FROM documents
-            WHERE is_deleted = 0 AND accessed_at IS NOT NULL
-            GROUP BY month
-            ORDER BY month
-        """)
-        access_by_month = cursor.fetchall()
-        
-        # Hour of day patterns
-        cursor.execute("""
-            SELECT strftime('%H', created_at) as hour, COUNT(*) as count
-            FROM documents
-            WHERE is_deleted = 0
-            GROUP BY hour
-            ORDER BY hour
-        """)
-        creation_by_hour = cursor.fetchall()
-        
-        return {
-            "creation_by_month": [dict(row) for row in creation_by_month],
-            "access_by_month": [dict(row) for row in access_by_month],
-            "creation_by_hour": [dict(row) for row in creation_by_hour]
-        }
-    
-    def analyze_project_health(self) -> Dict[str, Any]:
-        """Analyze project success rates and patterns"""
-        cursor = self.conn.cursor()
-        
-        # Success rate by project
-        cursor.execute("""
-            SELECT 
-                d.project,
-                COUNT(CASE WHEN t.name = 'success' THEN 1 END) as success_count,
-                COUNT(CASE WHEN t.name = 'failed' THEN 1 END) as failed_count,
-                COUNT(CASE WHEN t.name = 'blocked' THEN 1 END) as blocked_count,
-                COUNT(CASE WHEN t.name = 'active' THEN 1 END) as active_count,
-                COUNT(DISTINCT d.id) as total
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            LEFT JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0
-            GROUP BY d.project
-        """)
-        project_health = cursor.fetchall()
-        
-        # Gameplan success analysis
-        cursor.execute("""
-            SELECT 
-                COUNT(CASE WHEN t2.name = 'success' THEN 1 END) as success_count,
-                COUNT(CASE WHEN t2.name = 'failed' THEN 1 END) as failed_count,
-                COUNT(CASE WHEN t2.name = 'blocked' THEN 1 END) as blocked_count,
-                COUNT(DISTINCT d.id) as total
-            FROM documents d
-            JOIN document_tags dt1 ON d.id = dt1.document_id
-            JOIN tags t1 ON dt1.tag_id = t1.id
-            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
-            LEFT JOIN tags t2 ON dt2.tag_id = t2.id AND t2.name IN ('success', 'failed', 'blocked')
-            WHERE d.is_deleted = 0 AND t1.name = 'gameplan'
-        """)
-        gameplan_stats = cursor.fetchone()
-        
-        return {
-            "project_health": [dict(row) for row in project_health],
-            "gameplan_stats": dict(gameplan_stats) if gameplan_stats else {}
-        }
-
-
 @app.command()
 def analyze(
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Save report to file"),
-    json_export: Optional[Path] = typer.Option(None, "--json", help="Export raw data as JSON"),
-    section: Optional[str] = typer.Option(None, "--section", "-s", help="Show specific section: overview, tags, content, temporal, health")
+    health: bool = typer.Option(False, "--health", "-h", help="Show detailed health metrics"),
+    duplicates: bool = typer.Option(False, "--duplicates", "-d", help="Find duplicate documents"),
+    similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),
+    empty: bool = typer.Option(False, "--empty", "-e", help="Find empty documents"),
+    tags: bool = typer.Option(False, "--tags", "-t", help="Analyze tag coverage and patterns"),
+    lifecycle: bool = typer.Option(False, "--lifecycle", "-l", help="Analyze gameplan lifecycle patterns"),
+    projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
+    all_analyses: bool = typer.Option(False, "--all", "-a", help="Run all analyses"),
+    project: Optional[str] = typer.Option(None, "--project", help="Filter by specific project"),
 ):
-    """Analyze your EMDX knowledge base and generate insights."""
-    with console.status("[bold green]Analyzing knowledge base..."):
-        analyzer = KnowledgeBaseAnalyzer()
-        
-        # Gather all data
-        overview = analyzer.get_overview_stats()
-        tags = analyzer.analyze_tags()
-        content = analyzer.analyze_content_patterns()
-        temporal = analyzer.analyze_temporal_patterns()
-        health = analyzer.analyze_project_health()
+    """
+    Analyze your knowledge base to discover patterns, issues, and insights.
     
-    # If specific section requested
-    if section:
-        if section == "overview":
-            display_overview(overview)
-        elif section == "tags":
-            display_tags(tags)
-        elif section == "content":
-            display_content(content)
-        elif section == "temporal":
-            display_temporal(temporal)
-        elif section == "health":
-            display_health(health)
-        else:
-            console.print(f"[red]Unknown section: {section}[/red]")
-            raise typer.Exit(1)
+    This command provides comprehensive read-only analysis without making any changes.
+    Use it to understand the current state of your knowledge base and identify
+    opportunities for improvement.
+    
+    Examples:
+        emdx analyze              # Show health overview with recommendations
+        emdx analyze --health     # Detailed health metrics
+        emdx analyze --duplicates # Find duplicate documents
+        emdx analyze --all        # Run all analyses
+    """
+    
+    # If no specific analysis requested, show health overview
+    if not any([health, duplicates, similar, empty, tags, lifecycle, projects, all_analyses]):
+        health = True
+    
+    # If --all is specified, enable everything
+    if all_analyses:
+        health = duplicates = similar = empty = tags = lifecycle = projects = True
+    
+    # Header
+    console.print(Panel(
+        "[bold cyan]📊 Knowledge Base Analysis[/bold cyan]",
+        box=box.DOUBLE
+    ))
+    
+    # Health Analysis
+    if health:
+        _analyze_health()
+        if any([duplicates, similar, empty, tags, lifecycle, projects]):
+            console.print()  # Add spacing between sections
+    
+    # Duplicate Analysis
+    if duplicates:
+        _analyze_duplicates()
+        if any([similar, empty, tags, lifecycle, projects]):
+            console.print()
+    
+    # Similar Documents Analysis
+    if similar:
+        _analyze_similar()
+        if any([empty, tags, lifecycle, projects]):
+            console.print()
+    
+    # Empty Documents Analysis
+    if empty:
+        _analyze_empty()
+        if any([tags, lifecycle, projects]):
+            console.print()
+    
+    # Tag Analysis
+    if tags:
+        _analyze_tags(project)
+        if any([lifecycle, projects]):
+            console.print()
+    
+    # Lifecycle Analysis
+    if lifecycle:
+        _analyze_lifecycle()
+        if projects:
+            console.print()
+    
+    # Project Analysis
+    if projects:
+        _analyze_projects()
+
+
+def _analyze_health():
+    """Show detailed health metrics."""
+    monitor = HealthMonitor()
+    
+    with console.status("[bold green]Analyzing knowledge base health..."):
+        metrics = monitor.calculate_overall_health()
+    
+    # Overall health score
+    overall_score = metrics["overall_score"] * 100  # Convert to percentage
+    health_color = (
+        "green" if overall_score >= 80 else
+        "yellow" if overall_score >= 60 else
+        "red"
+    )
+    
+    console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")
+    
+    # Detailed metrics
+    console.print("\n[bold]Health Metrics:[/bold]")
+    
+    metrics_table = Table(show_header=False, box=box.SIMPLE)
+    metrics_table.add_column("Metric", style="cyan")
+    metrics_table.add_column("Score", justify="right")
+    metrics_table.add_column("Status")
+    metrics_table.add_column("Details")
+    
+    # Tag Coverage
+    tag_metric = metrics["metrics"]["tag_coverage"]
+    tag_score = tag_metric.value * 100  # Convert to percentage
+    tag_color = "green" if tag_score >= 80 else "yellow" if tag_score >= 60 else "red"
+    metrics_table.add_row(
+        "Tag Coverage",
+        f"[{tag_color}]{tag_score:.0f}%[/{tag_color}]",
+        _get_status_emoji(tag_score),
+        tag_metric.details
+    )
+    
+    # Duplicate Ratio
+    dup_metric = metrics["metrics"]["duplicate_ratio"]
+    dup_score = dup_metric.value * 100
+    dup_color = "green" if dup_score >= 80 else "yellow" if dup_score >= 60 else "red"
+    metrics_table.add_row(
+        "Duplicate Ratio",
+        f"[{dup_color}]{dup_score:.0f}%[/{dup_color}]",
+        _get_status_emoji(dup_score),
+        dup_metric.details
+    )
+    
+    # Organization
+    org_metric = metrics["metrics"]["organization"]
+    org_score = org_metric.value * 100
+    org_color = "green" if org_score >= 80 else "yellow" if org_score >= 60 else "red"
+    metrics_table.add_row(
+        "Organization",
+        f"[{org_color}]{org_score:.0f}%[/{org_color}]",
+        _get_status_emoji(org_score),
+        org_metric.details
+    )
+    
+    # Activity
+    act_metric = metrics["metrics"]["activity"]
+    act_score = act_metric.value * 100
+    act_color = "green" if act_score >= 80 else "yellow" if act_score >= 60 else "red"
+    metrics_table.add_row(
+        "Activity",
+        f"[{act_color}]{act_score:.0f}%[/{act_color}]",
+        _get_status_emoji(act_score),
+        act_metric.details
+    )
+    
+    console.print(metrics_table)
+    
+    # Collect all recommendations
+    all_recommendations = []
+    for metric in metrics["metrics"].values():
+        all_recommendations.extend(metric.recommendations)
+    
+    if all_recommendations:
+        console.print("\n[bold]Recommendations:[/bold]")
+        for rec in all_recommendations:
+            console.print(f"  • {rec}")
+        console.print("\n[dim]Run 'emdx maintain' to fix these issues[/dim]")
+
+
+def _analyze_duplicates():
+    """Find duplicate documents."""
+    detector = DuplicateDetector()
+    
+    with console.status("[bold green]Detecting duplicates..."):
+        exact_dupes = detector.find_duplicates()
+        near_dupes = detector.find_near_duplicates(threshold=0.85)
+    
+    console.print("[bold]Duplicate Analysis:[/bold]")
+    
+    if not exact_dupes and not near_dupes:
+        console.print("  ✨ [green]No duplicate documents found![/green]")
+        return
+    
+    # Exact duplicates
+    if exact_dupes:
+        total_exact = sum(len(group) - 1 for group in exact_dupes)
+        console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")
+        
+        # Show a few examples
+        for i, group in enumerate(exact_dupes[:3], 1):
+            console.print(f"    • Group {i}: '{group[0]['title']}' ({len(group)} copies)")
+    
+    # Near duplicates
+    if near_dupes:
+        console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")
+        
+        # Show a few examples
+        for i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
+            console.print(f"    • '{doc1['title']}' ↔ '{doc2['title']}' ({similarity:.0%} similar)")
+    
+    console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")
+
+
+def _analyze_similar():
+    """Find similar documents for merging."""
+    merger = DocumentMerger()
+    
+    with console.status("[bold green]Finding similar documents..."):
+        candidates = merger.find_merge_candidates(similarity_threshold=0.7)
+    
+    console.print("[bold]Similar Documents (Merge Candidates):[/bold]")
+    
+    if not candidates:
+        console.print("  ✨ [green]No similar documents found![/green]")
+        return
+    
+    console.print(f"\n  Found {len(candidates)} merge candidates:")
+    
+    # Show top candidates
+    for i, candidate in enumerate(candidates[:5], 1):
+        console.print(f"\n  [{i}] [cyan]{candidate.doc1['title']}[/cyan]")
+        console.print(f"      ↔ [cyan]{candidate.doc2['title']}[/cyan]")
+        console.print(f"      [dim]Similarity: {candidate.similarity:.0%} | "
+                     f"Combined length: {candidate.combined_length:,} chars[/dim]")
+    
+    if len(candidates) > 5:
+        console.print(f"\n  [dim]... and {len(candidates) - 5} more[/dim]")
+    
+    console.print("\n[dim]Run 'emdx maintain --merge' to merge similar documents[/dim]")
+
+
+def _analyze_empty():
+    """Find empty documents."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT id, title, LENGTH(content) as length, project, access_count
+        FROM documents
+        WHERE is_deleted = 0
+        AND LENGTH(content) < 10
+        ORDER BY length, id
+    """)
+    
+    empty_docs = cursor.fetchall()
+    conn.close()
+    
+    console.print("[bold]Empty Documents Analysis:[/bold]")
+    
+    if not empty_docs:
+        console.print("  ✨ [green]No empty documents found![/green]")
+        return
+    
+    console.print(f"\n  [yellow]Found {len(empty_docs)} empty documents[/yellow]")
+    
+    # Show examples
+    console.print("\n  Examples:")
+    for doc in empty_docs[:5]:
+        console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")
+    
+    if len(empty_docs) > 5:
+        console.print(f"    [dim]... and {len(empty_docs) - 5} more[/dim]")
+    
+    console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
+
+
+def _analyze_tags(project: Optional[str] = None):
+    """Analyze tag coverage and patterns."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Overall tag statistics
+    if project:
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT d.id) as total_docs,
+                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                COUNT(DISTINCT t.id) as unique_tags,
+                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+            FROM documents d
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as tag_count
+                FROM document_tags
+                GROUP BY document_id
+            ) dt ON d.id = dt.document_id
+            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+            LEFT JOIN tags t ON dt2.tag_id = t.id
+            WHERE d.is_deleted = 0 AND d.project = ?
+        """, (project,))
     else:
-        # Display full report
-        display_overview(overview)
-        display_tags(tags)
-        display_content(content)
-        display_temporal(temporal)
-        display_health(health)
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT d.id) as total_docs,
+                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                COUNT(DISTINCT t.id) as unique_tags,
+                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+            FROM documents d
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as tag_count
+                FROM document_tags
+                GROUP BY document_id
+            ) dt ON d.id = dt.document_id
+            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+            LEFT JOIN tags t ON dt2.tag_id = t.id
+            WHERE d.is_deleted = 0
+        """)
     
-    # Save outputs if requested
-    if output:
-        report = generate_text_report(overview, tags, content, temporal, health)
-        output.write_text(report)
-        console.print(f"\n[green]Report saved to: {output}[/green]")
+    stats = cursor.fetchone()
     
-    if json_export:
-        data = {
-            "overview": overview,
-            "tags": tags,
-            "content": content,
-            "temporal": temporal,
-            "health": health,
-            "generated_at": datetime.now().isoformat()
-        }
-        json_export.write_text(json.dumps(data, indent=2, default=str))
-        console.print(f"[green]JSON export saved to: {json_export}[/green]")
-
-
-def display_overview(overview: Dict[str, Any]):
-    """Display overview statistics"""
-    console.print("\n[bold cyan]📊 Knowledge Base Overview[/bold cyan]\n")
+    console.print("[bold]Tag Analysis:[/bold]")
     
-    # Stats table
-    stats_table = Table(show_header=False, box=box.ROUNDED)
-    stats_table.add_row("Total Documents", f"[bold]{overview['total_documents']}[/bold]")
-    stats_table.add_row("Total Views", f"{overview['total_views']:,}")
-    stats_table.add_row("Average Views/Doc", f"{overview['average_views']:.1f}")
-    stats_table.add_row("Deleted Documents", f"{overview['deleted_documents']}")
-    console.print(stats_table)
+    if project:
+        console.print(f"  [dim]Project: {project}[/dim]")
     
-    # Projects
-    if overview['projects']:
-        console.print("\n[bold]Projects Distribution:[/bold]")
-        proj_table = Table(show_header=True, header_style="bold magenta")
-        proj_table.add_column("Project", style="cyan")
-        proj_table.add_column("Documents", justify="right")
-        
-        for proj in overview['projects'][:10]:
-            proj_table.add_row(
-                proj['project'] or "[dim]No Project[/dim]",
-                str(proj['count'])
-            )
-        console.print(proj_table)
+    coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
     
-    # Most viewed
-    if overview['most_viewed']:
-        console.print("\n[bold]Most Viewed Documents:[/bold]")
-        view_table = Table(show_header=True, header_style="bold magenta")
-        view_table.add_column("ID", style="dim", width=6)
-        view_table.add_column("Title", no_wrap=False)
-        view_table.add_column("Views", justify="right")
-        
-        for doc in overview['most_viewed'][:5]:
-            view_table.add_row(
-                str(doc['id']),
-                doc['title'][:60] + "..." if len(doc['title']) > 60 else doc['title'],
-                str(doc['access_count'])
-            )
-        console.print(view_table)
-
-
-def display_tags(tags: Dict[str, Any]):
-    """Display tag analysis"""
-    console.print("\n[bold cyan]🏷️  Tag Analysis[/bold cyan]\n")
+    console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")
+    console.print(f"  Total Documents: {stats['total_docs']:,}")
+    console.print(f"  Tagged Documents: {stats['tagged_docs']:,}")
+    console.print(f"  Unique Tags: {stats['unique_tags']}")
+    console.print(f"  Avg Tags per Doc: {stats['avg_tags']:.1f}")
     
-    stats = f"Total Tags: [bold]{tags['total_tags']}[/bold] | Untagged Documents: [bold]{tags['untagged_documents']}[/bold]"
-    console.print(Panel(stats, box=box.ROUNDED))
+    # Most used tags
+    cursor.execute("""
+        SELECT t.name, COUNT(dt.document_id) as usage_count
+        FROM tags t
+        JOIN document_tags dt ON t.id = dt.tag_id
+        JOIN documents d ON dt.document_id = d.id
+        WHERE d.is_deleted = 0
+        GROUP BY t.id, t.name
+        ORDER BY usage_count DESC
+        LIMIT 10
+    """)
     
-    if tags['tags']:
-        console.print("\n[bold]Top Tags:[/bold]")
-        tag_table = Table(show_header=True, header_style="bold magenta")
-        tag_table.add_column("Emoji", width=4)
-        tag_table.add_column("Name", style="cyan")
-        tag_table.add_column("Count", justify="right")
-        tag_table.add_column("Usage", width=20)
-        
-        max_count = tags['tags'][0]['count'] if tags['tags'] else 1
-        for tag in tags['tags'][:20]:
-            if tag['count'] > 0:
-                bar_length = int((tag['count'] / max_count) * 20)
-                bar = "█" * bar_length + "░" * (20 - bar_length)
-                tag_table.add_row(
-                    tag['emoji'],
-                    tag['name'],
-                    str(tag['count']),
-                    f"[green]{bar}[/green]"
-                )
-        console.print(tag_table)
-
-
-def display_content(content: Dict[str, Any]):
-    """Display content analysis"""
-    console.print("\n[bold cyan]📝 Content Analysis[/bold cyan]\n")
+    top_tags = cursor.fetchall()
+    if top_tags:
+        console.print("\n  [bold]Most Used Tags:[/bold]")
+        for tag in top_tags[:5]:
+            console.print(f"    • {tag['name']} ({tag['usage_count']} docs)")
     
-    # Document types
-    console.print("[bold]Document Type Distribution:[/bold]")
-    type_table = Table(show_header=True, header_style="bold magenta")
-    type_table.add_column("Type", style="cyan")
-    type_table.add_column("Count", justify="right")
-    type_table.add_column("Percentage", justify="right")
-    
-    total = sum(content['title_patterns'].values())
-    for pattern, count in sorted(content['title_patterns'].items(), key=lambda x: x[1], reverse=True):
-        percentage = (count / total * 100) if total > 0 else 0
-        type_table.add_row(
-            pattern.capitalize(),
-            str(count),
-            f"{percentage:.1f}%"
+    # Untagged documents
+    cursor.execute("""
+        SELECT COUNT(*) as untagged
+        FROM documents d
+        WHERE d.is_deleted = 0
+        AND NOT EXISTS (
+            SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
         )
-    console.print(type_table)
+    """ + (" AND d.project = ?" if project else ""), 
+    (project,) if project else ())
     
-    # Length distribution
-    console.print("\n[bold]Document Length Distribution:[/bold]")
-    length_table = Table(show_header=True, header_style="bold magenta")
-    length_table.add_column("Category", style="cyan")
-    length_table.add_column("Count", justify="right")
-    length_table.add_column("Characters", justify="right", style="dim")
+    untagged = cursor.fetchone()['untagged']
+    if untagged > 0:
+        console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
+        console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
     
-    length_ranges = {
-        "very_short": "< 100",
-        "short": "100-500",
-        "medium": "500-2K",
-        "long": "2K-5K",
-        "very_long": "> 5K"
-    }
+    conn.close()
+
+
+def _analyze_lifecycle():
+    """Analyze gameplan lifecycle patterns."""
+    tracker = LifecycleTracker()
     
-    for size, count in content['length_distribution'].items():
-        length_table.add_row(
-            size.replace('_', ' ').capitalize(),
-            str(count),
-            length_ranges.get(size, "")
+    with console.status("[bold green]Analyzing lifecycle patterns..."):
+        analysis = tracker.analyze_lifecycle_patterns()
+    
+    console.print("[bold]Lifecycle Analysis:[/bold]")
+    
+    if analysis['total_gameplans'] == 0:
+        console.print("  [dim]No gameplans found[/dim]")
+        return
+    
+    console.print(f"\n  Total Gameplans: {analysis['total_gameplans']}")
+    console.print(f"  Success Rate: [{_get_success_color(analysis['success_rate'])}]{analysis['success_rate']:.0f}%[/{_get_success_color(analysis['success_rate'])}]")
+    console.print(f"  Average Duration: {analysis['average_duration']:.0f} days")
+    
+    # Stage distribution
+    if analysis['stage_distribution']:
+        console.print("\n  [bold]Stage Distribution:[/bold]")
+        for stage, count in analysis['stage_distribution'].items():
+            percentage = (count / analysis['total_gameplans'] * 100)
+            console.print(f"    • {stage}: {count} ({percentage:.0f}%)")
+    
+    # Insights
+    if analysis['insights']:
+        console.print("\n  [bold]Insights:[/bold]")
+        for insight in analysis['insights']:
+            console.print(f"    • {insight}")
+    
+    if analysis.get('stale_active', 0) > 0:
+        console.print("\n[dim]Run 'emdx maintain --lifecycle' to auto-transition stale gameplans[/dim]")
+
+
+def _analyze_projects():
+    """Show project-level analysis."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 
+            p.project,
+            COUNT(*) as doc_count,
+            AVG(LENGTH(p.content)) as avg_length,
+            SUM(p.access_count) as total_views,
+            COUNT(DISTINCT dt.tag_id) as unique_tags,
+            MAX(p.updated_at) as last_updated
+        FROM documents p
+        LEFT JOIN document_tags dt ON p.id = dt.document_id
+        WHERE p.is_deleted = 0
+        GROUP BY p.project
+        ORDER BY doc_count DESC
+    """)
+    
+    projects = cursor.fetchall()
+    conn.close()
+    
+    console.print("[bold]Project Analysis:[/bold]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+    table.add_column("Project", style="cyan")
+    table.add_column("Docs", justify="right")
+    table.add_column("Avg Size", justify="right")
+    table.add_column("Views", justify="right")
+    table.add_column("Tags", justify="right")
+    table.add_column("Last Updated")
+    
+    for proj in projects:
+        last_updated = datetime.fromisoformat(proj['last_updated'])
+        days_ago = (datetime.now() - last_updated).days
+        
+        table.add_row(
+            proj['project'] or "[No Project]",
+            str(proj['doc_count']),
+            f"{proj['avg_length']:.0f}",
+            f"{proj['total_views']:,}",
+            str(proj['unique_tags']),
+            f"{days_ago}d ago"
         )
-    console.print(length_table)
-    console.print(f"\nAverage document length: [bold]{content['average_length']:.0f}[/bold] characters")
+    
+    console.print(table)
 
 
-def display_temporal(temporal: Dict[str, Any]):
-    """Display temporal patterns"""
-    console.print("\n[bold cyan]📅 Temporal Patterns[/bold cyan]\n")
-    
-    # Recent activity
-    if temporal['creation_by_month']:
-        console.print("[bold]Recent Activity (Last 6 Months):[/bold]")
-        recent_table = Table(show_header=True, header_style="bold magenta")
-        recent_table.add_column("Month", style="cyan")
-        recent_table.add_column("Created", justify="right")
-        recent_table.add_column("Activity", width=30)
-        
-        recent_months = temporal['creation_by_month'][-6:]
-        max_count = max(m['count'] for m in recent_months) if recent_months else 1
-        
-        for month in recent_months:
-            bar_length = int((month['count'] / max_count) * 30)
-            bar = "█" * bar_length + "░" * (30 - bar_length)
-            recent_table.add_row(
-                month['month'],
-                str(month['count']),
-                f"[green]{bar}[/green]"
-            )
-        console.print(recent_table)
+def _get_status_emoji(score: float) -> str:
+    """Get status emoji based on score."""
+    if score >= 80:
+        return "✅"
+    elif score >= 60:
+        return "⚠️"
+    else:
+        return "❌"
 
 
-def display_health(health: Dict[str, Any]):
-    """Display project health analysis"""
-    console.print("\n[bold cyan]💚 Project Health Analysis[/bold cyan]\n")
-    
-    # Gameplan success rate
-    if health.get('gameplan_stats'):
-        stats = health['gameplan_stats']
-        total = stats.get('total', 0)
-        if total > 0:
-            success_rate = (stats.get('success_count', 0) / total * 100)
-            console.print(Panel(
-                f"[bold]Gameplan Success Rate:[/bold] [green]{success_rate:.1f}%[/green] "
-                f"({stats.get('success_count', 0)}/{total} gameplans)",
-                box=box.ROUNDED
-            ))
-    
-    # Project health
-    if health['project_health']:
-        console.print("\n[bold]Success Rates by Project:[/bold]")
-        health_table = Table(show_header=True, header_style="bold magenta")
-        health_table.add_column("Project", style="cyan")
-        health_table.add_column("Total", justify="right")
-        health_table.add_column("Success", justify="right", style="green")
-        health_table.add_column("Failed", justify="right", style="red")
-        health_table.add_column("Blocked", justify="right", style="yellow")
-        health_table.add_column("Active", justify="right", style="blue")
-        health_table.add_column("Success %", justify="right")
-        
-        for proj in health['project_health']:
-            if proj['total'] > 5:  # Only show projects with meaningful data
-                success_rate = (proj['success_count'] / proj['total'] * 100) if proj['total'] > 0 else 0
-                health_table.add_row(
-                    proj['project'] or "[dim]No Project[/dim]",
-                    str(proj['total']),
-                    str(proj['success_count']),
-                    str(proj['failed_count']),
-                    str(proj['blocked_count']),
-                    str(proj['active_count']),
-                    f"{success_rate:.1f}%"
-                )
-        console.print(health_table)
+def _get_coverage_color(coverage: float) -> str:
+    """Get color based on coverage percentage."""
+    if coverage >= 80:
+        return "green"
+    elif coverage >= 60:
+        return "yellow"
+    else:
+        return "red"
 
 
-def generate_text_report(overview, tags, content, temporal, health) -> str:
-    """Generate a text report for file output"""
-    report = []
-    report.append("# EMDX Knowledge Base Analysis Report")
-    report.append(f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    # Overview
-    report.append("\n## Overview Statistics")
-    report.append(f"- Total Documents: {overview['total_documents']}")
-    report.append(f"- Total Views: {overview['total_views']}")
-    report.append(f"- Average Views per Document: {overview['average_views']:.1f}")
-    report.append(f"- Deleted Documents: {overview['deleted_documents']}")
-    
-    # Projects
-    report.append("\n### Projects Distribution")
-    for proj in overview['projects'][:10]:
-        report.append(f"- {proj['project'] or 'No Project'}: {proj['count']} documents")
-    
-    # Tags
-    report.append("\n## Tag Analysis")
-    report.append(f"- Total Unique Tags: {tags['total_tags']}")
-    report.append(f"- Untagged Documents: {tags['untagged_documents']}")
-    
-    report.append("\n### Top Tags")
-    for tag in tags['tags'][:20]:
-        if tag['count'] > 0:
-            report.append(f"- {tag['emoji']} {tag['name']}: {tag['count']} documents")
-    
-    # Content
-    report.append("\n## Content Analysis")
-    report.append("\n### Document Type Distribution")
-    for pattern, count in sorted(content['title_patterns'].items(), key=lambda x: x[1], reverse=True):
-        report.append(f"- {pattern.capitalize()}: {count}")
-    
-    # Project Health
-    if health.get('gameplan_stats'):
-        stats = health['gameplan_stats']
-        total = stats.get('total', 0)
-        if total > 0:
-            success_rate = (stats.get('success_count', 0) / total * 100)
-            report.append(f"\n## Gameplan Success Rate")
-            report.append(f"- Overall: {success_rate:.1f}% ({stats.get('success_count', 0)}/{total})")
-    
-    return "\n".join(report)
+def _get_success_color(rate: float) -> str:
+    """Get color based on success rate."""
+    if rate >= 70:
+        return "green"
+    elif rate >= 50:
+        return "yellow"
+    else:
+        return "red"
+
+
+if __name__ == "__main__":
+    app()
