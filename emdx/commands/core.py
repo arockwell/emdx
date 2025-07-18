@@ -2,6 +2,7 @@
 Core CRUD operations for emdx
 """
 
+import json
 import os
 import subprocess
 import tempfile
@@ -234,6 +235,13 @@ def find(
         None, "--tags", "-t", help="Filter by tags (comma-separated)"
     ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
+    no_tags: Optional[str] = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
+    ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
+    created_after: Optional[str] = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),
+    created_before: Optional[str] = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),
+    modified_after: Optional[str] = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),
+    modified_before: Optional[str] = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),
 ) -> None:
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query) if query else ""
@@ -243,8 +251,9 @@ def find(
         db.ensure_schema()
 
         # Validate that we have something to search for
-        if not search_query and not tags:
-            console.print("[red]Error: Provide search terms or use --tags option[/red]")
+        has_date_filters = any([created_after, created_before, modified_after, modified_before])
+        if not search_query and not tags and not has_date_filters:
+            console.print("[red]Error: Provide search terms, tags, or date filters[/red]")
             raise typer.Exit(1)
 
         # Handle tag-based search
@@ -262,7 +271,9 @@ def find(
 
                 # Get documents matching search query
                 search_results = search_documents(
-                    search_query, project=project, limit=limit * 2, fuzzy=fuzzy
+                    search_query, project=project, limit=limit * 2, fuzzy=fuzzy,
+                    created_after=created_after, created_before=created_before,
+                    modified_after=modified_after, modified_before=modified_before
                 )
 
                 # Combine: only show documents that match both criteria
@@ -286,18 +297,112 @@ def find(
                     return
                 search_query = f"tags: {', '.join(tag_list)}"
         else:
-            # Regular search without tags
-            results = search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
+            # Regular search without tags (but might have date filters)
+            # If we have no search query but have date filters, use a wildcard
+            effective_query = search_query if search_query else "*"
+            
+            results = search_documents(
+                effective_query, project=project, limit=limit, fuzzy=fuzzy,
+                created_after=created_after, created_before=created_before,
+                modified_after=modified_after, modified_before=modified_before
+            )
 
             if not results:
-                console.print(
-                    f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
-                )
+                if search_query:
+                    console.print(
+                        f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
+                    )
+                else:
+                    console.print("[yellow]No results found matching the date filters[/yellow]")
                 return
+        
+        # Filter out documents with excluded tags if --no-tags is specified
+        if no_tags:
+            expanded_no_tags = expand_alias_string(no_tags)
+            no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
+            
+            if no_tag_list:
+                # Filter results to exclude documents with any of the no_tags
+                filtered_results = []
+                for result in results:
+                    doc_tags = get_document_tags(result["id"])
+                    # Check if document has any excluded tags
+                    has_excluded_tag = any(tag in doc_tags for tag in no_tag_list)
+                    if not has_excluded_tag:
+                        filtered_results.append(result)
+                
+                results = filtered_results
+                
+                if not results:
+                    console.print(
+                        f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"
+                    )
+                    return
 
-        # Display results
+        # Handle different output formats
+        if ids_only:
+            # Output only IDs, one per line
+            for result in results:
+                print(result['id'])
+            return
+        
+        if json_output:
+            # Output as JSON with all metadata
+            output_results = []
+            for result in results:
+                # Get tags for each document
+                doc_tags = get_document_tags(result["id"])
+                
+                # Build clean result object
+                output_result = {
+                    "id": result["id"],
+                    "title": result["title"],
+                    "project": result.get("project"),
+                    "created_at": result["created_at"].isoformat(),
+                    "updated_at": result.get("updated_at", result["created_at"]).isoformat(),
+                    "tags": doc_tags,
+                    "access_count": result.get("access_count", 0),
+                }
+                
+                # Add search-specific metadata if available
+                if "rank" in result:
+                    output_result["relevance"] = result["rank"]
+                elif "score" in result:
+                    output_result["similarity"] = result["score"]
+                
+                if snippets and "snippet" in result:
+                    # Clean snippet of HTML tags
+                    output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
+                
+                output_results.append(output_result)
+            
+            # Output as JSON
+            print(json.dumps(output_results, indent=2))
+            return
+
+        # Display results (default human-readable format)
+        # Build search description
+        search_desc = []
+        if search_query:
+            search_desc.append(f"'[cyan]{search_query}[/cyan]'")
+        if created_after or created_before:
+            date_range = []
+            if created_after:
+                date_range.append(f"after {created_after}")
+            if created_before:
+                date_range.append(f"before {created_before}")
+            search_desc.append(f"created {' and '.join(date_range)}")
+        if modified_after or modified_before:
+            date_range = []
+            if modified_after:
+                date_range.append(f"after {modified_after}")
+            if modified_before:
+                date_range.append(f"before {modified_before}")
+            search_desc.append(f"modified {' and '.join(date_range)}")
+        
+        search_description = " ".join(search_desc) if search_desc else "all documents"
         console.print(
-            f"\n[bold]🔍 Found {len(results)} results for '[cyan]{search_query}[/cyan]'[/bold]\n"
+            f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n"
         )
 
         for i, result in enumerate(results, 1):

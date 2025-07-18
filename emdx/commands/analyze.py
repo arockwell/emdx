@@ -3,8 +3,9 @@ Unified analyze command for EMDX.
 Consolidates all read-only analysis and inspection operations.
 """
 
+import json
 import typer
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -33,6 +34,7 @@ def analyze(
     projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
     all_analyses: bool = typer.Option(False, "--all", "-a", help="Run all analyses"),
     project: Optional[str] = typer.Option(None, "--project", help="Filter by specific project"),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
 ):
     """
     Analyze your knowledge base to discover patterns, issues, and insights.
@@ -56,7 +58,36 @@ def analyze(
     if all_analyses:
         health = duplicates = similar = empty = tags = lifecycle = projects = True
     
-    # Header
+    # Collect results if JSON output is requested
+    if json_output:
+        results = {}
+        
+        if health:
+            results["health"] = _collect_health_data()
+        
+        if duplicates:
+            results["duplicates"] = _collect_duplicates_data()
+        
+        if similar:
+            results["similar"] = _collect_similar_data()
+        
+        if empty:
+            results["empty"] = _collect_empty_data()
+        
+        if tags:
+            results["tags"] = _collect_tags_data(project)
+        
+        if lifecycle:
+            results["lifecycle"] = _collect_lifecycle_data()
+        
+        if projects:
+            results["projects"] = _collect_projects_data()
+        
+        # Output as JSON
+        print(json.dumps(results, indent=2))
+        return
+    
+    # Header for human-readable output
     console.print(Panel(
         "[bold cyan]📊 Knowledge Base Analysis[/bold cyan]",
         box=box.DOUBLE
@@ -491,6 +522,279 @@ def _get_success_color(rate: float) -> str:
         return "yellow"
     else:
         return "red"
+
+
+# JSON collection functions
+def _collect_health_data() -> Dict[str, Any]:
+    """Collect health metrics as structured data."""
+    monitor = HealthMonitor()
+    metrics = monitor.calculate_overall_health()
+    
+    # Convert HealthMetric objects to dictionaries
+    result = {
+        "overall_score": metrics["overall_score"],
+        "overall_status": metrics["overall_status"],
+        "metrics": {},
+        "statistics": metrics.get("statistics", {}),
+        "timestamp": metrics.get("timestamp", datetime.now().isoformat())
+    }
+    
+    # Convert each metric
+    for key, metric in metrics["metrics"].items():
+        result["metrics"][key] = {
+            "name": metric.name,
+            "value": metric.value,
+            "score": metric.value * 100,  # Convert to percentage
+            "weight": metric.weight,
+            "status": metric.status,
+            "details": metric.details,
+            "recommendations": metric.recommendations
+        }
+    
+    return result
+
+
+def _collect_duplicates_data() -> Dict[str, Any]:
+    """Collect duplicate analysis data."""
+    detector = DuplicateDetector()
+    exact_dupes = detector.find_duplicates()
+    near_dupes = detector.find_near_duplicates(threshold=0.85)
+    
+    result = {
+        "exact_duplicates": {
+            "count": len(exact_dupes),
+            "total_duplicates": sum(len(group) - 1 for group in exact_dupes),
+            "groups": []
+        },
+        "near_duplicates": {
+            "count": len(near_dupes),
+            "pairs": []
+        }
+    }
+    
+    # Add exact duplicate groups
+    for group in exact_dupes[:10]:  # Limit to 10 groups
+        result["exact_duplicates"]["groups"].append({
+            "title": group[0]['title'],
+            "count": len(group),
+            "ids": [doc['id'] for doc in group]
+        })
+    
+    # Add near duplicate pairs
+    for doc1, doc2, similarity in near_dupes[:10]:  # Limit to 10 pairs
+        result["near_duplicates"]["pairs"].append({
+            "doc1": {"id": doc1['id'], "title": doc1['title']},
+            "doc2": {"id": doc2['id'], "title": doc2['title']},
+            "similarity": similarity
+        })
+    
+    return result
+
+
+def _collect_similar_data() -> Dict[str, Any]:
+    """Collect similar documents data."""
+    merger = DocumentMerger()
+    candidates = merger.find_merge_candidates(similarity_threshold=0.7)
+    
+    result = {
+        "count": len(candidates),
+        "candidates": []
+    }
+    
+    for candidate in candidates[:20]:  # Limit to 20
+        result["candidates"].append({
+            "doc1": {"id": candidate.doc1['id'], "title": candidate.doc1['title']},
+            "doc2": {"id": candidate.doc2['id'], "title": candidate.doc2['title']},
+            "similarity": candidate.similarity,
+            "combined_length": candidate.combined_length
+        })
+    
+    return result
+
+
+def _collect_empty_data() -> Dict[str, Any]:
+    """Collect empty documents data."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT id, title, LENGTH(content) as length, project, access_count
+        FROM documents
+        WHERE is_deleted = 0
+        AND LENGTH(content) < 10
+        ORDER BY length, id
+    """)
+    
+    empty_docs = cursor.fetchall()
+    conn.close()
+    
+    result = {
+        "count": len(empty_docs),
+        "documents": []
+    }
+    
+    for doc in empty_docs:
+        result["documents"].append({
+            "id": doc['id'],
+            "title": doc['title'],
+            "length": doc['length'],
+            "project": doc['project'],
+            "access_count": doc['access_count']
+        })
+    
+    return result
+
+
+def _collect_tags_data(project: Optional[str] = None) -> Dict[str, Any]:
+    """Collect tag analysis data."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Overall tag statistics
+    if project:
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT d.id) as total_docs,
+                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                COUNT(DISTINCT t.id) as unique_tags,
+                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+            FROM documents d
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as tag_count
+                FROM document_tags
+                GROUP BY document_id
+            ) dt ON d.id = dt.document_id
+            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+            LEFT JOIN tags t ON dt2.tag_id = t.id
+            WHERE d.is_deleted = 0 AND d.project = ?
+        """, (project,))
+    else:
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT d.id) as total_docs,
+                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                COUNT(DISTINCT t.id) as unique_tags,
+                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+            FROM documents d
+            LEFT JOIN (
+                SELECT document_id, COUNT(*) as tag_count
+                FROM document_tags
+                GROUP BY document_id
+            ) dt ON d.id = dt.document_id
+            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+            LEFT JOIN tags t ON dt2.tag_id = t.id
+            WHERE d.is_deleted = 0
+        """)
+    
+    stats = cursor.fetchone()
+    coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+    
+    result = {
+        "project": project,
+        "coverage": coverage,
+        "total_documents": stats['total_docs'],
+        "tagged_documents": stats['tagged_docs'],
+        "unique_tags": stats['unique_tags'],
+        "avg_tags_per_doc": float(stats['avg_tags'] or 0),
+        "top_tags": []
+    }
+    
+    # Most used tags
+    cursor.execute("""
+        SELECT t.name, COUNT(dt.document_id) as usage_count
+        FROM tags t
+        JOIN document_tags dt ON t.id = dt.tag_id
+        JOIN documents d ON dt.document_id = d.id
+        WHERE d.is_deleted = 0
+        GROUP BY t.id, t.name
+        ORDER BY usage_count DESC
+        LIMIT 20
+    """)
+    
+    for tag in cursor.fetchall():
+        result["top_tags"].append({
+            "name": tag['name'],
+            "count": tag['usage_count']
+        })
+    
+    # Untagged count
+    cursor.execute("""
+        SELECT COUNT(*) as untagged
+        FROM documents d
+        WHERE d.is_deleted = 0
+        AND NOT EXISTS (
+            SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
+        )
+    """ + (" AND d.project = ?" if project else ""), 
+    (project,) if project else ())
+    
+    result["untagged_count"] = cursor.fetchone()['untagged']
+    conn.close()
+    
+    return result
+
+
+def _collect_lifecycle_data() -> Dict[str, Any]:
+    """Collect lifecycle analysis data."""
+    tracker = LifecycleTracker()
+    analysis = tracker.analyze_lifecycle_patterns()
+    
+    return {
+        "total_gameplans": analysis['total_gameplans'],
+        "success_rate": analysis['success_rate'],
+        "average_duration": analysis['average_duration'],
+        "stage_distribution": analysis['stage_distribution'],
+        "insights": analysis['insights'],
+        "stale_active": analysis.get('stale_active', 0)
+    }
+
+
+def _collect_projects_data() -> Dict[str, Any]:
+    """Collect project analysis data."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 
+            p.project,
+            COUNT(*) as doc_count,
+            AVG(LENGTH(p.content)) as avg_length,
+            SUM(p.access_count) as total_views,
+            COUNT(DISTINCT dt.tag_id) as unique_tags,
+            MAX(p.updated_at) as last_updated
+        FROM documents p
+        LEFT JOIN document_tags dt ON p.id = dt.document_id
+        WHERE p.is_deleted = 0
+        GROUP BY p.project
+        ORDER BY doc_count DESC
+    """)
+    
+    projects = cursor.fetchall()
+    conn.close()
+    
+    result = {
+        "count": len(projects),
+        "projects": []
+    }
+    
+    for proj in projects:
+        last_updated = datetime.fromisoformat(proj['last_updated'])
+        days_ago = (datetime.now() - last_updated).days
+        
+        result["projects"].append({
+            "name": proj['project'] or "[No Project]",
+            "doc_count": proj['doc_count'],
+            "avg_length": float(proj['avg_length'] or 0),
+            "total_views": proj['total_views'],
+            "unique_tags": proj['unique_tags'],
+            "last_updated": proj['last_updated'],
+            "days_since_update": days_ago
+        })
+    
+    return result
 
 
 if __name__ == "__main__":
