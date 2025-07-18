@@ -39,7 +39,18 @@ logger = logging.getLogger(__name__)
 class DetailsPanel(Static):
     """Document details panel with reactive updates"""
     
+    DEFAULT_CSS = """
+    DetailsPanel {
+        height: 100%;
+        width: 100%;
+    }
+    """
+    
     current_doc = reactive(None)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.update("[dim]Loading document details...[/dim]")
     
     def get_project_color(self, project):
         """Get consistent color for project"""
@@ -258,6 +269,8 @@ class DocumentBrowser(Widget):
     #sidebar {
         width: 40%;
         min-width: 40;
+        layout: vertical;
+        height: 100%;
     }
     
     #doc-table {
@@ -269,9 +282,10 @@ class DocumentBrowser(Widget):
     #doc-details {
         height: 1fr;
         min-height: 8;
-        border-top: solid $primary;
+        border-top: thick $primary;
         padding: 1;
         overflow-y: auto;
+        background: $surface;
     }
     
     #preview-container {
