@@ -120,18 +120,46 @@ def duplicates(
     strategy: str = typer.Option("highest-views", "--strategy", "-s", 
                                 help="Keep strategy: highest-views, newest, oldest"),
     show_diff: bool = typer.Option(False, "--diff", help="Show content differences"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information"),
+    fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Include near-duplicates (85%+ similar)"),
+    threshold: float = typer.Option(0.85, "--threshold", "-t", help="Similarity threshold for fuzzy matching")
 ):
     """Find and remove duplicate documents based on content."""
     
     detector = DuplicateDetector()
     
-    with console.status("[bold green]Detecting duplicates..."):
-        duplicates = detector.find_duplicates()
-    
-    if not duplicates:
-        console.print("✨ [green]No duplicate documents found![/green]")
-        return
+    if fuzzy:
+        # Find near-duplicates
+        with console.status("[bold green]Detecting near-duplicates..."):
+            near_dupes = detector.find_near_duplicates(threshold=threshold)
+        
+        if not near_dupes:
+            console.print(f"✨ [green]No near-duplicate documents found (>{threshold:.0%} similar)![/green]")
+            return
+        
+        # Convert to format similar to exact duplicates
+        duplicates = []
+        seen_pairs = set()
+        
+        for doc1, doc2, similarity in near_dupes:
+            # Create a pair identifier to avoid duplicates
+            pair_id = tuple(sorted([doc1['id'], doc2['id']]))
+            if pair_id not in seen_pairs:
+                seen_pairs.add(pair_id)
+                # Create a group of 2 documents
+                group = [doc1, doc2]
+                # Add similarity info
+                for doc in group:
+                    doc['similarity'] = similarity
+                duplicates.append(group)
+    else:
+        # Find exact duplicates
+        with console.status("[bold green]Detecting duplicates..."):
+            duplicates = detector.find_duplicates()
+        
+        if not duplicates:
+            console.print("✨ [green]No duplicate documents found![/green]")
+            return
     
     # Calculate stats
     total_dupes = sum(len(group) - 1 for group in duplicates)  # -1 to keep one

@@ -90,9 +90,57 @@ class DuplicateDetector:
         Returns:
             List of tuples (doc1, doc2, similarity_score)
         """
-        # TODO: Implement fuzzy matching for near-duplicates
-        # This would use difflib.SequenceMatcher or similar
-        pass
+        import difflib
+        
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get all active documents
+        cursor.execute("""
+            SELECT 
+                d.id, 
+                d.title, 
+                d.content, 
+                d.project, 
+                d.access_count,
+                d.created_at,
+                LENGTH(d.content) as content_length
+            FROM documents d
+            WHERE d.is_deleted = 0
+            AND LENGTH(d.content) > 50  -- Skip very short docs
+            ORDER BY d.content_length DESC
+            LIMIT 500  -- Limit for performance
+        """)
+        
+        documents = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        near_duplicates = []
+        
+        # Compare each document pair
+        for i, doc1 in enumerate(documents):
+            # Only compare with subsequent docs to avoid duplicates
+            for doc2 in documents[i+1:]:
+                # Skip if very different lengths (optimization)
+                len1 = doc1['content_length']
+                len2 = doc2['content_length']
+                if min(len1, len2) / max(len1, len2) < 0.5:
+                    continue
+                
+                # Calculate similarity
+                similarity = difflib.SequenceMatcher(
+                    None, 
+                    doc1['content'], 
+                    doc2['content']
+                ).ratio()
+                
+                if similarity >= threshold:
+                    near_duplicates.append((doc1, doc2, similarity))
+        
+        # Sort by similarity
+        near_duplicates.sort(key=lambda x: x[2], reverse=True)
+        return near_duplicates
     
     def sort_by_strategy(self, group: List[Dict[str, Any]], strategy: str) -> List[Dict[str, Any]]:
         """
