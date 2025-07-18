@@ -21,10 +21,19 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
 
 
 def search_documents(
-    query: str, project: Optional[str] = None, limit: int = 10, fuzzy: bool = False
+    query: str, 
+    project: Optional[str] = None, 
+    limit: int = 10, 
+    fuzzy: bool = False,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    modified_after: Optional[str] = None,
+    modified_before: Optional[str] = None
 ) -> list[dict[str, Any]]:
-    """Search documents using FTS5"""
-    return db.search_documents(query, project, limit, fuzzy)
+    """Search documents using FTS5 with optional date filters"""
+    return db.search_documents(query, project, limit, fuzzy, 
+                             created_after, created_before, 
+                             modified_after, modified_before)
 
 
 def update_document(doc_id: int, title: str, content: str) -> bool:
