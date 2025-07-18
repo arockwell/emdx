@@ -31,6 +31,7 @@ from emdx.models.tags import (
     search_by_tags,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
+from emdx.utils.emoji_aliases import EMOJI_ALIASES
 from emdx.utils.emoji_aliases import expand_aliases
 from emdx.utils.git_ops import is_git_repository
 
@@ -142,6 +143,20 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
     #sidebar {
         width: 50%;
         border-right: solid $primary;
+        layout: vertical;
+    }
+    
+    #doc-table {
+        height: 2fr;
+        overflow-y: auto;
+    }
+    
+    #doc-details {
+        height: 1fr;
+        border-top: thick $primary;
+        background: $surface;
+        padding: 1;
+        overflow-y: auto;
     }
 
     #preview-container {
@@ -426,6 +441,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         with Horizontal():
             with Vertical(id="sidebar"):
                 yield DataTable(id="doc-table")
+                yield Static("[bold red]DETAILS PANEL HERE[/bold red]", id="doc-details")
             with Vertical(id="preview-container"):
                 yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
@@ -503,14 +519,14 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
         # Only add columns if they don't already exist
         if len(table.columns) == 0:
-            table.add_columns("ID", "Title", "Tags")
+            table.add_columns("ID", "Title")
 
         for doc in self.filtered_docs:
             # Format timestamp as MM-DD HH:MM (11 chars)
             timestamp = doc["created_at"].strftime("%m-%d %H:%M")
 
-            # Calculate available space for title (50 total - 11 for timestamp)
-            title_space = 50 - 11
+            # Calculate available space for title (80 total - 11 for timestamp)
+            title_space = 80 - 11
             title = doc["title"][:title_space]
             if len(doc["title"]) >= title_space:
                 title = title[: title_space - 3] + "..."
@@ -518,16 +534,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
 
-            # Expanded tag display - limit to 30 chars with emoji-safe truncation
-            formatted_tags = format_tags(doc.get("tags", []))
-            tags_str, was_truncated = truncate_emoji_safe(formatted_tags, 30)
-            if was_truncated:
-                tags_str += "..."
 
             table.add_row(
                 str(doc["id"]),
-                formatted_title,
-                tags_str or "-",
+                formatted_title
             )
 
         table.focus()
@@ -1229,8 +1239,8 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Format timestamp as MM-DD HH:MM (11 chars)
             timestamp = doc["created_at"].strftime("%m-%d %H:%M")
 
-            # Calculate available space for title (50 total - 11 for timestamp)
-            title_space = 50 - 11
+            # Calculate available space for title (80 total - 11 for timestamp)
+            title_space = 80 - 11
             title = doc["title"][:title_space]
             if len(doc["title"]) >= title_space:
                 title = title[: title_space - 3] + "..."
@@ -1238,16 +1248,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Right-justify timestamp by padding title to full width
             formatted_title = f"{title:<{title_space}}{timestamp}"
 
-            # Expanded tag display - limit to 30 chars with emoji-safe truncation
-            formatted_tags = format_tags(doc.get("tags", []))
-            tags_str, was_truncated = truncate_emoji_safe(formatted_tags, 30)
-            if was_truncated:
-                tags_str += "..."
 
             table.add_row(
                 str(doc["id"]),
-                formatted_title,
-                tags_str or "-",
+                formatted_title
             )
 
         self.update_status()
@@ -3205,7 +3209,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             # Clear and recreate the table with documents
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
-            table.add_columns("ID", "Title", "Tags")
+            table.add_columns("ID", "Title")
 
             # Reload documents
             self.load_documents()
