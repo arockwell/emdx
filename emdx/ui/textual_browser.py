@@ -14,7 +14,16 @@ from .text_areas import SelectionTextArea, VimEditTextArea, EditTextArea
 from .inputs import TitleInput
 from .document_viewer import FullScreenView
 from .modals import DeleteConfirmScreen
-from .main_browser import MinimalDocumentBrowser, run_minimal
+# DEPRECATED: These imports now generate warnings
+try:
+    from .main_browser import MinimalDocumentBrowser, run_minimal
+except RuntimeError:
+    # Handle case where these have been fully removed
+    def MinimalDocumentBrowser(*args, **kwargs):
+        raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
+    
+    def run_minimal():
+        raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
 
 # Import the VimLineNumbers class that was missed in the initial extraction
 from textual.widgets import Static

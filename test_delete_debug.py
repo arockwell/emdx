@@ -2,13 +2,26 @@
 """
 Debug script to test the delete functionality in EMDX TUI.
 This script simulates the key press sequence and checks the modal behavior.
+
+DEPRECATED: This test file is no longer relevant since MinimalDocumentBrowser
+has been removed as part of technical debt cleanup. The modern GUI uses
+DocumentBrowser from document_browser.py via BrowserContainer.
 """
 
 import asyncio
+import warnings
 from textual import events
 from textual.app import App
 from textual.pilot import Pilot
-from emdx.ui.main_browser import MinimalDocumentBrowser
+
+# Deprecated import - will generate warnings
+try:
+    from emdx.ui.main_browser import MinimalDocumentBrowser
+except RuntimeError as e:
+    print(f"❌ {e}")
+    print("✅ Use 'emdx gui' for the modern interface.")
+    exit(1)
+    
 from emdx.ui.modals import DeleteConfirmScreen
 
 async def test_delete_flow():
