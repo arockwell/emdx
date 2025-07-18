@@ -18,7 +18,6 @@ from rich.panel import Panel
 from rich import box
 from rich.progress import track
 
-from ..database import Database
 from ..config.settings import get_db_path
 
 app = typer.Typer()
