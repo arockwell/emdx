@@ -109,8 +109,8 @@ class DuplicateDetector:
             FROM documents d
             WHERE d.is_deleted = 0
             AND LENGTH(d.content) > 50  -- Skip very short docs
-            ORDER BY d.content_length DESC
-            LIMIT 500  -- Limit for performance
+            ORDER BY LENGTH(d.content) DESC
+            LIMIT 200  -- Limit for performance
         """)
         
         documents = [dict(row) for row in cursor.fetchall()]

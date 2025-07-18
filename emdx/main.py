@@ -14,11 +14,8 @@ from emdx.commands.gist import app as gist_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.executions import app as executions_app
 from emdx.commands.claude_execute import app as claude_app
-from emdx.commands.analyze import app as analyze_app
-from emdx.commands.clean import app as clean_app
-from emdx.commands.health import app as health_app
-from emdx.commands.merge import app as merge_app
-from emdx.commands.gc import app as gc_app
+from emdx.commands.analyze_new import app as analyze_app
+from emdx.commands.maintain import app as maintain_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.ui.gui import gui
 
@@ -53,23 +50,13 @@ app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 # Add claude execution as a subcommand group
 app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
 
-# Add analyze commands directly to the main app
-for command in analyze_app.registered_commands:
-    app.registered_commands.append(command)
+# Add the new unified analyze command
+app.command(name="analyze")(analyze_app.registered_commands[0].callback)
 
-# Add clean as a subcommand group
-app.add_typer(clean_app, name="clean", help="Clean and maintain your knowledge base")
+# Add the new unified maintain command
+app.command(name="maintain")(maintain_app.registered_commands[0].callback)
 
-# Add health as a subcommand group
-app.add_typer(health_app, name="health", help="Monitor knowledge base health")
-
-# Add merge as a subcommand group
-app.add_typer(merge_app, name="merge", help="Merge related documents")
-
-# Add gc command directly
-app.command(name="gc")(gc_app.registered_commands[0].callback)
-
-# Add lifecycle as a subcommand group
+# Add lifecycle as a subcommand group (keeping this as-is)
 app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add the gui command
