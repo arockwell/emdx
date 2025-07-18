@@ -34,11 +34,15 @@ from emdx.ui.formatting import format_tags, truncate_emoji_safe
 from emdx.utils.emoji_aliases import expand_aliases
 from emdx.utils.git_ops import is_git_repository
 
+from .browser_mode_router import BrowserModeRouter, BrowserMode
+from .browser_state import BrowserStateManager
+from .document_table_manager import DocumentTableManager
 from .document_viewer import FullScreenView
 from .git_browser import GitBrowserMixin
 from .inputs import TitleInput
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from .vim_line_numbers import SimpleVimLineNumbers
 from .worktree_picker import WorktreePickerScreen
 
 # Set up logging
@@ -75,57 +79,6 @@ except Exception:
     key_logger = logging.getLogger("key_events")
     logger = logging.getLogger(__name__)
 
-
-class SimpleVimLineNumbers(Static):
-    """Dead simple vim-style line numbers widget."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.add_class("vim-line-numbers")
-        self.text_area = None  # Reference to associated text area
-
-    def set_line_numbers(self, current_line, total_lines, text_area=None):
-        """Set line numbers given current line (0-based) and total lines."""
-        logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
-        
-        # Store text area reference if provided
-        if text_area:
-            self.text_area = text_area
-        
-        from rich.text import Text
-        
-        # Check if text area has focus - only highlight current line if it does
-        has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
-        logger.debug(f"🔢 Text area has focus: {has_focus}")
-        
-        lines = []
-        for i in range(total_lines):
-            if i == current_line:
-                # Current line always shows absolute number (1-based)
-                line_num = i + 1
-                if has_focus:
-                    line_text = Text(f"{line_num:>3}", style="bold yellow")
-                    logger.debug(f"  Line {i}: CURRENT (focused) -> bold yellow '{line_num}'")
-                else:
-                    line_text = Text(f"{line_num:>3}", style="dim yellow")
-                    logger.debug(f"  Line {i}: CURRENT (not focused) -> dim yellow '{line_num}'")
-                lines.append(line_text)
-            else:
-                # Other lines show distance from current line
-                distance = abs(i - current_line)
-                line_text = Text(f"{distance:>3}", style="dim cyan")
-                logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
-                lines.append(line_text)
-        
-        # Join with Rich Text newlines
-        result = Text("\n").join(lines)
-        logger.debug(f"🔢 Rich Text result created with {len(lines)} lines")
-        logger.debug(f"🔢 Widget content BEFORE update: {repr(self.renderable)}")
-        
-        # Update widget content with Rich Text
-        self.update(result)
-        
-        logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")
 
 class MinimalDocumentBrowser(GitBrowserMixin, App):
     """Minimal document browser that signals external wrapper for nvim."""
@@ -406,6 +359,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
     def __init__(self):
         super().__init__()
+        # Initialize state manager (replaces individual state variables)
+        self.state = BrowserStateManager()
+        
+        # Keep these for now during transition
         self.documents = []
         self.filtered_docs = []
         self.current_doc_id = None
@@ -414,6 +371,12 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         self.executions = []  # List of Execution objects
         self.current_execution_index = 0
         self.current_log_file = None
+        
+        # Initialize mode router
+        self.mode_router = BrowserModeRouter(self)
+        
+        # Table manager will be initialized in on_mount
+        self.table_manager = None
 
     def compose(self) -> ComposeResult:
         yield Input(
@@ -468,6 +431,10 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
         """Setup table and UI after widgets are fully mounted."""
         logger.info("_delayed_setup called")
         try:
+            # Initialize table manager
+            table = self.query_one("#doc-table", DataTable)
+            self.table_manager = DocumentTableManager(table)
+            
             self.setup_table()
             self.update_status()
             if self.filtered_docs:
@@ -896,7 +863,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                             self.cancel_refresh_timer()
                             status = self.query_one("#status", Label)
                             status.update("No tags to remove")
-                            self.mode = "NORMAL"
+                            self.mode_router.transition_to(BrowserMode.NORMAL)
                             return
 
                     # Only reset completion index for add mode
@@ -922,13 +889,13 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 table.focus()
 
     def action_search_mode(self):
-        self.mode = "SEARCH"
+        self.mode_router.transition_to(BrowserMode.SEARCH)
 
     def action_tag_mode(self):
         if not self.current_doc_id:
             return
         self.tag_action = "add"
-        self.mode = "TAG"
+        self.mode_router.transition_to(BrowserMode.TAG)
         # Show tag input when entering TAG mode
         tag_input = self.query_one("#tag-input", Input)
         tag_input.display = True
@@ -940,7 +907,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             return
         logger.info("DEBUG: action_untag_mode called, setting mode to TAG")
         self.tag_action = "remove"
-        self.mode = "TAG"
+        self.mode_router.transition_to(BrowserMode.TAG)
         # Show tag input when entering TAG mode
         tag_input = self.query_one("#tag-input", Input)
         tag_input.display = True
@@ -999,7 +966,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
     def on_input_submitted(self, event: Input.Submitted):
         if event.input.id == "search-input":
-            self.mode = "NORMAL"
+            self.mode_router.transition_to(BrowserMode.NORMAL)
         elif event.input.id == "tag-input":
             # Process tag input for both add and remove
             tags = [tag.strip() for tag in event.value.split() if tag.strip()]
@@ -1041,14 +1008,15 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     status = self.query_one("#status", Label)
                     status.update(f"Error: {e}")
 
-            self.mode = "NORMAL"
+            self.mode_router.transition_to(BrowserMode.NORMAL)
             # Hide tag input when exiting TAG mode
             self.query_one("#tag-input", Input).display = False
             self.query_one("#tag-selector", Label).display = False
 
     def on_key(self, event: events.Key) -> None:
+        """Handle key presses with mode-based routing."""
         try:
-            # Check if any modal or screen is active (screen stack > 1 means another screen is pushed)
+            # Check if any modal or screen is active
             if len(self.screen_stack) > 1:
                 # Another screen is active, let it handle the key event
                 active_screen = self.screen_stack[-1]
@@ -1056,124 +1024,69 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 key_logger.info(f"{screen_type} active, passing key event through: key={event.key}")
                 return
             
-            # Comprehensive logging of ALL key events
-            event_attrs = {}
-            for attr in ["key", "character", "name", "is_printable", "aliases"]:
-                if hasattr(event, attr):
-                    try:
-                        event_attrs[attr] = getattr(event, attr)
-                    except Exception as attr_error:
-                        event_attrs[attr] = f"ERROR: {attr_error}"
-
-            key_logger.info(f"App.on_key: {event_attrs}")
+            # Log key event for debugging
+            key_logger.info(f"App.on_key: key={event.key}, mode={self.mode}")
             logger.debug(f"Key event: key={event.key}")
-
-            # j/k keys are handled by the binding system via action_cursor_down/up
-
-            # Globally handle Tab to prevent default focus behavior
+            
+            # Special handling for edit mode (let text area handle it)
+            if self.edit_mode and event.key in ["escape", "ctrl+s"]:
+                # Let the edit widget handle these keys
+                return
+            
+            # Global Tab prevention (except in TAG mode for cycling)
             if event.key == "tab":
-                logger.info(f"DEBUG: Global Tab handler, mode={self.mode}, tag_action={getattr(self, 'tag_action', 'None')}")
-                # Only allow Tab in TAG mode for tag cycling
                 if self.mode == "TAG" and self.tag_action == "remove":
-                    logger.info(f"DEBUG: Allowing Tab to fall through to TAG handler")
-                    # Let it fall through to the TAG mode handler below
+                    # Allow Tab for tag cycling
                     pass
                 else:
-                    logger.info(f"DEBUG: Blocking Tab in non-untag mode")
                     # Block Tab in all other modes
                     event.prevent_default()
                     event.stop()
                     return
-
-            # Handle global Escape key - quit from any mode
-            if event.key == "escape":
-                # Edit mode ESC is handled by VimEditTextArea - don't interfere
-                if self.edit_mode:
-                    # Let the edit widget handle ESC
-                    return
-
-                # Selection mode ESC is handled by SelectionTextArea
-
-                # From any mode/state, ESC should quit
-                if self.mode == "SEARCH":
-                    self.mode = "NORMAL"
-                    self.search_query = ""
-                    self.filter_documents("")
-                elif self.mode == "TAG":
-                    self.mode = "NORMAL"
-                    # Hide tag input when exiting TAG mode
-                    self.query_one("#tag-input", Input).display = False
-                    self.query_one("#tag-selector", Label).display = False
-                else:
-                    # From normal mode or preview focus, quit the app
-                    self.action_quit()
+            
+            # Let mode router handle the key
+            if self.mode_router.handle_key(event):
                 event.prevent_default()
+                event.stop()
                 return
-
-            if self.mode == "TAG":
-                logger.info(f"DEBUG: In TAG mode, key={event.key}, tag_action={self.tag_action}")
-                if event.key == "tab" and self.tag_action == "remove":
-                    logger.info(f"DEBUG: Tab pressed in remove mode, calling complete_tag_removal")
-                    # Tab cycling for tag removal
-                    self.complete_tag_removal()
-                    event.prevent_default()
-                    event.stop()
-                    return
-                elif event.key == "enter" and self.tag_action == "remove":
-                    logger.info(f"DEBUG: Enter pressed in remove mode, calling remove_highlighted_tag")
-                    # Remove the highlighted tag
-                    self.remove_highlighted_tag()
-                    event.prevent_default()
-                    event.stop()
-                    return
-                else:
-                    logger.info(f"DEBUG: Other key in TAG mode, blocking")
-                    # In TAG mode, block all other keys except ESC (handled above)
-                    event.prevent_default()
-                    event.stop()
-                    return
-            elif self.mode == "NORMAL":
-                # Handle keys that don't require a document
-                if event.character == "s":
-                    event.prevent_default()
-                    event.stop()
-                    self.action_toggle_selection_mode()
-                elif event.character == "n":
-                    event.prevent_default()
-                    event.stop()
-                    self.action_new_note()
-                # Handle keys that require a document
-                elif self.current_doc_id:
-                    if event.key == "enter":
-                        event.prevent_default()
-                        event.stop()
-                        self.action_view()
-                    elif event.character == "e":
-                        event.prevent_default()
-                        event.stop()
-                        self.action_toggle_edit_mode()
-                    elif event.character == "d":
-                        event.prevent_default()
-                        event.stop()
-                        self.action_delete()
-                    elif event.character == "t":
-                        event.prevent_default()
-                        event.stop()
-                        self.action_tag_mode()
-                    elif event.character == "T":
-                        logger.info(f"DEBUG: Manual T character handler triggered")
-                        event.prevent_default()
-                        event.stop()
-                        self.action_untag_mode()
-
-        # Note: In Textual 4.0, we should NOT call super().on_key()
-        # as Textual automatically handles event propagation
-
+            
+            # Handle remaining global navigation keys that work in all modes
+            handled = False
+            
+            if event.key == "j" and self.mode not in ["SEARCH", "TAG", "EDIT"]:
+                self.action_cursor_down()
+                handled = True
+            elif event.key == "k" and self.mode not in ["SEARCH", "TAG", "EDIT"]:
+                self.action_cursor_up()
+                handled = True
+            elif event.key == "g" and self.mode not in ["SEARCH", "TAG", "EDIT"]:
+                self.action_cursor_top()
+                handled = True
+            elif event.key == "G" and self.mode not in ["SEARCH", "TAG", "EDIT"]:
+                self.action_cursor_bottom()
+                handled = True
+            elif event.key == "ctrl+d" and self.mode not in ["SEARCH", "TAG", "EDIT"]:
+                # Page down
+                table = self.query_one("#doc-table", DataTable)
+                visible_rows = table.visible_size.height - 2
+                for _ in range(max(1, visible_rows // 2)):
+                    self.action_cursor_down()
+                handled = True
+            elif event.key == "ctrl+u" and self.mode not in ["SEARCH", "TAG", "EDIT"]:
+                # Page up
+                table = self.query_one("#doc-table", DataTable)
+                visible_rows = table.visible_size.height - 2
+                for _ in range(max(1, visible_rows // 2)):
+                    self.action_cursor_up()
+                handled = True
+            
+            if handled:
+                event.prevent_default()
+                event.stop()
+                
         except Exception as e:
-            key_logger.error(f"CRASH in App.on_key: {e}")
-            logger.error(f"Error in App.on_key: {e}", exc_info=True)
-            # Don't re-raise here - let app continue
-
+            key_logger.error(f"Exception in on_key: {e}", exc_info=True)
+            logger.error(f"Exception in on_key: {e}", exc_info=True)
     def filter_documents(self, query: str):
         if not query:
             self.filtered_docs = self.documents
@@ -1471,7 +1384,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                 self.restore_table_position(current_doc_id, current_row)
 
                 # Exit tag mode
-                self.mode = "NORMAL"
+                self.mode_router.transition_to(BrowserMode.NORMAL)
             else:
                 self.cancel_refresh_timer()
                 status = self.query_one("#status", Label)
@@ -2394,7 +2307,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
 
     def action_log_browser(self):
         """Switch to log browser mode to view and switch between execution logs."""
-        self.mode = "LOG_BROWSER"
+        self.mode_router.transition_to(BrowserMode.LOG_BROWSER)
         self.setup_log_browser()
     
     def action_mark_execution_complete(self):
@@ -2443,7 +2356,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             return
         
         # Set mode first, then setup
-        self.mode = "FILE_BROWSER"
+        self.mode_router.transition_to(BrowserMode.FILE_BROWSER)
         logger.info(f"🗂️ Mode set to: {self.mode}")
         self.setup_file_browser()
     
@@ -2568,14 +2481,14 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             logger.info("🗂️ Document table and preview restored")
             
             # Reset mode and reload (watch_mode will handle tag input visibility)
-            self.mode = "NORMAL"
+            self.mode_router.transition_to(BrowserMode.NORMAL)
             logger.info("🗂️ Mode reset to NORMAL")
             self.reload_documents()
             
         except Exception as e:
             logger.error(f"Error exiting file browser: {e}")
             # Fallback (watch_mode will handle tag input visibility)
-            self.mode = "NORMAL"
+            self.mode_router.transition_to(BrowserMode.NORMAL)
             self.reload_documents()
     
     
@@ -2991,7 +2904,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             status.update("Not in a git repository - cannot show git diff")
             return
         
-        self.mode = "GIT_DIFF_BROWSER"
+        self.mode_router.transition_to(BrowserMode.GIT_DIFF_BROWSER)
         self.setup_git_diff_browser()
 
     
@@ -3056,7 +2969,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
             if hasattr(self, 'mode'):
                 if self.mode == "LOG_BROWSER":
                     # Exit log browser mode and return to document mode
-                    self.mode = "NORMAL"
+                    self.mode_router.transition_to(BrowserMode.NORMAL)
                     self.stop_log_monitoring()
                     self.reload_documents()
                 elif self.mode == "FILE_BROWSER":
@@ -3064,7 +2977,7 @@ class MinimalDocumentBrowser(GitBrowserMixin, App):
                     self.exit_file_browser()
                 elif self.mode == "GIT_DIFF_BROWSER":
                     # Exit git diff browser mode and return to document mode
-                    self.mode = "NORMAL"
+                    self.mode_router.transition_to(BrowserMode.NORMAL)
                     self.reload_documents()
                 else:
                     # Clean exit - subprocess are detached and will continue running
