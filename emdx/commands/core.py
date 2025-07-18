@@ -30,6 +30,7 @@ from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_
 from emdx.ui.formatting import format_tags
 from emdx.utils.git import get_git_project
 from emdx.utils.emoji_aliases import expand_alias_string
+from emdx.services.auto_tagger import AutoTagger
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -176,6 +177,8 @@ def save(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
+    auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
+    suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
@@ -196,8 +199,26 @@ def save(
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
-    # Step 7: Display result
+    # Step 7: Auto-tagging if requested
+    if auto_tag:
+        tagger = AutoTagger()
+        auto_applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
+        if auto_applied:
+            applied_tags.extend(auto_applied)
+            console.print(f"   [dim]Auto-tagged:[/dim] {format_tags(auto_applied)}")
+
+    # Step 8: Display result
     display_save_result(doc_id, metadata, applied_tags)
+
+    # Step 9: Show tag suggestions if requested
+    if suggest_tags and not auto_tag:
+        tagger = AutoTagger()
+        suggestions = tagger.suggest_tags(doc_id, max_suggestions=3)
+        if suggestions:
+            console.print("\n[dim]Suggested tags:[/dim]")
+            for tag, confidence in suggestions:
+                console.print(f"   • {tag} [dim]({confidence:.0%})[/dim]")
+            console.print(f"\n[dim]Apply with: emdx tag {doc_id} <tags>[/dim]")
 
 
 @app.command()

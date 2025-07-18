@@ -4,6 +4,9 @@
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from typing import List, Optional
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -17,6 +20,7 @@ from emdx.models.tags import (
 )
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_aliases, generate_legend
+from emdx.services.auto_tagger import AutoTagger
 
 app = typer.Typer()
 console = Console()
@@ -26,8 +30,10 @@ console = Console()
 def tag(
     doc_id: int = typer.Argument(..., help="Document ID to tag"),
     tags: list[str] = typer.Argument(None, help="Tags to add (space-separated)"),
+    auto: bool = typer.Option(False, "--auto", "-a", help="Apply high-confidence auto-tags"),
+    suggest: bool = typer.Option(False, "--suggest", "-s", help="Show tag suggestions"),
 ):
-    """Add tags to a document"""
+    """Add tags to a document with optional auto-tagging"""
     try:
         # Ensure database schema exists
         db.ensure_schema()
@@ -38,7 +44,50 @@ def tag(
             console.print(f"[red]Error: Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
 
-        # If no tags provided, show current tags
+        # Handle auto-tagging
+        if auto:
+            tagger = AutoTagger()
+            applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
+            if applied:
+                console.print(f"[green]✅ Auto-tagged #{doc_id} with:[/green] [cyan]{format_tags(applied)}[/cyan]")
+            else:
+                console.print("[yellow]No tags met confidence threshold for auto-tagging[/yellow]")
+            
+            # Show all tags
+            all_tags = get_document_tags(doc_id)
+            console.print(f"[dim]All tags:[/dim] {format_tags(all_tags)}")
+            return
+
+        # Handle suggestions
+        if suggest:
+            tagger = AutoTagger()
+            suggestions = tagger.suggest_tags(doc_id)
+            
+            if suggestions:
+                console.print(f"\n[bold]Tag suggestions for #{doc_id}: {doc['title']}[/bold]\n")
+                
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("Tag", style="cyan")
+                table.add_column("Confidence", justify="right")
+                table.add_column("Apply?", style="dim")
+                
+                for tag, confidence in suggestions:
+                    conf_percent = f"{confidence:.0%}"
+                    apply_hint = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"
+                    table.add_row(tag, conf_percent, apply_hint)
+                
+                console.print(table)
+                console.print("\n[dim]Use 'emdx tag ID TAG...' to apply tags[/dim]")
+            else:
+                console.print("[yellow]No tag suggestions found[/yellow]")
+            
+            # Show current tags
+            current_tags = get_document_tags(doc_id)
+            if current_tags:
+                console.print(f"\n[dim]Current tags:[/dim] {format_tags(current_tags)}")
+            return
+
+        # If no tags provided and no auto/suggest, show current tags
         if not tags:
             current_tags = get_document_tags(doc_id)
             if current_tags:
@@ -48,7 +97,7 @@ def tag(
                 console.print(f"[yellow]No tags for #{doc_id}: {doc['title']}[/yellow]")
             return
 
-        # Add tags
+        # Add tags manually
         added_tags = add_tags_to_document(doc_id, tags)
 
         if added_tags:
@@ -256,4 +305,112 @@ def legend():
         
     except Exception as e:
         console.print(f"[red]Error displaying legend: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def batch(
+    untagged_only: bool = typer.Option(True, "--untagged/--all", help="Only process untagged documents"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    confidence: float = typer.Option(0.7, "--confidence", "-c", help="Minimum confidence threshold"),
+    max_tags: int = typer.Option(3, "--max-tags", "-m", help="Maximum tags per document"),
+    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
+):
+    """Batch auto-tag multiple documents"""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+        
+        tagger = AutoTagger()
+        
+        # Get suggestions first
+        with console.status("[bold green]Analyzing documents..."):
+            suggestions = tagger.batch_suggest(
+                untagged_only=untagged_only,
+                project=project,
+                limit=limit
+            )
+        
+        if not suggestions:
+            console.print("[yellow]No documents found matching criteria[/yellow]")
+            return
+        
+        # Filter by confidence
+        eligible_docs = []
+        total_tags_to_apply = 0
+        
+        for doc_id, doc_suggestions in suggestions.items():
+            eligible_tags = [
+                (tag, conf) for tag, conf in doc_suggestions[:max_tags]
+                if conf >= confidence
+            ]
+            if eligible_tags:
+                eligible_docs.append((doc_id, eligible_tags))
+                total_tags_to_apply += len(eligible_tags)
+        
+        if not eligible_docs:
+            console.print(f"[yellow]No tags found with confidence >= {confidence:.0%}[/yellow]")
+            return
+        
+        # Display what will be done
+        console.print(f"\n[bold cyan]🏷️  Batch Auto-Tagging Report[/bold cyan]")
+        console.print(f"\n[yellow]Found {len(eligible_docs)} documents to tag[/yellow]")
+        console.print(f"[yellow]Total tags to apply: {total_tags_to_apply}[/yellow]\n")
+        
+        # Show sample of what will be done
+        sample_size = min(10, len(eligible_docs))
+        if sample_size > 0:
+            console.print("[bold]Sample of documents to be tagged:[/bold]\n")
+            
+            for doc_id, tags in eligible_docs[:sample_size]:
+                # Get document title
+                doc = get_document(str(doc_id))
+                title = doc['title'][:50] + "..." if len(doc['title']) > 50 else doc['title']
+                
+                console.print(f"  [dim]#{doc_id}[/dim] {title}")
+                for tag, conf in tags:
+                    console.print(f"    → {tag} [dim]({conf:.0%})[/dim]")
+                console.print()
+            
+            if len(eligible_docs) > sample_size:
+                console.print(f"[dim]... and {len(eligible_docs) - sample_size} more documents[/dim]\n")
+        
+        if dry_run:
+            console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]")
+            console.print(f"Would apply {total_tags_to_apply} tags to {len(eligible_docs)} documents")
+            console.print("\n[dim]Run with --execute to apply tags[/dim]")
+        else:
+            # Confirm
+            if not typer.confirm(f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"):
+                console.print("[red]Batch tagging cancelled[/red]")
+                return
+            
+            # Execute batch tagging
+            applied_count = 0
+            tagged_docs = 0
+            
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console
+            ) as progress:
+                task = progress.add_task("Applying tags...", total=len(eligible_docs))
+                
+                for doc_id, tags in eligible_docs:
+                    applied = tagger.auto_tag_document(
+                        doc_id, 
+                        confidence_threshold=confidence,
+                        max_tags=max_tags
+                    )
+                    if applied:
+                        applied_count += len(applied)
+                        tagged_docs += 1
+                    progress.update(task, advance=1)
+            
+            console.print(f"\n✅ [green]Successfully tagged {tagged_docs} documents![/green]")
+            console.print(f"[dim]Total tags applied: {applied_count}[/dim]")
+    
+    except Exception as e:
+        console.print(f"[red]Error batch tagging: {e}[/red]")
         raise typer.Exit(1) from e
