@@ -13,8 +13,8 @@ from .text_areas import VimEditTextArea
 logger = logging.getLogger(__name__)
 
 
-# Import the exact same line numbers implementation from main browser
-from .main_browser import SimpleVimLineNumbers
+# Import line numbers implementation
+from .vim_line_numbers import SimpleVimLineNumbers
 
 
 class VimEditor(Vertical):
