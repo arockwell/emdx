@@ -91,7 +91,7 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
                 SELECT id, title, project, created_at, access_count
                 FROM documents
                 WHERE project = ? AND is_deleted = FALSE
-                ORDER BY created_at DESC
+                ORDER BY id DESC
                 LIMIT ?
             """,
                 (project, limit),
@@ -102,7 +102,7 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
                 SELECT id, title, project, created_at, access_count
                 FROM documents
                 WHERE is_deleted = FALSE
-                ORDER BY created_at DESC
+                ORDER BY id DESC
                 LIMIT ?
             """,
                 (limit,),
