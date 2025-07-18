@@ -60,12 +60,16 @@ class FileBrowserVimApp:
     def action_save_document(self):
         # Just update status - file will be saved when exiting
         pass
+    
+    def action_save_and_exit_edit(self):
+        """Save and exit edit mode (called by VimEditTextArea)."""
+        self.file_browser._exit_edit_mode()
         
     def _update_vim_status(self, message=""):
         # Update file browser status with vim info
         try:
-            if hasattr(self.file_browser, 'vim_editor'):
-                mode = self.file_browser.vim_editor.vim_mode
+            if hasattr(self.file_browser, 'vim_area'):
+                mode = self.file_browser.vim_area.vim_mode
                 if message:
                     status = f"📝 VIM {mode}: {message}"
                 else:
@@ -577,22 +581,32 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
         except:
             pass
         
-        # Create vim editor
-        from .vim_editor import VimEditor
-        vim_app = FileBrowserVimApp(self)
+        # Create a simple container for editing (OLD WORKING APPROACH)
+        from textual.containers import ScrollableContainer
+        from .text_areas import VimEditTextArea
         
-        self.vim_editor = VimEditor(
-            vim_app, content=content, 
-            id="edit-preview-container", 
-            classes="file-preview-pane"
+        edit_container = ScrollableContainer(id="edit-preview-container", classes="file-preview-pane")
+        
+        # Use simple VimEditTextArea directly (what worked before)
+        edit_area = VimEditTextArea(
+            self,
+            text=content,
+            read_only=False,
+            id="edit-content"
         )
-        self.vim_editor.text_area.file_path = selected_file
+        edit_area.can_focus = True
+        edit_area.file_path = selected_file  # Store file path for saving
         
-        horizontal_container.mount(self.vim_editor)
-        self.call_after_refresh(lambda: self.vim_editor.focus_editor())
+        # Store edit area for status updates and saving
+        self.vim_area = edit_area
         
-        # Update status
-        mode = self.vim_editor.vim_mode
+        # Mount the edit container and area (SIMPLE APPROACH)
+        horizontal_container.mount(edit_container)
+        edit_container.mount(edit_area)
+        edit_area.focus()
+        
+        # Update status with vim mode info
+        mode = edit_area.vim_mode
         self.query_one("#file-status-bar", Static).update(
             f"📝 VIM {mode}: {selected_file.name} - ESC to save and exit"
         )
@@ -633,9 +647,9 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
     def _exit_edit_mode(self) -> None:
         """Exit edit mode and save file."""
         try:
-            # Save and exit using vim editor
-            if hasattr(self, 'vim_editor'):
-                self.save_and_exit_edit_mode(self.vim_editor.text_area)
+            # Save and exit using simple vim area
+            if hasattr(self, 'vim_area'):
+                self.save_and_exit_edit_mode(self.vim_area)
             self.edit_mode = False
             
         except Exception as e:
@@ -671,8 +685,8 @@ class FileBrowser(Container, NavigationMixin, SelectionMixin):
         
         # Exit edit mode
         self.edit_mode = False
-        if hasattr(self, "vim_editor"):
-            delattr(self, "vim_editor")
+        if hasattr(self, "vim_area"):
+            delattr(self, "vim_area")
         
         # Recreate widgets
         horizontal_container = self.query_one(".file-browser-content", Horizontal)

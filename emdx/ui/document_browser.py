@@ -183,6 +183,19 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
         scrollbar-size: 0 0;
     }
     
+    #vim-line-numbers {
+        width: 4;
+        background: $background;
+        color: $text-muted;
+        text-align: right;
+        padding-right: 1;
+        padding-top: 1;
+        margin: 0;
+        border: none;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
+    }
+    
     /* VimEditor inside preview container */
     #preview VimEditor {
         width: 100%;
@@ -197,6 +210,28 @@ class DocumentBrowser(Widget, NavigationMixin, SelectionMixin, EditMixin):
     #preview #vim-text-area {
         color: $text;
         background: $background;
+    }
+    
+    /* Force text visibility for vim text area */
+    #vim-text-area {
+        color: $text !important;
+        background: $background !important;
+    }
+    
+    /* VimEditor widget in preview container */
+    #preview-container VimEditor {
+        width: 100%;
+        height: 100%;
+    }
+    
+    #preview-container #vim-edit-container {
+        width: 100%;
+        height: 100%;
+    }
+    
+    #preview-container .file-browser-vim-textarea {
+        color: $text !important;
+        background: $background !important;
     }
     
     /* Copy file browser vim textarea styling */

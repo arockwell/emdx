@@ -44,9 +44,12 @@ class VimEditor(Vertical):
         self.text_area.word_wrap = True
         self.text_area.show_line_numbers = False  # Using custom vim relative numbers
         
-        # Force text visibility in case CSS isn't working
+        # Force text visibility with multiple approaches
         self.text_area.styles.color = "white"
         self.text_area.styles.background = "rgb(0, 0, 0)"
+        self.text_area.styles.display = "block"
+        self.text_area.styles.visibility = "visible"
+        self.text_area.styles.opacity = 1.0
         
         # Try setting max line length if available
         if hasattr(self.text_area, 'max_line_length'):
@@ -65,9 +68,14 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
+        logger.info(f"VimEditor.on_mount: Starting mount process")
+        logger.info(f"VimEditor.on_mount: Text area has {len(self.text_area.text)} chars")
+        
         # Mount line numbers and text area in horizontal layout
         self.edit_container.mount(self.line_numbers)
         self.edit_container.mount(self.text_area)
+        
+        logger.info(f"VimEditor.on_mount: Widgets mounted to edit_container")
         
         # Ensure the entire vim editor container starts at top
         self.scroll_to(0, 0, animate=False)
@@ -79,6 +87,8 @@ class VimEditor(Vertical):
         # WORKAROUND: Schedule a second positioning attempt slightly later
         # This handles cases where TextArea's internal logic overrides our initial positioning
         self.set_timer(0.1, lambda: self._delayed_positioning_check())
+        
+        logger.info(f"VimEditor.on_mount: Mount complete")
     
     def get_text(self):
         """Get the current text content."""

@@ -27,62 +27,75 @@ class EditMixin:
     
     async def action_edit_document(self) -> None:
         """Edit the current document."""
-        doc = self.get_current_document_for_edit()
-        if not doc:
-            return
+        try:
+            doc = self.get_current_document_for_edit()
+            if not doc:
+                return
+                
+            self.editing_doc_id = doc["id"]
+            self.edit_mode = True
             
-        self.editing_doc_id = doc["id"]
-        self.edit_mode = True
-        
-        container = self.query_one("#preview")
-        container.remove_children()
-        
-        # Use the same VimEditor that works in file browser
-        from .vim_editor import VimEditor
-        
-        content = doc.get("content", "")
-        logger.info(f"EditMixin: Creating VimEditor with {len(content)} chars of content")
-        
-        # Create a mock app instance for vim callbacks
-        class EditMixinVimApp:
-            def __init__(self, parent):
-                self.parent = parent
+            # Remove the preview container first
+            preview_container = self.query_one("#preview-container")
             
-            def action_save_and_exit_edit(self):
-                self.parent.action_save_and_exit_edit()
+            # Remove all children except vim mode indicator
+            for child in list(preview_container.children):
+                if child.id not in ["vim-mode-indicator"]:
+                    child.remove()
             
-            def _update_vim_status(self, message=""):
-                self.parent._update_vim_status(message)
-        
-        vim_app = EditMixinVimApp(self)
-        
-        # Create vim editor
-        vim_editor = VimEditor(
-            vim_app,
-            content=content,
-            id="edit-container"
-        )
-        
-        # Store reference for save/exit
-        self.vim_editor = vim_editor
-        
-        logger.info(f"EditMixin: About to mount VimEditor, content starts with: {content[:50]}")
-        container.mount(vim_editor)
-        
-        # Debug: Check if text area actually has content after mounting
-        def debug_check():
-            if hasattr(vim_editor, 'text_area'):
-                actual_text = vim_editor.text_area.text
-                logger.info(f"EditMixin: After mount - text_area has {len(actual_text)} chars")
-                logger.info(f"EditMixin: Text area content starts with: {actual_text[:50]}")
-            else:
-                logger.error("EditMixin: No text_area found in vim_editor!")
-            vim_editor.focus_editor()
-        
-        # Focus after mounting
-        self.call_after_refresh(debug_check)
-        
-        logger.info(f"EditMixin: VimEditor mounted")
+            # Use the same VimEditor that works in file browser
+            from .vim_editor import VimEditor
+            
+            content = doc.get("content", "")
+            logger.info(f"EditMixin: Creating VimEditor with {len(content)} chars of content")
+            
+            # Create a mock app instance for vim callbacks
+            class EditMixinVimApp:
+                def __init__(self, parent):
+                    self.parent = parent
+                
+                def action_save_and_exit_edit(self):
+                    self.parent.action_save_and_exit_edit()
+                
+                def _update_vim_status(self, message=""):
+                    self.parent._update_vim_status(message)
+            
+            vim_app = EditMixinVimApp(self)
+            
+            # Create vim editor - mount directly to preview container like file browser
+            vim_editor = VimEditor(
+                vim_app,
+                content=content,
+                id="vim-editor-widget"
+            )
+            
+            # Store reference for save/exit
+            self.vim_editor = vim_editor
+            
+            logger.info(f"EditMixin: About to mount VimEditor with {len(content)} chars of content")
+            preview_container.mount(vim_editor)
+            
+            # Debug: Check if text area actually has content after mounting
+            def debug_check():
+                try:
+                    if hasattr(vim_editor, 'text_area'):
+                        actual_text = vim_editor.text_area.text
+                        logger.info(f"EditMixin: After mount - text_area has {len(actual_text)} chars")
+                        logger.info(f"EditMixin: Text area content starts with: {actual_text[:50]}")
+                    else:
+                        logger.error("EditMixin: No text_area found in vim_editor!")
+                    vim_editor.focus_editor()
+                except Exception as e:
+                    logger.error(f"EditMixin: Error in debug_check: {e}")
+            
+            # Focus after mounting
+            self.call_after_refresh(debug_check)
+            
+            logger.info(f"EditMixin: VimEditor mounted")
+        except Exception as e:
+            logger.error(f"EditMixin: Error in action_edit_document: {e}")
+            self.edit_mode = False
+            self.editing_doc_id = None
     
     def action_save_and_exit_edit(self) -> None:
         """Save and exit edit mode."""
@@ -99,23 +112,34 @@ class EditMixin:
         if not self.edit_mode:
             return
             
-        container = self.query_one("#preview")
+        preview_container = self.query_one("#preview-container")
         
         # Remove vim editor if it exists
         if hasattr(self, 'vim_editor'):
             self.vim_editor.remove()
             delattr(self, 'vim_editor')
         
-        container.remove_children()
+        # Remove all children except vim mode indicator
+        for child in list(preview_container.children):
+            if child.id not in ["vim-mode-indicator"]:
+                child.remove()
         
+        # Restore original preview structure
+        from textual.containers import ScrollableContainer
         from textual.widgets import RichLog
+        
+        # Create preview container
+        preview = ScrollableContainer(id="preview")
+        preview_container.mount(preview)
+        
+        # Create content widget
         richlog = RichLog(
             id="preview-content", 
             wrap=True, 
             highlight=True, 
             markup=True
         )
-        container.mount(richlog)
+        preview.mount(richlog)
         
         self.edit_mode = False
         self.editing_doc_id = None
