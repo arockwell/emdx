@@ -159,7 +159,7 @@ class DetailsPanel(Static):
         sections.append("")
         
         # Project with color
-        project = doc.get('project', 'default') or 'default'
+        project = doc["project"] if doc["project"] else 'default'
         project_color = self.get_project_color(project)
         sections.append(f"[bold]📁 Project:[/bold] [{project_color}]{project}[/{project_color}]")
         sections.append("")
@@ -172,13 +172,13 @@ class DetailsPanel(Static):
         
         # Timeline section
         sections.append("[bold]📅 Timeline:[/bold]")
-        created = doc.get("created_at")
+        created = doc["created_at"]
         if created:
             relative_time = self.get_relative_time(created)
             sections.append(f"Created: {relative_time}")
         
         # Access info with progress bar
-        access_count = doc.get('access_count', 0)
+        access_count = doc["access_count"] if doc["access_count"] else 0
         if access_count > 0:
             bar = self.create_progress_bar(min(access_count, 20), 20)
             sections.append(f"Views: {bar} {access_count}")
