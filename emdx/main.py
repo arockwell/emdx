@@ -14,7 +14,7 @@ from emdx.commands.gist import app as gist_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.executions import app as executions_app
 from emdx.commands.claude_execute import app as claude_app
-from emdx.commands.analyze_new import app as analyze_app
+from emdx.commands.analyze import app as analyze_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.ui.gui import gui
