@@ -274,8 +274,8 @@ class DocumentBrowser(Widget):
     }
     
     #table-container {
-        height: 2fr;
-        min-height: 10;
+        height: 66%;
+        min-height: 15;
     }
     
     #doc-table {
@@ -284,8 +284,9 @@ class DocumentBrowser(Widget):
     }
     
     #details-container {
-        height: 1fr;
-        min-height: 8;
+        height: 34%;
+        min-height: 10;
+        max-height: 20;
         border-top: thick $primary;
         background: $surface;
     }
