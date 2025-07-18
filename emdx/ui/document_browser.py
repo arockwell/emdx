@@ -43,6 +43,8 @@ class DetailsPanel(Static):
     DetailsPanel {
         height: 100%;
         width: 100%;
+        display: block;
+        visibility: visible;
     }
     """
     
@@ -50,7 +52,7 @@ class DetailsPanel(Static):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.update("[dim]Loading document details...[/dim]")
+        self.update("[bold red]DETAILS PANEL IS HERE[/bold red]\n[dim]Loading document details...[/dim]")
     
     def get_project_color(self, project):
         """Get consistent color for project"""
@@ -283,7 +285,8 @@ class DocumentBrowser(Widget):
         height: 1fr;
         min-height: 10;
         border-top: thick $primary;
-        background: $surface;
+        background: red;
+        color: white;
         padding: 1;
         overflow-y: auto;
     }
