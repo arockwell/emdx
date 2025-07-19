@@ -237,9 +237,13 @@ class DocumentBrowser(Widget):
         
         # Setup table
         table = self.query_one("#doc-table", DataTable)
-        table.add_columns("ID", "Title")
+        table.add_column("ID", width=4)
+        table.add_column("Tags", width=8)  
+        table.add_column(" ", width=1)  # Padding column
+        table.add_column("Title", width=38)
         table.cursor_type = "row"
         table.show_header = True
+        table.cell_padding = 0  # Remove cell padding for tight spacing
         
         # Disable focus on non-interactive widgets
         preview_content = self.query_one("#preview-content")
@@ -314,11 +318,19 @@ class DocumentBrowser(Widget):
         table.clear()
         
         for doc in self.filtered_docs:
-            # Format row data - simplified to just ID and Title
-            title = truncate_emoji_safe(doc["title"], 60)  # Longer title since we have more space
+            # Format row data - ID, Tags, and Title
+            title, was_truncated = truncate_emoji_safe(doc["title"], 40)
+            if was_truncated:
+                title += "..."
+            
+            # Get first 3 tags as emojis with spaces between, pad to 5 chars
+            doc_tags = get_document_tags(doc["id"])
+            tags_display = " ".join(doc_tags[:3]).ljust(8)  # Pad to exactly 8 chars
             
             table.add_row(
                 str(doc["id"]),
+                tags_display,
+                "",  # Empty padding column
                 title,
             )
             
