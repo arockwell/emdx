@@ -82,9 +82,9 @@ def search_documents(
         if conditions:
             base_query += " AND " + " AND ".join(conditions)
         
-        # Order by rank for text searches, by date for date-only searches
+        # Order by rank for text searches, by id for date-only searches
         if query == "*":
-            base_query += " ORDER BY d.created_at DESC LIMIT ?"
+            base_query += " ORDER BY d.id DESC LIMIT ?"
         else:
             base_query += " ORDER BY rank LIMIT ?"
         params.append(limit)
