@@ -248,7 +248,7 @@ def search_by_tags(
             query += " AND d.project = ?"
             params.append(project)
 
-        query += " GROUP BY d.id ORDER BY d.created_at DESC LIMIT ?"
+        query += " GROUP BY d.id ORDER BY d.id DESC LIMIT ?"
         params.append(limit)
 
         cursor = conn.execute(query, params)

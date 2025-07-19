@@ -297,7 +297,7 @@ class DocumentBrowser(Widget):
                     SELECT id, title, project, created_at, accessed_at, access_count
                     FROM documents
                     WHERE is_deleted = 0
-                    ORDER BY accessed_at DESC
+                    ORDER BY id DESC
                 """)
                 self.documents = cursor.fetchall()
                 self.filtered_docs = self.documents
