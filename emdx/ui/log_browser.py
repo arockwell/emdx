@@ -72,7 +72,7 @@ class LogBrowser(Widget):
     }
     
     #log-sidebar {
-        width: 2fr;
+        width: 1fr;
         min-width: 50;
         height: 100%;
         layout: vertical;
@@ -119,10 +119,10 @@ class LogBrowser(Widget):
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
         with Horizontal(classes="log-browser-content"):
-            # Left sidebar (2/3 width) - contains table + details
+            # Left sidebar (50% width) - contains table + details
             with Vertical(id="log-sidebar") as sidebar:
                 # Apply direct styles for precise control
-                sidebar.styles.width = "2fr"
+                sidebar.styles.width = "1fr"
                 sidebar.styles.min_width = 50
                 sidebar.styles.height = "100%"
                 
@@ -151,7 +151,7 @@ class LogBrowser(Widget):
                         auto_scroll=False
                     )
             
-            # Right preview panel (1/3 width) - matches document browser
+            # Right preview panel (50% width) - equal split
             with Vertical(id="log-preview-container") as preview_container:
                 preview_container.styles.width = "1fr"
                 preview_container.styles.min_width = 40
