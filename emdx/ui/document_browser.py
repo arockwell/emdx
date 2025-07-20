@@ -507,10 +507,10 @@ class DocumentBrowser(Widget):
                 # Save new document
                 try:
                     title_input = self.query_one("#title-input", Input)
-                    edit_area = self.query_one("#edit-area", VimEditTextArea)
+                    vim_editor = self.query_one("#vim-editor-container", VimEditor)
                     
                     title = title_input.value.strip()
-                    content = edit_area.text
+                    content = vim_editor.text_area.text
                     
                     if not title:
                         # Update status to show error
@@ -683,14 +683,13 @@ class DocumentBrowser(Widget):
         from .inputs import TitleInput
         title_input = TitleInput(self, placeholder="Enter document title...", id="title-input")
         
-        # Create edit area with empty content
-        from .text_areas import VimEditTextArea
-        edit_area: VimEditTextArea = VimEditTextArea(self, "", id="edit-area")
+        # Create vim editor with empty content
+        vim_editor = VimEditor(self, content="", id="vim-editor-container")
         
         # Mount the container and its children
         await preview_container.mount(edit_container)
         await edit_container.mount(title_input)
-        await edit_container.mount(edit_area)
+        await edit_container.mount(vim_editor)
         
         # Focus on title input first
         title_input.focus()
