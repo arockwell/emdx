@@ -1,0 +1,864 @@
+{
+  "overview": {
+    "total_documents": 324,
+    "deleted_documents": 406,
+    "total_views": 10364,
+    "average_views": 31.987654320987655,
+    "total_projects": 11,
+    "total_tags": 48,
+    "date_range": {
+      "first": "2025-07-07 05:27:41",
+      "last": "2025-07-18 00:21:17"
+    },
+    "most_viewed": [
+      {
+        "id": 678,
+        "title": "Gameplan: Enhance File Browser with Main Browser Features",
+        "access_count": 252
+      },
+      {
+        "id": 675,
+        "title": "Git Diff Browser Implementation Summary",
+        "access_count": 212
+      },
+      {
+        "id": 681,
+        "title": "Git Diff Browser Debug Checkpoint - Filename Fix",
+        "access_count": 212
+      },
+      {
+        "id": 695,
+        "title": "Analysis: Textual Vim-Style Relative Line Numbers Implementation",
+        "access_count": 179
+      },
+      {
+        "id": 674,
+        "title": "Git Diff Browser Analysis and Design",
+        "access_count": 164
+      }
+    ],
+    "daily_average": 40.5
+  },
+  "projects": {
+    "projects": [
+      {
+        "project": "emdx",
+        "total_docs": 227,
+        "total_views": 21634,
+        "avg_views": 42.00776699029126,
+        "gameplans": 3,
+        "successes": 1,
+        "failures": 0,
+        "blocked": 0,
+        "active": 2,
+        "last_activity": "2025-07-18 00:21:17",
+        "health_score": 5,
+        "success_rate": 33.33333333333333
+      },
+      {
+        "project": "clauding",
+        "total_docs": 60,
+        "total_views": 456,
+        "avg_views": 6.0,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:49:05",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "improve-docs",
+        "total_docs": 10,
+        "total_views": 168,
+        "avg_views": 12.923076923076923,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:49:05",
+        "health_score": 2,
+        "success_rate": 0
+      },
+      {
+        "project": null,
+        "total_docs": 10,
+        "total_views": 324,
+        "avg_views": 23.142857142857142,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-09 05:33:52",
+        "health_score": 2,
+        "success_rate": 0
+      },
+      {
+        "project": "clauding-basic-versioning",
+        "total_docs": 5,
+        "total_views": 20,
+        "avg_views": 4.0,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:31:30",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "project-alpha",
+        "total_docs": 3,
+        "total_views": 42,
+        "avg_views": 4.666666666666667,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-13 06:05:30",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "test-project",
+        "total_docs": 2,
+        "total_views": 13,
+        "avg_views": 3.25,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-13 06:05:30",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "clauding-main",
+        "total_docs": 2,
+        "total_views": 6,
+        "avg_views": 3.0,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:49:04",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "clauding-fix-arch",
+        "total_docs": 2,
+        "total_views": 13,
+        "avg_views": 6.5,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:31:30",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "test",
+        "total_docs": 1,
+        "total_views": 41,
+        "avg_views": 41.0,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:55:14",
+        "health_score": 2,
+        "success_rate": 0
+      },
+      {
+        "project": "myapp",
+        "total_docs": 1,
+        "total_views": 7,
+        "avg_views": 7.0,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-07 05:49:05",
+        "health_score": 1,
+        "success_rate": 0
+      },
+      {
+        "project": "fish-functions",
+        "total_docs": 1,
+        "total_views": 78,
+        "avg_views": 39.0,
+        "gameplans": 0,
+        "successes": 0,
+        "failures": 0,
+        "blocked": 0,
+        "active": 0,
+        "last_activity": "2025-07-08 07:10:00",
+        "health_score": 2,
+        "success_rate": 0
+      }
+    ],
+    "total_projects": 12,
+    "active_projects": 1,
+    "healthy_projects": 1
+  },
+  "content": {
+    "document_types": {
+      "other": 256,
+      "gameplan": 30,
+      "analysis": 37,
+      "summary": 1
+    },
+    "quality_metrics": {
+      "average_score": 3.361111111111111,
+      "distribution": {
+        "4": 95,
+        "5": 70,
+        "3": 86,
+        "1": 45,
+        "2": 28
+      },
+      "empty_documents": 0,
+      "empty_list": []
+    },
+    "hot_topics": [
+      {
+        "topic": "test",
+        "count": 238,
+        "views": 8165
+      },
+      {
+        "topic": "file",
+        "count": 162,
+        "views": 5599
+      },
+      {
+        "topic": "fix",
+        "count": 145,
+        "views": 4970
+      },
+      {
+        "topic": "browser",
+        "count": 98,
+        "views": 4525
+      },
+      {
+        "topic": "tui",
+        "count": 105,
+        "views": 4496
+      },
+      {
+        "topic": "tag",
+        "count": 102,
+        "views": 3844
+      },
+      {
+        "topic": "git",
+        "count": 94,
+        "views": 3463
+      },
+      {
+        "topic": "vim",
+        "count": 62,
+        "views": 3044
+      },
+      {
+        "topic": "claude",
+        "count": 124,
+        "views": 2469
+      },
+      {
+        "topic": "modal",
+        "count": 20,
+        "views": 1290
+      }
+    ],
+    "content_stats": {
+      "average_length": 3493.4135802469136,
+      "total_characters": 1131866
+    }
+  },
+  "tags": {
+    "tags": [
+      {
+        "name": "\ud83e\uddea",
+        "usage_count": 271,
+        "projects": "emdx,test,fish-functions,clauding,improve-docs,clauding-fix-arch,clauding-basic-versioning,test-project,clauding-main"
+      },
+      {
+        "name": "\ud83c\udfaf",
+        "usage_count": 79,
+        "projects": "emdx,test-project,project-alpha"
+      },
+      {
+        "name": "\ud83d\ude80",
+        "usage_count": 77,
+        "projects": "emdx,test-project,project-alpha"
+      },
+      {
+        "name": "\ud83d\udd0d",
+        "usage_count": 67,
+        "projects": "emdx,project-alpha"
+      },
+      {
+        "name": "\ud83d\udd27",
+        "usage_count": 64,
+        "projects": "emdx,clauding,improve-docs"
+      },
+      {
+        "name": "\ud83c\udfd7\ufe0f",
+        "usage_count": 52,
+        "projects": "emdx,clauding"
+      },
+      {
+        "name": "\ud83d\udc1b",
+        "usage_count": 51,
+        "projects": "emdx,project-alpha,fish-functions,clauding,improve-docs"
+      },
+      {
+        "name": "claude",
+        "usage_count": 36,
+        "projects": "clauding"
+      },
+      {
+        "name": "\ud83d\udcda",
+        "usage_count": 34,
+        "projects": "emdx,improve-docs"
+      },
+      {
+        "name": "tui",
+        "usage_count": 31,
+        "projects": "emdx"
+      },
+      {
+        "name": "\u2705",
+        "usage_count": 20,
+        "projects": "emdx,project-alpha"
+      },
+      {
+        "name": "\ud83d\udcdd",
+        "usage_count": 19,
+        "projects": "emdx"
+      },
+      {
+        "name": "file-browser",
+        "usage_count": 19,
+        "projects": "emdx"
+      },
+      {
+        "name": "\ud83c\udfd7",
+        "usage_count": 16,
+        "projects": "emdx"
+      },
+      {
+        "name": "\ud83c\udf89",
+        "usage_count": 15,
+        "projects": "emdx,project-alpha"
+      },
+      {
+        "name": "\u2728",
+        "usage_count": 14,
+        "projects": "emdx,test-project,improve-docs"
+      },
+      {
+        "name": "\ud83d\udea8",
+        "usage_count": 13,
+        "projects": "emdx,project-alpha"
+      },
+      {
+        "name": "vim",
+        "usage_count": 13,
+        "projects": "emdx"
+      },
+      {
+        "name": "\ud83d\udc8e",
+        "usage_count": 7,
+        "projects": "emdx"
+      },
+      {
+        "name": "gameplan",
+        "usage_count": 6,
+        "projects": "emdx"
+      },
+      {
+        "name": "\ud83d\udea7",
+        "usage_count": 5,
+        "projects": "emdx,project-alpha"
+      },
+      {
+        "name": "active",
+        "usage_count": 5,
+        "projects": "emdx"
+      },
+      {
+        "name": "\ud83c\udff7",
+        "usage_count": 4,
+        "projects": "emdx"
+      },
+      {
+        "name": "bug",
+        "usage_count": 4,
+        "projects": "emdx"
+      },
+      {
+        "name": "urgent",
+        "usage_count": 4,
+        "projects": "emdx"
+      },
+      {
+        "name": "\ud83e\udd16",
+        "usage_count": 2,
+        "projects": null
+      },
+      {
+        "name": "\ud83d\udcca",
+        "usage_count": 2,
+        "projects": null
+      },
+      {
+        "name": "\ud83d\udcbb",
+        "usage_count": 2,
+        "projects": null
+      },
+      {
+        "name": "fdadf",
+        "usage_count": 1,
+        "projects": null
+      },
+      {
+        "name": "taxonomy",
+        "usage_count": 1,
+        "projects": null
+      }
+    ],
+    "total_tags": 48,
+    "untagged_count": 6,
+    "untagged_percentage": 1.8518518518518516,
+    "popular_combinations": [
+      [
+        "\ud83c\udfaf, \ud83d\ude80",
+        18
+      ],
+      [
+        "claude, \ud83c\udfd7\ufe0f",
+        12
+      ],
+      [
+        "\ud83d\udc1b, \ud83e\uddea",
+        6
+      ],
+      [
+        "\ud83c\udfaf, \ud83d\udd27, \ud83d\ude80",
+        6
+      ],
+      [
+        "file-browser, tui, \ud83d\udc1b",
+        5
+      ],
+      [
+        "tui, \ud83d\udc1b, \ud83e\uddea",
+        5
+      ],
+      [
+        "\ud83c\udfd7, \ud83d\udcda, \ud83d\udd0d",
+        5
+      ],
+      [
+        "\ud83d\udd27, \ud83e\uddea",
+        4
+      ],
+      [
+        "\ud83d\udc1b, \ud83d\udd27, \ud83e\uddea",
+        4
+      ],
+      [
+        "file-browser, tui, \ud83d\udd27",
+        4
+      ],
+      [
+        "\ud83d\udd0d, \ud83d\ude80",
+        4
+      ],
+      [
+        "\ud83c\udfaf, \ud83c\udfd7\ufe0f, \ud83d\ude80",
+        4
+      ],
+      [
+        "\ud83d\udc1b, \ud83d\udd0d, \ud83d\ude80",
+        4
+      ],
+      [
+        "\ud83c\udfd7\ufe0f, \ud83d\udd27, \ud83d\ude80",
+        4
+      ],
+      [
+        "tui, \ud83e\uddea",
+        3
+      ]
+    ],
+    "workflows": {
+      "gameplan\u2192active": 44,
+      "bug\u2192fixed": 3,
+      "active\u2192success": 2
+    },
+    "tag_diversity": 20
+  },
+  "temporal": {
+    "daily_activity": [
+      {
+        "date": "2025-07-07",
+        "docs_created": 92,
+        "quality_docs": 79
+      },
+      {
+        "date": "2025-07-08",
+        "docs_created": 3,
+        "quality_docs": 3
+      },
+      {
+        "date": "2025-07-09",
+        "docs_created": 6,
+        "quality_docs": 5
+      },
+      {
+        "date": "2025-07-10",
+        "docs_created": 1,
+        "quality_docs": 1
+      },
+      {
+        "date": "2025-07-12",
+        "docs_created": 34,
+        "quality_docs": 25
+      },
+      {
+        "date": "2025-07-13",
+        "docs_created": 98,
+        "quality_docs": 65
+      },
+      {
+        "date": "2025-07-14",
+        "docs_created": 60,
+        "quality_docs": 42
+      },
+      {
+        "date": "2025-07-15",
+        "docs_created": 29,
+        "quality_docs": 18
+      },
+      {
+        "date": "2025-07-18",
+        "docs_created": 1,
+        "quality_docs": 1
+      }
+    ],
+    "hour_pattern": [
+      {
+        "hour": "00",
+        "count": 18
+      },
+      {
+        "hour": "01",
+        "count": 23
+      },
+      {
+        "hour": "02",
+        "count": 18
+      },
+      {
+        "hour": "03",
+        "count": 23
+      },
+      {
+        "hour": "04",
+        "count": 15
+      },
+      {
+        "hour": "05",
+        "count": 123
+      },
+      {
+        "hour": "06",
+        "count": 26
+      },
+      {
+        "hour": "07",
+        "count": 18
+      },
+      {
+        "hour": "08",
+        "count": 12
+      },
+      {
+        "hour": "17",
+        "count": 1
+      },
+      {
+        "hour": "18",
+        "count": 3
+      },
+      {
+        "hour": "19",
+        "count": 6
+      },
+      {
+        "hour": "20",
+        "count": 16
+      },
+      {
+        "hour": "21",
+        "count": 17
+      },
+      {
+        "hour": "23",
+        "count": 5
+      }
+    ],
+    "peak_hour": "05",
+    "momentum": {
+      "recent_3_days": 30,
+      "previous_3_days": 192,
+      "change_percentage": -84.375
+    }
+  },
+  "quality": {
+    "needs_attention": [
+      {
+        "id": 673,
+        "title": "Test Document for Untag Fix",
+        "length": 92,
+        "access_count": 142,
+        "created_at": "2025-07-14 05:09:59",
+        "project": "emdx"
+      },
+      {
+        "id": 688,
+        "title": "Test Gameplan",
+        "length": 52,
+        "access_count": 133,
+        "created_at": "2025-07-14 07:29:42",
+        "project": "emdx"
+      },
+      {
+        "id": 643,
+        "title": "New Note - 2025-07-13 22:17",
+        "length": 60,
+        "access_count": 106,
+        "created_at": "2025-07-14 02:17:42",
+        "project": "emdx"
+      },
+      {
+        "id": 689,
+        "title": "Test Stuck Execution",
+        "length": 24,
+        "access_count": 102,
+        "created_at": "2025-07-14 07:49:51",
+        "project": "emdx"
+      },
+      {
+        "id": 693,
+        "title": "Test Log Check",
+        "length": 17,
+        "access_count": 98,
+        "created_at": "2025-07-14 08:03:29",
+        "project": "emdx"
+      },
+      {
+        "id": 622,
+        "title": "Test: Stdin After Fix",
+        "length": 168,
+        "access_count": 91,
+        "created_at": "2025-07-13 20:46:54",
+        "project": "emdx"
+      },
+      {
+        "id": 466,
+        "title": "Direct Text Test",
+        "length": 37,
+        "access_count": 85,
+        "created_at": "2025-07-12 18:56:59",
+        "project": "emdx"
+      },
+      {
+        "id": 696,
+        "title": "New Note - 2025-07-14 04:36",
+        "length": 107,
+        "access_count": 84,
+        "created_at": "2025-07-14 08:36:12",
+        "project": "emdx"
+      },
+      {
+        "id": 295,
+        "title": "EMDX Surface Area Reduction Plan",
+        "length": 1790,
+        "access_count": 83,
+        "created_at": "2025-07-09 05:33:52",
+        "project": null
+      },
+      {
+        "id": 474,
+        "title": "TextArea Preview Test",
+        "length": 186,
+        "access_count": 72,
+        "created_at": "2025-07-12 20:24:28",
+        "project": "emdx"
+      },
+      {
+        "id": 297,
+        "title": "Test pipe input",
+        "length": 22,
+        "access_count": 71,
+        "created_at": "2025-07-09 05:37:57",
+        "project": "emdx"
+      },
+      {
+        "id": 634,
+        "title": "New Note - 2025-07-13 20:22",
+        "length": 116,
+        "access_count": 71,
+        "created_at": "2025-07-14 00:22:49",
+        "project": "emdx"
+      },
+      {
+        "id": 687,
+        "title": "Test Hello",
+        "length": 15,
+        "access_count": 67,
+        "created_at": "2025-07-14 07:29:09",
+        "project": "emdx"
+      },
+      {
+        "id": 680,
+        "title": "Line Number Test",
+        "length": 34,
+        "access_count": 56,
+        "created_at": "2025-07-14 06:23:02",
+        "project": "emdx"
+      },
+      {
+        "id": 633,
+        "title": "Add human-readable file size formatter",
+        "length": 365,
+        "access_count": 55,
+        "created_at": "2025-07-14 00:13:02",
+        "project": "emdx"
+      },
+      {
+        "id": 624,
+        "title": "Test Claude Execution",
+        "length": 59,
+        "access_count": 51,
+        "created_at": "2025-07-13 21:17:07",
+        "project": "emdx"
+      },
+      {
+        "id": 292,
+        "title": "Claude Export Wrapper Documentation",
+        "length": 1329,
+        "access_count": 42,
+        "created_at": "2025-07-09 05:12:22",
+        "project": null
+      },
+      {
+        "id": 287,
+        "title": "Direct SQLite Test",
+        "length": 21,
+        "access_count": 41,
+        "created_at": "2025-07-07 05:55:14",
+        "project": "test"
+      },
+      {
+        "id": 528,
+        "title": "Testing deny rules",
+        "length": 13,
+        "access_count": 37,
+        "created_at": "2025-07-13 03:48:28",
+        "project": "emdx"
+      },
+      {
+        "id": 594,
+        "title": "New Note - 2025-07-13 15:03",
+        "length": 45,
+        "access_count": 34,
+        "created_at": "2025-07-13 19:03:36",
+        "project": "emdx"
+      }
+    ],
+    "stale_active_items": [
+      {
+        "id": 568,
+        "title": "Fix-Selection-Mode",
+        "created_at": "2025-07-13 06:29:04",
+        "project": "emdx",
+        "days_old": 4.7614030903205276
+      },
+      {
+        "id": 570,
+        "title": "Selection-Mode-Final-Fix-Gameplan",
+        "created_at": "2025-07-13 06:47:41",
+        "project": "emdx",
+        "days_old": 4.748474849388003
+      }
+    ],
+    "quality_issues": {
+      "empty_documents": 0,
+      "high_view_low_content": 15,
+      "no_project": 2
+    }
+  },
+  "gaps": {
+    "gaps": [
+      {
+        "type": "missing_gameplan",
+        "project": "clauding",
+        "severity": "high",
+        "recommendation": "Create gameplans for clauding project"
+      },
+      {
+        "type": "missing_gameplan",
+        "project": "improve-docs",
+        "severity": "high",
+        "recommendation": "Create gameplans for improve-docs project"
+      },
+      {
+        "type": "missing_gameplan",
+        "project": null,
+        "severity": "high",
+        "recommendation": "Create gameplans for None project"
+      }
+    ],
+    "total_gaps": 3,
+    "high_severity": 3
+  },
+  "insights": {
+    "immediate_actions": [],
+    "improvements": [
+      {
+        "suggestion": "Increase project activity",
+        "current": "1 active projects",
+        "target": "At least 6 active projects"
+      }
+    ],
+    "achievements": [
+      {
+        "achievement": "High engagement",
+        "metric": "32.0 average views per document"
+      }
+    ]
+  },
+  "metadata": {
+    "generated_at": "2025-07-17T20:45:29.227983",
+    "database_path": "/Users/alexrockwell/.config/emdx/knowledge.db"
+  }
+}

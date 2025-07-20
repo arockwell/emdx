@@ -123,12 +123,54 @@ def migration_004_add_execution_pid(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_005_add_execution_numeric_id(conn: sqlite3.Connection):
+    """Replace text ID with auto-incrementing numeric ID for executions."""
+    cursor = conn.cursor()
+    
+    # Create new table with numeric ID as primary key
+    cursor.execute("""
+        CREATE TABLE executions_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id INTEGER NOT NULL,
+            doc_title TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            started_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP,
+            log_file TEXT NOT NULL,
+            exit_code INTEGER,
+            working_dir TEXT,
+            pid INTEGER,
+            FOREIGN KEY (doc_id) REFERENCES documents(id)
+        )
+    """)
+    
+    # Copy existing data (ordered by started_at to preserve chronological order)
+    cursor.execute("""
+        INSERT INTO executions_new (doc_id, doc_title, status, started_at, 
+                                   completed_at, log_file, exit_code, working_dir, pid)
+        SELECT doc_id, doc_title, status, started_at, 
+               completed_at, log_file, exit_code, working_dir, pid
+        FROM executions
+        ORDER BY started_at ASC
+    """)
+    
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE executions")
+    cursor.execute("ALTER TABLE executions_new RENAME TO executions")
+    
+    # Create index on doc_id for fast lookups
+    cursor.execute("CREATE INDEX idx_executions_doc_id ON executions(doc_id)")
+    
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (1, "Add tags system", migration_001_add_tags),
     (2, "Add executions tracking", migration_002_add_executions),
     (3, "Add document relationships", migration_003_add_document_relationships),
     (4, "Add execution PID tracking", migration_004_add_execution_pid),
+    (5, "Add numeric ID to executions", migration_005_add_execution_numeric_id),
 ]
 
 

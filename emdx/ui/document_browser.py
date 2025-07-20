@@ -69,6 +69,7 @@ class DocumentBrowser(Widget):
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
+        Binding("x", "execute_document", "Execute"),
     ]
     
     CSS = """
@@ -714,6 +715,83 @@ class DocumentBrowser(Widget):
     async def action_edit_document(self) -> None:
         """Edit the current document."""
         await self.enter_edit_mode()
+        
+    def action_execute_document(self) -> None:
+        """Execute the current document with context-aware behavior based on tags."""
+        if not self.current_doc_id:
+            self._update_status("No document selected for execution")
+            return
+            
+        try:
+            import time
+            from pathlib import Path
+            from emdx.commands.claude_execute import get_execution_context
+            from emdx.models.documents import get_document
+            from emdx.models.tags import get_document_tags
+            from emdx.models.executions import create_execution
+            
+            # Get the current document
+            doc = get_document(str(self.current_doc_id))
+            if not doc:
+                self._update_status("Document not found")
+                return
+            
+            # Get document tags
+            doc_tags = get_document_tags(str(self.current_doc_id))
+            
+            # Get execution context to show what will happen
+            context = get_execution_context(doc_tags)
+            self._update_status(f"Executing {context['type'].value}: {context['description']}")
+            
+            # Create logs directory
+            log_dir = Path.home() / ".config/emdx/logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create the execution record and get numeric ID
+            timestamp = int(time.time())
+            log_filename = f"claude-{self.current_doc_id}-{timestamp}.log"
+            log_path = log_dir / log_filename
+            
+            exec_id = create_execution(
+                doc_id=self.current_doc_id,
+                doc_title=doc['title'],
+                log_file=str(log_path)
+            )
+            
+            # Now execute in background using the wrapper script
+            import subprocess
+            import sys
+            
+            # Find the wrapper script
+            wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
+            
+            # Build the claude command
+            claude_cmd = [
+                sys.executable,
+                "-m", "emdx.commands.claude_execute",
+                "execute",
+                str(self.current_doc_id),
+                "--execution-id", str(exec_id),
+                "--background"
+            ]
+            
+            # Execute with wrapper
+            wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
+            
+            # Start the process in background
+            subprocess.Popen(
+                wrapper_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            
+            # Show success message
+            self._update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
+            
+        except Exception as e:
+            logger.error(f"Error executing document: {e}", exc_info=True)
+            self._update_status(f"Error: {str(e)}")
         
     async def action_new_document(self) -> None:
         """Create a new document."""
