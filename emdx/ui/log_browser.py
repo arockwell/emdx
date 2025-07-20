@@ -71,14 +71,30 @@ class LogBrowser(Widget):
         height: 1fr;
     }
     
-    #log-table {
-        width: 40%;
+    #log-sidebar {
+        width: 2fr;
         min-width: 50;
+        height: 100%;
+        layout: vertical;
+    }
+    
+    #log-table-container {
+        min-height: 15;
+    }
+    
+    #log-details-container {
+        min-height: 8;
+        border-top: heavy gray;
+    }
+    
+    #log-table {
+        width: 100%;
         border-right: solid $primary;
     }
     
-    #log-preview {
-        width: 60%;
+    #log-preview-container {
+        width: 1fr;
+        min-width: 40;
         padding: 0 1;
     }
     
@@ -103,17 +119,49 @@ class LogBrowser(Widget):
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
         with Horizontal(classes="log-browser-content"):
-            # Execution list table
-            table = DataTable(id="log-table")
-            table.cursor_type = "row"
-            table.show_header = True
-            yield table
+            # Left sidebar (2/3 width) - contains table + details
+            with Vertical(id="log-sidebar") as sidebar:
+                # Apply direct styles for precise control
+                sidebar.styles.width = "2fr"
+                sidebar.styles.min_width = 50
+                sidebar.styles.height = "100%"
+                
+                # Table container (2/3 of sidebar height)
+                with Vertical(id="log-table-container") as table_container:
+                    table_container.styles.height = "66%"
+                    table_container.styles.min_height = 15
+                    table_container.styles.padding = 0
+                    
+                    table = DataTable(id="log-table")
+                    table.cursor_type = "row"
+                    table.show_header = True
+                    yield table
+                
+                # Details container (1/3 of sidebar height)
+                with Vertical(id="log-details-container") as details_container:
+                    details_container.styles.height = "34%"
+                    details_container.styles.min_height = 8
+                    details_container.styles.padding = 0
+                    details_container.styles.border_top = ("heavy", "gray")
+                    
+                    yield RichLog(
+                        id="log-details",
+                        wrap=True,
+                        markup=True,
+                        auto_scroll=False,
+                        can_focus=False
+                    )
             
-            # Log content preview
-            yield ScrollableContainer(
-                RichLog(id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False),
-                id="log-preview"
-            )
+            # Right preview panel (1/3 width) - unchanged functionality
+            with Vertical(id="log-preview-container") as preview_container:
+                preview_container.styles.width = "1fr"
+                preview_container.styles.min_width = 40
+                preview_container.styles.padding = (0, 1)
+                
+                yield ScrollableContainer(
+                    RichLog(id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False),
+                    id="log-preview"
+                )
             
         # Status bar
         yield Static("Loading executions...", classes="log-status")
@@ -172,9 +220,87 @@ class LogBrowser(Widget):
             logger.error(f"Error loading executions: {e}", exc_info=True)
             self.update_status(f"Error loading executions: {e}")
             
+    def format_execution_metadata(self, execution: Execution) -> str:
+        """Format execution metadata for details panel display."""
+        try:
+            # Try to get version info, fallback to default if not available
+            from emdx import __version__
+            version = __version__
+        except:
+            version = "0.6.0"
+        
+        try:
+            from emdx import __build_id__
+            build_id = __build_id__
+        except:
+            build_id = "unknown"
+        
+        # Build metadata sections
+        metadata_lines = [
+            "[bold cyan]=== EMDX Claude Execution ===[/bold cyan]",
+            f"[yellow]Version:[/yellow] {version}",
+            f"[yellow]Build ID:[/yellow] {build_id}",
+            f"[yellow]Doc ID:[/yellow] {execution.doc_id if hasattr(execution, 'doc_id') else 'N/A'}",
+            f"[yellow]Execution ID:[/yellow] {execution.id}",
+            ""
+        ]
+        
+        # Add worktree information if available
+        if execution.working_dir:
+            metadata_lines.extend([
+                f"[yellow]Worktree:[/yellow] {execution.working_dir}",
+                ""
+            ])
+        
+        # Add timing information
+        started_str = execution.started_at.strftime('%Y-%m-%d %H:%M:%S')
+        metadata_lines.append(f"[yellow]Started:[/yellow] {started_str}")
+        
+        if execution.completed_at:
+            completed_str = execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')
+            metadata_lines.append(f"[yellow]Completed:[/yellow] {completed_str}")
+        
+        # Add status and exit code
+        status_icon = {
+            'running': '🔄',
+            'completed': '✅',
+            'failed': '❌'
+        }.get(execution.status, '❓')
+        
+        metadata_lines.extend([
+            "",
+            f"[yellow]Status:[/yellow] {status_icon} {execution.status}",
+        ])
+        
+        # Add file paths
+        metadata_lines.extend([
+            "",
+            f"[yellow]Log File:[/yellow] {execution.log_file}",
+        ])
+        
+        metadata_lines.append("[bold cyan]" + "=" * 50 + "[/bold cyan]")
+        
+        return "\n".join(metadata_lines)
+    
+    async def update_details_panel(self, execution: Execution) -> None:
+        """Update the details panel with execution metadata."""
+        try:
+            details_panel = self.query_one("#log-details", RichLog)
+            details_panel.clear()
+            
+            # Format and display metadata
+            metadata_content = self.format_execution_metadata(execution)
+            details_panel.write(metadata_content)
+            
+        except Exception as e:
+            logger.error(f"Error updating details panel: {e}", exc_info=True)
+
     async def load_execution_log(self, execution: Execution) -> None:
         """Load and display the log content for the selected execution."""
         try:
+            # Update details panel with execution metadata
+            await self.update_details_panel(execution)
+            
             log_content = self.query_one("#log-content", RichLog)
             log_content.clear()
             
