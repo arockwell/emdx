@@ -19,7 +19,7 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, ScrollableContainer
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
@@ -148,8 +148,7 @@ class LogBrowser(Widget):
                         id="log-details",
                         wrap=True,
                         markup=True,
-                        auto_scroll=False,
-                        can_focus=False
+                        auto_scroll=False
                     )
             
             # Right preview panel (1/3 width) - unchanged functionality
