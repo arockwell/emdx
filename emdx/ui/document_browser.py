@@ -31,6 +31,7 @@ from emdx.utils.emoji_aliases import expand_aliases
 from .document_viewer import FullScreenView
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +190,7 @@ class DocumentBrowser(Widget):
         border: solid $primary;
     }
     
-    #edit-area {
+    #edit-area, #vim-editor-container {
         height: 1fr;
         margin: 1;
     }
@@ -458,15 +459,16 @@ class DocumentBrowser(Widget):
                 if child.id in ["preview", "preview-content"]:
                     await child.remove()
         
-        # Create edit area with proper app instance (self implements TextAreaHost)
-        edit_area: VimEditTextArea = VimEditTextArea(self, full_doc["content"], id="edit-area")
-        await preview_container.mount(edit_area)
-        edit_area.focus()
+        # Create vim editor with line numbers
+        from .vim_editor import VimEditor
+        vim_editor = VimEditor(self, content=full_doc["content"], id="vim-editor-container")
+        await preview_container.mount(vim_editor)
+        vim_editor.focus_editor()
         
         self.edit_mode = True
         
         # Show vim mode indicator immediately - use call_after_refresh to ensure widget is ready
-        self.call_after_refresh(lambda: self._update_vim_status(f"{edit_area.vim_mode} | ESC=exit"))
+        self.call_after_refresh(lambda: self._update_vim_status(f"{vim_editor.text_area.vim_mode} | ESC=exit"))
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
@@ -535,8 +537,8 @@ class DocumentBrowser(Widget):
                 # Update existing document
                 if self.editing_doc_id:
                     try:
-                        edit_area = self.query_one("#edit-area", VimEditTextArea)
-                        content = edit_area.text
+                        vim_editor = self.query_one("#vim-editor-container", VimEditor)
+                        content = vim_editor.text_area.text
                         
                         from emdx.models.documents import update_document, get_document
                         # Get the current document to preserve the title
