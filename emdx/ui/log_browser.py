@@ -72,7 +72,7 @@ class LogBrowser(Widget):
     }
     
     #log-sidebar {
-        width: 1fr;
+        width: 2fr;
         min-width: 50;
         height: 100%;
         layout: vertical;
@@ -93,7 +93,7 @@ class LogBrowser(Widget):
     }
     
     #log-preview-container {
-        width: 2fr;
+        width: 1fr;
         min-width: 40;
         padding: 0 1;
     }
@@ -119,10 +119,10 @@ class LogBrowser(Widget):
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
         with Horizontal(classes="log-browser-content"):
-            # Left sidebar (1/3 width) - contains table + details
+            # Left sidebar (2/3 width) - contains table + details
             with Vertical(id="log-sidebar") as sidebar:
                 # Apply direct styles for precise control
-                sidebar.styles.width = "1fr"
+                sidebar.styles.width = "2fr"
                 sidebar.styles.min_width = 50
                 sidebar.styles.height = "100%"
                 
@@ -151,9 +151,9 @@ class LogBrowser(Widget):
                         auto_scroll=False
                     )
             
-            # Right preview panel (2/3 width) - now takes more space
+            # Right preview panel (1/3 width) - matches document browser
             with Vertical(id="log-preview-container") as preview_container:
-                preview_container.styles.width = "2fr"
+                preview_container.styles.width = "1fr"
                 preview_container.styles.min_width = 40
                 preview_container.styles.padding = (0, 1)
                 
@@ -172,8 +172,8 @@ class LogBrowser(Widget):
         # Set up the table
         table = self.query_one("#log-table", DataTable)
         table.add_column("#", width=4)
-        table.add_column("Status", width=10)
-        table.add_column("Document", width=30)
+        table.add_column("Status", width=3)
+        table.add_column("Document", width=40)
         
         # Focus the table
         table.focus()
@@ -203,7 +203,7 @@ class LogBrowser(Widget):
                 
                 table.add_row(
                     f"{i+1}",
-                    f"{status_icon} {execution.status}",
+                    status_icon,
                     execution.doc_title[:30] + "..." if len(execution.doc_title) > 30 else execution.doc_title
                 )
                 
