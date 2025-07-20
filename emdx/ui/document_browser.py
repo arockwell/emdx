@@ -216,31 +216,30 @@ class DocumentBrowser(Widget):
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
         yield Label("", id="tag-selector")
         
-        with Vertical():
-            with Horizontal():
-                with Vertical(id="sidebar") as sidebar:
-                    # Remove debug background
-                    pass
-                    with Vertical(id="table-container", classes="table-section") as table_container:
-                        # Apply direct styles - 2/3 of sidebar
-                        table_container.styles.height = "66%"
-                        table_container.styles.min_height = 10
-                        table_container.styles.padding = 0
-                        yield DataTable(id="doc-table")
-                    with Vertical(id="details-container", classes="details-section") as details_container:
-                        # Apply direct styles - 1/3 of sidebar
-                        details_container.styles.height = "34%"
-                        details_container.styles.min_height = 8
-                        details_container.styles.padding = 0
-                        details_container.styles.border_top = ("heavy", "gray")
-                        yield RichLog(
-                            id="details-panel",
-                            classes="details-richlog",
-                            wrap=True, 
-                            highlight=True, 
-                            markup=True, 
-                        auto_scroll=False
-                    )
+        with Horizontal():
+            with Vertical(id="sidebar") as sidebar:
+                # Remove debug background
+                pass
+                with Vertical(id="table-container", classes="table-section") as table_container:
+                    # Apply direct styles - 2/3 of sidebar
+                    table_container.styles.height = "66%"
+                    table_container.styles.min_height = 10
+                    table_container.styles.padding = 0
+                    yield DataTable(id="doc-table")
+                with Vertical(id="details-container", classes="details-section") as details_container:
+                    # Apply direct styles - 1/3 of sidebar
+                    details_container.styles.height = "34%"
+                    details_container.styles.min_height = 8
+                    details_container.styles.padding = 0
+                    details_container.styles.border_top = ("heavy", "gray")
+                    yield RichLog(
+                        id="details-panel",
+                        classes="details-richlog",
+                        wrap=True, 
+                        highlight=True, 
+                        markup=True, 
+                    auto_scroll=False
+                )
             with Vertical(id="preview-container"):
                 yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
@@ -249,9 +248,9 @@ class DocumentBrowser(Widget):
                         classes="preview-richlog",
                         wrap=True, highlight=True, markup=True, auto_scroll=False
                     )
-            
-            # Status bar at the bottom
-            yield Static("Ready", id="browser-status", classes="browser-status")
+        
+        # Status bar at the bottom
+        yield Static("Ready", id="browser-status", classes="browser-status")
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
