@@ -65,6 +65,7 @@ class DocumentBrowser(Widget):
         Binding("g", "cursor_top", "Top"),
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("e", "edit_document", "Edit"),
+        Binding("n", "new_document", "New"),
         Binding("/", "search", "Search"),
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
@@ -168,6 +169,22 @@ class DocumentBrowser(Widget):
     #preview-content {
         height: 1fr;
         padding: 1;
+    }
+    
+    #edit-container {
+        height: 100%;
+        layout: vertical;
+    }
+    
+    #title-input {
+        height: 3;
+        margin: 1;
+        border: solid $primary;
+    }
+    
+    #edit-area {
+        height: 1fr;
+        margin: 1;
     }
     """
     
@@ -341,7 +358,7 @@ class DocumentBrowser(Widget):
             if hasattr(app, 'update_status'):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 if self.mode == "NORMAL":
-                    status_text += " | e=edit | /=search | t=tag | f=files | d=git | q=quit"
+                    status_text += " | e=edit | n=new | /=search | t=tag | f=files | d=git | q=quit"
                 elif self.mode == "SEARCH":
                     status_text += " | Enter=apply | ESC=cancel"
                 status_text += f" | {BUILD_ID}"
@@ -397,6 +414,9 @@ class DocumentBrowser(Widget):
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
             if self.edit_mode:
+                # For new document mode, just cancel without saving
+                if getattr(self, 'new_document_mode', False):
+                    self.new_document_mode = False
                 await self.exit_edit_mode()
                 event.stop()
             elif self.mode == "SEARCH":
@@ -456,17 +476,16 @@ class DocumentBrowser(Widget):
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
-        # For now, just exit edit mode - saving would need to be implemented
         logger.info("action_save_and_exit_edit called")
         try:
             # Use call_after_refresh to avoid timing issues
-            self.call_after_refresh(self._async_exit_edit_mode)
+            self.call_after_refresh(self._async_save_and_exit_edit_mode)
         except Exception as e:
             logger.error(f"Error in action_save_and_exit_edit: {e}")
             # Fallback - try direct call
             try:
                 import asyncio
-                asyncio.create_task(self.exit_edit_mode())
+                asyncio.create_task(self.save_and_exit_edit_mode())
             except:
                 pass
             
@@ -475,6 +494,73 @@ class DocumentBrowser(Widget):
         logger.info("_async_exit_edit_mode called")
         import asyncio
         asyncio.create_task(self.exit_edit_mode())
+        
+    def _async_save_and_exit_edit_mode(self) -> None:
+        """Async wrapper for save_and_exit_edit_mode."""
+        logger.info("_async_save_and_exit_edit_mode called")
+        import asyncio
+        asyncio.create_task(self.save_and_exit_edit_mode())
+        
+    async def save_and_exit_edit_mode(self) -> None:
+        """Save the document and exit edit mode."""
+        if not self.edit_mode:
+            return
+            
+        try:
+            if getattr(self, 'new_document_mode', False):
+                # Save new document
+                try:
+                    title_input = self.query_one("#title-input", Input)
+                    edit_area = self.query_one("#edit-area", VimEditTextArea)
+                    
+                    title = title_input.value.strip()
+                    content = edit_area.text
+                    
+                    if not title:
+                        # Update status to show error
+                        self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
+                        return
+                    
+                    # Save the new document
+                    from emdx.models.documents import save_document
+                    from emdx.utils.git import get_git_project
+                    
+                    project = get_git_project() or "default"
+                    doc_id = save_document(title=title, content=content, project=project)
+                    
+                    logger.info(f"Created new document with ID: {doc_id}")
+                    
+                    # Clean up new document mode flag
+                    self.new_document_mode = False
+                    
+                except Exception as e:
+                    logger.error(f"Error saving new document: {e}")
+                    self._update_vim_status(f"ERROR: {str(e)}")
+                    return
+            else:
+                # Update existing document
+                if self.editing_doc_id:
+                    try:
+                        edit_area = self.query_one("#edit-area", VimEditTextArea)
+                        content = edit_area.text
+                        
+                        from emdx.models.documents import update_document
+                        update_document(str(self.editing_doc_id), content=content)
+                        
+                        logger.info(f"Updated document ID: {self.editing_doc_id}")
+                    except Exception as e:
+                        logger.error(f"Error updating document: {e}")
+                        self._update_vim_status(f"ERROR: {str(e)}")
+                        return
+            
+            # Exit edit mode and reload documents
+            await self.exit_edit_mode()
+            await self.load_documents()
+            
+        except Exception as e:
+            logger.error(f"Error in save_and_exit_edit_mode: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
         
     def _update_vim_status(self, message: str = "") -> None:
         """Update status bar with vim mode info (called by VimEditTextArea)."""
@@ -539,6 +625,9 @@ class DocumentBrowser(Widget):
         await preview.mount(preview_content)
         
         self.edit_mode = False
+        # Clean up new document mode flag if it was set
+        if hasattr(self, 'new_document_mode'):
+            self.new_document_mode = False
         
         # Clear vim mode indicator
         try:
@@ -568,6 +657,49 @@ class DocumentBrowser(Widget):
         # Return focus to table
         table.focus()
         
+    async def enter_new_document_mode(self) -> None:
+        """Enter mode to create a new document."""
+        # Store that we're creating a new document
+        self.editing_doc_id = None  # No existing document
+        self.edit_mode = True
+        self.new_document_mode = True
+        
+        # Replace preview with edit area for new document
+        from textual.containers import Vertical, ScrollableContainer
+        preview_container = self.query_one("#preview-container", Vertical)
+        try:
+            preview = self.query_one("#preview", ScrollableContainer)
+            await preview.remove()
+        except Exception as e:
+            logger.error(f"Error removing preview for new document mode: {e}")
+            # Try removing all children instead
+            for child in list(preview_container.children):
+                if child.id in ["preview", "preview-content"]:
+                    await child.remove()
+        
+        # Create a vertical container for title input and content editor
+        from textual.containers import Vertical
+        edit_container = Vertical(id="edit-container")
+        
+        # Create title input
+        from .inputs import TitleInput
+        title_input = TitleInput(self, placeholder="Enter document title...", id="title-input")
+        
+        # Create edit area with empty content
+        from .text_areas import VimEditTextArea
+        edit_area: VimEditTextArea = VimEditTextArea(self, "", id="edit-area")
+        
+        # Mount the container and its children
+        await preview_container.mount(edit_container)
+        await edit_container.mount(title_input)
+        await edit_container.mount(edit_area)
+        
+        # Focus on title input first
+        title_input.focus()
+        
+        # Update status
+        self._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | ESC=cancel")
+        
     def action_cursor_down(self) -> None:
         """Move cursor down."""
         table = self.query_one("#doc-table", DataTable)
@@ -596,6 +728,13 @@ class DocumentBrowser(Widget):
         if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
             return
         await self.enter_edit_mode()
+        
+    async def action_new_document(self) -> None:
+        """Create a new document."""
+        # Don't allow new document in log browser mode
+        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
+            return
+        await self.enter_new_document_mode()
         
     def action_search(self) -> None:
         """Enter search mode."""
@@ -750,7 +889,7 @@ class DocumentBrowser(Widget):
             app = self.app
             if hasattr(app, 'update_status'):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
-                status_text += " | e=edit | /=search | t=tag | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | q=quit"
                 app.update_status(status_text)
         except:
             pass
