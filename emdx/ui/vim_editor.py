@@ -66,7 +66,8 @@ class VimEditor(Vertical):
         self.edit_container.mount(self.text_area)
         
         # Ensure the entire vim editor container starts at top
-        self.scroll_to(0, 0, animate=False)
+        # TEMPORARILY DISABLED: This might be causing first line visibility issues
+        # self.scroll_to(0, 0, animate=False)
         
         # Focus the text area and initialize line numbers
         self.text_area.can_focus = True
@@ -108,25 +109,28 @@ class VimEditor(Vertical):
                     pass
                     
             # Method 3: Force scroll to top using multiple methods
-            if hasattr(self.text_area, 'scroll_to'):
-                self.text_area.scroll_to(0, 0, animate=False)
-                logger.debug(f"🔢   Called scroll_to(0, 0)")
+            # TEMPORARILY DISABLED: This might be hiding the first line
+            # if hasattr(self.text_area, 'scroll_to'):
+            #     self.text_area.scroll_to(0, 0, animate=False)
+            #     logger.debug(f"🔢   Called scroll_to(0, 0)")
             
             # Method 4: Try to access internal scroll attributes if they exist
-            if hasattr(self.text_area, 'scroll_offset'):
-                try:
-                    self.text_area.scroll_offset = (0, 0)
-                    logger.debug(f"🔢   Set scroll_offset to (0, 0)")
-                except:
-                    pass
+            # TEMPORARILY DISABLED: This might be hiding the first line
+            # if hasattr(self.text_area, 'scroll_offset'):
+            #     try:
+            #         self.text_area.scroll_offset = (0, 0)
+            #         logger.debug(f"🔢   Set scroll_offset to (0, 0)")
+            #     except:
+            #         pass
                     
-            if hasattr(self.text_area, 'scroll_x'):
-                try:
-                    self.text_area.scroll_x = 0
-                    self.text_area.scroll_y = 0
-                    logger.debug(f"🔢   Set scroll_x/y to 0")
-                except:
-                    pass
+            # TEMPORARILY DISABLED: This might be hiding the first line
+            # if hasattr(self.text_area, 'scroll_x'):
+            #     try:
+            #         self.text_area.scroll_x = 0
+            #         self.text_area.scroll_y = 0
+            #         logger.debug(f"🔢   Set scroll_x/y to 0")
+            #     except:
+            #         pass
             
             # Method 5: For markdown files, be extra aggressive
             is_markdown = False
@@ -137,9 +141,10 @@ class VimEditor(Vertical):
                     logger.debug(f"🔢   MARKDOWN FILE detected: {self.text_area.file_path}")
                     # Triple-force for markdown files
                     self.text_area.cursor_location = (0, 0)
-                    if hasattr(self.text_area, 'scroll_to'):
-                        self.text_area.scroll_to(0, 0, animate=False)
-                    logger.debug(f"🔢   Applied markdown-specific positioning")
+                    # TEMPORARILY DISABLED: scroll_to might be hiding first line
+                    # if hasattr(self.text_area, 'scroll_to'):
+                    #     self.text_area.scroll_to(0, 0, animate=False)
+                    logger.debug(f"🔢   Applied markdown-specific positioning (scroll disabled)")
             
             # Method 6: Force cursor position using TextArea internal methods if available
             if hasattr(self.text_area, 'move_cursor'):
@@ -218,8 +223,9 @@ class VimEditor(Vertical):
                 self.text_area.cursor_location = (0, 0)
                 if hasattr(self.text_area, 'selection'):
                     self.text_area.selection = None
-                if hasattr(self.text_area, 'scroll_to'):
-                    self.text_area.scroll_to(0, 0, animate=False)
+                # TEMPORARILY DISABLED: scroll_to might be hiding first line
+                # if hasattr(self.text_area, 'scroll_to'):
+                #     self.text_area.scroll_to(0, 0, animate=False)
                     
                 # Update line numbers
                 total_lines = len(self.text_area.text.split('\n'))
