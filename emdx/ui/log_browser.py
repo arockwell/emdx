@@ -9,6 +9,7 @@ This widget displays execution logs in a dual-pane layout:
 
 import logging
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
@@ -23,35 +24,27 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
+from emdx.commands.claude_execute import format_claude_output
 from emdx.models.executions import get_recent_executions, Execution
+from .text_areas import SelectionTextArea
 
 logger = logging.getLogger(__name__)
 
 
-class LogSelectionTextArea(Static):
-    """Text area for selecting and copying log content."""
+class LogBrowserHost:
+    """Host implementation for LogBrowser to work with SelectionTextArea."""
     
-    def __init__(self, log_browser, content: str, *args, **kwargs):
-        super().__init__(content, *args, **kwargs)
+    def __init__(self, log_browser):
         self.log_browser = log_browser
-        self.can_focus = True
-        
-    def on_key(self, event: events.Key) -> None:
-        """Handle key events."""
-        if event.key == "escape":
-            self.log_browser.exit_selection_mode()
-            event.stop()
-        elif event.key == "enter":
-            # Copy selection to clipboard
-            try:
-                # For now, copy entire content
-                # TODO: Implement actual text selection
-                subprocess.run(["pbcopy"], input=self.renderable.encode(), check=True)
-                logger.info("Copied log content to clipboard")
-            except Exception as e:
-                logger.error(f"Failed to copy to clipboard: {e}")
-            self.log_browser.exit_selection_mode()
-            event.stop()
+    
+    def action_toggle_selection_mode(self) -> None:
+        """Toggle selection mode (called by SelectionTextArea)."""
+        # Exit selection mode
+        try:
+            import asyncio
+            asyncio.create_task(self.log_browser.exit_selection_mode())
+        except Exception as e:
+            logger.error(f"Error exiting selection mode: {e}")
 
 
 class LogBrowser(Widget):
@@ -118,7 +111,7 @@ class LogBrowser(Widget):
             
             # Log content preview
             yield ScrollableContainer(
-                RichLog(id="log-content"),
+                RichLog(id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False),
                 id="log-preview"
             )
             
@@ -197,21 +190,40 @@ class LogBrowser(Widget):
                     return
                     
                 if content.strip():
-                    # Add execution header
-                    header = Text()
-                    header.append(f"📋 Execution: {execution.doc_title}\n", style="bold cyan")
-                    header.append(f"📅 Started: {execution.started_at}\n")
-                    header.append(f"📊 Status: {execution.status}\n")
+                    # Add execution header with rich formatting
+                    log_content.write("[bold cyan]=== Execution {} ===[/bold cyan]".format(execution.id))
+                    log_content.write("[yellow]Document:[/yellow] {}".format(execution.doc_title))
+                    log_content.write("[yellow]Status:[/yellow] {}".format(execution.status))
+                    log_content.write("[yellow]Started:[/yellow] {}".format(
+                        execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')))
                     if execution.completed_at:
-                        header.append(f"⏱️  Completed: {execution.completed_at}\n")
-                    header.append(f"📁 Working Dir: {execution.working_dir}\n")
-                    header.append(f"📄 Log File: {execution.log_file}\n")
-                    header.append("─" * 60 + "\n", style="dim")
+                        log_content.write("[yellow]Completed:[/yellow] {}".format(
+                            execution.completed_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')))
+                    log_content.write("[yellow]Working Dir:[/yellow] {}".format(execution.working_dir))
+                    log_content.write("[yellow]Log File:[/yellow] {}".format(execution.log_file))
+                    log_content.write("[bold cyan]=== Log Output ===[/bold cyan]")
+                    log_content.write("")
                     
-                    log_content.write(header)
-                    log_content.write(content)
+                    # Process log content to format JSON lines with emojis
+                    for line in content.splitlines():
+                        # Skip header lines and non-JSON lines
+                        if (line.startswith('=') or line.startswith('-') or 
+                            line.startswith('Version:') or line.startswith('Doc ID:') or 
+                            line.startswith('Execution ID:') or line.startswith('Worktree:') or 
+                            line.startswith('Started:') or not line.strip()):
+                            log_content.write(line)
+                        else:
+                            # Try to format JSON lines with emojis
+                            formatted = format_claude_output(line, time.time())
+                            if formatted:
+                                log_content.write(formatted)
+                            else:
+                                log_content.write(line)
+                    
+                    # Scroll to top so users see the beginning of the log
+                    log_content.scroll_to(0, 0, animate=False)
                 else:
-                    log_content.write("⚠️ Log file is empty")
+                    log_content.write("[dim](No log content yet)[/dim]")
             else:
                 log_content.write(f"❌ Log file not found: {execution.log_file}")
                 
@@ -253,34 +265,72 @@ class LogBrowser(Widget):
             
         self.selection_mode = True
         
-        # Get current log content
-        log_widget = self.query_one("#log-content", RichLog)
-        # Extract text content (simplified for now)
-        content = "\n".join(str(line) for line in log_widget._lines)
+        # Get current log content by re-reading the file
+        # This is more reliable than trying to extract from RichLog
+        content = ""
+        try:
+            table = self.query_one("#log-table", DataTable)
+            row_idx = table.cursor_row
+            if row_idx < len(self.executions):
+                execution = self.executions[row_idx]
+                log_file = Path(execution.log_file)
+                if log_file.exists():
+                    with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read()
+        except Exception as e:
+            logger.error(f"Error reading log for selection: {e}")
+            content = "Error reading log content"
         
         # Replace log viewer with selection text area
         preview_container = self.query_one("#log-preview", ScrollableContainer)
+        log_widget = self.query_one("#log-content", RichLog)
         await log_widget.remove()
         
-        selection_area = LogSelectionTextArea(self, content, id="log-selection")
+        # Create LogBrowserHost instance for SelectionTextArea
+        host = LogBrowserHost(self)
+        selection_area = SelectionTextArea(
+            host,
+            content, 
+            id="log-selection",
+            read_only=True
+        )
         await preview_container.mount(selection_area)
         selection_area.focus()
         
         self.update_status("Selection Mode | Enter=copy | ESC=cancel")
         
-    def exit_selection_mode(self) -> None:
+    async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore log viewer."""
         if not self.selection_mode:
             return
             
         self.selection_mode = False
         
+        # Remove selection area and restore RichLog
+        try:
+            preview_container = self.query_one("#log-preview", ScrollableContainer)
+            selection_area = self.query_one("#log-selection", SelectionTextArea)
+            await selection_area.remove()
+            
+            # Re-mount RichLog widget with markup support
+            log_widget = RichLog(id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False)
+            await preview_container.mount(log_widget)
+            
+            # Reload the current execution's log
+            table = self.query_one("#log-table", DataTable)
+            row_idx = table.cursor_row
+            if row_idx < len(self.executions):
+                execution = self.executions[row_idx]
+                await self.load_execution_log(execution)
+            
+            # Focus back to table
+            table.focus()
+            
+        except Exception as e:
+            logger.error(f"Error exiting selection mode: {e}")
+        
         # Restore normal status
         self.update_status(f"📋 {len(self.executions)} executions | j/k=navigate | s=select | q=back")
-        
-        # We'll restore the log view on next mount
-        # For now, just refresh
-        self.refresh()
         
     async def action_refresh(self) -> None:
         """Refresh the execution list."""
