@@ -387,6 +387,12 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
+        # Handle 'q' in log browser mode
+        if key == "q" and getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
+            await self.exit_log_browser()
+            event.stop()
+            return
+        
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -398,6 +404,9 @@ class DocumentBrowser(Widget):
                 event.stop()
             elif self.mode == "TAG":
                 self.exit_tag_mode()
+                event.stop()
+            elif self.mode == "LOG_BROWSER":
+                await self.exit_log_browser()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
                 
@@ -755,10 +764,7 @@ class DocumentBrowser(Widget):
         
         # Handle log browser mode differently
         if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            # Skip loading if we're in selection mode
-            if getattr(self, 'log_selection_mode', False):
-                return
-            if hasattr(self, 'executions') and row_idx < len(self.executions):
+            if row_idx < len(self.executions):
                 execution = self.executions[row_idx]
                 await self.load_execution_log(execution)
             return
@@ -957,6 +963,17 @@ class DocumentBrowser(Widget):
                     self.parent.update_status("No executions found - Press 'q' to return")
                 return
                 
+            # Hide the details panel in log browser mode
+            try:
+                details_container = self.query_one("#details-container")
+                details_container.display = False
+                
+                # Make table container take full height
+                table_container = self.query_one("#table-container")
+                table_container.styles.height = "100%"
+            except Exception as e:
+                logger.error(f"Error hiding details panel: {e}")
+                
             # Replace the documents table with executions table
             table = self.query_one("#doc-table", DataTable)
             table.clear(columns=True)
@@ -988,6 +1005,28 @@ class DocumentBrowser(Widget):
             logger.error(f"❌ Error in action_log_browser: {e}", exc_info=True)
             if hasattr(self.parent, 'update_status'):
                 self.parent.update_status(f"Error entering log browser: {e}")
+    
+    async def exit_log_browser(self) -> None:
+        """Exit log browser mode and return to document browser."""
+        logger.info("📤 Exiting log browser mode")
+        
+        # Restore the layout
+        try:
+            # Show the details panel again
+            details_container = self.query_one("#details-container")
+            details_container.display = True
+            
+            # Restore table container height
+            table_container = self.query_one("#table-container")
+            table_container.styles.height = "66%"
+        except Exception as e:
+            logger.error(f"Error restoring layout: {e}")
+        
+        # Reset mode
+        self.mode = "NORMAL"
+        
+        # Reload documents table
+        await self.load_documents()
     
     async def load_execution_log(self, execution) -> None:
         """Load and display the log content for the selected execution."""
