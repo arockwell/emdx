@@ -477,51 +477,51 @@ class DocumentBrowser(Widget):
                 asyncio.create_task(self.save_and_exit_edit_mode())
             except:
                 pass
-            
+
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
         logger.info("_async_exit_edit_mode called")
         import asyncio
         asyncio.create_task(self.exit_edit_mode())
-        
+
     def _async_save_and_exit_edit_mode(self) -> None:
         """Async wrapper for save_and_exit_edit_mode."""
         logger.info("_async_save_and_exit_edit_mode called")
         import asyncio
         asyncio.create_task(self.save_and_exit_edit_mode())
-        
+
     async def save_and_exit_edit_mode(self) -> None:
         """Save the document and exit edit mode."""
         if not self.edit_mode:
             return
-            
+
         try:
             if getattr(self, 'new_document_mode', False):
                 # Save new document
                 try:
                     title_input = self.query_one("#title-input", Input)
                     edit_area = self.query_one("#edit-area", VimEditTextArea)
-                    
+
                     title = title_input.value.strip()
                     content = edit_area.text
-                    
+
                     if not title:
                         # Update status to show error
                         self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
                         return
-                    
+
                     # Save the new document
                     from emdx.models.documents import save_document
                     from emdx.utils.git import get_git_project
-                    
+
                     project = get_git_project() or "default"
                     doc_id = save_document(title=title, content=content, project=project)
-                    
+
                     logger.info(f"Created new document with ID: {doc_id}")
-                    
+
                     # Clean up new document mode flag
                     self.new_document_mode = False
-                    
+
                 except Exception as e:
                     logger.error(f"Error saving new document: {e}")
                     self._update_vim_status(f"ERROR: {str(e)}")
@@ -531,11 +531,13 @@ class DocumentBrowser(Widget):
                 if self.editing_doc_id:
                     try:
                         edit_area = self.query_one("#edit-area", VimEditTextArea)
+
                         content = edit_area.text
-                        
-                        from emdx.models.documents import update_document
-                        update_document(str(self.editing_doc_id), content=content)
-                        
+
+                        from emdx.models.documents import update_document, get_document
+                        document = get_document(str(self.editing_doc_id))
+                        update_document(str(self.editing_doc_id), title=document["title"], content=content)
+
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
                     except Exception as e:
                         logger.error(f"Error updating document: {e}")
