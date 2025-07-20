@@ -173,8 +173,7 @@ class LogBrowser(Widget):
         table = self.query_one("#log-table", DataTable)
         table.add_column("#", width=4)
         table.add_column("Status", width=10)
-        table.add_column("Document", width=25)
-        table.add_column("Started", width=8)
+        table.add_column("Document", width=30)
         
         # Focus the table
         table.focus()
@@ -205,8 +204,7 @@ class LogBrowser(Widget):
                 table.add_row(
                     f"{i+1}",
                     f"{status_icon} {execution.status}",
-                    execution.doc_title[:25] + "..." if len(execution.doc_title) > 25 else execution.doc_title,
-                    execution.started_at.strftime("%H:%M")
+                    execution.doc_title[:30] + "..." if len(execution.doc_title) > 30 else execution.doc_title
                 )
                 
             self.update_status(f"📋 {len(self.executions)} executions | j/k=navigate | s=select | q=back")
