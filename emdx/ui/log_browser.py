@@ -57,7 +57,7 @@ class LogBrowser(Widget):
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("s", "selection_mode", "Select"),
         Binding("r", "refresh", "Refresh"),
-        Binding("q", "quit", "Back"),
+        # Note: 'q' key is handled by BrowserContainer to switch back to document browser
     ]
     
     DEFAULT_CSS = """
@@ -336,11 +336,6 @@ class LogBrowser(Widget):
         """Refresh the execution list."""
         await self.load_executions()
         
-    def action_quit(self) -> None:
-        """Return to document browser."""
-        # The container will handle the actual switching
-        # We don't actually quit here - let the container handle 'q' key
-        pass
             
     def update_status(self, text: str) -> None:
         """Update the status bar."""
