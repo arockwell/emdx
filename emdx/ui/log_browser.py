@@ -223,63 +223,38 @@ class LogBrowser(Widget):
             
     def format_execution_metadata(self, execution: Execution) -> str:
         """Format execution metadata for details panel display."""
-        try:
-            # Try to get version info, fallback to default if not available
-            from emdx import __version__
-            version = __version__
-        except:
-            version = "0.6.0"
+        from pathlib import Path
         
-        try:
-            from emdx import __build_id__
-            build_id = __build_id__
-        except:
-            build_id = "unknown"
+        metadata_lines = []
         
-        # Build metadata sections
-        metadata_lines = [
-            "[bold cyan]=== EMDX Claude Execution ===[/bold cyan]",
-            f"[yellow]Version:[/yellow] {version}",
-            f"[yellow]Build ID:[/yellow] {build_id}",
-            f"[yellow]Doc ID:[/yellow] {execution.doc_id if hasattr(execution, 'doc_id') else 'N/A'}",
-            f"[yellow]Execution ID:[/yellow] {execution.id}",
-            ""
-        ]
-        
-        # Add worktree information if available
+        # Add worktree information if available (just the last part)
         if execution.working_dir:
-            metadata_lines.extend([
-                f"[yellow]Worktree:[/yellow] {execution.working_dir}",
-                ""
-            ])
+            worktree_name = Path(execution.working_dir).name
+            metadata_lines.append(f"[yellow]Worktree:[/yellow] {worktree_name}")
+        
+        # Add log file (just filename)
+        log_filename = Path(execution.log_file).name
+        metadata_lines.append(f"[yellow]Log:[/yellow] {log_filename}")
         
         # Add timing information
-        started_str = execution.started_at.strftime('%Y-%m-%d %H:%M:%S')
-        metadata_lines.append(f"[yellow]Started:[/yellow] {started_str}")
+        metadata_lines.append("")
+        metadata_lines.append(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%H:%M:%S')}")
         
         if execution.completed_at:
-            completed_str = execution.completed_at.strftime('%Y-%m-%d %H:%M:%S')
-            metadata_lines.append(f"[yellow]Completed:[/yellow] {completed_str}")
+            metadata_lines.append(f"[yellow]Completed:[/yellow] {execution.completed_at.strftime('%H:%M:%S')}")
+            # Calculate duration
+            duration = execution.completed_at - execution.started_at
+            minutes = int(duration.total_seconds() // 60)
+            seconds = int(duration.total_seconds() % 60)
+            metadata_lines.append(f"[yellow]Duration:[/yellow] {minutes}m {seconds}s")
         
-        # Add status and exit code
+        # Add status
         status_icon = {
             'running': '🔄',
             'completed': '✅',
             'failed': '❌'
         }.get(execution.status, '❓')
-        
-        metadata_lines.extend([
-            "",
-            f"[yellow]Status:[/yellow] {status_icon} {execution.status}",
-        ])
-        
-        # Add file paths
-        metadata_lines.extend([
-            "",
-            f"[yellow]Log File:[/yellow] {execution.log_file}",
-        ])
-        
-        metadata_lines.append("[bold cyan]" + "=" * 50 + "[/bold cyan]")
+        metadata_lines.append(f"[yellow]Status:[/yellow] {status_icon} {execution.status}")
         
         return "\n".join(metadata_lines)
     

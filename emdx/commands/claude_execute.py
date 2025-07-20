@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional
@@ -547,7 +547,7 @@ def execute_document_smart_background(
         doc_id=doc_id,
         doc_title=doc['title'],
         status="running",
-        started_at=datetime.now(),
+        started_at=datetime.now(timezone.utc),
         log_file=str(log_file),
         working_dir=working_dir
     )
@@ -631,7 +631,7 @@ def execute_document_smart(
         doc_id=doc_id,
         doc_title=doc['title'],
         status="running",
-        started_at=datetime.now(),
+        started_at=datetime.now(timezone.utc),
         log_file=str(log_file),
         working_dir=working_dir
     )
@@ -766,7 +766,7 @@ def monitor_execution_detached(
             doc_id=int(doc_id),
             doc_title=doc_title,
             status="running",
-            started_at=datetime.now(),
+            started_at=datetime.now(timezone.utc),
             log_file=str(log_file),
             working_dir=working_dir
         )
@@ -825,7 +825,7 @@ def monitor_execution(
             doc_id=int(doc_id),
             doc_title=doc_title,
             status="running",
-            started_at=datetime.now(),
+            started_at=datetime.now(timezone.utc),
             log_file=str(log_file),
             working_dir=working_dir
         )
@@ -961,7 +961,7 @@ def execute(
                 doc_id=int(doc_id),
                 doc_title=doc['title'],
                 status="running",
-                started_at=datetime.now(),
+                started_at=datetime.now(timezone.utc),
                 log_file=str(log_file),
                 working_dir=working_dir
             )
