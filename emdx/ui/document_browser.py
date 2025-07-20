@@ -69,6 +69,7 @@ class DocumentBrowser(Widget):
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
+        Binding("x", "execute_document", "Execute"),
     ]
     
     CSS = """
@@ -95,6 +96,14 @@ class DocumentBrowser(Widget):
     
     #search-input.visible, #tag-input.visible {
         display: block;
+    }
+    
+    .browser-status {
+        height: 1;
+        background: $boost;
+        color: $text;
+        padding: 0 1;
+        text-align: center;
     }
     
     #tag-selector {
@@ -229,8 +238,8 @@ class DocumentBrowser(Widget):
                         wrap=True, 
                         highlight=True, 
                         markup=True, 
-                        auto_scroll=False
-                    )
+                    auto_scroll=False
+                )
             with Vertical(id="preview-container"):
                 yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
@@ -239,6 +248,9 @@ class DocumentBrowser(Widget):
                         classes="preview-richlog",
                         wrap=True, highlight=True, markup=True, auto_scroll=False
                     )
+        
+        # Status bar at the bottom
+        yield Static("Ready", id="browser-status", classes="browser-status")
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
@@ -349,21 +361,14 @@ class DocumentBrowser(Widget):
                 title,
             )
             
-        # Update status - need to find the app instance
+        # Update status using our own status bar
         try:
-            app = self.app
-            logger.info(f"Updating status with BUILD_ID: {BUILD_ID}")
-            if hasattr(app, 'update_status'):
-                status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
-                if self.mode == "NORMAL":
-                    status_text += " | e=edit | n=new | /=search | t=tag | f=files | d=git | q=quit"
-                elif self.mode == "SEARCH":
-                    status_text += " | Enter=apply | ESC=cancel"
-                status_text += f" | {BUILD_ID}"
-                logger.info(f"Setting status to: {status_text}")
-                app.update_status(status_text)
-            else:
-                logger.warning("App has no update_status method!")
+            status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
+            if self.mode == "NORMAL":
+                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | q=quit"
+            elif self.mode == "SEARCH":
+                status_text += " | Enter=apply | ESC=cancel"
+            self.update_status(status_text)
         except Exception as e:
             logger.error(f"Status update failed: {e}")
             import traceback
@@ -477,51 +482,51 @@ class DocumentBrowser(Widget):
                 asyncio.create_task(self.save_and_exit_edit_mode())
             except:
                 pass
-
+            
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
         logger.info("_async_exit_edit_mode called")
         import asyncio
         asyncio.create_task(self.exit_edit_mode())
-
+        
     def _async_save_and_exit_edit_mode(self) -> None:
         """Async wrapper for save_and_exit_edit_mode."""
         logger.info("_async_save_and_exit_edit_mode called")
         import asyncio
         asyncio.create_task(self.save_and_exit_edit_mode())
-
+        
     async def save_and_exit_edit_mode(self) -> None:
         """Save the document and exit edit mode."""
         if not self.edit_mode:
             return
-
+            
         try:
             if getattr(self, 'new_document_mode', False):
                 # Save new document
                 try:
                     title_input = self.query_one("#title-input", Input)
                     edit_area = self.query_one("#edit-area", VimEditTextArea)
-
+                    
                     title = title_input.value.strip()
                     content = edit_area.text
-
+                    
                     if not title:
                         # Update status to show error
                         self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
                         return
-
+                    
                     # Save the new document
                     from emdx.models.documents import save_document
                     from emdx.utils.git import get_git_project
-
+                    
                     project = get_git_project() or "default"
                     doc_id = save_document(title=title, content=content, project=project)
-
+                    
                     logger.info(f"Created new document with ID: {doc_id}")
-
+                    
                     # Clean up new document mode flag
                     self.new_document_mode = False
-
+                    
                 except Exception as e:
                     logger.error(f"Error saving new document: {e}")
                     self._update_vim_status(f"ERROR: {str(e)}")
@@ -531,13 +536,11 @@ class DocumentBrowser(Widget):
                 if self.editing_doc_id:
                     try:
                         edit_area = self.query_one("#edit-area", VimEditTextArea)
-
                         content = edit_area.text
-
-                        from emdx.models.documents import update_document, get_document
-                        document = get_document(str(self.editing_doc_id))
-                        update_document(str(self.editing_doc_id), title=document["title"], content=content)
-
+                        
+                        from emdx.models.documents import update_document
+                        update_document(str(self.editing_doc_id), content=content)
+                        
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
                     except Exception as e:
                         logger.error(f"Error updating document: {e}")
@@ -716,6 +719,91 @@ class DocumentBrowser(Widget):
     async def action_edit_document(self) -> None:
         """Edit the current document."""
         await self.enter_edit_mode()
+        
+    def update_status(self, message: str) -> None:
+        """Update the document browser status bar."""
+        try:
+            status = self.query_one("#browser-status", Static)
+            status.update(message)
+        except Exception:
+            # Fallback to app status if our status bar doesn't exist
+            app = self.app
+            if hasattr(app, 'update_status'):
+                app.update_status(message)
+    
+    def action_execute_document(self) -> None:
+        """Execute the current document with context-aware behavior based on tags."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row >= len(self.filtered_docs):
+            self.update_status("No document selected for execution")
+            return
+            
+        doc = self.filtered_docs[table.cursor_row]
+        doc_id = int(doc["id"])
+        
+        try:
+            import time
+            from pathlib import Path
+            from emdx.commands.claude_execute import get_execution_context
+            from emdx.models.tags import get_document_tags
+            from emdx.models.executions import create_execution
+            
+            # Get document tags
+            doc_tags = get_document_tags(str(doc_id))
+            
+            # Get execution context to show what will happen
+            context = get_execution_context(doc_tags)
+            self.update_status(f"Executing {context['type'].value}: {context['description']}")
+            
+            # Create logs directory
+            log_dir = Path.home() / ".config/emdx/logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create the execution record and get numeric ID
+            timestamp = int(time.time())
+            log_filename = f"claude-{doc_id}-{timestamp}.log"
+            log_path = log_dir / log_filename
+            
+            exec_id = create_execution(
+                doc_id=doc_id,
+                doc_title=doc['title'],
+                log_file=str(log_path)
+            )
+            
+            # Now execute in background using the wrapper script
+            import subprocess
+            import sys
+            
+            # Find the wrapper script
+            wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
+            
+            # Build the claude command
+            claude_cmd = [
+                sys.executable,
+                "-m", "emdx.commands.claude_execute",
+                "execute",
+                str(doc_id),
+                "--execution-id", str(exec_id),
+                "--background"
+            ]
+            
+            # Execute with wrapper
+            wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
+            
+            # Start the process in background
+            subprocess.Popen(
+                wrapper_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            
+            # Show success message
+            self.update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
+            
+        except Exception as e:
+            logger.error(f"Error executing document: {e}", exc_info=True)
+            self.update_status(f"Error: {str(e)}")
         
     async def action_new_document(self) -> None:
         """Create a new document."""
