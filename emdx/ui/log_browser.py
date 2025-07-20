@@ -171,8 +171,8 @@ class LogBrowser(Widget):
         
         # Set up the table
         table = self.query_one("#log-table", DataTable)
-        table.add_column("#", width=6)
-        table.add_column("Title", width=45)
+        table.add_column("", width=3)  # Status emoji column, no header
+        table.add_column("Title", width=50)
         
         # Focus the table
         table.focus()
@@ -200,12 +200,15 @@ class LogBrowser(Widget):
                     'failed': '❌'
                 }.get(execution.status, '❓')
                 
-                # Combine ID and status in a compact format
-                id_with_status = f"{status_icon}{execution.id}"
+                # Format title with ID prefix
+                title_with_id = f"({execution.id}) {execution.doc_title}"
+                # Truncate if needed
+                if len(title_with_id) > 47:
+                    title_with_id = title_with_id[:44] + "..."
                 
                 table.add_row(
-                    id_with_status,
-                    execution.doc_title[:40] + "..." if len(execution.doc_title) > 40 else execution.doc_title
+                    status_icon,
+                    title_with_id
                 )
                 
             self.update_status(f"📋 {len(self.executions)} executions | j/k=navigate | s=select | q=back")
