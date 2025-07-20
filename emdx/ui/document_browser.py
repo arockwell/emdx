@@ -538,8 +538,10 @@ class DocumentBrowser(Widget):
                         edit_area = self.query_one("#edit-area", VimEditTextArea)
                         content = edit_area.text
                         
-                        from emdx.models.documents import update_document
-                        update_document(str(self.editing_doc_id), content=content)
+                        from emdx.models.documents import update_document, get_document
+                        # Get the current document to preserve the title
+                        document = get_document(str(self.editing_doc_id))
+                        update_document(str(self.editing_doc_id), title=document["title"], content=content)
                         
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
                     except Exception as e:
