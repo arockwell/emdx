@@ -720,11 +720,14 @@ class DocumentBrowser(Widget):
         """Execute the current document with context-aware behavior based on tags."""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row >= len(self.filtered_docs):
-            self._update_status("No document selected for execution")
+            app = self.app
+            if hasattr(app, 'update_status'):
+                app.update_status("No document selected for execution")
             return
             
         doc = self.filtered_docs[table.cursor_row]
         doc_id = int(doc["id"])
+        app = self.app
         
         try:
             import time
@@ -738,7 +741,8 @@ class DocumentBrowser(Widget):
             
             # Get execution context to show what will happen
             context = get_execution_context(doc_tags)
-            self._update_status(f"Executing {context['type'].value}: {context['description']}")
+            if hasattr(app, 'update_status'):
+                app.update_status(f"Executing {context['type'].value}: {context['description']}")
             
             # Create logs directory
             log_dir = Path.home() / ".config/emdx/logs"
@@ -784,11 +788,13 @@ class DocumentBrowser(Widget):
             )
             
             # Show success message
-            self._update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
+            if hasattr(app, 'update_status'):
+                app.update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
             
         except Exception as e:
             logger.error(f"Error executing document: {e}", exc_info=True)
-            self._update_status(f"Error: {str(e)}")
+            if hasattr(app, 'update_status'):
+                app.update_status(f"Error: {str(e)}")
         
     async def action_new_document(self) -> None:
         """Create a new document."""
