@@ -3,17 +3,42 @@
 import os
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
 from ..database.connection import db_connection
 
 
+def parse_timestamp(ts) -> datetime:
+    """Parse a timestamp from the database, ensuring it has timezone info."""
+    if isinstance(ts, str):
+        # SQLite returns timestamps as strings
+        # First try parsing with timezone
+        try:
+            dt = datetime.fromisoformat(ts.replace(' ', 'T'))
+        except ValueError:
+            # If that fails, parse as naive and assume UTC
+            dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
+        
+        # Ensure timezone awareness
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    elif isinstance(ts, datetime):
+        # Already a datetime object
+        if ts.tzinfo is None:
+            return ts.replace(tzinfo=timezone.utc)
+        return ts
+    else:
+        # Fallback
+        return datetime.now(timezone.utc)
+
+
 @dataclass
 class Execution:
     """Represents a Claude execution."""
-    id: str
+    id: int  # Now numeric auto-incrementing ID
     doc_id: int
     doc_title: str
     status: str  # 'running', 'completed', 'failed'
@@ -59,26 +84,25 @@ class Execution:
         return Path(self.log_file).expanduser()
 
 
-def save_execution(execution: Execution) -> None:
-    """Save execution to database."""
+def create_execution(doc_id: int, doc_title: str, log_file: str, 
+                    working_dir: Optional[str] = None, pid: Optional[int] = None) -> int:
+    """Create a new execution and return its ID."""
     with db_connection.get_connection() as conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO executions 
-            (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            execution.id,
-            execution.doc_id,
-            execution.doc_title,
-            execution.status,
-            execution.started_at.isoformat() if execution.started_at else None,
-            execution.completed_at.isoformat() if execution.completed_at else None,
-            execution.log_file,
-            execution.exit_code,
-            execution.working_dir,
-            execution.pid
-        ))
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO executions 
+            (doc_id, doc_title, status, started_at, log_file, working_dir, pid)
+            VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?)
+        """, (doc_id, doc_title, log_file, working_dir, pid))
         conn.commit()
+        return cursor.lastrowid
+
+
+def save_execution(execution: Execution) -> None:
+    """Save execution to database (for backwards compatibility)."""
+    # This function is deprecated but kept for compatibility
+    # New code should use create_execution instead
+    pass
 
 
 def get_execution(exec_id: str) -> Optional[Execution]:
@@ -124,23 +148,18 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
         cursor.execute("""
             SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions 
-            ORDER BY started_at DESC 
+            ORDER BY id DESC 
             LIMIT ?
         """, (limit,))
         
         executions = []
         for row in cursor.fetchall():
-            # Handle datetime parsing more robustly
-            try:
-                started_at = datetime.fromisoformat(row[4]) if isinstance(row[4], str) else row[4]
-                completed_at = datetime.fromisoformat(row[5]) if row[5] and isinstance(row[5], str) else row[5]
-            except (ValueError, TypeError):
-                # Fallback for any datetime parsing issues
-                started_at = datetime.now()
-                completed_at = None
+            # Parse timestamps with timezone handling
+            started_at = parse_timestamp(row[4])
+            completed_at = parse_timestamp(row[5]) if row[5] else None
                 
             executions.append(Execution(
-                id=row[0],
+                id=int(row[0]),  # Convert to int for numeric ID
                 doc_id=row[1],
                 doc_title=row[2],
                 status=row[3],
@@ -168,17 +187,12 @@ def get_running_executions() -> List[Execution]:
         
         executions = []
         for row in cursor.fetchall():
-            # Handle datetime parsing more robustly
-            try:
-                started_at = datetime.fromisoformat(row[4]) if isinstance(row[4], str) else row[4]
-                completed_at = datetime.fromisoformat(row[5]) if row[5] and isinstance(row[5], str) else row[5]
-            except (ValueError, TypeError):
-                # Fallback for any datetime parsing issues
-                started_at = datetime.now()
-                completed_at = None
+            # Parse timestamps with timezone handling
+            started_at = parse_timestamp(row[4])
+            completed_at = parse_timestamp(row[5]) if row[5] else None
                 
             executions.append(Execution(
-                id=row[0],
+                id=int(row[0]),  # Convert to int for numeric ID
                 doc_id=row[1],
                 doc_title=row[2],
                 status=row[3],
@@ -193,7 +207,7 @@ def get_running_executions() -> List[Execution]:
         return executions
 
 
-def update_execution_status(exec_id: str, status: str, exit_code: Optional[int] = None) -> None:
+def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] = None) -> None:
     """Update execution status and completion time."""
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:
@@ -211,7 +225,7 @@ def update_execution_status(exec_id: str, status: str, exit_code: Optional[int] 
         conn.commit()
 
 
-def update_execution_pid(exec_id: str, pid: int) -> None:
+def update_execution_pid(exec_id: int, pid: int) -> None:
     """Update execution PID."""
     with db_connection.get_connection() as conn:
         conn.execute("""
