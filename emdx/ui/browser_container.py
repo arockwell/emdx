@@ -59,8 +59,8 @@ class BrowserContainer(App):
         
         # Browser will have parent reference automatically after mounting
         
-        # Update status
-        self.update_status("Document Browser | f=files | d=git | q=quit")
+        # Don't set a default status - let the browser update it once it loads
+        # The DocumentBrowser will call update_status() from its update_table() method
         
     def update_status(self, text: str) -> None:
         """Update the status bar."""

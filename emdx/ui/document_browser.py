@@ -341,7 +341,7 @@ class DocumentBrowser(Widget):
             if hasattr(app, 'update_status'):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 if self.mode == "NORMAL":
-                    status_text += " | e=edit | /=search | t=tag | q=quit"
+                    status_text += " | e=edit | /=search | t=tag | f=files | d=git | q=quit"
                 elif self.mode == "SEARCH":
                     status_text += " | Enter=apply | ESC=cancel"
                 status_text += f" | {BUILD_ID}"
