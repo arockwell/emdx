@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 class BrowserContainer(App):
     """Dead simple container that swaps browser widgets."""
     
-    BINDINGS = [
-        Binding("q", "quit", "Quit", priority=True),
-    ]
+    # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
     
     CSS = """
     #browser-mount {
