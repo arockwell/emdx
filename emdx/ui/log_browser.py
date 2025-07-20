@@ -171,9 +171,9 @@ class LogBrowser(Widget):
         
         # Set up the table
         table = self.query_one("#log-table", DataTable)
-        table.add_column("#", width=4)
-        table.add_column("Status", width=3)
-        table.add_column("Document", width=40)
+        table.add_column("ID", width=4)
+        table.add_column("Status", width=8)
+        table.add_column("Title", width=40)
         
         # Focus the table
         table.focus()
