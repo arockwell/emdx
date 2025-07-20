@@ -32,12 +32,15 @@ class VimEditor(Vertical):
         self.app_instance = app_instance
         
         # Create the vim text area
+        logger.debug(f"🔍 VimEditor.__init__: Creating VimEditTextArea with content length: {len(content)}")
+        logger.debug(f"🔍 VimEditor.__init__: First 100 chars: {repr(content[:100])}")
         self.text_area = VimEditTextArea(
             app_instance,
             text=content,
             read_only=False,
             id="vim-text-area"
         )
+        logger.debug(f"🔍 VimEditor.__init__: VimEditTextArea created")
         
         # Apply styling - use file-browser specific class for proper alignment
         self.text_area.add_class("file-browser-vim-textarea")
@@ -64,6 +67,10 @@ class VimEditor(Vertical):
         # Mount line numbers and text area in horizontal layout
         self.edit_container.mount(self.line_numbers)
         self.edit_container.mount(self.text_area)
+        
+        logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
+        logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
+        logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
         
         # Ensure the entire vim editor container starts at top
         # TEMPORARILY DISABLED: This might be causing first line visibility issues

@@ -194,6 +194,12 @@ class DocumentBrowser(Widget):
         height: 1fr;
         margin: 1;
     }
+    
+    /* DEBUG: Temporary visual indicators */
+    #vim-text-area {
+        background: $error 20%;
+        border: solid red;
+    }
     """
     
     # Reactive properties
@@ -438,8 +444,13 @@ class DocumentBrowser(Widget):
         doc = self.filtered_docs[row_idx]
         self.editing_doc_id = doc["id"]
         
+        logger.info(f"🔍 DEBUG: Entering edit mode for doc {doc['id']} at row {row_idx}")
+        
         # Load full document
         full_doc = get_document(str(doc["id"]))
+        logger.info(f"🔍 DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
+        logger.info(f"🔍 DEBUG: Content length: {len(full_doc.get('content', ''))}")
+        logger.info(f"🔍 DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
             
         if not full_doc:
             return
@@ -461,9 +472,13 @@ class DocumentBrowser(Widget):
         
         # Create vim editor with line numbers
         from .vim_editor import VimEditor
+        logger.info(f"🔍 DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
         vim_editor = VimEditor(self, content=full_doc["content"], id="vim-editor-container")
+        logger.info(f"🔍 DEBUG: VimEditor created, mounting...")
         await preview_container.mount(vim_editor)
+        logger.info(f"🔍 DEBUG: VimEditor mounted, focusing...")
         vim_editor.focus_editor()
+        logger.info(f"🔍 DEBUG: VimEditor focused")
         
         self.edit_mode = True
         
