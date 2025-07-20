@@ -98,6 +98,14 @@ class DocumentBrowser(Widget):
         display: block;
     }
     
+    .browser-status {
+        height: 1;
+        background: $boost;
+        color: $text;
+        padding: 0 1;
+        text-align: center;
+    }
+    
     #tag-selector {
         display: none;
         height: 1;
@@ -208,28 +216,29 @@ class DocumentBrowser(Widget):
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
         yield Label("", id="tag-selector")
         
-        with Horizontal():
-            with Vertical(id="sidebar") as sidebar:
-                # Remove debug background
-                pass
-                with Vertical(id="table-container", classes="table-section") as table_container:
-                    # Apply direct styles - 2/3 of sidebar
-                    table_container.styles.height = "66%"
-                    table_container.styles.min_height = 10
-                    table_container.styles.padding = 0
-                    yield DataTable(id="doc-table")
-                with Vertical(id="details-container", classes="details-section") as details_container:
-                    # Apply direct styles - 1/3 of sidebar
-                    details_container.styles.height = "34%"
-                    details_container.styles.min_height = 8
-                    details_container.styles.padding = 0
-                    details_container.styles.border_top = ("heavy", "gray")
-                    yield RichLog(
-                        id="details-panel",
-                        classes="details-richlog",
-                        wrap=True, 
-                        highlight=True, 
-                        markup=True, 
+        with Vertical():
+            with Horizontal():
+                with Vertical(id="sidebar") as sidebar:
+                    # Remove debug background
+                    pass
+                    with Vertical(id="table-container", classes="table-section") as table_container:
+                        # Apply direct styles - 2/3 of sidebar
+                        table_container.styles.height = "66%"
+                        table_container.styles.min_height = 10
+                        table_container.styles.padding = 0
+                        yield DataTable(id="doc-table")
+                    with Vertical(id="details-container", classes="details-section") as details_container:
+                        # Apply direct styles - 1/3 of sidebar
+                        details_container.styles.height = "34%"
+                        details_container.styles.min_height = 8
+                        details_container.styles.padding = 0
+                        details_container.styles.border_top = ("heavy", "gray")
+                        yield RichLog(
+                            id="details-panel",
+                            classes="details-richlog",
+                            wrap=True, 
+                            highlight=True, 
+                            markup=True, 
                         auto_scroll=False
                     )
             with Vertical(id="preview-container"):
@@ -240,6 +249,9 @@ class DocumentBrowser(Widget):
                         classes="preview-richlog",
                         wrap=True, highlight=True, markup=True, auto_scroll=False
                     )
+            
+            # Status bar at the bottom
+            yield Static("Ready", id="browser-status", classes="browser-status")
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
@@ -350,21 +362,14 @@ class DocumentBrowser(Widget):
                 title,
             )
             
-        # Update status - need to find the app instance
+        # Update status using our own status bar
         try:
-            app = self.app
-            logger.info(f"Updating status with BUILD_ID: {BUILD_ID}")
-            if hasattr(app, 'update_status'):
-                status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
-                if self.mode == "NORMAL":
-                    status_text += " | e=edit | n=new | /=search | t=tag | f=files | d=git | q=quit"
-                elif self.mode == "SEARCH":
-                    status_text += " | Enter=apply | ESC=cancel"
-                status_text += f" | {BUILD_ID}"
-                logger.info(f"Setting status to: {status_text}")
-                app.update_status(status_text)
-            else:
-                logger.warning("App has no update_status method!")
+            status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
+            if self.mode == "NORMAL":
+                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | q=quit"
+            elif self.mode == "SEARCH":
+                status_text += " | Enter=apply | ESC=cancel"
+            self.update_status(status_text)
         except Exception as e:
             logger.error(f"Status update failed: {e}")
             import traceback
@@ -716,18 +721,26 @@ class DocumentBrowser(Widget):
         """Edit the current document."""
         await self.enter_edit_mode()
         
+    def update_status(self, message: str) -> None:
+        """Update the document browser status bar."""
+        try:
+            status = self.query_one("#browser-status", Static)
+            status.update(message)
+        except Exception:
+            # Fallback to app status if our status bar doesn't exist
+            app = self.app
+            if hasattr(app, 'update_status'):
+                app.update_status(message)
+    
     def action_execute_document(self) -> None:
         """Execute the current document with context-aware behavior based on tags."""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row >= len(self.filtered_docs):
-            app = self.app
-            if hasattr(app, 'update_status'):
-                app.update_status("No document selected for execution")
+            self.update_status("No document selected for execution")
             return
             
         doc = self.filtered_docs[table.cursor_row]
         doc_id = int(doc["id"])
-        app = self.app
         
         try:
             import time
@@ -741,8 +754,7 @@ class DocumentBrowser(Widget):
             
             # Get execution context to show what will happen
             context = get_execution_context(doc_tags)
-            if hasattr(app, 'update_status'):
-                app.update_status(f"Executing {context['type'].value}: {context['description']}")
+            self.update_status(f"Executing {context['type'].value}: {context['description']}")
             
             # Create logs directory
             log_dir = Path.home() / ".config/emdx/logs"
@@ -788,13 +800,11 @@ class DocumentBrowser(Widget):
             )
             
             # Show success message
-            if hasattr(app, 'update_status'):
-                app.update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
+            self.update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
             
         except Exception as e:
             logger.error(f"Error executing document: {e}", exc_info=True)
-            if hasattr(app, 'update_status'):
-                app.update_status(f"Error: {str(e)}")
+            self.update_status(f"Error: {str(e)}")
         
     async def action_new_document(self) -> None:
         """Create a new document."""
