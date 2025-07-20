@@ -718,26 +718,23 @@ class DocumentBrowser(Widget):
         
     def action_execute_document(self) -> None:
         """Execute the current document with context-aware behavior based on tags."""
-        if not self.current_doc_id:
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row >= len(self.filtered_docs):
             self._update_status("No document selected for execution")
             return
             
+        doc = self.filtered_docs[table.cursor_row]
+        doc_id = int(doc["id"])
+        
         try:
             import time
             from pathlib import Path
             from emdx.commands.claude_execute import get_execution_context
-            from emdx.models.documents import get_document
             from emdx.models.tags import get_document_tags
             from emdx.models.executions import create_execution
             
-            # Get the current document
-            doc = get_document(str(self.current_doc_id))
-            if not doc:
-                self._update_status("Document not found")
-                return
-            
             # Get document tags
-            doc_tags = get_document_tags(str(self.current_doc_id))
+            doc_tags = get_document_tags(str(doc_id))
             
             # Get execution context to show what will happen
             context = get_execution_context(doc_tags)
@@ -749,11 +746,11 @@ class DocumentBrowser(Widget):
             
             # Create the execution record and get numeric ID
             timestamp = int(time.time())
-            log_filename = f"claude-{self.current_doc_id}-{timestamp}.log"
+            log_filename = f"claude-{doc_id}-{timestamp}.log"
             log_path = log_dir / log_filename
             
             exec_id = create_execution(
-                doc_id=self.current_doc_id,
+                doc_id=doc_id,
                 doc_title=doc['title'],
                 log_file=str(log_path)
             )
@@ -770,7 +767,7 @@ class DocumentBrowser(Widget):
                 sys.executable,
                 "-m", "emdx.commands.claude_execute",
                 "execute",
-                str(self.current_doc_id),
+                str(doc_id),
                 "--execution-id", str(exec_id),
                 "--background"
             ]
