@@ -427,7 +427,7 @@ class DocumentBrowser(Widget):
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
         table = self.query_one("#doc-table", DataTable)
-        if not table.cursor_row:
+        if table.cursor_row is None:
             return
             
         row_idx = table.cursor_row
@@ -855,7 +855,7 @@ class DocumentBrowser(Widget):
     async def action_selection_mode(self) -> None:
         """Enter selection mode for document content."""
         table = self.query_one("#doc-table", DataTable)
-        if not table.cursor_row or table.cursor_row >= len(self.filtered_docs):
+        if table.cursor_row is None or table.cursor_row >= len(self.filtered_docs):
             return
             
         doc = self.filtered_docs[table.cursor_row]
