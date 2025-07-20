@@ -201,7 +201,7 @@ class LogBrowser(Widget):
                 }.get(execution.status, '❓')
                 
                 # Format title with ID prefix
-                title_with_id = f"({execution.id}) {execution.doc_title}"
+                title_with_id = f"#{execution.id} - {execution.doc_title}"
                 # Truncate if needed
                 if len(title_with_id) > 47:
                     title_with_id = title_with_id[:44] + "..."
