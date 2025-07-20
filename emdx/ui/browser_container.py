@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 class BrowserContainer(App):
     """Dead simple container that swaps browser widgets."""
     
-    BINDINGS = [
-        Binding("q", "quit", "Quit", priority=True),
-    ]
+    # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
     
     CSS = """
     #browser-mount {
@@ -88,6 +86,9 @@ class BrowserContainer(App):
             elif browser_type == "git":
                 from .git_browser_standalone import GitBrowser
                 self.browsers[browser_type] = GitBrowser()
+            elif browser_type == "log":
+                from .log_browser import LogBrowser
+                self.browsers[browser_type] = LogBrowser()
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -107,6 +108,10 @@ class BrowserContainer(App):
             browser.restore_state(self.browser_states[browser_type])
             
         self.current_browser = browser_type
+        
+        # Update status bar based on browser type
+        if browser_type == "log":
+            self.update_status("Log Browser | q=back")
         
     def action_quit(self) -> None:
         """Quit the application."""
@@ -130,7 +135,11 @@ class BrowserContainer(App):
             await self.switch_browser("git")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git"]:
+        elif key == "l" and self.current_browser == "document":
+            await self.switch_browser("log")
+            event.stop()
+            return
+        elif key == "q" and self.current_browser in ["file", "git", "log"]:
             await self.switch_browser("document")
             event.stop()
             return

@@ -19,7 +19,6 @@ from textual.binding import Binding
 
 from emdx.database import db
 from emdx.models.documents import get_document
-from emdx.models.executions import get_recent_executions
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -70,7 +69,6 @@ class DocumentBrowser(Widget):
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
-        Binding("l", "log_browser", "Log Browser"),
     ]
     
     CSS = """
@@ -404,12 +402,6 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
-        # Handle 'q' in log browser mode
-        if key == "q" and getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            await self.exit_log_browser()
-            event.stop()
-            return
-        
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -424,9 +416,6 @@ class DocumentBrowser(Widget):
                 event.stop()
             elif self.mode == "TAG":
                 self.exit_tag_mode()
-                event.stop()
-            elif self.mode == "LOG_BROWSER":
-                await self.exit_log_browser()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
                 
@@ -724,9 +713,6 @@ class DocumentBrowser(Widget):
             
     async def action_edit_document(self) -> None:
         """Edit the current document."""
-        # Don't allow editing in log browser mode
-        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            return
         await self.enter_edit_mode()
         
     async def action_new_document(self) -> None:
@@ -738,9 +724,6 @@ class DocumentBrowser(Widget):
         
     def action_search(self) -> None:
         """Enter search mode."""
-        # Don't allow search in log browser mode
-        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            return
         self.mode = "SEARCH"
         search_input = self.query_one("#search-input", Input)
         search_input.display = True
@@ -749,9 +732,6 @@ class DocumentBrowser(Widget):
         
     def action_add_tags(self) -> None:
         """Enter tag adding mode."""
-        # Don't allow tagging in log browser mode
-        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            return
         self.mode = "TAG"
         self.tag_action = "add"
         tag_input = self.query_one("#tag-input", Input)
@@ -761,9 +741,6 @@ class DocumentBrowser(Widget):
         
     def action_remove_tags(self) -> None:
         """Enter tag removal mode."""
-        # Don't allow tag removal in log browser mode
-        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            return
         self.mode = "TAG"
         self.tag_action = "remove"
         # Show tag selector with existing tags
@@ -784,12 +761,7 @@ class DocumentBrowser(Widget):
         tag_input.focus()
         
     async def action_selection_mode(self) -> None:
-        """Enter selection mode for document or log content."""
-        # Handle log browser selection mode
-        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            await self.enter_log_selection_mode()
-            return
-            
+        """Enter selection mode for document content."""
         table = self.query_one("#doc-table", DataTable)
         if not table.cursor_row or table.cursor_row >= len(self.filtered_docs):
             return
@@ -901,13 +873,6 @@ class DocumentBrowser(Widget):
             
         row_idx = event.cursor_row
         
-        # Handle log browser mode differently
-        if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
-            if row_idx < len(self.executions):
-                execution = self.executions[row_idx]
-                await self.load_execution_log(execution)
-            return
-            
         if row_idx >= len(self.filtered_docs):
             return
             
@@ -1090,234 +1055,3 @@ class DocumentBrowser(Widget):
         if tags:
             remove_tags_from_document(doc["id"], tags)
             await self.update_table()
-    
-    def action_log_browser(self) -> None:
-        """Switch to log browser mode to view and switch between execution logs."""
-        logger.info("🔍 DocumentBrowser.action_log_browser called")
-        try:
-            # Get recent executions
-            self.executions = get_recent_executions(limit=50)
-            if not self.executions:
-                if hasattr(self.parent, 'update_status'):
-                    self.parent.update_status("No executions found - Press 'q' to return")
-                return
-                
-            # Hide the details panel in log browser mode
-            try:
-                details_container = self.query_one("#details-container")
-                details_container.display = False
-                
-                # Make table container take full height
-                table_container = self.query_one("#table-container")
-                table_container.styles.height = "100%"
-            except Exception as e:
-                logger.error(f"Error hiding details panel: {e}")
-                
-            # Replace the documents table with executions table
-            table = self.query_one("#doc-table", DataTable)
-            table.clear(columns=True)
-            table.add_columns("Recent", "Status", "Document", "Started")
-            
-            # Populate executions table
-            for i, execution in enumerate(self.executions):
-                status_icon = {
-                    'running': '🔄',
-                    'completed': '✅', 
-                    'failed': '❌'
-                }.get(execution.status, '❓')
-                
-                table.add_row(
-                    f"#{i+1}",
-                    f"{status_icon} {execution.status}",
-                    execution.doc_title,
-                    execution.started_at.strftime("%H:%M")
-                )
-            
-            # Update status
-            if hasattr(self.parent, 'update_status'):
-                self.parent.update_status(f"📋 LOG BROWSER: {len(self.executions)} executions (j/k to navigate, 'q' to exit)")
-                
-            # Set mode flag
-            self.mode = "LOG_BROWSER"
-            
-        except Exception as e:
-            logger.error(f"❌ Error in action_log_browser: {e}", exc_info=True)
-            if hasattr(self.parent, 'update_status'):
-                self.parent.update_status(f"Error entering log browser: {e}")
-    
-    async def exit_log_browser(self) -> None:
-        """Exit log browser mode and return to document browser."""
-        logger.info("📤 Exiting log browser mode")
-        
-        # Restore the layout
-        try:
-            # Show the details panel again
-            details_container = self.query_one("#details-container")
-            details_container.display = True
-            
-            # Restore table container height
-            table_container = self.query_one("#table-container")
-            table_container.styles.height = "66%"
-        except Exception as e:
-            logger.error(f"Error restoring layout: {e}")
-        
-        # Reset mode
-        self.mode = "NORMAL"
-        
-        # Reload documents table
-        await self.load_documents()
-    
-    async def load_execution_log(self, execution) -> None:
-        """Load and display the log content for the selected execution."""
-        try:
-            # Check if we have a RichLog widget, if not create one
-            try:
-                preview = self.query_one("#preview-content", RichLog)
-            except:
-                # Preview widget might be wrong type, recreate it
-                await self.restore_log_preview()
-                preview = self.query_one("#preview-content", RichLog)
-            
-            preview.clear()
-            
-            # Read log file content
-            log_file = Path(execution.log_file)
-            if log_file.exists():
-                try:
-                    with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                        log_content = f.read()
-                except Exception as file_error:
-                    logger.error(f"Error reading log file {log_file}: {file_error}")
-                    preview.write(f"📋 Execution: {execution.doc_title}\n\n❌ Error reading log file: {file_error}")
-                    return
-                
-                if log_content.strip():
-                    # Display log content with syntax highlighting
-                    from rich.syntax import Syntax
-                    from rich.text import Text
-                    
-                    # Add execution info header
-                    header = f"📋 Execution: {execution.doc_title}\n"
-                    header += f"📅 Started: {execution.started_at}\n"
-                    header += f"📊 Status: {execution.status}\n"
-                    if execution.completed_at:
-                        header += f"⏱️  Completed: {execution.completed_at}\n"
-                    header += f"📁 Working Dir: {execution.working_dir}\n"
-                    header += f"📄 Log File: {execution.log_file}\n"
-                    header += "─" * 60 + "\n\n"
-                    
-                    preview.write(header)
-                    preview.write(log_content)
-                else:
-                    preview.write(f"📋 Execution: {execution.doc_title}\n\n⚠️ Log file is empty")
-            else:
-                preview.write(f"📋 Execution: {execution.doc_title}\n\n❌ Log file not found: {execution.log_file}")
-                
-        except Exception as e:
-            logger.error(f"Error loading execution log: {e}", exc_info=True)
-            try:
-                preview = self.query_one("#preview-content", RichLog)
-                preview.clear()
-                preview.write(f"❌ Error loading log: {e}")
-            except Exception:
-                # If preview widget doesn't exist or wrong type, just log the error
-                logger.error(f"Could not display error message in preview: {e}")
-    
-    async def enter_log_selection_mode(self) -> None:
-        """Enter selection mode for log content."""
-        try:
-            logger.info("🔄 Entering log selection mode")
-            table = self.query_one("#doc-table", DataTable)
-            logger.info(f"🔍 Table cursor_row: {table.cursor_row}, executions count: {len(getattr(self, 'executions', []))}")
-            
-            if table.cursor_row is None or table.cursor_row >= len(getattr(self, 'executions', [])):
-                logger.warning(f"No valid execution selected: cursor_row={table.cursor_row}, executions={len(getattr(self, 'executions', []))}")
-                return
-                
-            execution = self.executions[table.cursor_row]
-            logger.info(f"📄 Loading log for execution: {execution.doc_title}")
-            
-            # Read log file content
-            log_file = Path(execution.log_file)
-            if not log_file.exists():
-                logger.warning(f"Log file not found: {log_file}")
-                return
-                
-            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                log_content = f.read()
-            
-            if not log_content.strip():
-                logger.warning("Log file is empty")
-                return
-            
-            logger.info(f"📊 Log content loaded: {len(log_content)} characters")
-            
-            # Replace preview with selection text area
-            preview_container = self.query_one("#preview-container", Vertical)
-            logger.info("🗑️ Removing existing preview content")
-            try:
-                await preview_container.remove_children()
-            except Exception as e:
-                logger.warning(f"Error removing children: {e}")
-                
-            # Create selection text area with log content
-            from .text_areas import SelectionTextArea
-            
-            # Add execution info header
-            header = f"📋 Execution: {execution.doc_title}\n"
-            header += f"📅 Started: {execution.started_at}\n"
-            header += f"📊 Status: {execution.status}\n"
-            if execution.completed_at:
-                header += f"⏱️  Completed: {execution.completed_at}\n"
-            header += f"📁 Working Dir: {execution.working_dir}\n"
-            header += f"📄 Log File: {execution.log_file}\n"
-            header += "─" * 60 + "\n\n"
-            
-            full_content = header + log_content
-            logger.info(f"📝 Creating SelectionTextArea with {len(full_content)} characters")
-            
-            selection_area = SelectionTextArea(
-                app_instance=self.app,
-                text=full_content,
-                read_only=True,
-                id="preview-content"
-            )
-            selection_area.can_focus = True
-            
-            logger.info("🏗️ Mounting SelectionTextArea")
-            await preview_container.mount(selection_area)
-            
-            logger.info("🎯 Focusing SelectionTextArea")
-            selection_area.focus()
-            
-            logger.info("✅ Log selection mode activated")
-            
-        except Exception as e:
-            logger.error(f"Error entering log selection mode: {e}", exc_info=True)
-    
-    async def restore_log_preview(self) -> None:
-        """Restore the RichLog widget for log viewing."""
-        try:
-            preview_container = self.query_one("#preview-container", Vertical)
-            
-            # Remove existing content
-            try:
-                await preview_container.remove_children()
-            except Exception:
-                pass
-            
-            # Create new RichLog widget
-            from textual.widgets import RichLog
-            preview = RichLog(
-                id="preview-content",
-                wrap=True,
-                highlight=True,
-                markup=True,
-                auto_scroll=False
-            )
-            preview.can_focus = False
-            
-            await preview_container.mount(preview)
-            
-        except Exception as e:
-            logger.error(f"Error restoring log preview: {e}", exc_info=True)
