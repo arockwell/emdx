@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from rich.syntax import Syntax
 from rich.text import Text
@@ -239,10 +239,17 @@ class LogBrowser(Widget):
         metadata_lines.append(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%H:%M:%S')}")
         
         if execution.completed_at:
+            # Use actual completed time, not current time
             duration = execution.completed_at - execution.started_at
             minutes = int(duration.total_seconds() // 60)
             seconds = int(duration.total_seconds() % 60)
             metadata_lines.append(f"[yellow]Duration:[/yellow] {minutes}m {seconds}s")
+        elif execution.status == 'running':
+            # Show elapsed time for running executions
+            elapsed = datetime.now(timezone.utc) - execution.started_at
+            minutes = int(elapsed.total_seconds() // 60)
+            seconds = int(elapsed.total_seconds() % 60)
+            metadata_lines.append(f"[yellow]Elapsed:[/yellow] {minutes}m {seconds}s (running)")
         
         # Add prompt from log file if available
         if self.current_prompt:
@@ -325,14 +332,25 @@ class LogBrowser(Widget):
                             skip_until_line = None
                         filtered_lines.append(line)
                     
+                    # Debug: log line count
+                    logger.debug(f"Total lines: {len(lines)}, Filtered lines: {len(filtered_lines)}")
+                    
                     # Write lines in reverse order (latest first)
                     for line in reversed(filtered_lines):
-                        # Skip header lines and non-JSON lines
-                        if (line.startswith('=') or line.startswith('-') or 
-                            line.startswith('Version:') or line.startswith('Doc ID:') or 
-                            line.startswith('Execution ID:') or line.startswith('Worktree:') or 
-                            line.startswith('Started:') or not line.strip()):
-                            log_content.write(line)
+                        # Skip only specific header lines
+                        if (line.strip().startswith('===') or 
+                            line.strip().startswith('---') or
+                            line.startswith('Version:') or 
+                            line.startswith('Doc ID:') or 
+                            line.startswith('Execution ID:') or 
+                            line.startswith('Worktree:') or 
+                            line.startswith('Started at:')):
+                            # Skip these header lines
+                            continue
+                        
+                        if not line.strip():
+                            # Keep empty lines for readability
+                            log_content.write("")
                         else:
                             # Check if line already has a timestamp (from previous formatting)
                             if line.startswith("[") and "]" in line[:10]:
@@ -565,11 +583,20 @@ class LogBrowser(Widget):
                         
                         # Write lines in reverse order (latest first)
                         for line in reversed(filtered_lines):
-                            if (line.startswith('=') or line.startswith('-') or 
-                                line.startswith('Version:') or line.startswith('Doc ID:') or 
-                                line.startswith('Execution ID:') or line.startswith('Worktree:') or 
-                                line.startswith('Started:') or not line.strip()):
-                                log_content_widget.write(line)
+                            # Skip only specific header lines
+                            if (line.strip().startswith('===') or 
+                                line.strip().startswith('---') or
+                                line.startswith('Version:') or 
+                                line.startswith('Doc ID:') or 
+                                line.startswith('Execution ID:') or 
+                                line.startswith('Worktree:') or 
+                                line.startswith('Started at:')):
+                                # Skip these header lines
+                                continue
+                            
+                            if not line.strip():
+                                # Keep empty lines for readability
+                                log_content_widget.write("")
                             else:
                                 # Check if line already has a timestamp (from previous formatting)
                                 if line.startswith("[") and "]" in line[:10]:
