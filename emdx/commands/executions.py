@@ -151,7 +151,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         return
     
     table = Table(title="Recent Executions")
-    table.add_column("ID", style="cyan", width=36)
+    table.add_column("ID", style="cyan", width=10)
     table.add_column("Document", style="white")
     table.add_column("Status", style="bold")
     table.add_column("Started", style="green")
@@ -173,7 +173,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
             status_display += " [red]💀[/red]"
         
         table.add_row(
-            exec.id[:8] + "...",  # Show first 8 chars of UUID
+            str(exec.id),  # Show numeric ID
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
             status_display,
             formatted_time
@@ -192,7 +192,7 @@ def running():
         return
     
     table = Table(title="Running Executions")
-    table.add_column("ID", style="cyan", width=36)
+    table.add_column("ID", style="cyan", width=10)
     table.add_column("Document", style="white")
     table.add_column("Started", style="green")
     
@@ -202,7 +202,7 @@ def running():
         formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
         
         table.add_row(
-            exec.id[:8] + "...",
+            str(exec.id),
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
             formatted_time
         )
@@ -308,15 +308,16 @@ def kill_execution(exec_id: Optional[str] = typer.Argument(None)):
         
         console.print("\n[bold]Running Executions:[/bold]")
         for i, exec in enumerate(executions, 1):
-            console.print(f"{i}. [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
+            console.print(f"{i}. [cyan]{exec.id}[/cyan] - {exec.doc_title}")
         
         console.print(f"\n[dim]Usage: emdx exec kill <exec_id>[/dim]")
-        console.print(f"[dim]Example: emdx exec kill {executions[0].id[:8]}[/dim]")
+        console.print(f"[dim]Example: emdx exec kill {executions[0].id}[/dim]")
         return
     
     # Find execution by partial or full ID
     all_running = get_running_executions()
-    matching_executions = [e for e in all_running if e.id.startswith(exec_id)]
+    # Handle numeric ID partial matching
+    matching_executions = [e for e in all_running if str(e.id).startswith(exec_id)]
     
     if not matching_executions:
         console.print(f"[red]No running execution found with ID starting with '{exec_id}'[/red]")
@@ -325,7 +326,7 @@ def kill_execution(exec_id: Optional[str] = typer.Argument(None)):
     if len(matching_executions) > 1:
         console.print(f"[yellow]Multiple executions match '{exec_id}':[/yellow]")
         for exec in matching_executions:
-            console.print(f"  [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
+            console.print(f"  [cyan]{exec.id}[/cyan] - {exec.doc_title}")
         console.print("[dim]Use more characters to uniquely identify the execution.[/dim]")
         return
     
@@ -334,7 +335,7 @@ def kill_execution(exec_id: Optional[str] = typer.Argument(None)):
     # Mark as completed with exit code 130 (interrupted)
     update_execution_status(execution.id, "completed", 130)
     
-    console.print(f"[green]✅ Killed execution {execution.id[:8]}...[/green]")
+    console.print(f"[green]✅ Killed execution {execution.id}[/green]")
     console.print(f"[dim]Document: {execution.doc_title}[/dim]")
     console.print(f"[dim]Marked as completed with exit code 130 (interrupted)[/dim]")
 
@@ -350,7 +351,7 @@ def kill_all_executions():
     
     console.print(f"[yellow]About to kill {len(executions)} running execution(s):[/yellow]")
     for exec in executions:
-        console.print(f"  [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
+        console.print(f"  [cyan]{exec.id}[/cyan] - {exec.doc_title}")
     
     # Ask for confirmation
     confirm = typer.confirm("Are you sure you want to kill all running executions?")
