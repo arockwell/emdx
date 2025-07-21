@@ -1,29 +1,39 @@
-# emdx - Documentation Index Management System
+# emdx - Intelligent Knowledge Assistant
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a modern terminal interface with seamless nvim integration.
+A powerful command-line knowledge management system with AI-powered analysis, automated maintenance, Unix pipeline integration, and a modern terminal interface. Transform your documentation workflow with intelligent organization, health monitoring, and lifecycle tracking.
 
 ## Features
 
+### Core Capabilities
 - 🚀 **Unified CLI**: Single `emdx` command with intuitive subcommands
-- 🔍 **Full-Text Search**: SQLite FTS5-powered search with ranking and fuzzy matching
-- 📝 **Flexible Input**: Save files, text, or piped input with one command
-- 🎨 **Rich Terminal UI**: Beautiful tables, markdown rendering, and syntax highlighting
-- 🔧 **Git Integration**: Automatically detects project names from Git repositories
-- 🖥️ **Advanced TUI Browser**: Multiple browser modes (documents, files, git diffs) with full vim editing
-- 📁 **File Browser**: Yazi-inspired file navigation with real-time preview and vim integration
-- 🔀 **Git Diff Browser**: Visual git diff viewer with worktree switching (press 'd' and 'w')
-- ⚡ **Claude Execution**: Execute prompts directly from TUI with live streaming logs
-- ✨ **Complete Vim Editor**: Full modal editing (NORMAL/INSERT/VISUAL modes) with line numbers
-- 💾 **SQLite Backend**: Zero-setup, portable, fast local storage
-- 🌐 **GitHub Gist Integration**: Share your knowledge base entries as GitHub Gists
-- ✏️ **Document Management**: Edit and delete documents with trash/restore functionality
-- 📊 **Export Options**: Export your knowledge base as JSON or CSV
-- 🏷️ **Emoji Tag System**: Organize with emoji tags + intuitive text aliases (gameplan→🎯, active→🚀)
-- 📖 **Emoji Legend**: `emdx legend` command for quick emoji reference and aliases
+- 🔍 **Advanced Search**: Full-text search with date filtering, tag combinations, and fuzzy matching
+- 📝 **Flexible Input**: Save files, text, or piped input with automatic project detection
+- 🎨 **Rich Terminal UI**: Split-panel browser with vim editing, file navigation, and git diffs
+- 💾 **SQLite Backend**: Zero-setup, portable database with FTS5 full-text search
+
+### Intelligence & Automation (New in 0.7.0)
+- 🤖 **Auto-Tagging**: AI-powered content analysis for automatic tag suggestions
+- 📊 **Health Monitoring**: Knowledge base health scoring with actionable recommendations
+- 🔧 **Smart Maintenance**: Automated duplicate detection, document merging, and cleanup
+- 📈 **Lifecycle Tracking**: Gameplan progression tracking with success analytics
+- 🔄 **Unix Pipeline Integration**: JSON output for seamless tool integration
+
+### Organization & Workflow
+- 🏷️ **Emoji Tag System**: Visual tags with text aliases (gameplan→🎯, active→🚀)
+- 🔧 **Git Integration**: Automatic project detection from repositories
+- 📁 **Multi-Mode Browser**: Documents, files, and git diffs in one interface
+- ✨ **Vim Editor**: Full modal editing (NORMAL/INSERT/VISUAL) with line numbers
+- 🌐 **GitHub Integration**: Create and manage Gists directly from documents
+
+### Data Management
+- 📊 **Export Options**: JSON, CSV, and pipeline-friendly output formats
+- ♻️ **Trash System**: Safe deletion with restore capabilities
+- 🔍 **Advanced Filtering**: Date ranges, project scopes, and tag combinations
+- 📖 **Documentation**: Built-in legend and comprehensive help system
 
 ## Installation
 
@@ -66,6 +76,14 @@ just
 ### No database setup required!
 
 emdx uses SQLite and stores your knowledge base at `~/.config/emdx/knowledge.db`. It's created automatically on first use.
+
+### ⚠️ Version 0.7.0 Migration Notes
+
+If upgrading from 0.6.x:
+1. **Database will auto-migrate** on first run
+2. **Deprecated commands removed**: `health`, `clean`, `merge` (see [Migration Guide](#migration-from-06x))
+3. **New consolidated commands**: `analyze`, `maintain`, `lifecycle`
+4. Run `emdx analyze` after upgrade to check knowledge base health
 
 ## Quick Start
 
@@ -125,6 +143,101 @@ emdx view "Project Notes"
 
 # View raw markdown (no formatting)
 emdx view 42 --raw
+```
+
+## Power User Features (New in 0.7.0)
+
+### Unix Pipeline Integration
+
+emdx now fully supports JSON output and pipeline integration for advanced workflows:
+
+```bash
+# Health check in CI/CD pipeline
+emdx analyze --health --json | jq '.health_score' || exit 1
+
+# Find urgent bugs with JSON filtering
+emdx find "bug" --json | jq '.documents[] | select(.tags | contains(["urgent"]))'
+
+# Export document IDs for batch processing
+emdx find "refactor" --ids-only | xargs -I {} emdx tag {} "needs-review"
+
+# Generate daily activity report
+emdx find --date-from "yesterday" --json | jq -r '.documents[] | "\(.title) - \(.project)"'
+
+# Automated duplicate cleanup (dry run)
+emdx analyze --duplicates --json | jq -r '.duplicates[].ids[]' | head -5
+
+# Pipeline document content to other tools
+emdx view 42 --raw | pandoc -f markdown -t html > doc.html
+```
+
+### Advanced Search Capabilities
+
+```bash
+# Date-based filtering
+emdx find "meeting" --date-from "2024-01-01" --date-to "2024-12-31"
+emdx find --date-from "last week" --date-to "today"
+emdx find --created-after "30 days ago"
+
+# Complex tag queries
+emdx find --tags "gameplan,active" --exclude-tags "blocked"
+emdx find --tags "bug" --any-tags "urgent,critical"
+
+# Project-scoped searches with multiple filters
+emdx find "api" --project "backend" --tags "bug" --date-from "this month"
+
+# Output control for scripting
+emdx find "todo" --ids-only              # Just IDs for xargs
+emdx find "todo" --json | jq '.count'    # Count matches
+emdx find "todo" --limit 5 --offset 10   # Pagination
+```
+
+### Automated Maintenance
+
+```bash
+# Schedule regular maintenance (add to cron)
+0 2 * * * emdx maintain --auto --execute >> /var/log/emdx-maintenance.log
+
+# Health monitoring script
+#!/bin/bash
+HEALTH=$(emdx analyze --health --json | jq '.health_score')
+if [ "$HEALTH" -lt 80 ]; then
+    emdx maintain --auto --execute
+    echo "Knowledge base maintained, health improved to $(emdx analyze --health --json | jq '.health_score')%"
+fi
+
+# Automated lifecycle transitions
+emdx lifecycle auto-detect --execute    # Move stale gameplans to appropriate stages
+emdx lifecycle analyze --json | jq '.success_rate'  # Track gameplan success
+
+# Batch operations with dry-run safety
+emdx maintain --clean                   # Preview what would be cleaned
+emdx maintain --clean --execute         # Actually perform cleanup
+```
+
+### Integration Examples
+
+```bash
+# Generate markdown report of active gameplans
+emdx find --tags "gameplan,active" --json | \
+    jq -r '.documents[] | "## \(.title)\n\n*Project:* \(.project)\n*Created:* \(.created_at)\n"'
+
+# Create Jira tickets from urgent bugs
+emdx find --tags "bug,urgent" --json | \
+    jq -r '.documents[] | @base64' | \
+    while read -r doc; do
+        echo "$doc" | base64 -d | jq -r '
+            "jira create --project PROJ --type Bug",
+            "--summary \"[EMDX] \(.title)\"",
+            "--description \"Document ID: \(.id)\n\n\(.content | .[0:500])...\""
+        ' | xargs
+    done
+
+# Sync to external backup with metadata
+emdx list --json > backup/metadata.json
+emdx list --ids-only | while read -r id; do
+    emdx view "$id" --raw > "backup/docs/${id}.md"
+done
 ```
 
 ### Edit and delete documents
@@ -305,14 +418,43 @@ The status bar shows your current vim mode with color coding:
 
 ### Core Commands
 - `emdx save [input] [--title] [--project] [--tags]` - Save content (file, text, or stdin)
-- `emdx find <query> [--project] [--limit] [--snippets] [--fuzzy] [--tags] [--any-tags]` - Search documents
+- `emdx find <query> [options]` - Advanced search with filters
+  - `--project` - Filter by project
+  - `--tags` / `--any-tags` - Filter by tags (all/any mode)
+  - `--date-from` / `--date-to` - Date range filtering
+  - `--fuzzy` - Typo-tolerant search
+  - `--json` - JSON output for pipelines
+  - `--ids-only` - Output only document IDs
 - `emdx view <id|title> [--raw]` - View a document
 - `emdx list [--project] [--limit] [--format]` - List documents
 - `emdx edit <id|title>` - Edit a document
 - `emdx delete <id|title> [--force]` - Delete a document (moves to trash)
-- `emdx trash <id|title>` - Move document to trash
 - `emdx restore <id|title>` - Restore from trash
 - `emdx purge <id|title> [--force]` - Permanently delete
+
+### Analysis & Intelligence Commands (New in 0.7.0)
+- `emdx analyze [options]` - Analyze knowledge base health
+  - `--health` - Show health score and metrics
+  - `--duplicates` - Find duplicate documents
+  - `--similar` - Find similar documents for merging
+  - `--empty` - Find empty documents
+  - `--tags` - Analyze tag coverage
+  - `--lifecycle` - Analyze gameplan patterns
+  - `--all` - Run all analyses
+  - `--json` - Output as JSON
+- `emdx maintain [options]` - Automated maintenance
+  - `--auto` - Fix all issues automatically
+  - `--clean` - Remove duplicates and empty docs
+  - `--merge` - Merge similar documents
+  - `--tags` - Auto-tag documents
+  - `--gc` - Database optimization
+  - `--execute` - Perform changes (default: dry run)
+- `emdx lifecycle <subcommand>` - Document lifecycle management
+  - `status` - Show lifecycle status
+  - `transition <id> <stage>` - Change document stage
+  - `analyze` - Analyze lifecycle patterns
+  - `auto-detect` - Suggest transitions
+  - `flow` - Visualize lifecycle flow
 
 ### Tag Commands
 - `emdx tag <id> [tags...]` - Add tags using text aliases (or view if no tags given)
@@ -325,12 +467,20 @@ The status bar shows your current vim mode with color coding:
 ### Browse Commands
 - `emdx recent [count]` - Show recently accessed documents
 - `emdx stats [--project]` - Show statistics
+- `emdx project-stats` - Detailed project breakdown
+- `emdx projects` - List all projects
 - `emdx gui` - Launch interactive browser
 
 ### Gist Commands
-- `emdx gist <id|title> [--public] [--copy] [--open]` - Create a GitHub Gist from a document
+- `emdx gist <id|title> [--public] [--copy] [--open]` - Create a GitHub Gist
 - `emdx gist <id|title> --update <gist-id>` - Update an existing gist
 - `emdx gist-list [--project]` - List all created gists
+
+### ⚠️ Deprecated Commands (Removed in 0.7.0)
+The following commands have been removed and replaced:
+- ~~`emdx health`~~ → Use `emdx analyze --health`
+- ~~`emdx clean`~~ → Use `emdx maintain --clean`
+- ~~`emdx merge`~~ → Use `emdx maintain --merge`
 
 ## Configuration
 
@@ -437,6 +587,43 @@ emdx list --format csv > my-knowledge-base.csv
 emdx list --project "my-app" --format json > my-app-docs.json
 ```
 
+## Migration from 0.6.x
+
+### Command Changes
+Version 0.7.0 consolidates several commands for a cleaner, more intuitive interface:
+
+| Old Command (0.6.x) | New Command (0.7.0) | Notes |
+|-------------------|-------------------|--------|
+| `emdx health` | `emdx analyze --health` | More comprehensive analysis |
+| `emdx clean` | `emdx maintain --clean` | Now includes dry-run by default |
+| `emdx merge` | `emdx maintain --merge` | Smarter similarity detection |
+| N/A | `emdx analyze` | New unified analysis command |
+| N/A | `emdx maintain` | New automated maintenance |
+| N/A | `emdx lifecycle` | New lifecycle tracking |
+
+### New Features to Explore
+After upgrading, try these new capabilities:
+
+```bash
+# Check your knowledge base health
+emdx analyze --health
+
+# Find and fix issues automatically
+emdx maintain --auto  # Preview changes
+emdx maintain --auto --execute  # Apply changes
+
+# Track gameplan success rates
+emdx lifecycle analyze
+
+# Use JSON output for automation
+emdx find "todo" --json | jq '.documents[].title'
+```
+
+### Breaking Changes
+1. **Removed commands**: `health`, `clean`, `merge` no longer exist
+2. **Default dry-run**: `maintain` commands preview by default, use `--execute` to apply
+3. **JSON structure**: New standardized JSON output format for all commands
+
 ## Troubleshooting
 
 ### Common Issues
@@ -505,11 +692,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [x] ~~Add tagging system~~ - **COMPLETED** with emoji tags + text aliases
 - [x] ~~Implement search operators~~ - **COMPLETED** with tag search modes
 - [x] ~~Add vim-like editing~~ - **COMPLETED** with full modal editing in TUI
+- [x] ~~Health monitoring system~~ - **COMPLETED** with analyze command
+- [x] ~~Automated maintenance~~ - **COMPLETED** with maintain command
+- [x] ~~JSON/pipeline integration~~ - **COMPLETED** with --json flags
+- [x] ~~Auto-tagging system~~ - **COMPLETED** with AI-powered analysis
 - [ ] Add comprehensive test suite
 - [ ] Set up GitHub Actions CI/CD  
 - [ ] Add more export formats (Markdown, HTML)
 - [ ] Create web UI companion
-- [ ] Add fuzzy alias matching for typos
 
 ## License
 
