@@ -1,5 +1,6 @@
 """Modal dialogs for file browser operations."""
 
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -254,10 +255,37 @@ class ExecuteFileModal(ModalScreen[Optional[dict]]):
         """Execute the file."""
         if self.doc_id:
             # Use smart execution for saved documents
-            timestamp = int(time.time())
-            execution_id = f"claude-{self.doc_id}-{timestamp}"
+            from emdx.models.executions import create_execution, format_execution_log_filename
+            from emdx.models.documents import get_document
+            
+            # Get document for title
+            doc = get_document(self.doc_id)
+            if not doc:
+                self.notify("Document not found", severity="error")
+                return
+                
+            # Set up log directory
             log_dir = Path.home() / ".config" / "emdx" / "logs"
-            log_file = log_dir / f"{execution_id}.log"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create execution record first to get numeric ID
+            temp_log = log_dir / "temp_execution.log"
+            execution_id = create_execution(
+                doc_id=self.doc_id,
+                doc_title=doc['title'],
+                log_file=str(temp_log),
+                working_dir=os.getcwd()
+            )
+            
+            # Now create proper log file with numeric ID
+            log_file = log_dir / format_execution_log_filename(execution_id)
+            
+            # Update execution with correct log file path
+            from emdx.database.connection import db_connection
+            with db_connection.get_connection() as conn:
+                conn.execute("UPDATE executions SET log_file = ? WHERE id = ?", 
+                            (str(log_file), execution_id))
+                conn.commit()
             
             try:
                 execute_document_smart_background(
