@@ -34,9 +34,10 @@ class VimEditor(Vertical):
         # Create the vim text area
         logger.debug(f"🔍 VimEditor.__init__: Creating VimEditTextArea with content length: {len(content)}")
         logger.debug(f"🔍 VimEditor.__init__: First 100 chars: {repr(content[:100])}")
+        # Pass content as first positional argument (required by VimEditTextArea)
         self.text_area = VimEditTextArea(
             app_instance,
-            text=content,
+            content,  # First positional arg after app_instance
             read_only=False,
             id="vim-text-area"
         )

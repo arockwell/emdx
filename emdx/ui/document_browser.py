@@ -194,12 +194,6 @@ class DocumentBrowser(Widget):
         height: 1fr;
         margin: 1;
     }
-    
-    /* DEBUG: Temporary visual indicators */
-    #vim-text-area {
-        background: $error 20%;
-        border: solid red;
-    }
     """
     
     # Reactive properties
@@ -478,34 +472,26 @@ class DocumentBrowser(Widget):
                 if child.id in ["preview", "preview-content"]:
                     await child.remove()
         
-        # TEMPORARY TEST: Use plain TextArea to isolate issue
-        from textual.widgets import TextArea
-        print(f"🔍 {build_id} DEBUG: Creating plain TextArea with content length: {len(full_doc['content'])}")
-        logger.info(f"🔍 {build_id} DEBUG: Creating plain TextArea with content length: {len(full_doc['content'])}")
+        # Create vim editor with line numbers
+        from .vim_editor import VimEditor
+        print(f"🔍 {build_id} DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
+        logger.info(f"🔍 {build_id} DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
         
-        # Create a simple TextArea with debug styling
-        test_area = TextArea(
-            text=full_doc["content"],
-            id="test-text-area"
-        )
-        test_area.styles.border = ("solid", "red")
-        test_area.styles.background = "#ff000020"
+        vim_editor = VimEditor(self, content=full_doc["content"], id="vim-editor-container")
         
-        print(f"🔍 {build_id} DEBUG: Plain TextArea created, mounting...")
-        logger.info(f"🔍 {build_id} DEBUG: Plain TextArea created, mounting...")
-        await preview_container.mount(test_area)
-        test_area.focus()
-        print(f"🔍 {build_id} DEBUG: Plain TextArea mounted and focused")
-        print(f"🔍 {build_id} DEBUG: TextArea.text length after mount: {len(test_area.text)}")
-        logger.info(f"🔍 {build_id} DEBUG: Plain TextArea mounted and focused")
+        print(f"🔍 {build_id} DEBUG: VimEditor created, mounting...")
+        logger.info(f"🔍 {build_id} DEBUG: VimEditor created, mounting...")
+        await preview_container.mount(vim_editor)
         
-        # Store reference for save
-        self._test_area = test_area
+        print(f"🔍 {build_id} DEBUG: VimEditor mounted, focusing...")
+        vim_editor.focus_editor()
+        print(f"🔍 {build_id} DEBUG: VimEditor focused")
+        logger.info(f"🔍 {build_id} DEBUG: VimEditor mounted and focused")
         
         self.edit_mode = True
         
-        # Show status for test
-        self.call_after_refresh(lambda: self._update_vim_status("TEST MODE - Plain TextArea | ESC=exit"))
+        # Show vim mode indicator
+        self.call_after_refresh(lambda: self._update_vim_status(f"{vim_editor.text_area.vim_mode} | ESC=exit"))
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
@@ -574,12 +560,8 @@ class DocumentBrowser(Widget):
                 # Update existing document
                 if self.editing_doc_id:
                     try:
-                        # TEMPORARY: Get content from test area
-                        if hasattr(self, '_test_area'):
-                            content = self._test_area.text
-                        else:
-                            vim_editor = self.query_one("#vim-editor-container", VimEditor)
-                            content = vim_editor.text_area.text
+                        vim_editor = self.query_one("#vim-editor-container", VimEditor)
+                        content = vim_editor.text_area.text
                         
                         from emdx.models.documents import update_document, get_document
                         # Get the current document to preserve the title
