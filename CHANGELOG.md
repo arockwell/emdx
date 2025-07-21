@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-07-21
+
+### 🚀 Major Release: Intelligent Knowledge Assistant
+
+EMDX evolves from a documentation storage tool to an intelligent knowledge management system with AI-powered analysis, automated maintenance, and comprehensive Unix pipeline integration.
+
+### 🎯 New Unified Commands
+
+#### `emdx analyze` - Comprehensive Knowledge Base Analysis
+- **Health monitoring** with weighted scoring system (0-100%)
+- **Duplicate detection** with exact and similarity matching
+- **Tag coverage analysis** with actionable recommendations
+- **Lifecycle pattern analysis** for gameplans
+- **JSON output** for all analysis operations
+
+#### `emdx maintain` - Automated Maintenance Operations
+- **Dry-run by default** for all destructive operations
+- **Auto-maintenance** mode fixes all issues intelligently
+- **Duplicate removal** with configurable strategies
+- **Document merging** for similar content
+- **Auto-tagging** based on content patterns
+- **Database optimization** with garbage collection
+
+#### `emdx lifecycle` - Document Lifecycle Management
+- **Stage tracking**: planning → active → blocked → completed → success/failed
+- **Auto-detection** of stale documents
+- **Success analytics** for gameplans
+- **Visual flow diagrams** of lifecycle patterns
+
+### 🤖 New Service Architecture
+
+- **HealthMonitor** - Calculates knowledge base health scores
+- **AutoTagger** - AI-powered tag suggestions
+- **DuplicateDetector** - Finds exact and near duplicates
+- **DocumentMerger** - Intelligent content merging
+- **LifecycleTracker** - Document progression analytics
+
+### 🔧 Enhanced Features
+
+#### Unix Pipeline Integration
+- **JSON output** for all commands with `--json` flag
+- **ID-only output** with `--ids-only` for xargs pipelines
+- **Standardized response format** across all commands
+- **jq-friendly** nested structures
+
+#### Advanced Search
+- **Date filtering**: `--date-from`, `--date-to`, `--created-after`
+- **Tag exclusion**: `--exclude-tags`
+- **Improved performance** with optimized indexes
+- **Pagination support**: `--limit`, `--offset`
+
+### 💔 Breaking Changes
+
+#### Removed Commands
+- `emdx health` → Use `emdx analyze --health`
+- `emdx clean` → Use `emdx maintain --clean`
+- `emdx merge` → Use `emdx maintain --merge`
+
+#### Safety Changes
+- All destructive operations require explicit `--execute` flag
+- Dry-run mode is now the default behavior
+- Preview changes before applying them
+
+### 📚 Documentation Overhaul
+
+- **README.md** - Transformed for intelligent assistant focus
+- **AUTOMATION.md** - Comprehensive pipeline and cron examples
+- **MAINTENANCE.md** - Health monitoring and troubleshooting guide
+- **MIGRATION.md** - Complete 0.6.x to 0.7.0 upgrade guide
+- **QUICK_REFERENCE.md** - Essential commands at a glance
+
+### 🐛 Bug Fixes
+
+- Fixed empty document creation with incorrect save syntax
+- Improved error handling for database operations
+- Better Unicode support in JSON output
+- Resolved race conditions in concurrent operations
+
+### 🔄 Database Changes
+
+- New lifecycle tracking tables
+- Performance optimization indexes
+- Automatic migration on first run
+- Backward compatible with 0.6.x databases
+
 ## [0.6.0] - 2025-07-14
 
 ### 🔥 Major Features Added
@@ -236,6 +321,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.7.0]: https://github.com/arockwell/emdx/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/arockwell/emdx/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/arockwell/emdx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/arockwell/emdx/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/arockwell/emdx/compare/v0.3.1...v0.3.2
