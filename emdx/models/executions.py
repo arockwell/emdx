@@ -16,11 +16,11 @@ def parse_timestamp(ts) -> datetime:
         # SQLite returns timestamps as strings
         # First try parsing with timezone
         try:
-            dt = datetime.fromisoformat(ts.replace(' ', 'T'))
+            dt = datetime.fromisoformat(ts.replace(" ", "T"))
         except ValueError:
             # If that fails, parse as naive and assume UTC
-            dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
-        
+            dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+
         # Ensure timezone awareness
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -38,6 +38,7 @@ def parse_timestamp(ts) -> datetime:
 @dataclass
 class Execution:
     """Represents a Claude execution."""
+
     id: int  # Now numeric auto-incrementing ID
     doc_id: int
     doc_title: str
@@ -59,14 +60,14 @@ class Execution:
     @property
     def is_running(self) -> bool:
         """Check if execution is still running."""
-        return self.status == 'running'
-    
+        return self.status == "running"
+
     @property
     def is_zombie(self) -> bool:
         """Check if this is a zombie process (marked running but process is dead)."""
         if not self.is_running or not self.pid:
             return False
-        
+
         # Check if process exists
         try:
             # Send signal 0 to check if process exists
@@ -84,32 +85,43 @@ class Execution:
         return Path(self.log_file).expanduser()
 
 
-def create_execution(doc_id: int, doc_title: str, log_file: str, 
-                    working_dir: Optional[str] = None, pid: Optional[int] = None,
-                    string_id: Optional[str] = None) -> int:
+def create_execution(
+    doc_id: int,
+    doc_title: str,
+    log_file: str,
+    working_dir: Optional[str] = None,
+    pid: Optional[int] = None,
+    string_id: Optional[str] = None,
+) -> int:
     """Create a new execution and return its ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Check if string_id column exists (post-migration)
         cursor.execute("PRAGMA table_info(executions)")
         columns = {col[1] for col in cursor.fetchall()}
-        
-        if 'string_id' in columns:
+
+        if "string_id" in columns:
             # New schema with string_id
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO executions 
                 (doc_id, doc_title, status, started_at, log_file, working_dir, pid, string_id)
                 VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?, ?)
-            """, (doc_id, doc_title, log_file, working_dir, pid, string_id))
+            """,
+                (doc_id, doc_title, log_file, working_dir, pid, string_id),
+            )
         else:
             # Old schema without string_id (pre-migration)
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO executions 
                 (doc_id, doc_title, status, started_at, log_file, working_dir, pid)
                 VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?)
-            """, (doc_id, doc_title, log_file, working_dir, pid))
-        
+            """,
+                (doc_id, doc_title, log_file, working_dir, pid),
+            )
+
         conn.commit()
         return cursor.lastrowid
 
@@ -130,45 +142,56 @@ def get_execution(exec_id: str | int) -> Optional[Execution]:
     """Get execution by ID (supports both numeric and legacy string IDs)."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Check if string_id column exists
         cursor.execute("PRAGMA table_info(executions)")
         columns = {col[1] for col in cursor.fetchall()}
-        has_string_id = 'string_id' in columns
-        
+        has_string_id = "string_id" in columns
+
         # Try numeric ID first
         if isinstance(exec_id, int) or (isinstance(exec_id, str) and exec_id.isdigit()):
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
                 FROM executions WHERE id = ?
-            """, (int(exec_id) if isinstance(exec_id, str) else exec_id,))
+            """,
+                (int(exec_id) if isinstance(exec_id, str) else exec_id,),
+            )
         else:
             # Fall back to string ID lookup for backwards compatibility
             if has_string_id:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
                     FROM executions WHERE string_id = ?
-                """, (exec_id,))
+                """,
+                    (exec_id,),
+                )
             else:
                 # Pre-migration: ID is stored as string in id column
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
                     FROM executions WHERE id = ?
-                """, (exec_id,))
-        
+                """,
+                    (exec_id,),
+                )
+
         row = cursor.fetchone()
         if not row:
             return None
-            
+
         # Handle datetime parsing more robustly
         try:
             started_at = datetime.fromisoformat(row[4]) if isinstance(row[4], str) else row[4]
-            completed_at = datetime.fromisoformat(row[5]) if row[5] and isinstance(row[5], str) else row[5]
+            completed_at = (
+                datetime.fromisoformat(row[5]) if row[5] and isinstance(row[5], str) else row[5]
+            )
         except (ValueError, TypeError):
             # Fallback for any datetime parsing issues
             started_at = datetime.now()
             completed_at = None
-            
+
         return Execution(
             id=row[0],
             doc_id=row[1],
@@ -179,7 +202,7 @@ def get_execution(exec_id: str | int) -> Optional[Execution]:
             log_file=row[6],
             exit_code=row[7],
             working_dir=row[8],
-            pid=row[9] if len(row) > 9 else None  # Handle old records without PID
+            pid=row[9] if len(row) > 9 else None,  # Handle old records without PID
         )
 
 
@@ -187,32 +210,37 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
     """Get recent executions ordered by start time."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions 
             ORDER BY id DESC 
             LIMIT ?
-        """, (limit,))
-        
+        """,
+            (limit,),
+        )
+
         executions = []
         for row in cursor.fetchall():
             # Parse timestamps with timezone handling
             started_at = parse_timestamp(row[4])
             completed_at = parse_timestamp(row[5]) if row[5] else None
-                
-            executions.append(Execution(
-                id=int(row[0]),  # Convert to int for numeric ID
-                doc_id=row[1],
-                doc_title=row[2],
-                status=row[3],
-                started_at=started_at,
-                completed_at=completed_at,
-                log_file=row[6],
-                exit_code=row[7],
-                working_dir=row[8],
-                pid=row[9] if len(row) > 9 else None
-            ))
-        
+
+            executions.append(
+                Execution(
+                    id=int(row[0]),  # Convert to int for numeric ID
+                    doc_id=row[1],
+                    doc_title=row[2],
+                    status=row[3],
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    log_file=row[6],
+                    exit_code=row[7],
+                    working_dir=row[8],
+                    pid=row[9] if len(row) > 9 else None,
+                )
+            )
+
         return executions
 
 
@@ -220,61 +248,74 @@ def get_running_executions() -> List[Execution]:
     """Get all currently running executions."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions 
             WHERE status = 'running'
             ORDER BY started_at DESC
-        """, )
-        
+        """,
+        )
+
         executions = []
         for row in cursor.fetchall():
             # Parse timestamps with timezone handling
             started_at = parse_timestamp(row[4])
             completed_at = parse_timestamp(row[5]) if row[5] else None
-                
-            executions.append(Execution(
-                id=int(row[0]),  # Convert to int for numeric ID
-                doc_id=row[1],
-                doc_title=row[2],
-                status=row[3],
-                started_at=started_at,
-                completed_at=completed_at,
-                log_file=row[6],
-                exit_code=row[7],
-                working_dir=row[8],
-                pid=row[9] if len(row) > 9 else None
-            ))
-        
+
+            executions.append(
+                Execution(
+                    id=int(row[0]),  # Convert to int for numeric ID
+                    doc_id=row[1],
+                    doc_title=row[2],
+                    status=row[3],
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    log_file=row[6],
+                    exit_code=row[7],
+                    working_dir=row[8],
+                    pid=row[9] if len(row) > 9 else None,
+                )
+            )
+
         return executions
 
 
 def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] = None) -> None:
     """Update execution status and completion time."""
     with db_connection.get_connection() as conn:
-        if status in ['completed', 'failed']:
-            conn.execute("""
+        if status in ["completed", "failed"]:
+            conn.execute(
+                """
                 UPDATE executions 
                 SET status = ?, completed_at = CURRENT_TIMESTAMP, exit_code = ?
                 WHERE id = ?
-            """, (status, exit_code, exec_id))
+            """,
+                (status, exit_code, exec_id),
+            )
         else:
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE executions 
                 SET status = ?
                 WHERE id = ?
-            """, (status, exec_id))
+            """,
+                (status, exec_id),
+            )
         conn.commit()
 
 
 def update_execution_pid(exec_id: int, pid: int) -> None:
     """Update execution PID."""
     with db_connection.get_connection() as conn:
-        conn.execute("""
+        conn.execute(
+            """
             UPDATE executions 
             SET pid = ?
             WHERE id = ?
-        """, (pid, exec_id))
+        """,
+            (pid, exec_id),
+        )
         conn.commit()
 
 
@@ -282,10 +323,12 @@ def cleanup_old_executions(days: int = 7) -> int:
     """Clean up executions older than specified days."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM executions 
             WHERE started_at < datetime('now', '-{} days')
-        """.format(days))
+        """.format(days)
+        )
         conn.commit()
         return cursor.rowcount
 
@@ -294,30 +337,35 @@ def get_execution_stats() -> dict:
     """Get execution statistics."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Count by status
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT status, COUNT(*) 
             FROM executions 
             GROUP BY status
-        """)
+        """
+        )
         status_counts = dict(cursor.fetchall())
-        
+
         # Total executions
         cursor.execute("SELECT COUNT(*) FROM executions")
         total = cursor.fetchone()[0]
-        
+
         # Recent activity (last 24 hours)
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) FROM executions 
             WHERE started_at > datetime('now', '-1 day')
-        """)
+        """
+        )
         recent = cursor.fetchone()[0]
-        
+
         return {
-            'total': total,
-            'recent_24h': recent,
-            'running': status_counts.get('running', 0),
-            'completed': status_counts.get('completed', 0),
-            'failed': status_counts.get('failed', 0),
+            "total": total,
+            "recent_24h": recent,
+            "running": status_counts.get("running", 0),
+            "completed": status_counts.get("completed", 0),
+            "failed": status_counts.get("failed", 0),
         }
+

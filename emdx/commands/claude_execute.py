@@ -26,6 +26,7 @@ console = Console()
 
 class ExecutionType(Enum):
     """Types of document execution based on tags."""
+
     NOTE = "note"
     ANALYSIS = "analysis"
     GAMEPLAN = "gameplan"
@@ -34,26 +35,42 @@ class ExecutionType(Enum):
 
 # Default allowed tools for Claude
 DEFAULT_ALLOWED_TOOLS = [
-    "Read", "Write", "Edit", "MultiEdit", "Bash",
-    "Glob", "Grep", "LS", "Task", "TodoWrite"
+    "Read",
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "Bash",
+    "Glob",
+    "Grep",
+    "LS",
+    "Task",
+    "TodoWrite",
 ]
 
 # Stage-specific tool restrictions
 STAGE_TOOLS = {
     ExecutionType.NOTE: [
-        "Read", "Grep", "Glob", "LS",  # Analysis needs to read/search
+        "Read",
+        "Grep",
+        "Glob",
+        "LS",  # Analysis needs to read/search
         "Write",  # For creating temporary files to pipe to emdx save
         "Bash",  # For piping to emdx save
-        "WebFetch", "WebSearch"  # For research during analysis
+        "WebFetch",
+        "WebSearch",  # For research during analysis
     ],
     ExecutionType.ANALYSIS: [
-        "Read", "Grep", "Glob", "LS",  # Gameplan creation needs to read
+        "Read",
+        "Grep",
+        "Glob",
+        "LS",  # Gameplan creation needs to read
         "Write",  # For creating temporary files to pipe to emdx save
         "Bash",  # For piping to emdx save
-        "WebFetch", "WebSearch"  # For research during gameplan creation
+        "WebFetch",
+        "WebSearch",  # For research during gameplan creation
     ],
     ExecutionType.GAMEPLAN: DEFAULT_ALLOWED_TOOLS,  # Full tools for implementation
-    ExecutionType.GENERIC: DEFAULT_ALLOWED_TOOLS  # Legacy behavior
+    ExecutionType.GENERIC: DEFAULT_ALLOWED_TOOLS,  # Legacy behavior
 }
 
 # Emoji mappings for tool usage
@@ -75,9 +92,9 @@ TOOL_EMOJIS = {
 # Emoji mappings for execution types
 EXECUTION_TYPE_EMOJIS = {
     ExecutionType.NOTE: "📝",
-    ExecutionType.ANALYSIS: "🔍", 
+    ExecutionType.ANALYSIS: "🔍",
     ExecutionType.GAMEPLAN: "🎯",
-    ExecutionType.GENERIC: "⚡"
+    ExecutionType.GENERIC: "⚡",
 }
 
 
@@ -86,38 +103,38 @@ def get_execution_context(doc_tags: list[str]) -> dict[str, Any]:
     tag_set = set(doc_tags)
 
     # Check for note tags (get_document_tags returns normalized emojis)
-    if '📝' in tag_set:
+    if "📝" in tag_set:
         return {
-            'type': ExecutionType.NOTE,
-            'prompt_template': 'analyze_note',
-            'output_tags': ['analysis'],
-            'output_title_prefix': 'Analysis: ',
-            'description': 'Generate analysis from note'
+            "type": ExecutionType.NOTE,
+            "prompt_template": "analyze_note",
+            "output_tags": ["analysis"],
+            "output_title_prefix": "Analysis: ",
+            "description": "Generate analysis from note",
         }
     # Check for analysis tags
-    elif '🔍' in tag_set:
+    elif "🔍" in tag_set:
         return {
-            'type': ExecutionType.ANALYSIS,
-            'prompt_template': 'create_gameplan',
-            'output_tags': ['gameplan', 'active'],
-            'output_title_prefix': 'Gameplan: ',
-            'description': 'Generate gameplan from analysis'
+            "type": ExecutionType.ANALYSIS,
+            "prompt_template": "create_gameplan",
+            "output_tags": ["gameplan", "active"],
+            "output_title_prefix": "Gameplan: ",
+            "description": "Generate gameplan from analysis",
         }
     # Check for gameplan tags
-    elif '🎯' in tag_set:
+    elif "🎯" in tag_set:
         return {
-            'type': ExecutionType.GAMEPLAN,
-            'prompt_template': 'implement_gameplan',
-            'output_tags': [],
-            'create_pr': True,
-            'description': 'Implement gameplan and create PR'
+            "type": ExecutionType.GAMEPLAN,
+            "prompt_template": "implement_gameplan",
+            "output_tags": [],
+            "create_pr": True,
+            "description": "Implement gameplan and create PR",
         }
     else:
         return {
-            'type': ExecutionType.GENERIC,
-            'prompt_template': None,
-            'output_tags': [],
-            'description': 'Execute with document content'
+            "type": ExecutionType.GENERIC,
+            "prompt_template": None,
+            "output_tags": [],
+            "description": "Execute with document content",
         }
 
 
@@ -131,7 +148,7 @@ def parse_task_content(task: str) -> str:
         Expanded task content with file contents included
     """
     # Find all @filename references
-    pattern = r'@([^\s]+)'
+    pattern = r"@([^\s]+)"
 
     def replace_file_reference(match):
         filename = match.group(1)
@@ -225,7 +242,9 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 return f"{format_timestamp()} ❌ Task failed: {data.get('result', 'Unknown error')}"
 
         # For debugging: show unhandled JSON types (this was the source of "JSON shit")
-        return f"{format_timestamp()} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
+        return (
+            f"{format_timestamp()} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
+        )
 
     except json.JSONDecodeError:
         # Not JSON - return as plain text if it's not empty
@@ -245,38 +264,42 @@ def execute_with_claude_detached(
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
     doc_id: Optional[str] = None,
-    context: Optional[dict] = None
+    context: Optional[dict] = None,
 ) -> int:
     """Execute a task with Claude in a fully detached background process.
-    
+
     This function starts Claude and returns immediately without waiting.
     The subprocess continues running independently of the parent process.
-    
+
     Returns:
         The process ID of the started subprocess.
     """
     if allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
-    
+
     # Expand @filename references
     expanded_task = parse_task_content(task)
-    
+
     # Build Claude command
     cmd = [
         "claude",
-        "--print", expanded_task,
-        "--allowedTools", ",".join(allowed_tools),
-        "--output-format", "stream-json",
-        "--verbose"
+        "--print",
+        expanded_task,
+        "--allowedTools",
+        ",".join(allowed_tools),
+        "--output-format",
+        "stream-json",
+        "--verbose",
     ]
-    
+
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Write initial log header
     from emdx import __version__, __build_id__
+
     start_time = datetime.now()
-    with open(log_file, 'w') as f:
+    with open(log_file, "w") as f:
         f.write("=== EMDX Claude Execution ===\n")
         f.write(f"Version: {__version__}\n")
         f.write(f"Build ID: {__build_id__}\n")
@@ -287,12 +310,14 @@ def execute_with_claude_detached(
         f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
         f.write(f"{'=' * 50}\n\n")
         # Get execution type emoji and description
-        if context and context.get('type'):
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            exec_type = context['type'].value.upper()
-            exec_desc = context.get('description', 'Executing document')
+        if context and context.get("type"):
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context["type"], "⚡")
+            exec_type = context["type"].value.upper()
+            exec_desc = context.get("description", "Executing document")
             f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
-            f.write(f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n")
+            f.write(
+                f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n"
+            )
         else:
             f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
         f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
@@ -300,71 +325,75 @@ def execute_with_claude_detached(
         f.write(f"{'─' * 60}\n")
         f.write(f"{expanded_task}\n")
         f.write(f"{'─' * 60}\n\n")
-    
+
     # Start subprocess in detached mode using wrapper
     try:
         # Get the wrapper script path
         wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
-        
+
         # Build wrapper command: wrapper.py exec_id log_file claude_command...
         wrapper_cmd = [
             sys.executable,  # Use current Python interpreter
             str(wrapper_path),
             str(execution_id),  # Convert to string for command line
-            str(log_file)
+            str(log_file),
         ] + cmd
-        
+
         # Use nohup for true detachment
         nohup_cmd = ["nohup"] + wrapper_cmd
-        
+
         # Open log file for appending
-        log_handle = open(log_file, 'a')
-        
+        log_handle = open(log_file, "a")
+
         process = subprocess.Popen(
             nohup_cmd,
             stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
             stdout=log_handle,  # Direct to file, no pipe
             stderr=subprocess.STDOUT,
             cwd=working_dir,
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
             start_new_session=True,  # Better than preexec_fn
-            close_fds=True  # Don't inherit file descriptors
+            close_fds=True,  # Don't inherit file descriptors
         )
-        
+
         # Close the file handle in parent process
         log_handle.close()
-        
+
         # Log the PID for tracking
-        with open(log_file, 'a') as f:
-            f.write(f"\n{format_timestamp()} 🔧 Background process started with PID: {process.pid}\n")
+        with open(log_file, "a") as f:
+            f.write(
+                f"\n{format_timestamp()} 🔧 Background process started with PID: {process.pid}\n"
+            )
             f.write(f"{format_timestamp()} 📄 Output is being written to this log file\n")
             f.write(f"{format_timestamp()} 🔄 Wrapper will update status on completion\n")
-        
+
         # Return immediately - don't wait or read from pipes
         console.print(f"[green]✅ Claude started in background (PID: {process.pid})[/green]")
-        
+
         return process.pid
-        
+
     except FileNotFoundError as e:
         # Handle missing nohup
         if "nohup" in str(e):
             # Fallback without nohup
-            log_handle = open(log_file, 'a')
-            
+            log_handle = open(log_file, "a")
+
             process = subprocess.Popen(
                 wrapper_cmd,  # Use wrapper even without nohup
                 stdin=subprocess.DEVNULL,
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 cwd=working_dir,
-                env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
                 start_new_session=True,
-                close_fds=True
+                close_fds=True,
             )
-            
+
             log_handle.close()
-            
-            console.print(f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]")
+
+            console.print(
+                f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]"
+            )
             return process.pid
         else:
             raise
@@ -378,7 +407,7 @@ def execute_with_claude(
     verbose: bool = True,
     working_dir: Optional[str] = None,
     doc_id: Optional[str] = None,
-    context: Optional[dict] = None
+    context: Optional[dict] = None,
 ) -> int:
     """Execute a task with Claude, streaming output to log file.
 
@@ -401,10 +430,13 @@ def execute_with_claude(
     # Build Claude command
     cmd = [
         "claude",
-        "--print", expanded_task,
-        "--allowedTools", ",".join(allowed_tools),
-        "--output-format", "stream-json",
-        "--verbose"
+        "--print",
+        expanded_task,
+        "--allowedTools",
+        ",".join(allowed_tools),
+        "--output-format",
+        "stream-json",
+        "--verbose",
     ]
 
     # Ensure log directory exists
@@ -412,8 +444,9 @@ def execute_with_claude(
 
     # Write initial log header
     from emdx import __version__, __build_id__
+
     start_time = datetime.now()
-    with open(log_file, 'w') as f:
+    with open(log_file, "w") as f:
         f.write("=== EMDX Claude Execution ===\n")
         f.write(f"Version: {__version__}\n")
         f.write(f"Build ID: {__build_id__}\n")
@@ -424,12 +457,14 @@ def execute_with_claude(
         f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
         f.write(f"{'=' * 50}\n\n")
         # Get execution type emoji and description
-        if context and context.get('type'):
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            exec_type = context['type'].value.upper()
-            exec_desc = context.get('description', 'Executing document')
+        if context and context.get("type"):
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context["type"], "⚡")
+            exec_type = context["type"].value.upper()
+            exec_desc = context.get("description", "Executing document")
             f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
-            f.write(f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n")
+            f.write(
+                f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n"
+            )
         else:
             f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
         f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
@@ -449,15 +484,15 @@ def execute_with_claude(
             universal_newlines=True,
             cwd=working_dir,  # Run in specified working directory
             # Force unbuffered for any Python subprocesses
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
             # Detach from parent process group so it survives parent exit
-            preexec_fn=os.setsid if os.name != 'nt' else None
+            preexec_fn=os.setsid if os.name != "nt" else None,
         )
 
         exec_start_time = time.time()
 
         # Stream output
-        with open(log_file, 'a') as log:
+        with open(log_file, "a") as log:
             for line in process.stdout:
                 formatted = format_claude_output(line, exec_start_time)
                 if formatted:
@@ -470,35 +505,41 @@ def execute_with_claude(
         exit_code = process.wait()
 
         # Write completion status
-        with open(log_file, 'a') as log:
+        with open(log_file, "a") as log:
             duration = time.time() - exec_start_time
             end_time = datetime.now()
             if exit_code == 0:
-                if context and context.get('type'):
-                    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-                    exec_type = context['type'].value.upper()
-                    log.write(f"\n{format_timestamp()} ✅ {exec_type} execution completed successfully!\n")
+                if context and context.get("type"):
+                    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context["type"], "⚡")
+                    exec_type = context["type"].value.upper()
+                    log.write(
+                        f"\n{format_timestamp()} ✅ {exec_type} execution completed successfully!\n"
+                    )
                     log.write(f"{format_timestamp()} {exec_emoji} All tasks finished\n")
                 else:
                     log.write(f"\n{format_timestamp()} ✅ Execution completed successfully\n")
             else:
                 log.write(f"\n{format_timestamp()} ❌ Process exited with code {exit_code}\n")
             log.write(f"{format_timestamp()} ⏱️  Duration: {duration:.1f}s\n")
-            log.write(f"{format_timestamp()} 🏁 Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
+            log.write(
+                f"{format_timestamp()} 🏁 Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            )
 
         return exit_code
 
     except FileNotFoundError:
-        error_msg = ("Error: claude command not found. "
-                    "Make sure Claude Code is installed and in your PATH.")
-        with open(log_file, 'a') as log:
+        error_msg = (
+            "Error: claude command not found. "
+            "Make sure Claude Code is installed and in your PATH."
+        )
+        with open(log_file, "a") as log:
             log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
         return 1
     except Exception as e:
         error_msg = f"Error executing Claude: {e}"
-        with open(log_file, 'a') as log:
+        with open(log_file, "a") as log:
             log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
@@ -510,10 +551,10 @@ def execute_document_smart_background(
     execution_id: int,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
-    use_stage_tools: bool = True
+    use_stage_tools: bool = True,
 ) -> None:
     """Execute a document in background with context-aware behavior.
-    
+
     This function starts execution and returns immediately.
     """
     # Get document
@@ -523,30 +564,34 @@ def execute_document_smart_background(
 
     # Get document tags
     from ..models.tags import get_document_tags
+
     doc_tags = get_document_tags(str(doc_id))
-    
+
     # Get execution context based on tags
     context = get_execution_context(doc_tags)
 
     # Build prompt with template
-    prompt = build_prompt(context['prompt_template'], doc['content'])
+    prompt = build_prompt(context["prompt_template"], doc["content"])
 
     # Use stage-specific tools if enabled and no custom tools provided
     if use_stage_tools and allowed_tools is None:
-        allowed_tools = STAGE_TOOLS.get(context['type'], DEFAULT_ALLOWED_TOOLS)
+        allowed_tools = STAGE_TOOLS.get(context["type"], DEFAULT_ALLOWED_TOOLS)
     elif allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
     # Create worktree
-    worktree_path = create_execution_worktree(execution_id, doc_id, doc['title'])
+    worktree_path = create_execution_worktree(execution_id, doc_id, doc["title"])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
     # Update execution with working directory if worktree was created
     if worktree_path:
         from ..database.connection import db_connection
+
         with db_connection.get_connection() as conn:
-            conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
-                        (str(worktree_path), execution_id))
+            conn.execute(
+                "UPDATE executions SET working_dir = ? WHERE id = ?",
+                (str(worktree_path), execution_id),
+            )
             conn.commit()
 
     # Execute with Claude in detached mode
@@ -557,9 +602,9 @@ def execute_document_smart_background(
         allowed_tools=allowed_tools,
         working_dir=working_dir,
         doc_id=str(doc_id),
-        context=context
+        context=context,
     )
-    
+
     # Update execution with PID
     update_execution_pid(execution_id, pid)
 
@@ -571,7 +616,7 @@ def execute_document_smart(
     allowed_tools: Optional[List[str]] = None,
     verbose: bool = True,
     background: bool = False,
-    use_stage_tools: bool = True
+    use_stage_tools: bool = True,
 ) -> Optional[int]:
     """Execute a document with context-aware behavior.
 
@@ -593,46 +638,52 @@ def execute_document_smart(
 
     # Get document tags
     from ..models.tags import get_document_tags
+
     doc_tags = get_document_tags(str(doc_id))
-    
+
     # Get execution context based on tags
     context = get_execution_context(doc_tags)
 
     # Build prompt with template
-    prompt = build_prompt(context['prompt_template'], doc['content'])
+    prompt = build_prompt(context["prompt_template"], doc["content"])
 
     # Use stage-specific tools if enabled and no custom tools provided
     if use_stage_tools and allowed_tools is None:
-        allowed_tools = STAGE_TOOLS.get(context['type'], DEFAULT_ALLOWED_TOOLS)
+        allowed_tools = STAGE_TOOLS.get(context["type"], DEFAULT_ALLOWED_TOOLS)
         console.print(f"[dim]Using stage-specific tools for {context['type'].value}[/dim]")
     elif allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
         console.print(f"[dim]Using default tools (stage-specific disabled)[/dim]")
 
     # Log execution type
-    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-    exec_type = context['type'].value.upper()
+    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context["type"], "⚡")
+    exec_type = context["type"].value.upper()
     console.print(f"[bold cyan]{exec_emoji} {exec_type} EXECUTION[/bold cyan]")
     console.print(f"[cyan]📋 {context['description']}[/cyan]")
     if verbose and allowed_tools:
         console.print(f"[dim]Allowed tools: {', '.join(allowed_tools)}[/dim]")
 
     # Create worktree
-    worktree_path = create_execution_worktree(execution_id, doc_id, doc['title'])
+    worktree_path = create_execution_worktree(execution_id, doc_id, doc["title"])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
     # Update execution with working directory if worktree was created
     if worktree_path:
         from ..database.connection import db_connection
+
         with db_connection.get_connection() as conn:
-            conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
-                        (str(worktree_path), execution_id))
+            conn.execute(
+                "UPDATE executions SET working_dir = ? WHERE id = ?",
+                (str(worktree_path), execution_id),
+            )
             conn.commit()
 
     # Execute with Claude
     if verbose:
-        console.print(f"[dim]Passing {len(allowed_tools)} tools to Claude: {', '.join(allowed_tools)}[/dim]")
-    
+        console.print(
+            f"[dim]Passing {len(allowed_tools)} tools to Claude: {', '.join(allowed_tools)}[/dim]"
+        )
+
     exit_code = execute_with_claude(
         task=prompt,
         execution_id=execution_id,
@@ -641,7 +692,7 @@ def execute_document_smart(
         verbose=verbose,
         working_dir=working_dir,
         doc_id=str(doc_id),
-        context=context
+        context=context,
     )
 
     # Update execution status
@@ -650,14 +701,20 @@ def execute_document_smart(
 
     # Handle output based on context
     if exit_code == 0:
-        if context['type'] == ExecutionType.GAMEPLAN:
+        if context["type"] == ExecutionType.GAMEPLAN:
             # Update original gameplan tags
-            add_tags_to_document(str(doc_id), ['done', 'success'])
-            console.print(f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.GAMEPLAN]} Gameplan implemented successfully![/green]")
-        elif context['type'] == ExecutionType.ANALYSIS:
-            console.print(f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.ANALYSIS]} Analysis completed successfully![/green]")
-        elif context['type'] == ExecutionType.NOTE:
-            console.print(f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.NOTE]} Note analysis completed successfully![/green]")
+            add_tags_to_document(str(doc_id), ["done", "success"])
+            console.print(
+                f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.GAMEPLAN]} Gameplan implemented successfully![/green]"
+            )
+        elif context["type"] == ExecutionType.ANALYSIS:
+            console.print(
+                f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.ANALYSIS]} Analysis completed successfully![/green]"
+            )
+        elif context["type"] == ExecutionType.NOTE:
+            console.print(
+                f"[green]{EXECUTION_TYPE_EMOJIS[ExecutionType.NOTE]} Note analysis completed successfully![/green]"
+            )
         else:
             console.print("[green]✅ Execution completed successfully![/green]")
     else:
@@ -679,19 +736,17 @@ def create_execution_worktree(execution_id: int, doc_id: int, doc_title: str) ->
     try:
         # Get project name from git remote
         result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=os.getcwd()
+            ["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=os.getcwd()
         )
 
         if result.returncode == 0:
             remote_url = result.stdout.strip()
             # Extract project name from URL
             import re
-            match = re.search(r'([^/]+)(\.git)?$', remote_url)
+
+            match = re.search(r"([^/]+)(\.git)?$", remote_url)
             if match:
-                project_name = match.group(1).replace('.git', '')
+                project_name = match.group(1).replace(".git", "")
             else:
                 project_name = Path.cwd().name
         else:
@@ -699,7 +754,7 @@ def create_execution_worktree(execution_id: int, doc_id: int, doc_title: str) ->
 
         # Create branch name from execution ID and doc title
         # Sanitize doc title for git branch name
-        safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
+        safe_title = re.sub(r"[^a-zA-Z0-9-]", "-", doc_title.lower())[:20]
         branch_name = f"exec-{execution_id}-doc-{doc_id}-{safe_title}"
 
         # Worktree directory
@@ -709,17 +764,13 @@ def create_execution_worktree(execution_id: int, doc_id: int, doc_title: str) ->
         worktree_path = worktrees_dir / worktree_name
 
         # Create branch from current HEAD
-        subprocess.run(
-            ["git", "branch", branch_name],
-            check=True,
-            capture_output=True
-        )
+        subprocess.run(["git", "branch", branch_name], check=True, capture_output=True)
 
         # Create worktree
         subprocess.run(
             ["git", "worktree", "add", str(worktree_path), branch_name],
             check=True,
-            capture_output=True
+            capture_output=True,
         )
 
         console.print(f"[green]✅ Created execution worktree: {worktree_path}[/green]")
@@ -740,7 +791,7 @@ def monitor_execution_detached(
     doc_id: int,
     doc_title: str,
     log_file: Path,
-    allowed_tools: Optional[List[str]] = None
+    allowed_tools: Optional[List[str]] = None,
 ) -> None:
     """Start Claude execution in detached mode and return immediately."""
     try:
@@ -751,9 +802,12 @@ def monitor_execution_detached(
         # Update execution with working directory if worktree was created
         if worktree_path:
             from ..database.connection import db_connection
+
             with db_connection.get_connection() as conn:
-                conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
-                            (str(worktree_path), execution_id))
+                conn.execute(
+                    "UPDATE executions SET working_dir = ? WHERE id = ?",
+                    (str(worktree_path), execution_id),
+                )
                 conn.commit()
 
         # Execute with Claude in detached mode
@@ -764,16 +818,16 @@ def monitor_execution_detached(
             allowed_tools=allowed_tools,
             working_dir=working_dir,
             doc_id=doc_id,
-            context=None  # Context not available in these functions yet
+            context=None,  # Context not available in these functions yet
         )
-        
+
         # Update execution with PID
         update_execution_pid(execution_id, pid)
     except Exception as e:
         # Log error
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(log_file, 'a') as f:
+            with open(log_file, "a") as f:
                 f.write(f"\n❌ Error in monitor_execution_detached: {e}\n")
             update_execution_status(execution_id, "failed", 1)
         except Exception:
@@ -786,7 +840,7 @@ def monitor_execution(
     doc_id: int,
     doc_title: str,
     log_file: Path,
-    allowed_tools: Optional[List[str]] = None
+    allowed_tools: Optional[List[str]] = None,
 ) -> None:
     """Monitor Claude execution and update status in database.
 
@@ -806,9 +860,12 @@ def monitor_execution(
         # Update execution with working directory if worktree was created
         if worktree_path:
             from ..database.connection import db_connection
+
             with db_connection.get_connection() as conn:
-                conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
-                            (str(worktree_path), execution_id))
+                conn.execute(
+                    "UPDATE executions SET working_dir = ? WHERE id = ?",
+                    (str(worktree_path), execution_id),
+                )
                 conn.commit()
 
         # Execute with Claude in the worktree
@@ -820,7 +877,7 @@ def monitor_execution(
             verbose=False,  # Don't show output when running in background
             working_dir=working_dir,
             doc_id=doc_id,
-            context=None  # Context not available in these functions yet
+            context=None,  # Context not available in these functions yet
         )
 
         # Update execution status
@@ -830,7 +887,7 @@ def monitor_execution(
         # Log error and update status
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(log_file, 'a') as f:
+            with open(log_file, "a") as f:
                 f.write(f"\n❌ Error in monitor_execution: {e}\n")
             update_execution_status(execution_id, "failed", 1)
         except Exception:
@@ -841,14 +898,18 @@ def monitor_execution(
 def execute(
     doc_id: str = typer.Argument(..., help="Document ID to execute"),
     background: bool = typer.Option(False, "--background", "-b", help="Run in background"),
-    tools: Optional[str] = typer.Option(None, "--tools", "-t",
-                                        help="Comma-separated list of allowed tools"),
-    smart: bool = typer.Option(True, "--smart/--no-smart",
-                              help="Use smart context-aware execution"),
-    exec_id: Optional[int] = typer.Option(None, "--exec-id", 
-                                          help="Execution ID (for internal use)"),
-    log_file: Optional[str] = typer.Option(None, "--log-file",
-                                           help="Log file path (for internal use)")
+    tools: Optional[str] = typer.Option(
+        None, "--tools", "-t", help="Comma-separated list of allowed tools"
+    ),
+    smart: bool = typer.Option(
+        True, "--smart/--no-smart", help="Use smart context-aware execution"
+    ),
+    exec_id: Optional[int] = typer.Option(
+        None, "--exec-id", help="Execution ID (for internal use)"
+    ),
+    log_file: Optional[str] = typer.Option(
+        None, "--log-file", help="Log file path (for internal use)"
+    ),
 ):
     """Execute a document with Claude Code."""
     # Get document
@@ -870,38 +931,41 @@ def execute(
     else:
         # Create new execution record and get auto-generated ID
         from ..models.executions import create_execution, format_execution_log_filename
-        
+
         # Set up log directory
         log_dir = Path.home() / ".config" / "emdx" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create temporary log file path (will update with proper ID)
         temp_log_file = log_dir / "temp_execution.log"
-        
+
         # Create execution record first to get numeric ID
         execution_id = create_execution(
             doc_id=int(doc_id),
-            doc_title=doc['title'],
+            doc_title=doc["title"],
             log_file=str(temp_log_file),
-            working_dir=os.getcwd()
+            working_dir=os.getcwd(),
         )
-        
+
         # Now create proper log file with numeric ID
         log_file = log_dir / format_execution_log_filename(execution_id)
-        
+
         # Update execution with correct log file path
         from ..models.executions import update_execution_status
         from ..database.connection import db_connection
+
         with db_connection.get_connection() as conn:
-            conn.execute("UPDATE executions SET log_file = ? WHERE id = ?", 
-                        (str(log_file), execution_id))
+            conn.execute(
+                "UPDATE executions SET log_file = ? WHERE id = ?", (str(log_file), execution_id)
+            )
             conn.commit()
 
     if smart:
         # Get document tags
         from ..models.tags import get_document_tags
+
         doc_tags = get_document_tags(doc_id)
-        
+
         # Use smart execution
         if background:
             console.print("[green]Starting smart execution in background...[/green]")
@@ -910,8 +974,8 @@ def execute(
 
             # Get execution context to show what will happen
             context = get_execution_context(doc_tags)
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            exec_type = context['type'].value.upper()
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context["type"], "⚡")
+            exec_type = context["type"].value.upper()
             console.print(f"[bold cyan]{exec_emoji} {exec_type} EXECUTION[/bold cyan]")
             console.print(f"[cyan]📋 {context['description']}[/cyan]")
 
@@ -921,7 +985,7 @@ def execute(
                 execution_id=execution_id,
                 log_file=log_file,
                 allowed_tools=allowed_tools,
-                use_stage_tools=True
+                use_stage_tools=True,
             )
 
             console.print("\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
@@ -933,13 +997,13 @@ def execute(
                 log_file=log_file,
                 allowed_tools=allowed_tools,
                 verbose=True,
-                background=False
+                background=False,
             )
     else:
         # Legacy execution mode - use default tools if none specified
         if allowed_tools is None:
             allowed_tools = DEFAULT_ALLOWED_TOOLS
-            
+
         if background:
             # Run in background thread
             console.print("[green]Starting execution in background...[/green]")
@@ -949,11 +1013,11 @@ def execute(
             # Execute in background without blocking
             monitor_execution_detached(
                 execution_id=execution_id,
-                task=doc['content'],
+                task=doc["content"],
                 doc_id=int(doc_id),
-                doc_title=doc['title'],
+                doc_title=doc["title"],
                 log_file=log_file,
-                allowed_tools=allowed_tools
+                allowed_tools=allowed_tools,
             )
 
             console.print("\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
@@ -965,26 +1029,28 @@ def execute(
             console.print()
 
             # Create worktree for execution
-            worktree_path = create_execution_worktree(execution_id, int(doc_id), doc['title'])
+            worktree_path = create_execution_worktree(execution_id, int(doc_id), doc["title"])
             working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
             # Update execution record with working directory
             if execution_id and worktree_path:
                 with db_connection.get_connection() as conn:
-                    conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
-                                (str(worktree_path), execution_id))
+                    conn.execute(
+                        "UPDATE executions SET working_dir = ? WHERE id = ?",
+                        (str(worktree_path), execution_id),
+                    )
                     conn.commit()
 
             # Execute in worktree
             exit_code = execute_with_claude(
-                task=doc['content'],
+                task=doc["content"],
                 execution_id=execution_id,
                 log_file=log_file,
                 allowed_tools=allowed_tools,
                 verbose=True,
                 working_dir=working_dir,
                 doc_id=doc_id,
-                context=None  # Direct execution - no context analysis
+                context=None,  # Direct execution - no context analysis
             )
 
             # Update status

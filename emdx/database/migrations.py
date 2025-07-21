@@ -35,7 +35,7 @@ def set_schema_version(conn: sqlite3.Connection, version: int):
 def migration_000_create_documents_table(conn: sqlite3.Connection):
     """Create the initial documents table and related schema."""
     cursor = conn.cursor()
-    
+
     # Create documents table
     cursor.execute(
         """
@@ -53,7 +53,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         )
         """
     )
-    
+
     # Create FTS5 virtual table for full-text search
     cursor.execute(
         """
@@ -63,7 +63,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         )
         """
     )
-    
+
     # Create triggers to keep FTS in sync
     cursor.execute(
         """
@@ -73,7 +73,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         END
         """
     )
-    
+
     cursor.execute(
         """
         CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
@@ -83,7 +83,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         END
         """
     )
-    
+
     cursor.execute(
         """
         CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
@@ -91,7 +91,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         END
         """
     )
-    
+
     # Create indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project)")
     cursor.execute(
@@ -104,7 +104,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         )
         """
     )
-    
+
     # Create gists table for tracking document-gist relationships
     cursor.execute(
         """
@@ -120,11 +120,11 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
         )
         """
     )
-    
+
     # Create indexes for gists table
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)")
-    
+
     conn.commit()
 
 
@@ -204,7 +204,7 @@ def migration_003_add_document_relationships(conn: sqlite3.Connection):
 
     # Add parent_id column to documents table
     cursor.execute("ALTER TABLE documents ADD COLUMN parent_id INTEGER")
-    
+
     # Add foreign key constraint (SQLite doesn't support adding FK constraints later)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_parent_id ON documents(parent_id)")
 
@@ -214,17 +214,17 @@ def migration_003_add_document_relationships(conn: sqlite3.Connection):
 def migration_004_add_execution_pid(conn: sqlite3.Connection):
     """Add process ID tracking to executions table."""
     cursor = conn.cursor()
-    
+
     # Add pid column to executions table
     cursor.execute("ALTER TABLE executions ADD COLUMN pid INTEGER")
-    
+
     conn.commit()
 
 
 def migration_005_execution_numeric_id(conn: sqlite3.Connection):
     """Migrate executions table from string IDs to auto-incrementing numeric IDs."""
     cursor = conn.cursor()
-    
+
     # Create new executions table with numeric ID
     cursor.execute(
         """
@@ -244,7 +244,7 @@ def migration_005_execution_numeric_id(conn: sqlite3.Connection):
         )
         """
     )
-    
+
     # Copy existing data to new table, preserving string IDs
     cursor.execute(
         """
@@ -255,17 +255,17 @@ def migration_005_execution_numeric_id(conn: sqlite3.Connection):
         FROM executions
         """
     )
-    
+
     # Drop old table and rename new one
     cursor.execute("DROP TABLE executions")
     cursor.execute("ALTER TABLE executions_new RENAME TO executions")
-    
+
     # Create indexes on new table
     cursor.execute("CREATE INDEX idx_executions_status ON executions(status)")
     cursor.execute("CREATE INDEX idx_executions_started_at ON executions(started_at)")
     cursor.execute("CREATE INDEX idx_executions_doc_id ON executions(doc_id)")
     cursor.execute("CREATE INDEX idx_executions_string_id ON executions(string_id)")
-    
+
     conn.commit()
 
 
@@ -285,7 +285,7 @@ def run_migrations():
     db_path = get_db_path()
     # Don't return early - we need to run migrations even for new databases
     # The database file will be created when we connect to it
-    
+
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
 
@@ -301,3 +301,4 @@ def run_migrations():
 
     finally:
         conn.close()
+

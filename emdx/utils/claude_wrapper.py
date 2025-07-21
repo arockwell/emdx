@@ -26,7 +26,7 @@ def format_timestamp() -> str:
 def log_to_file(log_path: Path, message: str) -> None:
     """Append a message to the log file."""
     try:
-        with open(log_path, 'a') as f:
+        with open(log_path, "a") as f:
             f.write(f"{format_timestamp()} {message}\n")
     except Exception as e:
         # If we can't write to log, at least print to stderr
@@ -38,53 +38,53 @@ def main():
     if len(sys.argv) < 4:
         print("Usage: claude_wrapper.py <exec_id> <log_file> <command...>", file=sys.stderr)
         sys.exit(1)
-    
+
     exec_id = sys.argv[1]  # Can be numeric or string ID
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
-    
+
     # Log wrapper start
     log_to_file(log_file, "🔄 Wrapper script started")
     log_to_file(log_file, f"📋 Execution ID: {exec_id}")
     log_to_file(log_file, f"📋 Command: {' '.join(cmd)}")
-    
+
     exit_code = 1  # Default to failure
     status = "failed"
-    
+
     try:
         # Run the actual Claude command
         log_to_file(log_file, "🚀 Starting Claude process...")
-        
+
         # Execute the command and stream output directly to log file
-        with open(log_file, 'a') as log_f:
+        with open(log_file, "a") as log_f:
             result = subprocess.run(
                 cmd,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
-                cwd=os.getcwd()  # Preserve working directory
+                cwd=os.getcwd(),  # Preserve working directory
             )
-        
+
         exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
-        
+
         log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
-        
+
     except subprocess.TimeoutExpired:
         log_to_file(log_file, "⏱️ Process timed out")
         status = "failed"
         exit_code = 124  # Standard timeout exit code
-        
+
     except KeyboardInterrupt:
         log_to_file(log_file, "⚠️ Process interrupted by user")
         status = "failed"
         exit_code = 130  # Standard SIGINT exit code
-        
+
     except Exception as e:
         log_to_file(log_file, f"❌ Wrapper error: {str(e)}")
         log_to_file(log_file, f"Traceback:\n{traceback.format_exc()}")
         status = "failed"
         exit_code = 1
-    
+
     finally:
         # Always try to update the database
         try:
@@ -100,10 +100,11 @@ def main():
             log_to_file(log_file, f"❌ Failed to update database: {str(e)}")
             # Don't exit with error if only DB update failed
             # The main process ran, which is what matters
-    
+
     # Exit with the same code as the subprocess
     sys.exit(exit_code)
 
 
 if __name__ == "__main__":
     main()
+
