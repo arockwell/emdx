@@ -132,9 +132,10 @@ class LogBrowser(Widget):
                 
                 # Table container (2/3 of sidebar height)
                 with Vertical(id="log-table-container") as table_container:
-                    table_container.styles.height = "66%"
+                    table_container.styles.height = "2fr"
                     table_container.styles.min_height = 15
                     table_container.styles.padding = 0
+                    table_container.styles.background = "#1a1a2e"
                     
                     table = DataTable(id="log-table")
                     table.cursor_type = "row"
@@ -143,10 +144,11 @@ class LogBrowser(Widget):
                 
                 # Details container (1/3 of sidebar height)
                 with Vertical(id="log-details-container") as details_container:
-                    details_container.styles.height = "34%"
+                    details_container.styles.height = "1fr"
                     details_container.styles.min_height = 8
                     details_container.styles.padding = 0
                     details_container.styles.border_top = ("heavy", "gray")
+                    details_container.styles.background = "#0f0f23"
                     
                     yield RichLog(
                         id="log-details",
