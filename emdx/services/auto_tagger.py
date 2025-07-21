@@ -454,3 +454,188 @@ class AutoTagger:
         # TODO: Implement tracking of pattern usage
         # This would require storing pattern match history
         return {}
+    
+    def suggest_tags_from_graph(self, doc_id: int, top_n: int = 5) -> List[Tuple[str, float]]:
+        """
+        Suggest tags based on document's graph neighborhood.
+        
+        Uses the knowledge graph to find similar documents and suggest
+        tags that are common among connected documents.
+        
+        Args:
+            doc_id: Document ID to suggest tags for
+            top_n: Number of tag suggestions to return
+            
+        Returns:
+            List of (tag, confidence) tuples sorted by confidence
+        """
+        from ..analysis.graph import GraphAnalyzer
+        
+        # Get graph analyzer
+        analyzer = GraphAnalyzer(self.db_path)
+        
+        # Get recommendations (similar documents)
+        recommendations = analyzer.get_node_recommendations(doc_id, limit=10)
+        
+        if not recommendations:
+            return []
+        
+        # Connect to database to get tags
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Get current document's tags to exclude
+        cursor.execute("""
+            SELECT GROUP_CONCAT(t.name) as tags
+            FROM documents d
+            LEFT JOIN document_tags dt ON d.id = dt.document_id
+            LEFT JOIN tags t ON dt.tag_id = t.id
+            WHERE d.id = ?
+            GROUP BY d.id
+        """, (doc_id,))
+        
+        result = cursor.fetchone()
+        current_tags = set(result[0].split(',')) if result and result[0] else set()
+        
+        # Collect tags from similar documents with weights
+        tag_scores = defaultdict(float)
+        total_weight = 0
+        
+        for rec in recommendations:
+            similar_id = rec['id']
+            similarity = rec['similarity_score'] / 100.0  # Normalize to 0-1
+            
+            # Get tags for similar document
+            cursor.execute("""
+                SELECT GROUP_CONCAT(t.name) as tags
+                FROM documents d
+                LEFT JOIN document_tags dt ON d.id = dt.document_id
+                LEFT JOIN tags t ON dt.tag_id = t.id
+                WHERE d.id = ?
+                GROUP BY d.id
+            """, (similar_id,))
+            
+            result = cursor.fetchone()
+            if result and result[0]:
+                similar_tags = result[0].split(',')
+                
+                # Weight tags by similarity score
+                for tag in similar_tags:
+                    if tag not in current_tags:  # Don't suggest existing tags
+                        tag_scores[tag] += similarity
+                        total_weight += similarity
+        
+        conn.close()
+        
+        # Normalize scores to get confidence values
+        if total_weight > 0:
+            tag_suggestions = [
+                (tag, score / total_weight) 
+                for tag, score in tag_scores.items()
+            ]
+        else:
+            tag_suggestions = []
+        
+        # Sort by confidence and return top N
+        tag_suggestions.sort(key=lambda x: x[1], reverse=True)
+        return tag_suggestions[:top_n]
+    
+    def auto_tag_with_graph(
+        self,
+        doc_id: int,
+        confidence_threshold: float = 0.3,
+        max_tags: int = 3,
+        dry_run: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Auto-tag a document using both content analysis and graph neighborhood.
+        
+        Args:
+            doc_id: Document ID to tag
+            confidence_threshold: Minimum confidence to apply tag
+            max_tags: Maximum number of tags to add
+            dry_run: If True, don't actually apply tags
+            
+        Returns:
+            Dictionary with tagging results
+        """
+        # Get document content
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT title, content, GROUP_CONCAT(t.name) as tags
+            FROM documents d
+            LEFT JOIN document_tags dt ON d.id = dt.document_id
+            LEFT JOIN tags t ON dt.tag_id = t.id
+            WHERE d.id = ?
+            GROUP BY d.id
+        """, (doc_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return {'error': f'Document {doc_id} not found'}
+        
+        title, content, existing_tags = result
+        existing_tags = existing_tags.split(',') if existing_tags else []
+        
+        # Get content-based suggestions
+        content_suggestions = self.analyze_document(title, content, existing_tags)
+        
+        # Get graph-based suggestions
+        graph_suggestions = self.suggest_tags_from_graph(doc_id)
+        
+        # Combine suggestions, preferring content-based when both suggest same tag
+        combined_suggestions = {}
+        
+        # Add content suggestions
+        for tag_data in content_suggestions:
+            tag = tag_data['tag']
+            combined_suggestions[tag] = {
+                'confidence': tag_data['confidence'],
+                'source': 'content',
+                'pattern': tag_data.get('pattern')
+            }
+        
+        # Add or boost graph suggestions
+        for tag, confidence in graph_suggestions:
+            if tag in combined_suggestions:
+                # Boost confidence if suggested by both
+                old_conf = combined_suggestions[tag]['confidence']
+                new_conf = min(1.0, old_conf + confidence * 0.5)
+                combined_suggestions[tag]['confidence'] = new_conf
+                combined_suggestions[tag]['source'] = 'both'
+            else:
+                combined_suggestions[tag] = {
+                    'confidence': confidence,
+                    'source': 'graph',
+                    'pattern': None
+                }
+        
+        # Filter by threshold and limit
+        final_tags = [
+            (tag, data) for tag, data in combined_suggestions.items()
+            if data['confidence'] >= confidence_threshold
+        ]
+        final_tags.sort(key=lambda x: x[1]['confidence'], reverse=True)
+        final_tags = final_tags[:max_tags]
+        
+        # Apply tags if not dry run
+        if not dry_run and final_tags:
+            from ..models.tags import add_tags_to_document
+            tags_to_add = [tag for tag, _ in final_tags]
+            added = add_tags_to_document(doc_id, tags_to_add)
+        else:
+            added = []
+        
+        conn.close()
+        
+        return {
+            'document_id': doc_id,
+            'title': title,
+            'existing_tags': existing_tags,
+            'suggestions': final_tags,
+            'applied': added if not dry_run else [],
+            'dry_run': dry_run
+        }

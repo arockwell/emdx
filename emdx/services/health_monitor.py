@@ -47,12 +47,13 @@ class HealthMonitor:
     
     # Metric weights
     WEIGHTS = {
-        'tag_coverage': 0.25,
-        'duplicate_ratio': 0.20,
-        'organization': 0.20,
+        'tag_coverage': 0.20,
+        'duplicate_ratio': 0.15,
+        'organization': 0.15,
         'activity': 0.15,
         'quality': 0.10,
-        'growth': 0.10
+        'growth': 0.10,
+        'connectivity': 0.15
     }
     
     def __init__(self, db_path: Optional[str] = None):
@@ -74,6 +75,7 @@ class HealthMonitor:
         metrics.append(self._calculate_activity_health())
         metrics.append(self._calculate_quality_health())
         metrics.append(self._calculate_growth_health())
+        metrics.append(self._calculate_connectivity_health())
         
         # Calculate weighted overall score
         overall_score = sum(m.value * m.weight for m in metrics)
@@ -521,6 +523,124 @@ class HealthMonitor:
             weight=self.WEIGHTS['growth'],
             status=status,
             details=f"+{growth_data['week']} this week, +{growth_data['month']} this month",
+            recommendations=recommendations
+        )
+    
+    def _calculate_connectivity_health(self) -> HealthMetric:
+        """
+        Calculate health based on document connectivity and knowledge graph structure.
+        
+        Good connectivity means:
+        - Low percentage of orphan documents
+        - Reasonable clustering (not too fragmented)
+        - Good distribution of connections
+        """
+        from ..analysis.graph import GraphAnalyzer
+        
+        # Get graph data
+        analyzer = GraphAnalyzer(self.db_path)
+        graph_data = analyzer.get_document_graph(
+            min_similarity=20.0,  # Include weak connections
+            include_orphans=True
+        )
+        
+        metrics = graph_data['metadata']['metrics']
+        node_count = graph_data['metadata']['node_count']
+        edge_count = graph_data['metadata']['edge_count']
+        
+        if node_count == 0:
+            return HealthMetric(
+                name='connectivity',
+                value=0.0,
+                weight=self.WEIGHTS['connectivity'],
+                status='critical',
+                details='No documents in knowledge base',
+                recommendations=['Start adding documents to build knowledge graph']
+            )
+        
+        # Calculate connectivity metrics
+        orphan_ratio = metrics['orphan_count'] / node_count if node_count > 0 else 1.0
+        density = metrics['density']
+        clustering = metrics['clustering_coefficient']
+        components = metrics['connected_components']
+        
+        # Calculate sub-scores
+        
+        # 1. Orphan score (fewer orphans is better)
+        orphan_score = max(0, 1.0 - orphan_ratio)
+        
+        # 2. Component score (fewer components relative to nodes is better)
+        component_ratio = len(components) / node_count if node_count > 0 else 1.0
+        component_score = max(0, 1.0 - component_ratio * 2)  # Penalize fragmentation
+        
+        # 3. Density score (moderate density is best - not too sparse, not too dense)
+        if density < 0.05:  # Too sparse
+            density_score = density * 20  # Scale up to 0-1
+        elif density > 0.3:  # Too dense
+            density_score = max(0, 1.0 - (density - 0.3) * 2)
+        else:  # Good range
+            density_score = 1.0
+        
+        # 4. Distribution score (check if connections are well-distributed)
+        centrality_values = [c['weighted_degree'] for c in metrics['centrality'].values()]
+        if centrality_values:
+            # Check standard deviation - lower is better (more even distribution)
+            if len(centrality_values) > 1:
+                mean_centrality = statistics.mean(centrality_values)
+                std_centrality = statistics.stdev(centrality_values)
+                cv = std_centrality / mean_centrality if mean_centrality > 0 else 0
+                distribution_score = max(0, 1.0 - cv)
+            else:
+                distribution_score = 0.5
+        else:
+            distribution_score = 0.0
+        
+        # Combine scores with weights
+        connectivity_score = (
+            orphan_score * 0.4 +       # Orphans are most important
+            component_score * 0.3 +     # Fragmentation is important
+            density_score * 0.2 +       # Density matters less
+            distribution_score * 0.1    # Distribution is least important
+        )
+        
+        # Determine status
+        if connectivity_score < 0.4:
+            status = 'critical'
+        elif connectivity_score < 0.7:
+            status = 'warning'
+        else:
+            status = 'good'
+        
+        # Generate recommendations
+        recommendations = []
+        
+        if orphan_ratio > 0.3:
+            recommendations.append(f"High orphan rate ({orphan_ratio:.1%}) - add tags to connect isolated documents")
+        
+        if len(components) > node_count * 0.2:
+            recommendations.append(f"Knowledge is fragmented ({len(components)} clusters) - find connections between topics")
+        
+        if density < 0.02:
+            recommendations.append("Very sparse graph - enrich documents with more tags and cross-references")
+        elif density > 0.3:
+            recommendations.append("Very dense graph - consider more specific tagging to clarify relationships")
+        
+        bridge_count = len(metrics.get('bridge_nodes', []))
+        if bridge_count > 0 and bridge_count < 5:
+            recommendations.append(f"Key bridge documents: {', '.join(str(b) for b in metrics['bridge_nodes'][:3])}")
+        
+        # Build details string
+        details_parts = []
+        details_parts.append(f"{orphan_ratio:.0%} orphans")
+        details_parts.append(f"{len(components)} clusters")
+        details_parts.append(f"{density:.3f} density")
+        
+        return HealthMetric(
+            name='connectivity',
+            value=connectivity_score,
+            weight=self.WEIGHTS['connectivity'],
+            status=status,
+            details=', '.join(details_parts),
             recommendations=recommendations
         )
     
