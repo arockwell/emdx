@@ -444,13 +444,21 @@ class DocumentBrowser(Widget):
         doc = self.filtered_docs[row_idx]
         self.editing_doc_id = doc["id"]
         
-        logger.info(f"🔍 DEBUG: Entering edit mode for doc {doc['id']} at row {row_idx}")
+        # Build ID for debugging
+        import time
+        build_id = f"BUILD-{int(time.time())}"
+        logger.info(f"🔍 {build_id} DEBUG: Entering edit mode for doc {doc['id']} at row {row_idx}")
         
         # Load full document
         full_doc = get_document(str(doc["id"]))
-        logger.info(f"🔍 DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
-        logger.info(f"🔍 DEBUG: Content length: {len(full_doc.get('content', ''))}")
-        logger.info(f"🔍 DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
+        # Also print to console for immediate visibility
+        print(f"🔍 {build_id} DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
+        print(f"🔍 {build_id} DEBUG: Content length: {len(full_doc.get('content', ''))}")
+        print(f"🔍 {build_id} DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
+        
+        logger.info(f"🔍 {build_id} DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
+        logger.info(f"🔍 {build_id} DEBUG: Content length: {len(full_doc.get('content', ''))}")
+        logger.info(f"🔍 {build_id} DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
             
         if not full_doc:
             return
@@ -470,20 +478,34 @@ class DocumentBrowser(Widget):
                 if child.id in ["preview", "preview-content"]:
                     await child.remove()
         
-        # Create vim editor with line numbers
-        from .vim_editor import VimEditor
-        logger.info(f"🔍 DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
-        vim_editor = VimEditor(self, content=full_doc["content"], id="vim-editor-container")
-        logger.info(f"🔍 DEBUG: VimEditor created, mounting...")
-        await preview_container.mount(vim_editor)
-        logger.info(f"🔍 DEBUG: VimEditor mounted, focusing...")
-        vim_editor.focus_editor()
-        logger.info(f"🔍 DEBUG: VimEditor focused")
+        # TEMPORARY TEST: Use plain TextArea to isolate issue
+        from textual.widgets import TextArea
+        print(f"🔍 {build_id} DEBUG: Creating plain TextArea with content length: {len(full_doc['content'])}")
+        logger.info(f"🔍 {build_id} DEBUG: Creating plain TextArea with content length: {len(full_doc['content'])}")
+        
+        # Create a simple TextArea with debug styling
+        test_area = TextArea(
+            text=full_doc["content"],
+            id="test-text-area"
+        )
+        test_area.styles.border = ("solid", "red")
+        test_area.styles.background = "#ff000020"
+        
+        print(f"🔍 {build_id} DEBUG: Plain TextArea created, mounting...")
+        logger.info(f"🔍 {build_id} DEBUG: Plain TextArea created, mounting...")
+        await preview_container.mount(test_area)
+        test_area.focus()
+        print(f"🔍 {build_id} DEBUG: Plain TextArea mounted and focused")
+        print(f"🔍 {build_id} DEBUG: TextArea.text length after mount: {len(test_area.text)}")
+        logger.info(f"🔍 {build_id} DEBUG: Plain TextArea mounted and focused")
+        
+        # Store reference for save
+        self._test_area = test_area
         
         self.edit_mode = True
         
-        # Show vim mode indicator immediately - use call_after_refresh to ensure widget is ready
-        self.call_after_refresh(lambda: self._update_vim_status(f"{vim_editor.text_area.vim_mode} | ESC=exit"))
+        # Show status for test
+        self.call_after_refresh(lambda: self._update_vim_status("TEST MODE - Plain TextArea | ESC=exit"))
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
@@ -552,8 +574,12 @@ class DocumentBrowser(Widget):
                 # Update existing document
                 if self.editing_doc_id:
                     try:
-                        vim_editor = self.query_one("#vim-editor-container", VimEditor)
-                        content = vim_editor.text_area.text
+                        # TEMPORARY: Get content from test area
+                        if hasattr(self, '_test_area'):
+                            content = self._test_area.text
+                        else:
+                            vim_editor = self.query_one("#vim-editor-container", VimEditor)
+                            content = vim_editor.text_area.text
                         
                         from emdx.models.documents import update_document, get_document
                         # Get the current document to preserve the title
