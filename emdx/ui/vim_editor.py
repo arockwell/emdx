@@ -66,15 +66,21 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # TEMPORARILY DISABLED: Line numbers causing layout issues
-        # Just mount the text area directly without line numbers
+        # Configure line numbers widget
+        self.line_numbers.styles.width = 4
+        self.line_numbers.styles.min_width = 4
+        self.line_numbers.styles.max_width = 4
+        self.line_numbers.styles.background = "$background"
+        self.line_numbers.styles.color = "$text-muted"
+        self.line_numbers.styles.padding = (1, 1, 0, 0)
+        self.line_numbers.styles.dock = "left"
         
-        # Configure text area to take full space
+        # Configure text area to take remaining space
         self.text_area.styles.width = "100%"
         self.text_area.styles.padding = (0, 1)  # Add horizontal padding
         
-        # Mount only text area (no line numbers for now)
-        self.edit_container.mount(self.text_area)
+        # Mount line numbers and text area in proper order
+        self.edit_container.mount(self.line_numbers, self.text_area)
         
         logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
         logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
@@ -86,11 +92,12 @@ class VimEditor(Vertical):
         
         # Focus the text area and initialize line numbers
         self.text_area.can_focus = True
-        self.call_after_refresh(lambda: self._initialize_editor())
         
-        # WORKAROUND: Schedule a second positioning attempt slightly later
-        # This handles cases where TextArea's internal logic overrides our initial positioning
-        self.set_timer(0.1, lambda: self._delayed_positioning_check())
+        # Initialize line numbers immediately on mount
+        self._initialize_editor()
+        
+        # Update line numbers on every cursor move
+        self.set_interval(0.05, self._update_line_numbers_periodically)
     
     def get_text(self):
         """Get the current text content."""
@@ -123,6 +130,29 @@ class VimEditor(Vertical):
             self.line_numbers.styles.width = line_number_width
             self.line_numbers.styles.min_width = line_number_width
             self.line_numbers.styles.max_width = line_number_width
+    
+    def _update_line_numbers_periodically(self):
+        """Periodically update line numbers to ensure they stay in sync."""
+        try:
+            if not self.text_area.has_focus:
+                return
+                
+            # Get current cursor position
+            if hasattr(self.text_area, 'selection') and self.text_area.selection:
+                current_line = self.text_area.selection.end[0]
+            elif hasattr(self.text_area, 'cursor_location'):
+                current_line = self.text_area.cursor_location[0]
+            else:
+                current_line = 0
+                
+            total_lines = len(self.text_area.text.split('\n'))
+            
+            # Update line numbers
+            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            self._update_line_number_width()
+            
+        except Exception as e:
+            logger.debug(f"Error in periodic line number update: {e}")
     
     def _initialize_editor(self):
         """Initialize editor after mounting - focus and set up line numbers."""
@@ -233,56 +263,18 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # TEMPORARILY DISABLED: Line numbers
-            # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            # self._update_line_number_width()
-            # if hasattr(self.text_area, '_update_line_numbers'):
-            #     logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-            #     self.text_area._update_line_numbers()
+            # Initialize line numbers
+            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            self._update_line_number_width()
+            if hasattr(self.text_area, '_update_line_numbers'):
+                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+                self.text_area._update_line_numbers()
                 
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
         except Exception as e:
             logger.error(f"Error initializing vim editor: {e}")
     
-    def _delayed_positioning_check(self):
-        """Delayed check to ensure positioning worked correctly."""
-        try:
-            logger.debug(f"🔢 DELAYED POSITIONING CHECK starting")
-            
-            # Check if we're still at the top
-            current_cursor = getattr(self.text_area, 'cursor_location', (0, 0))
-            current_selection = getattr(self.text_area, 'selection', None)
-            
-            logger.debug(f"🔢   Current cursor after delay: {current_cursor}")
-            logger.debug(f"🔢   Current selection after delay: {current_selection}")
-            
-            # If we're not at the top, force it again
-            cursor_row = current_cursor[0] if current_cursor else 0
-            selection_row = current_selection.end[0] if current_selection else 0
-            
-            if cursor_row != 0 or selection_row != 0:
-                logger.debug(f"🔢   NOT AT TOP! cursor_row={cursor_row}, selection_row={selection_row}")
-                logger.debug(f"🔢   Forcing position to top again...")
-                
-                # Force positioning again
-                self.text_area.cursor_location = (0, 0)
-                if hasattr(self.text_area, 'selection'):
-                    self.text_area.selection = None
-                # TEMPORARILY DISABLED: scroll_to might be hiding first line
-                # if hasattr(self.text_area, 'scroll_to'):
-                #     self.text_area.scroll_to(0, 0, animate=False)
-                    
-                # TEMPORARILY DISABLED: Line numbers
-                # total_lines = len(self.text_area.text.split('\n'))
-                # self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
-                
-                logger.debug(f"🔢   Forced positioning completed")
-            else:
-                logger.debug(f"🔢   Position is correct, no adjustment needed")
-                
-        except Exception as e:
-            logger.error(f"Error in delayed positioning check: {e}")
     
     @property
     def vim_mode(self):

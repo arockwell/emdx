@@ -194,6 +194,29 @@ class DocumentBrowser(Widget):
         height: 1fr;
         width: 100%;
     }
+    
+    .vim-line-numbers {
+        width: 4;
+        background: $background;
+        color: $text-muted;
+        text-align: right;
+        padding-right: 1;
+        padding-top: 1;
+        margin: 0;
+        border: none;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
+    }
+    
+    #vim-line-numbers {
+        dock: left;
+    }
+    
+    #vim-edit-container {
+        layout: horizontal;
+        width: 100%;
+        height: 100%;
+    }
     """
     
     # Reactive properties

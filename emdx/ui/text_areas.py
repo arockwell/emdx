@@ -160,12 +160,11 @@ class VimEditTextArea(TextArea):
                 else:
                     current_line = 0
                 
-                # Log the actual cursor position to debug
+                # Get total lines
                 total_lines = len(self.text.split('\n'))
                 logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
                 
-                # Pass the raw cursor position - no adjustment
-                # The issue might be in the display, not the data
+                # Update the widget
                 self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
                 
                 # Update line number widget width if parent has the method
