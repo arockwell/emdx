@@ -26,7 +26,7 @@ These commands STILL execute and hang the session. This is a critical bug in Cla
 
 ## Project Overview
 
-EMDX is a powerful command-line knowledge base and documentation management system built in Python. It provides full-text search, tagging, project organization, and multiple interfaces (CLI, TUI, web) for managing and accessing your knowledge base.
+EMDX is an intelligent knowledge assistant built in Python that transforms how you manage documentation. Version 0.7.0 introduces AI-powered analysis, automated maintenance, health monitoring, and comprehensive Unix pipeline integration, evolving EMDX from a storage tool to an intelligent knowledge management system.
 
 ## Architecture
 
@@ -40,8 +40,18 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 - **TUI Browser** (`emdx/ui/textual_browser.py`) - Interactive terminal interface
 - **Integrations** (`emdx/commands/gist.py`, `emdx/ui/nvim_wrapper.py`) - External tool integrations
 
+### New Service Components (0.7.0)
+- **Analysis Commands** (`emdx/commands/analyze.py`) - Unified analysis interface
+- **Maintenance Commands** (`emdx/commands/maintain.py`) - Automated maintenance operations
+- **Lifecycle Commands** (`emdx/commands/lifecycle.py`) - Document lifecycle tracking
+- **Health Monitor** (`emdx/services/health_monitor.py`) - Knowledge base health scoring
+- **Auto-Tagger** (`emdx/services/auto_tagger.py`) - AI-powered tag suggestions
+- **Duplicate Detector** (`emdx/services/duplicate_detector.py`) - Find duplicate content
+- **Document Merger** (`emdx/services/document_merger.py`) - Smart document merging
+- **Lifecycle Tracker** (`emdx/services/lifecycle_tracker.py`) - Gameplan progression
+
 ### Key Features
-- **Full-text search** with SQLite FTS5 and fuzzy matching
+- **Full-text search** with SQLite FTS5, fuzzy matching, and date filtering
 - **Emoji tag system** with intuitive text aliases (gameplan→🎯, active→🚀)
 - **Tag-based organization** with flexible search (all/any tag modes)
 - **Project detection** from git repositories
@@ -49,6 +59,15 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 - **GitHub Gist integration** for sharing
 - **Neovim integration** for editing
 - **Rich formatting** with syntax highlighting and markdown rendering
+
+### New Intelligence Features (0.7.0)
+- **Health monitoring** with weighted scoring system (0-100%)
+- **Auto-tagging** based on content patterns and AI analysis
+- **Duplicate detection** with exact and similarity matching
+- **Smart merging** of similar documents
+- **Lifecycle tracking** for gameplans with success analytics
+- **JSON output** for all commands enabling pipeline integration
+- **Dry-run safety** by default for all destructive operations
 
 ## Development Guidelines
 
@@ -232,10 +251,22 @@ emdx stats                                             # Overall stats
 emdx project-stats                                     # Detailed project breakdown
 emdx projects                                          # List all projects
 
-# Cleanup and maintenance
+# Cleanup and maintenance (OLD - still works)
 emdx trash                                             # View deleted documents
 emdx restore 123                                       # Restore from trash
 emdx delete 123                                        # Soft delete to trash
+
+# NEW 0.7.0 Analysis & Maintenance Commands
+emdx analyze --health                                  # Check knowledge base health
+emdx analyze --duplicates --json                      # Find duplicates (JSON output)
+emdx analyze --all                                     # Run all analyses
+
+emdx maintain --auto                                   # Preview automatic fixes
+emdx maintain --auto --execute                        # Apply fixes
+emdx maintain --clean --execute                       # Remove duplicates/empty docs
+
+emdx lifecycle status                                  # Show document lifecycle stages
+emdx lifecycle analyze --json                          # Gameplan success analytics
 ```
 
 ### ⚠️ Critical Save Syntax
@@ -244,7 +275,49 @@ emdx delete 123                                        # Soft delete to trash
 
 The wrong syntax was causing ~40 empty documents because emdx was looking for a file named "text content" that didn't exist.
 
+### ⚠️ Critical Warning: Destructive Operations
+**Version 0.7.0 makes all destructive operations safe by default:**
+
+```bash
+# SAFE (preview only):
+emdx maintain --clean
+emdx maintain --merge
+emdx lifecycle auto-detect
+
+# DESTRUCTIVE (requires explicit flag):
+emdx maintain --clean --execute
+emdx maintain --merge --execute
+emdx lifecycle auto-detect --execute
+```
+
+**NEVER** use `--execute` without first running the preview!
+
 This project emphasizes clean architecture, comprehensive testing, and user-friendly interfaces while maintaining high code quality standards.
+
+## Command Consolidation (0.7.0)
+
+### Deprecated Commands
+The following commands have been **removed** in 0.7.0:
+
+| Old Command | New Command | Migration Notes |
+|-------------|-------------|------------------|
+| `emdx health` | `emdx analyze --health` | More comprehensive metrics |
+| `emdx clean` | `emdx maintain --clean` | Includes dry-run by default |
+| `emdx merge` | `emdx maintain --merge` | Smarter similarity detection |
+
+### New Command Pattern
+Version 0.7.0 introduces three main command groups:
+
+1. **`analyze`** - Read-only inspection and health checks
+2. **`maintain`** - Modification operations with dry-run safety
+3. **`lifecycle`** - Document lifecycle and gameplan tracking
+
+### Safety First: Dry-Run by Default
+All destructive operations now require explicit `--execute` flag:
+```bash
+emdx maintain --clean          # Preview what would be deleted
+emdx maintain --clean --execute  # Actually delete
+```
 
 ## Vim Editing Mode
 
@@ -366,3 +439,46 @@ When Claude Code helps with EMDX:
 5. **Maintain minimal taxonomy** - resist adding too many tags
 
 This enables powerful project management and success tracking while keeping the tag system simple and space-efficient in the GUI.
+
+## JSON Output Integration (0.7.0)
+
+Most commands now support `--json` output for automation:
+
+```bash
+# Health checks in CI/CD
+HEALTH_SCORE=$(emdx analyze --health --json | jq '.health_score')
+if [ "$HEALTH_SCORE" -lt 80 ]; then
+    echo "Knowledge base health is low: ${HEALTH_SCORE}%"
+    exit 1
+fi
+
+# Document processing pipelines
+emdx find "bug" --json | jq -r '.documents[] | select(.tags | contains(["urgent"])) | .id' | \
+    xargs -I {} emdx view {} --raw | \
+    your-ticket-creation-script
+
+# Automated reporting
+emdx analyze --all --json > daily-report.json
+emdx lifecycle analyze --json | jq '.success_rate' > gameplan-metrics.txt
+```
+
+## Development Workflow Updates (0.7.0)
+
+### Working with Service Architecture
+The new service layer provides clean separation of concerns:
+
+1. **Commands** (`commands/analyze.py`, `maintain.py`, `lifecycle.py`) handle CLI interface
+2. **Services** (`services/health_monitor.py`, etc.) contain business logic
+3. **Models** continue to handle data operations
+
+### Adding New Analysis Features
+1. Create service in `services/` directory
+2. Add to `analyze.py` command group
+3. Ensure JSON output support
+4. Add appropriate tests
+
+### Health Metrics Integration
+When adding features that affect knowledge base quality:
+1. Update `HealthMonitor.calculate_health()` if needed
+2. Add new metrics to health score calculation
+3. Provide actionable recommendations
