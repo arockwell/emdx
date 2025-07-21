@@ -20,6 +20,26 @@ from .vim_line_numbers import SimpleVimLineNumbers
 class VimEditor(Vertical):
     """Unified vim editor with line numbers and proper layout."""
     
+    CSS = """
+    #vim-edit-container {
+        layout: horizontal;
+    }
+    
+    #vim-line-numbers {
+        width: 4;
+        min-width: 4;
+        max-width: 4;
+        padding: 0 1 0 0;
+        background: $surface;
+        color: $text-muted;
+        text-align: right;
+    }
+    
+    #vim-text-area {
+        width: 1fr;
+    }
+    """
+    
     def __init__(self, app_instance, content="", **kwargs):
         """Initialize vim editor.
         
@@ -66,25 +86,25 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # TEMPORARILY DISABLED: Line numbers causing layout issues
-        # Just mount the text area directly without line numbers
+        # Configure line numbers widget
+        self.line_numbers.styles.width = 4  # Fixed width for line numbers
+        self.line_numbers.styles.min_width = 4
+        self.line_numbers.styles.max_width = 4
+        self.line_numbers.styles.padding = (0, 0, 0, 1)  # Right padding
+        self.line_numbers.styles.background = "$surface"
         
-        # Configure text area to take full space
-        self.text_area.styles.width = "100%"
+        # Configure text area to use remaining space
+        self.text_area.styles.width = "1fr"  # Use fraction unit for remaining space
         self.text_area.styles.padding = (0, 1)  # Add horizontal padding
         
-        # Mount only text area (no line numbers for now)
-        self.edit_container.mount(self.text_area)
+        # Mount both line numbers and text area
+        self.edit_container.mount(self.line_numbers, self.text_area)
         
-        logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
+        logger.debug(f"🔍 VimEditor.on_mount: Components mounted with line numbers")
         logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
         logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
         
-        # Ensure the entire vim editor container starts at top
-        # TEMPORARILY DISABLED: This might be causing first line visibility issues
-        # self.scroll_to(0, 0, animate=False)
-        
-        # Focus the text area and initialize line numbers
+        # Focus the text area and initialize editor
         self.text_area.can_focus = True
         self.call_after_refresh(lambda: self._initialize_editor())
         
@@ -233,12 +253,12 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # TEMPORARILY DISABLED: Line numbers
-            # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            # self._update_line_number_width()
-            # if hasattr(self.text_area, '_update_line_numbers'):
-            #     logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-            #     self.text_area._update_line_numbers()
+            # Initialize line numbers
+            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            self._update_line_number_width()
+            if hasattr(self.text_area, '_update_line_numbers'):
+                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+                self.text_area._update_line_numbers()
                 
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
@@ -273,9 +293,9 @@ class VimEditor(Vertical):
                 # if hasattr(self.text_area, 'scroll_to'):
                 #     self.text_area.scroll_to(0, 0, animate=False)
                     
-                # TEMPORARILY DISABLED: Line numbers
-                # total_lines = len(self.text_area.text.split('\n'))
-                # self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
+                # Update line numbers after repositioning
+                total_lines = len(self.text_area.text.split('\n'))
+                self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
                 
                 logger.debug(f"🔢   Forced positioning completed")
             else:
