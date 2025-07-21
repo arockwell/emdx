@@ -9,6 +9,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
 from .text_areas import VimEditTextArea
+from ..config.vim_settings import vim_settings
 
 logger = logging.getLogger(__name__)
 
@@ -66,21 +67,29 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # Configure line numbers widget
-        self.line_numbers.styles.width = 4
-        self.line_numbers.styles.min_width = 4
-        self.line_numbers.styles.max_width = 4
-        self.line_numbers.styles.background = "$background"
-        self.line_numbers.styles.color = "$text-muted"
-        self.line_numbers.styles.padding = (1, 1, 0, 0)
-        self.line_numbers.styles.dock = "left"
-        
-        # Configure text area to take remaining space
-        self.text_area.styles.width = "100%"
-        self.text_area.styles.padding = (0, 1)  # Add horizontal padding
-        
-        # Mount line numbers and text area in proper order
-        self.edit_container.mount(self.line_numbers, self.text_area)
+        # Check if line numbers are enabled
+        if vim_settings.line_numbers_enabled:
+            # Configure line numbers widget
+            width = vim_settings.line_numbers_width
+            self.line_numbers.styles.width = width
+            self.line_numbers.styles.min_width = width
+            self.line_numbers.styles.max_width = width
+            self.line_numbers.styles.background = vim_settings.settings["colors"]["line_numbers"]["background"]
+            self.line_numbers.styles.color = vim_settings.settings["colors"]["line_numbers"]["foreground"]
+            self.line_numbers.styles.padding = (1, 1, 0, 0)
+            self.line_numbers.styles.dock = "left"
+            
+            # Configure text area to take remaining space
+            self.text_area.styles.width = "100%"
+            self.text_area.styles.padding = (0, 1)  # Add horizontal padding
+            
+            # Mount line numbers and text area in proper order
+            self.edit_container.mount(self.line_numbers, self.text_area)
+        else:
+            # No line numbers, just mount text area
+            self.text_area.styles.width = "100%"
+            self.text_area.styles.padding = (0, 1)
+            self.edit_container.mount(self.text_area)
         
         logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
         logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
@@ -96,8 +105,9 @@ class VimEditor(Vertical):
         # Initialize line numbers immediately on mount
         self._initialize_editor()
         
-        # Update line numbers on every cursor move
-        self.set_interval(0.05, self._update_line_numbers_periodically)
+        # Update line numbers on every cursor move if enabled
+        if vim_settings.line_numbers_enabled:
+            self.set_interval(0.05, self._update_line_numbers_periodically)
     
     def get_text(self):
         """Get the current text content."""
@@ -263,12 +273,13 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # Initialize line numbers
-            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            self._update_line_number_width()
-            if hasattr(self.text_area, '_update_line_numbers'):
-                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-                self.text_area._update_line_numbers()
+            # Initialize line numbers if enabled
+            if vim_settings.line_numbers_enabled:
+                self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+                self._update_line_number_width()
+                if hasattr(self.text_area, '_update_line_numbers'):
+                    logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+                    self.text_area._update_line_numbers()
                 
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
