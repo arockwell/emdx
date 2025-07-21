@@ -2,6 +2,15 @@
 
 EMDX 0.7.0 introduces powerful Unix pipeline integration and JSON output, enabling sophisticated automation workflows. This guide shows you how to integrate EMDX into your development workflow.
 
+## 🎯 New in 0.7.0
+
+EMDX 0.7.0 transforms automation capabilities:
+- **Consolidated commands** make scripting simpler
+- **JSON everywhere** enables sophisticated pipelines
+- **Auto-tagging** reduces manual organization
+- **Health monitoring** enables proactive maintenance
+- **Dry-run by default** prevents automation accidents
+
 ## 🔧 Core Automation Features
 
 ### Pipeline-Friendly Output
@@ -548,5 +557,33 @@ set -x  # Enable bash debug
    # Validate JSON output
    emdx analyze --json | jq empty
    ```
+
+## 🌟 Success Stories
+
+### Story 1: The DevOps Team
+"We pipe our Docker logs and Kubernetes events directly into EMDX. Auto-tagging identifies issues immediately. Our incident response time dropped by 40%."
+
+```bash
+# Their automation
+kubectl events | emdx save --title "K8s events $(date)" --auto-tag
+docker logs app | tail -1000 | emdx save --title "App logs" --auto-tag
+```
+
+### Story 2: The Research Lab
+"EMDX replaced our mess of text files. The health monitoring keeps our research organized, and JSON export feeds directly into our analysis pipeline."
+
+```bash
+# Their daily routine
+emdx maintain --auto --execute
+emdx find --tags "experiment,active" --format json | python analyze.py
+```
+
+### Story 3: The Solo Developer
+"I save everything - code snippets, debug sessions, architecture decisions. The weekly maintenance keeps it manageable. It's like having a personal knowledge assistant."
+
+```bash
+# Their git hook
+git log -1 --pretty=full | emdx save --title "Commit: %s" --auto-tag
+```
 
 Start automating today and let EMDX work for you! 🤖

@@ -45,10 +45,10 @@ Growth            70%  ⚠️   Steady growth rate
 
 #### 3. Organization (Weight: 20%)
 - **What it measures**: Project distribution and naming consistency
-- **Good**: Documents spread across multiple projects
-- **Warning**: Most documents in one project
+- **Good**: Documents spread across multiple projects with balanced distribution
+- **Warning**: Most documents in one project or "[No Project]"
 - **Poor**: No project organization
-- **How to improve**: Use `--project` when saving documents
+- **How to improve**: Use `--project` when saving documents, or save from git repos for auto-detection
 
 #### 4. Activity (Weight: 15%)
 - **What it measures**: Recent access patterns and usage
@@ -413,6 +413,94 @@ Aim for these targets:
 | Activity | >70% | Living documentation |
 | Quality | >80% | Valuable content |
 
+## 🌟 Real-World Maintenance Workflows
+
+### Workflow 1: The Morning Routine
+```bash
+#!/bin/bash
+# morning-review.sh
+# Start your day with a healthy knowledge base
+
+echo "🌅 Good morning! Let's check your knowledge base..."
+echo
+
+# Quick health check
+emdx analyze --health | grep "Overall Score"
+
+# Show what needs attention
+echo -e "\n🔧 Maintenance needed:"
+emdx maintain --auto | grep -A 5 "This will:"
+
+# Recent additions that need tags
+echo -e "\n🏷️  Recent documents without tags:"
+emdx find --created-after "yesterday" --no-tags "*" --limit 5
+
+# Today's active gameplans
+echo -e "\n🎯 Active gameplans:"
+emdx find --tags "gameplan,active" --limit 5
+```
+
+### Workflow 2: The Weekly Sprint Review
+```bash
+#!/bin/bash
+# sprint-review.sh
+# End of sprint knowledge cleanup
+
+echo "=== Sprint Knowledge Review ==="
+
+# Documents created this sprint
+echo "Documents created this week:"
+emdx find --created-after "1 week ago" --format json | jq 'length'
+
+# Tag the sprint's work
+SPRINT="sprint-$(date +%U)"
+emdx find --created-after "1 week ago" --ids-only | \
+  xargs -I {} emdx tag {} "$SPRINT"
+
+# Archive completed gameplans
+echo -e "\nCompleted gameplans:"
+emdx find --tags "gameplan,done" --modified-after "1 week ago" \
+  --ids-only | xargs -I {} emdx lifecycle transition {} archived
+
+# Clean up
+emdx maintain --auto --execute
+```
+
+### Workflow 3: The Monthly Deep Dive
+```bash
+#!/bin/bash
+# monthly-analysis.sh
+# Monthly knowledge base analysis and cleanup
+
+MONTH=$(date +%B)
+echo "=== $MONTH Knowledge Base Analysis ==="
+
+# Growth metrics
+echo "Growth this month:"
+emdx analyze --json | jq -r '
+  "Total documents: \(.statistics.total_documents)
+  Active projects: \(.statistics.total_projects)
+  Unique tags: \(.statistics.total_tags)"
+'
+
+# Project-level health
+echo -e "\nProject Health Scores:"
+emdx project-stats --json | jq -r '.projects[] | 
+  "\(.name): \(.document_count) docs, \(.avg_tags_per_doc) avg tags"
+'
+
+# Find neglected projects
+echo -e "\nProjects needing attention:"
+emdx project-stats --json | jq -r '.projects[] | 
+  select(.days_since_last_update > 30) | .name
+'
+
+# Deep maintenance
+echo -e "\nRunning deep maintenance..."
+emdx maintain --auto --execute
+emdx maintain --gc --execute
+```
+
 ## 🆘 Recovery Procedures
 
 ### Restore from Trash
@@ -463,5 +551,34 @@ Use this checklist for manual maintenance:
 - [ ] Backup database
 - [ ] Review growth trends
 - [ ] Update maintenance scripts
+
+## 💡 Pro Tips
+
+### Preventive Maintenance
+1. **Always use auto-tag on save**: `emdx save doc.md --auto-tag`
+2. **Search before saving** to avoid duplicates
+3. **Use meaningful titles** for better organization
+4. **Regular small cleanups** beat big maintenance sessions
+
+### Performance Optimization
+```bash
+# Optimize database after major operations
+emdx maintain --gc --execute
+
+# Check database size
+du -h ~/.config/emdx/knowledge.db
+
+# Export old content before archiving
+emdx find --modified-before "1 year ago" --format json > archive.json
+```
+
+### Integration with Development Workflow
+```bash
+# Git post-commit hook
+#!/bin/bash
+# .git/hooks/post-commit
+git diff --name-only HEAD~1 | grep -E '\.(md|txt|doc)$' | \
+  xargs -I {} emdx save {} --auto-tag --project "$(basename $(pwd))"
+```
 
 Keep your knowledge base healthy and it will serve you well! 🌟
