@@ -676,3 +676,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 MIT License - see LICENSE file for details
 
+## 📚 Documentation
+
+- **[Quick Start](#quick-start)** - Get up and running quickly
+- **[EXAMPLES.md](EXAMPLES.md)** - Real-world workflows and automation scripts
+- **[MIGRATION.md](MIGRATION.md)** - Upgrade guide from 0.6.x to 0.7.0  
+- **[AUTOMATION.md](AUTOMATION.md)** - Unix pipeline integration and automation
+- **[MAINTENANCE.md](MAINTENANCE.md)** - Keep your knowledge base healthy
+- **[COMMAND_MIGRATION_TABLE.md](COMMAND_MIGRATION_TABLE.md)** - Complete command mapping
+- **[CLAUDE.md](CLAUDE.md)** - Technical architecture and development guide
+
