@@ -335,7 +335,9 @@ class LogBrowser(Widget):
                             log_content.write(line)
                         else:
                             # Try to format JSON lines with emojis
-                            formatted = format_claude_output(line, time.time())
+                            # Use execution start time for proper timestamps
+                            start_time = execution.started_at.timestamp()
+                            formatted = format_claude_output(line, start_time)
                             if formatted:
                                 log_content.write(formatted)
                             else:
@@ -564,7 +566,9 @@ class LogBrowser(Widget):
                                 line.startswith('Started:') or not line.strip()):
                                 log_content_widget.write(line)
                             else:
-                                formatted = format_claude_output(line, time.time())
+                                # Use execution start time for proper timestamps
+                                start_time = self.current_execution.started_at.timestamp()
+                                formatted = format_claude_output(line, start_time)
                                 if formatted:
                                     log_content_widget.write(formatted)
                                 else:
