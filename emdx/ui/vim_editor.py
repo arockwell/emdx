@@ -66,23 +66,14 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # Calculate line numbers width based on total lines
-        total_lines = len(self.text_area.text.split('\n'))
-        line_number_width = self._calculate_line_number_width(total_lines)
+        # TEMPORARILY DISABLED: Line numbers causing layout issues
+        # Just mount the text area directly without line numbers
         
-        # Configure line numbers to have dynamic width
-        self.line_numbers.styles.width = line_number_width
-        self.line_numbers.styles.min_width = line_number_width
-        self.line_numbers.styles.max_width = line_number_width
-        # Add subtle right border to line numbers
-        self.line_numbers.styles.border_right = ("solid", "#333333")
-        
-        # Configure text area to take remaining space
-        self.text_area.styles.width = "1fr"
+        # Configure text area to take full space
+        self.text_area.styles.width = "100%"
         self.text_area.styles.padding = (0, 1)  # Add horizontal padding
         
-        # Mount line numbers and text area in horizontal layout
-        self.edit_container.mount(self.line_numbers)
+        # Mount only text area (no line numbers for now)
         self.edit_container.mount(self.text_area)
         
         logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
@@ -242,16 +233,12 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # Set initial line numbers
-            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            
-            # Update line number width based on content
-            self._update_line_number_width()
-            
-            # Double-check by calling text area's update method if it exists
-            if hasattr(self.text_area, '_update_line_numbers'):
-                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-                self.text_area._update_line_numbers()
+            # TEMPORARILY DISABLED: Line numbers
+            # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            # self._update_line_number_width()
+            # if hasattr(self.text_area, '_update_line_numbers'):
+            #     logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+            #     self.text_area._update_line_numbers()
                 
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
@@ -286,9 +273,9 @@ class VimEditor(Vertical):
                 # if hasattr(self.text_area, 'scroll_to'):
                 #     self.text_area.scroll_to(0, 0, animate=False)
                     
-                # Update line numbers
-                total_lines = len(self.text_area.text.split('\n'))
-                self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
+                # TEMPORARILY DISABLED: Line numbers
+                # total_lines = len(self.text_area.text.split('\n'))
+                # self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
                 
                 logger.debug(f"🔢   Forced positioning completed")
             else:
