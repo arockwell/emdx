@@ -161,6 +161,12 @@ class VimEditor(Vertical):
             self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
             self._update_line_number_width()
             
+            # Update vim status if parent has the method
+            if hasattr(self.app_instance, '_update_vim_status'):
+                mode = self.text_area.vim_mode
+                status = f"{mode} | ESC=exit"
+                self.app_instance._update_vim_status(status)
+            
         except Exception as e:
             logger.debug(f"Error in periodic line number update: {e}")
     

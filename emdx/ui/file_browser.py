@@ -202,13 +202,14 @@ class FileBrowser(Container):
     
     .vim-line-numbers {
         width: 4;
-        background: $background;
+        background: $surface;
         color: $text-muted;
         text-align: right;
         padding-right: 1;
         padding-top: 1;
         margin: 0;
         border: none;
+        border-right: solid $primary-background-lighten-2;
         overflow-y: hidden;
         scrollbar-size: 0 0;
     }
