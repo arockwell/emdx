@@ -534,8 +534,15 @@ class LogBrowser(Widget):
                         'completed': '✅',
                         'failed': '❌'
                     }.get(latest_execution.status, '❓')
-                    # Update the status icon in the table
-                    table.update_cell(i, 0, status_icon)
+                    
+                    # Find the actual row key in the table
+                    # The table's rows are indexed by their row_key, not by position
+                    for row_key in table.rows:
+                        row_data = table.get_row(row_key)
+                        # Check if this row contains our execution ID in the title
+                        if f"#{latest_execution.id} -" in str(row_data[1]):
+                            table.update_cell(row_key, 0, status_icon)
+                            break
                     break
         
         # Only refresh if the execution is still running
