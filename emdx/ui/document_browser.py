@@ -90,13 +90,15 @@ class DocumentBrowser(Widget):
     
     #search-input, #tag-input {
         display: none;
-        height: 3;
-        margin: 1;
+        height: 0;
+        margin: 0;
         border: solid $primary;
     }
     
     #search-input.visible, #tag-input.visible {
         display: block;
+        height: 3;
+        margin: 1;
     }
     
     .browser-status {
@@ -109,8 +111,8 @@ class DocumentBrowser(Widget):
     
     #tag-selector {
         display: none;
-        height: 1;
-        margin: 0 1;
+        height: 0;
+        margin: 0;
     }
     
     Horizontal {
@@ -160,13 +162,17 @@ class DocumentBrowser(Widget):
     #preview-container {
         width: 1fr;
         min-width: 40;
-        padding: 0 1;
+        padding: 0;
     }
     
     #vim-mode-indicator {
-        height: 1;
+        height: 0;
         background: $boost;
         text-align: center;
+    }
+    
+    #vim-mode-indicator.active {
+        height: 1;
     }
     
     #preview {
@@ -590,8 +596,10 @@ class DocumentBrowser(Widget):
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             if message:
                 vim_indicator.update(f"VIM: {message}")
+                vim_indicator.add_class("active")
             else:
                 vim_indicator.update("VIM: NORMAL | ESC=exit")
+                vim_indicator.add_class("active")
                 
             # Also update main status
             app = self.app
@@ -654,6 +662,7 @@ class DocumentBrowser(Widget):
         try:
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.update("")
+            vim_indicator.remove_class("active")
         except:
             pass
         
