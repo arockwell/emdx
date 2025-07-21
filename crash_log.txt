@@ -1,40 +1,42 @@
 ╭────────────────────────────────────────── Traceback (most recent call last) ──────────────────────────────────────────╮
-│ /Users/alexrockwell/dev/worktrees/emdx-improve-log-mode/emdx/ui/log_browser.py:538 in _auto_refresh_log               │
+│ /Users/alexrockwell/dev/worktrees/emdx-improve-log-mode/emdx/ui/log_browser.py:544 in _auto_refresh_log               │
 │                                                                                                                       │
-│   535 │   │   │   │   │   │   'failed': '❌'                                                                          │
-│   536 │   │   │   │   │   }.get(latest_execution.status, '❓')                                                        │
-│   537 │   │   │   │   │   # Update the status icon in the table                                                       │
-│ ❱ 538 │   │   │   │   │   table.update_cell(i, 0, status_icon)                                                        │
-│   539 │   │   │   │   │   break                                                                                       │
-│   540 │   │                                                                                                           │
-│   541 │   │   # Only refresh if the execution is still running                                                        │
+│   541 │   │   │   │   │   │   row_data = table.get_row(row_key)                                                       │
+│   542 │   │   │   │   │   │   # Check if this row contains our execution ID in the title                              │
+│   543 │   │   │   │   │   │   if f#{latest_execution.id} - in str(row_data[1]):                                     │
+│ ❱ 544 │   │   │   │   │   │   │   table.update_cell(row_key, 0, status_icon)                                          │
+│   545 │   │   │   │   │   │   │   break                                                                               │
+│   546 │   │   │   │   │   break                                                                                       │
+│   547                                                                                                                 │
 │                                                                                                                       │
 │ ╭────────────────────────────────────────────────── locals ──────────────────────────────────────────────────╮        │
 │ │             exec = Execution(                                                                              │        │
-│ │                    │   id=96,                                                                              │        │
-│ │                    │   doc_id=755,                                                                         │        │
-│ │                    │   doc_title='EMDX LHS Split Implementation Journey',                                  │        │
+│ │                    │   id=98,                                                                              │        │
+│ │                    │   doc_id=753,                                                                         │        │
+│ │                    │   doc_title='Textual ScrollableContainer Height Issue Analysis',                      │        │
 │ │                    │   status='running',                                                                   │        │
-│ │                    │   started_at=datetime.datetime(2025, 7, 21, 3, 24, 33, tzinfo=datetime.timezone.utc), │        │
+│ │                    │   started_at=datetime.datetime(2025, 7, 21, 3, 24, 35, tzinfo=datetime.timezone.utc), │        │
 │ │                    │   completed_at=None,                                                                  │        │
-│ │                    │   log_file='/Users/alexrockwell/.config/emdx/logs/claude-755-1753068273.log',         │        │
+│ │                    │   log_file='/Users/alexrockwell/.config/emdx/logs/claude-753-1753068275.log',         │        │
 │ │                    │   exit_code=None,                                                                     │        │
 │ │                    │   working_dir=None,                                                                   │        │
 │ │                    │   pid=None                                                                            │        │
 │ │                    )                                                                                       │        │
-│ │                i = 2                                                                                       │        │
+│ │                i = 0                                                                                       │        │
 │ │ latest_execution = Execution(                                                                              │        │
-│ │                    │   id=96,                                                                              │        │
-│ │                    │   doc_id=755,                                                                         │        │
-│ │                    │   doc_title='EMDX LHS Split Implementation Journey',                                  │        │
+│ │                    │   id=98,                                                                              │        │
+│ │                    │   doc_id=753,                                                                         │        │
+│ │                    │   doc_title='Textual ScrollableContainer Height Issue Analysis',                      │        │
 │ │                    │   status='running',                                                                   │        │
-│ │                    │   started_at=datetime.datetime(2025, 7, 21, 3, 24, 33),                               │        │
+│ │                    │   started_at=datetime.datetime(2025, 7, 21, 3, 24, 35),                               │        │
 │ │                    │   completed_at=None,                                                                  │        │
-│ │                    │   log_file='/Users/alexrockwell/.config/emdx/logs/claude-755-1753068273.log',         │        │
+│ │                    │   log_file='/Users/alexrockwell/.config/emdx/logs/claude-753-1753068275.log',         │        │
 │ │                    │   exit_code=None,                                                                     │        │
 │ │                    │   working_dir=None,                                                                   │        │
 │ │                    │   pid=None                                                                            │        │
 │ │                    )                                                                                       │        │
+│ │         row_data = ['🔄', '#98 - Textual ScrollableContainer Height Iss...']                               │        │
+│ │          row_key = RowKey(value=None)                                                                      │        │
 │ │             self = LogBrowser()                                                                            │        │
 │ │      status_icon = '🔄'                                                                                    │        │
 │ │            table = DataTable(id='log-table')                                                               │        │
@@ -53,11 +55,12 @@
 │                                                                                                                       │
 │ ╭───────────────── locals ─────────────────╮                                                                          │
 │ │   column_key = 0                         │                                                                          │
-│ │      row_key = 2                         │                                                                          │
+│ │      row_key = RowKey(value=None)        │                                                                          │
 │ │         self = DataTable(id='log-table') │                                                                          │
 │ │ update_width = False                     │                                                                          │
 │ │        value = '🔄'                      │                                                                          │
 │ ╰──────────────────────────────────────────╯                                                                          │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-CellDoesNotExist: No cell exists for row_key=2, column_key=0.
+CellDoesNotExist: No cell exists for row_key=<textual.widgets._data_table.RowKey object at 0x1133b2530>, column_key=0.
+⏎
 

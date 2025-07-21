@@ -537,12 +537,17 @@ class LogBrowser(Widget):
                     
                     # Find the actual row key in the table
                     # The table's rows are indexed by their row_key, not by position
-                    for row_key in table.rows:
-                        row_data = table.get_row(row_key)
-                        # Check if this row contains our execution ID in the title
-                        if f"#{latest_execution.id} -" in str(row_data[1]):
-                            table.update_cell(row_key, 0, status_icon)
-                            break
+                    try:
+                        for row_key in table.rows:
+                            row_data = table.get_row(row_key)
+                            # Check if this row contains our execution ID in the title
+                            if f"#{latest_execution.id} -" in str(row_data[1]):
+                                table.update_cell(row_key, 0, status_icon)
+                                break
+                    except (KeyError, Exception):
+                        # Table was likely refreshed while we were updating
+                        # This is fine - the next refresh will update the status
+                        pass
                     break
         
         # Only refresh if the execution is still running
