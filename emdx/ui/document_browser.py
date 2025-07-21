@@ -268,7 +268,7 @@ class DocumentBrowser(Widget):
         table.add_column("ID", width=4)
         table.add_column("Tags", width=8)  
         table.add_column(" ", width=1)  # Padding column
-        table.add_column("Title", width=38)
+        table.add_column("Title", width=74)
         table.cursor_type = "row"
         table.show_header = True
         table.cell_padding = 0  # Remove cell padding for tight spacing
@@ -347,7 +347,7 @@ class DocumentBrowser(Widget):
         
         for doc in self.filtered_docs:
             # Format row data - ID, Tags, and Title
-            title, was_truncated = truncate_emoji_safe(doc["title"], 40)
+            title, was_truncated = truncate_emoji_safe(doc["title"], 74)
             if was_truncated:
                 title += "..."
             
