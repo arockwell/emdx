@@ -864,7 +864,11 @@ def execute(
     tools: Optional[str] = typer.Option(None, "--tools", "-t",
                                         help="Comma-separated list of allowed tools"),
     smart: bool = typer.Option(True, "--smart/--no-smart",
-                              help="Use smart context-aware execution")
+                              help="Use smart context-aware execution"),
+    exec_id: Optional[int] = typer.Option(None, "--exec-id", 
+                                          help="Execution ID (for internal use)"),
+    log_file: Optional[str] = typer.Option(None, "--log-file",
+                                           help="Log file path (for internal use)")
 ):
     """Execute a document with Claude Code."""
     # Get document
@@ -876,13 +880,22 @@ def execute(
     # Parse allowed tools
     allowed_tools = tools.split(",") if tools else None
 
-    # Generate execution ID
-    timestamp = int(time.time())
-    execution_id = f"claude-{doc['id']}-{timestamp}"
-
-    # Set up log file
-    log_dir = Path.home() / ".config" / "emdx" / "logs"
-    log_file = log_dir / f"{execution_id}.log"
+    # Use provided exec_id and log_file, or generate new ones
+    if exec_id and log_file:
+        # Use provided values from document browser
+        execution_id = str(exec_id)
+        log_file = Path(log_file)
+        # Ensure log directory exists
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        # Generate new execution ID
+        timestamp = int(time.time())
+        execution_id = f"claude-{doc['id']}-{timestamp}"
+        
+        # Set up log file
+        log_dir = Path.home() / ".config" / "emdx" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{execution_id}.log"
 
     if smart:
         # Get document tags
