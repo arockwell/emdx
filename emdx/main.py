@@ -17,6 +17,7 @@ from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.lifecycle import app as lifecycle_app
+from emdx.commands.graph import app as graph_app
 from emdx.ui.gui import gui
 
 # Create main app
@@ -58,6 +59,9 @@ app.command(name="maintain")(maintain_app.registered_commands[0].callback)
 
 # Add lifecycle as a subcommand group (keeping this as-is)
 app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
+
+# Add graph as a subcommand group
+app.add_typer(graph_app, name="graph", help="Analyze and visualize knowledge graphs")
 
 # Add the gui command
 app.command()(gui)
