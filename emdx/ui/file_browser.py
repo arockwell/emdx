@@ -664,9 +664,7 @@ class FileBrowser(Container):
                             # Use call_after_refresh to ensure populate_files is complete
                             def _restore_cursor():
                                 try:
-                                    # file_list.cursor_coordinate = (current_cursor_row, 0)
                                     self.selected_index = current_cursor_row
-                                    # Don't set self.selected_index here - let the selection event handle it
                                 except Exception as e:
                                     logger.error(f"🗂️ Error restoring cursor: {e}")
                             self.call_after_refresh(_restore_cursor)
