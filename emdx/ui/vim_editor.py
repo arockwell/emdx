@@ -31,6 +31,10 @@ class VimEditor(Vertical):
         super().__init__(**kwargs)
         self.app_instance = app_instance
         
+        # Ensure VimEditor takes full available space
+        self.styles.width = "100%"
+        self.styles.height = "100%"
+        
         # Create the vim text area
         logger.debug(f"🔍 VimEditor.__init__: Creating VimEditTextArea with content length: {len(content)}")
         logger.debug(f"🔍 VimEditor.__init__: First 100 chars: {repr(content[:100])}")
@@ -53,6 +57,8 @@ class VimEditor(Vertical):
         
         # Create horizontal container for line numbers and text area
         self.edit_container = Horizontal(id="vim-edit-container")
+        self.edit_container.styles.width = "100%"
+        self.edit_container.styles.height = "100%"
     
     def compose(self):
         """Compose the vim editor layout."""
@@ -68,9 +74,12 @@ class VimEditor(Vertical):
         self.line_numbers.styles.width = line_number_width
         self.line_numbers.styles.min_width = line_number_width
         self.line_numbers.styles.max_width = line_number_width
+        self.line_numbers.styles.border = ("none", "solid", "none", "none")  # Right border only
+        self.line_numbers.styles.border_right = ("solid", "dim")
         
         # Configure text area to take remaining space
         self.text_area.styles.width = "1fr"
+        self.text_area.styles.padding = (0, 1)  # Add horizontal padding
         
         # Mount line numbers and text area in horizontal layout
         self.edit_container.mount(self.line_numbers)
