@@ -815,14 +815,18 @@ class DocumentBrowser(Widget):
                     "-m", "emdx",
                     "claude", "execute",
                     str(doc_id),
-                    "--background"
+                    "--background",
+                    "--exec-id", str(exec_id),
+                    "--log-file", str(log_path)
                 ]
             else:
                 claude_cmd = [
                     emdx_path,
                     "claude", "execute", 
                     str(doc_id),
-                    "--background"
+                    "--background",
+                    "--exec-id", str(exec_id),
+                    "--log-file", str(log_path)
                 ]
             
             # For background execution, don't use wrapper here
