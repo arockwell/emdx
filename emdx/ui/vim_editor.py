@@ -101,6 +101,18 @@ class VimEditor(Vertical):
         try:
             logger.debug(f"🔢 VimEditor _initialize_editor starting")
             
+            # DEBUG: Check TextArea state
+            logger.debug(f"🔍 DEBUG TextArea state:")
+            logger.debug(f"🔍   - text length: {len(self.text_area.text)}")
+            logger.debug(f"🔍   - text first 50: {repr(self.text_area.text[:50])}")
+            logger.debug(f"🔍   - has_focus: {self.text_area.has_focus}")
+            logger.debug(f"🔍   - display: {self.text_area.display}")
+            logger.debug(f"🔍   - visible: {self.text_area.visible}")
+            if hasattr(self.text_area, 'size'):
+                logger.debug(f"🔍   - size: {self.text_area.size}")
+            if hasattr(self.text_area, 'region'):
+                logger.debug(f"🔍   - region: {self.text_area.region}")
+            
             # AGGRESSIVE positioning: Force cursor to top MULTIPLE times with different approaches
             
             # Method 1: Force cursor to start at beginning
