@@ -825,12 +825,13 @@ class DocumentBrowser(Widget):
                     "--background"
                 ]
             
-            # Execute with wrapper
-            wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
+            # For background execution, don't use the wrapper script
+            # The wrapper marks executions as completed when the command exits,
+            # but background mode exits immediately while the real work continues
             
-            # Start the process in background
+            # Start the process directly without wrapper
             subprocess.Popen(
-                wrapper_cmd,
+                claude_cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True
