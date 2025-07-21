@@ -90,11 +90,26 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
     """Create a new execution and return its ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO executions 
-            (doc_id, doc_title, status, started_at, log_file, working_dir, pid, string_id)
-            VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?, ?)
-        """, (doc_id, doc_title, log_file, working_dir, pid, string_id))
+        
+        # Check if string_id column exists (post-migration)
+        cursor.execute("PRAGMA table_info(executions)")
+        columns = {col[1] for col in cursor.fetchall()}
+        
+        if 'string_id' in columns:
+            # New schema with string_id
+            cursor.execute("""
+                INSERT INTO executions 
+                (doc_id, doc_title, status, started_at, log_file, working_dir, pid, string_id)
+                VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?, ?)
+            """, (doc_id, doc_title, log_file, working_dir, pid, string_id))
+        else:
+            # Old schema without string_id (pre-migration)
+            cursor.execute("""
+                INSERT INTO executions 
+                (doc_id, doc_title, status, started_at, log_file, working_dir, pid)
+                VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?)
+            """, (doc_id, doc_title, log_file, working_dir, pid))
+        
         conn.commit()
         return cursor.lastrowid
 
@@ -116,6 +131,11 @@ def get_execution(exec_id: str | int) -> Optional[Execution]:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         
+        # Check if string_id column exists
+        cursor.execute("PRAGMA table_info(executions)")
+        columns = {col[1] for col in cursor.fetchall()}
+        has_string_id = 'string_id' in columns
+        
         # Try numeric ID first
         if isinstance(exec_id, int) or (isinstance(exec_id, str) and exec_id.isdigit()):
             cursor.execute("""
@@ -124,10 +144,17 @@ def get_execution(exec_id: str | int) -> Optional[Execution]:
             """, (int(exec_id) if isinstance(exec_id, str) else exec_id,))
         else:
             # Fall back to string ID lookup for backwards compatibility
-            cursor.execute("""
-                SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-                FROM executions WHERE string_id = ?
-            """, (exec_id,))
+            if has_string_id:
+                cursor.execute("""
+                    SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+                    FROM executions WHERE string_id = ?
+                """, (exec_id,))
+            else:
+                # Pre-migration: ID is stored as string in id column
+                cursor.execute("""
+                    SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+                    FROM executions WHERE id = ?
+                """, (exec_id,))
         
         row = cursor.fetchone()
         if not row:
