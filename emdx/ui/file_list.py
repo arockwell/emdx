@@ -49,6 +49,7 @@ class FileList(DataTable):
     
     def watch_selected_index(self, old: int, new: int) -> None:
         """Update cursor position when selection changes."""
+        logger.debug("cursor moved")
         if 0 <= new < len(self.files) and self.row_count > 0:
             self.move_cursor(row=new)
     

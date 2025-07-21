@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 class FileEditTextArea(TextArea):
     """TextArea for file editing that handles ESC key."""
-    
+
     def __init__(self, file_browser, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.file_browser = file_browser
-    
+
     def on_key(self, event: events.Key) -> None:
         if event.key == "escape":
             # Let the FileBrowser handle ESC
@@ -35,10 +35,10 @@ class FileEditTextArea(TextArea):
 
 class FileBrowserVimApp:
     """Mock app instance for vim editor in file browser context."""
-    
+
     def __init__(self, file_browser):
         self.file_browser = file_browser
-        
+
     def action_save_and_exit_edit(self):
         try:
             # Call _exit_edit_mode directly since action_handle_escape doesn't exist
@@ -47,18 +47,18 @@ class FileBrowserVimApp:
             # Fallback if file_browser not accessible
             logger.error(f"FileBrowserVimApp: Cannot access file_browser._exit_edit_mode: {e}")
             pass
-        
+
     def action_cancel_edit(self):
         try:
             self.file_browser.action_handle_escape()
         except AttributeError:
             # Fallback if file_browser not accessible
             self.file_browser._exit_edit_mode()
-        
+
     def action_save_document(self):
         # Just update status - file will be saved when exiting
         pass
-        
+
     def _update_vim_status(self, message=""):
         # Update file browser status with vim info
         try:
@@ -571,10 +571,10 @@ class FileBrowser(Container):
                 event.stop()
                 event.prevent_default()
                 return
-        
+
         # For all other keys, use default handling
         super().on_key(event)
-    
+
     def _exit_edit_mode(self) -> None:
         """Exit edit mode and save file."""
         try:
@@ -582,19 +582,19 @@ class FileBrowser(Container):
             if hasattr(self, 'vim_editor'):
                 self.save_and_exit_edit_mode(self.vim_editor.text_area)
             self.edit_mode = False
-            
+
         except Exception as e:
             logger.error(f"🗂️ Error exiting edit mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Exit edit mode error: {e}"
             )
-    
+
     def _exit_selection_mode(self) -> None:
         """Exit selection mode and return to preview."""
         try:
             file_list = self.query_one("#file-list", FileList)
             selected_file = file_list.get_selected_file()
-            
+
             if selected_file:
                 # Use the existing toggle method to exit selection mode
                 self.selection_mode = False
@@ -664,7 +664,8 @@ class FileBrowser(Container):
                             # Use call_after_refresh to ensure populate_files is complete
                             def _restore_cursor():
                                 try:
-                                    file_list.cursor_coordinate = (current_cursor_row, 0)
+                                    # file_list.cursor_coordinate = (current_cursor_row, 0)
+                                    self.selected_index = current_cursor_row
                                     # Don't set self.selected_index here - let the selection event handle it
                                 except Exception as e:
                                     logger.error(f"🗂️ Error restoring cursor: {e}")
@@ -876,32 +877,32 @@ class FileBrowser(Container):
                 
                 if result:
                     return result['id']
-                    
+
         except Exception:
             pass
-        
+
         return None
-    
+
     def on_file_list_file_selected(self, event) -> None:
         """Handle file selection changes from FileList."""
         logger.info(f"🗂️ File selection changed to index {event.index}")
         self.selected_index = event.index
         self.update_preview()
-    
+
     def on_key(self, event) -> None:
         """Handle key events with proper isolation from main browser."""
         # Ensure file browser handles its own keys and doesn't let them bubble to main browser
         try:
             # Log key events for debugging
             logger.debug(f"🗂️ FileBrowser received key: {event.key}")
-            
+
             # If we're in edit or selection mode, ensure keys don't bubble up
             if self.edit_mode or self.selection_mode:
                 event.stop()
-                
+
         except Exception as e:
             logger.error(f"🗂️ Error in FileBrowser key handling: {e}")
-    
+
     class QuitFileBrowser(events.Event):
         """Event sent when quitting file browser."""
         pass
