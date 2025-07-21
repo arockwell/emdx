@@ -167,6 +167,14 @@ class VimEditTextArea(TextArea):
                 # Pass the raw cursor position - no adjustment
                 # The issue might be in the display, not the data
                 self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
+                
+                # Update line number widget width if parent has the method
+                parent = self.parent
+                while parent:
+                    if hasattr(parent, '_update_line_number_width'):
+                        parent._update_line_number_width()
+                        break
+                    parent = parent.parent if hasattr(parent, 'parent') else None
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
