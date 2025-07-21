@@ -71,6 +71,7 @@ class DocumentBrowser(Widget):
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
         Binding("x", "execute_document", "Execute"),
+        Binding("v", "show_graph", "Graph View"),
     ]
     
     CSS = """
@@ -746,6 +747,34 @@ class DocumentBrowser(Widget):
         """Edit the current document."""
         await self.enter_edit_mode()
         
+    async def view_document_by_id(self, doc_id: int) -> None:
+        """View a specific document by ID."""
+        try:
+            # Get the document
+            doc = get_document(str(doc_id))
+            if not doc:
+                self.update_status(f"Document #{doc_id} not found")
+                return
+            
+            # Find the row in the table that matches this ID
+            table = self.query_one("#doc-table", DataTable)
+            for row_key in table.rows:
+                row_data = table.get_row(row_key)
+                if row_data and row_data[0] == doc_id:
+                    # Move cursor to this row
+                    table.cursor_coordinate = table.get_coordinate(row_key, table.columns[0])
+                    # Enter edit mode to view the document
+                    await self.enter_edit_mode()
+                    break
+            else:
+                # Document not in current view, just open it directly
+                self.current_doc_id = doc_id
+                await self.enter_edit_mode()
+                
+        except Exception as e:
+            logger.error(f"Error viewing document {doc_id}: {e}")
+            self.update_status(f"Error viewing document: {e}")
+    
     def update_status(self, message: str) -> None:
         """Update the document browser status bar."""
         try:
@@ -855,6 +884,13 @@ class DocumentBrowser(Widget):
         if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
             return
         await self.enter_new_document_mode()
+    
+    def action_show_graph(self) -> None:
+        """Switch to graph view."""
+        # Tell the browser container to switch to graph view
+        if hasattr(self.parent, 'switch_browser'):
+            from asyncio import create_task
+            create_task(self.parent.switch_browser("graph"))
         
     def action_search(self) -> None:
         """Enter search mode."""

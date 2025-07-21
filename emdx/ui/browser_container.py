@@ -89,6 +89,9 @@ class BrowserContainer(App):
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
+            elif browser_type == "graph":
+                from .graph_browser import GraphBrowser
+                self.browsers[browser_type] = GraphBrowser()
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -139,9 +142,23 @@ class BrowserContainer(App):
             await self.switch_browser("log")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git", "log"]:
+        elif key == "q" and self.current_browser in ["file", "git", "log", "graph"]:
             await self.switch_browser("document")
             event.stop()
             return
         
         # Don't handle any other keys - let them bubble to browsers
+    
+    async def on_graph_browser_node_selected(self, message) -> None:
+        """Handle node selection from graph browser."""
+        # Switch back to document browser and open the document
+        await self.switch_browser("document")
+        
+        # Open the document in the document browser
+        browser = self.browsers.get("document")
+        if browser and hasattr(browser, 'view_document_by_id'):
+            await browser.view_document_by_id(message.node_id)
+    
+    async def on_graph_browser_graph_exit(self, message) -> None:
+        """Handle exit from graph browser."""
+        await self.switch_browser("document")
