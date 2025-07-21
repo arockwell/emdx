@@ -192,7 +192,7 @@ class DocumentBrowser(Widget):
     
     #edit-area, #vim-editor-container {
         height: 1fr;
-        margin: 1;
+        width: 100%;
     }
     """
     
