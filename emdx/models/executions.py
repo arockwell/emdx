@@ -85,17 +85,23 @@ class Execution:
 
 
 def create_execution(doc_id: int, doc_title: str, log_file: str, 
-                    working_dir: Optional[str] = None, pid: Optional[int] = None) -> int:
+                    working_dir: Optional[str] = None, pid: Optional[int] = None,
+                    string_id: Optional[str] = None) -> int:
     """Create a new execution and return its ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO executions 
-            (doc_id, doc_title, status, started_at, log_file, working_dir, pid)
-            VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?)
-        """, (doc_id, doc_title, log_file, working_dir, pid))
+            (doc_id, doc_title, status, started_at, log_file, working_dir, pid, string_id)
+            VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?, ?)
+        """, (doc_id, doc_title, log_file, working_dir, pid, string_id))
         conn.commit()
         return cursor.lastrowid
+
+
+def format_execution_log_filename(exec_id: int) -> str:
+    """Format log filename with zero-padded numeric ID for sortability."""
+    return f"execution_{exec_id:08d}_output.log"
 
 
 def save_execution(execution: Execution) -> None:
@@ -105,14 +111,23 @@ def save_execution(execution: Execution) -> None:
     pass
 
 
-def get_execution(exec_id: str) -> Optional[Execution]:
-    """Get execution by ID."""
+def get_execution(exec_id: str | int) -> Optional[Execution]:
+    """Get execution by ID (supports both numeric and legacy string IDs)."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-            FROM executions WHERE id = ?
-        """, (exec_id,))
+        
+        # Try numeric ID first
+        if isinstance(exec_id, int) or (isinstance(exec_id, str) and exec_id.isdigit()):
+            cursor.execute("""
+                SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+                FROM executions WHERE id = ?
+            """, (int(exec_id) if isinstance(exec_id, str) else exec_id,))
+        else:
+            # Fall back to string ID lookup for backwards compatibility
+            cursor.execute("""
+                SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+                FROM executions WHERE string_id = ?
+            """, (exec_id,))
         
         row = cursor.fetchone()
         if not row:
