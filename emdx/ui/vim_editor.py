@@ -48,6 +48,11 @@ class VimEditor(Vertical):
         self.text_area.word_wrap = True
         self.text_area.show_line_numbers = False  # Using custom vim relative numbers
         
+        # DEBUG: Add visible border and background to text area
+        self.text_area.styles.border = ("solid", "red")
+        self.text_area.styles.background = "#1a1a1a"  # Dark gray background
+        self.text_area.styles.width = "1fr"  # Take remaining space
+        
         # Try setting max line length if available
         if hasattr(self.text_area, 'max_line_length'):
             self.text_area.max_line_length = 80
@@ -56,8 +61,17 @@ class VimEditor(Vertical):
         self.line_numbers = SimpleVimLineNumbers(id="vim-line-numbers")
         self.text_area.line_numbers_widget = self.line_numbers
         
+        # DEBUG: Add visible border to line numbers
+        self.line_numbers.styles.border = ("solid", "green")
+        self.line_numbers.styles.width = 4  # Fixed width for line numbers (matching CSS)
+        self.line_numbers.styles.max_width = 4
+        self.line_numbers.styles.min_width = 4
+        
         # Create horizontal container for line numbers and text area
         self.edit_container = Horizontal(id="vim-edit-container")
+        
+        # DEBUG: Ensure container takes full width
+        self.edit_container.styles.width = "100%"
     
     def compose(self):
         """Compose the vim editor layout."""
@@ -72,6 +86,9 @@ class VimEditor(Vertical):
         logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
         logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
         logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
+        
+        # DEBUG: Log widget sizes after mounting
+        self.call_after_refresh(lambda: self._log_widget_sizes())
         
         # Ensure the entire vim editor container starts at top
         # TEMPORARILY DISABLED: This might be causing first line visibility issues
@@ -96,6 +113,23 @@ class VimEditor(Vertical):
     def focus_editor(self):
         """Focus the text editor."""
         self.text_area.focus()
+    
+    def _log_widget_sizes(self):
+        """DEBUG: Log widget sizes and visibility."""
+        try:
+            logger.debug(f"🔍 DEBUG WIDGET SIZES:")
+            logger.debug(f"🔍   VimEditor size: {self.size}")
+            logger.debug(f"🔍   VimEditor region: {self.region}")
+            logger.debug(f"🔍   Edit container size: {self.edit_container.size}")
+            logger.debug(f"🔍   Line numbers size: {self.line_numbers.size}")
+            logger.debug(f"🔍   Line numbers visible: {self.line_numbers.visible}")
+            logger.debug(f"🔍   TextArea size: {self.text_area.size}")
+            logger.debug(f"🔍   TextArea visible: {self.text_area.visible}")
+            logger.debug(f"🔍   TextArea display: {self.text_area.display}")
+            logger.debug(f"🔍   TextArea has content: {len(self.text_area.text) > 0}")
+            logger.debug(f"🔍   TextArea content preview: {repr(self.text_area.text[:100])}")
+        except Exception as e:
+            logger.debug(f"🔍 Error logging widget sizes: {e}")
     
     def _initialize_editor(self):
         """Initialize editor after mounting - focus and set up line numbers."""
