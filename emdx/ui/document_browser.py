@@ -804,12 +804,12 @@ class DocumentBrowser(Widget):
             wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
             
             # Build the claude command
+            # Note: execute command doesn't take --execution-id parameter
             claude_cmd = [
                 sys.executable,
                 "-m", "emdx.commands.claude_execute",
                 "execute",
                 str(doc_id),
-                "--execution-id", str(exec_id),
                 "--background"
             ]
             
