@@ -11,11 +11,12 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, timezone
 
 from rich.syntax import Syntax
 from rich.text import Text
+from rich.ansi import AnsiDecoder
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -24,7 +25,6 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.commands.claude_execute import format_claude_output
 from emdx.models.executions import get_recent_executions, Execution
 from .text_areas import SelectionTextArea
 
@@ -354,17 +354,21 @@ class LogBrowser(Widget):
                         else:
                             # Check if line already has a timestamp (from previous formatting)
                             if line.startswith("[") and "]" in line[:10]:
-                                # Line already has timestamp, write as-is
-                                log_content.write(line)
+                                # Line already has timestamp, write as-is with markup
+                                log_content.write(line, markup=True)
+                            elif line.strip().startswith("{") and line.strip().endswith("}"):
+                                # Skip raw JSON lines - they shouldn't be displayed
+                                # These are artifacts from the streaming output that weren't formatted
+                                continue
+                            elif '\033[' in line or '\x1b[' in line:
+                                # Contains ANSI escape codes - convert to Rich text
+                                from rich.ansi import AnsiDecoder
+                                from rich.text import Text
+                                text = Text.from_ansi(line)
+                                log_content.write(text)
                             else:
-                                # Try to format JSON lines with emojis
-                                # Use execution start time for proper timestamps
-                                start_time = execution.started_at.timestamp()
-                                formatted = format_claude_output(line, start_time)
-                                if formatted:
-                                    log_content.write(formatted)
-                                else:
-                                    log_content.write(line)
+                                # Other content - write as-is with markup
+                                log_content.write(line, markup=True)
                     
                     # Scroll to top to see latest messages
                     log_content.scroll_to(0, 0, animate=False)
@@ -621,16 +625,21 @@ class LogBrowser(Widget):
                             else:
                                 # Check if line already has a timestamp (from previous formatting)
                                 if line.startswith("[") and "]" in line[:10]:
-                                    # Line already has timestamp, write as-is
-                                    log_content_widget.write(line)
+                                    # Line already has timestamp, write as-is with markup
+                                    log_content_widget.write(line, markup=True)
+                                elif line.strip().startswith("{") and line.strip().endswith("}"):
+                                    # Skip raw JSON lines - they shouldn't be displayed
+                                    # These are artifacts from the streaming output that weren't formatted
+                                    continue
+                                elif '\033[' in line or '\x1b[' in line:
+                                    # Contains ANSI escape codes - convert to Rich text
+                                    from rich.ansi import AnsiDecoder
+                                    from rich.text import Text
+                                    text = Text.from_ansi(line)
+                                    log_content_widget.write(text)
                                 else:
-                                    # Use execution start time for proper timestamps
-                                    start_time = self.current_execution.started_at.timestamp()
-                                    formatted = format_claude_output(line, start_time)
-                                    if formatted:
-                                        log_content_widget.write(formatted)
-                                    else:
-                                        log_content_widget.write(line)
+                                    # Other content - write as-is with markup
+                                    log_content_widget.write(line, markup=True)
                         
                         # Stay at top to see latest messages
                         log_content_widget.scroll_to(0, 0, animate=False)
