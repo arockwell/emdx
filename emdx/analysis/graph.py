@@ -48,7 +48,23 @@ class GraphAnalyzer:
             # Get documents
             documents = self._get_filtered_documents(conn, project, tag_filter)
             if not documents:
-                return {"nodes": [], "edges": [], "metadata": {}}
+                return {
+                    "nodes": [], 
+                    "edges": [], 
+                    "metadata": {
+                        'node_count': 0,
+                        'edge_count': 0,
+                        'metrics': {
+                            'density': 0.0,
+                            'clustering_coefficient': 0.0,
+                            'connected_components': [],
+                            'orphan_count': 0,
+                            'bridge_nodes': [],
+                            'centrality': {}
+                        },
+                        'generated_at': datetime.now().isoformat()
+                    }
+                }
             
             # Build graph
             nodes = []
