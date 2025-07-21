@@ -39,12 +39,13 @@ def main():
         print("Usage: claude_wrapper.py <exec_id> <log_file> <command...>", file=sys.stderr)
         sys.exit(1)
     
-    exec_id = sys.argv[1]
+    exec_id = sys.argv[1]  # Can be numeric or string ID
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
     
     # Log wrapper start
     log_to_file(log_file, "🔄 Wrapper script started")
+    log_to_file(log_file, f"📋 Execution ID: {exec_id}")
     log_to_file(log_file, f"📋 Command: {' '.join(cmd)}")
     
     exit_code = 1  # Default to failure
@@ -88,7 +89,12 @@ def main():
         # Always try to update the database
         try:
             log_to_file(log_file, f"📊 Updating execution status to: {status}")
-            update_execution_status(exec_id, status, exit_code)
+            # Convert exec_id to int if it's a numeric string
+            if exec_id.isdigit():
+                update_execution_status(int(exec_id), status, exit_code)
+            else:
+                # Legacy string ID support
+                update_execution_status(exec_id, status, exit_code)
             log_to_file(log_file, "✅ Database updated successfully")
         except Exception as e:
             log_to_file(log_file, f"❌ Failed to update database: {str(e)}")
