@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
-from ..models.executions import Execution, save_execution, update_execution_status, update_execution_pid
+from ..models.executions import update_execution_status, update_execution_pid
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
 
@@ -240,7 +240,7 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
 
 def execute_with_claude_detached(
     task: str,
-    execution_id: str,
+    execution_id: int,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
@@ -310,7 +310,7 @@ def execute_with_claude_detached(
         wrapper_cmd = [
             sys.executable,  # Use current Python interpreter
             str(wrapper_path),
-            execution_id,
+            str(execution_id),  # Convert to string for command line
             str(log_file)
         ] + cmd
         
@@ -372,7 +372,7 @@ def execute_with_claude_detached(
 
 def execute_with_claude(
     task: str,
-    execution_id: str,
+    execution_id: int,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     verbose: bool = True,
@@ -507,7 +507,7 @@ def execute_with_claude(
 
 def execute_document_smart_background(
     doc_id: int,
-    execution_id: str,
+    execution_id: int,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     use_stage_tools: bool = True
@@ -538,20 +538,16 @@ def execute_document_smart_background(
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
     # Create worktree
-    worktree_path = create_execution_worktree(execution_id, doc['title'])
+    worktree_path = create_execution_worktree(execution_id, doc_id, doc['title'])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-    # Create execution record
-    execution = Execution(
-        id=execution_id,
-        doc_id=doc_id,
-        doc_title=doc['title'],
-        status="running",
-        started_at=datetime.now(timezone.utc),
-        log_file=str(log_file),
-        working_dir=working_dir
-    )
-    save_execution(execution)
+    # Update execution with working directory if worktree was created
+    if worktree_path:
+        from ..database.connection import db_connection
+        with db_connection.get_connection() as conn:
+            conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
+                        (str(worktree_path), execution_id))
+            conn.commit()
 
     # Execute with Claude in detached mode
     pid = execute_with_claude_detached(
@@ -570,7 +566,7 @@ def execute_document_smart_background(
 
 def execute_document_smart(
     doc_id: int,
-    execution_id: str,
+    execution_id: int,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     verbose: bool = True,
@@ -622,20 +618,16 @@ def execute_document_smart(
         console.print(f"[dim]Allowed tools: {', '.join(allowed_tools)}[/dim]")
 
     # Create worktree
-    worktree_path = create_execution_worktree(execution_id, doc['title'])
+    worktree_path = create_execution_worktree(execution_id, doc_id, doc['title'])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-    # Create execution record
-    execution = Execution(
-        id=execution_id,
-        doc_id=doc_id,
-        doc_title=doc['title'],
-        status="running",
-        started_at=datetime.now(timezone.utc),
-        log_file=str(log_file),
-        working_dir=working_dir
-    )
-    save_execution(execution)
+    # Update execution with working directory if worktree was created
+    if worktree_path:
+        from ..database.connection import db_connection
+        with db_connection.get_connection() as conn:
+            conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
+                        (str(worktree_path), execution_id))
+            conn.commit()
 
     # Execute with Claude
     if verbose:
@@ -674,7 +666,7 @@ def execute_document_smart(
     return None
 
 
-def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Path]:
+def create_execution_worktree(execution_id: int, doc_id: int, doc_title: str) -> Optional[Path]:
     """Create a dedicated git worktree for Claude execution.
 
     Args:
@@ -706,13 +698,9 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
             project_name = Path.cwd().name
 
         # Create branch name from execution ID and doc title
-        # Extract doc ID from execution_id (format: "claude-{doc_id}-{timestamp}")
-        exec_parts = execution_id.split('-')
-        doc_id = exec_parts[1] if len(exec_parts) > 1 else "unknown"
-
         # Sanitize doc title for git branch name
         safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
-        branch_name = f"exec-{doc_id}-{safe_title}"
+        branch_name = f"exec-{execution_id}-doc-{doc_id}-{safe_title}"
 
         # Worktree directory
         worktrees_dir = Path.home() / "dev" / "worktrees"
@@ -747,9 +735,9 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
 
 
 def monitor_execution_detached(
-    execution_id: str,
+    execution_id: int,
     task: str,
-    doc_id: str,
+    doc_id: int,
     doc_title: str,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None
@@ -757,20 +745,16 @@ def monitor_execution_detached(
     """Start Claude execution in detached mode and return immediately."""
     try:
         # Create dedicated worktree for this execution
-        worktree_path = create_execution_worktree(execution_id, doc_title)
+        worktree_path = create_execution_worktree(execution_id, doc_id, doc_title)
         working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-        # Create and save initial execution record
-        execution = Execution(
-            id=execution_id,
-            doc_id=int(doc_id),
-            doc_title=doc_title,
-            status="running",
-            started_at=datetime.now(timezone.utc),
-            log_file=str(log_file),
-            working_dir=working_dir
-        )
-        save_execution(execution)
+        # Update execution with working directory if worktree was created
+        if worktree_path:
+            from ..database.connection import db_connection
+            with db_connection.get_connection() as conn:
+                conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
+                            (str(worktree_path), execution_id))
+                conn.commit()
 
         # Execute with Claude in detached mode
         pid = execute_with_claude_detached(
@@ -797,9 +781,9 @@ def monitor_execution_detached(
 
 
 def monitor_execution(
-    execution_id: str,
+    execution_id: int,
     task: str,
-    doc_id: str,
+    doc_id: int,
     doc_title: str,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None
@@ -816,20 +800,16 @@ def monitor_execution(
     """
     try:
         # Create dedicated worktree for this execution
-        worktree_path = create_execution_worktree(execution_id, doc_title)
+        worktree_path = create_execution_worktree(execution_id, doc_id, doc_title)
         working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-        # Create and save initial execution record
-        execution = Execution(
-            id=execution_id,
-            doc_id=int(doc_id),
-            doc_title=doc_title,
-            status="running",
-            started_at=datetime.now(timezone.utc),
-            log_file=str(log_file),
-            working_dir=working_dir
-        )
-        save_execution(execution)
+        # Update execution with working directory if worktree was created
+        if worktree_path:
+            from ..database.connection import db_connection
+            with db_connection.get_connection() as conn:
+                conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
+                            (str(worktree_path), execution_id))
+                conn.commit()
 
         # Execute with Claude in the worktree
         exit_code = execute_with_claude(
@@ -883,19 +863,39 @@ def execute(
     # Use provided exec_id and log_file, or generate new ones
     if exec_id and log_file:
         # Use provided values from document browser
-        execution_id = str(exec_id)
+        execution_id = exec_id  # Already numeric
         log_file = Path(log_file)
         # Ensure log directory exists
         log_file.parent.mkdir(parents=True, exist_ok=True)
     else:
-        # Generate new execution ID
-        timestamp = int(time.time())
-        execution_id = f"claude-{doc['id']}-{timestamp}"
+        # Create new execution record and get auto-generated ID
+        from ..models.executions import create_execution, format_execution_log_filename
         
-        # Set up log file
+        # Set up log directory
         log_dir = Path.home() / ".config" / "emdx" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / f"{execution_id}.log"
+        
+        # Create temporary log file path (will update with proper ID)
+        temp_log_file = log_dir / "temp_execution.log"
+        
+        # Create execution record first to get numeric ID
+        execution_id = create_execution(
+            doc_id=int(doc_id),
+            doc_title=doc['title'],
+            log_file=str(temp_log_file),
+            working_dir=os.getcwd()
+        )
+        
+        # Now create proper log file with numeric ID
+        log_file = log_dir / format_execution_log_filename(execution_id)
+        
+        # Update execution with correct log file path
+        from ..models.executions import update_execution_status
+        from ..database.connection import db_connection
+        with db_connection.get_connection() as conn:
+            conn.execute("UPDATE executions SET log_file = ? WHERE id = ?", 
+                        (str(log_file), execution_id))
+            conn.commit()
 
     if smart:
         # Get document tags
@@ -950,7 +950,7 @@ def execute(
             monitor_execution_detached(
                 execution_id=execution_id,
                 task=doc['content'],
-                doc_id=str(doc['id']),
+                doc_id=int(doc_id),
                 doc_title=doc['title'],
                 log_file=log_file,
                 allowed_tools=allowed_tools
@@ -965,20 +965,15 @@ def execute(
             console.print()
 
             # Create worktree for execution
-            worktree_path = create_execution_worktree(execution_id, doc['title'])
+            worktree_path = create_execution_worktree(execution_id, int(doc_id), doc['title'])
             working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-            # Create execution record
-            execution = Execution(
-                id=execution_id,
-                doc_id=int(doc_id),
-                doc_title=doc['title'],
-                status="running",
-                started_at=datetime.now(timezone.utc),
-                log_file=str(log_file),
-                working_dir=working_dir
-            )
-            save_execution(execution)
+            # Update execution record with working directory
+            if execution_id and worktree_path:
+                with db_connection.get_connection() as conn:
+                    conn.execute("UPDATE executions SET working_dir = ? WHERE id = ?",
+                                (str(worktree_path), execution_id))
+                    conn.commit()
 
             # Execute in worktree
             exit_code = execute_with_claude(
