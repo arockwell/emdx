@@ -527,6 +527,15 @@ class LogBrowser(Widget):
             for i, exec in enumerate(self.executions):
                 if exec.id == latest_execution.id:
                     self.executions[i] = latest_execution
+                    # Update the table to reflect status change
+                    table = self.query_one("#log-table", DataTable)
+                    status_icon = {
+                        'running': '🔄',
+                        'completed': '✅',
+                        'failed': '❌'
+                    }.get(latest_execution.status, '❓')
+                    # Update the status icon in the table
+                    table.update_cell(i, 0, status_icon)
                     break
         
         # Only refresh if the execution is still running

@@ -825,9 +825,10 @@ class DocumentBrowser(Widget):
                     "--background"
                 ]
             
-            # For background execution, don't use the wrapper script
-            # The wrapper marks executions as completed when the command exits,
-            # but background mode exits immediately while the real work continues
+            # For background execution, don't use wrapper here
+            # The execute command with --background already uses a wrapper internally
+            # to monitor the actual Claude process. Double-wrapping causes the outer
+            # wrapper to mark execution as complete when execute command exits.
             
             # Start the process directly without wrapper
             subprocess.Popen(
