@@ -334,14 +334,19 @@ class LogBrowser(Widget):
                             line.startswith('Started:') or not line.strip()):
                             log_content.write(line)
                         else:
-                            # Try to format JSON lines with emojis
-                            # Use execution start time for proper timestamps
-                            start_time = execution.started_at.timestamp()
-                            formatted = format_claude_output(line, start_time)
-                            if formatted:
-                                log_content.write(formatted)
-                            else:
+                            # Check if line already has a timestamp (from previous formatting)
+                            if line.startswith("[") and "]" in line[:10]:
+                                # Line already has timestamp, write as-is
                                 log_content.write(line)
+                            else:
+                                # Try to format JSON lines with emojis
+                                # Use execution start time for proper timestamps
+                                start_time = execution.started_at.timestamp()
+                                formatted = format_claude_output(line, start_time)
+                                if formatted:
+                                    log_content.write(formatted)
+                                else:
+                                    log_content.write(line)
                     
                     # Scroll to top to see latest messages
                     log_content.scroll_to(0, 0, animate=False)
@@ -566,13 +571,18 @@ class LogBrowser(Widget):
                                 line.startswith('Started:') or not line.strip()):
                                 log_content_widget.write(line)
                             else:
-                                # Use execution start time for proper timestamps
-                                start_time = self.current_execution.started_at.timestamp()
-                                formatted = format_claude_output(line, start_time)
-                                if formatted:
-                                    log_content_widget.write(formatted)
-                                else:
+                                # Check if line already has a timestamp (from previous formatting)
+                                if line.startswith("[") and "]" in line[:10]:
+                                    # Line already has timestamp, write as-is
                                     log_content_widget.write(line)
+                                else:
+                                    # Use execution start time for proper timestamps
+                                    start_time = self.current_execution.started_at.timestamp()
+                                    formatted = format_claude_output(line, start_time)
+                                    if formatted:
+                                        log_content_widget.write(formatted)
+                                    else:
+                                        log_content_widget.write(line)
                         
                         # Stay at top to see latest messages
                         log_content_widget.scroll_to(0, 0, animate=False)
