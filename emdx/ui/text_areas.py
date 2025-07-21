@@ -101,6 +101,16 @@ class VimEditTextArea(TextArea):
     VIM_COMMAND = "COMMAND"
     
     def __init__(self, app_instance, *args, **kwargs):
+        # Debug logging for VimEditTextArea initialization
+        logger.debug(f"🔍 VimEditTextArea.__init__: args={args[:1] if args else 'NO ARGS'}")
+        logger.debug(f"🔍 VimEditTextArea.__init__: kwargs.keys()={list(kwargs.keys())}")
+        if 'text' in kwargs:
+            logger.debug(f"🔍 VimEditTextArea.__init__: text kwarg length={len(kwargs['text'])}")
+            logger.debug(f"🔍 VimEditTextArea.__init__: text kwarg first 50 chars={repr(kwargs['text'][:50])}")
+        elif args:
+            logger.debug(f"🔍 VimEditTextArea.__init__: args[0] length={len(args[0]) if args[0] else 0}")
+            logger.debug(f"🔍 VimEditTextArea.__init__: args[0] first 50 chars={repr(args[0][:50]) if args[0] else 'EMPTY'}")
+            
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
         self.vim_mode = self.VIM_NORMAL  # Start in normal mode like vim
@@ -114,6 +124,10 @@ class VimEditTextArea(TextArea):
         self.command_buffer = ""  # For vim commands like :w, :q, etc.
         # Store original content to detect changes
         self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
+        
+        # Debug: Check what text we actually have after init
+        logger.debug(f"🔍 VimEditTextArea.__init__: After super().__init__, self.text length={len(self.text)}")
+        logger.debug(f"🔍 VimEditTextArea.__init__: self.text first 50 chars={repr(self.text[:50])}")
         
         # Set initial cursor style for NORMAL mode (solid, non-blinking)
         self.show_cursor = True
@@ -153,6 +167,14 @@ class VimEditTextArea(TextArea):
                 # Pass the raw cursor position - no adjustment
                 # The issue might be in the display, not the data
                 self.line_numbers_widget.set_line_numbers(current_line, total_lines, self)
+                
+                # Update line number widget width if parent has the method
+                parent = self.parent
+                while parent:
+                    if hasattr(parent, '_update_line_number_width'):
+                        parent._update_line_number_width()
+                        break
+                    parent = parent.parent if hasattr(parent, 'parent') else None
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
         
@@ -381,8 +403,7 @@ class VimEditTextArea(TextArea):
     
     def _handle_insert_mode(self, event: events.Key) -> None:
         """Handle keys in INSERT mode - just pass through for normal editing."""
-        # Let TextArea handle all keys in insert mode
-        super().on_key(event)
+        # Don't stop the event - let it bubble up naturally for TextArea to handle
         # Only update line numbers for operations that might change line count
         if event.key in ["enter", "backspace", "delete"]:
             self._update_line_numbers()
@@ -399,8 +420,8 @@ class VimEditTextArea(TextArea):
             event.prevent_default()
             self.app_instance._update_vim_status("NORMAL | ESC=exit")
         else:
-            # For other keys, let TextArea handle them
-            super().on_key(event)
+            # For other keys, don't stop the event - let it bubble up
+            pass
     
     def _handle_visual_line_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL LINE mode."""
@@ -414,8 +435,8 @@ class VimEditTextArea(TextArea):
             event.prevent_default()
             self.app_instance._update_vim_status("NORMAL | ESC=exit")
         else:
-            # For other keys, let TextArea handle them
-            super().on_key(event)
+            # For other keys, don't stop the event - let it bubble up
+            pass
     
     def _handle_command_mode(self, event: events.Key) -> None:
         """Handle keys in COMMAND mode."""
@@ -452,11 +473,12 @@ class VimEditTextArea(TextArea):
         cmd = self.command_buffer[1:].strip()  # Remove the colon
         
         if cmd in ["w", "write"]:
-            # Save
-            self.app_instance.action_save_document()
+            # Save without exiting - for now just update the status
+            # TODO: Implement save-only functionality
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
+            self.app_instance._update_vim_status("NORMAL | Saved")
         elif cmd in ["q", "quit"]:
             # Quit without saving (check for changes)
             if self.text != self.original_content:
@@ -467,17 +489,22 @@ class VimEditTextArea(TextArea):
             else:
                 self.app_instance.action_save_and_exit_edit()
         elif cmd in ["q!", "quit!"]:
-            # Force quit without saving
-            self.app_instance.action_cancel_edit()
+            # Force quit without saving - use the exit method
+            if hasattr(self.app_instance, 'exit_edit_mode'):
+                import asyncio
+                asyncio.create_task(self.app_instance.exit_edit_mode())
+            else:
+                self.app_instance.action_save_and_exit_edit()
         elif cmd in ["wq", "x"]:
             # Save and quit
             self.app_instance.action_save_and_exit_edit()
         elif cmd in ["wa", "wall"]:
             # Save all (just save current in our case)
-            self.app_instance.action_save_document()
+            # TODO: Implement save-only functionality
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
+            self.app_instance._update_vim_status("NORMAL | Saved")
         else:
             # Unknown command
             self.app_instance._update_vim_status(f"Not an editor command: {cmd}")

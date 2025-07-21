@@ -31,6 +31,7 @@ from emdx.utils.emoji_aliases import expand_aliases
 from .document_viewer import FullScreenView
 from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
 
@@ -189,9 +190,9 @@ class DocumentBrowser(Widget):
         border: solid $primary;
     }
     
-    #edit-area {
+    #edit-area, #vim-editor-container {
         height: 1fr;
-        margin: 1;
+        width: 100%;
     }
     """
     
@@ -427,7 +428,7 @@ class DocumentBrowser(Widget):
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
         table = self.query_one("#doc-table", DataTable)
-        if not table.cursor_row:
+        if table.cursor_row is None:
             return
             
         row_idx = table.cursor_row
@@ -437,8 +438,21 @@ class DocumentBrowser(Widget):
         doc = self.filtered_docs[row_idx]
         self.editing_doc_id = doc["id"]
         
+        # Build ID for debugging
+        import time
+        build_id = f"BUILD-{int(time.time())}"
+        logger.info(f"🔍 {build_id} DEBUG: Entering edit mode for doc {doc['id']} at row {row_idx}")
+        
         # Load full document
         full_doc = get_document(str(doc["id"]))
+        # Also print to console for immediate visibility
+        print(f"🔍 {build_id} DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
+        print(f"🔍 {build_id} DEBUG: Content length: {len(full_doc.get('content', ''))}")
+        print(f"🔍 {build_id} DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
+        
+        logger.info(f"🔍 {build_id} DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
+        logger.info(f"🔍 {build_id} DEBUG: Content length: {len(full_doc.get('content', ''))}")
+        logger.info(f"🔍 {build_id} DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
             
         if not full_doc:
             return
@@ -458,15 +472,26 @@ class DocumentBrowser(Widget):
                 if child.id in ["preview", "preview-content"]:
                     await child.remove()
         
-        # Create edit area with proper app instance (self implements TextAreaHost)
-        edit_area: VimEditTextArea = VimEditTextArea(self, full_doc["content"], id="edit-area")
-        await preview_container.mount(edit_area)
-        edit_area.focus()
+        # Create vim editor with line numbers
+        from .vim_editor import VimEditor
+        print(f"🔍 {build_id} DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
+        logger.info(f"🔍 {build_id} DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
+        
+        vim_editor = VimEditor(self, content=full_doc["content"], id="vim-editor-container")
+        
+        print(f"🔍 {build_id} DEBUG: VimEditor created, mounting...")
+        logger.info(f"🔍 {build_id} DEBUG: VimEditor created, mounting...")
+        await preview_container.mount(vim_editor)
+        
+        print(f"🔍 {build_id} DEBUG: VimEditor mounted, focusing...")
+        vim_editor.focus_editor()
+        print(f"🔍 {build_id} DEBUG: VimEditor focused")
+        logger.info(f"🔍 {build_id} DEBUG: VimEditor mounted and focused")
         
         self.edit_mode = True
         
-        # Show vim mode indicator immediately - use call_after_refresh to ensure widget is ready
-        self.call_after_refresh(lambda: self._update_vim_status(f"{edit_area.vim_mode} | ESC=exit"))
+        # Show vim mode indicator
+        self.call_after_refresh(lambda: self._update_vim_status(f"{vim_editor.text_area.vim_mode} | ESC=exit"))
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
@@ -505,10 +530,10 @@ class DocumentBrowser(Widget):
                 # Save new document
                 try:
                     title_input = self.query_one("#title-input", Input)
-                    edit_area = self.query_one("#edit-area", VimEditTextArea)
+                    vim_editor = self.query_one("#vim-editor-container", VimEditor)
                     
                     title = title_input.value.strip()
-                    content = edit_area.text
+                    content = vim_editor.text_area.text
                     
                     if not title:
                         # Update status to show error
@@ -535,11 +560,13 @@ class DocumentBrowser(Widget):
                 # Update existing document
                 if self.editing_doc_id:
                     try:
-                        edit_area = self.query_one("#edit-area", VimEditTextArea)
-                        content = edit_area.text
+                        vim_editor = self.query_one("#vim-editor-container", VimEditor)
+                        content = vim_editor.text_area.text
                         
-                        from emdx.models.documents import update_document
-                        update_document(str(self.editing_doc_id), content=content)
+                        from emdx.models.documents import update_document, get_document
+                        # Get the current document to preserve the title
+                        document = get_document(str(self.editing_doc_id))
+                        update_document(str(self.editing_doc_id), title=document["title"], content=content)
                         
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
                     except Exception as e:
@@ -679,14 +706,13 @@ class DocumentBrowser(Widget):
         from .inputs import TitleInput
         title_input = TitleInput(self, placeholder="Enter document title...", id="title-input")
         
-        # Create edit area with empty content
-        from .text_areas import VimEditTextArea
-        edit_area: VimEditTextArea = VimEditTextArea(self, "", id="edit-area")
+        # Create vim editor with empty content
+        vim_editor = VimEditor(self, content="", id="vim-editor-container")
         
         # Mount the container and its children
         await preview_container.mount(edit_container)
         await edit_container.mount(title_input)
-        await edit_container.mount(edit_area)
+        await edit_container.mount(vim_editor)
         
         # Focus on title input first
         title_input.focus()
@@ -853,7 +879,7 @@ class DocumentBrowser(Widget):
     async def action_selection_mode(self) -> None:
         """Enter selection mode for document content."""
         table = self.query_one("#doc-table", DataTable)
-        if not table.cursor_row or table.cursor_row >= len(self.filtered_docs):
+        if table.cursor_row is None or table.cursor_row >= len(self.filtered_docs):
             return
             
         doc = self.filtered_docs[table.cursor_row]

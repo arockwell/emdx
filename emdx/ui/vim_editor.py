@@ -31,22 +31,25 @@ class VimEditor(Vertical):
         super().__init__(**kwargs)
         self.app_instance = app_instance
         
+        # Ensure VimEditor takes full available space
+        self.styles.width = "100%"
+        self.styles.height = "100%"
+        
         # Create the vim text area
+        logger.debug(f"🔍 VimEditor.__init__: Creating VimEditTextArea with content length: {len(content)}")
+        logger.debug(f"🔍 VimEditor.__init__: First 100 chars: {repr(content[:100])}")
+        # Pass content as first positional argument (required by VimEditTextArea)
         self.text_area = VimEditTextArea(
             app_instance,
-            text=content,
+            content,  # First positional arg after app_instance
             read_only=False,
             id="vim-text-area"
         )
+        logger.debug(f"🔍 VimEditor.__init__: VimEditTextArea created")
         
-        # Apply styling - use file-browser specific class for proper alignment
-        self.text_area.add_class("file-browser-vim-textarea")
-        self.text_area.word_wrap = True
+        # Apply styling
         self.text_area.show_line_numbers = False  # Using custom vim relative numbers
-        
-        # Try setting max line length if available
-        if hasattr(self.text_area, 'max_line_length'):
-            self.text_area.max_line_length = 80
+        self.text_area.word_wrap = False  # Disable to maintain line alignment
         
         # Create line numbers widget
         self.line_numbers = SimpleVimLineNumbers(id="vim-line-numbers")
@@ -54,6 +57,8 @@ class VimEditor(Vertical):
         
         # Create horizontal container for line numbers and text area
         self.edit_container = Horizontal(id="vim-edit-container")
+        self.edit_container.styles.width = "100%"
+        self.edit_container.styles.height = "100%"
     
     def compose(self):
         """Compose the vim editor layout."""
@@ -61,12 +66,23 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # Mount line numbers and text area in horizontal layout
-        self.edit_container.mount(self.line_numbers)
+        # TEMPORARILY DISABLED: Line numbers causing layout issues
+        # Just mount the text area directly without line numbers
+        
+        # Configure text area to take full space
+        self.text_area.styles.width = "100%"
+        self.text_area.styles.padding = (0, 1)  # Add horizontal padding
+        
+        # Mount only text area (no line numbers for now)
         self.edit_container.mount(self.text_area)
         
+        logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
+        logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
+        logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
+        
         # Ensure the entire vim editor container starts at top
-        self.scroll_to(0, 0, animate=False)
+        # TEMPORARILY DISABLED: This might be causing first line visibility issues
+        # self.scroll_to(0, 0, animate=False)
         
         # Focus the text area and initialize line numbers
         self.text_area.can_focus = True
@@ -88,10 +104,42 @@ class VimEditor(Vertical):
         """Focus the text editor."""
         self.text_area.focus()
     
+    def _calculate_line_number_width(self, total_lines):
+        """Calculate required width for line numbers based on total lines."""
+        # Account for the largest line number + 1 space padding
+        max_digits = len(str(total_lines))
+        # Minimum 3 chars (like vim), add 1 for padding
+        width = max(3, max_digits) + 1
+        logger.debug(f"🔢 Line number width calculation: total_lines={total_lines}, max_digits={max_digits}, width={width}")
+        return width
+    
+    def _update_line_number_width(self):
+        """Update line number widget width based on current content."""
+        total_lines = len(self.text_area.text.split('\n'))
+        line_number_width = self._calculate_line_number_width(total_lines)
+        
+        # Update width if it changed
+        if self.line_numbers.styles.width != line_number_width:
+            self.line_numbers.styles.width = line_number_width
+            self.line_numbers.styles.min_width = line_number_width
+            self.line_numbers.styles.max_width = line_number_width
+    
     def _initialize_editor(self):
         """Initialize editor after mounting - focus and set up line numbers."""
         try:
             logger.debug(f"🔢 VimEditor _initialize_editor starting")
+            
+            # DEBUG: Check TextArea state
+            logger.debug(f"🔍 DEBUG TextArea state:")
+            logger.debug(f"🔍   - text length: {len(self.text_area.text)}")
+            logger.debug(f"🔍   - text first 50: {repr(self.text_area.text[:50])}")
+            logger.debug(f"🔍   - has_focus: {self.text_area.has_focus}")
+            logger.debug(f"🔍   - display: {self.text_area.display}")
+            logger.debug(f"🔍   - visible: {self.text_area.visible}")
+            if hasattr(self.text_area, 'size'):
+                logger.debug(f"🔍   - size: {self.text_area.size}")
+            if hasattr(self.text_area, 'region'):
+                logger.debug(f"🔍   - region: {self.text_area.region}")
             
             # AGGRESSIVE positioning: Force cursor to top MULTIPLE times with different approaches
             
@@ -108,25 +156,28 @@ class VimEditor(Vertical):
                     pass
                     
             # Method 3: Force scroll to top using multiple methods
-            if hasattr(self.text_area, 'scroll_to'):
-                self.text_area.scroll_to(0, 0, animate=False)
-                logger.debug(f"🔢   Called scroll_to(0, 0)")
+            # TEMPORARILY DISABLED: This might be hiding the first line
+            # if hasattr(self.text_area, 'scroll_to'):
+            #     self.text_area.scroll_to(0, 0, animate=False)
+            #     logger.debug(f"🔢   Called scroll_to(0, 0)")
             
             # Method 4: Try to access internal scroll attributes if they exist
-            if hasattr(self.text_area, 'scroll_offset'):
-                try:
-                    self.text_area.scroll_offset = (0, 0)
-                    logger.debug(f"🔢   Set scroll_offset to (0, 0)")
-                except:
-                    pass
+            # TEMPORARILY DISABLED: This might be hiding the first line
+            # if hasattr(self.text_area, 'scroll_offset'):
+            #     try:
+            #         self.text_area.scroll_offset = (0, 0)
+            #         logger.debug(f"🔢   Set scroll_offset to (0, 0)")
+            #     except:
+            #         pass
                     
-            if hasattr(self.text_area, 'scroll_x'):
-                try:
-                    self.text_area.scroll_x = 0
-                    self.text_area.scroll_y = 0
-                    logger.debug(f"🔢   Set scroll_x/y to 0")
-                except:
-                    pass
+            # TEMPORARILY DISABLED: This might be hiding the first line
+            # if hasattr(self.text_area, 'scroll_x'):
+            #     try:
+            #         self.text_area.scroll_x = 0
+            #         self.text_area.scroll_y = 0
+            #         logger.debug(f"🔢   Set scroll_x/y to 0")
+            #     except:
+            #         pass
             
             # Method 5: For markdown files, be extra aggressive
             is_markdown = False
@@ -137,9 +188,10 @@ class VimEditor(Vertical):
                     logger.debug(f"🔢   MARKDOWN FILE detected: {self.text_area.file_path}")
                     # Triple-force for markdown files
                     self.text_area.cursor_location = (0, 0)
-                    if hasattr(self.text_area, 'scroll_to'):
-                        self.text_area.scroll_to(0, 0, animate=False)
-                    logger.debug(f"🔢   Applied markdown-specific positioning")
+                    # TEMPORARILY DISABLED: scroll_to might be hiding first line
+                    # if hasattr(self.text_area, 'scroll_to'):
+                    #     self.text_area.scroll_to(0, 0, animate=False)
+                    logger.debug(f"🔢   Applied markdown-specific positioning (scroll disabled)")
             
             # Method 6: Force cursor position using TextArea internal methods if available
             if hasattr(self.text_area, 'move_cursor'):
@@ -181,13 +233,12 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # Set initial line numbers
-            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            
-            # Double-check by calling text area's update method if it exists
-            if hasattr(self.text_area, '_update_line_numbers'):
-                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-                self.text_area._update_line_numbers()
+            # TEMPORARILY DISABLED: Line numbers
+            # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            # self._update_line_number_width()
+            # if hasattr(self.text_area, '_update_line_numbers'):
+            #     logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+            #     self.text_area._update_line_numbers()
                 
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
@@ -218,12 +269,13 @@ class VimEditor(Vertical):
                 self.text_area.cursor_location = (0, 0)
                 if hasattr(self.text_area, 'selection'):
                     self.text_area.selection = None
-                if hasattr(self.text_area, 'scroll_to'):
-                    self.text_area.scroll_to(0, 0, animate=False)
+                # TEMPORARILY DISABLED: scroll_to might be hiding first line
+                # if hasattr(self.text_area, 'scroll_to'):
+                #     self.text_area.scroll_to(0, 0, animate=False)
                     
-                # Update line numbers
-                total_lines = len(self.text_area.text.split('\n'))
-                self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
+                # TEMPORARILY DISABLED: Line numbers
+                # total_lines = len(self.text_area.text.split('\n'))
+                # self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
                 
                 logger.debug(f"🔢   Forced positioning completed")
             else:
