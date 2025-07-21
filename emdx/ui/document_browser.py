@@ -803,15 +803,27 @@ class DocumentBrowser(Widget):
             # Find the wrapper script
             wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
             
-            # Build the claude command
-            # Note: execute command doesn't take --execution-id parameter
-            claude_cmd = [
-                sys.executable,
-                "-m", "emdx.commands.claude_execute",
-                "execute",
-                str(doc_id),
-                "--background"
-            ]
+            # Build the claude command using emdx CLI
+            # Use the emdx command instead of calling module directly
+            import shutil
+            emdx_path = shutil.which("emdx")
+            if not emdx_path:
+                # Fallback to python module if emdx not in PATH
+                emdx_path = sys.executable
+                claude_cmd = [
+                    emdx_path,
+                    "-m", "emdx",
+                    "claude", "execute",
+                    str(doc_id),
+                    "--background"
+                ]
+            else:
+                claude_cmd = [
+                    emdx_path,
+                    "claude", "execute", 
+                    str(doc_id),
+                    "--background"
+                ]
             
             # Execute with wrapper
             wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
