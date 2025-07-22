@@ -36,8 +36,9 @@ class FileList(DataTable):
     
     def on_data_table_row_highlighted(self, event) -> None:
         """Handle row selection changes."""
+        logger.debug(f"📁 FileList.on_data_table_row_highlighted: {self.selected_index} → {event.cursor_row}")
         self.selected_index = event.cursor_row
-        logger.debug(f"📁 Row highlighted: {event.cursor_row}, updating selected_index")
+        logger.debug(f"📁 Posting FileSelected message: {event.cursor_row}")
         # Notify parent FileBrowser of selection change
         self.post_message(self.FileSelected(event.cursor_row))
     
@@ -49,8 +50,9 @@ class FileList(DataTable):
     
     def watch_selected_index(self, old: int, new: int) -> None:
         """Update cursor position when selection changes."""
-        logger.debug("cursor moved")
+        logger.debug(f"📁 FileList.watch_selected_index: {old} → {new}, files={len(self.files)}, rows={self.row_count}")
         if 0 <= new < len(self.files) and self.row_count > 0:
+            logger.debug(f"📁 FileList.move_cursor to row {new}")
             self.move_cursor(row=new)
     
     def populate_files(self, path: Path, show_hidden: bool = False) -> None:

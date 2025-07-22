@@ -301,12 +301,15 @@ class FileBrowser(Container):
     
     def watch_selected_index(self, old: int, new: int) -> None:
         """React to selection changes."""
+        logger.debug(f"🗂️ FileBrowser.watch_selected_index: {old} → {new}, mounted={self.is_mounted}")
         if self.is_mounted:
             try:
                 file_list = self.query_one("#file-list", FileList)
+                logger.debug(f"🗂️ FileBrowser updating FileList.selected_index: {file_list.selected_index} → {new}")
                 file_list.selected_index = new
                 self.update_preview()
-            except Exception:
+            except Exception as e:
+                logger.debug(f"🗂️ FileBrowser.watch_selected_index error: {e}")
                 pass  # Widget not ready yet
     
     def watch_show_hidden(self, old: bool, new: bool) -> None:
@@ -364,15 +367,24 @@ class FileBrowser(Container):
         """Move selection down."""
         try:
             file_list = self.query_one("#file-list", FileList)
+            old_index = self.selected_index
             if self.selected_index < len(file_list.files) - 1:
                 self.selected_index += 1
-        except Exception:
+                logger.debug(f"🗂️ FileBrowser.action_move_down: {old_index} → {self.selected_index}")
+            else:
+                logger.debug(f"🗂️ FileBrowser.action_move_down: at bottom, staying at {self.selected_index}")
+        except Exception as e:
+            logger.debug(f"🗂️ FileBrowser.action_move_down error: {e}")
             pass
     
     def action_move_up(self) -> None:
         """Move selection up."""
+        old_index = self.selected_index
         if self.selected_index > 0:
             self.selected_index -= 1
+            logger.debug(f"🗂️ FileBrowser.action_move_up: {old_index} → {self.selected_index}")
+        else:
+            logger.debug(f"🗂️ FileBrowser.action_move_up: at top, staying at {self.selected_index}")
     
     def action_go_top(self) -> None:
         """Go to first item."""
@@ -883,7 +895,7 @@ class FileBrowser(Container):
 
     def on_file_list_file_selected(self, event) -> None:
         """Handle file selection changes from FileList."""
-        logger.info(f"🗂️ File selection changed to index {event.index}")
+        logger.debug(f"🗂️ FileBrowser.on_file_list_file_selected: {self.selected_index} → {event.index}")
         self.selected_index = event.index
         self.update_preview()
 
