@@ -31,6 +31,32 @@ from .text_areas import SelectionTextArea
 logger = logging.getLogger(__name__)
 
 
+def parse_log_timestamp(line: str) -> Optional[str]:
+    """Parse timestamp from log line.
+    
+    Args:
+        line: Log line that may contain a timestamp
+        
+    Returns:
+        Timestamp string in [HH:MM:SS] format or None if not found
+    """
+    if not line:
+        return None
+        
+    import re
+    
+    # Match timestamp pattern at start of line: [HH:MM:SS]
+    # Handle both direct timestamps and timestamps with whitespace
+    # More strict: hours 00-23, minutes 00-59, seconds 00-59
+    timestamp_pattern = r'^\s*(\[(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\])'
+    match = re.match(timestamp_pattern, line)
+    
+    if match:
+        return match.group(1)
+    
+    return None
+
+
 class LogBrowserHost:
     """Host implementation for LogBrowser to work with SelectionTextArea."""
     
@@ -315,12 +341,19 @@ class LogBrowser(Widget):
                             line.startswith('Started:') or not line.strip()):
                             log_content.write(line)
                         else:
-                            # Try to format JSON lines with emojis
-                            formatted = format_claude_output(line, time.time())
-                            if formatted:
-                                log_content.write(formatted)
-                            else:
+                            # Check if line already has a timestamp
+                            timestamp = parse_log_timestamp(line)
+                            if timestamp:
+                                # Line already has timestamp, display as-is
                                 log_content.write(line)
+                            else:
+                                # Try to format JSON lines with emojis
+                                # Use the execution's start time as the base timestamp
+                                formatted = format_claude_output(line, execution.started_at.timestamp())
+                                if formatted:
+                                    log_content.write(formatted)
+                                else:
+                                    log_content.write(line)
                     
                     # Scroll to top so users see the beginning of the log
                     log_content.scroll_to(0, 0, animate=False)
