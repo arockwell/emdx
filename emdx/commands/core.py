@@ -32,6 +32,8 @@ from emdx.ui.formatting import format_tags
 from emdx.utils.git import get_git_project
 from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.services.auto_tagger import AutoTagger
+from emdx.utils.formatter import DocumentFormatter
+from emdx.utils.format_helpers import format_summary, format_issue_table
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -180,27 +182,55 @@ def save(
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
     suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
+    validate: bool = typer.Option(True, "--validate/--no-validate", help="Validate document formatting"),
+    strict: bool = typer.Option(False, "--strict", help="Enforce strict formatting (fail on errors)"),
+    format: bool = typer.Option(False, "--format", "-f", help="Auto-format document before saving"),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
     input_content = get_input_content(input)
+    
+    # Step 2: Validate and format if requested
+    content_to_save = input_content.content
+    if validate or format:
+        formatter = DocumentFormatter()
+        result = formatter.validate(content_to_save, auto_fix=format)
+        
+        if validate and result.issues:
+            # Show validation results
+            console.print("\n[yellow]Document formatting validation:[/yellow]")
+            console.print(format_summary(result))
+            
+            if result.issues:
+                console.print()
+                console.print(format_issue_table(result))
+                console.print()
+        
+        if format and result.fixed_content:
+            content_to_save = result.fixed_content
+            console.print("[green]✨ Document formatted successfully[/green]")
+            
+        # In strict mode, fail on errors
+        if strict and not result.valid:
+            console.print("\n[red]❌ Document has formatting errors. Use --no-validate to bypass.[/red]")
+            raise typer.Exit(1)
 
-    # Step 2: Generate title
+    # Step 3: Generate title
     final_title = generate_title(input_content, title)
 
-    # Step 3: Detect project
+    # Step 4: Detect project
     final_project = detect_project(input_content, project)
 
-    # Step 4: Create metadata object
+    # Step 5: Create metadata object
     metadata = DocumentMetadata(title=final_title, project=final_project)
 
-    # Step 5: Create document in database
-    doc_id = create_document(metadata.title, input_content.content, metadata.project)
+    # Step 6: Create document in database (use formatted content if available)
+    doc_id = create_document(metadata.title, content_to_save, metadata.project)
 
-    # Step 6: Apply tags
+    # Step 7: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
-    # Step 7: Auto-tagging if requested
+    # Step 8: Auto-tagging if requested
     if auto_tag:
         tagger = AutoTagger()
         auto_applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
@@ -208,10 +238,10 @@ def save(
             applied_tags.extend(auto_applied)
             console.print(f"   [dim]Auto-tagged:[/dim] {format_tags(auto_applied)}")
 
-    # Step 8: Display result
+    # Step 9: Display result
     display_save_result(doc_id, metadata, applied_tags)
 
-    # Step 9: Show tag suggestions if requested
+    # Step 10: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
         tagger = AutoTagger()
         suggestions = tagger.suggest_tags(doc_id, max_suggestions=3)
