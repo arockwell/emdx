@@ -201,6 +201,10 @@ class DocumentBrowser(Widget):
         height: 1fr;
         width: 100%;
     }
+    
+    #doc-table {
+        height: 1fr;
+    }
     """
     
     # Reactive properties
@@ -234,7 +238,7 @@ class DocumentBrowser(Widget):
                     # Apply direct styles - 2/3 of sidebar
                     table_container.styles.height = "66%"
                     table_container.styles.min_height = 10
-                    table_container.styles.padding = 0
+                    table_container.styles.padding = (1, 0, 0, 0)  # Top padding for spacing
                     yield DataTable(id="doc-table")
                 with Vertical(id="details-container", classes="details-section") as details_container:
                     # Apply direct styles - 1/3 of sidebar
@@ -278,7 +282,7 @@ class DocumentBrowser(Widget):
         table.add_column(" ", width=1)  # Padding column
         table.add_column("Title", width=74)
         table.cursor_type = "row"
-        table.show_header = True
+        table.show_header = True  # Show built-in headers
         table.cell_padding = 0  # Remove cell padding for tight spacing
         
         # Disable focus on non-interactive widgets
