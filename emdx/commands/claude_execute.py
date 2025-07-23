@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 import sys
-import threading
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -16,7 +15,12 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
-from ..models.executions import Execution, save_execution, update_execution_status, update_execution_pid
+from ..models.executions import (
+    Execution,
+    save_execution,
+    update_execution_pid,
+    update_execution_status,
+)
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
 
@@ -75,7 +79,7 @@ TOOL_EMOJIS = {
 # Emoji mappings for execution types
 EXECUTION_TYPE_EMOJIS = {
     ExecutionType.NOTE: "📝",
-    ExecutionType.ANALYSIS: "🔍", 
+    ExecutionType.ANALYSIS: "🔍",
     ExecutionType.GAMEPLAN: "🎯",
     ExecutionType.GENERIC: "⚡"
 }
@@ -155,10 +159,10 @@ def parse_task_content(task: str) -> str:
 
 def format_timestamp(base_time: Optional[float] = None) -> str:
     """Get formatted timestamp for log output.
-    
+
     Args:
         base_time: Base timestamp in seconds since epoch. If None, uses current time.
-    
+
     Returns:
         Formatted timestamp string in [HH:MM:SS] format
     """
@@ -186,7 +190,9 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
 
     # Check if line already has a timestamp - if so, return as-is
     import re
-    timestamp_pattern = r'^\[\d{2}:\d{2}:\d{2}\]'
+    # Match timestamp pattern at start of line: [HH:MM:SS]
+    # More strict: hours 00-23, minutes 00-59, seconds 00-59
+    timestamp_pattern = r'^\s*\[(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\]'
     if re.match(timestamp_pattern, line):
         return line
 
@@ -266,19 +272,19 @@ def execute_with_claude_detached(
     context: Optional[dict] = None
 ) -> int:
     """Execute a task with Claude in a fully detached background process.
-    
+
     This function starts Claude and returns immediately without waiting.
     The subprocess continues running independently of the parent process.
-    
+
     Returns:
         The process ID of the started subprocess.
     """
     if allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
-    
+
     # Expand @filename references
     expanded_task = parse_task_content(task)
-    
+
     # Build Claude command
     cmd = [
         "claude",
@@ -287,12 +293,12 @@ def execute_with_claude_detached(
         "--output-format", "stream-json",
         "--verbose"
     ]
-    
+
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Write initial log header
-    from emdx import __version__, __build_id__
+    from emdx import __build_id__, __version__
     start_time = datetime.now()
     with open(log_file, 'w') as f:
         f.write("=== EMDX Claude Execution ===\n")
@@ -318,12 +324,12 @@ def execute_with_claude_detached(
         f.write(f"{'─' * 60}\n")
         f.write(f"{expanded_task}\n")
         f.write(f"{'─' * 60}\n\n")
-    
+
     # Start subprocess in detached mode using wrapper
     try:
         # Get the wrapper script path
         wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
-        
+
         # Build wrapper command: wrapper.py exec_id log_file claude_command...
         wrapper_cmd = [
             sys.executable,  # Use current Python interpreter
@@ -331,13 +337,13 @@ def execute_with_claude_detached(
             execution_id,
             str(log_file)
         ] + cmd
-        
+
         # Use nohup for true detachment
         nohup_cmd = ["nohup"] + wrapper_cmd
-        
+
         # Open log file for appending
         log_handle = open(log_file, 'a')
-        
+
         process = subprocess.Popen(
             nohup_cmd,
             stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
@@ -348,27 +354,27 @@ def execute_with_claude_detached(
             start_new_session=True,  # Better than preexec_fn
             close_fds=True  # Don't inherit file descriptors
         )
-        
+
         # Close the file handle in parent process
         log_handle.close()
-        
+
         # Log the PID for tracking
         with open(log_file, 'a') as f:
             f.write(f"\n{format_timestamp()} 🔧 Background process started with PID: {process.pid}\n")
             f.write(f"{format_timestamp()} 📄 Output is being written to this log file\n")
             f.write(f"{format_timestamp()} 🔄 Wrapper will update status on completion\n")
-        
+
         # Return immediately - don't wait or read from pipes
         console.print(f"[green]✅ Claude started in background (PID: {process.pid})[/green]")
-        
+
         return process.pid
-        
+
     except FileNotFoundError as e:
         # Handle missing nohup
         if "nohup" in str(e):
             # Fallback without nohup
             log_handle = open(log_file, 'a')
-            
+
             process = subprocess.Popen(
                 wrapper_cmd,  # Use wrapper even without nohup
                 stdin=subprocess.DEVNULL,
@@ -379,9 +385,9 @@ def execute_with_claude_detached(
                 start_new_session=True,
                 close_fds=True
             )
-            
+
             log_handle.close()
-            
+
             console.print(f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]")
             return process.pid
         else:
@@ -429,7 +435,7 @@ def execute_with_claude(
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Write initial log header
-    from emdx import __version__, __build_id__
+    from emdx import __build_id__, __version__
     start_time = datetime.now()
     with open(log_file, 'w') as f:
         f.write("=== EMDX Claude Execution ===\n")
@@ -531,7 +537,7 @@ def execute_document_smart_background(
     use_stage_tools: bool = True
 ) -> None:
     """Execute a document in background with context-aware behavior.
-    
+
     This function starts execution and returns immediately.
     """
     # Get document
@@ -542,7 +548,7 @@ def execute_document_smart_background(
     # Get document tags
     from ..models.tags import get_document_tags
     doc_tags = get_document_tags(str(doc_id))
-    
+
     # Get execution context based on tags
     context = get_execution_context(doc_tags)
 
@@ -581,7 +587,7 @@ def execute_document_smart_background(
         doc_id=str(doc_id),
         context=context
     )
-    
+
     # Update execution with PID
     update_execution_pid(execution_id, pid)
 
@@ -616,7 +622,7 @@ def execute_document_smart(
     # Get document tags
     from ..models.tags import get_document_tags
     doc_tags = get_document_tags(str(doc_id))
-    
+
     # Get execution context based on tags
     context = get_execution_context(doc_tags)
 
@@ -629,7 +635,7 @@ def execute_document_smart(
         console.print(f"[dim]Using stage-specific tools for {context['type'].value}[/dim]")
     elif allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
-        console.print(f"[dim]Using default tools (stage-specific disabled)[/dim]")
+        console.print("[dim]Using default tools (stage-specific disabled)[/dim]")
 
     # Log execution type
     exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
@@ -658,7 +664,7 @@ def execute_document_smart(
     # Execute with Claude
     if verbose:
         console.print(f"[dim]Passing {len(allowed_tools)} tools to Claude: {', '.join(allowed_tools)}[/dim]")
-    
+
     exit_code = execute_with_claude(
         task=prompt,
         execution_id=execution_id,
@@ -800,7 +806,7 @@ def monitor_execution_detached(
             doc_id=doc_id,
             context=None  # Context not available in these functions yet
         )
-        
+
         # Update execution with PID
         update_execution_pid(execution_id, pid)
     except Exception as e:
@@ -906,7 +912,7 @@ def execute(
         # Get document tags
         from ..models.tags import get_document_tags
         doc_tags = get_document_tags(doc_id)
-        
+
         # Use smart execution
         if background:
             console.print("[green]Starting smart execution in background...[/green]")
@@ -944,7 +950,7 @@ def execute(
         # Legacy execution mode - use default tools if none specified
         if allowed_tools is None:
             allowed_tools = DEFAULT_ALLOWED_TOOLS
-            
+
         if background:
             # Run in background thread
             console.print("[green]Starting execution in background...[/green]")
