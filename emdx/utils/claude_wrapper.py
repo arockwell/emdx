@@ -39,20 +39,37 @@ def main():
         print("Usage: claude_wrapper.py <exec_id> <log_file> <command...>", file=sys.stderr)
         sys.exit(1)
 
-    exec_id = sys.argv[1]
+    exec_id = int(sys.argv[1])  # Convert to int - this is the database ID
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
+    
+    # TEMPORARY: Disable lock mechanism to test if it's causing issues
+    log_to_file(log_file, f"🔍 DEBUG: LOCK MECHANISM DISABLED FOR TESTING")
+    log_to_file(log_file, f"🔍 DEBUG: This should allow multiple executions to run simultaneously")
 
     # Log wrapper start
     log_to_file(log_file, "🔄 Wrapper script started")
+    log_to_file(log_file, f"📋 Full args: {sys.argv}")
+    log_to_file(log_file, f"📋 Exec ID: {exec_id}")
     log_to_file(log_file, f"📋 Command: {' '.join(cmd)}")
 
     exit_code = 1  # Default to failure
     status = "failed"
+    lines_processed = 0  # Track lines to detect empty runs
+    
+    # Check if claude command exists
+    import shutil
+    if not shutil.which(cmd[0]):
+        log_to_file(log_file, f"❌ Command '{cmd[0]}' not found in PATH")
+        log_to_file(log_file, f"💡 PATH: {os.environ.get('PATH', 'not set')}")
+        update_execution_status(exec_id, "failed", 127)
+        sys.exit(127)
 
     try:
         # Run the actual Claude command
         log_to_file(log_file, "🚀 Starting Claude process...")
+        log_to_file(log_file, f"🔍 Working directory: {os.getcwd()}")
+        log_to_file(log_file, f"🔍 Environment PYTHONUNBUFFERED: {os.environ.get('PYTHONUNBUFFERED', 'not set')}")
 
         # Execute the command and format output before writing to log
         process = subprocess.Popen(
@@ -67,13 +84,24 @@ def main():
         # Import formatting function
         import time
 
-        from emdx.commands.claude_execute import format_claude_output
+        from emdx.commands.claude_execute import format_claude_output, parse_log_timestamp
         start_time = time.time()
+        
+        log_to_file(log_file, f"🔍 Process started with PID: {process.pid}")
 
         # Stream and format output
+        lines_processed = 0
+        last_timestamp = None
         with open(log_file, 'a') as log_f:
             for line in process.stdout:
-                formatted = format_claude_output(line, start_time)
+                lines_processed += 1
+                # Parse timestamp from log line if available
+                parsed_timestamp = parse_log_timestamp(line)
+                if parsed_timestamp:
+                    last_timestamp = parsed_timestamp
+                # Use parsed timestamp or last known timestamp, fallback to current time
+                timestamp_to_use = parsed_timestamp or last_timestamp or time.time()
+                formatted = format_claude_output(line, timestamp_to_use)
                 if formatted:
                     log_f.write(formatted + '\n')
                     log_f.flush()  # Ensure real-time updates
@@ -81,12 +109,22 @@ def main():
         # Wait for process to complete
         process.wait()
         result = process
+        
+        duration = time.time() - start_time
 
         exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
 
         log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
+        log_to_file(log_file, f"📊 Duration: {duration:.2f}s, Lines processed: {lines_processed}")
 
+    except FileNotFoundError as e:
+        log_to_file(log_file, f"❌ Command not found: {cmd[0]}")
+        log_to_file(log_file, f"❌ Full error: {str(e)}")
+        log_to_file(log_file, "💡 Make sure 'claude' is installed and in your PATH")
+        status = "failed"
+        exit_code = 127  # Standard command not found exit code
+        
     except subprocess.TimeoutExpired:
         log_to_file(log_file, "⏱️ Process timed out")
         status = "failed"
@@ -106,14 +144,23 @@ def main():
     finally:
         # Always try to update the database
         try:
+            # Always update status - the lock file should prevent true duplicates
             log_to_file(log_file, f"📊 Updating execution status to: {status}")
+            log_to_file(log_file, f"📊 Lines processed: {lines_processed}, Exit code: {exit_code}")
+            log_to_file(log_file, f"🔍 DEBUG: About to call update_execution_status({exec_id}, {status}, {exit_code})")
+            
             update_execution_status(exec_id, status, exit_code)
+            
             log_to_file(log_file, "✅ Database updated successfully")
+            log_to_file(log_file, f"🔍 DEBUG: Execution {exec_id} is now marked as {status}")
         except Exception as e:
             log_to_file(log_file, f"❌ Failed to update database: {str(e)}")
             # Don't exit with error if only DB update failed
             # The main process ran, which is what matters
 
+    # TEMPORARY: No lock file cleanup since lock mechanism is disabled
+    log_to_file(log_file, f"🔍 DEBUG: Wrapper finished for execution {exec_id}")
+    
     # Exit with the same code as the subprocess
     sys.exit(exit_code)
 
