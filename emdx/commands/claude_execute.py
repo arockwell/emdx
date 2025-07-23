@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
-from ..models.executions import Execution, save_execution, update_execution_status, update_execution_pid
+from ..models.executions import Execution, save_execution, update_execution_status, update_execution_pid, create_execution
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
 
@@ -153,17 +153,66 @@ def parse_task_content(task: str) -> str:
     return expanded
 
 
-def format_timestamp() -> str:
-    """Get formatted timestamp for log output."""
-    return datetime.now().strftime("[%H:%M:%S]")
+def format_timestamp(timestamp: Optional[float] = None) -> str:
+    """Get formatted timestamp for log output.
+    
+    Args:
+        timestamp: Optional epoch timestamp. If None, uses current time.
+        
+    Returns:
+        Formatted timestamp string in [HH:MM:SS] format
+    """
+    if timestamp is None:
+        return datetime.now().strftime("[%H:%M:%S]")
+    else:
+        return datetime.fromtimestamp(timestamp).strftime("[%H:%M:%S]")
 
 
-def format_claude_output(line: str, start_time: float) -> Optional[str]:
+def parse_log_timestamp(line: str) -> Optional[float]:
+    """Parse timestamp from a log line.
+    
+    Args:
+        line: Log line that may contain a timestamp in format [HH:MM:SS]
+        
+    Returns:
+        Epoch timestamp as float if found, None otherwise
+    """
+    if not line:
+        return None
+        
+    # Look for timestamp pattern at the beginning of the line
+    timestamp_match = re.match(r'^\[(\d{2}):(\d{2}):(\d{2})\]', line.strip())
+    if timestamp_match:
+        hour = int(timestamp_match.group(1))
+        minute = int(timestamp_match.group(2))
+        second = int(timestamp_match.group(3))
+        
+        # Validate time components
+        if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
+            return None
+        
+        # Create datetime for today with the parsed time
+        now = datetime.now()
+        timestamp_dt = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
+        
+        # If the timestamp appears to be in the future (log from before midnight)
+        # adjust the date accordingly
+        if timestamp_dt > now:
+            # Timestamp is in the future, likely from yesterday
+            from datetime import timedelta
+            timestamp_dt = timestamp_dt - timedelta(days=1)
+        
+        return timestamp_dt.timestamp()
+    
+    return None
+
+
+def format_claude_output(line: str, timestamp: float) -> Optional[str]:
     """Format Claude's JSON output into readable log entries.
 
     Args:
         line: Raw output line from Claude
-        start_time: Timestamp when execution started
+        timestamp: Timestamp to use for this log entry
 
     Returns:
         Formatted log entry or None if line should be skipped
@@ -186,7 +235,7 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
         if data.get("type") == "system":
             # Handle system initialization messages
             if data.get("subtype") == "init":
-                return f"{format_timestamp()} 🚀 Claude Code session started"
+                return f"{format_timestamp(timestamp)} 🚀 Claude Code session started"
             # Skip other system messages for now
             return None
 
@@ -198,11 +247,11 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 if item.get("type") == "text":
                     text = item.get("text", "").strip()
                     if text:
-                        return f"{format_timestamp()} 🤖 Claude: {text}"
+                        return f"{format_timestamp(timestamp)} 🤖 Claude: {text}"
                 elif item.get("type") == "tool_use":
                     tool_name = item.get("name", "Unknown")
                     emoji = TOOL_EMOJIS.get(tool_name, "🛠️")
-                    return f"{format_timestamp()} {emoji} Using tool: {tool_name}"
+                    return f"{format_timestamp(timestamp)} {emoji} Using tool: {tool_name}"
 
         elif data.get("type") == "user" and data.get("message", {}).get("role") == "user":
             # Tool result - extract key info
@@ -211,42 +260,42 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 result = content[0].get("content", "")
                 if len(result) > 100:
                     result = result[:100] + "..."
-                return f"{format_timestamp()} 📄 Tool result: {result}"
+                return f"{format_timestamp(timestamp)} 📄 Tool result: {result}"
 
         elif data.get("type") == "text":
             text = data.get("text", "").strip()
             if text:
-                return f"{format_timestamp()} 🤖 Claude: {text}"
+                return f"{format_timestamp(timestamp)} 🤖 Claude: {text}"
 
         elif data.get("type") == "error":
             error = data.get("error", {}).get("message", "Unknown error")
-            return f"{format_timestamp()} ❌ Error: {error}"
+            return f"{format_timestamp(timestamp)} ❌ Error: {error}"
 
         elif data.get("type") == "result":
             # Handle the final result message
             if data.get("subtype") == "success":
-                duration = time.time() - start_time
-                return f"{format_timestamp()} ✅ Task completed successfully! Duration: {duration:.2f}s"
+                # Duration calculation isn't possible here without tracking start time
+                return f"{format_timestamp(timestamp)} ✅ Task completed successfully!"
             else:
-                return f"{format_timestamp()} ❌ Task failed: {data.get('result', 'Unknown error')}"
+                return f"{format_timestamp(timestamp)} ❌ Task failed: {data.get('result', 'Unknown error')}"
 
         # For debugging: show unhandled JSON types (this was the source of "JSON shit")
-        return f"{format_timestamp()} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
+        return f"{format_timestamp(timestamp)} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
 
     except json.JSONDecodeError:
         # Not JSON - return as plain text if it's not empty
         if line and not line.startswith("{"):
-            return f"{format_timestamp()} 💬 {line}"
+            return f"{format_timestamp(timestamp)} 💬 {line}"
         else:
             # Malformed JSON - show for debugging
-            return f"{format_timestamp()} ⚠️  Malformed JSON: {line[:100]}..."
+            return f"{format_timestamp(timestamp)} ⚠️  Malformed JSON: {line[:100]}..."
 
     return None
 
 
 def execute_with_claude_detached(
     task: str,
-    execution_id: str,
+    execution_id: int,  # Now expects numeric database ID
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
@@ -313,18 +362,34 @@ def execute_with_claude_detached(
         wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
         
         # Build wrapper command: wrapper.py exec_id log_file claude_command...
+        # CRITICAL FIX: Use python3 instead of sys.executable to avoid pipx wrapper issues
         wrapper_cmd = [
-            sys.executable,  # Use current Python interpreter
+            "python3",  # Use system python3 to avoid pipx wrapper recursion
             str(wrapper_path),
-            execution_id,
+            str(execution_id),  # Convert numeric ID to string for command line
             str(log_file)
         ] + cmd
         
         # Use nohup for true detachment
         nohup_cmd = ["nohup"] + wrapper_cmd
         
+        # Debug: Log the full command being executed
+        with open(log_file, 'a') as f:
+            f.write(f"{format_timestamp()} 🔍 Debug - sys.executable: {sys.executable}\n")
+            f.write(f"{format_timestamp()} 🔍 Debug - Claude command (cmd): {cmd}\n")
+            f.write(f"{format_timestamp()} 🔍 Debug - Wrapper command: {wrapper_cmd}\n")
+            f.write(f"{format_timestamp()} 🔍 Debug - Full nohup command: {' '.join(nohup_cmd)}\n")
+            f.write(f"{format_timestamp()} 🔍 Debug - Working directory: {working_dir}\n")
+        
         # Open log file for appending
         log_handle = open(log_file, 'a')
+        
+        # Ensure PATH contains the claude binary location
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
+        # Make sure PATH is preserved
+        if 'PATH' not in env:
+            env['PATH'] = '/usr/local/bin:/usr/bin:/bin'
         
         process = subprocess.Popen(
             nohup_cmd,
@@ -332,7 +397,7 @@ def execute_with_claude_detached(
             stdout=log_handle,  # Direct to file, no pipe
             stderr=subprocess.STDOUT,
             cwd=working_dir,
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            env=env,
             start_new_session=True,  # Better than preexec_fn
             close_fds=True  # Don't inherit file descriptors
         )
@@ -347,7 +412,10 @@ def execute_with_claude_detached(
             f.write(f"{format_timestamp()} 🔄 Wrapper will update status on completion\n")
         
         # Return immediately - don't wait or read from pipes
-        console.print(f"[green]✅ Claude started in background (PID: {process.pid})[/green]")
+        # Note: Don't use console.print here as stdout might be redirected
+        # Print to stderr instead to avoid log pollution
+        print(f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr)
+        print(f"Monitor with: emdx exec show {execution_id}", file=sys.stderr)
         
         return process.pid
         
@@ -363,14 +431,15 @@ def execute_with_claude_detached(
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 cwd=working_dir,
-                env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+                env=env,  # Use same env as nohup version
                 start_new_session=True,
                 close_fds=True
             )
             
             log_handle.close()
             
-            console.print(f"[green]✅ Claude started in background (PID: {process.pid}) [no nohup][/green]")
+            # Print to stderr to avoid log pollution
+            print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)
             return process.pid
         else:
             raise
@@ -378,7 +447,7 @@ def execute_with_claude_detached(
 
 def execute_with_claude(
     task: str,
-    execution_id: str,
+    execution_id: int,  # Now expects numeric database ID
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
     verbose: bool = True,
@@ -465,7 +534,8 @@ def execute_with_claude(
         # Stream output
         with open(log_file, 'a') as log:
             for line in process.stdout:
-                formatted = format_claude_output(line, exec_start_time)
+                # Use current time for each log line
+                formatted = format_claude_output(line, time.time())
                 if formatted:
                     log.write(formatted + "\n")
                     log.flush()
@@ -522,6 +592,7 @@ def execute_document_smart_background(
     
     This function starts execution and returns immediately.
     """
+    console.print(f"[dim]🔍 DEBUG: execute_document_smart_background called for {execution_id}[/dim]")
     # Get document
     doc = get_document(str(doc_id))
     if not doc:
@@ -547,22 +618,29 @@ def execute_document_smart_background(
     worktree_path = create_execution_worktree(execution_id, doc['title'])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-    # Create execution record
-    execution = Execution(
-        id=execution_id,
+    # Create execution record in database and get numeric ID
+    console.print(f"[dim]🔍 DEBUG: Creating execution in database for {execution_id}[/dim]")
+    
+    db_execution_id = create_execution(
         doc_id=doc_id,
         doc_title=doc['title'],
-        status="running",
-        started_at=datetime.now(timezone.utc),
         log_file=str(log_file),
         working_dir=working_dir
     )
-    save_execution(execution)
+    
+    console.print(f"[dim]🔍 DEBUG: Created execution with DB ID: {db_execution_id}[/dim]")
+    
+    # Debug: Write to log file
+    with open(log_file, 'a') as f:
+        f.write(f"🔍 DEBUG: Database execution ID: {db_execution_id}\n")
+        f.write(f"🔍 DEBUG: String execution ID: {execution_id}\n")
+        f.write(f"🔍 DEBUG: About to launch wrapper\n")
 
-    # Execute with Claude in detached mode
+    # Execute with Claude in detached mode  
+    console.print(f"[dim]🔍 DEBUG: Launching detached execution for DB ID {db_execution_id}[/dim]")
     pid = execute_with_claude_detached(
         task=prompt,
-        execution_id=execution_id,
+        execution_id=db_execution_id,  # Pass numeric ID
         log_file=log_file,
         allowed_tools=allowed_tools,
         working_dir=working_dir,
@@ -570,8 +648,10 @@ def execute_document_smart_background(
         context=context
     )
     
+    console.print(f"[dim]🔍 DEBUG: Wrapper launched with PID: {pid}[/dim]")
+    
     # Update execution with PID
-    update_execution_pid(execution_id, pid)
+    update_execution_pid(db_execution_id, pid)
 
 
 def execute_document_smart(
@@ -631,17 +711,13 @@ def execute_document_smart(
     worktree_path = create_execution_worktree(execution_id, doc['title'])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-    # Create execution record
-    execution = Execution(
-        id=execution_id,
+    # Create execution record in database and get numeric ID
+    db_execution_id = create_execution(
         doc_id=doc_id,
         doc_title=doc['title'],
-        status="running",
-        started_at=datetime.now(timezone.utc),
         log_file=str(log_file),
         working_dir=working_dir
     )
-    save_execution(execution)
 
     # Execute with Claude
     if verbose:
@@ -649,7 +725,7 @@ def execute_document_smart(
     
     exit_code = execute_with_claude(
         task=prompt,
-        execution_id=execution_id,
+        execution_id=db_execution_id,  # Pass database ID
         log_file=log_file,
         allowed_tools=allowed_tools,
         verbose=verbose,
@@ -660,7 +736,7 @@ def execute_document_smart(
 
     # Update execution status
     status = "completed" if exit_code == 0 else "failed"
-    update_execution_status(execution_id, status, exit_code)
+    update_execution_status(db_execution_id, status, exit_code)
 
     # Handle output based on context
     if exit_code == 0:
@@ -711,27 +787,47 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         else:
             project_name = Path.cwd().name
 
-        # Create branch name from execution ID and doc title
+        # Create unique branch name using full execution ID (includes timestamp)
+        # This ensures each execution gets a unique branch and worktree
         # Extract doc ID from execution_id (format: "claude-{doc_id}-{timestamp}")
         exec_parts = execution_id.split('-')
         doc_id = exec_parts[1] if len(exec_parts) > 1 else "unknown"
+        timestamp = exec_parts[2] if len(exec_parts) > 2 else str(int(time.time()))
 
         # Sanitize doc title for git branch name
         safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
-        branch_name = f"exec-{doc_id}-{safe_title}"
+        # Include timestamp to ensure uniqueness
+        branch_name = f"exec-{doc_id}-{safe_title}-{timestamp}"
 
-        # Worktree directory
+        # Worktree directory - also unique per execution
         worktrees_dir = Path.home() / "dev" / "worktrees"
         worktrees_dir.mkdir(parents=True, exist_ok=True)
         worktree_name = f"{project_name}-{branch_name}"
         worktree_path = worktrees_dir / worktree_name
 
-        # Create branch from current HEAD
+        # Always create a new branch for each execution
+        # No need to check if it exists - timestamp ensures uniqueness
         subprocess.run(
             ["git", "branch", branch_name],
             check=True,
             capture_output=True
         )
+
+        # Create worktree - should never exist due to unique naming
+        if worktree_path.exists():
+            # This should not happen with timestamp-based naming
+            console.print(f"[red]ERROR: Worktree already exists (unexpected): {worktree_path}[/red]")
+            # Generate an even more unique name
+            import uuid
+            branch_name = f"{branch_name}-{uuid.uuid4().hex[:8]}"
+            worktree_name = f"{project_name}-{branch_name}"
+            worktree_path = worktrees_dir / worktree_name
+            
+            subprocess.run(
+                ["git", "branch", branch_name],
+                check=True,
+                capture_output=True
+            )
 
         # Create worktree
         subprocess.run(
@@ -882,13 +978,30 @@ def execute(
     # Parse allowed tools
     allowed_tools = tools.split(",") if tools else None
 
-    # Generate execution ID
-    timestamp = int(time.time())
-    execution_id = f"claude-{doc['id']}-{timestamp}"
+    # Generate execution ID with microsecond precision + PID to prevent collisions
+    import time
+    import os
+    timestamp = int(time.time() * 1000000)  # Microsecond precision
+    pid = os.getpid()
+    execution_id = f"claude-{doc['id']}-{timestamp}-{pid}"
 
     # Set up log file
     log_dir = Path.home() / ".config" / "emdx" / "logs"
     log_file = log_dir / f"{execution_id}.log"
+    
+    console.print(f"[bold red]🔍 DEBUG: Creating log file: {log_file}[/bold red]")
+    console.print(f"[bold red]🔍 DEBUG: Execution ID: {execution_id}[/bold red]")
+    
+    # Debug: Log the execution start
+    with open(log_file, 'w') as f:
+        f.write(f"=== EXECUTION START DEBUG ===\n")
+        f.write(f"Execution ID: {execution_id}\n")
+        f.write(f"Doc ID: {doc['id']}\n")
+        f.write(f"Timestamp: {timestamp}\n")
+        f.write(f"Process PID: {os.getpid()}\n")
+        f.write(f"Time: {datetime.now()}\n")
+        f.write(f"Log file path: {log_file}\n")
+        f.write(f"==============================\n\n")
 
     if smart:
         # Get document tags
@@ -909,6 +1022,7 @@ def execute(
             console.print(f"[cyan]📋 {context['description']}[/cyan]")
 
             # Execute in background without blocking
+            console.print(f"[dim]🔍 DEBUG: Calling execute_document_smart_background for {execution_id}[/dim]")
             execute_document_smart_background(
                 doc_id=int(doc_id),
                 execution_id=execution_id,
@@ -917,7 +1031,7 @@ def execute(
                 use_stage_tools=True
             )
 
-            console.print("\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
+            console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
         else:
             # Run smart execution in foreground
             execute_document_smart(
@@ -949,7 +1063,7 @@ def execute(
                 allowed_tools=allowed_tools
             )
 
-            console.print("\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
+            console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
         else:
             # Run in foreground
             console.print(f"[green]Executing document #{doc_id}: {doc['title']}[/green]")
