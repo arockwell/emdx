@@ -311,9 +311,10 @@ class LogBrowser(Widget):
                     
                     for line in content.splitlines():
                         # Skip header lines and non-JSON lines
-                        if (line.startswith('=') or line.startswith('-') or 
-                            line.startswith('Version:') or line.startswith('Doc ID:') or 
-                            line.startswith('Execution ID:') or line.startswith('Worktree:') or 
+                        if (line.startswith('=') or line.startswith('-') or
+                            line.startswith('Build ID:') or
+                            line.startswith('Version:') or line.startswith('Doc ID:') or
+                            line.startswith('Execution ID:') or line.startswith('Worktree:') or
                             line.startswith('Started:') or not line.strip()):
                             log_content.write(line)
                         else:
