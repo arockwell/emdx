@@ -73,10 +73,13 @@ class DocumentBrowser(Widget):
         Binding("x", "execute_document", "Execute"),
     ]
     
-    CSS = """
+    DEFAULT_CSS = """
     DocumentBrowser {
         layout: vertical;
         height: 100%;
+        layers: base overlay;
+        padding: 0;
+        margin: 0;
     }
     
     /* Debug styles to make layout visible */
@@ -89,16 +92,16 @@ class DocumentBrowser(Widget):
     } */
     
     #search-input, #tag-input {
+        layer: overlay;
         display: none;
-        height: 0;
-        margin: 0;
+        height: 3;
+        margin: 1;
         border: solid $primary;
+        offset: 0 0;
     }
     
     #search-input.visible, #tag-input.visible {
         display: block;
-        height: 3;
-        margin: 1;
     }
     
     .browser-status {
@@ -107,77 +110,75 @@ class DocumentBrowser(Widget):
         color: $text;
         padding: 0 1;
         text-align: center;
+        layer: base;
     }
     
     #tag-selector {
+        layer: overlay;
         display: none;
-        height: 0;
-        margin: 0;
+        height: 1;
+        margin: 0 1;
+        offset: 0 0;
     }
     
     Horizontal {
         height: 1fr;
+        layer: base;
     }
     
     #sidebar {
-        width: 2fr;
+        width: 1fr;
         min-width: 40;
         height: 100%;
         layout: vertical;
+        padding: 0;
+        margin: 0;
     }
     
     #table-container {
         height: 2fr;
         min-height: 15;
-        background: green;
-        border: thick solid yellow;
     }
     
     #details-container {
         height: 1fr;
         min-height: 10;
-        border: thick solid red;
-        background: red;
     }
     
     #doc-table {
         height: 100%;
-        background: lightgreen;
-        border: solid blue;
     }
     
     #details-panel {
         height: 100%;
         padding: 1;
-        background: black;
-        color: yellow;
-        border: thick solid white;
     }
     
     .details-richlog {
-        background: black !important;
-        color: yellow !important;
     }
     
     #preview-container {
         width: 1fr;
         min-width: 40;
         padding: 0;
+        margin: 0;
     }
     
     #vim-mode-indicator {
-        height: 0;
+        layer: overlay;
+        display: none;
+        height: 1;
         background: $boost;
         text-align: center;
+        offset: 0 0;
     }
     
     #vim-mode-indicator.active {
-        height: 1;
+        display: block;
     }
     
     #preview {
         height: 1fr;
-        border: solid $primary;
     }
     
     #preview-content {
@@ -216,12 +217,14 @@ class DocumentBrowser(Widget):
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
+        # Docked inputs at the top (hidden by default)
         yield Input(
             placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')",
             id="search-input",
         )
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
         yield Label("", id="tag-selector")
+        yield Label("", id="vim-mode-indicator")
         
         with Horizontal():
             with Vertical(id="sidebar") as sidebar:
@@ -248,7 +251,6 @@ class DocumentBrowser(Widget):
                     auto_scroll=False
                 )
             with Vertical(id="preview-container"):
-                yield Label("", id="vim-mode-indicator")
                 with ScrollableContainer(id="preview"):
                     yield RichLog(
                         id="preview-content",
@@ -266,8 +268,8 @@ class DocumentBrowser(Widget):
         print(f"🔴 MOUNTED WITH {BUILD_ID} 🔴")
         
         # Log CSS content to verify it's loaded
-        logger.info(f"CSS contains 'background: green': {'background: green' in self.CSS}")
-        logger.info(f"First 200 chars of CSS: {self.CSS[:200]}")
+        logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
+        logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
         
         # Setup table
         table = self.query_one("#doc-table", DataTable)
@@ -633,10 +635,9 @@ class DocumentBrowser(Widget):
         # Clear preview container completely
         preview_container = self.query_one("#preview-container", Vertical)
         
-        # Remove all children except vim indicator
+        # Remove all children
         for child in list(preview_container.children):
-            if child.id not in ["vim-mode-indicator"]:  # Keep vim indicator
-                await child.remove()
+            await child.remove()
         
         # Restore original preview structure exactly
         from textual.containers import ScrollableContainer
@@ -952,10 +953,9 @@ class DocumentBrowser(Widget):
         # Clear preview container completely
         preview_container = self.query_one("#preview-container", Vertical)
         
-        # Remove all children except vim indicator
+        # Remove all children
         for child in list(preview_container.children):
-            if child.id not in ["vim-mode-indicator"]:
-                await child.remove()
+            await child.remove()
         
         # Restore preview structure
         from textual.containers import ScrollableContainer
