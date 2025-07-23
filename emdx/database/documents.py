@@ -6,17 +6,23 @@ from datetime import datetime
 from typing import Any, Optional
 
 from .connection import db_connection
+from ..utils.formatting import DocumentFormatter, FormatValidationError
 
 
 def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
     """Save a document to the knowledge base"""
+    # Format and validate content
+    formatter = DocumentFormatter()
+    formatted_content = formatter.validate_and_format(content)
+    formatted_title = formatter.format_title(title)
+    
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
             INSERT INTO documents (title, content, project, parent_id)
             VALUES (?, ?, ?, ?)
         """,
-            (title, content, project, parent_id),
+            (formatted_title, formatted_content, project, parent_id),
         )
 
         conn.commit()
@@ -121,6 +127,11 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
 
 def update_document(doc_id: int, title: str, content: str) -> bool:
     """Update a document"""
+    # Format and validate content
+    formatter = DocumentFormatter()
+    formatted_content = formatter.validate_and_format(content)
+    formatted_title = formatter.format_title(title)
+    
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -128,7 +139,7 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
             SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """,
-            (title, content, doc_id),
+            (formatted_title, formatted_content, doc_id),
         )
 
         conn.commit()

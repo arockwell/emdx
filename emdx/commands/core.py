@@ -32,6 +32,7 @@ from emdx.ui.formatting import format_tags
 from emdx.utils.git import get_git_project
 from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.services.auto_tagger import AutoTagger
+from emdx.utils.formatting import FormatValidationError
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -137,10 +138,13 @@ def create_document(title: str, content: str, project: Optional[str]) -> int:
         console.print(f"[red]Database error: {e}[/red]")
         raise typer.Exit(1) from e
 
-    # Save to database
+    # Save to database (formatting happens in database layer)
     try:
         doc_id = save_document(title, content, project)
         return doc_id
+    except FormatValidationError as e:
+        console.print(f"[red]Formatting error: {e}[/red]")
+        raise typer.Exit(1) from e
     except Exception as e:
         console.print(f"[red]Error saving document: {e}[/red]")
         raise typer.Exit(1) from e
@@ -546,14 +550,18 @@ def edit(
 
         # Quick title update without editing content
         if title:
-            success = update_document(doc["id"], title, doc["content"])
-            if success:
-                console.print(
-                    f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]"
-                )
-            else:
-                console.print("[red]Error updating document title[/red]")
-                raise typer.Exit(1)
+            try:
+                success = update_document(doc["id"], title, doc["content"])
+                if success:
+                    console.print(
+                        f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]"
+                    )
+                else:
+                    console.print("[red]Error updating document title[/red]")
+                    raise typer.Exit(1)
+            except FormatValidationError as e:
+                console.print(f"[red]Formatting error: {e}[/red]")
+                raise typer.Exit(1) from e
             return
 
         # Determine editor to use
@@ -612,15 +620,15 @@ def edit(
                 return
 
             # Rest is content
-            new_content = "".join(lines[content_start:]).strip()
+            new_content = "".join(lines[content_start:])
 
-            # Check if anything changed
-            if new_title == doc["title"] and new_content == doc["content"].strip():
-                console.print("[yellow]No changes made[/yellow]")
-                return
-
-            # Update document
-            success = update_document(doc["id"], new_title, new_content)
+            # Try to update (formatting happens in database layer)
+            try:
+                # Update document
+                success = update_document(doc["id"], new_title, new_content)
+            except FormatValidationError as e:
+                console.print(f"[red]Formatting error: {e}[/red]")
+                raise typer.Exit(1) from e
 
             if success:
                 console.print(f"[green]✅ Updated #{doc['id']}:[/green] [cyan]{new_title}[/cyan]")
