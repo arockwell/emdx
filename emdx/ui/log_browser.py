@@ -24,32 +24,11 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.commands.claude_execute import format_claude_output
 from emdx.models.executions import get_recent_executions, Execution
 from .text_areas import SelectionTextArea
 
 logger = logging.getLogger(__name__)
 
-
-def parse_log_timestamp(line: str) -> Optional[str]:
-    """Parse timestamp from log line.
-    
-    Args:
-        line: Log line that may contain a timestamp
-        
-    Returns:
-        Timestamp string in format HH:MM:SS or None if not found
-    """
-    import re
-    
-    # Match timestamp pattern at the beginning of the line: [HH:MM:SS]
-    timestamp_pattern = r'^\[(\d{2}:\d{2}:\d{2})\]'
-    match = re.match(timestamp_pattern, line.strip())
-    
-    if match:
-        return match.group(1)  # Return just the HH:MM:SS part
-    
-    return None
 
 
 class LogBrowserHost:
@@ -336,19 +315,9 @@ class LogBrowser(Widget):
                             line.startswith('Started:') or not line.strip()):
                             log_content.write(line)
                         else:
-                            # Try to preserve original timestamp or format new content
-                            # Check if the line already has a timestamp
-                            if parse_log_timestamp(line):
-                                # Line already has timestamp, just write it as-is
-                                log_content.write(line)
-                            else:
-                                # Line doesn't have timestamp, might be JSON that needs formatting
-                                # Pass None to format_claude_output to indicate no timestamp
-                                formatted = format_claude_output(line, None)
-                                if formatted:
-                                    log_content.write(formatted)
-                                else:
-                                    log_content.write(line)
+                            # Line already has timestamp, just write it as-is
+                            # The logs are already formatted with timestamps when written
+                            log_content.write(line)
                     
                     # Scroll to top so users see the beginning of the log
                     log_content.scroll_to(0, 0, animate=False)
