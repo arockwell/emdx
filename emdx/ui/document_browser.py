@@ -71,6 +71,7 @@ class DocumentBrowser(Widget):
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
         Binding("x", "execute_document", "Execute"),
+        Binding("r", "refresh", "Refresh"),
     ]
     
     DEFAULT_CSS = """
@@ -378,7 +379,7 @@ class DocumentBrowser(Widget):
         try:
             status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
             if self.mode == "NORMAL":
-                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
             elif self.mode == "SEARCH":
                 status_text += " | Enter=apply | ESC=cancel"
             self.update_status(status_text)
@@ -811,6 +812,10 @@ class DocumentBrowser(Widget):
     async def action_edit_document(self) -> None:
         """Edit the current document."""
         await self.enter_edit_mode()
+    
+    async def action_refresh(self) -> None:
+        """Refresh the document list."""
+        await self.load_documents()
         
     def update_status(self, message: str) -> None:
         """Update the document browser status bar."""
@@ -1054,7 +1059,7 @@ class DocumentBrowser(Widget):
             app = self.app
             if hasattr(app, 'update_status'):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
-                status_text += " | e=edit | n=new | /=search | t=tag | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
         except:
             pass
