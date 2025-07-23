@@ -274,7 +274,7 @@ class LogBrowser(Widget):
         """Check if a line is wrapper orchestration noise that should be filtered out."""
         if not line.strip():
             return False
-            
+
         # Common wrapper patterns to filter out
         wrapper_patterns = [
             "🔄 Wrapper script started",
@@ -289,12 +289,12 @@ class LogBrowser(Widget):
             "📝 Prompt being sent to Claude:",
             "────────────────────────────────────────────────────────────",
         ]
-        
+
         # Check for exact matches or patterns that start lines
         for pattern in wrapper_patterns:
             if pattern in line:
                 return True
-                
+
         # Filter out execution metadata lines
         if any(line.startswith(prefix) for prefix in [
             "⚡ Execution type:",
@@ -303,7 +303,7 @@ class LogBrowser(Widget):
             "📄 Output is being",
         ]):
             return True
-            
+
         return False
 
     async def update_details_panel(self, execution: Execution) -> None:
@@ -369,7 +369,7 @@ class LogBrowser(Widget):
                     filtered_lines = []
                     prompt_content = []
                     in_prompt = False
-                    
+
                     for line in log_lines:
                         # Detect prompt section
                         if "📝 Prompt being sent to Claude:" in line:
@@ -382,12 +382,12 @@ class LogBrowser(Widget):
                         elif in_prompt:
                             prompt_content.append(line)
                             continue
-                            
+
                         # Skip wrapper orchestration messages
                         if self._is_wrapper_noise(line):
                             continue
                         filtered_lines.append(line)
-                    
+
                     # Show prompt first if we found one
                     if prompt_content:
                         log_content.write("[bold blue]Prompt:[/bold blue]")
@@ -407,10 +407,10 @@ class LogBrowser(Widget):
                             parsed_timestamp = parse_log_timestamp(line)
                             if parsed_timestamp:
                                 last_timestamp = parsed_timestamp
-                            
+
                             # Use parsed timestamp or last known timestamp, fallback to current time
                             timestamp_to_use = parsed_timestamp or last_timestamp or time.time()
-                            
+
                             # Try to format JSON lines with emojis
                             formatted = format_claude_output(line, timestamp_to_use)
                             if formatted:

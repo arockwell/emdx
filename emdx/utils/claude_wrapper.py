@@ -42,10 +42,10 @@ def main():
     exec_id = int(sys.argv[1])  # Convert to int - this is the database ID
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
-    
+
     # TEMPORARY: Disable lock mechanism to test if it's causing issues
-    log_to_file(log_file, f"🔍 DEBUG: LOCK MECHANISM DISABLED FOR TESTING")
-    log_to_file(log_file, f"🔍 DEBUG: This should allow multiple executions to run simultaneously")
+    log_to_file(log_file, "🔍 DEBUG: LOCK MECHANISM DISABLED FOR TESTING")
+    log_to_file(log_file, "🔍 DEBUG: This should allow multiple executions to run simultaneously")
 
     # Log wrapper start
     log_to_file(log_file, "🔄 Wrapper script started")
@@ -56,7 +56,7 @@ def main():
     exit_code = 1  # Default to failure
     status = "failed"
     lines_processed = 0  # Track lines to detect empty runs
-    
+
     # Check if claude command exists
     import shutil
     if not shutil.which(cmd[0]):
@@ -86,7 +86,7 @@ def main():
 
         from emdx.commands.claude_execute import format_claude_output, parse_log_timestamp
         start_time = time.time()
-        
+
         log_to_file(log_file, f"🔍 Process started with PID: {process.pid}")
 
         # Stream and format output
@@ -109,7 +109,7 @@ def main():
         # Wait for process to complete
         process.wait()
         result = process
-        
+
         duration = time.time() - start_time
 
         exit_code = result.returncode
@@ -124,7 +124,7 @@ def main():
         log_to_file(log_file, "💡 Make sure 'claude' is installed and in your PATH")
         status = "failed"
         exit_code = 127  # Standard command not found exit code
-        
+
     except subprocess.TimeoutExpired:
         log_to_file(log_file, "⏱️ Process timed out")
         status = "failed"
@@ -148,9 +148,9 @@ def main():
             log_to_file(log_file, f"📊 Updating execution status to: {status}")
             log_to_file(log_file, f"📊 Lines processed: {lines_processed}, Exit code: {exit_code}")
             log_to_file(log_file, f"🔍 DEBUG: About to call update_execution_status({exec_id}, {status}, {exit_code})")
-            
+
             update_execution_status(exec_id, status, exit_code)
-            
+
             log_to_file(log_file, "✅ Database updated successfully")
             log_to_file(log_file, f"🔍 DEBUG: Execution {exec_id} is now marked as {status}")
         except Exception as e:
@@ -160,7 +160,7 @@ def main():
 
     # TEMPORARY: No lock file cleanup since lock mechanism is disabled
     log_to_file(log_file, f"🔍 DEBUG: Wrapper finished for execution {exec_id}")
-    
+
     # Exit with the same code as the subprocess
     sys.exit(exit_code)
 
