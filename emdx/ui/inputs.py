@@ -60,6 +60,22 @@ class TitleInput(Input):
         except Exception as e:
             logger.debug(f"Error restoring cursor: {e}")
     
+    def _format_title_with_box(self, title: str) -> str:
+        """Format title with unicode box for content area."""
+        # Calculate box width - make it wider than the title for better appearance
+        box_width = max(len(title) + 4, 80)
+        
+        # Center the title within the box
+        padded_title = title.center(box_width - 2)
+        
+        # Create the unicode box
+        top_line = "╔" + "═" * (box_width - 2) + "╗"
+        title_line = "║" + padded_title + "║"
+        bottom_line = "╚" + "═" * (box_width - 2) + "╝"
+        
+        # Return with extra newlines for spacing
+        return f"{top_line}\n{title_line}\n{bottom_line}\n\n"
+    
     def on_blur(self) -> None:
         """Save cursor position when losing focus."""
         self._saved_cursor_position = self.cursor_position
@@ -83,10 +99,17 @@ class TitleInput(Input):
                 vim_editor = self.app_instance.query_one("#vim-editor-container", VimEditor)
                 vim_editor.focus_editor()
                 
-                # First time tabbing to content? Start in INSERT mode
+                # First time tabbing to content? Start in INSERT mode and add formatted title
                 if not hasattr(vim_editor.text_area, '_has_been_focused'):
                     vim_editor.text_area._has_been_focused = True
                     vim_editor.text_area.vim_mode = "INSERT"
+                    
+                    # Insert formatted title if content is empty
+                    if not vim_editor.text_area.text.strip() and self.value.strip():
+                        formatted_title = self._format_title_with_box(self.value.strip())
+                        vim_editor.text_area.insert(formatted_title)
+                        # Position cursor after the formatted title
+                        vim_editor.text_area.move_cursor((len(formatted_title.split('\n')), 0))
                 
                 vim_editor.text_area._update_cursor_style()
                 mode_name = vim_editor.text_area.vim_mode
