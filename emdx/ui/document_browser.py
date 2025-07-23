@@ -93,14 +93,9 @@ class DocumentBrowser(Widget):
     } */
     
     #search-input, #tag-input {
-        display: none;
         height: 3;
         margin: 1;
         border: solid $primary;
-    }
-    
-    #search-input.visible, #tag-input.visible {
-        display: block;
     }
     
     .browser-status {
