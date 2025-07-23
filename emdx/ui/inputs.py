@@ -104,12 +104,14 @@ class TitleInput(Input):
                     vim_editor.text_area._has_been_focused = True
                     vim_editor.text_area.vim_mode = "INSERT"
                     
-                    # Insert formatted title if content is empty
-                    if not vim_editor.text_area.text.strip() and self.value.strip():
-                        formatted_title = self._format_title_with_box(self.value.strip())
-                        vim_editor.text_area.insert(formatted_title)
-                        # Position cursor after the formatted title
-                        vim_editor.text_area.move_cursor((len(formatted_title.split('\n')), 0))
+                    # Only insert formatted title for NEW documents (not edits)
+                    if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+                        # Insert formatted title if content is empty
+                        if not vim_editor.text_area.text.strip() and self.value.strip():
+                            formatted_title = self._format_title_with_box(self.value.strip())
+                            vim_editor.text_area.insert(formatted_title)
+                            # Position cursor after the formatted title
+                            vim_editor.text_area.move_cursor((len(formatted_title.split('\n')), 0))
                 
                 vim_editor.text_area._update_cursor_style()
                 mode_name = vim_editor.text_area.vim_mode

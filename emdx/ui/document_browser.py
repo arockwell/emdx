@@ -446,29 +446,17 @@ class DocumentBrowser(Widget):
         doc = self.filtered_docs[row_idx]
         self.editing_doc_id = doc["id"]
         
-        # Build ID for debugging
-        import time
-        build_id = f"BUILD-{int(time.time())}"
-        logger.info(f"🔍 {build_id} DEBUG: Entering edit mode for doc {doc['id']} at row {row_idx}")
-        
         # Load full document
         full_doc = get_document(str(doc["id"]))
-        # Also print to console for immediate visibility
-        print(f"🔍 {build_id} DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
-        print(f"🔍 {build_id} DEBUG: Content length: {len(full_doc.get('content', ''))}")
-        print(f"🔍 {build_id} DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
-        
-        logger.info(f"🔍 {build_id} DEBUG: Loaded document - title: {full_doc.get('title', 'NO TITLE')}")
-        logger.info(f"🔍 {build_id} DEBUG: Content length: {len(full_doc.get('content', ''))}")
-        logger.info(f"🔍 {build_id} DEBUG: First 100 chars: {repr(full_doc.get('content', '')[:100])}")
-            
         if not full_doc:
             return
             
         # Store original preview for restoration
         self.original_preview_content = full_doc["content"]
+        self.edit_mode = True
         
         # Replace preview with edit area
+        from textual.containers import Vertical, ScrollableContainer
         preview_container = self.query_one("#preview-container", Vertical)
         try:
             preview = self.query_one("#preview", ScrollableContainer)
@@ -480,26 +468,32 @@ class DocumentBrowser(Widget):
                 if child.id in ["preview", "preview-content"]:
                     await child.remove()
         
-        # Create vim editor with line numbers
+        # Create a vertical container for title input and content editor (same as new document mode)
+        edit_container = Vertical(id="edit-container")
+        
+        # Mount the container first
+        await preview_container.mount(edit_container)
+        
+        # Create title input with existing title
+        from .inputs import TitleInput
+        title_input = TitleInput(self, value=full_doc["title"], placeholder="Enter document title...", id="title-input")
+        
+        # Extract content without unicode box if present
+        content = self._extract_content_without_title_box(full_doc["content"], full_doc["title"])
+        
+        # Create vim editor with the content (without the title box)
         from .vim_editor import VimEditor
-        print(f"🔍 {build_id} DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
-        logger.info(f"🔍 {build_id} DEBUG: Creating VimEditor with content length: {len(full_doc['content'])}")
+        vim_editor = VimEditor(self, content=content, id="vim-editor-container")
         
-        vim_editor = VimEditor(self, content=full_doc["content"], id="vim-editor-container")
+        # Mount both components to the already-mounted container
+        await edit_container.mount(title_input)
+        await edit_container.mount(vim_editor)
         
-        print(f"🔍 {build_id} DEBUG: VimEditor created, mounting...")
-        logger.info(f"🔍 {build_id} DEBUG: VimEditor created, mounting...")
-        await preview_container.mount(vim_editor)
+        # Focus on title input first
+        self.call_after_refresh(lambda: title_input.focus())
         
-        print(f"🔍 {build_id} DEBUG: VimEditor mounted, focusing...")
-        vim_editor.focus_editor()
-        print(f"🔍 {build_id} DEBUG: VimEditor focused")
-        logger.info(f"🔍 {build_id} DEBUG: VimEditor mounted and focused")
-        
-        self.edit_mode = True
-        
-        # Show vim mode indicator
-        self.call_after_refresh(lambda: self._update_vim_status(f"{vim_editor.text_area.vim_mode} | ESC=exit"))
+        # Update status
+        self._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
@@ -568,13 +562,19 @@ class DocumentBrowser(Widget):
                 # Update existing document
                 if self.editing_doc_id:
                     try:
+                        title_input = self.query_one("#title-input", Input)
                         vim_editor = self.query_one("#vim-editor-container", VimEditor)
+                        
+                        title = title_input.value.strip()
                         content = vim_editor.text_area.text
                         
-                        from emdx.models.documents import update_document, get_document
-                        # Get the current document to preserve the title
-                        document = get_document(str(self.editing_doc_id))
-                        update_document(str(self.editing_doc_id), title=document["title"], content=content)
+                        if not title:
+                            # Update status to show error
+                            self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
+                            return
+                        
+                        from emdx.models.documents import update_document
+                        update_document(str(self.editing_doc_id), title=title, content=content)
                         
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
                     except Exception as e:
@@ -591,6 +591,28 @@ class DocumentBrowser(Widget):
             import traceback
             logger.error(traceback.format_exc())
         
+    def _extract_content_without_title_box(self, content: str, title: str) -> str:
+        """Extract content without the unicode box title if present."""
+        lines = content.split('\n')
+        
+        # Check if content starts with a unicode box
+        if len(lines) >= 3 and lines[0].startswith('╔') and lines[2].startswith('╚'):
+            # Skip the first 3-4 lines (box + optional blank line)
+            start_idx = 3
+            if len(lines) > 3 and not lines[3].strip():
+                start_idx = 4
+            return '\n'.join(lines[start_idx:])
+        
+        # Also check for the line-based box style
+        if len(lines) >= 3 and lines[0].startswith('┏') and lines[2].startswith('┗'):
+            start_idx = 3
+            if len(lines) > 3 and not lines[3].strip():
+                start_idx = 4
+            return '\n'.join(lines[start_idx:])
+        
+        # No box found, return original content
+        return content
+    
     def _update_vim_status(self, message: str = "") -> None:
         """Update status bar with vim mode info (called by VimEditTextArea)."""
         try:
