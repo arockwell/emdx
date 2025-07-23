@@ -17,6 +17,7 @@ from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.lifecycle import app as lifecycle_app
+from emdx.commands.format import app as format_app
 from emdx.ui.gui import gui
 
 # Create main app
@@ -58,6 +59,10 @@ app.command(name="maintain")(maintain_app.registered_commands[0].callback)
 
 # Add lifecycle as a subcommand group (keeping this as-is)
 app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
+
+# Add format commands directly to the main app
+for command in format_app.registered_commands:
+    app.registered_commands.append(command)
 
 # Add the gui command
 app.command()(gui)
