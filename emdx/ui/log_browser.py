@@ -24,7 +24,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.commands.claude_execute import format_claude_output, parse_timestamp_from_line
+from emdx.commands.claude_execute import format_claude_output
 from emdx.models.executions import get_recent_executions, Execution
 from .text_areas import SelectionTextArea
 
@@ -307,8 +307,8 @@ class LogBrowser(Widget):
                     log_content.write("")
                     
                     # Process log content to format JSON lines with emojis
-                    # Track the last timestamp in case we need it for multi-line entries
-                    last_timestamp = None
+                    # Use execution start time for duration calculations
+                    exec_start_timestamp = execution.started_at.timestamp()
                     
                     for line in content.splitlines():
                         # Skip header lines and non-JSON lines
@@ -318,16 +318,9 @@ class LogBrowser(Widget):
                             line.startswith('Started:') or not line.strip()):
                             log_content.write(line)
                         else:
-                            # First try to extract timestamp from the line
-                            timestamp = parse_timestamp_from_line(line)
-                            if timestamp is not None:
-                                last_timestamp = timestamp
-                            
                             # Try to format JSON lines with emojis
-                            # Use parsed timestamp if available, otherwise use last known timestamp
-                            # If no timestamp is available, fall back to current time
-                            effective_timestamp = timestamp or last_timestamp or time.time()
-                            formatted = format_claude_output(line, effective_timestamp)
+                            # Pass execution start time for proper duration calculation
+                            formatted = format_claude_output(line, exec_start_timestamp)
                             if formatted:
                                 log_content.write(formatted)
                             else:
