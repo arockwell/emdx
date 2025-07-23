@@ -83,10 +83,15 @@ class TitleInput(Input):
                 vim_editor = self.app_instance.query_one("#vim-editor-container", VimEditor)
                 vim_editor.focus_editor()
                 
-                # First time tabbing to content? Start in INSERT mode
+                # First time tabbing to content?
                 if not hasattr(vim_editor.text_area, '_has_been_focused'):
                     vim_editor.text_area._has_been_focused = True
-                    vim_editor.text_area.vim_mode = "INSERT"
+                    # For NEW documents, start in INSERT mode
+                    # For EDIT documents, start in NORMAL mode
+                    if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+                        vim_editor.text_area.vim_mode = "INSERT"
+                    else:
+                        vim_editor.text_area.vim_mode = "NORMAL"
                 
                 vim_editor.text_area._update_cursor_style()
                 mode_name = vim_editor.text_area.vim_mode
