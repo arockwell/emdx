@@ -546,8 +546,11 @@ class DocumentBrowser(Widget):
                     from emdx.models.documents import save_document
                     from emdx.utils.git import get_git_project
                     
+                    # Add unicode box to content when saving
+                    formatted_content = self._format_content_with_title_box(title, content)
+                    
                     project = get_git_project() or "default"
-                    doc_id = save_document(title=title, content=content, project=project)
+                    doc_id = save_document(title=title, content=formatted_content, project=project)
                     
                     logger.info(f"Created new document with ID: {doc_id}")
                     
@@ -573,8 +576,11 @@ class DocumentBrowser(Widget):
                             self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
                             return
                         
+                        # Add unicode box to content when saving
+                        formatted_content = self._format_content_with_title_box(title, content)
+                        
                         from emdx.models.documents import update_document
-                        update_document(str(self.editing_doc_id), title=title, content=content)
+                        update_document(str(self.editing_doc_id), title=title, content=formatted_content)
                         
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
                     except Exception as e:
@@ -591,26 +597,48 @@ class DocumentBrowser(Widget):
             import traceback
             logger.error(traceback.format_exc())
         
+    def _format_content_with_title_box(self, title: str, content: str) -> str:
+        """Format content with title as markdown header."""
+        # Simply use markdown header - Rich will render it with the unicode box
+        formatted = f"# {title}\n\n{content}"
+        return formatted
+    
     def _extract_content_without_title_box(self, content: str, title: str) -> str:
-        """Extract content without the unicode box title if present."""
+        """Extract content without the title header or unicode box if present."""
         lines = content.split('\n')
         
-        # Check if content starts with a unicode box
-        if len(lines) >= 3 and lines[0].startswith('╔') and lines[2].startswith('╚'):
-            # Skip the first 3-4 lines (box + optional blank line)
-            start_idx = 3
-            if len(lines) > 3 and not lines[3].strip():
-                start_idx = 4
+        # Check for markdown header first
+        if lines and lines[0].strip() == f"# {title}":
+            # Skip the header line and optional blank line
+            start_idx = 1
+            if len(lines) > 1 and not lines[1].strip():
+                start_idx = 2
             return '\n'.join(lines[start_idx:])
         
-        # Also check for the line-based box style
-        if len(lines) >= 3 and lines[0].startswith('┏') and lines[2].startswith('┗'):
-            start_idx = 3
-            if len(lines) > 3 and not lines[3].strip():
-                start_idx = 4
-            return '\n'.join(lines[start_idx:])
+        # Check if content starts with a unicode box (various styles)
+        if len(lines) >= 3:
+            # Check for double-line box (╔═╗)
+            if lines[0].startswith('╔') and lines[2].startswith('╚'):
+                start_idx = 3
+                if len(lines) > 3 and not lines[3].strip():
+                    start_idx = 4
+                return '\n'.join(lines[start_idx:])
+            
+            # Check for heavy-line box (┏━┓)
+            elif lines[0].startswith('┏') and lines[2].startswith('┗'):
+                start_idx = 3
+                if len(lines) > 3 and not lines[3].strip():
+                    start_idx = 4
+                return '\n'.join(lines[start_idx:])
+            
+            # Check for single-line box (┌─┐)
+            elif lines[0].startswith('┌') and lines[2].startswith('└'):
+                start_idx = 3
+                if len(lines) > 3 and not lines[3].strip():
+                    start_idx = 4
+                return '\n'.join(lines[start_idx:])
         
-        # No box found, return original content
+        # No header or box found, return original content
         return content
     
     def _update_vim_status(self, message: str = "") -> None:
