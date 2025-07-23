@@ -24,6 +24,25 @@ These commands STILL execute and hang the session. This is a critical bug in Cla
 
 **WORKAROUND**: Simply don't ask Claude to run these commands until the bug is fixed.
 
+## ⚠️ CRITICAL: Destructive Operations
+
+**ALWAYS use dry-run first for maintenance operations:**
+- `emdx maintain --clean` - Shows what would be deleted
+- `emdx maintain --clean --execute` - Actually deletes duplicates/empty docs
+- `emdx maintain --merge` - Shows what would be merged
+- `emdx maintain --merge --execute` - Actually merges documents
+
+The `--execute` flag is required for ALL destructive operations in 0.7.0.
+
+**Data Safety Best Practices:**
+1. Always run without `--execute` first to preview changes
+2. Review the dry-run output carefully
+3. Use `--json` output to save a record of what will be changed
+4. Consider backing up the database before major operations:
+   ```bash
+   cp ~/.config/emdx/knowledge.db ~/.config/emdx/knowledge.backup.db
+   ```
+
 ## Project Overview
 
 EMDX is a powerful command-line knowledge base and documentation management system built in Python. It provides full-text search, tagging, project organization, and multiple interfaces (CLI, TUI, web) for managing and accessing your knowledge base.
@@ -40,6 +59,28 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 - **TUI Browser** (`emdx/ui/textual_browser.py`) - Interactive terminal interface
 - **Integrations** (`emdx/commands/gist.py`, `emdx/ui/nvim_wrapper.py`) - External tool integrations
 
+### New in 0.7.0: Service Architecture
+- **Unified Commands** (`emdx/commands/analyze.py`, `maintain.py`) - Consolidated analysis and maintenance
+- **Service Layer** (`emdx/services/`) - Complex operations decoupled from commands
+  - `auto_tagger.py` - Rule-based intelligent tagging with confidence scoring
+  - `health_monitor.py` - 6 weighted health metrics and recommendations
+  - `duplicate_finder.py` - Content-based duplicate detection algorithms
+  - `maintenance.py` - Automated fix operations with dry-run support
+- **Pipeline Support** - `--ids-only`, `--json` flags for Unix integration
+- **Date Filtering** - `--created-after`, `--modified-before` for temporal queries
+
+### Service Components (0.7.0+)
+- **Auto Tagger** (`emdx/services/auto_tagger.py`) - AI-powered automatic document tagging
+- **Health Monitor** (`emdx/services/health_monitor.py`) - Knowledge base health metrics and scoring
+- **Document Merger** (`emdx/services/document_merger.py`) - Intelligent similar document merging
+- **Duplicate Detector** (`emdx/services/duplicate_detector.py`) - Find and manage duplicate content
+- **Lifecycle Tracker** (`emdx/services/lifecycle_tracker.py`) - Track document lifecycle stages
+- **Garbage Collector** (`emdx/commands/gc.py`) - Database cleanup and optimization
+
+### Consolidated Commands (0.7.0+)
+- **Analyze Command** (`emdx/commands/analyze.py`) - Unified read-only analysis operations
+- **Maintain Command** (`emdx/commands/maintain.py`) - Unified maintenance and fix operations
+- **Lifecycle Command** (`emdx/commands/lifecycle.py`) - Document lifecycle management
 ### Key Features
 - **Full-text search** with SQLite FTS5 and fuzzy matching
 - **Emoji tag system** with intuitive text aliases (gameplan→🎯, active→🚀)
@@ -49,6 +90,10 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 - **GitHub Gist integration** for sharing
 - **Neovim integration** for editing
 - **Rich formatting** with syntax highlighting and markdown rendering
+- **Auto-tagging** (NEW) - Pattern-based automatic tag suggestions
+- **Health monitoring** (NEW) - Knowledge base quality metrics
+- **Unix pipeline support** (NEW) - Composable operations with standard tools
+- **Command consolidation** (NEW) - 15 commands → 3 focused commands
 
 ## Development Guidelines
 
@@ -72,14 +117,88 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 - **FTS5 search**: documents_fts virtual table for full-text search
 - **Migrations**: Versioned schema changes in `emdx/migrations.py`
 
+## Command Migration Guide (0.6.x → 0.7.0)
+
+### Command Consolidation
+EMDX 0.7.0 consolidates multiple commands into focused, powerful commands:
+
+| Old Command | New Command | Notes |
+|------------|-------------|-------|
+| `emdx health` | `emdx analyze --health` | Part of unified analysis |
+| `emdx clean duplicates` | `emdx maintain --clean --execute` | Requires --execute |
+| `emdx merge find` | `emdx analyze --similar` | Read-only analysis |
+| `emdx gc` | `emdx maintain --gc --execute` | Part of maintenance |
+| `emdx tag batch` | `emdx maintain --tags --execute` | Auto-tagging |
+
+### Key Changes
+1. **Dry-run by default**: `maintain` commands show what would happen unless you add `--execute`
+2. **JSON everywhere**: Add `--json` to any analyze command for automation
+3. **Pipeline support**: New `--ids-only` flag for Unix pipelines
+4. **Date filtering**: `--created-after`, `--modified-before` for time-based queries
+
+### Development Workflow Changes
+- Use `emdx analyze --all` before making changes to understand the current state
+- Always test with dry-run: `emdx maintain --auto` before `emdx maintain --auto --execute`
+- Leverage JSON output for testing: `emdx analyze --health --json | jq '.overall_score'`
+
+## Command Consolidation (0.7.0)
+
+### Design Philosophy Change
+EMDX 0.7.0 represents a fundamental shift in CLI design:
+- **Before**: Many specific commands (`health`, `clean duplicates`, `merge find`, etc.)
+- **After**: Three focused commands with composable flags
+- **Rationale**: Easier to remember, more powerful, consistent patterns
+
+### Command Architecture
+```
+analyze (read-only)
+├── --health         # Overall health metrics
+├── --duplicates     # Find duplicate documents
+├── --similar        # Find similar documents
+├── --empty          # Find empty documents
+├── --tags           # Tag coverage analysis
+├── --lifecycle      # Gameplan patterns
+├── --projects       # Project-level analysis
+└── --all            # Run everything
+
+maintain (modifications, dry-run default)
+├── --auto           # Fix all issues
+├── --clean          # Remove duplicates/empty
+├── --merge          # Merge similar docs
+├── --tags           # Auto-tag documents
+├── --gc             # Garbage collection
+├── --lifecycle      # Transition stale docs
+└── --execute        # Actually apply changes
+```
+
+### Implementation Pattern
+Both commands follow the same pattern:
+1. Parse flags to determine operations
+2. Call appropriate service layer functions
+3. Return structured results (with JSON option)
+4. For `maintain`, show dry-run preview unless `--execute`
 ## Common Development Tasks
 
-### Adding New Commands
-1. Add command function to appropriate module in `commands/` directory
-2. Register with typer app in the module
-3. Include in main CLI app (`main.py`)
-4. Add tests in corresponding test file
-5. Update help documentation
+### Adding New Commands (Post-0.7.0 Pattern)
+1. Consider if it belongs in `analyze` (read-only) or `maintain` (modifications)
+2. If it's a new operation type:
+   - Add service module in `services/` for business logic
+   - Add flag to appropriate unified command
+   - Update command's flag handling logic
+3. If it's truly independent:
+   - Add command function to new module in `commands/`
+   - Register with typer app in the module
+   - Include in main CLI app (`main.py`)
+4. Add tests for both service and command layers
+5. Update help documentation and migration guide
+
+### Service Architecture Pattern
+New complex operations should follow this pattern:
+1. Create service class in `services/` with clear interface
+2. Implement business logic with proper error handling
+3. Add JSON serialization for all results
+4. Call from command layer with minimal logic
+5. Support both interactive and programmatic use
 
 ### Database Changes
 1. Create migration function in `emdx/database/migrations.py`
@@ -104,6 +223,17 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 2. Use subprocess for external tool calls
 3. Add proper error handling and user feedback
 4. Mock external dependencies in tests
+5. Consider adding `--json` output for automation
+6. Add `--quiet` flag for pipeline usage
+
+### JSON Output Requirements (0.7.0+)
+All new commands should support JSON output:
+1. Add `--json` flag to command signature
+2. Structure output as consistent dictionaries
+3. Include metadata (timestamp, version, command)
+4. Use ISO format for dates
+5. Ensure all fields are serializable
+6. Document JSON schema in help text
 
 ## Key Files and Their Purpose
 

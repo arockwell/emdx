@@ -11,11 +11,12 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Dict
+from datetime import datetime, timezone
 
 from rich.syntax import Syntax
 from rich.text import Text
+from rich.ansi import AnsiDecoder
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -24,7 +25,6 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.commands.claude_execute import format_claude_output
 from emdx.models.executions import get_recent_executions, Execution
 from .text_areas import SelectionTextArea
 
@@ -85,6 +85,15 @@ class LogBrowser(Widget):
     #log-details-container {
         min-height: 8;
         border-top: heavy gray;
+        background: $surface;
+        display: block !important;
+    }
+    
+    #log-details {
+        height: 100%;
+        padding: 1;
+        background: $surface;
+        display: block !important;
     }
     
     #log-table {
@@ -115,6 +124,10 @@ class LogBrowser(Widget):
         super().__init__(*args, **kwargs)
         self.executions: List[Execution] = []
         self.selection_mode = False
+        self.current_execution: Optional[Execution] = None
+        self.refresh_timer = None
+        self.current_prompt = None
+        self.current_tools = None
         
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
@@ -180,6 +193,9 @@ class LogBrowser(Widget):
         # Load executions
         await self.load_executions()
         
+        # Start auto-refresh timer for log content
+        self.set_interval(2.0, self._auto_refresh_log)
+        
     async def load_executions(self) -> None:
         """Load recent executions from the database."""
         try:
@@ -227,34 +243,34 @@ class LogBrowser(Widget):
         
         metadata_lines = []
         
-        # Add worktree information if available (just the last part)
-        if execution.working_dir:
-            worktree_name = Path(execution.working_dir).name
-            metadata_lines.append(f"[yellow]Worktree:[/yellow] {worktree_name}")
-        
-        # Add log file (just filename)
-        log_filename = Path(execution.log_file).name
-        metadata_lines.append(f"[yellow]Log:[/yellow] {log_filename}")
-        
-        # Add timing information
-        metadata_lines.append("")
+        # Add basic metadata
+        metadata_lines.append(f"[yellow]Status:[/yellow] {'🔄' if execution.status == 'running' else '✅' if execution.status == 'completed' else '❌'} {execution.status}")
         metadata_lines.append(f"[yellow]Started:[/yellow] {execution.started_at.strftime('%H:%M:%S')}")
         
         if execution.completed_at:
-            metadata_lines.append(f"[yellow]Completed:[/yellow] {execution.completed_at.strftime('%H:%M:%S')}")
-            # Calculate duration
+            # Use actual completed time, not current time
             duration = execution.completed_at - execution.started_at
             minutes = int(duration.total_seconds() // 60)
             seconds = int(duration.total_seconds() % 60)
             metadata_lines.append(f"[yellow]Duration:[/yellow] {minutes}m {seconds}s")
+        elif execution.status == 'running':
+            # Show elapsed time for running executions
+            elapsed = datetime.now(timezone.utc) - execution.started_at
+            minutes = int(elapsed.total_seconds() // 60)
+            seconds = int(elapsed.total_seconds() % 60)
+            metadata_lines.append(f"[yellow]Elapsed:[/yellow] {minutes}m {seconds}s (running)")
         
-        # Add status
-        status_icon = {
-            'running': '🔄',
-            'completed': '✅',
-            'failed': '❌'
-        }.get(execution.status, '❓')
-        metadata_lines.append(f"[yellow]Status:[/yellow] {status_icon} {execution.status}")
+        # Add prompt from log file if available
+        if self.current_prompt:
+            metadata_lines.append("")
+            metadata_lines.append("[bold cyan]=== Prompt ===[/bold cyan]")
+            metadata_lines.append(self.current_prompt)
+        
+        # Add tools if available
+        if self.current_tools:
+            metadata_lines.append("")
+            metadata_lines.append("[bold cyan]=== Available Tools ===[/bold cyan]")
+            metadata_lines.append(self.current_tools)
         
         return "\n".join(metadata_lines)
     
@@ -267,6 +283,12 @@ class LogBrowser(Widget):
             # Format and display metadata
             metadata_content = self.format_execution_metadata(execution)
             details_panel.write(metadata_content)
+            
+            # Ensure the container is visible
+            details_container = self.query_one("#log-details-container")
+            details_container.styles.display = "block"
+            details_container.styles.height = "34%"
+            details_container.styles.min_height = 8
             
         except Exception as e:
             logger.error(f"Error updating details panel: {e}", exc_info=True)
@@ -292,37 +314,94 @@ class LogBrowser(Widget):
                     return
                     
                 if content.strip():
-                    # Add execution header with rich formatting
-                    log_content.write("[bold cyan]=== Execution {} ===[/bold cyan]".format(execution.id))
-                    log_content.write("[yellow]Document:[/yellow] {}".format(execution.doc_title))
-                    log_content.write("[yellow]Status:[/yellow] {}".format(execution.status))
-                    log_content.write("[yellow]Started:[/yellow] {}".format(
-                        execution.started_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')))
-                    if execution.completed_at:
-                        log_content.write("[yellow]Completed:[/yellow] {}".format(
-                            execution.completed_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')))
-                    log_content.write("[yellow]Working Dir:[/yellow] {}".format(execution.working_dir))
-                    log_content.write("[yellow]Log File:[/yellow] {}".format(execution.log_file))
-                    log_content.write("[bold cyan]=== Log Output ===[/bold cyan]")
-                    log_content.write("")
+                    # Extract prompt and tools from log for display in details panel
+                    self.extract_prompt_and_tools(content, execution)
                     
-                    # Process log content to format JSON lines with emojis
-                    for line in content.splitlines():
-                        # Skip header lines and non-JSON lines
-                        if (line.startswith('=') or line.startswith('-') or 
-                            line.startswith('Version:') or line.startswith('Doc ID:') or 
-                            line.startswith('Execution ID:') or line.startswith('Worktree:') or 
-                            line.startswith('Started:') or not line.strip()):
-                            log_content.write(line)
+                    # Process lines in reverse order (latest first) and filter out prompt/tools
+                    lines = content.splitlines()
+                    filtered_lines = []
+                    skip_until_line = None
+                    
+                    for i, line in enumerate(lines):
+                        # Skip prompt section
+                        if "📝 Prompt being sent to Claude:" in line:
+                            skip_until_line = i + 1
+                            # Find end of prompt section (look for dashes)
+                            while skip_until_line < len(lines):
+                                if lines[skip_until_line].strip().startswith("─"):
+                                    skip_until_line += 1
+                                    break
+                                skip_until_line += 1
+                            continue
+                        
+                        # Skip lines within prompt section
+                        if skip_until_line and i < skip_until_line:
+                            continue
+                        
+                        # Skip tools line
+                        if "📋 Available tools:" in line:
+                            continue
+                            
+                        # Add other lines
+                        if skip_until_line and i >= skip_until_line:
+                            skip_until_line = None
+                        filtered_lines.append(line)
+                    
+                    # Debug: log line count
+                    logger.debug(f"Total lines: {len(lines)}, Filtered lines: {len(filtered_lines)}")
+                    
+                    # Write lines in reverse order (latest first)
+                    for line in reversed(filtered_lines):
+                        # Skip only specific header lines
+                        if (line.strip().startswith('===') or 
+                            line.strip().startswith('---') or
+                            line.startswith('Version:') or 
+                            line.startswith('Doc ID:') or 
+                            line.startswith('Execution ID:') or 
+                            line.startswith('Worktree:') or 
+                            line.startswith('Started at:')):
+                            # Skip these header lines
+                            continue
+                        
+                        if not line.strip():
+                            # Keep empty lines for readability
+                            log_content.write("")
                         else:
-                            # Try to format JSON lines with emojis
-                            formatted = format_claude_output(line, time.time())
-                            if formatted:
-                                log_content.write(formatted)
+                            # Check if line already has a timestamp (from previous formatting)
+                            if line.startswith("[") and "]" in line[:10]:
+                                # Extract and remember this timestamp for JSON lines
+                                bracket_end = line.find("]")
+                                if bracket_end > 0:
+                                    self._last_seen_timestamp = line[:bracket_end + 1]
+                                # Line already has timestamp, write as-is with markup
+                                log_content.write(line, markup=True)
+                            elif line.strip().startswith("{") and line.strip().endswith("}"):
+                                # Raw JSON line - format it but preserve timestamps by using a fixed time
+                                try:
+                                    import json
+                                    data = json.loads(line.strip())
+                                    # Try to get the last timestamp we saw, or use execution start time
+                                    if hasattr(self, '_last_seen_timestamp'):
+                                        exec_time = self._last_seen_timestamp
+                                    else:
+                                        exec_time = execution.started_at.strftime("[%H:%M:%S]")
+                                    formatted = self._format_json_to_display(data, exec_time)
+                                    if formatted:
+                                        log_content.write(formatted, markup=True)
+                                except:
+                                    # Not valid JSON or formatting failed, skip it
+                                    continue
+                            elif '\033[' in line or '\x1b[' in line:
+                                # Contains ANSI escape codes - convert to Rich text
+                                from rich.ansi import AnsiDecoder
+                                from rich.text import Text
+                                text = Text.from_ansi(line)
+                                log_content.write(text)
                             else:
-                                log_content.write(line)
+                                # Other content - write as-is with markup
+                                log_content.write(line, markup=True)
                     
-                    # Scroll to top so users see the beginning of the log
+                    # Scroll to top to see latest messages
                     log_content.scroll_to(0, 0, animate=False)
                 else:
                     log_content.write("[dim](No log content yet)[/dim]")
@@ -331,12 +410,95 @@ class LogBrowser(Widget):
                 
         except Exception as e:
             logger.error(f"Error loading execution log: {e}", exc_info=True)
+    
+    def _format_json_to_display(self, data: dict, base_timestamp: str) -> Optional[str]:
+        """Format a JSON line for display with a consistent timestamp."""
+        # Emoji mappings for tool usage
+        TOOL_EMOJIS = {
+            "Read": "📖", "Write": "📝", "Edit": "✏️", "MultiEdit": "✏️",
+            "Bash": "💻", "Glob": "🔍", "Grep": "🔍", "LS": "📁",
+            "Task": "📋", "TodoWrite": "📋", "WebSearch": "🌐", "WebFetch": "🌐",
+        }
+        
+        # Handle different event types
+        if data.get("type") == "system":
+            if data.get("subtype") == "init":
+                return f"{base_timestamp} 🚀 Claude Code session started"
+            return None
+
+        elif data.get("type") == "assistant" and "message" in data:
+            msg = data.get("message", {})
+            content = msg.get("content", [])
+            for item in content:
+                if item.get("type") == "text":
+                    text = item.get("text", "").strip()
+                    if text:
+                        return f"{base_timestamp} 🤖 Claude: {text}"
+                elif item.get("type") == "tool_use":
+                    tool_name = item.get("name", "Unknown")
+                    emoji = TOOL_EMOJIS.get(tool_name, "🛠️")
+                    return f"{base_timestamp} {emoji} Using tool: {tool_name}"
+
+        elif data.get("type") == "user" and data.get("message", {}).get("role") == "user":
+            content = data.get("message", {}).get("content", [])
+            if content and isinstance(content, list) and len(content) > 0:
+                result = content[0].get("content", "")
+                if len(result) > 100:
+                    result = result[:100] + "..."
+                return f"{base_timestamp} 📄 Tool result: {result}"
+
+        elif data.get("type") == "text":
+            text = data.get("text", "").strip()
+            if text:
+                return f"{base_timestamp} 🤖 Claude: {text}"
+
+        elif data.get("type") == "error":
+            error = data.get("error", {}).get("message", "Unknown error")
+            return f"{base_timestamp} ❌ Error: {error}"
+
+        elif data.get("type") == "result":
+            if data.get("subtype") == "success":
+                return f"{base_timestamp} ✅ Execution completed successfully"
+            else:
+                return f"{base_timestamp} ❌ Execution failed"
+                
+        return None
+    
+    def extract_prompt_and_tools(self, content: str, execution: Execution) -> None:
+        """Extract prompt and tools from log content."""
+        lines = content.splitlines()
+        
+        # Reset
+        self.current_prompt = None
+        self.current_tools = None
+        
+        # Look for prompt
+        for i, line in enumerate(lines):
+            if "📝 Prompt being sent to Claude:" in line:
+                # Extract prompt content
+                prompt_lines = []
+                j = i + 1
+                # Skip dashes
+                while j < len(lines) and lines[j].strip().startswith("─"):
+                    j += 1
+                # Collect prompt until we hit dashes again
+                while j < len(lines) and not lines[j].strip().startswith("─"):
+                    prompt_lines.append(lines[j])
+                    j += 1
+                self.current_prompt = "\n".join(prompt_lines).strip()
+            
+            # Look for tools
+            if "📋 Available tools:" in line:
+                # Extract tools from the line
+                tools_part = line.split("📋 Available tools:")[-1].strip()
+                self.current_tools = tools_part
             
     async def on_data_table_row_highlighted(self, event) -> None:
         """Handle row selection in the execution table."""
         row_idx = event.cursor_row
         if row_idx < len(self.executions):
             execution = self.executions[row_idx]
+            self.current_execution = execution
             await self.load_execution_log(execution)
             
     def action_cursor_down(self) -> None:
@@ -437,6 +599,153 @@ class LogBrowser(Widget):
     async def action_refresh(self) -> None:
         """Refresh the execution list."""
         await self.load_executions()
+    
+    async def _auto_refresh_log(self) -> None:
+        """Auto-refresh the current log content if execution is running."""
+        if not self.current_execution or self.selection_mode:
+            return
+            
+        # Check the latest execution status from database
+        from emdx.models.executions import get_execution
+        latest_execution = get_execution(self.current_execution.id)
+        if latest_execution:
+            self.current_execution = latest_execution
+            
+            # Update the execution in the list too
+            for i, exec in enumerate(self.executions):
+                if exec.id == latest_execution.id:
+                    self.executions[i] = latest_execution
+                    # Update the table to reflect status change
+                    table = self.query_one("#log-table", DataTable)
+                    status_icon = {
+                        'running': '🔄',
+                        'completed': '✅',
+                        'failed': '❌'
+                    }.get(latest_execution.status, '❓')
+                    
+                    # Find the actual row key in the table
+                    # The table's rows are indexed by their row_key, not by position
+                    try:
+                        for row_key in table.rows:
+                            row_data = table.get_row(row_key)
+                            # Check if this row contains our execution ID in the title
+                            if f"#{latest_execution.id} -" in str(row_data[1]):
+                                table.update_cell(row_key, 0, status_icon)
+                                break
+                    except (KeyError, Exception):
+                        # Table was likely refreshed while we were updating
+                        # This is fine - the next refresh will update the status
+                        pass
+                    break
+        
+        # Only refresh if the execution is still running
+        if self.current_execution.status == "running":
+            try:
+                # Get the latest content from the log file
+                log_file = Path(self.current_execution.log_file)
+                if log_file.exists():
+                    log_content_widget = self.query_one("#log-content", RichLog)
+                    
+                    # Get current scroll position to restore it
+                    current_scroll = log_content_widget.scroll_offset
+                    
+                    # Read new content
+                    with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read()
+                    
+                    if content.strip():
+                        # Extract prompt and tools for details panel
+                        self.extract_prompt_and_tools(content, self.current_execution)
+                        await self.update_details_panel(self.current_execution)
+                        
+                        # Clear and rewrite content
+                        log_content_widget.clear()
+                        
+                        # Process lines in reverse order (latest first) and filter out prompt/tools
+                        lines = content.splitlines()
+                        filtered_lines = []
+                        skip_until_line = None
+                        
+                        for i, line in enumerate(lines):
+                            # Skip prompt section
+                            if "📝 Prompt being sent to Claude:" in line:
+                                skip_until_line = i + 1
+                                while skip_until_line < len(lines):
+                                    if lines[skip_until_line].strip().startswith("─"):
+                                        skip_until_line += 1
+                                        break
+                                    skip_until_line += 1
+                                continue
+                            
+                            # Skip lines within prompt section
+                            if skip_until_line and i < skip_until_line:
+                                continue
+                            
+                            # Skip tools line
+                            if "📋 Available tools:" in line:
+                                continue
+                                
+                            # Add other lines
+                            if skip_until_line and i >= skip_until_line:
+                                skip_until_line = None
+                            filtered_lines.append(line)
+                        
+                        # Write lines in reverse order (latest first)
+                        for line in reversed(filtered_lines):
+                            # Skip only specific header lines
+                            if (line.strip().startswith('===') or 
+                                line.strip().startswith('---') or
+                                line.startswith('Version:') or 
+                                line.startswith('Doc ID:') or 
+                                line.startswith('Execution ID:') or 
+                                line.startswith('Worktree:') or 
+                                line.startswith('Started at:')):
+                                # Skip these header lines
+                                continue
+                            
+                            if not line.strip():
+                                # Keep empty lines for readability
+                                log_content_widget.write("")
+                            else:
+                                # Check if line already has a timestamp (from previous formatting)
+                                if line.startswith("[") and "]" in line[:10]:
+                                    # Extract and remember this timestamp for JSON lines
+                                    bracket_end = line.find("]")
+                                    if bracket_end > 0:
+                                        self._last_seen_timestamp = line[:bracket_end + 1]
+                                    # Line already has timestamp, write as-is with markup
+                                    log_content_widget.write(line, markup=True)
+                                elif line.strip().startswith("{") and line.strip().endswith("}"):
+                                    # Raw JSON line - format it but preserve timestamps by using a fixed time
+                                    try:
+                                        import json
+                                        data = json.loads(line.strip())
+                                        # Try to get the last timestamp we saw, or use execution start time
+                                        if hasattr(self, '_last_seen_timestamp'):
+                                            exec_time = self._last_seen_timestamp
+                                        else:
+                                            exec_time = self.current_execution.started_at.strftime("[%H:%M:%S]")
+                                        formatted = self._format_json_to_display(data, exec_time)
+                                        if formatted:
+                                            log_content_widget.write(formatted, markup=True)
+                                    except:
+                                        # Not valid JSON or formatting failed, skip it
+                                        continue
+                                elif '\033[' in line or '\x1b[' in line:
+                                    # Contains ANSI escape codes - convert to Rich text
+                                    from rich.ansi import AnsiDecoder
+                                    from rich.text import Text
+                                    text = Text.from_ansi(line)
+                                    log_content_widget.write(text)
+                                else:
+                                    # Other content - write as-is with markup
+                                    log_content_widget.write(line, markup=True)
+                        
+                        # Stay at top to see latest messages
+                        log_content_widget.scroll_to(0, 0, animate=False)
+                        
+            except Exception as e:
+                logger.debug(f"Error during auto-refresh: {e}")
         
             
     def update_status(self, text: str) -> None:

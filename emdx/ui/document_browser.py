@@ -886,22 +886,28 @@ class DocumentBrowser(Widget):
                     "-m", "emdx",
                     "claude", "execute",
                     str(doc_id),
-                    "--background"
+                    "--background",
+                    "--exec-id", str(exec_id),
+                    "--log-file", str(log_path)
                 ]
             else:
                 claude_cmd = [
                     emdx_path,
                     "claude", "execute", 
                     str(doc_id),
-                    "--background"
+                    "--background",
+                    "--exec-id", str(exec_id),
+                    "--log-file", str(log_path)
                 ]
             
-            # Execute with wrapper
-            wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
+            # For background execution, don't use wrapper here
+            # The execute command with --background already uses a wrapper internally
+            # to monitor the actual Claude process. Double-wrapping causes the outer
+            # wrapper to mark execution as complete when execute command exits.
             
-            # Start the process in background
+            # Start the process directly without wrapper
             subprocess.Popen(
-                wrapper_cmd,
+                claude_cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True
