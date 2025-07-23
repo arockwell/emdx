@@ -24,7 +24,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.commands.claude_execute import format_claude_output
+from emdx.commands.claude_execute import format_claude_output, parse_timestamp
 from emdx.models.executions import get_recent_executions, Execution
 from .text_areas import SelectionTextArea
 
@@ -307,6 +307,8 @@ class LogBrowser(Widget):
                     log_content.write("")
                     
                     # Process log content to format JSON lines with emojis
+                    last_timestamp = None  # Track the last seen timestamp
+                    
                     for line in content.splitlines():
                         # Skip header lines and non-JSON lines
                         if (line.startswith('=') or line.startswith('-') or 
@@ -316,7 +318,17 @@ class LogBrowser(Widget):
                             log_content.write(line)
                         else:
                             # Try to format JSON lines with emojis
-                            formatted = format_claude_output(line, time.time())
+                            # First, extract timestamp from the line if present
+                            parsed_timestamp = parse_timestamp(line)
+                            
+                            # If we found a timestamp, update our last seen timestamp
+                            if parsed_timestamp:
+                                last_timestamp = parsed_timestamp
+                            
+                            # Use the parsed timestamp if available, otherwise use last seen timestamp
+                            timestamp_to_use = parsed_timestamp or last_timestamp
+                            
+                            formatted = format_claude_output(line, time.time(), timestamp_to_use)
                             if formatted:
                                 log_content.write(formatted)
                             else:
