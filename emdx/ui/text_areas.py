@@ -239,6 +239,11 @@ class VimEditTextArea(TextArea):
         
         key_logger.info(f"VimEditTextArea._handle_normal_mode: key={key}, char={char}")
         
+        # Handle Ctrl+S to save
+        if key == "ctrl+s":
+            self.app_instance.action_save_and_exit_edit()
+            return
+        
         # Stop event from bubbling up
         event.stop()
         event.prevent_default()
@@ -393,9 +398,19 @@ class VimEditTextArea(TextArea):
             self.command_buffer = ":"
             self.app_instance._update_vim_status("COMMAND :")
         
-        # Tab key - no special handling needed without title input
+        # Tab key - switch back to title in new document mode
         elif key == "tab":
-            pass  # Could add tab functionality later
+            # Check if we're in new document mode
+            if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+                try:
+                    title_input = self.app_instance.query_one("#title-input")
+                    title_input.focus()
+                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+                    event.stop()
+                    return
+                except Exception as e:
+                    logger.debug(f"Error switching to title: {e}")
+                    pass  # Title input might not exist
         
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:
@@ -403,6 +418,23 @@ class VimEditTextArea(TextArea):
     
     def _handle_insert_mode(self, event: events.Key) -> None:
         """Handle keys in INSERT mode - just pass through for normal editing."""
+        # Handle Ctrl+S to save
+        if event.key == "ctrl+s":
+            self.app_instance.action_save_and_exit_edit()
+            event.stop()
+            return
+        
+        # Handle Tab in new document mode
+        if event.key == "tab" and hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+            try:
+                title_input = self.app_instance.query_one("#title-input")
+                title_input.focus()
+                self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+                event.stop()
+                return
+            except:
+                pass  # Title input might not exist
+        
         # Don't stop the event - let it bubble up naturally for TextArea to handle
         # Only update line numbers for operations that might change line count
         if event.key in ["enter", "backspace", "delete"]:
@@ -473,8 +505,15 @@ class VimEditTextArea(TextArea):
         cmd = self.command_buffer[1:].strip()  # Remove the colon
         
         if cmd in ["w", "write"]:
-            # Save without exiting - for now just update the status
-            # TODO: Implement save-only functionality
+            # Save without exiting
+            if hasattr(self.app_instance, 'save_document_without_exit'):
+                # Try new save method
+                self.app_instance.save_document_without_exit()
+            elif hasattr(self.app_instance, 'action_save_and_exit_edit'):
+                # Fall back to save and exit, but return to edit mode
+                self.app_instance.action_save_and_exit_edit()
+                return
+            
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
@@ -659,6 +698,16 @@ class VimEditTextArea(TextArea):
             self.action_delete_right()
         except:
             # Ignore if at end of document
+            pass
+    
+    def _clear_title_selection(self, title_input) -> None:
+        """Clear selection in title input."""
+        try:
+            # Position cursor at end without selection
+            title_input.cursor_position = len(title_input.value)
+            if hasattr(title_input, 'selection'):
+                title_input.selection = (title_input.cursor_position, title_input.cursor_position)
+        except:
             pass
 
 
