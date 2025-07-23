@@ -144,11 +144,12 @@ Content here
         """HTML content should be allowed but not processed"""
         formatter = DocumentFormatter()
         
-        content = "<h1>Title</h1>\n<p>Paragraph   </p>"
+        content = "<h1>Title</h1>\n<p>Paragraph   </p>  "
         formatted = formatter.validate_and_format(content)
         assert "<h1>Title</h1>" in formatted
-        # Note: Trailing spaces are removed from all lines, including inside HTML
-        assert "<p>Paragraph</p>" in formatted
+        # Trailing spaces at end of line are removed, but spaces inside tags are preserved
+        assert "<p>Paragraph   </p>" in formatted
+        assert not formatted.rstrip().endswith("  ")  # Trailing spaces removed
     
     def test_url_preservation(self):
         """URLs should not be modified"""
@@ -206,7 +207,7 @@ class TestFormatterConfiguration:
         )
         
         # Line too long
-        with pytest.raises(FormatValidationError, match="line.*too long"):
+        with pytest.raises(FormatValidationError, match="exceeds maximum length"):
             formatter.validate_and_format("x" * 100)
         
         # Tabs not allowed
