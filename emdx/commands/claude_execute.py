@@ -532,10 +532,16 @@ def execute_with_claude(
         exec_start_time = time.time()
 
         # Stream output
+        last_timestamp = None
         with open(log_file, 'a') as log:
             for line in process.stdout:
-                # Use current time for each log line
-                formatted = format_claude_output(line, time.time())
+                # Parse timestamp from log line if available
+                parsed_timestamp = parse_log_timestamp(line)
+                if parsed_timestamp:
+                    last_timestamp = parsed_timestamp
+                # Use parsed timestamp or last known timestamp, fallback to current time
+                timestamp_to_use = parsed_timestamp or last_timestamp or time.time()
+                formatted = format_claude_output(line, timestamp_to_use)
                 if formatted:
                     log.write(formatted + "\n")
                     log.flush()
