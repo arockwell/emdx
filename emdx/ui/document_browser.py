@@ -71,6 +71,7 @@ class DocumentBrowser(Widget):
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
         Binding("x", "execute_document", "Execute"),
+        Binding("r", "refresh", "Refresh"),
     ]
     
     DEFAULT_CSS = """
@@ -811,6 +812,11 @@ class DocumentBrowser(Widget):
     async def action_edit_document(self) -> None:
         """Edit the current document."""
         await self.enter_edit_mode()
+    
+    async def action_refresh(self) -> None:
+        """Refresh the document list."""
+        await self.load_documents()
+        self.update_status("Documents refreshed")
         
     def update_status(self, message: str) -> None:
         """Update the document browser status bar."""
