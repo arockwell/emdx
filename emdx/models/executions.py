@@ -209,20 +209,32 @@ def get_running_executions() -> List[Execution]:
 
 def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] = None) -> None:
     """Update execution status and completion time."""
+    import traceback
+    print(f"🔍 DEBUG: update_execution_status called with exec_id={exec_id}, status={status}, exit_code={exit_code}")
+    print(f"🔍 DEBUG: Call stack:")
+    for line in traceback.format_stack():
+        print(f"🔍   {line.strip()}")
+    
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:
-            conn.execute("""
+            cursor = conn.execute("""
                 UPDATE executions 
                 SET status = ?, completed_at = CURRENT_TIMESTAMP, exit_code = ?
                 WHERE id = ?
             """, (status, exit_code, exec_id))
+            rows_affected = cursor.rowcount
+            print(f"🔍 DEBUG: Updated {rows_affected} rows for completion status")
         else:
-            conn.execute("""
+            cursor = conn.execute("""
                 UPDATE executions 
                 SET status = ?
                 WHERE id = ?
             """, (status, exec_id))
+            rows_affected = cursor.rowcount
+            print(f"🔍 DEBUG: Updated {rows_affected} rows for status change")
+        
         conn.commit()
+        print(f"🔍 DEBUG: Database commit successful for execution {exec_id}")
 
 
 def update_execution_pid(exec_id: int, pid: int) -> None:
