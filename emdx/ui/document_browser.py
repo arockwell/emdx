@@ -205,8 +205,15 @@ class DocumentBrowser(Widget):
     #table-header {
         background: $boost;
         padding: 0 1;
-        margin-bottom: 0;
+        margin: 0;
+        height: 1;
         text-style: bold;
+        color: $text;
+        dock: top;
+    }
+    
+    #doc-table {
+        height: 1fr;
     }
     """
     
@@ -241,9 +248,9 @@ class DocumentBrowser(Widget):
                     # Apply direct styles - 2/3 of sidebar
                     table_container.styles.height = "66%"
                     table_container.styles.min_height = 10
-                    table_container.styles.padding = 0
+                    table_container.styles.padding = (1, 0, 0, 0)  # Add top padding for header
                     # Add header label
-                    yield Label("ID   TAGS     TITLE", id="table-header")
+                    yield Static("ID   TAGS     TITLE", id="table-header")
                     yield DataTable(id="doc-table")
                 with Vertical(id="details-container", classes="details-section") as details_container:
                     # Apply direct styles - 1/3 of sidebar
@@ -279,6 +286,17 @@ class DocumentBrowser(Widget):
         # Log CSS content to verify it's loaded
         logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
         logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
+        
+        # Setup header
+        try:
+            header = self.query_one("#table-header", Static)
+            header.styles.background = "blue"
+            header.styles.color = "white"
+            header.styles.padding = (0, 1)
+            header.styles.height = 1
+            header.styles.text_style = "bold"
+        except Exception as e:
+            logger.error(f"Error styling header: {e}")
         
         # Setup table
         table = self.query_one("#doc-table", DataTable)
