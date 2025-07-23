@@ -202,20 +202,8 @@ class DocumentBrowser(Widget):
         width: 100%;
     }
     
-    #table-header {
-        background: blue;
-        padding: 0 1;
-        margin: 0 0 1 0;
-        height: 1;
-        text-style: bold;
-        color: white;
-        width: 100%;
-        display: block;
-    }
-    
     #doc-table {
         height: 1fr;
-        margin-top: 0;
     }
     """
     
@@ -251,8 +239,6 @@ class DocumentBrowser(Widget):
                     table_container.styles.height = "66%"
                     table_container.styles.min_height = 10
                     table_container.styles.padding = (1, 0, 0, 0)  # Top padding for spacing
-                    # Add header label
-                    yield Static("ID   TAGS     TITLE", id="table-header")
                     yield DataTable(id="doc-table")
                 with Vertical(id="details-container", classes="details-section") as details_container:
                     # Apply direct styles - 1/3 of sidebar
@@ -289,20 +275,6 @@ class DocumentBrowser(Widget):
         logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
         logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
         
-        # Setup header
-        try:
-            header = self.query_one("#table-header", Static)
-            header.styles.background = "blue"
-            header.styles.color = "white"
-            header.styles.padding = (0, 1, 0, 1)  # Equal padding on both sides
-            header.styles.height = 1
-            header.styles.text_style = "bold"
-            header.styles.width = "100%"
-            header.styles.margin = (0, 0, 1, 0)  # Bottom margin for spacing
-            header.styles.display = "block"
-        except Exception as e:
-            logger.error(f"Error styling header: {e}")
-        
         # Setup table
         table = self.query_one("#doc-table", DataTable)
         table.add_column("ID", width=4)
@@ -310,7 +282,7 @@ class DocumentBrowser(Widget):
         table.add_column(" ", width=1)  # Padding column
         table.add_column("Title", width=74)
         table.cursor_type = "row"
-        table.show_header = False  # Hide built-in headers since we have custom header
+        table.show_header = True  # Show built-in headers
         table.cell_padding = 0  # Remove cell padding for tight spacing
         
         # Disable focus on non-interactive widgets
