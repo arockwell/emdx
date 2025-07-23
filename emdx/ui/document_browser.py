@@ -724,11 +724,13 @@ class DocumentBrowser(Widget):
         await edit_container.mount(title_input)
         await edit_container.mount(vim_editor)
         
-        # Focus on title input first
-        title_input.focus()
+        # Vim editor will start in NORMAL mode by default
+        
+        # Focus on title input first - use call_after_refresh to ensure it's ready
+        self.call_after_refresh(lambda: title_input.focus())
         
         # Update status
-        self._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | ESC=cancel")
+        self._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
         
     def action_cursor_down(self) -> None:
         """Move cursor down."""
