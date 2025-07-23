@@ -30,12 +30,6 @@ class BrowserContainerWidget(Widget):
         margin: 0;
     }
     
-    #status {
-        height: 1;
-        background: $boost;
-        color: $text;
-        padding: 0 1;
-    }
     
     Container {
         padding: 0;
@@ -49,10 +43,9 @@ class BrowserContainerWidget(Widget):
     """
     
     def compose(self) -> ComposeResult:
-        """Just a mount point and status bar."""
+        """Just a mount point - browsers handle their own status."""
         with Vertical():
             yield Container(id="browser-mount")
-            yield Label("", id="status")
 
 
 class BrowserContainer(App):
@@ -108,10 +101,10 @@ class BrowserContainer(App):
         # The DocumentBrowser will call update_status() from its update_table() method
         
     def update_status(self, text: str) -> None:
-        """Update the status bar."""
-        if self.container_widget:
-            status = self.container_widget.query_one("#status", Label)
-            status.update(text)
+        """Update the status bar - delegate to current browser."""
+        current_browser = self.browsers.get(self.current_browser)
+        if current_browser and hasattr(current_browser, 'update_status'):
+            current_browser.update_status(text)
         
     async def switch_browser(self, browser_type: str) -> None:
         """Switch to a different browser."""
@@ -157,9 +150,7 @@ class BrowserContainer(App):
             
         self.current_browser = browser_type
         
-        # Update status bar based on browser type
-        if browser_type == "log":
-            self.update_status("Log Browser | q=back")
+        # Let each browser handle its own status updates
         
     def action_quit(self) -> None:
         """Quit the application."""
