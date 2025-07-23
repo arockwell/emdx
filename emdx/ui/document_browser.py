@@ -93,12 +93,10 @@ class DocumentBrowser(Widget):
     } */
     
     #search-input, #tag-input {
-        layer: overlay;
         display: none;
         height: 3;
         margin: 1;
         border: solid $primary;
-        offset: 0 0;
     }
     
     #search-input.visible, #tag-input.visible {
