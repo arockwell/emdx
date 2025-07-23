@@ -52,7 +52,7 @@ class BrowserContainerWidget(Widget):
         """Just a mount point and status bar."""
         with Vertical():
             yield Container(id="browser-mount")
-            yield Label("Loading...", id="status")
+            yield Label("", id="status")
 
 
 class BrowserContainer(App):
