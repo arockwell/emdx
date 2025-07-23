@@ -96,6 +96,8 @@ class DocumentBrowser(Widget):
         height: 3;
         margin: 1;
         border: solid $primary;
+        dock: top;
+        background: $surface;
     }
     
     .browser-status {
