@@ -24,6 +24,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - 📊 **Export Options**: Export your knowledge base as JSON or CSV
 - 🏷️ **Emoji Tag System**: Organize with emoji tags + intuitive text aliases (gameplan→🎯, active→🚀)
 - 📖 **Emoji Legend**: `emdx legend` command for quick emoji reference and aliases
+- ✅ **Document Formatting**: Automatic content validation and formatting for consistency
 
 ## Installation
 

@@ -105,6 +105,28 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 3. Add proper error handling and user feedback
 4. Mock external dependencies in tests
 
+## Document Formatting System (NEW!)
+
+As of the latest update, EMDX now includes automatic document formatting:
+
+### What Gets Formatted
+- **Empty/whitespace-only documents are rejected** - Prevents the empty document bug
+- **Line endings normalized to Unix (LF)** - Consistent across platforms
+- **Trailing whitespace removed** - Cleaner documents
+- **Final newline enforced** - Unix convention
+- **Titles trimmed** - No leading/trailing spaces
+
+### Implementation
+- Formatting happens at the database layer (`database/documents.py`)
+- All saves/updates go through formatting automatically
+- Comprehensive test coverage in `tests/test_document_formatting.py`
+- Configurable formatter in `utils/formatting.py`
+
+### Error Handling
+- User-friendly error messages for validation failures
+- Formatting errors bubble up with clear descriptions
+- No silent failures - users know why documents are rejected
+
 ## Key Files and Their Purpose
 
 ### Core System
@@ -112,6 +134,7 @@ EMDX is a powerful command-line knowledge base and documentation management syst
 - `emdx/commands/core.py` - Core CRUD operations (save, find, view, edit, delete)
 - `emdx/database/` - Modular database layer (connection, documents, search)
 - `emdx/config/` - Configuration management
+- `emdx/utils/formatting.py` - Document formatting and validation (NEW!)
 
 ### User Interfaces
 - `emdx/commands/browse.py` - Browse commands (list, recent, stats, projects)
