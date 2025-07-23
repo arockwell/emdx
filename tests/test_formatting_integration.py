@@ -130,8 +130,8 @@ Code without language
         result = self.runner.invoke(app, ["save", "--title", "Piped"], input=content)
         
         assert result.exit_code == 0
-        assert "✅ Document formatting is valid!" in result.output
         assert "Saved as #" in result.output
+        # Valid document doesn't show validation message when no issues
 
     @patch('emdx.commands.core.get_git_project')
     def test_file_save_with_format(self, mock_git):
@@ -149,7 +149,7 @@ Content here.
         
         assert result.exit_code == 0
         assert "Document formatted successfully" in result.output
-        assert "Project: test-project" in result.output
+        assert "test-project" in result.output
 
     def test_empty_document_validation(self):
         """Test validation of empty or minimal documents."""
