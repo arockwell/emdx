@@ -153,9 +153,21 @@ def parse_task_content(task: str) -> str:
     return expanded
 
 
-def format_timestamp() -> str:
-    """Get formatted timestamp for log output."""
-    return datetime.now().strftime("[%H:%M:%S]")
+def format_timestamp(base_time: Optional[float] = None) -> str:
+    """Get formatted timestamp for log output.
+    
+    Args:
+        base_time: Base timestamp in seconds since epoch. If None, uses current time.
+    
+    Returns:
+        Formatted timestamp string in [HH:MM:SS] format
+    """
+    if base_time is None:
+        return datetime.now().strftime("[%H:%M:%S]")
+    else:
+        # Convert epoch time to datetime
+        dt = datetime.fromtimestamp(base_time)
+        return dt.strftime("[%H:%M:%S]")
 
 
 def format_claude_output(line: str, start_time: float) -> Optional[str]:
@@ -186,7 +198,7 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
         if data.get("type") == "system":
             # Handle system initialization messages
             if data.get("subtype") == "init":
-                return f"{format_timestamp()} 🚀 Claude Code session started"
+                return f"{format_timestamp(start_time)} 🚀 Claude Code session started"
             # Skip other system messages for now
             return None
 
@@ -198,11 +210,11 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 if item.get("type") == "text":
                     text = item.get("text", "").strip()
                     if text:
-                        return f"{format_timestamp()} 🤖 Claude: {text}"
+                        return f"{format_timestamp(start_time)} 🤖 Claude: {text}"
                 elif item.get("type") == "tool_use":
                     tool_name = item.get("name", "Unknown")
                     emoji = TOOL_EMOJIS.get(tool_name, "🛠️")
-                    return f"{format_timestamp()} {emoji} Using tool: {tool_name}"
+                    return f"{format_timestamp(start_time)} {emoji} Using tool: {tool_name}"
 
         elif data.get("type") == "user" and data.get("message", {}).get("role") == "user":
             # Tool result - extract key info
@@ -211,7 +223,7 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 result = content[0].get("content", "")
                 if len(result) > 100:
                     result = result[:100] + "..."
-                return f"{format_timestamp()} 📄 Tool result: {result}"
+                return f"{format_timestamp(start_time)} 📄 Tool result: {result}"
 
         elif data.get("type") == "text":
             text = data.get("text", "").strip()
@@ -220,26 +232,26 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
 
         elif data.get("type") == "error":
             error = data.get("error", {}).get("message", "Unknown error")
-            return f"{format_timestamp()} ❌ Error: {error}"
+            return f"{format_timestamp(start_time)} ❌ Error: {error}"
 
         elif data.get("type") == "result":
             # Handle the final result message
             if data.get("subtype") == "success":
                 duration = time.time() - start_time
-                return f"{format_timestamp()} ✅ Task completed successfully! Duration: {duration:.2f}s"
+                return f"{format_timestamp(start_time)} ✅ Task completed successfully! Duration: {duration:.2f}s"
             else:
-                return f"{format_timestamp()} ❌ Task failed: {data.get('result', 'Unknown error')}"
+                return f"{format_timestamp(start_time)} ❌ Task failed: {data.get('result', 'Unknown error')}"
 
         # For debugging: show unhandled JSON types (this was the source of "JSON shit")
-        return f"{format_timestamp()} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
+        return f"{format_timestamp(start_time)} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
 
     except json.JSONDecodeError:
         # Not JSON - return as plain text if it's not empty
         if line and not line.startswith("{"):
-            return f"{format_timestamp()} 💬 {line}"
+            return f"{format_timestamp(start_time)} 💬 {line}"
         else:
             # Malformed JSON - show for debugging
-            return f"{format_timestamp()} ⚠️  Malformed JSON: {line[:100]}..."
+            return f"{format_timestamp(start_time)} ⚠️  Malformed JSON: {line[:100]}..."
 
     return None
 
