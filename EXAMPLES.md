@@ -2,14 +2,63 @@
 
 A collection of practical examples showing how to use EMDX 0.7.0's powerful features in real-world scenarios.
 
+## 🎆 What's New in These Examples
+
+These workflows showcase EMDX 0.7.0's game-changing features:
+
+- **🤖 Auto-tagging**: Every `emdx save` includes `--auto-tag` for intelligent organization
+- **📊 JSON Integration**: Complex pipelines using `--json` and `jq` for data processing
+- **🚀 Pipeline Power**: Unix-style automation with `--ids-only` and `xargs`
+- **🏥 Health Monitoring**: Automated maintenance and health tracking
+- **🔄 Consolidated Commands**: Using `analyze` and `maintain` for powerful operations
+- **📅 Date Filtering**: Time-based queries with `--created-after` and `--modified-before`
+- **🏷️ Smart Tagging**: Lifecycle management and tag-based workflows
+
+### 📝 How to Use These Examples
+
+1. **Copy and adapt**: Each script is a starting point - modify for your needs
+2. **Combine workflows**: Mix and match patterns from different examples
+3. **Start simple**: Begin with basic versions and add complexity over time
+4. **Test first**: Always run with dry-run or preview modes when available
+
+### 🛠️ Prerequisites
+
+These examples assume you have:
+- EMDX 0.7.0+ installed
+- Basic shell scripting knowledge
+- Common Unix tools: `jq`, `curl`, `git`
+- Optional: `gh` CLI for GitHub integration
+
 ## 📚 Table of Contents
 
 1. [Daily Development Workflows](#daily-development-workflows)
+   - Capture Everything During Debugging
+   - Code Review Workflow
 2. [Project Management](#project-management)
+   - Sprint Planning Automation
+   - Project Documentation Generator
 3. [Research & Learning](#research--learning)
+   - Learning Journal Workflow
+   - Research Session Capture
 4. [DevOps & Monitoring](#devops--monitoring)
+   - Incident Response Automation
+   - Performance Monitoring
 5. [Team Collaboration](#team-collaboration)
+   - Standup Notes Aggregator
+   - Knowledge Sharing Session
 6. [Advanced Automation](#advanced-automation)
+   - Self-Organizing Knowledge Base
+   - AI-Powered Summary Generator
+   - Cross-Project Knowledge Transfer
+7. [Learning & Onboarding](#learning--onboarding)
+   - New Team Member Onboarding
+   - Personal Learning Path
+8. [Consulting & Client Work](#consulting--client-work)
+   - Client Project Setup
+9. [Academic Research](#academic-research)
+   - Literature Review Workflow
+10. [Enterprise Integration](#enterprise-integration)
+    - Confluence/Wiki Migration
 
 ## 💻 Daily Development Workflows
 
@@ -685,6 +734,340 @@ emdx analyze --empty --json | jq -r '.empty_documents[]'
 
 # Track knowledge growth
 emdx stats --json | jq '{date: now, docs: .total_documents}' >> growth.jsonl
+```
+
+## 🎓 Learning & Onboarding
+
+### New Team Member Onboarding
+
+```bash
+#!/bin/bash
+# onboard-teammate.sh
+# Create comprehensive onboarding knowledge base
+
+TEAMMEMBER="$1"
+TEAM="$2"
+
+if [ -z "$TEAMMEMBER" ] || [ -z "$TEAM" ]; then
+    echo "Usage: $0 <name> <team>"
+    exit 1
+fi
+
+# Create onboarding gameplan
+cat << EOF | emdx save --title "Onboarding: $TEAMMEMBER ($TEAM)" --tags "onboarding,gameplan,active" --auto-tag
+# Onboarding Plan: $TEAMMEMBER
+
+**Team**: $TEAM
+**Start Date**: $(date +%Y-%m-%d)
+**Buddy**: [Assign buddy]
+
+## Week 1: Foundation
+- [ ] Complete security setup
+- [ ] Access to all required systems
+- [ ] Read team documentation
+- [ ] Shadow experienced team member
+- [ ] First small task assignment
+
+## Week 2: Deep Dive
+- [ ] Understand codebase architecture
+- [ ] Review recent project history
+- [ ] Attend all team meetings
+- [ ] Complete first medium task
+
+## Week 3: Integration
+- [ ] Lead a small feature
+- [ ] Present learnings to team
+- [ ] Contribute to documentation
+- [ ] Identify improvement opportunities
+
+## Resources
+- Team handbook: [link]
+- Code repositories: [links]
+- Contact list: [link]
+EOF
+
+# Collect essential team knowledge
+emdx find --tags "team-knowledge,$TEAM" --format json | \
+  jq -r '.[] | "- [\(.id)] \(.title)"' | \
+  emdx save --title "Essential Reading: $TEAM Team" --tags "onboarding,reading-list" --auto-tag
+
+echo "Onboarding plan created for $TEAMMEMBER"
+echo "Track progress with: emdx find --tags onboarding,$TEAMMEMBER"
+```
+
+### Personal Learning Path
+
+```bash
+#!/bin/bash
+# learning-path.sh
+# Create structured learning paths for new technologies
+
+TECH="$1"
+GOAL="$2"
+
+if [ -z "$TECH" ]; then
+    echo "Usage: $0 <technology> [goal]"
+    exit 1
+fi
+
+GOAL=${GOAL:-"Understand and use effectively"}
+
+# Create learning gameplan
+cat << EOF | emdx save --title "Learning Path: $TECH" --tags "learning,gameplan,active" --auto-tag
+# Learning Path: $TECH
+
+**Goal**: $GOAL
+**Started**: $(date +%Y-%m-%d)
+**Target Completion**: $(date -d "+1 month" +%Y-%m-%d)
+
+## Phase 1: Foundation (Week 1)
+- [ ] Read official documentation
+- [ ] Complete "Hello World" tutorial
+- [ ] Understand core concepts
+- [ ] Set up development environment
+
+## Phase 2: Practice (Week 2-3)
+- [ ] Build small project
+- [ ] Follow advanced tutorials
+- [ ] Read best practices
+- [ ] Join community forums
+
+## Phase 3: Mastery (Week 4)
+- [ ] Build something useful
+- [ ] Optimize performance
+- [ ] Contribute to open source
+- [ ] Teach someone else
+
+## Resources
+- Official docs: [link]
+- Tutorials: [links]
+- Community: [links]
+- Books/Courses: [links]
+
+## Progress Notes
+(Weekly updates go here)
+EOF
+
+echo "Learning path created for $TECH"
+echo "Save progress with: emdx save --tags learning,$TECH,progress"
+```
+
+## 💼 Consulting & Client Work
+
+### Client Project Setup
+
+```bash
+#!/bin/bash
+# client-project-setup.sh
+# Initialize knowledge base for new client project
+
+CLIENT="$1"
+PROJECT="$2"
+
+if [ -z "$CLIENT" ] || [ -z "$PROJECT" ]; then
+    echo "Usage: $0 <client-name> <project-name>"
+    exit 1
+fi
+
+PROJECT_ID="${CLIENT}-${PROJECT}"
+
+# Project kickoff document
+cat << EOF | emdx save --title "Project Kickoff: $PROJECT_ID" --tags "project,kickoff,$PROJECT_ID" --auto-tag
+# Project Kickoff: $PROJECT_ID
+
+**Client**: $CLIENT
+**Project**: $PROJECT
+**Start Date**: $(date +%Y-%m-%d)
+**Status**: Active
+
+## Objectives
+- 
+
+## Scope
+### In Scope
+- 
+
+### Out of Scope
+- 
+
+## Timeline
+- Phase 1: 
+- Phase 2: 
+- Go-live: 
+
+## Key Contacts
+- Client PM: 
+- Technical Lead: 
+- Business Owner: 
+
+## Success Criteria
+1. 
+2. 
+3. 
+
+## Risks
+- 
+
+## Next Steps
+- [ ] Requirements gathering
+- [ ] Technical architecture
+- [ ] Project plan
+EOF
+
+echo "Client project $PROJECT_ID initialized"
+echo "Track with: emdx find --tags $PROJECT_ID"
+```
+
+## 🔬 Academic Research
+
+### Literature Review Workflow
+
+```bash
+#!/bin/bash
+# literature-review.sh
+# Systematic literature review using EMDX
+
+TOPIC="$1"
+if [ -z "$TOPIC" ]; then
+    echo "Usage: $0 <research-topic>"
+    exit 1
+fi
+
+# Create research protocol
+cat << EOF | emdx save --title "Literature Review Protocol: $TOPIC" --tags "research,protocol,active" --auto-tag
+# Literature Review Protocol: $TOPIC
+
+**Started**: $(date +%Y-%m-%d)
+**Researcher**: $(whoami)
+
+## Research Question
+[Define your research question]
+
+## Search Strategy
+### Databases
+- [ ] Google Scholar
+- [ ] PubMed
+- [ ] IEEE Xplore
+- [ ] ACM Digital Library
+- [ ] arXiv
+
+### Keywords
+- Primary: "$TOPIC"
+- Secondary: [related terms]
+- Boolean operators: [search strings]
+
+### Inclusion Criteria
+- Publication date: [range]
+- Language: English
+- Peer-reviewed: Yes
+- Full text available: Yes
+
+### Exclusion Criteria
+- [Define exclusion criteria]
+
+## Screening Process
+1. Title screening
+2. Abstract screening
+3. Full-text review
+4. Quality assessment
+
+## Data Extraction
+- Citation details
+- Methodology
+- Key findings
+- Limitations
+- Relevance score (1-5)
+EOF
+
+echo "Literature review protocol created for: $TOPIC"
+echo "Track progress with: emdx find --tags literature-review,$TOPIC"
+```
+
+## 🏢 Enterprise Integration
+
+### Confluence/Wiki Migration
+
+```bash
+#!/bin/bash
+# wiki-migration.sh
+# Migrate from corporate wiki to EMDX
+
+SOURCE_WIKI="$1"  # e.g., "confluence", "notion", "sharepoint"
+SPACE="$2"        # Wiki space/area name
+
+if [ -z "$SOURCE_WIKI" ] || [ -z "$SPACE" ]; then
+    echo "Usage: $0 <source-wiki> <space-name>"
+    exit 1
+fi
+
+# Create migration plan
+cat << EOF | emdx save --title "Wiki Migration: $SPACE from $SOURCE_WIKI" --tags "migration,wiki,project" --auto-tag
+# Wiki Migration Plan: $SPACE
+
+**Source**: $SOURCE_WIKI
+**Target**: EMDX
+**Started**: $(date +%Y-%m-%d)
+**Status**: Planning
+
+## Migration Strategy
+1. **Inventory**: Catalog all content
+2. **Prioritize**: Identify high-value content
+3. **Transform**: Convert to markdown
+4. **Import**: Bulk import to EMDX
+5. **Organize**: Apply tags and structure
+6. **Validate**: Verify migration success
+
+## Timeline
+- Week 1: Inventory and planning
+- Week 2: Export and conversion
+- Week 3: Import and organization
+- Week 4: Validation and cleanup
+EOF
+
+echo "Migration plan created for $SPACE"
+echo "Track with: emdx find --tags migration,$SPACE"
+```
+
+## 🌟 Pro Tips for Workflow Success
+
+### Start Small, Think Big
+```bash
+# Begin with simple patterns
+echo "Today I learned about async/await" | emdx save --title "TIL: Async" --auto-tag
+
+# Gradually build complexity
+emdx find --tags "learning" --created-after "this week" --format json | \
+  jq -r '.[] | "- \(.title)"' | \
+  emdx save --title "This Week's Learning Summary" --auto-tag
+```
+
+### Make It Automatic
+```bash
+# Add to your .bashrc/.zshrc
+alias til='echo "$1" | emdx save --title "TIL: $(date +%Y-%m-%d)" --auto-tag'
+alias emdx-health='emdx analyze --health'
+alias emdx-clean='emdx maintain --auto --execute'
+
+# Use cron for regular maintenance
+echo "0 6 * * * emdx maintain --auto --execute" | crontab -
+```
+
+### Measure What Matters
+```bash
+# Track your knowledge growth
+emdx analyze --json | jq '.statistics.total_documents' >> ~/knowledge-growth.log
+
+# Monitor health over time
+emdx analyze --health --json | jq '{date: now, score: .overall_score}' >> ~/health-history.jsonl
+```
+
+### Share and Collaborate
+```bash
+# Export workflows for your team
+emdx find --tags "workflow,automation" --format json > team-workflows.json
+
+# Create team knowledge templates
+emdx save template.md --title "Team Meeting Template" --tags "template,team"
 ```
 
 Remember: The best workflow is the one you'll actually use. Start simple and evolve!
