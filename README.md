@@ -168,6 +168,30 @@ emdx find --tags "gameplan,🚀,bug"                 # Mix and match!
 # docs → 📚, test → 🧪, feature → ✨, success → 🎉, refactor → 🔧
 ```
 
+### Document Formatting
+
+EMDX fully supports standard markdown with excellent content preservation:
+
+```bash
+# Supported markdown features:
+# - Headers (all levels), **bold**, *italic*, `code`
+# - Lists (ordered, unordered, nested, task lists)
+# - Code blocks with syntax highlighting
+# - Tables, blockquotes, links, images
+# - Full Unicode support (中文, 日本語, العربية, 🎯🚀✨)
+# - Special characters (<>&"', math symbols ∑∏∫∞)
+
+# View formatted document
+emdx view 42
+
+# View raw markdown
+emdx view 42 --raw
+
+# All formatting is preserved through save/retrieve cycles
+```
+
+See [docs/formatting-guide.md](docs/formatting-guide.md) for the complete formatting guide.
+
 ### Tag management
 ```bash
 # Add tags to a document (using aliases)
