@@ -172,6 +172,12 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
     if not line:
         return None
 
+    # Check if line already has a timestamp - if so, return as-is
+    import re
+    timestamp_pattern = r'^\[\d{2}:\d{2}:\d{2}\]'
+    if re.match(timestamp_pattern, line):
+        return line
+
     try:
         # Try to parse as JSON (Claude's stream-json format)
         data = json.loads(line)

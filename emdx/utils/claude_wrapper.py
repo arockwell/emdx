@@ -5,12 +5,12 @@ Wrapper script for Claude executions that tracks completion status.
 This script runs a Claude command and updates the database with the final status,
 solving the issue where background executions remain 'running' forever.
 """
-import sys
-import subprocess
 import os
-from pathlib import Path
-from datetime import datetime
+import subprocess
+import sys
 import traceback
+from datetime import datetime
+from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -38,52 +38,71 @@ def main():
     if len(sys.argv) < 4:
         print("Usage: claude_wrapper.py <exec_id> <log_file> <command...>", file=sys.stderr)
         sys.exit(1)
-    
+
     exec_id = sys.argv[1]
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
-    
+
     # Log wrapper start
     log_to_file(log_file, "🔄 Wrapper script started")
     log_to_file(log_file, f"📋 Command: {' '.join(cmd)}")
-    
+
     exit_code = 1  # Default to failure
     status = "failed"
-    
+
     try:
         # Run the actual Claude command
         log_to_file(log_file, "🚀 Starting Claude process...")
-        
-        # Execute the command and stream output directly to log file
+
+        # Execute the command and format output before writing to log
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=os.getcwd(),  # Preserve working directory
+            text=True,
+            bufsize=1  # Line buffered
+        )
+
+        # Import formatting function
+        import time
+
+        from emdx.commands.claude_execute import format_claude_output
+        start_time = time.time()
+
+        # Stream and format output
         with open(log_file, 'a') as log_f:
-            result = subprocess.run(
-                cmd,
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                cwd=os.getcwd()  # Preserve working directory
-            )
-        
+            for line in process.stdout:
+                formatted = format_claude_output(line, start_time)
+                if formatted:
+                    log_f.write(formatted + '\n')
+                    log_f.flush()  # Ensure real-time updates
+
+        # Wait for process to complete
+        process.wait()
+        result = process
+
         exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
-        
+
         log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
-        
+
     except subprocess.TimeoutExpired:
         log_to_file(log_file, "⏱️ Process timed out")
         status = "failed"
         exit_code = 124  # Standard timeout exit code
-        
+
     except KeyboardInterrupt:
         log_to_file(log_file, "⚠️ Process interrupted by user")
         status = "failed"
         exit_code = 130  # Standard SIGINT exit code
-        
+
     except Exception as e:
         log_to_file(log_file, f"❌ Wrapper error: {str(e)}")
         log_to_file(log_file, f"Traceback:\n{traceback.format_exc()}")
         status = "failed"
         exit_code = 1
-    
+
     finally:
         # Always try to update the database
         try:
@@ -94,7 +113,7 @@ def main():
             log_to_file(log_file, f"❌ Failed to update database: {str(e)}")
             # Don't exit with error if only DB update failed
             # The main process ran, which is what matters
-    
+
     # Exit with the same code as the subprocess
     sys.exit(exit_code)
 
