@@ -153,17 +153,80 @@ def parse_task_content(task: str) -> str:
     return expanded
 
 
-def format_timestamp() -> str:
-    """Get formatted timestamp for log output."""
-    return datetime.now().strftime("[%H:%M:%S]")
+def format_timestamp(timestamp: Optional[float] = None) -> str:
+    """Get formatted timestamp for log output.
+    
+    Args:
+        timestamp: Optional timestamp in seconds. If None, uses current time.
+                  If < 86400 (24 hours), treats as seconds since midnight.
+                  Otherwise treats as epoch timestamp.
+    
+    Returns:
+        Formatted timestamp string like [HH:MM:SS]
+    """
+    if timestamp is None:
+        return datetime.now().strftime("[%H:%M:%S]")
+    
+    # If timestamp is less than 24 hours (86400 seconds), assume it's seconds since midnight
+    if timestamp < 86400:
+        hours = int(timestamp // 3600)
+        minutes = int((timestamp % 3600) // 60)
+        seconds = int(timestamp % 60)
+        return f"[{hours:02d}:{minutes:02d}:{seconds:02d}]"
+    else:
+        # Otherwise treat as epoch timestamp
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.strftime("[%H:%M:%S]")
 
 
-def format_claude_output(line: str, start_time: float) -> Optional[str]:
+def parse_timestamp_from_line(line: str) -> Optional[float]:
+    """Extract timestamp from a log line.
+    
+    Args:
+        line: Log line that may contain a timestamp
+        
+    Returns:
+        Epoch timestamp as float if found, None otherwise
+        
+    Example:
+        >>> parse_timestamp_from_line("[10:30:45] Some log message")
+        38445.0  # Seconds since midnight
+        >>> parse_timestamp_from_line("[2025-07-15 10:30:45] Some log message")
+        1736941845.0  # Epoch timestamp
+    """
+    stripped = line.strip()
+    
+    # Pattern to match [HH:MM:SS] at the beginning of lines
+    time_match = re.match(r'^\[(\d{2}):(\d{2}):(\d{2})\]', stripped)
+    if time_match:
+        hours, minutes, seconds = map(int, time_match.groups())
+        # Validate time values
+        if 0 <= hours <= 23 and 0 <= minutes <= 59 and 0 <= seconds <= 59:
+            # Convert to seconds since midnight
+            return hours * 3600 + minutes * 60 + seconds
+        else:
+            return None
+    
+    # Pattern to match [YYYY-MM-DD HH:MM:SS] format
+    datetime_match = re.match(r'^\[(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\]', stripped)
+    if datetime_match:
+        year, month, day, hours, minutes, seconds = map(int, datetime_match.groups())
+        try:
+            dt = datetime(year, month, day, hours, minutes, seconds)
+            return dt.timestamp()
+        except ValueError:
+            # Invalid date/time values
+            return None
+    
+    return None
+
+
+def format_claude_output(line: str, timestamp: float) -> Optional[str]:
     """Format Claude's JSON output into readable log entries.
 
     Args:
         line: Raw output line from Claude
-        start_time: Timestamp when execution started
+        timestamp: Timestamp to use for the log entry (seconds since midnight or epoch)
 
     Returns:
         Formatted log entry or None if line should be skipped
@@ -180,7 +243,7 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
         if data.get("type") == "system":
             # Handle system initialization messages
             if data.get("subtype") == "init":
-                return f"{format_timestamp()} 🚀 Claude Code session started"
+                return f"{format_timestamp(timestamp)} 🚀 Claude Code session started"
             # Skip other system messages for now
             return None
 
@@ -192,11 +255,11 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 if item.get("type") == "text":
                     text = item.get("text", "").strip()
                     if text:
-                        return f"{format_timestamp()} 🤖 Claude: {text}"
+                        return f"{format_timestamp(timestamp)} 🤖 Claude: {text}"
                 elif item.get("type") == "tool_use":
                     tool_name = item.get("name", "Unknown")
                     emoji = TOOL_EMOJIS.get(tool_name, "🛠️")
-                    return f"{format_timestamp()} {emoji} Using tool: {tool_name}"
+                    return f"{format_timestamp(timestamp)} {emoji} Using tool: {tool_name}"
 
         elif data.get("type") == "user" and data.get("message", {}).get("role") == "user":
             # Tool result - extract key info
@@ -205,35 +268,35 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
                 result = content[0].get("content", "")
                 if len(result) > 100:
                     result = result[:100] + "..."
-                return f"{format_timestamp()} 📄 Tool result: {result}"
+                return f"{format_timestamp(timestamp)} 📄 Tool result: {result}"
 
         elif data.get("type") == "text":
             text = data.get("text", "").strip()
             if text:
-                return f"{format_timestamp()} 🤖 Claude: {text}"
+                return f"{format_timestamp(timestamp)} 🤖 Claude: {text}"
 
         elif data.get("type") == "error":
             error = data.get("error", {}).get("message", "Unknown error")
-            return f"{format_timestamp()} ❌ Error: {error}"
+            return f"{format_timestamp(timestamp)} ❌ Error: {error}"
 
         elif data.get("type") == "result":
             # Handle the final result message
             if data.get("subtype") == "success":
-                duration = time.time() - start_time
-                return f"{format_timestamp()} ✅ Task completed successfully! Duration: {duration:.2f}s"
+                duration = time.time() - timestamp
+                return f"{format_timestamp(timestamp)} ✅ Task completed successfully! Duration: {duration:.2f}s"
             else:
-                return f"{format_timestamp()} ❌ Task failed: {data.get('result', 'Unknown error')}"
+                return f"{format_timestamp(timestamp)} ❌ Task failed: {data.get('result', 'Unknown error')}"
 
         # For debugging: show unhandled JSON types (this was the source of "JSON shit")
-        return f"{format_timestamp()} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
+        return f"{format_timestamp(timestamp)} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
 
     except json.JSONDecodeError:
         # Not JSON - return as plain text if it's not empty
         if line and not line.startswith("{"):
-            return f"{format_timestamp()} 💬 {line}"
+            return f"{format_timestamp(timestamp)} 💬 {line}"
         else:
             # Malformed JSON - show for debugging
-            return f"{format_timestamp()} ⚠️  Malformed JSON: {line[:100]}..."
+            return f"{format_timestamp(timestamp)} ⚠️  Malformed JSON: {line[:100]}..."
 
     return None
 
