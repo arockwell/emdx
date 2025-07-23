@@ -398,19 +398,22 @@ class VimEditTextArea(TextArea):
             self.command_buffer = ":"
             self.app_instance._update_vim_status("COMMAND :")
         
-        # Tab key - switch back to title in new document mode
+        # Tab key - switch back to title in new or edit document mode
         elif key == "tab":
-            # Check if we're in new document mode
-            if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
-                try:
-                    title_input = self.app_instance.query_one("#title-input")
-                    title_input.focus()
+            # Check if we have a title input (works for both new and edit modes)
+            try:
+                title_input = self.app_instance.query_one("#title-input")
+                title_input.focus()
+                # Update status based on mode
+                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
                     self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
-                    event.stop()
-                    return
-                except Exception as e:
-                    logger.debug(f"Error switching to title: {e}")
-                    pass  # Title input might not exist
+                else:
+                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
+                event.stop()
+                return
+            except Exception as e:
+                logger.debug(f"Error switching to title: {e}")
+                pass  # Title input might not exist
         
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:
@@ -424,12 +427,16 @@ class VimEditTextArea(TextArea):
             event.stop()
             return
         
-        # Handle Tab in new document mode
-        if event.key == "tab" and hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+        # Handle Tab in new or edit document mode
+        if event.key == "tab":
             try:
                 title_input = self.app_instance.query_one("#title-input")
                 title_input.focus()
-                self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+                # Update status based on mode
+                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+                else:
+                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
                 event.stop()
                 return
             except:
