@@ -158,12 +158,12 @@ def format_timestamp() -> str:
     return datetime.now().strftime("[%H:%M:%S]")
 
 
-def format_claude_output(line: str, start_time: float) -> Optional[str]:
+def format_claude_output(line: str, start_time: Optional[float]) -> Optional[str]:
     """Format Claude's JSON output into readable log entries.
 
     Args:
         line: Raw output line from Claude
-        start_time: Timestamp when execution started
+        start_time: Timestamp when execution started, or None to skip timestamp generation
 
     Returns:
         Formatted log entry or None if line should be skipped
@@ -225,8 +225,11 @@ def format_claude_output(line: str, start_time: float) -> Optional[str]:
         elif data.get("type") == "result":
             # Handle the final result message
             if data.get("subtype") == "success":
-                duration = time.time() - start_time
-                return f"{format_timestamp()} ✅ Task completed successfully! Duration: {duration:.2f}s"
+                if start_time is not None:
+                    duration = time.time() - start_time
+                    return f"{format_timestamp()} ✅ Task completed successfully! Duration: {duration:.2f}s"
+                else:
+                    return f"{format_timestamp()} ✅ Task completed successfully!"
             else:
                 return f"{format_timestamp()} ❌ Task failed: {data.get('result', 'Unknown error')}"
 
