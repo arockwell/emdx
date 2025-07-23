@@ -209,7 +209,7 @@ class DocumentBrowser(Widget):
         height: 1;
         text-style: bold;
         color: $text;
-        dock: top;
+        width: 100%;
     }
     
     #doc-table {
@@ -248,7 +248,7 @@ class DocumentBrowser(Widget):
                     # Apply direct styles - 2/3 of sidebar
                     table_container.styles.height = "66%"
                     table_container.styles.min_height = 10
-                    table_container.styles.padding = (1, 0, 0, 0)  # Add top padding for header
+                    table_container.styles.padding = 0  # No padding to let header extend fully
                     # Add header label
                     yield Static("ID   TAGS     TITLE", id="table-header")
                     yield DataTable(id="doc-table")
@@ -292,9 +292,11 @@ class DocumentBrowser(Widget):
             header = self.query_one("#table-header", Static)
             header.styles.background = "blue"
             header.styles.color = "white"
-            header.styles.padding = (0, 1)
+            header.styles.padding = (0, 1, 0, 1)  # Equal padding on both sides
             header.styles.height = 1
             header.styles.text_style = "bold"
+            header.styles.width = "100%"
+            header.styles.margin = 0
         except Exception as e:
             logger.error(f"Error styling header: {e}")
         
