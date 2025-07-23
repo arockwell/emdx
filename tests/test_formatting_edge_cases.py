@@ -147,7 +147,8 @@ Content here
         content = "<h1>Title</h1>\n<p>Paragraph   </p>"
         formatted = formatter.validate_and_format(content)
         assert "<h1>Title</h1>" in formatted
-        assert "<p>Paragraph</p>" in formatted  # Internal HTML spacing preserved
+        # Note: Trailing spaces are removed from all lines, including inside HTML
+        assert "<p>Paragraph</p>" in formatted
     
     def test_url_preservation(self):
         """URLs should not be modified"""

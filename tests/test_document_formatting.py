@@ -34,7 +34,7 @@ class TestDocumentFormatter:
         ]
         
         for content in test_cases:
-            with pytest.raises(FormatValidationError, match="whitespace"):
+            with pytest.raises(FormatValidationError, match="empty"):
                 formatter.validate_and_format(content)
     
     def test_line_ending_normalization(self):
