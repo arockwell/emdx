@@ -4,8 +4,9 @@ Minimal browser container - just swaps browsers, no fancy shit.
 """
 
 from textual.app import App, ComposeResult
-from textual.containers import Vertical
+from textual.containers import Vertical, Container
 from textual.widgets import Label, Static
+from textual.widget import Widget
 from textual.reactive import reactive
 from textual.binding import Binding
 
@@ -13,14 +14,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class BrowserContainer(App):
-    """Dead simple container that swaps browser widgets."""
+class BrowserContainerWidget(Widget):
+    """Widget wrapper to avoid Screen padding issue."""
     
-    # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
+    DEFAULT_CSS = """
+    BrowserContainerWidget {
+        layout: vertical;
+        height: 100%;
+        offset: 0 -1;
+    }
     
-    CSS = """
     #browser-mount {
         height: 1fr;
+        padding: 0;
+        margin: 0;
     }
     
     #status {
@@ -29,7 +36,31 @@ class BrowserContainer(App):
         color: $text;
         padding: 0 1;
     }
+    
+    Container {
+        padding: 0;
+        margin: 0;
+    }
+    
+    Vertical {
+        padding: 0;
+        margin: 0;
+    }
     """
+    
+    def compose(self) -> ComposeResult:
+        """Just a mount point and status bar."""
+        with Vertical():
+            yield Container(id="browser-mount")
+            yield Label("Loading...", id="status")
+
+
+class BrowserContainer(App):
+    """Dead simple container that swaps browser widgets."""
+    
+    # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
+    
+    # No CSS needed here - it's all in the widget
     
     current_browser = reactive("document")
     
@@ -37,23 +68,39 @@ class BrowserContainer(App):
         super().__init__(*args, **kwargs)
         self.browsers = {}  # Will store browser instances
         self.browser_states = {}  # Quick and dirty state storage
+        self.container_widget = None  # Will be set in compose
         
     def compose(self) -> ComposeResult:
-        """Just a mount point and status bar."""
-        with Vertical():
-            yield Static(id="browser-mount")
-            yield Label("Loading...", id="status")
+        """Yield the widget wrapper."""
+        self.container_widget = BrowserContainerWidget()
+        yield self.container_widget
             
     async def on_mount(self) -> None:
         """Mount the default browser on startup."""
         from .document_browser import DocumentBrowser
         
+        logger.info("=== BrowserContainer.on_mount START ===")
+        logger.info(f"Screen size: {self.screen.size}")
+        logger.info(f"Screen region: {self.screen.region}")
+        
+        # Log the container widget info
+        logger.info(f"Container widget size: {self.container_widget.size}")
+        logger.info(f"Container widget region: {self.container_widget.region}")
+        
         # Create and mount document browser
         browser = DocumentBrowser()
         self.browsers["document"] = browser
         
-        mount_point = self.query_one("#browser-mount", Static)
+        mount_point = self.container_widget.query_one("#browser-mount", Container)
+        logger.info(f"Mount point size before mount: {mount_point.size}")
+        logger.info(f"Mount point region before mount: {mount_point.region}")
+        
         await mount_point.mount(browser)
+        
+        # Log after mounting
+        logger.info(f"Mount point size after mount: {mount_point.size}")
+        logger.info(f"Mount point region after mount: {mount_point.region}")
+        logger.info("=== BrowserContainer.on_mount END ===")
         
         # Browser will have parent reference automatically after mounting
         
@@ -62,8 +109,9 @@ class BrowserContainer(App):
         
     def update_status(self, text: str) -> None:
         """Update the status bar."""
-        status = self.query_one("#status", Label)
-        status.update(text)
+        if self.container_widget:
+            status = self.container_widget.query_one("#status", Label)
+            status.update(text)
         
     async def switch_browser(self, browser_type: str) -> None:
         """Switch to a different browser."""
@@ -75,7 +123,7 @@ class BrowserContainer(App):
             self.browser_states[self.current_browser] = current.save_state()
             
         # Remove current browser
-        mount_point = self.query_one("#browser-mount", Static)
+        mount_point = self.container_widget.query_one("#browser-mount", Container)
         await mount_point.remove_children()
         
         # Create or get the new browser
@@ -122,6 +170,12 @@ class BrowserContainer(App):
         key = event.key
         logger.info(f"BrowserContainer.on_key: {key}")
         
+        # Debug key - dump widget tree
+        if key == "ctrl+d":
+            self._dump_widget_tree()
+            event.stop()
+            return
+        
         # Only handle browser switching keys, let browsers handle their own keys
         if key == "q" and self.current_browser == "document":
             self.exit()
@@ -145,3 +199,31 @@ class BrowserContainer(App):
             return
         
         # Don't handle any other keys - let them bubble to browsers
+    
+    def _dump_widget_tree(self) -> None:
+        """Debug function to dump the widget tree and regions."""
+        logger.info("=== WIDGET TREE DUMP ===")
+        logger.info(f"Screen size: {self.screen.size}")
+        logger.info(f"Screen region: {self.screen.region}")
+        
+        def dump_widget(widget, indent=0):
+            prefix = "  " * indent
+            logger.info(f"{prefix}{widget.__class__.__name__} id={widget.id}")
+            logger.info(f"{prefix}  region: {widget.region}")
+            logger.info(f"{prefix}  size: {widget.size}")
+            logger.info(f"{prefix}  styles.padding: {widget.styles.padding}")
+            logger.info(f"{prefix}  styles.margin: {widget.styles.margin}")
+            
+            # Check computed styles
+            if hasattr(widget, 'styles') and hasattr(widget.styles, 'get_rule'):
+                try:
+                    computed_padding = widget.styles.get_rule('padding')
+                    logger.info(f"{prefix}  computed padding: {computed_padding}")
+                except:
+                    pass
+            
+            for child in widget.children:
+                dump_widget(child, indent + 1)
+        
+        dump_widget(self.screen)
+        logger.info("=== END WIDGET TREE DUMP ===")
