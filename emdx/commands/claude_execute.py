@@ -809,9 +809,15 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
 
         # Sanitize doc title for git branch name
         safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
-        # Extract short unique ID from timestamp (last 6 digits for uniqueness)
-        # This gives us ~1 million unique IDs, plenty for concurrent executions
-        short_uid = timestamp[-6:] if len(timestamp) > 6 else timestamp
+        # Extract short unique ID from timestamp
+        # For microsecond timestamps, use last 6 digits
+        # For second timestamps, add random suffix for uniqueness
+        if len(timestamp) > 10:  # Microsecond timestamp
+            short_uid = timestamp[-6:]
+        else:  # Second timestamp, needs more entropy
+            import random
+            short_uid = f"{timestamp[-4:]}{random.randint(10, 99)}"
+        
         # Include short UID to ensure uniqueness
         branch_name = f"exec-{doc_id}-{safe_title}-{short_uid}"
 
