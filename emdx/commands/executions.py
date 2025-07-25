@@ -4,10 +4,13 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timezone
 
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.box import Box
 
 from ..models.executions import (
     get_recent_executions,
@@ -377,6 +380,182 @@ def kill_all_executions():
     
     console.print(f"[green]✅ Killed {len(executions)} execution(s)[/green]")
     console.print("[dim]All marked as completed with exit code 130 (interrupted)[/dim]")
+
+
+@app.command(name="health")
+def execution_health():
+    """Show detailed health status of running executions."""
+    from ..services.execution_monitor import ExecutionMonitor
+    import psutil
+    
+    monitor = ExecutionMonitor()
+    running = get_running_executions()
+    
+    if not running:
+        console.print("[green]No running executions.[/green]")
+        return
+    
+    # Get metrics first
+    metrics = monitor.get_execution_metrics()
+    
+    # Show summary
+    console.print(Panel(
+        f"[bold]Execution Health Status[/bold]\n"
+        f"Running: [cyan]{metrics['currently_running']}[/cyan] | "
+        f"Unhealthy: [red]{metrics['unhealthy_running']}[/red] | "
+        f"Failure Rate: [yellow]{metrics['failure_rate_percent']:.1f}%[/yellow]",
+        box=Box.ROUNDED
+    ))
+    
+    # Create health table
+    table = Table(title="Running Executions Health Check")
+    table.add_column("ID", style="cyan", width=6)
+    table.add_column("Document", style="white")
+    table.add_column("PID", style="dim")
+    table.add_column("Status", style="bold")
+    table.add_column("Runtime", style="green")
+    table.add_column("Health", style="bold")
+    
+    for exec in running:
+        health = monitor.check_process_health(exec)
+        
+        # Format runtime
+        runtime = (datetime.now(timezone.utc) - exec.started_at).total_seconds()
+        if runtime > 3600:
+            runtime_str = f"{runtime/3600:.1f}h"
+        else:
+            runtime_str = f"{runtime/60:.0f}m"
+        
+        # Determine health status
+        if health['is_zombie']:
+            health_status = "[red]ZOMBIE[/red]"
+        elif not health['process_exists'] and exec.pid:
+            health_status = "[red]DEAD[/red]"
+        elif health['is_stale']:
+            health_status = "[yellow]STALE[/yellow]"
+        elif health['is_running']:
+            health_status = "[green]HEALTHY[/green]"
+        else:
+            health_status = "[yellow]UNKNOWN[/yellow]"
+        
+        # Process status
+        if exec.pid:
+            try:
+                proc = psutil.Process(exec.pid)
+                cpu = proc.cpu_percent(interval=0.1)
+                mem = proc.memory_info().rss / 1024 / 1024  # MB
+                proc_status = f"CPU: {cpu:.0f}% MEM: {mem:.0f}MB"
+            except:
+                proc_status = "N/A"
+        else:
+            proc_status = "No PID"
+        
+        table.add_row(
+            str(exec.id),
+            exec.doc_title[:30] + "..." if len(exec.doc_title) > 30 else exec.doc_title,
+            str(exec.pid) if exec.pid else "-",
+            proc_status,
+            runtime_str,
+            health_status
+        )
+    
+    console.print(table)
+    
+    # Show recommendations if there are unhealthy executions
+    if metrics['unhealthy_running'] > 0:
+        console.print("\n[yellow]⚠ Found unhealthy executions![/yellow]")
+        console.print("Run [cyan]emdx maintain cleanup --executions --execute[/cyan] to clean up")
+
+
+@app.command(name="monitor")
+def monitor_executions(
+    interval: int = typer.Option(5, "--interval", "-i", help="Refresh interval in seconds"),
+    follow: bool = typer.Option(True, "--follow/--no-follow", "-f/-F", help="Continuously monitor")
+):
+    """Monitor execution status in real-time."""
+    import psutil
+    from ..services.execution_monitor import ExecutionMonitor
+    
+    monitor = ExecutionMonitor()
+    
+    try:
+        while True:
+            # Clear screen for better display
+            if follow:
+                console.clear()
+            
+            # Get current executions
+            running = get_running_executions()
+            
+            # Header
+            console.print(f"[bold]📊 Execution Monitor[/bold] - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            console.print("-" * 80)
+            
+            if not running:
+                console.print("[dim]No running executions[/dim]")
+            else:
+                # Create monitoring table
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("ID", width=6)
+                table.add_column("Document", width=30)
+                table.add_column("Runtime", width=10)
+                table.add_column("CPU %", width=8)
+                table.add_column("Memory", width=10)
+                table.add_column("Status", width=15)
+                
+                for exec in running:
+                    # Get process info
+                    cpu_str = "-"
+                    mem_str = "-"
+                    status_str = "[yellow]Unknown[/yellow]"
+                    
+                    if exec.pid:
+                        try:
+                            proc = psutil.Process(exec.pid)
+                            cpu = proc.cpu_percent(interval=0.1)
+                            mem_mb = proc.memory_info().rss / 1024 / 1024
+                            cpu_str = f"{cpu:.1f}"
+                            mem_str = f"{mem_mb:.0f} MB"
+                            
+                            # Check health
+                            health = monitor.check_process_health(exec)
+                            if health['is_zombie']:
+                                status_str = "[red]Zombie[/red]"
+                            elif health['is_running']:
+                                status_str = "[green]Running[/green]"
+                            else:
+                                status_str = "[yellow]Unknown[/yellow]"
+                                
+                        except psutil.NoSuchProcess:
+                            status_str = "[red]Dead[/red]"
+                        except psutil.AccessDenied:
+                            status_str = "[dim]No Access[/dim]"
+                    
+                    # Calculate runtime
+                    runtime = (datetime.now(timezone.utc) - exec.started_at).total_seconds()
+                    runtime_str = f"{int(runtime/60)}:{int(runtime%60):02d}"
+                    
+                    # Add row
+                    table.add_row(
+                        str(exec.id),
+                        exec.doc_title[:30] + "..." if len(exec.doc_title) > 30 else exec.doc_title,
+                        runtime_str,
+                        cpu_str,
+                        mem_str,
+                        status_str
+                    )
+                
+                console.print(table)
+            
+            if not follow:
+                break
+            
+            # Wait for next update
+            console.print(f"\n[dim]Refreshing every {interval} seconds. Press Ctrl+C to stop.[/dim]")
+            time.sleep(interval)
+            
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Monitoring stopped[/yellow]")
 
 
 if __name__ == "__main__":
