@@ -680,52 +680,57 @@ def _cleanup_processes(dry_run: bool) -> Optional[str]:
 
 def _cleanup_executions(dry_run: bool) -> Optional[str]:
     """Clean up stuck executions in the database."""
-    from ..models.executions import get_running_executions, update_execution_status
+    from ..models.executions import get_stale_executions, get_running_executions, update_execution_status
     
-    # Get all running executions
+    # Get stale executions (based on heartbeat)
+    stale = get_stale_executions(timeout_seconds=1800)  # 30 minutes
+    
+    # Also check for zombie processes
     running = get_running_executions()
+    zombies = []
     
-    if not running:
-        console.print("  ✨ No running executions found!")
-        return None
-    
-    # Check which ones are actually stuck
-    stuck_executions = []
     for exec in running:
-        # Check if process is still alive
+        # Skip if already in stale list
+        if any(s.id == exec.id for s in stale):
+            continue
+            
+        # Check if process is actually dead
         if exec.pid:
             try:
                 proc = psutil.Process(exec.pid)
                 if not proc.is_running():
-                    stuck_executions.append(exec)
+                    zombies.append(exec)
             except psutil.NoSuchProcess:
-                stuck_executions.append(exec)
-        else:
-            # No PID recorded - check age
-            age = (datetime.now(timezone.utc) - exec.started_at).total_seconds()
-            if age > 1800:  # 30 minutes
-                stuck_executions.append(exec)
+                zombies.append(exec)
+        elif (datetime.now(timezone.utc) - exec.started_at).total_seconds() > 3600:
+            # No PID and > 1 hour old = likely stuck
+            zombies.append(exec)
     
-    if not stuck_executions:
+    all_stuck = stale + zombies
+    
+    if not all_stuck:
         console.print("  ✨ All running executions are active!")
         return None
     
-    console.print(f"  Found: {len(stuck_executions)} stuck executions")
+    console.print(f"  Found: {len(stale)} stale (no heartbeat), {len(zombies)} zombie processes")
     
     if dry_run:
         console.print("\n  Executions to mark as failed:")
-        for exec in stuck_executions[:5]:
+        for exec in all_stuck[:5]:
             age_minutes = int((datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60)
-            console.print(f"    • #{exec.id}: {exec.doc_title} (running for {age_minutes}m)")
-        if len(stuck_executions) > 5:
-            console.print(f"    ... and {len(stuck_executions) - 5} more")
-        return f"Would mark {len(stuck_executions)} executions as failed"
+            reason = "no heartbeat" if exec in stale else "dead process"
+            console.print(f"    • #{exec.id}: {exec.doc_title} ({reason}, running for {age_minutes}m)")
+        if len(all_stuck) > 5:
+            console.print(f"    ... and {len(all_stuck) - 5} more")
+        return f"Would mark {len(all_stuck)} executions as failed"
     
     # Mark stuck executions as failed
     updated = 0
-    for exec in stuck_executions:
+    for exec in all_stuck:
         try:
-            update_execution_status(exec.id, "failed", -1)  # -1 indicates timeout
+            # 124 = timeout, 137 = killed
+            exit_code = 124 if exec in stale else 137
+            update_execution_status(exec.id, "failed", exit_code)
             updated += 1
         except:
             pass

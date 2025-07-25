@@ -248,6 +248,63 @@ def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
         conn.commit()
 
 
+def update_execution_heartbeat(exec_id: int) -> None:
+    """Update execution heartbeat timestamp."""
+    with db_connection.get_connection() as conn:
+        conn.execute("""
+            UPDATE executions 
+            SET last_heartbeat = CURRENT_TIMESTAMP
+            WHERE id = ? AND status = 'running'
+        """, (exec_id,))
+        conn.commit()
+
+
+def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
+    """Get executions that haven't sent a heartbeat recently.
+    
+    Args:
+        timeout_seconds: Seconds after which an execution is considered stale (default 30 min)
+        
+    Returns:
+        List of stale executions
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, doc_id, doc_title, status, started_at, completed_at, 
+                   log_file, exit_code, working_dir, pid
+            FROM executions 
+            WHERE status = 'running'
+            AND (
+                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, '+{} seconds')
+                OR 
+                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, '+{} seconds')
+            )
+            ORDER BY started_at DESC
+        """.format(timeout_seconds, timeout_seconds))
+        
+        executions = []
+        for row in cursor.fetchall():
+            # Parse timestamps with timezone handling
+            started_at = parse_timestamp(row[4])
+            completed_at = parse_timestamp(row[5]) if row[5] else None
+                
+            executions.append(Execution(
+                id=int(row[0]),
+                doc_id=row[1],
+                doc_title=row[2],
+                status=row[3],
+                started_at=started_at,
+                completed_at=completed_at,
+                log_file=row[6],
+                exit_code=row[7],
+                working_dir=row[8],
+                pid=row[9] if len(row) > 9 else None
+            ))
+        
+        return executions
+
+
 def cleanup_old_executions(days: int = 7) -> int:
     """Clean up executions older than specified days."""
     with db_connection.get_connection() as conn:

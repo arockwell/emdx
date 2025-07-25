@@ -8,6 +8,8 @@ solving the issue where background executions remain 'running' forever.
 import os
 import subprocess
 import sys
+import threading
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +17,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from emdx.models.executions import update_execution_status
+from emdx.models.executions import update_execution_status, update_execution_heartbeat
 
 
 def format_timestamp() -> str:
@@ -32,6 +34,19 @@ def log_to_file(log_path: Path, message: str) -> None:
     except Exception as e:
         # If we can't write to log, at least print to stderr
         print(f"Failed to write to log: {e}", file=sys.stderr)
+
+
+def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
+    """Background thread that updates heartbeat every 30 seconds."""
+    while not stop_event.is_set():
+        try:
+            update_execution_heartbeat(exec_id)
+        except Exception:
+            # Silently ignore heartbeat failures
+            pass
+        
+        # Wait 30 seconds or until stop event
+        stop_event.wait(30)
 
 
 def main():
@@ -53,6 +68,12 @@ def main():
     exit_code = 1  # Default to failure
     status = "failed"
     lines_processed = 0  # Track lines to detect empty runs
+    
+    # Start heartbeat thread
+    stop_heartbeat = threading.Event()
+    heartbeat = threading.Thread(target=heartbeat_thread, args=(exec_id, stop_heartbeat))
+    heartbeat.daemon = True
+    heartbeat.start()
 
     # Check if claude command exists
     import shutil
@@ -139,6 +160,10 @@ def main():
         exit_code = 1
 
     finally:
+        # Stop heartbeat thread
+        stop_heartbeat.set()
+        heartbeat.join(timeout=1)
+        
         # Always try to update the database
         try:
             # Always update status - the lock file should prevent true duplicates
