@@ -818,8 +818,24 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         worktree_name = f"{project_name}-{branch_name}"
         worktree_path = worktrees_dir / worktree_name
 
-        # Always create a new branch for each execution
-        # No need to check if it exists - timestamp ensures uniqueness
+        # Check if branch already exists
+        check_branch = subprocess.run(
+            ["git", "rev-parse", "--verify", branch_name],
+            capture_output=True,
+            text=True
+        )
+        
+        if check_branch.returncode == 0:
+            # Branch exists - add more uniqueness
+            import uuid
+            unique_suffix = uuid.uuid4().hex[:8]
+            branch_name = f"{branch_name}-{unique_suffix}"
+            # Also update worktree path
+            worktree_name = f"{project_name}-{branch_name}"
+            worktree_path = worktrees_dir / worktree_name
+            console.print(f"[yellow]Branch already exists, using: {branch_name}[/yellow]")
+        
+        # Create the branch
         subprocess.run(
             ["git", "branch", branch_name],
             check=True,
