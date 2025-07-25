@@ -395,12 +395,14 @@ class LogBrowser(Widget):
 
                     # Show prompt first if we found one
                     if prompt_content:
-                        log_content.write("[bold blue]Prompt:[/bold blue]")
+                        log_content.write("[bold blue]📝 Prompt:[/bold blue]")
+                        log_content.write("[dim]" + "-" * 60 + "[/dim]")
                         for prompt_line in prompt_content:
                             if prompt_line.strip():
-                                log_content.write(prompt_line)
+                                log_content.write(f"[dim]{prompt_line}[/dim]")
+                        log_content.write("[dim]" + "-" * 60 + "[/dim]")
                         log_content.write("")
-                        log_content.write("[bold blue]Claude Response:[/bold blue]")
+                        log_content.write("[bold cyan]🤖 Claude Response:[/bold cyan]")
 
                     # Show logs in chronological order (oldest first, newest last)
                     last_timestamp = None
@@ -419,7 +421,19 @@ class LogBrowser(Widget):
                             # Try to format JSON lines with emojis
                             formatted = format_claude_output(line, timestamp_to_use)
                             if formatted:
-                                log_content.write(formatted)
+                                # Add color coding based on message type
+                                if "🤖 Claude:" in formatted:
+                                    log_content.write(f"[cyan]{formatted}[/cyan]")
+                                elif any(emoji in formatted for emoji in ["🛠️", "📖", "📝", "✏️", "💻", "🔍", "📁", "📋"]):
+                                    log_content.write(f"[yellow]{formatted}[/yellow]")
+                                elif "📄 Tool result:" in formatted:
+                                    log_content.write(f"[green]{formatted}[/green]")
+                                elif "❌" in formatted:
+                                    log_content.write(f"[red]{formatted}[/red]")
+                                elif "✅" in formatted:
+                                    log_content.write(f"[green]{formatted}[/green]")
+                                else:
+                                    log_content.write(formatted)
                             else:
                                 log_content.write(line)
 
@@ -448,7 +462,8 @@ class LogBrowser(Widget):
 
             # Update status to show live mode hint for running executions
             if self.live_mode:
-                self.update_status("🔴 LIVE MODE | l=toggle off | Auto-refresh every 1s")
+                refresh_rate = "0.5s" if execution.status == 'running' else "2s"
+                self.update_status(f"🔴 LIVE MODE | l=toggle off | Refresh: {refresh_rate}")
             elif execution.status == 'running' and not self.selection_mode:
                 self.update_status("📋 Execution running | Press 'l' for live mode | q=back")
 
@@ -563,7 +578,7 @@ class LogBrowser(Widget):
         if self.live_mode:
             # Start auto-refresh timer
             self.start_live_refresh()
-            self.update_status("🔴 LIVE MODE | l=toggle off | Auto-refresh every 1s")
+            # Status will be updated by row highlighted event
         else:
             # Stop auto-refresh
             self.stop_live_refresh()
@@ -614,12 +629,27 @@ class LogBrowser(Widget):
             if log_file.exists():
                 current_size = log_file.stat().st_size
                 if current_size != self.last_log_size:
+                    # File has changed, reload it
                     self.last_log_size = current_size
                     await self.load_execution_log(execution)
+                    
+                    # Update execution status if it changed
+                    from emdx.models.executions import get_execution
+                    updated_exec = get_execution(execution.id)
+                    if updated_exec and updated_exec.status != execution.status:
+                        self.executions[row_idx] = updated_exec
+                        # Update table row with new status
+                        status_icon = {
+                            'running': '🔄',
+                            'completed': '✅',
+                            'failed': '❌'
+                        }.get(updated_exec.status, '❓')
+                        table.update_cell(row_idx, 0, status_icon)
 
-        # Schedule next refresh
+        # Schedule next refresh with shorter interval for running executions
         if self.live_mode:
-            self.refresh_timer = self.set_timer(1.0, self.live_refresh_log)
+            refresh_interval = 0.5 if execution.status == 'running' else 2.0
+            self.refresh_timer = self.set_timer(refresh_interval, self.live_refresh_log)
 
 
     def update_status(self, text: str) -> None:
