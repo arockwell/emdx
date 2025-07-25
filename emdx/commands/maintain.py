@@ -475,6 +475,7 @@ def cleanup_main(
     force: bool = typer.Option(False, "--force", "-f", help="Force delete unmerged branches"),
     age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
     max_runtime: int = typer.Option(2, "--max-runtime", help="Max process runtime in hours before considering stuck"),
+    timeout_minutes: int = typer.Option(30, "--timeout", help="Minutes after which to consider execution stale"),
 ):
     """
     Clean up system resources used by EMDX executions.
@@ -528,7 +529,7 @@ def cleanup_main(
     # Clean executions
     if executions:
         console.print("[bold]Cleaning up stuck executions...[/bold]")
-        cleaned = _cleanup_executions(dry_run)
+        cleaned = _cleanup_executions(dry_run, timeout_minutes=timeout_minutes)
         if cleaned:
             actions_taken.append(cleaned)
         console.print()
@@ -853,65 +854,154 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
     return f"Terminated {total_removed} processes" if total_removed > 0 else None
 
 
-def _cleanup_executions(dry_run: bool) -> Optional[str]:
-    """Clean up stuck executions in the database."""
-    from ..models.executions import get_stale_executions, get_running_executions, update_execution_status
+def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbeat: bool = True) -> Optional[str]:
+    """Clean up stuck executions in the database.
     
-    # Get stale executions (based on heartbeat)
-    stale = get_stale_executions(timeout_seconds=1800)  # 30 minutes
+    Args:
+        dry_run: If True, only show what would be done
+        timeout_minutes: Minutes after which to consider execution stale
+        check_heartbeat: Whether to use heartbeat checking (if available)
+    """
+    from ..models.executions import (
+        get_stale_executions, 
+        get_running_executions, 
+        update_execution_status,
+        get_execution_stats
+    )
+    from ..services.execution_monitor import ExecutionMonitor
     
-    # Also check for zombie processes
+    # Initialize monitor
+    monitor = ExecutionMonitor(stale_timeout_seconds=timeout_minutes * 60)
+    
+    # Get various categories of stuck executions
+    stale_heartbeat = []
+    dead_process = []
+    no_pid_old = []
+    long_running = []
+    
+    # Get running executions
     running = get_running_executions()
-    zombies = []
     
+    # Get stale executions based on heartbeat (if enabled)
+    if check_heartbeat:
+        stale_heartbeat = get_stale_executions(timeout_seconds=timeout_minutes * 60)
+        # Create a set of IDs for faster lookup
+        stale_ids = {exec.id for exec in stale_heartbeat}
+    else:
+        stale_ids = set()
+    
+    # Check each running execution
     for exec in running:
-        # Skip if already in stale list
-        if any(s.id == exec.id for s in stale):
+        # Skip if already categorized as stale
+        if exec.id in stale_ids:
             continue
-            
-        # Check if process is actually dead
-        if exec.pid:
-            try:
-                proc = psutil.Process(exec.pid)
-                if not proc.is_running():
-                    zombies.append(exec)
-            except psutil.NoSuchProcess:
-                zombies.append(exec)
-        elif (datetime.now(timezone.utc) - exec.started_at).total_seconds() > 3600:
+        
+        # Calculate runtime
+        runtime_minutes = (datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60
+        
+        # Check process health
+        health = monitor.check_process_health(exec)
+        
+        if health['is_zombie'] or (health['process_exists'] == False and exec.pid):
+            dead_process.append((exec, health['reason']))
+        elif not exec.pid and runtime_minutes > 60:
             # No PID and > 1 hour old = likely stuck
-            zombies.append(exec)
+            no_pid_old.append((exec, f"No PID, {runtime_minutes:.0f}m old"))
+        elif runtime_minutes > 180:  # 3 hours
+            # Very long running, might be stuck
+            long_running.append((exec, f"Running for {runtime_minutes:.0f}m"))
     
-    all_stuck = stale + zombies
+    # Get stats for context
+    stats = get_execution_stats()
     
-    if not all_stuck:
-        console.print("  ✨ All running executions are active!")
+    # Combine all problematic executions
+    all_stuck = []
+    if stale_heartbeat:
+        all_stuck.extend([(e, "no heartbeat") for e in stale_heartbeat])
+    all_stuck.extend(dead_process)
+    all_stuck.extend(no_pid_old)
+    
+    # Report current state
+    console.print(f"  Total executions in DB: {stats['total']}")
+    console.print(f"  Currently marked running: {stats['running']}")
+    
+    if not all_stuck and not long_running:
+        console.print("  ✨ All running executions appear healthy!")
         return None
     
-    console.print(f"  Found: {len(stale)} stale (no heartbeat), {len(zombies)} zombie processes")
+    # Report findings
+    if all_stuck:
+        console.print(f"\n  [red]Found {len(all_stuck)} stuck executions:[/red]")
+        if stale_heartbeat:
+            console.print(f"  • {len(stale_heartbeat)} with no heartbeat")
+        if dead_process:
+            console.print(f"  • {len(dead_process)} with dead processes")
+        if no_pid_old:
+            console.print(f"  • {len(no_pid_old)} old executions without PID")
+    
+    if long_running:
+        console.print(f"\n  [yellow]Found {len(long_running)} long-running executions (may be normal):[/yellow]")
     
     if dry_run:
-        console.print("\n  Executions to mark as failed:")
-        for exec in all_stuck[:5]:
-            age_minutes = int((datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60)
-            reason = "no heartbeat" if exec in stale else "dead process"
-            console.print(f"    • #{exec.id}: {exec.doc_title} ({reason}, running for {age_minutes}m)")
-        if len(all_stuck) > 5:
-            console.print(f"    ... and {len(all_stuck) - 5} more")
+        # Show details
+        if all_stuck:
+            console.print("\n  Executions to mark as failed:")
+            for exec, reason in all_stuck[:10]:
+                age_minutes = int((datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60)
+                console.print(f"    • #{exec.id}: {exec.doc_title[:30]}... ({reason}, {age_minutes}m old)")
+            if len(all_stuck) > 10:
+                console.print(f"    ... and {len(all_stuck) - 10} more")
+        
+        if long_running:
+            console.print("\n  Long-running executions (review manually):")
+            for exec, reason in long_running[:5]:
+                console.print(f"    • #{exec.id}: {exec.doc_title[:30]}... ({reason})")
+            if len(long_running) > 5:
+                console.print(f"    ... and {len(long_running) - 5} more")
+        
         return f"Would mark {len(all_stuck)} executions as failed"
     
     # Mark stuck executions as failed
     updated = 0
-    for exec in all_stuck:
-        try:
-            # 124 = timeout, 137 = killed
-            exit_code = 124 if exec in stale else 137
-            update_execution_status(exec.id, "failed", exit_code)
-            updated += 1
-        except:
-            pass
+    failed_updates = 0
     
-    console.print(f"  [green]✓[/green] Marked {updated} executions as failed")
-    return f"Marked {updated} executions as failed"
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    ) as progress:
+        task = progress.add_task("Updating execution status...", total=len(all_stuck))
+        
+        for exec, reason in all_stuck:
+            try:
+                # Choose appropriate exit code based on reason
+                if "heartbeat" in reason:
+                    exit_code = 124  # timeout
+                elif "zombie" in reason or "dead" in reason:
+                    exit_code = 137  # killed
+                elif "No PID" in reason:
+                    exit_code = -1   # unknown error
+                else:
+                    exit_code = 1    # general error
+                
+                update_execution_status(exec.id, "failed", exit_code)
+                updated += 1
+            except Exception as e:
+                failed_updates += 1
+                
+            progress.update(task, advance=1)
+    
+    # Report results
+    if updated > 0:
+        console.print(f"  [green]✓[/green] Marked {updated} executions as failed")
+    if failed_updates > 0:
+        console.print(f"  [yellow]⚠[/yellow] Failed to update {failed_updates} executions")
+    
+    # Also report on long-running for awareness
+    if long_running:
+        console.print(f"  [dim]Note: {len(long_running)} long-running executions left untouched[/dim]")
+    
+    return f"Marked {updated} executions as failed" if updated > 0 else None
 
 
 @app.command(name="cleanup-dirs")

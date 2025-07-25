@@ -27,6 +27,7 @@ from ..models.executions import (
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
 from ..utils.environment import validate_execution_environment, ensure_claude_in_path
+from ..utils.structured_logger import StructuredLogger, ProcessType
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
 console = Console()
@@ -400,8 +401,14 @@ def execute_with_claude_detached(
 
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
+    
+    # Initialize structured logger for main process
+    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
+    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'}", {
+        "doc_id": doc_id,
+        "working_dir": working_dir,
+        "allowed_tools": allowed_tools
+    })
 
     # Start subprocess in detached mode using wrapper
     try:
