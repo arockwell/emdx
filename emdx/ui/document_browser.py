@@ -97,6 +97,7 @@ class DocumentBrowser(Widget):
         margin: 1;
         border: solid $primary;
         background: $surface;
+        color: $text;
     }
     
     .browser-status {
@@ -216,14 +217,16 @@ class DocumentBrowser(Widget):
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
-        # Docked inputs at the top (hidden by default)
+        # Hidden labels for vim mode and tag selector
+        yield Label("", id="tag-selector")
+        yield Label("", id="vim-mode-indicator")
+        
+        # Inputs at top of main content area
         yield Input(
             placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')",
             id="search-input",
         )
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
-        yield Label("", id="tag-selector")
-        yield Label("", id="vim-mode-indicator")
         
         with Horizontal():
             with Vertical(id="sidebar") as sidebar:
