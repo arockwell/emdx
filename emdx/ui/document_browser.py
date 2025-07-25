@@ -93,12 +93,10 @@ class DocumentBrowser(Widget):
     } */
     
     #search-input, #tag-input {
-        layer: overlay;
         height: 3;
         margin: 1;
         border: solid $primary;
         background: $surface;
-        offset: 1 1;
     }
     
     .browser-status {
