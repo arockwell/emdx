@@ -5,6 +5,7 @@ Wrapper script for Claude executions that tracks completion status.
 This script runs a Claude command and updates the database with the final status,
 solving the issue where background executions remain 'running' forever.
 """
+import json
 import os
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from emdx.models.executions import update_execution_status, update_execution_heartbeat
+from emdx.utils.structured_logger import StructuredLogger, ProcessType, LogLevel
 
 
 def format_timestamp() -> str:

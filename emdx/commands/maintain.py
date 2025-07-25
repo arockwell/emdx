@@ -474,6 +474,7 @@ def cleanup_main(
     dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
     force: bool = typer.Option(False, "--force", "-f", help="Force delete unmerged branches"),
     age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
+    max_runtime: int = typer.Option(2, "--max-runtime", help="Max process runtime in hours before considering stuck"),
 ):
     """
     Clean up system resources used by EMDX executions.
@@ -519,7 +520,7 @@ def cleanup_main(
     # Clean processes
     if processes:
         console.print("[bold]Cleaning up zombie processes...[/bold]")
-        cleaned = _cleanup_processes(dry_run)
+        cleaned = _cleanup_processes(dry_run, max_runtime_hours=max_runtime)
         if cleaned:
             actions_taken.append(cleaned)
         console.print()
