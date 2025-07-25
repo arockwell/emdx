@@ -159,25 +159,27 @@ def parse_task_content(task: str) -> str:
 
 
 def format_timestamp(timestamp: Optional[float] = None) -> str:
-    """Get formatted timestamp for log output.
+    """Get formatted timestamp for log output with millisecond precision.
 
     Args:
         timestamp: Optional epoch timestamp. If None, uses current time.
 
     Returns:
-        Formatted timestamp string in [HH:MM:SS] format
+        Formatted timestamp string in [HH:MM:SS.mmm] format
     """
     if timestamp is None:
-        return datetime.now().strftime("[%H:%M:%S]")
+        now = datetime.now()
+        return now.strftime("[%H:%M:%S.%f")[:-3] + "]"  # Trim to milliseconds
     else:
-        return datetime.fromtimestamp(timestamp).strftime("[%H:%M:%S]")
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.strftime("[%H:%M:%S.%f")[:-3] + "]"  # Trim to milliseconds
 
 
 def parse_log_timestamp(line: str) -> Optional[float]:
     """Parse timestamp from a log line.
 
     Args:
-        line: Log line that may contain a timestamp in format [HH:MM:SS]
+        line: Log line that may contain a timestamp in format [HH:MM:SS] or [HH:MM:SS.mmm]
 
     Returns:
         Epoch timestamp as float if found, None otherwise
@@ -185,12 +187,13 @@ def parse_log_timestamp(line: str) -> Optional[float]:
     if not line:
         return None
 
-    # Look for timestamp pattern at the beginning of the line
-    timestamp_match = re.match(r'^\[(\d{2}):(\d{2}):(\d{2})\]', line.strip())
+    # Look for timestamp pattern at the beginning of the line (with optional milliseconds)
+    timestamp_match = re.match(r'^\[(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?\]', line.strip())
     if timestamp_match:
         hour = int(timestamp_match.group(1))
         minute = int(timestamp_match.group(2))
         second = int(timestamp_match.group(3))
+        millisecond = int(timestamp_match.group(4)) if timestamp_match.group(4) else 0
 
         # Validate time components
         if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
@@ -198,7 +201,12 @@ def parse_log_timestamp(line: str) -> Optional[float]:
 
         # Create datetime for today with the parsed time
         now = datetime.now()
-        timestamp_dt = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
+        timestamp_dt = now.replace(
+            hour=hour,
+            minute=minute,
+            second=second,
+            microsecond=millisecond * 1000  # Convert milliseconds to microseconds
+        )
 
         # If the timestamp appears to be in the future (log from before midnight)
         # adjust the date accordingly
@@ -228,7 +236,7 @@ def format_claude_output(line: str, timestamp: float) -> Optional[str]:
 
     # Check if line already has a timestamp - if so, return as-is
     import re
-    timestamp_pattern = r'^\[\d{2}:\d{2}:\d{2}\]'
+    timestamp_pattern = r'^\[\d{2}:\d{2}:\d{2}(?:\.\d{3})?\]'
     if re.match(timestamp_pattern, line):
         return line
 

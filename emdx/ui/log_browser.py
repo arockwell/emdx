@@ -277,6 +277,7 @@ class LogBrowser(Widget):
 
         # Common wrapper patterns to filter out
         wrapper_patterns = [
+            "[wrapper]",  # Any wrapper-prefixed message
             "🔄 Wrapper script started",
             "📋 Command:",
             "🚀 Starting Claude process...",
@@ -287,6 +288,9 @@ class LogBrowser(Widget):
             "📄 Output is being written to this log file",
             "🔄 Wrapper will update status on completion",
             "📝 Prompt being sent to Claude:",
+            "🔍 Working directory:",
+            "🔍 Environment PYTHONUNBUFFERED:",
+            "🔍 Claude process started with PID:",
             "────────────────────────────────────────────────────────────",
         ]
 

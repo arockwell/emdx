@@ -19,8 +19,9 @@ from emdx.models.executions import update_execution_status
 
 
 def format_timestamp() -> str:
-    """Get a formatted timestamp for logging."""
-    return datetime.now().strftime("[%H:%M:%S]")
+    """Get a formatted timestamp for logging with millisecond precision."""
+    now = datetime.now()
+    return now.strftime("[%H:%M:%S.%f")[:-3] + "]"  # Trim to milliseconds
 
 
 def log_to_file(log_path: Path, message: str) -> None:
@@ -85,7 +86,7 @@ def main():
         from emdx.commands.claude_execute import format_claude_output, parse_log_timestamp
         start_time = time.time()
 
-        log_to_file(log_file, f"🔍 Process started with PID: {process.pid}")
+        log_to_file(log_file, f"🔍 Claude process started with PID: {process.pid}")
 
         # Stream and format output
         lines_processed = 0
@@ -101,18 +102,17 @@ def main():
                 timestamp_to_use = parsed_timestamp or last_timestamp or time.time()
                 formatted = format_claude_output(line, timestamp_to_use)
                 if formatted:
+                    # Don't add [claude] prefix - format_claude_output already adds context
                     log_f.write(formatted + '\n')
                     log_f.flush()  # Ensure real-time updates
 
         # Wait for process to complete
-        process.wait()
-        result = process
-
+        exit_code = process.wait()
         duration = time.time() - start_time
 
-        exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
 
+        # Log completion with accurate timing
         log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
         log_to_file(log_file, f"📊 Duration: {duration:.2f}s, Lines processed: {lines_processed}")
 
