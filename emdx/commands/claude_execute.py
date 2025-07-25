@@ -688,9 +688,7 @@ def execute_document_smart(
         context=context
     )
 
-    # Update execution status
-    status = "completed" if exit_code == 0 else "failed"
-    update_execution_status(db_execution_id, status, exit_code)
+    # Don't update status here - the wrapper already handled it
 
     # Handle output based on context
     if exit_code == 0:
@@ -711,7 +709,10 @@ def execute_document_smart(
 
 
 def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Path]:
-    """Create a dedicated git worktree for Claude execution.
+    """Create a dedicated temporary directory for Claude execution.
+    
+    NOTE: We do NOT create git worktrees anymore to avoid Claude editing
+    the source code of the system it's running in!
 
     Args:
         execution_id: Unique execution ID
@@ -761,69 +762,25 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         # Include short UID to ensure uniqueness
         branch_name = f"exec-{doc_id}-{safe_title}-{short_uid}"
 
-        # Worktree directory - also unique per execution
-        worktrees_dir = Path.home() / "dev" / "worktrees"
-        worktrees_dir.mkdir(parents=True, exist_ok=True)
-        worktree_name = f"{project_name}-{branch_name}"
-        worktree_path = worktrees_dir / worktree_name
+        # Create temp directory instead of git worktree
+        import tempfile
+        temp_base = Path(tempfile.gettempdir())
+        dir_name = f"emdx-exec-{doc_id}-{safe_title}-{short_uid}"
+        worktree_path = temp_base / dir_name
 
-        # Check if branch already exists
-        check_branch = subprocess.run(
-            ["git", "rev-parse", "--verify", branch_name],
-            capture_output=True,
-            text=True
-        )
+        # Create the directory
+        worktree_path.mkdir(parents=True, exist_ok=True)
         
-        if check_branch.returncode == 0:
-            # Branch exists - add more uniqueness
-            import uuid
-            unique_suffix = uuid.uuid4().hex[:8]
-            branch_name = f"{branch_name}-{unique_suffix}"
-            # Also update worktree path
-            worktree_name = f"{project_name}-{branch_name}"
-            worktree_path = worktrees_dir / worktree_name
-            console.print(f"[yellow]Branch already exists, using: {branch_name}[/yellow]")
-        
-        # Create the branch
-        subprocess.run(
-            ["git", "branch", branch_name],
-            check=True,
-            capture_output=True
-        )
-
-        # Create worktree - should never exist due to unique naming
-        if worktree_path.exists():
-            # This should not happen with timestamp-based naming
-            console.print(f"[red]ERROR: Worktree already exists (unexpected): {worktree_path}[/red]")
-            # Generate an even more unique name
-            import uuid
-            branch_name = f"{branch_name}-{uuid.uuid4().hex[:8]}"
-            worktree_name = f"{project_name}-{branch_name}"
-            worktree_path = worktrees_dir / worktree_name
-
-            subprocess.run(
-                ["git", "branch", branch_name],
-                check=True,
-                capture_output=True
-            )
-
-        # Create worktree
-        subprocess.run(
-            ["git", "worktree", "add", str(worktree_path), branch_name],
-            check=True,
-            capture_output=True
-        )
-
-        console.print(f"[green]✅ Created execution worktree: {worktree_path}[/green]")
+        console.print(f"[green]✅ Created execution directory: {worktree_path}[/green]")
         return worktree_path
 
     except subprocess.CalledProcessError as e:
-        console.print(f"[yellow]Warning: Could not create worktree: {e}[/yellow]")
-        console.print("[yellow]Execution will run in current directory[/yellow]")
-        return None
+        console.print(f"[yellow]Warning: Could not create temp directory: {e}[/yellow]")
+        console.print("[yellow]Execution will run in /tmp[/yellow]")
+        return Path("/tmp")
     except Exception as e:
-        console.print(f"[yellow]Warning: Worktree creation failed: {e}[/yellow]")
-        return None
+        console.print(f"[yellow]Warning: Directory creation failed: {e}[/yellow]")
+        return Path("/tmp")
 
 
 def monitor_execution_detached(
@@ -866,12 +823,12 @@ def monitor_execution_detached(
         # Update execution with PID
         update_execution_pid(execution_id, pid)
     except Exception as e:
-        # Log error
+        # Log error but don't update status - let the wrapper handle it
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
-                f.write(f"\n❌ Error in monitor_execution_detached: {e}\n")
-            update_execution_status(execution_id, "failed", 1)
+                f.write(f"\n❌ Error starting execution: {e}\n")
+            # Don't update status here - wrapper will handle it
         except Exception:
             pass  # Silent fail if we can't even log the error
 
@@ -923,16 +880,15 @@ def monitor_execution(
             context=None  # Context not available in these functions yet
         )
 
-        # Update execution status
-        status = "completed" if exit_code == 0 else "failed"
-        update_execution_status(execution_id, status, exit_code)
+        # Don't update status here - the wrapper already did it
+        pass
     except Exception as e:
-        # Log error and update status
+        # Log error but don't update status - wrapper handles it
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
-                f.write(f"\n❌ Error in monitor_execution: {e}\n")
-            update_execution_status(execution_id, "failed", 1)
+                f.write(f"\n❌ Error in execution: {e}\n")
+            # Don't update status - wrapper handles it
         except Exception:
             pass  # Silent fail if we can't even log the error
 

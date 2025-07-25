@@ -178,6 +178,11 @@ class LogBrowser(Widget):
 
         # Load executions
         await self.load_executions()
+    
+    async def on_focus(self) -> None:
+        """Refresh executions when the log browser gains focus."""
+        logger.info("📋 LogBrowser focused - refreshing executions")
+        await self.load_executions()
 
     async def on_unmount(self) -> None:
         """Clean up when unmounting."""

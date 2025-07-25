@@ -151,10 +151,11 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         return
     
     table = Table(title="Recent Executions")
-    table.add_column("ID", style="cyan", width=36)
+    table.add_column("ID", style="cyan", width=6)
     table.add_column("Document", style="white")
     table.add_column("Status", style="bold")
     table.add_column("Started", style="green")
+    table.add_column("Worktree", style="dim")
     
     for exec in executions:
         status_style = {
@@ -172,11 +173,23 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         if exec.is_zombie:
             status_display += " [red]💀[/red]"
         
+        # Extract worktree name from path if available
+        worktree = ""
+        if exec.working_dir:
+            # Get just the last part of the path for display
+            worktree_parts = exec.working_dir.split('/')
+            if worktree_parts:
+                worktree = worktree_parts[-1]
+                # Truncate if too long
+                if len(worktree) > 30:
+                    worktree = worktree[:27] + "..."
+        
         table.add_row(
             str(exec.id),  # Show numeric ID
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
             status_display,
-            formatted_time
+            formatted_time,
+            worktree
         )
     
     console.print(table)

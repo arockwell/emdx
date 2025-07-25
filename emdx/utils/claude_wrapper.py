@@ -28,6 +28,7 @@ def log_to_file(log_path: Path, message: str) -> None:
     try:
         with open(log_path, 'a') as f:
             f.write(f"{format_timestamp()} {message}\n")
+            f.flush()  # Ensure immediate write for live viewing
     except Exception as e:
         # If we can't write to log, at least print to stderr
         print(f"Failed to write to log: {e}", file=sys.stderr)
