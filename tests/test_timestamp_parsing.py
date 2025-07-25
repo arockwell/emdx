@@ -1,15 +1,15 @@
 """Test timestamp parsing for log browser."""
 
-import time
-from datetime import datetime, timedelta
-from emdx.commands.claude_execute import parse_log_timestamp, format_timestamp
+from datetime import datetime
+
+from emdx.commands.claude_execute import format_timestamp, parse_log_timestamp
 
 
 def test_parse_log_timestamp_basic():
     """Test basic timestamp parsing."""
     line = "[14:30:45] This is a log message"
     timestamp = parse_log_timestamp(line)
-    
+
     assert timestamp is not None
     dt = datetime.fromtimestamp(timestamp)
     assert dt.hour == 14
@@ -43,13 +43,13 @@ def test_parse_log_timestamp_midnight_rollover():
     # Create a timestamp from just before midnight
     now = datetime.now()
     late_night = now.replace(hour=23, minute=59, second=30)
-    
+
     # If current time is early morning, a late night timestamp should be from yesterday
     if now.hour < 12:
         line = "[23:59:30] Late night message"
         timestamp = parse_log_timestamp(line)
         dt = datetime.fromtimestamp(timestamp)
-        
+
         # Should be from yesterday
         assert dt.date() < now.date()
 
@@ -59,7 +59,7 @@ def test_format_timestamp_with_value():
     # Create a known timestamp
     dt = datetime(2024, 1, 15, 14, 30, 45)
     timestamp = dt.timestamp()
-    
+
     formatted = format_timestamp(timestamp)
     assert formatted == "[14:30:45]"
 
@@ -69,16 +69,16 @@ def test_format_timestamp_without_value():
     before = datetime.now()
     formatted = format_timestamp()
     after = datetime.now()
-    
+
     # Extract time from formatted string
     import re
     match = re.match(r'\[(\d{2}):(\d{2}):(\d{2})\]', formatted)
     assert match is not None
-    
+
     hour = int(match.group(1))
     minute = int(match.group(2))
     second = int(match.group(3))
-    
+
     # Should be between before and after times
     assert before.hour <= hour <= after.hour
     if before.hour == hour == after.hour:
@@ -91,11 +91,11 @@ def test_timestamp_parsing_integration():
     original_time = datetime.now().replace(microsecond=0)
     original_formatted = original_time.strftime("[%H:%M:%S]")
     log_line = f"{original_formatted} Test message"
-    
+
     # Parse it
     parsed_timestamp = parse_log_timestamp(log_line)
     assert parsed_timestamp is not None
-    
+
     # Format it back
     formatted_back = format_timestamp(parsed_timestamp)
     assert formatted_back == original_formatted
@@ -111,5 +111,5 @@ if __name__ == "__main__":
     test_format_timestamp_with_value()
     test_format_timestamp_without_value()
     test_timestamp_parsing_integration()
-    
+
     print("All tests passed!")

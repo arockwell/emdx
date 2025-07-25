@@ -837,7 +837,8 @@ class DocumentBrowser(Widget):
                 ]
             
             # Execute with wrapper
-            wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
+            # Use python3 instead of sys.executable to avoid pipx wrapper recursion
+            wrapper_cmd = ["python3", str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
             
             # Start the process in background
             subprocess.Popen(
