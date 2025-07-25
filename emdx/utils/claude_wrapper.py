@@ -43,11 +43,16 @@ def main():
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
 
-    # Clear the log file to avoid multiple executions in same file
-    with open(log_file, 'w') as f:
-        f.write(f"=== EMDX Execution #{exec_id} ===\n")
-        f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"{'=' * 40}\n\n")
+    # Write header to log file (wrapper is the sole writer)
+    # Clear file to ensure clean start
+    log_file.write_text("")
+    
+    # Write execution header
+    log_to_file(log_file, f"=== EMDX Execution #{exec_id} ===")
+    log_to_file(log_file, f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log_to_file(log_file, f"Wrapper PID: {os.getpid()}")
+    log_to_file(log_file, f"Working Directory: {os.getcwd()}")
+    log_to_file(log_file, f"{'=' * 40}\n")
 
     exit_code = 1  # Default to failure
     status = "failed"
@@ -64,8 +69,11 @@ def main():
     try:
         # Run the actual Claude command
         log_to_file(log_file, "🚀 Starting Claude process...")
+        log_to_file(log_file, f"🔍 Command: {' '.join(cmd)}")
         log_to_file(log_file, f"🔍 Working directory: {os.getcwd()}")
         log_to_file(log_file, f"🔍 Environment PYTHONUNBUFFERED: {os.environ.get('PYTHONUNBUFFERED', 'not set')}")
+        log_to_file(log_file, f"🔍 PATH: {os.environ.get('PATH', 'not set')}")
+        log_to_file(log_file, "")
 
         # Execute the command and format output before writing to log
         process = subprocess.Popen(
@@ -83,7 +91,8 @@ def main():
         from emdx.commands.claude_execute import format_claude_output, parse_log_timestamp
         start_time = time.time()
 
-        log_to_file(log_file, f"🔍 Process started with PID: {process.pid}")
+        log_to_file(log_file, f"🔍 Claude process started with PID: {process.pid}")
+        log_to_file(log_file, f"🔍 Parent (wrapper) PID: {os.getpid()}")
 
         # Stream and format output
         lines_processed = 0
@@ -111,29 +120,47 @@ def main():
         exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
 
-        log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
-        log_to_file(log_file, f"📊 Duration: {duration:.2f}s, Lines processed: {lines_processed}")
+        log_to_file(log_file, "")
+        log_to_file(log_file, f"{'=' * 40}")
+        log_to_file(log_file, f"✅ Claude process completed")
+        log_to_file(log_file, f"📊 Exit code: {exit_code}")
+        log_to_file(log_file, f"⏱️  Duration: {duration:.2f} seconds")
+        log_to_file(log_file, f"📝 Lines processed: {lines_processed}")
+        log_to_file(log_file, f"🏁 Finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log_to_file(log_file, f"{'=' * 40}")
 
     except FileNotFoundError as e:
+        log_to_file(log_file, "")
+        log_to_file(log_file, f"{'=' * 40}")
         log_to_file(log_file, f"❌ Command not found: {cmd[0]}")
         log_to_file(log_file, f"❌ Full error: {str(e)}")
         log_to_file(log_file, "💡 Make sure 'claude' is installed and in your PATH")
+        log_to_file(log_file, f"{'=' * 40}")
         status = "failed"
         exit_code = 127  # Standard command not found exit code
 
     except subprocess.TimeoutExpired:
+        log_to_file(log_file, "")
+        log_to_file(log_file, f"{'=' * 40}")
         log_to_file(log_file, "⏱️ Process timed out")
+        log_to_file(log_file, f"{'=' * 40}")
         status = "failed"
         exit_code = 124  # Standard timeout exit code
 
     except KeyboardInterrupt:
+        log_to_file(log_file, "")
+        log_to_file(log_file, f"{'=' * 40}")
         log_to_file(log_file, "⚠️ Process interrupted by user")
+        log_to_file(log_file, f"{'=' * 40}")
         status = "failed"
         exit_code = 130  # Standard SIGINT exit code
 
     except Exception as e:
+        log_to_file(log_file, "")
+        log_to_file(log_file, f"{'=' * 40}")
         log_to_file(log_file, f"❌ Wrapper error: {str(e)}")
         log_to_file(log_file, f"Traceback:\n{traceback.format_exc()}")
+        log_to_file(log_file, f"{'=' * 40}")
         status = "failed"
         exit_code = 1
 

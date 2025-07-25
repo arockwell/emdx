@@ -277,10 +277,12 @@ class LogBrowser(Widget):
 
         # Common wrapper patterns to filter out
         wrapper_patterns = [
-            "🔄 Wrapper script started",
+            "🔄 Wrapper Process Started",
             "📋 Command:",
             "🚀 Starting Claude process...",
-            "✅ Claude process finished",
+            "✅ Claude process completed",
+            "🔍 Claude process started with PID",
+            "🔍 Parent (wrapper) PID",
             "📊 Updating execution status",
             "✅ Database updated successfully",
             "🔧 Background process started with PID:",
