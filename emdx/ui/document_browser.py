@@ -94,7 +94,7 @@ class DocumentBrowser(Widget):
     
     #search-input, #tag-input {
         height: 3;
-        margin: 1 3 0 3;
+        margin: 1 3 0 0;
         border: solid $primary;
         background: $surface;
         color: $text;
