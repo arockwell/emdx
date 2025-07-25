@@ -173,7 +173,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
             status_display += " [red]💀[/red]"
         
         table.add_row(
-            exec.id[:8] + "...",  # Show first 8 chars of UUID
+            str(exec.id),  # Show numeric ID
             exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
             status_display,
             formatted_time

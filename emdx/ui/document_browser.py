@@ -826,19 +826,28 @@ class DocumentBrowser(Widget):
                     "-m", "emdx",
                     "claude", "execute",
                     str(doc_id),
-                    "--background"
+                    "--background",
+                    "--exec-id", str(exec_id)
                 ]
             else:
                 claude_cmd = [
                     emdx_path,
                     "claude", "execute", 
                     str(doc_id),
-                    "--background"
+                    "--background",
+                    "--exec-id", str(exec_id)
                 ]
             
             # Execute with wrapper
-            # Use python3 instead of sys.executable to avoid pipx wrapper recursion
-            wrapper_cmd = ["python3", str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
+            # Use the Python interpreter from the current environment
+            python_path = sys.executable
+            if "pipx" in python_path and "venvs" in python_path:
+                # We're running from pipx, use the venv's python directly
+                import sysconfig
+                venv_bin = Path(sysconfig.get_path("scripts"))
+                python_path = str(venv_bin / "python")
+            
+            wrapper_cmd = [python_path, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
             
             # Start the process in background
             # Set PYTHONUNBUFFERED for proper output streaming

@@ -43,15 +43,11 @@ def main():
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
 
-    # TEMPORARY: Disable lock mechanism to test if it's causing issues
-    log_to_file(log_file, "🔍 DEBUG: LOCK MECHANISM DISABLED FOR TESTING")
-    log_to_file(log_file, "🔍 DEBUG: This should allow multiple executions to run simultaneously")
-
-    # Log wrapper start
-    log_to_file(log_file, "🔄 Wrapper script started")
-    log_to_file(log_file, f"📋 Full args: {sys.argv}")
-    log_to_file(log_file, f"📋 Exec ID: {exec_id}")
-    log_to_file(log_file, f"📋 Command: {' '.join(cmd)}")
+    # Clear the log file to avoid multiple executions in same file
+    with open(log_file, 'w') as f:
+        f.write(f"=== EMDX Execution #{exec_id} ===\n")
+        f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"{'=' * 40}\n\n")
 
     exit_code = 1  # Default to failure
     status = "failed"
@@ -76,7 +72,7 @@ def main():
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            cwd=os.getcwd(),  # Preserve working directory
+            # Don't set cwd - inherit from parent process which already set it
             text=True,
             bufsize=1  # Line buffered
         )
@@ -145,21 +141,12 @@ def main():
         # Always try to update the database
         try:
             # Always update status - the lock file should prevent true duplicates
-            log_to_file(log_file, f"📊 Updating execution status to: {status}")
-            log_to_file(log_file, f"📊 Lines processed: {lines_processed}, Exit code: {exit_code}")
-            log_to_file(log_file, f"🔍 DEBUG: About to call update_execution_status({exec_id}, {status}, {exit_code})")
-
             update_execution_status(exec_id, status, exit_code)
-
-            log_to_file(log_file, "✅ Database updated successfully")
-            log_to_file(log_file, f"🔍 DEBUG: Execution {exec_id} is now marked as {status}")
         except Exception as e:
             log_to_file(log_file, f"❌ Failed to update database: {str(e)}")
             # Don't exit with error if only DB update failed
             # The main process ran, which is what matters
 
-    # TEMPORARY: No lock file cleanup since lock mechanism is disabled
-    log_to_file(log_file, f"🔍 DEBUG: Wrapper finished for execution {exec_id}")
 
     # Exit with the same code as the subprocess
     sys.exit(exit_code)

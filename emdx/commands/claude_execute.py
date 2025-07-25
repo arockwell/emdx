@@ -335,33 +335,7 @@ def execute_with_claude_detached(
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write initial log header
-    from emdx import __build_id__, __version__
-    start_time = datetime.now()
-    with open(log_file, 'w') as f:
-        f.write("=== EMDX Claude Execution ===\n")
-        f.write(f"Version: {__version__}\n")
-        f.write(f"Build ID: {__build_id__}\n")
-        f.write(f"Doc ID: {doc_id or 'unknown'}\n")
-        f.write(f"Execution ID: {execution_id}\n")
-        if working_dir:
-            f.write(f"Worktree: {working_dir}\n")
-        f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
-        f.write(f"{'=' * 50}\n\n")
-        # Get execution type emoji and description
-        if context and context.get('type'):
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            exec_type = context['type'].value.upper()
-            exec_desc = context.get('description', 'Executing document')
-            f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
-            f.write(f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n")
-        else:
-            f.write(f"{format_timestamp()} 🚀 Claude Code session started (detached)\n")
-        f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
-        f.write(f"{format_timestamp()} 📝 Prompt being sent to Claude:\n")
-        f.write(f"{'─' * 60}\n")
-        f.write(f"{expanded_task}\n")
-        f.write(f"{'─' * 60}\n\n")
+    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
 
     # Start subprocess in detached mode using wrapper
     try:
@@ -369,9 +343,17 @@ def execute_with_claude_detached(
         wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
 
         # Build wrapper command: wrapper.py exec_id log_file claude_command...
-        # CRITICAL FIX: Use python3 instead of sys.executable to avoid pipx wrapper issues
+        # Use the Python interpreter from the current environment
+        # If we're in pipx, use the underlying venv Python
+        python_path = sys.executable
+        if "pipx" in python_path and "venvs" in python_path:
+            # We're running from pipx, use the venv's python directly
+            import sysconfig
+            venv_bin = Path(sysconfig.get_path("scripts"))
+            python_path = str(venv_bin / "python")
+        
         wrapper_cmd = [
-            "python3",  # Use system python3 to avoid pipx wrapper recursion
+            python_path,
             str(wrapper_path),
             str(execution_id),  # Convert numeric ID to string for command line
             str(log_file)
@@ -380,13 +362,6 @@ def execute_with_claude_detached(
         # Use nohup for true detachment
         nohup_cmd = ["nohup"] + wrapper_cmd
 
-        # Debug: Log the full command being executed
-        with open(log_file, 'a') as f:
-            f.write(f"{format_timestamp()} 🔍 Debug - sys.executable: {sys.executable}\n")
-            f.write(f"{format_timestamp()} 🔍 Debug - Claude command (cmd): {cmd}\n")
-            f.write(f"{format_timestamp()} 🔍 Debug - Wrapper command: {wrapper_cmd}\n")
-            f.write(f"{format_timestamp()} 🔍 Debug - Full nohup command: {' '.join(nohup_cmd)}\n")
-            f.write(f"{format_timestamp()} 🔍 Debug - Working directory: {working_dir}\n")
 
         # Open log file for appending
         log_handle = open(log_file, 'a')
@@ -412,11 +387,7 @@ def execute_with_claude_detached(
         # Close the file handle in parent process
         log_handle.close()
 
-        # Log the PID for tracking
-        with open(log_file, 'a') as f:
-            f.write(f"\n{format_timestamp()} 🔧 Background process started with PID: {process.pid}\n")
-            f.write(f"{format_timestamp()} 📄 Output is being written to this log file\n")
-            f.write(f"{format_timestamp()} 🔄 Wrapper will update status on completion\n")
+        # Don't write to log - let wrapper handle all logging
 
         # Return immediately - don't wait or read from pipes
         # Note: Don't use console.print here as stdout might be redirected
@@ -492,33 +463,7 @@ def execute_with_claude(
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write initial log header
-    from emdx import __build_id__, __version__
-    start_time = datetime.now()
-    with open(log_file, 'w') as f:
-        f.write("=== EMDX Claude Execution ===\n")
-        f.write(f"Version: {__version__}\n")
-        f.write(f"Build ID: {__build_id__}\n")
-        f.write(f"Doc ID: {doc_id or 'unknown'}\n")
-        f.write(f"Execution ID: {execution_id}\n")
-        if working_dir:
-            f.write(f"Worktree: {working_dir}\n")
-        f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
-        f.write(f"{'=' * 50}\n\n")
-        # Get execution type emoji and description
-        if context and context.get('type'):
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            exec_type = context['type'].value.upper()
-            exec_desc = context.get('description', 'Executing document')
-            f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
-            f.write(f"{format_timestamp()} {exec_emoji} Execution type: {exec_type} - {exec_desc}\n")
-        else:
-            f.write(f"{format_timestamp()} 🚀 Claude Code session started\n")
-        f.write(f"{format_timestamp()} 📋 Available tools: {', '.join(allowed_tools)}\n")
-        f.write(f"{format_timestamp()} 📝 Prompt being sent to Claude:\n")
-        f.write(f"{'─' * 60}\n")
-        f.write(f"{expanded_task}\n")
-        f.write(f"{'─' * 60}\n\n")
+    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
 
     # Start subprocess
     try:
@@ -599,13 +544,13 @@ def execute_document_smart_background(
     execution_id: str,
     log_file: Path,
     allowed_tools: Optional[List[str]] = None,
-    use_stage_tools: bool = True
+    use_stage_tools: bool = True,
+    db_exec_id: Optional[int] = None
 ) -> None:
     """Execute a document in background with context-aware behavior.
 
     This function starts execution and returns immediately.
     """
-    console.print(f"[dim]🔍 DEBUG: execute_document_smart_background called for {execution_id}[/dim]")
     # Get document
     doc = get_document(str(doc_id))
     if not doc:
@@ -631,26 +576,24 @@ def execute_document_smart_background(
     worktree_path = create_execution_worktree(execution_id, doc['title'])
     working_dir = str(worktree_path) if worktree_path else os.getcwd()
 
-    # Create execution record in database and get numeric ID
-    console.print(f"[dim]🔍 DEBUG: Creating execution in database for {execution_id}[/dim]")
+    # Create or use existing execution record
+    if db_exec_id:
+        # Use existing execution ID
+        db_execution_id = db_exec_id
+        # Update the working directory in the existing execution
+        from ..models.executions import update_execution_working_dir
+        update_execution_working_dir(db_execution_id, working_dir)
+    else:
+        # Create new execution record in database
+        db_execution_id = create_execution(
+            doc_id=doc_id,
+            doc_title=doc['title'],
+            log_file=str(log_file),
+            working_dir=working_dir
+        )
 
-    db_execution_id = create_execution(
-        doc_id=doc_id,
-        doc_title=doc['title'],
-        log_file=str(log_file),
-        working_dir=working_dir
-    )
-
-    console.print(f"[dim]🔍 DEBUG: Created execution with DB ID: {db_execution_id}[/dim]")
-
-    # Debug: Write to log file
-    with open(log_file, 'a') as f:
-        f.write(f"🔍 DEBUG: Database execution ID: {db_execution_id}\n")
-        f.write(f"🔍 DEBUG: String execution ID: {execution_id}\n")
-        f.write("🔍 DEBUG: About to launch wrapper\n")
 
     # Execute with Claude in detached mode
-    console.print(f"[dim]🔍 DEBUG: Launching detached execution for DB ID {db_execution_id}[/dim]")
     pid = execute_with_claude_detached(
         task=prompt,
         execution_id=db_execution_id,  # Pass numeric ID
@@ -660,8 +603,6 @@ def execute_document_smart_background(
         doc_id=str(doc_id),
         context=context
     )
-
-    console.print(f"[dim]🔍 DEBUG: Wrapper launched with PID: {pid}[/dim]")
 
     # Update execution with PID
     update_execution_pid(db_execution_id, pid)
@@ -791,7 +732,6 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         if result.returncode == 0:
             remote_url = result.stdout.strip()
             # Extract project name from URL
-            import re
             match = re.search(r'([^/]+)(\.git)?$', remote_url)
             if match:
                 project_name = match.group(1).replace('.git', '')
@@ -1004,7 +944,9 @@ def execute(
     tools: Optional[str] = typer.Option(None, "--tools", "-t",
                                         help="Comma-separated list of allowed tools"),
     smart: bool = typer.Option(True, "--smart/--no-smart",
-                              help="Use smart context-aware execution")
+                              help="Use smart context-aware execution"),
+    exec_id: Optional[int] = typer.Option(None, "--exec-id",
+                                          help="Use existing execution ID from database")
 ):
     """Execute a document with Claude Code."""
     # Get document
@@ -1016,30 +958,33 @@ def execute(
     # Parse allowed tools
     allowed_tools = tools.split(",") if tools else None
 
-    # Generate execution ID with microsecond precision + PID to prevent collisions
+    # Handle execution ID and log file
     import os
     import time
-    timestamp = int(time.time() * 1000000)  # Microsecond precision
-    pid = os.getpid()
-    execution_id = f"claude-{doc['id']}-{timestamp}-{pid}"
+    
+    if exec_id:
+        # Use provided execution ID from database
+        from ..models.executions import get_execution
+        existing_exec = get_execution(exec_id)
+        if not existing_exec:
+            console.print(f"[red]Execution #{exec_id} not found[/red]")
+            raise typer.Exit(1)
+        
+        # Use the existing log file path
+        log_file = Path(existing_exec.log_file)
+        execution_id = f"claude-{doc['id']}-{exec_id}"  # Keep simple for backward compat
+        console.print(f"[yellow]Using existing execution #{exec_id}[/yellow]")
+    else:
+        # Generate new execution ID with microsecond precision + PID to prevent collisions
+        timestamp = int(time.time() * 1000000)  # Microsecond precision
+        pid = os.getpid()
+        execution_id = f"claude-{doc['id']}-{timestamp}-{pid}"
+        
+        # Set up log file
+        log_dir = Path.home() / ".config" / "emdx" / "logs"
+        log_file = log_dir / f"{execution_id}.log"
 
-    # Set up log file
-    log_dir = Path.home() / ".config" / "emdx" / "logs"
-    log_file = log_dir / f"{execution_id}.log"
 
-    console.print(f"[bold red]🔍 DEBUG: Creating log file: {log_file}[/bold red]")
-    console.print(f"[bold red]🔍 DEBUG: Execution ID: {execution_id}[/bold red]")
-
-    # Debug: Log the execution start
-    with open(log_file, 'w') as f:
-        f.write("=== EXECUTION START DEBUG ===\n")
-        f.write(f"Execution ID: {execution_id}\n")
-        f.write(f"Doc ID: {doc['id']}\n")
-        f.write(f"Timestamp: {timestamp}\n")
-        f.write(f"Process PID: {os.getpid()}\n")
-        f.write(f"Time: {datetime.now()}\n")
-        f.write(f"Log file path: {log_file}\n")
-        f.write("==============================\n\n")
 
     if smart:
         # Get document tags
@@ -1060,13 +1005,13 @@ def execute(
             console.print(f"[cyan]📋 {context['description']}[/cyan]")
 
             # Execute in background without blocking
-            console.print(f"[dim]🔍 DEBUG: Calling execute_document_smart_background for {execution_id}[/dim]")
             execute_document_smart_background(
                 doc_id=int(doc_id),
                 execution_id=execution_id,
                 log_file=log_file,
                 allowed_tools=allowed_tools,
-                use_stage_tools=True
+                use_stage_tools=True,
+                db_exec_id=exec_id
             )
 
             console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")

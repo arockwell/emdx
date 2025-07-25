@@ -209,12 +209,6 @@ def get_running_executions() -> List[Execution]:
 
 def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] = None) -> None:
     """Update execution status and completion time."""
-    import traceback
-    print(f"🔍 DEBUG: update_execution_status called with exec_id={exec_id}, status={status}, exit_code={exit_code}")
-    print(f"🔍 DEBUG: Call stack:")
-    for line in traceback.format_stack():
-        print(f"🔍   {line.strip()}")
-    
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:
             cursor = conn.execute("""
@@ -222,19 +216,14 @@ def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] 
                 SET status = ?, completed_at = CURRENT_TIMESTAMP, exit_code = ?
                 WHERE id = ?
             """, (status, exit_code, exec_id))
-            rows_affected = cursor.rowcount
-            print(f"🔍 DEBUG: Updated {rows_affected} rows for completion status")
         else:
             cursor = conn.execute("""
                 UPDATE executions 
                 SET status = ?
                 WHERE id = ?
             """, (status, exec_id))
-            rows_affected = cursor.rowcount
-            print(f"🔍 DEBUG: Updated {rows_affected} rows for status change")
         
         conn.commit()
-        print(f"🔍 DEBUG: Database commit successful for execution {exec_id}")
 
 
 def update_execution_pid(exec_id: int, pid: int) -> None:
@@ -245,6 +234,17 @@ def update_execution_pid(exec_id: int, pid: int) -> None:
             SET pid = ?
             WHERE id = ?
         """, (pid, exec_id))
+        conn.commit()
+
+
+def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
+    """Update execution working directory."""
+    with db_connection.get_connection() as conn:
+        conn.execute("""
+            UPDATE executions 
+            SET working_dir = ?
+            WHERE id = ?
+        """, (working_dir, exec_id))
         conn.commit()
 
 
