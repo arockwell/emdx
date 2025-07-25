@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -84,6 +85,28 @@ EXECUTION_TYPE_EMOJIS = {
     ExecutionType.GAMEPLAN: "🎯",
     ExecutionType.GENERIC: "⚡"
 }
+
+
+def generate_unique_execution_id(doc_id: str) -> str:
+    """Generate a guaranteed unique execution ID.
+    
+    Uses multiple sources of entropy to ensure uniqueness:
+    - Document ID
+    - Microsecond timestamp
+    - Process ID
+    - Random UUID component
+    
+    Args:
+        doc_id: Document ID being executed
+        
+    Returns:
+        Unique execution ID string
+    """
+    timestamp = int(time.time() * 1000000)  # Microsecond precision
+    pid = os.getpid()
+    # Use last 8 chars of UUID for additional entropy
+    uuid_suffix = str(uuid.uuid4()).split('-')[0]
+    return f"claude-{doc_id}-{timestamp}-{pid}-{uuid_suffix}"
 
 
 def get_execution_context(doc_tags: list[str]) -> dict[str, Any]:
@@ -722,65 +745,54 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         Path to created worktree or None if creation failed
     """
     try:
-        # Get project name from git remote
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=os.getcwd()
-        )
-
-        if result.returncode == 0:
-            remote_url = result.stdout.strip()
-            # Extract project name from URL
-            match = re.search(r'([^/]+)(\.git)?$', remote_url)
-            if match:
-                project_name = match.group(1).replace('.git', '')
-            else:
-                project_name = Path.cwd().name
-        else:
-            project_name = Path.cwd().name
-
-        # Create unique branch name using full execution ID (includes timestamp)
-        # This ensures each execution gets a unique branch and worktree
-        # Extract doc ID from execution_id (format: "claude-{doc_id}-{timestamp}")
+        # Extract components from execution ID
+        # Format: "claude-{doc_id}-{timestamp}-{pid}-{uuid}"
         exec_parts = execution_id.split('-')
         doc_id = exec_parts[1] if len(exec_parts) > 1 else "unknown"
-        timestamp = exec_parts[2] if len(exec_parts) > 2 else str(int(time.time()))
-
-        # Sanitize doc title for git branch name
-        safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
-        # Extract short unique ID from timestamp
-        # For microsecond timestamps, use last 6 digits
-        # For second timestamps, add random suffix for uniqueness
-        if len(timestamp) > 10:  # Microsecond timestamp
-            short_uid = timestamp[-6:]
-        else:  # Second timestamp, needs more entropy
-            import random
-            short_uid = f"{timestamp[-4:]}{random.randint(10, 99)}"
         
-        # Include short UID to ensure uniqueness
-        branch_name = f"exec-{doc_id}-{safe_title}-{short_uid}"
-
-        # Create temp directory instead of git worktree
+        # Sanitize doc title for directory name
+        safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:30]
+        safe_title = re.sub(r'-+', '-', safe_title).strip('-')  # Clean up multiple dashes
+        
+        # Use last 12 chars of execution ID for uniqueness
+        # This includes part of timestamp, PID, and UUID
+        unique_suffix = execution_id.split('-', 2)[-1][-12:]
+        
+        # Create temp directory
         import tempfile
         temp_base = Path(tempfile.gettempdir())
-        dir_name = f"emdx-exec-{doc_id}-{safe_title}-{short_uid}"
+        dir_name = f"emdx-exec-{doc_id}-{safe_title}-{unique_suffix}"
         worktree_path = temp_base / dir_name
 
-        # Create the directory
-        worktree_path.mkdir(parents=True, exist_ok=True)
+        # Handle existing directory (shouldn't happen with unique IDs, but be safe)
+        attempt = 0
+        final_path = worktree_path
+        while final_path.exists() and attempt < 10:
+            attempt += 1
+            final_path = temp_base / f"{dir_name}-{attempt}"
         
-        console.print(f"[green]✅ Created execution directory: {worktree_path}[/green]")
-        return worktree_path
+        if final_path.exists():
+            # Very unlikely, but use a completely random directory
+            import uuid
+            final_path = temp_base / f"emdx-exec-{uuid.uuid4()}"
+        
+        # Create the directory
+        final_path.mkdir(parents=True, exist_ok=True)
+        
+        console.print(f"[green]✅ Created execution directory: {final_path}[/green]")
+        return final_path
 
-    except subprocess.CalledProcessError as e:
-        console.print(f"[yellow]Warning: Could not create temp directory: {e}[/yellow]")
-        console.print("[yellow]Execution will run in /tmp[/yellow]")
-        return Path("/tmp")
     except Exception as e:
         console.print(f"[yellow]Warning: Directory creation failed: {e}[/yellow]")
-        return Path("/tmp")
+        # Fallback to a simple temp directory
+        import tempfile
+        try:
+            fallback_dir = tempfile.mkdtemp(prefix="emdx-exec-")
+            console.print(f"[yellow]Using fallback directory: {fallback_dir}[/yellow]")
+            return Path(fallback_dir)
+        except Exception:
+            console.print("[red]Failed to create any execution directory[/red]")
+            return None
 
 
 def monitor_execution_detached(
@@ -931,10 +943,8 @@ def execute(
         execution_id = f"claude-{doc['id']}-{exec_id}"  # Keep simple for backward compat
         console.print(f"[yellow]Using existing execution #{exec_id}[/yellow]")
     else:
-        # Generate new execution ID with microsecond precision + PID to prevent collisions
-        timestamp = int(time.time() * 1000000)  # Microsecond precision
-        pid = os.getpid()
-        execution_id = f"claude-{doc['id']}-{timestamp}-{pid}"
+        # Generate new execution ID with guaranteed uniqueness
+        execution_id = generate_unique_execution_id(doc['id'])
         
         # Set up log file
         log_dir = Path.home() / ".config" / "emdx" / "logs"
