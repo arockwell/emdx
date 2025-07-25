@@ -275,18 +275,16 @@ class LogBrowser(Widget):
         if not line.strip():
             return False
 
-        # Common wrapper patterns to filter out
+        # Filter out DEBUG level logs unless in verbose mode
+        if "[DEBUG]" in line:
+            return True
+
+        # Common wrapper patterns to filter out (updated for new format)
         wrapper_patterns = [
-            "🔄 Wrapper script started",
-            "📋 Command:",
-            "🚀 Starting Claude process...",
-            "✅ Claude process finished",
-            "📊 Updating execution status",
-            "✅ Database updated successfully",
-            "🔧 Background process started with PID:",
-            "📄 Output is being written to this log file",
-            "🔄 Wrapper will update status on completion",
-            "📝 Prompt being sent to Claude:",
+            "[Wrapper:",  # Filter wrapper process logs by default
+            "🔧 Environment:",
+            "📍 Working directory:",
+            "💻 Command:",
             "────────────────────────────────────────────────────────────",
         ]
 
@@ -295,14 +293,19 @@ class LogBrowser(Widget):
             if pattern in line:
                 return True
 
-        # Filter out execution metadata lines
-        if any(line.startswith(prefix) for prefix in [
-            "⚡ Execution type:",
-            "📋 Available tools:",
-            "🔧 Background process",
-            "📄 Output is being",
-        ]):
-            return True
+        # Keep important status messages
+        keep_patterns = [
+            "🚀 Starting Claude process",
+            "✅ Claude process finished",
+            "❌ Error:",
+            "⚠️ Process interrupted",
+            "🏁 Completed:",
+            "📊 Duration:",
+        ]
+        
+        for pattern in keep_patterns:
+            if pattern in line:
+                return False
 
         return False
 

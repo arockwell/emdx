@@ -23,12 +23,12 @@ def format_timestamp() -> str:
     return datetime.now().strftime("[%H:%M:%S]")
 
 
-def log_to_file(log_path: Path, message: str) -> None:
-    """Append a message to the log file with process identification."""
+def log_to_file(log_path: Path, message: str, level: str = "INFO") -> None:
+    """Append a message to the log file with process identification and level."""
     try:
         with open(log_path, 'a') as f:
-            # Include process info for clarity
-            f.write(f"{format_timestamp()} [Wrapper:{os.getpid()}] {message}\n")
+            # Include process info and level for clarity
+            f.write(f"{format_timestamp()} [Wrapper:{os.getpid()}] [{level}] {message}\n")
     except Exception as e:
         # If we can't write to log, at least print to stderr
         print(f"Failed to write to log: {e}", file=sys.stderr)
@@ -59,16 +59,17 @@ def main():
     # Check if claude command exists
     import shutil
     if not shutil.which(cmd[0]):
-        log_to_file(log_file, f"❌ Command '{cmd[0]}' not found in PATH")
-        log_to_file(log_file, f"💡 PATH: {os.environ.get('PATH', 'not set')}")
+        log_to_file(log_file, f"❌ Command '{cmd[0]}' not found in PATH", "ERROR")
+        log_to_file(log_file, f"💡 PATH: {os.environ.get('PATH', 'not set')}", "DEBUG")
         update_execution_status(exec_id, "failed", 127)
         sys.exit(127)
 
     try:
         # Run the actual Claude command
-        log_to_file(log_file, "🚀 Starting Claude process...")
-        log_to_file(log_file, f"🔍 Working directory: {os.getcwd()}")
-        log_to_file(log_file, f"🔍 Environment PYTHONUNBUFFERED: {os.environ.get('PYTHONUNBUFFERED', 'not set')}")
+        log_to_file(log_file, "🚀 Starting Claude process...", "INFO")
+        log_to_file(log_file, f"📍 Working directory: {os.getcwd()}", "DEBUG")
+        log_to_file(log_file, f"💻 Command: {' '.join(cmd)}", "DEBUG")
+        log_to_file(log_file, f"🔧 Environment: PYTHONUNBUFFERED={os.environ.get('PYTHONUNBUFFERED', 'not set')}", "DEBUG")
 
         # Execute the command and format output before writing to log
         process = subprocess.Popen(
@@ -86,7 +87,7 @@ def main():
         from emdx.commands.claude_execute import format_claude_output, parse_log_timestamp
         start_time = time.time()
 
-        log_to_file(log_file, f"🔍 Process started with PID: {process.pid}")
+        log_to_file(log_file, f"🔍 Process started with PID: {process.pid}", "INFO")
 
         # Stream and format output
         lines_processed = 0
@@ -114,32 +115,32 @@ def main():
         exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
 
-        log_to_file(log_file, f"\n{'=' * 40}")
-        log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
-        log_to_file(log_file, f"📊 Duration: {duration:.2f}s, Lines processed: {lines_processed}")
-        log_to_file(log_file, f"🏁 Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        log_to_file(log_file, f"{'=' * 40}\n")
+        log_to_file(log_file, f"\n{'=' * 40}", "INFO")
+        log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}", "INFO")
+        log_to_file(log_file, f"📊 Duration: {duration:.2f}s, Lines processed: {lines_processed}", "INFO")
+        log_to_file(log_file, f"🏁 Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", "INFO")
+        log_to_file(log_file, f"{'=' * 40}\n", "INFO")
 
     except FileNotFoundError as e:
-        log_to_file(log_file, f"❌ Command not found: {cmd[0]}")
-        log_to_file(log_file, f"❌ Full error: {str(e)}")
-        log_to_file(log_file, "💡 Make sure 'claude' is installed and in your PATH")
+        log_to_file(log_file, f"❌ Command not found: {cmd[0]}", "ERROR")
+        log_to_file(log_file, f"❌ Full error: {str(e)}", "ERROR")
+        log_to_file(log_file, "💡 Make sure 'claude' is installed and in your PATH", "ERROR")
         status = "failed"
         exit_code = 127  # Standard command not found exit code
 
     except subprocess.TimeoutExpired:
-        log_to_file(log_file, "⏱️ Process timed out")
+        log_to_file(log_file, "⏱️ Process timed out", "ERROR")
         status = "failed"
         exit_code = 124  # Standard timeout exit code
 
     except KeyboardInterrupt:
-        log_to_file(log_file, "⚠️ Process interrupted by user")
+        log_to_file(log_file, "⚠️ Process interrupted by user", "WARNING")
         status = "failed"
         exit_code = 130  # Standard SIGINT exit code
 
     except Exception as e:
-        log_to_file(log_file, f"❌ Wrapper error: {str(e)}")
-        log_to_file(log_file, f"Traceback:\n{traceback.format_exc()}")
+        log_to_file(log_file, f"❌ Wrapper error: {str(e)}", "ERROR")
+        log_to_file(log_file, f"Traceback:\n{traceback.format_exc()}", "ERROR")
         status = "failed"
         exit_code = 1
 
@@ -149,7 +150,7 @@ def main():
             # Always update status - the lock file should prevent true duplicates
             update_execution_status(exec_id, status, exit_code)
         except Exception as e:
-            log_to_file(log_file, f"❌ Failed to update database: {str(e)}")
+            log_to_file(log_file, f"❌ Failed to update database: {str(e)}", "ERROR")
             # Don't exit with error if only DB update failed
             # The main process ran, which is what matters
 
