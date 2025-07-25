@@ -706,71 +706,150 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         return None
 
 
-def _cleanup_processes(dry_run: bool) -> Optional[str]:
-    """Clean up zombie EMDX processes."""
+def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[str]:
+    """Clean up zombie and stuck EMDX processes.
+    
+    Args:
+        dry_run: If True, only show what would be done
+        max_runtime_hours: Maximum runtime before considering a process stuck
+    """
+    from ..models.executions import get_running_executions
+    
+    # Categorize problematic processes
     zombie_procs = []
+    stuck_procs = []
+    orphaned_procs = []
+    
+    # Get running executions from database
+    running_execs = get_running_executions()
+    known_pids = {exec.pid for exec in running_execs if exec.pid}
     
     # Find EMDX-related processes
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status']):
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status', 'create_time']):
         try:
             # Check if it's EMDX-related
             cmdline = proc.info.get('cmdline', []) or []
             cmdline_str = ' '.join(cmdline)
             
             # Look for EMDX execution processes
-            if any(pattern in cmdline_str for pattern in ['emdx exec', 'claude_wrapper.py', 'emdx-exec']):
-                # Check if it's a zombie or stuck
-                status = proc.info.get('status', '')
-                if status == psutil.STATUS_ZOMBIE or status == 'zombie':
-                    zombie_procs.append(proc)
-                elif 'claude' in cmdline_str:
-                    # Check if the process has been running for too long (> 30 min)
-                    try:
-                        create_time = proc.create_time()
-                        runtime = time.time() - create_time
-                        if runtime > 1800:  # 30 minutes
-                            zombie_procs.append(proc)
-                    except:
-                        pass
+            patterns = ['emdx exec', 'claude_wrapper.py', 'emdx-exec', 'claude --print']
+            if not any(pattern in cmdline_str for pattern in patterns):
+                continue
+            
+            # Get process info
+            pid = proc.info['pid']
+            status = proc.info.get('status', '')
+            
+            # Check if it's a zombie
+            if status == psutil.STATUS_ZOMBIE or status == 'zombie':
+                zombie_procs.append((proc, 'zombie'))
+                continue
+            
+            # Check runtime
+            try:
+                create_time = proc.info['create_time']
+                runtime_hours = (time.time() - create_time) / 3600
+                
+                # Check if process is stuck (running too long)
+                if runtime_hours > max_runtime_hours:
+                    stuck_procs.append((proc, f'{runtime_hours:.1f}h runtime'))
+                    continue
+                
+                # Check if process is orphaned (not in database)
+                if pid not in known_pids and 'claude' in cmdline_str:
+                    orphaned_procs.append((proc, f'orphaned, {runtime_hours:.1f}h old'))
+                    
+            except Exception:
+                pass
+                
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     
-    if not zombie_procs:
-        console.print("  ✨ No zombie processes found!")
+    # Combine all problematic processes
+    all_procs = zombie_procs + stuck_procs + orphaned_procs
+    
+    if not all_procs:
+        console.print("  ✨ No problematic processes found!")
         return None
     
-    console.print(f"  Found: {len(zombie_procs)} zombie/stuck processes")
+    # Report findings
+    console.print(f"  Found: {len(all_procs)} problematic processes")
+    if zombie_procs:
+        console.print(f"  • {len(zombie_procs)} zombie processes")
+    if stuck_procs:
+        console.print(f"  • {len(stuck_procs)} stuck (running > {max_runtime_hours}h)")
+    if orphaned_procs:
+        console.print(f"  • {len(orphaned_procs)} orphaned (not in database)")
     
     if dry_run:
-        console.print("\n  Processes to kill:")
-        for proc in zombie_procs[:5]:
+        console.print("\n  Processes to terminate:")
+        for proc, reason in all_procs[:10]:
             try:
-                cmdline = ' '.join(proc.cmdline()[:3]) + '...' if len(proc.cmdline()) > 3 else ' '.join(proc.cmdline())
-                console.print(f"    • PID {proc.pid}: {cmdline}")
+                # Get process details
+                cmdline = proc.cmdline()
+                if len(cmdline) > 3:
+                    cmd_display = ' '.join(cmdline[:3]) + '...'
+                else:
+                    cmd_display = ' '.join(cmdline)
+                
+                # Get memory usage
+                try:
+                    mem_mb = proc.memory_info().rss / 1024 / 1024
+                    mem_str = f", {mem_mb:.0f}MB"
+                except:
+                    mem_str = ""
+                
+                console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
             except:
-                console.print(f"    • PID {proc.pid}: [process info unavailable]")
-        if len(zombie_procs) > 5:
-            console.print(f"    ... and {len(zombie_procs) - 5} more")
-        return f"Would kill {len(zombie_procs)} processes"
+                console.print(f"    • PID {proc.pid}: [process info unavailable] ({reason})")
+        
+        if len(all_procs) > 10:
+            console.print(f"    ... and {len(all_procs) - 10} more")
+            
+        return f"Would terminate {len(all_procs)} processes"
     
-    # Kill zombie processes
+    # Kill processes
+    terminated = 0
     killed = 0
-    for proc in zombie_procs:
-        try:
-            proc.terminate()
-            proc.wait(timeout=3)
-            killed += 1
-        except psutil.TimeoutExpired:
-            try:
-                proc.kill()
-                killed += 1
-            except:
-                pass
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
+    failed = 0
     
-    console.print(f"  [green]✓[/green] Killed {killed} processes")
-    return f"Killed {killed} processes"
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    ) as progress:
+        task = progress.add_task("Terminating processes...", total=len(all_procs))
+        
+        for proc, reason in all_procs:
+            try:
+                # Try graceful termination first
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                    terminated += 1
+                except psutil.TimeoutExpired:
+                    # Force kill if terminate didn't work
+                    proc.kill()
+                    proc.wait(timeout=1)
+                    killed += 1
+            except psutil.NoSuchProcess:
+                # Process already gone
+                terminated += 1
+            except (psutil.AccessDenied, Exception):
+                failed += 1
+            
+            progress.update(task, advance=1)
+    
+    # Report results
+    if terminated > 0:
+        console.print(f"  [green]✓[/green] Terminated {terminated} processes gracefully")
+    if killed > 0:
+        console.print(f"  [yellow]⚠[/yellow] Force killed {killed} processes")
+    if failed > 0:
+        console.print(f"  [red]✗[/red] Failed to terminate {failed} processes")
+    
+    total_removed = terminated + killed
+    return f"Terminated {total_removed} processes" if total_removed > 0 else None
 
 
 def _cleanup_executions(dry_run: bool) -> Optional[str]:

@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.box import Box
+from rich import box
 
 from ..models.executions import (
     get_recent_executions,
@@ -404,7 +404,7 @@ def execution_health():
         f"Running: [cyan]{metrics['currently_running']}[/cyan] | "
         f"Unhealthy: [red]{metrics['unhealthy_running']}[/red] | "
         f"Failure Rate: [yellow]{metrics['failure_rate_percent']:.1f}%[/yellow]",
-        box=Box.ROUNDED
+        box=box.ROUNDED
     ))
     
     # Create health table
