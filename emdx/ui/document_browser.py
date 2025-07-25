@@ -796,7 +796,8 @@ class DocumentBrowser(Widget):
             log_dir.mkdir(parents=True, exist_ok=True)
             
             # Create the execution record and get numeric ID
-            timestamp = int(time.time())
+            # Use microsecond precision to avoid collisions
+            timestamp = int(time.time() * 1000000)
             log_filename = f"claude-{doc_id}-{timestamp}.log"
             log_path = log_dir / log_filename
             

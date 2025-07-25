@@ -254,7 +254,8 @@ class ExecuteFileModal(ModalScreen[Optional[dict]]):
         """Execute the file."""
         if self.doc_id:
             # Use smart execution for saved documents
-            timestamp = int(time.time())
+            # Use microsecond precision to avoid collisions
+            timestamp = int(time.time() * 1000000)
             execution_id = f"claude-{self.doc_id}-{timestamp}"
             log_dir = Path.home() / ".config" / "emdx" / "logs"
             log_file = log_dir / f"{execution_id}.log"
