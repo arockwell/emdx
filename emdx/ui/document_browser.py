@@ -94,11 +94,11 @@ class DocumentBrowser(Widget):
     
     #search-input, #tag-input {
         height: 3;
-        margin: 0 0 1 0;
+        margin: 1 3 0 3;
         border: solid $primary;
         background: $surface;
         color: $text;
-        width: 100%;
+        padding: 0 1;
     }
     
     .browser-status {
