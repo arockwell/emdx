@@ -344,7 +344,8 @@ class LogBrowser(Widget):
 
                 if content.strip():
                     # Simple header - just the execution info
-                    log_content.write(f"[bold]Execution #{execution.id}[/bold] - {execution.doc_title}")
+                    header_text = f"[bold]Execution #{execution.id}[/bold] - {execution.doc_title}"
+                    log_content.write(header_text)
                     log_content.write("")
 
                     # Split content into header and log lines
@@ -375,7 +376,7 @@ class LogBrowser(Widget):
                         if "📝 Prompt being sent to Claude:" in line:
                             in_prompt = True
                             continue
-                        elif line.strip() == "────────────────────────────────────────────────────────────":
+                        elif line.strip() == "─" * 60:
                             if in_prompt:
                                 in_prompt = False
                                 continue

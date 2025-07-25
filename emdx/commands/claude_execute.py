@@ -282,10 +282,12 @@ def format_claude_output(line: str, timestamp: float) -> Optional[str]:
                 # Duration calculation isn't possible here without tracking start time
                 return f"{format_timestamp(timestamp)} ✅ Task completed successfully!"
             else:
-                return f"{format_timestamp(timestamp)} ❌ Task failed: {data.get('result', 'Unknown error')}"
+                result = data.get('result', 'Unknown error')
+                return f"{format_timestamp(timestamp)} ❌ Task failed: {result}"
 
         # For debugging: show unhandled JSON types (this was the source of "JSON shit")
-        return f"{format_timestamp(timestamp)} 🔧 Debug: {data.get('type', 'unknown')} - {str(data)[:100]}..."
+        debug_info = f"{data.get('type', 'unknown')} - {str(data)[:100]}..."
+        return f"{format_timestamp(timestamp)} 🔧 Debug: {debug_info}"
 
     except json.JSONDecodeError:
         # Not JSON - return as plain text if it's not empty
