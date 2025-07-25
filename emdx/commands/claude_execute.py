@@ -335,7 +335,7 @@ def execute_with_claude_detached(
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
+    # Don't write anything to log - let the wrapper handle ALL logging to avoid coordination issues
 
     # Start subprocess in detached mode using wrapper
     try:
@@ -351,7 +351,7 @@ def execute_with_claude_detached(
             import sysconfig
             venv_bin = Path(sysconfig.get_path("scripts"))
             python_path = str(venv_bin / "python")
-        
+
         wrapper_cmd = [
             python_path,
             str(wrapper_path),
@@ -362,8 +362,7 @@ def execute_with_claude_detached(
         # Use nohup for true detachment
         nohup_cmd = ["nohup"] + wrapper_cmd
 
-
-        # Open log file for appending
+        # Open log file for wrapper's output
         log_handle = open(log_file, 'a')
 
         # Ensure PATH contains the claude binary location
@@ -376,8 +375,8 @@ def execute_with_claude_detached(
         process = subprocess.Popen(
             nohup_cmd,
             stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
-            stdout=log_handle,  # Direct to file, no pipe
-            stderr=subprocess.STDOUT,
+            stdout=log_handle,  # Wrapper output goes to log
+            stderr=subprocess.STDOUT,  # Combine stderr with stdout
             cwd=working_dir,
             env=env,
             start_new_session=True,  # Better than preexec_fn
@@ -406,8 +405,8 @@ def execute_with_claude_detached(
             process = subprocess.Popen(
                 wrapper_cmd,  # Use wrapper even without nohup
                 stdin=subprocess.DEVNULL,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
+                stdout=log_handle,  # Wrapper output goes to log
+                stderr=subprocess.STDOUT,  # Combine stderr with stdout
                 cwd=working_dir,
                 env=env,  # Use same env as nohup version
                 start_new_session=True,
@@ -463,7 +462,7 @@ def execute_with_claude(
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
+    # Don't write anything to log - let the wrapper handle ALL logging to avoid coordination issues
 
     # Start subprocess
     try:
@@ -757,7 +756,7 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         else:  # Second timestamp, needs more entropy
             import random
             short_uid = f"{timestamp[-4:]}{random.randint(10, 99)}"
-        
+
         # Include short UID to ensure uniqueness
         branch_name = f"exec-{doc_id}-{safe_title}-{short_uid}"
 
@@ -773,7 +772,7 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
             capture_output=True,
             text=True
         )
-        
+
         if check_branch.returncode == 0:
             # Branch exists - add more uniqueness
             import uuid
@@ -783,7 +782,7 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
             worktree_name = f"{project_name}-{branch_name}"
             worktree_path = worktrees_dir / worktree_name
             console.print(f"[yellow]Branch already exists, using: {branch_name}[/yellow]")
-        
+
         # Create the branch
         subprocess.run(
             ["git", "branch", branch_name],
@@ -961,7 +960,7 @@ def execute(
     # Handle execution ID and log file
     import os
     import time
-    
+
     if exec_id:
         # Use provided execution ID from database
         from ..models.executions import get_execution
@@ -969,7 +968,7 @@ def execute(
         if not existing_exec:
             console.print(f"[red]Execution #{exec_id} not found[/red]")
             raise typer.Exit(1)
-        
+
         # Use the existing log file path
         log_file = Path(existing_exec.log_file)
         execution_id = f"claude-{doc['id']}-{exec_id}"  # Keep simple for backward compat
@@ -979,7 +978,7 @@ def execute(
         timestamp = int(time.time() * 1000000)  # Microsecond precision
         pid = os.getpid()
         execution_id = f"claude-{doc['id']}-{timestamp}-{pid}"
-        
+
         # Set up log file
         log_dir = Path.home() / ".config" / "emdx" / "logs"
         log_file = log_dir / f"{execution_id}.log"

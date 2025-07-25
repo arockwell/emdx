@@ -27,7 +27,8 @@ def log_to_file(log_path: Path, message: str) -> None:
     """Append a message to the log file."""
     try:
         with open(log_path, 'a') as f:
-            f.write(f"{format_timestamp()} {message}\n")
+            f.write(f"{format_timestamp()} [wrapper] {message}\n")
+            f.flush()  # Ensure immediate write
     except Exception as e:
         # If we can't write to log, at least print to stderr
         print(f"Failed to write to log: {e}", file=sys.stderr)
@@ -65,7 +66,8 @@ def main():
         # Run the actual Claude command
         log_to_file(log_file, "🚀 Starting Claude process...")
         log_to_file(log_file, f"🔍 Working directory: {os.getcwd()}")
-        log_to_file(log_file, f"🔍 Environment PYTHONUNBUFFERED: {os.environ.get('PYTHONUNBUFFERED', 'not set')}")
+        pythonunbuffered = os.environ.get('PYTHONUNBUFFERED', 'not set')
+        log_to_file(log_file, f"🔍 Environment PYTHONUNBUFFERED: {pythonunbuffered}")
 
         # Execute the command and format output before writing to log
         process = subprocess.Popen(
