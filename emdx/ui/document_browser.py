@@ -221,15 +221,14 @@ class DocumentBrowser(Widget):
         yield Label("", id="tag-selector")
         yield Label("", id="vim-mode-indicator")
         
-        # Inputs at top of main content area
-        yield Input(
-            placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')",
-            id="search-input",
-        )
-        yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
-        
         with Horizontal():
             with Vertical(id="sidebar") as sidebar:
+                # Inputs at top of sidebar where they'll be visible
+                yield Input(
+                    placeholder="Search... (try 'tags:docker,python' or 'tags:any:config')",
+                    id="search-input",
+                )
+                yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
                 # Remove debug background
                 pass
                 with Vertical(id="table-container", classes="table-section") as table_container:
