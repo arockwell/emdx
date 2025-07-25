@@ -472,6 +472,8 @@ def cleanup_main(
     executions: bool = typer.Option(False, "--executions", "-e", help="Clean up stuck executions"),
     all: bool = typer.Option(False, "--all", "-a", help="Clean up everything"),
     dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force delete unmerged branches"),
+    age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
 ):
     """
     Clean up system resources used by EMDX executions.
@@ -485,6 +487,7 @@ def cleanup_main(
         emdx maintain cleanup --all          # Clean everything (dry run)
         emdx maintain cleanup --all --execute # Actually clean everything
         emdx maintain cleanup --branches     # Clean old branches
+        emdx maintain cleanup --branches --force # Delete unmerged branches too
         emdx maintain cleanup --processes    # Kill zombie processes
     """
     if not any([branches, processes, executions, all]):
@@ -508,7 +511,7 @@ def cleanup_main(
     # Clean branches
     if branches:
         console.print("[bold]Cleaning up old execution branches...[/bold]")
-        cleaned = _cleanup_branches(dry_run)
+        cleaned = _cleanup_branches(dry_run, force=force, older_than_days=age_days)
         if cleaned:
             actions_taken.append(cleaned)
         console.print()
@@ -541,9 +544,30 @@ def cleanup_main(
         console.print("\n[dim]Run with --execute to perform these actions[/dim]")
 
 
-def _cleanup_branches(dry_run: bool) -> Optional[str]:
-    """Clean up old execution branches."""
+def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int = 7) -> Optional[str]:
+    """Clean up old execution branches.
+    
+    Args:
+        dry_run: If True, only show what would be done
+        force: If True, delete unmerged branches as well
+        older_than_days: Only delete branches older than this many days
+    """
     try:
+        # First check if we're in a git repository
+        git_check = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True)
+        if git_check.returncode != 0:
+            console.print("  [yellow]⚠[/yellow] Not in a git repository")
+            return None
+        
+        # Get current branch
+        current_result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        current_branch = current_result.stdout.strip()
+        
         # List all branches
         result = subprocess.run(
             ["git", "branch", "-a"],
@@ -556,6 +580,9 @@ def _cleanup_branches(dry_run: bool) -> Optional[str]:
         exec_branches = []
         for line in result.stdout.strip().split('\n'):
             branch = line.strip().lstrip('* ')
+            # Skip remote branches and current branch
+            if branch.startswith('remotes/') or branch == current_branch:
+                continue
             if branch.startswith('exec-'):
                 exec_branches.append(branch)
         
@@ -563,51 +590,119 @@ def _cleanup_branches(dry_run: bool) -> Optional[str]:
             console.print("  ✨ No execution branches found!")
             return None
         
-        # Check which branches are merged
-        merged_branches = []
+        # Get main/master branch name
+        main_branch = "main"
+        main_check = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/main"])
+        if main_check.returncode != 0:
+            # Try master
+            master_check = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/master"])
+            if master_check.returncode == 0:
+                main_branch = "master"
+        
+        # Check which branches are merged and their age
+        branches_to_delete = []
+        unmerged_branches = []
+        
         for branch in exec_branches:
-            # Skip current branch
-            if line.startswith('* '):
-                continue
-            
-            # Check if branch is merged
-            merge_check = subprocess.run(
-                ["git", "branch", "--merged", "main", branch],
+            # Get branch age
+            age_cmd = subprocess.run(
+                ["git", "log", "-1", "--format=%ct", branch],
                 capture_output=True,
                 text=True
             )
-            if branch in merge_check.stdout:
-                merged_branches.append(branch)
+            
+            if age_cmd.returncode == 0:
+                branch_timestamp = int(age_cmd.stdout.strip())
+                branch_age_days = (time.time() - branch_timestamp) / (24 * 60 * 60)
+                
+                # Skip branches that are too new
+                if branch_age_days < older_than_days:
+                    continue
+            
+            # Check if branch is merged
+            merge_check = subprocess.run(
+                ["git", "branch", "--merged", main_branch],
+                capture_output=True,
+                text=True
+            )
+            
+            is_merged = branch in merge_check.stdout
+            
+            if is_merged:
+                branches_to_delete.append((branch, "merged", int(branch_age_days)))
+            elif force:
+                # For unmerged branches, check if they have any unique commits
+                unique_commits = subprocess.run(
+                    ["git", "rev-list", f"{main_branch}..{branch}"],
+                    capture_output=True,
+                    text=True
+                )
+                has_unique_commits = bool(unique_commits.stdout.strip())
+                if not has_unique_commits:
+                    branches_to_delete.append((branch, "no unique commits", int(branch_age_days)))
+                else:
+                    unmerged_branches.append((branch, int(branch_age_days)))
+            else:
+                unmerged_branches.append((branch, int(branch_age_days)))
         
-        console.print(f"  Found: {len(exec_branches)} execution branches ({len(merged_branches)} merged)")
+        # Report findings
+        console.print(f"  Found: {len(exec_branches)} execution branches")
+        if branches_to_delete:
+            console.print(f"  • {len(branches_to_delete)} can be deleted")
+        if unmerged_branches:
+            console.print(f"  • {len(unmerged_branches)} unmerged (use --force to delete)")
         
         if dry_run:
-            if merged_branches:
+            if branches_to_delete:
                 console.print("\n  Branches to delete:")
-                for branch in merged_branches[:5]:
-                    console.print(f"    • {branch}")
-                if len(merged_branches) > 5:
-                    console.print(f"    ... and {len(merged_branches) - 5} more")
-            return f"Would delete {len(merged_branches)} merged branches"
+                for branch, reason, age in branches_to_delete[:10]:
+                    console.print(f"    • {branch} ({reason}, {age}d old)")
+                if len(branches_to_delete) > 10:
+                    console.print(f"    ... and {len(branches_to_delete) - 10} more")
+            
+            if unmerged_branches and not force:
+                console.print("\n  [yellow]Unmerged branches (use --force):[/yellow]")
+                for branch, age in unmerged_branches[:5]:
+                    console.print(f"    • {branch} ({age}d old)")
+                if len(unmerged_branches) > 5:
+                    console.print(f"    ... and {len(unmerged_branches) - 5} more")
+                    
+            return f"Would delete {len(branches_to_delete)} branches"
         
-        # Delete merged branches
+        # Delete branches
         deleted = 0
-        for branch in merged_branches:
-            try:
-                subprocess.run(
-                    ["git", "branch", "-d", branch],
-                    capture_output=True,
-                    check=True
-                )
-                deleted += 1
-            except subprocess.CalledProcessError:
-                pass
+        failed = 0
         
-        console.print(f"  [green]✓[/green] Deleted {deleted} merged branches")
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task("Deleting branches...", total=len(branches_to_delete))
+            
+            for branch, reason, age in branches_to_delete:
+                try:
+                    # Use -D for force delete if needed
+                    delete_flag = "-D" if force and reason != "merged" else "-d"
+                    subprocess.run(
+                        ["git", "branch", delete_flag, branch],
+                        capture_output=True,
+                        check=True
+                    )
+                    deleted += 1
+                except subprocess.CalledProcessError:
+                    failed += 1
+                progress.update(task, advance=1)
+        
+        if deleted > 0:
+            console.print(f"  [green]✓[/green] Deleted {deleted} branches")
+        if failed > 0:
+            console.print(f"  [yellow]⚠[/yellow] Failed to delete {failed} branches")
+            
         return f"Deleted {deleted} branches"
         
-    except subprocess.CalledProcessError:
-        console.print("  [yellow]⚠[/yellow] Not in a git repository")
+    except subprocess.CalledProcessError as e:
+        console.print(f"  [red]✗[/red] Git error: {e}")
         return None
 
 

@@ -26,6 +26,7 @@ from ..models.executions import (
 )
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
+from ..utils.environment import validate_execution_environment, ensure_claude_in_path
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
 console = Console()
@@ -376,10 +377,14 @@ def execute_with_claude_detached(
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
     # Validate environment first
-    is_valid, error_msg = validate_environment()
+    is_valid, env_info = validate_execution_environment(verbose=False)
     if not is_valid:
+        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
         console.print(f"[red]Environment validation failed: {error_msg}[/red]")
         raise RuntimeError(f"Environment validation failed: {error_msg}")
+    
+    # Ensure claude is in PATH
+    ensure_claude_in_path()
 
     # Expand @filename references
     expanded_task = parse_task_content(task)
@@ -510,12 +515,16 @@ def execute_with_claude(
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
     # Validate environment first
-    is_valid, error_msg = validate_environment()
+    is_valid, env_info = validate_execution_environment(verbose=False)
     if not is_valid:
+        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
         console.print(f"[red]Environment validation failed: {error_msg}[/red]")
         with open(log_file, 'a') as log:
             log.write(f"\n{format_timestamp()} ❌ Environment validation failed: {error_msg}\n")
         return 1
+    
+    # Ensure claude is in PATH
+    ensure_claude_in_path()
 
     # Expand @filename references
     expanded_task = parse_task_content(task)
@@ -952,44 +961,57 @@ def monitor_execution(
 
 
 @app.command(name="check-env")
-def check_environment():
+def check_environment(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed environment info")
+):
     """Check if the execution environment is properly configured."""
     console.print("[bold]Checking EMDX execution environment...[/bold]\n")
     
-    checks = [
-        ("Python", lambda: sys.version),
-        ("Claude Code", lambda: subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.strip() if shutil.which("claude") else None),
-        ("Git", lambda: subprocess.run(["git", "--version"], capture_output=True, text=True).stdout.strip() if shutil.which("git") else None),
-        ("EMDX", lambda: "emdx" if shutil.which("emdx") else None),
-    ]
+    # Use the comprehensive validation
+    is_valid, env_info = validate_execution_environment(verbose=True)
     
-    all_good = True
+    # Additional quick checks
+    console.print("\n[bold]Quick Status:[/bold]")
+    checks = [
+        ("Python", lambda: sys.version.split()[0]),
+        ("Claude Code", lambda: "✓" if shutil.which("claude") else "✗"),
+        ("Git", lambda: "✓" if shutil.which("git") else "✗"),
+        ("EMDX", lambda: "✓" if shutil.which("emdx") else "✗"),
+    ]
     
     for name, check_func in checks:
         try:
             result = check_func()
-            if result:
-                console.print(f"✅ {name}: [green]{result}[/green]")
+            if result and result != "✗":
+                console.print(f"  {name}: [green]{result}[/green]")
             else:
-                console.print(f"❌ {name}: [red]Not found[/red]")
-                all_good = False
-        except Exception as e:
-            console.print(f"❌ {name}: [red]Error - {e}[/red]")
-            all_good = False
+                console.print(f"  {name}: [red]Not found[/red]")
+        except Exception:
+            console.print(f"  {name}: [red]Error[/red]")
     
-    # Check PATH
-    console.print(f"\n[dim]PATH: {os.environ.get('PATH', 'Not set')}[/dim]")
+    # Show PATH info if verbose
+    if verbose:
+        console.print(f"\n[dim]PATH entries: {len(os.environ.get('PATH', '').split(os.pathsep))}[/dim]")
+        console.print(f"[dim]Installation: {env_info.get('info', {}).get('installation', 'unknown')}[/dim]")
     
-    # Overall validation
-    is_valid, error_msg = validate_environment()
-    
-    if all_good and is_valid:
+    # Overall result
+    if is_valid:
         console.print("\n[bold green]✅ Environment is properly configured![/bold green]")
+        console.print("[dim]You can run executions without issues.[/dim]")
     else:
         console.print("\n[bold red]❌ Environment issues detected[/bold red]")
-        if error_msg:
-            console.print(f"[yellow]{error_msg}[/yellow]")
-        console.print("\n[dim]Please install missing components before running executions.[/dim]")
+        console.print("[dim]Please fix the issues above before running executions.[/dim]")
+        
+        # Suggest fixes
+        if env_info and env_info.get('errors'):
+            console.print("\n[yellow]Suggested fixes:[/yellow]")
+            for error in env_info['errors']:
+                if "claude" in error.lower():
+                    console.print("  • Install Claude Code: https://github.com/anthropics/claude-code")
+                elif "git" in error.lower():
+                    console.print("  • Install Git: https://git-scm.com/")
+                elif "python" in error.lower():
+                    console.print("  • Upgrade Python to 3.8 or later")
 
 
 @app.command()
