@@ -547,8 +547,15 @@ def execute_with_claude(
 
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
+    
+    # Initialize structured logger for main process
+    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
+    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {
+        "doc_id": doc_id,
+        "working_dir": working_dir,
+        "allowed_tools": allowed_tools,
+        "mode": "synchronous"
+    })
 
     # Start subprocess
     try:

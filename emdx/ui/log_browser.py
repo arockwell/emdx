@@ -17,10 +17,10 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.commands.claude_execute import format_claude_output, parse_log_timestamp
 from emdx.models.executions import Execution, get_recent_executions
 
 from .text_areas import SelectionTextArea
+from .log_parser import LogParser, LogEntry
 
 logger = logging.getLogger(__name__)
 
