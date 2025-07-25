@@ -24,10 +24,11 @@ def format_timestamp() -> str:
 
 
 def log_to_file(log_path: Path, message: str) -> None:
-    """Append a message to the log file."""
+    """Append a message to the log file with process identification."""
     try:
         with open(log_path, 'a') as f:
-            f.write(f"{format_timestamp()} {message}\n")
+            # Include process info for clarity
+            f.write(f"{format_timestamp()} [Wrapper:{os.getpid()}] {message}\n")
     except Exception as e:
         # If we can't write to log, at least print to stderr
         print(f"Failed to write to log: {e}", file=sys.stderr)
@@ -43,10 +44,12 @@ def main():
     log_file = Path(sys.argv[2])
     cmd = sys.argv[3:]
 
-    # Clear the log file to avoid multiple executions in same file
+    # Initialize the log file with header
     with open(log_file, 'w') as f:
         f.write(f"=== EMDX Execution #{exec_id} ===\n")
         f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Process: Wrapper (PID: {os.getpid()})\n")
+        f.write(f"Working Dir: {os.getcwd()}\n")
         f.write(f"{'=' * 40}\n\n")
 
     exit_code = 1  # Default to failure
@@ -111,8 +114,11 @@ def main():
         exit_code = result.returncode
         status = "completed" if exit_code == 0 else "failed"
 
+        log_to_file(log_file, f"\n{'=' * 40}")
         log_to_file(log_file, f"✅ Claude process finished with exit code: {exit_code}")
         log_to_file(log_file, f"📊 Duration: {duration:.2f}s, Lines processed: {lines_processed}")
+        log_to_file(log_file, f"🏁 Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log_to_file(log_file, f"{'=' * 40}\n")
 
     except FileNotFoundError as e:
         log_to_file(log_file, f"❌ Command not found: {cmd[0]}")

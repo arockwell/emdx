@@ -335,7 +335,8 @@ def execute_with_claude_detached(
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
+    # Let the wrapper handle ALL logging to avoid coordination issues
+    # Parent process should not write to the log file at all
 
     # Start subprocess in detached mode using wrapper
     try:
@@ -433,7 +434,9 @@ def execute_with_claude(
     doc_id: Optional[str] = None,
     context: Optional[dict] = None
 ) -> int:
-    """Execute a task with Claude, streaming output to log file.
+    """Execute a task with Claude in foreground mode, waiting for completion.
+
+    This now uses the wrapper process for all logging to avoid coordination issues.
 
     Args:
         task: Task description to execute
@@ -463,79 +466,73 @@ def execute_with_claude(
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Don't write header - let the wrapper handle ALL logging to avoid coordination issues
-
-    # Start subprocess
+    # Use wrapper for foreground execution too
     try:
+        # Get the wrapper script path
+        wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
+
+        # Build wrapper command
+        python_path = sys.executable
+        if "pipx" in python_path and "venvs" in python_path:
+            import sysconfig
+            venv_bin = Path(sysconfig.get_path("scripts"))
+            python_path = str(venv_bin / "python")
+        
+        wrapper_cmd = [
+            python_path,
+            str(wrapper_path),
+            str(execution_id),
+            str(log_file)
+        ] + cmd
+
+        # Ensure environment
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
+
+        # Execute using wrapper for consistent logging
         process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            wrapper_cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE if verbose else subprocess.DEVNULL,
+            stderr=subprocess.STDOUT if verbose else subprocess.DEVNULL,
             text=True,
-            bufsize=0,  # Unbuffered
-            universal_newlines=True,
-            cwd=working_dir,  # Run in specified working directory
-            # Force unbuffered for any Python subprocesses
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
-            # Detach from parent process group so it survives parent exit
-            preexec_fn=os.setsid if os.name != 'nt' else None
+            cwd=working_dir,
+            env=env,
+            bufsize=1  # Line buffered for real-time output
         )
 
-        exec_start_time = time.time()
+        if verbose:
+            console.print(f"[green]Executing with Claude (PID: {process.pid})...[/green]")
+            console.print(f"[dim]Log file: {log_file}[/dim]\n")
 
-        # Stream output
-        last_timestamp = None
-        with open(log_file, 'a') as log:
+            # Stream output from wrapper in real-time
             for line in process.stdout:
-                # Parse timestamp from log line if available
-                parsed_timestamp = parse_log_timestamp(line)
-                if parsed_timestamp:
-                    last_timestamp = parsed_timestamp
-                # Use parsed timestamp or last known timestamp, fallback to current time
-                timestamp_to_use = parsed_timestamp or last_timestamp or time.time()
-                formatted = format_claude_output(line, timestamp_to_use)
-                if formatted:
-                    log.write(formatted + "\n")
-                    log.flush()
-                    if verbose:
-                        console.print(formatted)
+                # The wrapper already formats output, just display it
+                console.print(line.rstrip())
 
         # Wait for completion
         exit_code = process.wait()
 
-        # Write completion status
-        with open(log_file, 'a') as log:
-            duration = time.time() - exec_start_time
-            end_time = datetime.now()
-            if exit_code == 0:
-                if context and context.get('type'):
-                    exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-                    exec_type = context['type'].value.upper()
-                    log.write(f"\n{format_timestamp()} ✅ {exec_type} execution completed successfully!\n")
-                    log.write(f"{format_timestamp()} {exec_emoji} All tasks finished\n")
-                else:
-                    log.write(f"\n{format_timestamp()} ✅ Execution completed successfully\n")
-            else:
-                log.write(f"\n{format_timestamp()} ❌ Process exited with code {exit_code}\n")
-            log.write(f"{format_timestamp()} ⏱️  Duration: {duration:.1f}s\n")
-            log.write(f"{format_timestamp()} 🏁 Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n")
+        # Update database status (wrapper should have done this too)
+        if exit_code == 0:
+            update_execution_status(execution_id, "completed", exit_code)
+        else:
+            update_execution_status(execution_id, "failed", exit_code)
 
         return exit_code
 
     except FileNotFoundError:
-        error_msg = ("Error: claude command not found. "
-                    "Make sure Claude Code is installed and in your PATH.")
-        with open(log_file, 'a') as log:
-            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        error_msg = ("Error: Python or wrapper not found. "
+                    "Make sure Python is available.")
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
-        return 1
+        update_execution_status(execution_id, "failed", 127)
+        return 127
     except Exception as e:
-        error_msg = f"Error executing Claude: {e}"
-        with open(log_file, 'a') as log:
-            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        error_msg = f"Error executing wrapper: {e}"
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
+        update_execution_status(execution_id, "failed", 1)
         return 1
 
 
