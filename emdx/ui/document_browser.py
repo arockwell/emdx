@@ -841,11 +841,16 @@ class DocumentBrowser(Widget):
             wrapper_cmd = ["python3", str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
             
             # Start the process in background
+            # Set PYTHONUNBUFFERED for proper output streaming
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            
             subprocess.Popen(
                 wrapper_cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                start_new_session=True
+                start_new_session=True,
+                env=env
             )
             
             # Show success message

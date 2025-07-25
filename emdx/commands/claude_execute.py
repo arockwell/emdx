@@ -809,8 +809,11 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
 
         # Sanitize doc title for git branch name
         safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
-        # Include timestamp to ensure uniqueness
-        branch_name = f"exec-{doc_id}-{safe_title}-{timestamp}"
+        # Extract short unique ID from timestamp (last 6 digits for uniqueness)
+        # This gives us ~1 million unique IDs, plenty for concurrent executions
+        short_uid = timestamp[-6:] if len(timestamp) > 6 else timestamp
+        # Include short UID to ensure uniqueness
+        branch_name = f"exec-{doc_id}-{safe_title}-{short_uid}"
 
         # Worktree directory - also unique per execution
         worktrees_dir = Path.home() / "dev" / "worktrees"
