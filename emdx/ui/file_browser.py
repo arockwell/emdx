@@ -199,20 +199,7 @@ class FileBrowser(Container):
         box-sizing: border-box !important;
         padding: 1 1 0 1 !important;
     }
-    
-    .vim-line-numbers {
-        width: 4;
-        background: $background;
-        color: $text-muted;
-        text-align: right;
-        padding-right: 1;
-        padding-top: 1;
-        margin: 0;
-        border: none;
-        overflow-y: hidden;
-        scrollbar-size: 0 0;
-    }
-    
+     
     #vim-edit-container {
         height: 100%;
         background: $background;

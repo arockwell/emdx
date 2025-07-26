@@ -66,20 +66,30 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # TEMPORARILY DISABLED: Line numbers causing layout issues
-        # Just mount the text area directly without line numbers
-        
+        total_lines = len(self.text_area.text.split('\n'))
+
+
+        line_number_width = self._calculate_line_number_width(total_lines)
+
+        # Configure line numbers to have dynamic width
+        self.line_numbers.styles.width = line_number_width
+        self.line_numbers.styles.min_width = line_number_width
+        self.line_numbers.styles.max_width = line_number_width
+
+
+        # Add subtle right border to line numbers
+        self.line_numbers.styles.border_right = ("solid", "#333333") 
         # Configure text area to take full space
-        self.text_area.styles.width = "100%"
+        self.text_area.styles.width = "100w"
         self.text_area.styles.padding = (0, 1)  # Add horizontal padding
-        
-        # Mount only text area (no line numbers for now)
+
+        self.edit_container.mount(self.line_numbers)
         self.edit_container.mount(self.text_area)
-        
+
         logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
         logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
         logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
-        
+
         # Ensure the entire vim editor container starts at top
         # TEMPORARILY DISABLED: This might be causing first line visibility issues
         # self.scroll_to(0, 0, animate=False)
@@ -109,7 +119,7 @@ class VimEditor(Vertical):
         # Account for the largest line number + 1 space padding
         max_digits = len(str(total_lines))
         # Minimum 3 chars (like vim), add 1 for padding
-        width = max(3, max_digits) + 1
+        width = max(3, max_digits) + 2
         logger.debug(f"🔢 Line number width calculation: total_lines={total_lines}, max_digits={max_digits}, width={width}")
         return width
     
@@ -123,6 +133,7 @@ class VimEditor(Vertical):
             self.line_numbers.styles.width = line_number_width
             self.line_numbers.styles.min_width = line_number_width
             self.line_numbers.styles.max_width = line_number_width
+            logger.debug(f"line_number_width updated to {line_number_width}")
     
     def _initialize_editor(self):
         """Initialize editor after mounting - focus and set up line numbers."""
@@ -233,12 +244,11 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # TEMPORARILY DISABLED: Line numbers
-            # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            # self._update_line_number_width()
-            # if hasattr(self.text_area, '_update_line_numbers'):
-            #     logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-            #     self.text_area._update_line_numbers()
+            self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
+            self._update_line_number_width()
+            if hasattr(self.text_area, '_update_line_numbers'):
+                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
+                self.text_area._update_line_numbers()
                 
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             

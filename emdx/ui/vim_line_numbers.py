@@ -13,6 +13,20 @@ logger = logging.getLogger(__name__)
 class SimpleVimLineNumbers(Static):
     """Dead simple vim-style line numbers widget."""
 
+    DEFAULT_CSS = """
+        SimpleVimLineNumbers {
+            background: $background;
+            color: $text-muted;
+            text-align: right;
+            padding-right: 1;
+            margin-top: 1;
+            border: none;
+            overflow-y: hidden;
+            scrollbar-size: 0 0;
+            text-wrap: nowrap
+        }
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_class("vim-line-numbers")
