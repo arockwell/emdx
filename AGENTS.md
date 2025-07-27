@@ -10,11 +10,13 @@ The EMDX Agent System brings AI-powered task automation directly into your knowl
 # List available agents
 emdx agent list
 
-# Run an agent on a document
-emdx agent run doc-generator --doc 123
+# Run an agent on a document (background with monitoring)
+emdx agent run doc-generator --doc 123 --background
+emdx log --live  # Monitor real-time progress
 
-# Run an agent with a query
-emdx agent run code-reviewer --query "Review the auth implementation"
+# Run an agent with a query (background with monitoring)  
+emdx agent run code-reviewer --query "Review the auth implementation" --background
+emdx log --live  # See what the agent is doing
 
 # Create a custom agent
 emdx agent create --name my-analyzer --prompt analyzer.md --category analysis
@@ -82,11 +84,22 @@ emdx agent create \
 
 ### Background Execution
 
-Run agents in the background for long tasks:
+Run agents in the background for long tasks with real-time monitoring:
 
 ```bash
+# Start agent in background
 emdx agent run doc-generator --doc 789 --background
-# Monitor with: emdx log
+# ✓ Agent started in background (execution #123)
+# Use emdx log to monitor progress
+
+# Monitor live output to see what the agent is doing
+emdx log --live
+# Shows real-time formatted output with timestamps and emojis:
+# [10:30:15] 🤖 Starting agent execution: Documentation Generator
+# [10:30:16] 🔧 Tools: Glob, Grep, Read, Write, Task  
+# [10:30:18] 🚀 Claude Code session started
+# [10:30:22] 📋 Using tool: Glob
+# [10:30:25] 📖 Using tool: Read
 ```
 
 ## Managing Agents
@@ -158,22 +171,16 @@ emdx agent template export my-agent > my-agent.json
 emdx agent template import colleague-agent.json
 ```
 
-### Agent Marketplace
-Discover and install community agents:
-```bash
-emdx agent template search "security"
-emdx agent template install security-scanner
-```
 
 ## Technical Details
 
 ### Agent Base Class
 ```python
-class Agent(ABC):
-    @abstractmethod
+class Agent:
     async def execute(self, context: AgentContext) -> AgentResult:
         """Execute the agent with given context."""
-        pass
+        # Custom execution logic goes here
+        return AgentResult(status='completed')
 ```
 
 ### Creating Custom Agent Types
@@ -189,17 +196,23 @@ class MyCustomAgent(Agent):
 agent_registry.register('my-custom-type', MyCustomAgent)
 ```
 
-### Tool Restrictions
-Agents can only use explicitly allowed tools:
-```json
-{
-  "allowed_tools": ["Read", "Grep", "Glob"],
-  "tool_restrictions": {
-    "Read": {"max_files": 10},
-    "Grep": {"timeout": 30}
-  }
-}
+### Tool Configuration
+Agents have flexible tool access that can be customized per use case:
+
+```bash
+# Default tools for analysis agents
+emdx agent run code-reviewer --doc 123  # Uses: Read, Grep, Glob
+
+# Add tools for more powerful agents
+emdx agent run doc-generator --doc 123 --tools "Read,Write,Bash,Glob,Grep,Task"
+
+# Create agents with custom tool sets
+emdx agent create --name security-scanner \
+  --tools "Read,Grep,Bash,WebSearch,Task" \
+  --description "Security analysis with web research"
 ```
+
+Tool restrictions are minimal by design - agents can be granted most tools based on trust level and use case.
 
 ## Best Practices
 
