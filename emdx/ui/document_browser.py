@@ -70,7 +70,7 @@ class DocumentBrowser(Widget):
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
-        Binding("x", "execute_document", "Execute"),
+        Binding("x", "execute_document", "Run Agent"),
         Binding("r", "refresh", "Refresh"),
     ]
     
@@ -829,54 +829,54 @@ class DocumentBrowser(Widget):
                 app.update_status(message)
     
     def action_execute_document(self) -> None:
-        """Execute the current document with context-aware behavior based on tags."""
+        """Open agent selection modal for the current document."""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row >= len(self.filtered_docs):
-            self.update_status("No document selected for execution")
+            self.update_status("No document selected for agent execution")
             return
             
         doc = self.filtered_docs[table.cursor_row]
         doc_id = int(doc["id"])
+        doc_title = doc["title"]
         
-        try:
-            from pathlib import Path
-            from emdx.commands.claude_execute import (
-                get_execution_context,
-                execute_document_smart_background,
-                generate_unique_execution_id,
-                EXECUTION_TYPE_EMOJIS
-            )
-            from emdx.models.tags import get_document_tags
-            
-            # Get document tags
-            doc_tags = get_document_tags(str(doc_id))
-            
-            # Get execution context to show what will happen
-            context = get_execution_context(doc_tags)
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            self.update_status(f"{exec_emoji} Executing {context['type'].value}: {context['description']}")
-            
-            # Generate unique execution ID
-            execution_id = generate_unique_execution_id(str(doc_id))
-            
-            # Set up log file
-            log_dir = Path.home() / ".config" / "emdx" / "logs"
-            log_file = log_dir / f"{execution_id}.log"
-            
-            # Use unified execution path
-            execute_document_smart_background(
-                doc_id=doc_id,
-                execution_id=execution_id,
-                log_file=log_file,
-                use_stage_tools=True
-            )
-            
-            # Show success message
-            self.update_status(f"🚀 Claude executing: {doc['title'][:25]}... (Press 'l' for logs)")
-            
-        except Exception as e:
-            logger.error(f"Error executing document: {e}", exc_info=True)
-            self.update_status(f"Error: {str(e)}")
+        # Import the agent selection modal
+        from .agent_modals import AgentSelectionModal
+        
+        def handle_agent_result(result):
+            """Handle the result from agent selection modal."""
+            if result and result.get('action') == 'run':
+                agent_id = result['agent_id']
+                agent_data = result['agent_data']
+                document_id = result['document_id']
+                
+                # Execute the agent in background
+                try:
+                    import asyncio
+                    from ..agents.executor import agent_executor
+                    
+                    async def run_agent():
+                        execution_id = await agent_executor.execute_agent(
+                            agent_id=agent_id,
+                            input_type='document',
+                            input_doc_id=document_id,
+                            background=True
+                        )
+                        return execution_id
+                    
+                    # Run the agent
+                    execution_id = asyncio.run(run_agent())
+                    self.update_status(f"🤖 Agent '{agent_data['display_name']}' started (execution #{execution_id})")
+                    
+                except Exception as e:
+                    logger.error(f"Error starting agent: {e}", exc_info=True)
+                    self.update_status(f"Error starting agent: {str(e)}")
+            else:
+                # User cancelled
+                self.update_status("Agent selection cancelled")
+        
+        # Open the agent selection modal
+        modal = AgentSelectionModal(doc_id, doc_title)
+        self.app.push_screen(modal, handle_agent_result)
     
     async def action_new_document(self) -> None:
         """Create a new document."""
