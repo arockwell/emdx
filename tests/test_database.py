@@ -3,15 +3,15 @@
 import tempfile
 from pathlib import Path
 
-from test_fixtures import TestDatabase
+from test_fixtures import DatabaseForTesting
 
 
-class TestDatabaseOperations:
+class DatabaseForTestingOperations:
     """Test database operations."""
 
     def test_save_and_retrieve_document(self):
         """Test saving and retrieving a document."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         doc_id = db.save_document(
             title="Test Document", content="This is test content", project="test-project"
@@ -27,7 +27,7 @@ class TestDatabaseOperations:
 
     def test_search_documents(self):
         """Test searching documents."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         db.save_document("Python Guide", "Learn Python programming", "project1")
         db.save_document("JavaScript Guide", "Learn JavaScript", "project1")
@@ -42,7 +42,7 @@ class TestDatabaseOperations:
 
     def test_update_document(self):
         """Test updating a document."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         doc_id = db.save_document("Original", "Original content", "test")
 
@@ -54,7 +54,7 @@ class TestDatabaseOperations:
 
     def test_delete_document(self):
         """Test deleting a document."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         doc_id = db.save_document("To Delete", "Will be deleted", "test")
 
@@ -65,7 +65,7 @@ class TestDatabaseOperations:
 
     def test_list_documents(self):
         """Test listing documents."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         db.save_document("Doc 1", "Content 1", "project1")
         db.save_document("Doc 2", "Content 2", "project1")
@@ -84,11 +84,11 @@ class TestDatabaseOperations:
 
         try:
             # Create and save
-            db1 = TestDatabase(str(db_path))
+            db1 = DatabaseForTesting(str(db_path))
             doc_id = db1.save_document("Persistent Doc", "Content", "test")
 
             # Open again and verify
-            db2 = TestDatabase(str(db_path))
+            db2 = DatabaseForTesting(str(db_path))
             doc = db2.get_document(doc_id)
             assert doc["title"] == "Persistent Doc"
 
@@ -97,7 +97,7 @@ class TestDatabaseOperations:
 
     def test_search_case_insensitive(self):
         """Test case-insensitive search."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         db.save_document("Python Guide", "Learn PYTHON programming", "test")
         db.save_document("python basics", "Python for beginners", "test")
@@ -109,7 +109,7 @@ class TestDatabaseOperations:
 
     def test_empty_database_operations(self):
         """Test operations on empty database."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # List empty database
         docs = db.list_documents()
@@ -125,7 +125,7 @@ class TestDatabaseOperations:
 
     def test_database_operations_edge_cases(self):
         """Test edge cases in database operations."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Test empty search
         results = db.search_documents("")
@@ -141,7 +141,7 @@ class TestDatabaseOperations:
 
     def test_project_name_handling(self):
         """Test different project name scenarios."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Save with no project
         doc_id = db.save_document("No Project", "Content", None)
@@ -160,7 +160,7 @@ class TestDatabaseOperations:
 
     def test_content_edge_cases(self):
         """Test edge cases with content."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Very long content
         long_content = "x" * 10000
@@ -181,7 +181,7 @@ class TestDatabaseOperations:
 
     def test_multiple_document_operations(self):
         """Test operations on multiple documents."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Create 10 documents
         doc_ids = []
@@ -211,7 +211,7 @@ class TestDatabaseOperations:
 
     def test_search_with_special_characters(self):
         """Test searching with special characters."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Save documents with special characters
         db.save_document("C++ Programming", "Learn C++ basics", "test")
@@ -235,11 +235,11 @@ class TestDatabaseOperations:
 
         try:
             # First connection saves a document
-            db1 = TestDatabase(db_path)
+            db1 = DatabaseForTesting(db_path)
             doc_id = db1.save_document("Concurrent Test", "Content", "test")
 
             # Second connection reads it
-            db2 = TestDatabase(db_path)
+            db2 = DatabaseForTesting(db_path)
             doc = db2.get_document(doc_id)
             assert doc["title"] == "Concurrent Test"
 
