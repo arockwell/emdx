@@ -10,6 +10,7 @@ This widget displays execution logs in a dual-pane layout:
 import logging
 import time
 from pathlib import Path
+from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -18,6 +19,7 @@ from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
 from emdx.models.executions import Execution, get_recent_executions
+from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
 from .text_areas import SelectionTextArea
 from .log_parser import LogParser, LogEntry
@@ -41,8 +43,23 @@ class LogBrowserHost:
             logger.error(f"Error exiting selection mode: {e}")
 
 
+class LogBrowserSubscriber(LogStreamSubscriber):
+    """Internal subscriber for LogBrowser to handle stream events."""
+    
+    def __init__(self, log_browser):
+        self.log_browser = log_browser
+    
+    def on_log_content(self, new_content: str) -> None:
+        """Delegate to LogBrowser."""
+        self.log_browser._handle_log_content(new_content)
+    
+    def on_log_error(self, error: Exception) -> None:
+        """Delegate to LogBrowser."""
+        self.log_browser._handle_log_error(error)
+
+
 class LogBrowser(Widget):
-    """Log browser widget for viewing execution logs."""
+    """Log browser widget for viewing execution logs with event-driven streaming."""
 
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
@@ -110,9 +127,9 @@ class LogBrowser(Widget):
         super().__init__(*args, **kwargs)
         self.executions: list[Execution] = []
         self.selection_mode = False
-        self.live_mode = False
-        self.refresh_timer = None
-        self.last_log_size = 0
+        self.current_stream: Optional[LogStream] = None
+        self.is_live_mode = False
+        self.stream_subscriber = LogBrowserSubscriber(self)
 
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
@@ -187,7 +204,8 @@ class LogBrowser(Widget):
     async def on_unmount(self) -> None:
         """Clean up when unmounting."""
         logger.info("📋 LogBrowser unmounting")
-        self.stop_live_refresh()
+        if self.current_stream:
+            self.current_stream.unsubscribe(self.stream_subscriber)
 
     async def load_executions(self) -> None:
         """Load recent executions from the database."""
@@ -325,7 +343,7 @@ class LogBrowser(Widget):
             logger.error(f"Error updating details panel: {e}", exc_info=True)
 
     async def load_execution_log(self, execution: Execution) -> None:
-        """Load and display the log content for the selected execution."""
+        """Load and display the log content using event-driven streaming."""
         try:
             # Update details panel with execution metadata
             await self.update_details_panel(execution)
@@ -333,93 +351,33 @@ class LogBrowser(Widget):
             log_content = self.query_one("#log-content", RichLog)
             log_content.clear()
 
-            # Read log file content
+            # Stop current stream if any
+            if self.current_stream:
+                self.current_stream.unsubscribe(self.stream_subscriber)
+
+            # Create new stream for this execution
             log_file = Path(execution.log_file)
-            if log_file.exists():
-                # Store file size for live refresh detection
-                self.last_log_size = log_file.stat().st_size
+            self.current_stream = LogStream(log_file)
 
-                try:
-                    with open(log_file, encoding='utf-8', errors='replace') as f:
-                        content = f.read()
-                except Exception as e:
-                    logger.error(f"Error reading log file: {e}")
-                    log_content.write(f"❌ Error reading log file: {e}")
-                    return
-
-                if content.strip():
-                    # Simple header - just the execution info
-                    header_text = f"[bold]Execution #{execution.id}[/bold] - {execution.doc_title}"
-                    log_content.write(header_text)
-                    log_content.write("")
-
-                    # Split content into header and log lines
-                    lines = content.splitlines()
-                    header_lines = []
-                    log_lines = []
-                    in_header = True
-
-                    for line in lines:
-                        if in_header and (
-                                line.startswith('=') or line.startswith('Version:') or
-                                line.startswith('Doc ID:') or line.startswith('Execution ID:') or
-                                line.startswith('Worktree:') or line.startswith('Started:') or
-                                line.startswith('Build ID:') or line.startswith('-')
-                        ):
-                            header_lines.append(line)
-                        else:
-                            in_header = False
-                            log_lines.append(line)
-
-                    # Extract prompt and filter out wrapper noise
-                    filtered_lines = []
-                    prompt_content = []
-                    in_prompt = False
-
-                    for line in log_lines:
-                        # Detect prompt section
-                        if "📝 Prompt being sent to Claude:" in line:
-                            in_prompt = True
-                            continue
-                        elif line.strip() == "─" * 60:
-                            if in_prompt:
-                                in_prompt = False
-                                continue
-                        elif in_prompt:
-                            prompt_content.append(line)
-                            continue
-
-                        # Skip wrapper orchestration messages
-                        if self._is_wrapper_noise(line):
-                            continue
-                        filtered_lines.append(line)
-
-                    # Show prompt first if we found one
-                    if prompt_content:
-                        log_content.write("[bold blue]Prompt:[/bold blue]")
-                        for prompt_line in prompt_content:
-                            if prompt_line.strip():
-                                log_content.write(prompt_line)
-                        log_content.write("")
-                        log_content.write("[bold blue]Claude Response:[/bold blue]")
-
-                    # Just display the log content as-is
-                    # The wrapper now writes human-readable logs directly
-                    for line in filtered_lines:
-                        log_content.write(line)
-
-                    # In live mode, scroll to bottom to see newest logs
-                    # In normal mode, stay at top
-                    if self.live_mode:
-                        # Scroll to bottom
-                        log_content.scroll_end(animate=False)
-                    else:
-                        # Stay at top
-                        log_content.scroll_to(0, 0, animate=False)
+            # Get initial content
+            initial_content = self.current_stream.get_initial_content()
+            
+            if initial_content.strip():
+                formatted_content = self._format_initial_content(initial_content, execution)
+                for line in formatted_content.splitlines():
+                    log_content.write(line)
+                
+                # Scroll position based on live mode
+                if self.is_live_mode:
+                    log_content.scroll_end(animate=False)
                 else:
-                    log_content.write("[dim](No log content yet)[/dim]")
+                    log_content.scroll_to(0, 0, animate=False)
             else:
-                log_content.write(f"❌ Log file not found: {execution.log_file}")
+                log_content.write("[dim](No log content yet)[/dim]")
+
+            # Enable live streaming if in live mode
+            if self.is_live_mode:
+                self.current_stream.subscribe(self.stream_subscriber)
 
         except Exception as e:
             logger.error(f"Error loading execution log: {e}", exc_info=True)
@@ -432,8 +390,8 @@ class LogBrowser(Widget):
             await self.load_execution_log(execution)
 
             # Update status to show live mode hint for running executions
-            if self.live_mode:
-                self.update_status("🔴 LIVE MODE | l=toggle off | Auto-refresh every 1s")
+            if self.is_live_mode:
+                self.update_status("🔴 LIVE MODE | l=toggle off | Event-driven streaming")
             elif execution.status == 'running' and not self.selection_mode:
                 self.update_status("📋 Execution running | Press 'l' for live mode | q=back")
 
@@ -542,70 +500,121 @@ class LogBrowser(Widget):
         await self.load_executions()
 
     async def action_toggle_live(self) -> None:
-        """Toggle live mode for auto-refreshing logs."""
-        self.live_mode = not self.live_mode
+        """Toggle live mode using event-driven streaming."""
+        self.is_live_mode = not self.is_live_mode
 
-        if self.live_mode:
-            # Start auto-refresh timer
-            self.start_live_refresh()
-            self.update_status("🔴 LIVE MODE | l=toggle off | Auto-refresh every 1s")
+        if self.is_live_mode:
+            # Enable live streaming if we have a current stream
+            if self.current_stream:
+                self.current_stream.subscribe(self.stream_subscriber)
+            self.update_status("🔴 LIVE MODE | l=toggle off | Event-driven streaming")
         else:
-            # Stop auto-refresh
-            self.stop_live_refresh()
-            # Refresh status based on current state
-            if self.selection_mode:
-                self.update_status("Selection Mode | Enter=copy | ESC=cancel")
+            # Disable live streaming
+            if self.current_stream:
+                self.current_stream.unsubscribe(self.stream_subscriber)
+            self.update_status("📋 Live mode off | l=toggle on | q=back")
+
+    # Stream event handlers (called by LogBrowserSubscriber)
+    def _handle_log_content(self, new_content: str) -> None:
+        """Handle new log content from stream."""
+        try:
+            if new_content:
+                filtered_content = self._filter_log_content(new_content)
+                if filtered_content.strip():
+                    log_content = self.query_one("#log-content", RichLog)
+                    log_content.write(filtered_content)
+                    
+                    # Auto-scroll to bottom in live mode
+                    if self.is_live_mode:
+                        log_content.scroll_end(animate=False)
+        except Exception as e:
+            logger.error(f"Error displaying new log content: {e}")
+
+    def _handle_log_error(self, error: Exception) -> None:
+        """Handle log streaming errors."""
+        try:
+            log_content = self.query_one("#log-content", RichLog)
+            error_msg = f"❌ Log streaming error: {error}"
+            log_content.write(error_msg)
+            logger.error(f"Log streaming error: {error}")
+        except Exception:
+            pass
+
+    def _filter_log_content(self, content: str) -> str:
+        """Apply filtering to new content (without header formatting)."""
+        lines = content.splitlines()
+        filtered_lines = []
+        
+        for line in lines:
+            # Skip wrapper orchestration messages
+            if self._is_wrapper_noise(line):
+                continue
+            filtered_lines.append(line)
+        
+        return '\n'.join(filtered_lines)
+
+    def _format_initial_content(self, content: str, execution: Execution) -> str:
+        """Apply same filtering and formatting logic as current LogBrowser."""
+        if not content.strip():
+            return ""
+        
+        # Simple header - just the execution info
+        lines = [f"[bold]Execution #{execution.id}[/bold] - {execution.doc_title}", ""]
+        
+        # Split content into header and log lines
+        content_lines = content.splitlines()
+        header_lines = []
+        log_lines = []
+        in_header = True
+
+        for line in content_lines:
+            if in_header and (
+                line.startswith('=') or line.startswith('Version:') or
+                line.startswith('Doc ID:') or line.startswith('Execution ID:') or
+                line.startswith('Worktree:') or line.startswith('Started:') or
+                line.startswith('Build ID:') or line.startswith('-')
+            ):
+                header_lines.append(line)
             else:
-                status_text = (
-                f"📋 {len(self.executions)} executions | "
-                "j/k=navigate | s=select | l=live | q=back"
-            )
-            self.update_status(status_text)
+                in_header = False
+                log_lines.append(line)
 
-        # Reload current log with new ordering
-        table = self.query_one("#log-table", DataTable)
-        row_idx = table.cursor_row
-        if row_idx < len(self.executions):
-            execution = self.executions[row_idx]
-            await self.load_execution_log(execution)
+        # Extract prompt and filter out wrapper noise
+        filtered_lines = []
+        prompt_content = []
+        in_prompt = False
 
-    def start_live_refresh(self) -> None:
-        """Start the auto-refresh timer for live mode."""
-        if self.refresh_timer:
-            self.refresh_timer.stop()
+        for line in log_lines:
+            # Detect prompt section
+            if "📝 Prompt being sent to Claude:" in line:
+                in_prompt = True
+                continue
+            elif line.strip() == "─" * 60:
+                if in_prompt:
+                    in_prompt = False
+                    continue
+            elif in_prompt:
+                prompt_content.append(line)
+                continue
 
-        # Refresh every 1 second
-        self.refresh_timer = self.set_timer(1.0, self.live_refresh_log)
+            # Skip wrapper orchestration messages
+            if self._is_wrapper_noise(line):
+                continue
+            filtered_lines.append(line)
 
-    def stop_live_refresh(self) -> None:
-        """Stop the auto-refresh timer."""
-        if self.refresh_timer:
-            self.refresh_timer.stop()
-            self.refresh_timer = None
+        # Show prompt first if we found one
+        if prompt_content:
+            lines.append("[bold blue]Prompt:[/bold blue]")
+            for prompt_line in prompt_content:
+                if prompt_line.strip():
+                    lines.append(prompt_line)
+            lines.append("")
+            lines.append("[bold blue]Claude Response:[/bold blue]")
 
-    async def live_refresh_log(self) -> None:
-        """Refresh the current log in live mode."""
-        if not self.live_mode:
-            return
-
-        # Get current execution
-        table = self.query_one("#log-table", DataTable)
-        row_idx = table.cursor_row
-        if row_idx < len(self.executions):
-            execution = self.executions[row_idx]
-
-            # Check if file has grown
-            log_file = Path(execution.log_file)
-            if log_file.exists():
-                current_size = log_file.stat().st_size
-                if current_size != self.last_log_size:
-                    self.last_log_size = current_size
-                    await self.load_execution_log(execution)
-
-        # Schedule next refresh
-        if self.live_mode:
-            self.refresh_timer = self.set_timer(1.0, self.live_refresh_log)
-
+        # Add the filtered log content
+        lines.extend(filtered_lines)
+        
+        return '\n'.join(lines)
 
     def update_status(self, text: str) -> None:
         """Update the status bar."""
