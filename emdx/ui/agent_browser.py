@@ -486,17 +486,13 @@ class AgentBrowser(Widget):
         content = self.query_one("#agent-content", Static)
         content.update("Agent editing temporarily disabled\n\nUse CLI commands instead:\n  emdx agent edit <name>")
     
-    async def action_new_agent(self) -> None:
+    def action_new_agent(self) -> None:
         """Start interactive agent creation using form."""
         logger.info("action_new_agent called")
         
         try:
             # Temporarily disable new agent creation to prevent crashes
             self.update_status("Create agent - temporarily disabled in this version")
-            
-            # Show message in content area
-            content = self.query_one("#agent-content", Static)
-            content.update("Agent creation temporarily disabled\n\nUse CLI commands instead:\n  emdx agent create --name my-agent")
             logger.info("action_new_agent completed successfully")
         except Exception as e:
             logger.error(f"Error in action_new_agent: {e}", exc_info=True)
