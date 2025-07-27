@@ -396,6 +396,7 @@ def execute_with_claude_detached(
         "--print", expanded_task,
         "--allowedTools", ",".join(allowed_tools),
         "--output-format", "stream-json",
+        "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
         "--verbose"
     ]
 
@@ -542,6 +543,7 @@ def execute_with_claude(
         "--print", expanded_task,
         "--allowedTools", ",".join(allowed_tools),
         "--output-format", "stream-json",
+        "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
         "--verbose"
     ]
 
