@@ -4,6 +4,7 @@ import subprocess
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
@@ -12,6 +13,7 @@ from .base import Agent, AgentContext, AgentResult
 from ..models.documents import get_document, save_document
 from ..utils.logging import get_logger
 from ..utils.structured_logger import StructuredLogger, ProcessType
+from ..commands.claude_execute import format_claude_output, format_timestamp
 
 logger = get_logger(__name__)
 
@@ -44,15 +46,13 @@ class GenericAgent(Agent):
             
             logger.info(f"Executing agent {self.config.name} with command: {' '.join(cmd)}")
             
-            # Initialize structured logger
+            # Set up log file path
             log_file = Path(context.log_file) if context.log_file else Path(context.working_dir) / "agent.log"
-            structured_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
-            structured_logger.info(f"Starting agent execution: {self.config.display_name}", {
-                "agent_name": self.config.name,
-                "agent_id": self.config.id,
-                "allowed_tools": self.config.allowed_tools,
-                "command": cmd
-            })
+            
+            # Write initial header like execute system does
+            with open(log_file, 'a') as f:
+                f.write(f"{format_timestamp()} 🤖 Starting agent execution: {self.config.display_name}\n")
+                f.write(f"{format_timestamp()} 🔧 Tools: {', '.join(self.config.allowed_tools)}\n")
             
             # Execute Claude
             process = subprocess.Popen(
@@ -77,56 +77,14 @@ class GenericAgent(Agent):
                         output_lines.append(line.rstrip())
                         stripped = line.strip()
                         
-                        # Write raw output and let structured logger handle formatting
-                        log_handle.write(line)
-                        
-                        # Use structured logger with claude_type context for existing parser
+                        # Use format_claude_output for pretty formatting (like execute system)
                         if stripped:
-                            try:
-                                if stripped.startswith('{"type":'):
-                                    data = json.loads(stripped)
-                                    msg_type = data.get("type")
-                                    
-                                    if msg_type == "assistant":
-                                        message = data.get("message", {})
-                                        content = message.get("content", [])
-                                        if content and isinstance(content, list):
-                                            first_content = content[0]
-                                            if isinstance(first_content, dict):
-                                                if first_content.get("type") == "tool_use":
-                                                    tool = first_content.get("name", "unknown")
-                                                    structured_logger.info(f"Using tool: {tool}", {
-                                                        "claude_type": "tool_use",
-                                                        "tool": tool
-                                                    })
-                                                elif first_content.get("type") == "text":
-                                                    text = first_content.get("text", "")[:100]
-                                                    structured_logger.info(f"Claude: {text}...", {
-                                                        "claude_type": "content"
-                                                    })
-                                    
-                                    elif msg_type == "user":
-                                        content = data.get("message", {}).get("content", [])
-                                        if content and isinstance(content, list):
-                                            first_content = content[0]
-                                            if isinstance(first_content, dict) and first_content.get("type") == "tool_result":
-                                                result = first_content.get("content", "")[:80]
-                                                structured_logger.info(f"Tool result: {result}...", {
-                                                    "claude_type": "tool_result"
-                                                })
-                                    
-                                    elif msg_type == "system" and data.get("subtype") == "init":
-                                        model = data.get("model", "unknown")
-                                        structured_logger.info(f"Session started with {model}", {
-                                            "claude_type": "system_init",
-                                            "model": model
-                                        })
-                                
-                                else:
-                                    structured_logger.info("Agent output", {"content": stripped})
-                            
-                            except (json.JSONDecodeError, KeyError):
-                                structured_logger.info("Agent output", {"content": stripped})
+                            formatted = format_claude_output(stripped, time.time())
+                            if formatted:
+                                log_handle.write(formatted + "\n")
+                            else:
+                                # Fallback for non-JSON lines
+                                log_handle.write(line)
                         
                         log_handle.flush()
             
