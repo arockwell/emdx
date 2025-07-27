@@ -100,7 +100,8 @@ class AgentExecutor:
             input_doc_id=input_doc_id,
             input_query=input_query,
             context_docs=context_docs,
-            variables=variables or {}
+            variables=variables or {},
+            log_file=str(log_file)
         )
         
         if background:

@@ -90,6 +90,7 @@ class AgentContext:
     context_docs: List[int] = field(default_factory=list)
     parent_execution_id: Optional[int] = None  # For pipeline executions
     variables: Dict[str, Any] = field(default_factory=dict)  # For template variables
+    log_file: Optional[str] = None  # Path to log file for this execution
 
 
 @dataclass

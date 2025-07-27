@@ -11,6 +11,7 @@ from datetime import datetime
 from .base import Agent, AgentContext, AgentResult
 from ..models.documents import get_document, save_document
 from ..utils.logging import get_logger
+from ..utils.structured_logger import StructuredLogger, ProcessType
 
 logger = get_logger(__name__)
 
@@ -31,33 +32,58 @@ class GenericAgent(Agent):
                 prompt_file = f.name
                 f.write(full_prompt)
             
-            # Prepare Claude command
+            # Prepare Claude command using same format as claude_execute.py
             cmd = [
-                "claude", "code",
-                "--file", prompt_file,
-                "--model", "claude-3.5-sonnet"  # Use appropriate model
+                "claude",
+                "--print", full_prompt,
+                "--allowedTools", ",".join(self.config.allowed_tools),
+                "--output-format", "stream-json",
+                "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
+                "--verbose"
             ]
             
-            # Add working directory
-            if context.working_dir:
-                cmd.extend(["--working-dir", context.working_dir])
-            
-            # Add timeout if specified
-            if self.config.timeout_seconds:
-                cmd.extend(["--timeout", str(self.config.timeout_seconds)])
-            
             logger.info(f"Executing agent {self.config.name} with command: {' '.join(cmd)}")
+            
+            # Initialize structured logger
+            log_file = Path(context.log_file) if context.log_file else Path(context.working_dir) / "agent.log"
+            structured_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
+            structured_logger.info(f"Starting agent execution: {self.config.display_name}", {
+                "agent_name": self.config.name,
+                "agent_id": self.config.id,
+                "allowed_tools": self.config.allowed_tools,
+                "command": cmd
+            })
             
             # Execute Claude
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # Combine stderr into stdout
                 text=True,
-                cwd=context.working_dir
+                bufsize=0,  # Unbuffered
+                universal_newlines=True,
+                cwd=context.working_dir,
+                env={**os.environ, 'PYTHONUNBUFFERED': '1'}
             )
             
-            stdout, stderr = process.communicate()
+            # Stream output to log file
+            output_lines = []
+            with open(log_file, 'a') as log_handle:
+                while True:
+                    line = process.stdout.readline()
+                    if not line and process.poll() is not None:
+                        break
+                    if line:
+                        output_lines.append(line.rstrip())
+                        log_handle.write(line)
+                        log_handle.flush()
+                        
+                        # Also log structured events
+                        if line.strip():
+                            structured_logger.info("Agent output", {"content": line.rstrip()})
+            
+            stdout = '\n'.join(output_lines)
+            stderr = ""  # Already combined with stdout
             
             # Clean up prompt file
             os.unlink(prompt_file)
