@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
 
-from emdx.cli import app
+from emdx.main import app
 
 runner = CliRunner()
 
@@ -44,15 +44,15 @@ class TestCLIBasics:
         result = runner.invoke(app, ["nonexistent-command"])
 
         assert result.exit_code != 0
-        # Typer shows error in stderr or stdout
-        error_output = result.stdout + result.stderr
+        # Typer shows error in stdout when stderr not captured
+        error_output = result.stdout
         assert (
             "no such command" in error_output.lower()
             or "invalid" in error_output.lower()
             or result.exit_code == 2
         )
 
-    @patch("emdx.browse.db")
+    @patch("emdx.commands.browse.db")
     def test_list_command(self, mock_db):
         """Test list command."""
         mock_db.ensure_schema = Mock()
@@ -74,14 +74,14 @@ class TestCLIBasics:
         # Should show some statistics
         assert result.exit_code == 0
 
-    @patch("emdx.tags.db")
+    @patch("emdx.models.tags.db")
     def test_tags_list_command(self, mock_db):
         """Test tags list command."""
         mock_conn = Mock()
         mock_conn.execute.return_value.fetchall.return_value = []
         mock_db.get_connection.return_value.__enter__.return_value = mock_conn
 
-        result = runner.invoke(app, ["tags", "list"])
+        result = runner.invoke(app, ["tags"])
         # Should work even with no tags
         assert result.exit_code == 0
 
