@@ -4,14 +4,13 @@ Analyzes document content and suggests appropriate tags based on patterns.
 """
 
 import re
-from typing import List, Dict, Any, Tuple, Optional, Set
-from collections import defaultdict
 import sqlite3
-from pathlib import Path
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
-from ..utils.emoji_aliases import EMOJI_ALIASES
 from ..models.tags import get_or_create_tag
+from ..utils.emoji_aliases import EMOJI_ALIASES
 
 
 class AutoTagger:

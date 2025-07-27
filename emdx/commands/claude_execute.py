@@ -26,8 +26,8 @@ from ..models.executions import (
 )
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
-from ..utils.environment import validate_execution_environment, ensure_claude_in_path
-from ..utils.structured_logger import StructuredLogger, ProcessType
+from ..utils.environment import ensure_claude_in_path, validate_execution_environment
+from ..utils.structured_logger import ProcessType, StructuredLogger
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
 console = Console()
@@ -1053,7 +1053,6 @@ def execute(
 
     # Handle execution ID and log file
     import os
-    import time
     
     if exec_id:
         # Use provided execution ID from database

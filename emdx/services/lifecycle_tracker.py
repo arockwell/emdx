@@ -4,14 +4,13 @@ Tracks document lifecycle, especially for gameplans and projects.
 """
 
 import sqlite3
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
-import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
-from ..models.tags import get_document_tags, add_tags_to_document, remove_tags_from_document
 from ..models.documents import get_document, update_document
+from ..models.tags import add_tags_to_document, get_document_tags, remove_tags_from_document
 
 
 class LifecycleTracker:

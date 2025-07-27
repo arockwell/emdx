@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from .structured_logger import LogLevel, ProcessType
 

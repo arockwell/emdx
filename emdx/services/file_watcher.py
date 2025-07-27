@@ -1,15 +1,14 @@
 """Cross-platform file watching with fallback to polling."""
 
-import time
+import logging
 import threading
 from pathlib import Path
 from typing import Callable
-import logging
 
 # Try to use watchdog for efficient file watching
 try:
-    from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False

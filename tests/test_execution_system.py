@@ -6,9 +6,7 @@ Run this manually to validate the fixes:
 """
 
 import subprocess
-import time
 import tempfile
-from pathlib import Path
 
 
 def test_execution_id_uniqueness():

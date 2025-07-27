@@ -6,19 +6,19 @@ Git diff browser and operations for EMDX TUI.
 import logging
 import os
 from pathlib import Path
-from textual.widgets import Button, DataTable, Input, Label, RichLog
-from textual.screen import ModalScreen  
+
 from textual.containers import Grid
+from textual.screen import ModalScreen
+from textual.widgets import Button, DataTable, Input, Label
 
 from emdx.utils.git_ops import (
-    get_git_status,
     get_comprehensive_git_diff,
     get_current_branch,
-    get_worktrees,
-    git_stage_file,
-    git_unstage_file,
+    get_git_status,
     git_commit,
     git_discard_changes,
+    git_stage_file,
+    git_unstage_file,
 )
 
 logger = logging.getLogger(__name__)

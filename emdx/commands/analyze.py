@@ -4,21 +4,23 @@ Consolidates all read-only analysis and inspection operations.
 """
 
 import json
+
+# Removed CommandDefinition import - using standard typer pattern
+import sqlite3
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 import typer
-from typing import Optional, Dict, Any, List
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
-from datetime import datetime, timedelta
 
+from ..config.settings import get_db_path
+from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
-from ..services.document_merger import DocumentMerger
-from ..config.settings import get_db_path
-# Removed CommandDefinition import - using standard typer pattern
-import sqlite3
 
 console = Console()
 
@@ -423,7 +425,10 @@ def _analyze_lifecycle():
         return
     
     console.print(f"\n  Total Gameplans: {analysis['total_gameplans']}")
-    console.print(f"  Success Rate: [{_get_success_color(analysis['success_rate'])}]{analysis['success_rate']:.0f}%[/{_get_success_color(analysis['success_rate'])}]")
+    # Format success rate with appropriate color coding
+    success_rate = analysis['success_rate']
+    color = _get_success_color(success_rate)
+    console.print(f"  Success Rate: [{color}]{success_rate:.0f}%[/{color}]")
     console.print(f"  Average Duration: {analysis['average_duration']:.0f} days")
     
     # Stage distribution

@@ -10,14 +10,12 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, RichLog, Static
 
+from emdx.commands.claude_execute import (
+    execute_document_smart_background,
+)
 from emdx.models.documents import save_document
 from emdx.models.tags import add_tags_to_document
 from emdx.utils.emoji_aliases import expand_aliases
-from emdx.commands.claude_execute import (
-    execute_document_smart_background,
-    ExecutionType,
-    STAGE_TOOLS
-)
 
 
 class SaveFileModal(ModalScreen[Optional[dict]]):
