@@ -130,6 +130,17 @@ class BrowserContainer(App):
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
+            elif browser_type == "agent":
+                try:
+                    from .agent_browser import AgentBrowser
+                    self.browsers[browser_type] = AgentBrowser()
+                    logger.info("AgentBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create AgentBrowser: {e}", exc_info=True)
+                    # Create a simple error message widget instead
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Agent browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    logger.error(f"AgentBrowser creation failed, showing error message")
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -184,7 +195,11 @@ class BrowserContainer(App):
             await self.switch_browser("log")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git", "log"]:
+        elif key == "a" and self.current_browser == "document":
+            await self.switch_browser("agent")
+            event.stop()
+            return
+        elif key == "q" and self.current_browser in ["file", "git", "log", "agent"]:
             await self.switch_browser("document")
             event.stop()
             return
