@@ -87,7 +87,7 @@ class AutoTagger:
         
         # Priority
         'urgent': {
-            'title_patterns': [r'urgent:', r'critical:', r'asap'],
+            'title_patterns': [r'urgent:', r'urgent\s', r'critical:', r'critical\s', r'asap'],
             'content_patterns': [r'urgent', r'critical', r'immediately', r'asap'],
             'confidence': 0.85,
             'tags': ['urgent']
@@ -155,7 +155,7 @@ class AutoTagger:
                     if title_matches > 0:
                         confidence = min(1.0, confidence + 0.1)
                     else:
-                        confidence = base_confidence * 0.7  # Lower confidence for content-only match
+                        confidence = base_confidence * 0.75  # Lower confidence for content-only match
             
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:

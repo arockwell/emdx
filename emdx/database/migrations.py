@@ -298,9 +298,10 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
 ]
 
 
-def run_migrations():
+def run_migrations(db_path=None):
     """Run all pending migrations."""
-    db_path = get_db_path()
+    if db_path is None:
+        db_path = get_db_path()
     # Don't return early - we need to run migrations even for new databases
     # The database file will be created when we connect to it
     
