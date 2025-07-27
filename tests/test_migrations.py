@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from emdx.migrations import get_schema_version, migration_001_add_tags
+from emdx.database.migrations import get_schema_version, migration_001_add_tags
 
 
 class TestSimpleMigrations:

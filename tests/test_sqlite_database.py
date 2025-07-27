@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-from emdx.sqlite_database import SQLiteDatabase
+from emdx.database import SQLiteDatabase
 
 
 class TestSQLiteDatabase:
