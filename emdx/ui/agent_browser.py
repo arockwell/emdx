@@ -48,6 +48,7 @@ class AgentBrowser(Widget):
         Binding("g", "cursor_top", "Top"),
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("r", "run_agent", "Run"),
+        Binding("a", "new_agent", "Add Agent"),
         Binding("n", "new_agent", "New"),
         Binding("e", "edit_agent", "Edit"),
         Binding("d", "delete_agent", "Delete"),
@@ -136,7 +137,7 @@ class AgentBrowser(Widget):
             # Left sidebar
             with Vertical(id="agent-sidebar"):
                 yield DataTable(id="agent-table", cursor_type="row")
-                yield RichLog(id="agent-details", auto_scroll=False, markup=True)
+                yield Static("", id="agent-details", markup=True)
             
             # Right preview
             with Vertical(id="agent-preview-container"):
@@ -238,15 +239,21 @@ class AgentBrowser(Widget):
     
     def update_details(self, agent_info: dict) -> None:
         """Update the details panel."""
-        details = self.query_one("#agent-details", RichLog)
-        details.clear()
-        details.write(f"[bold yellow]Agent: {agent_info['display_name']}[/bold yellow]")
-        details.write(f"ID: {agent_info['id']}")
-        details.write(f"Category: {agent_info['category']}")
-        details.write(f"Active: {agent_info['is_active']}")
-        details.write(f"Usage: {agent_info['usage_count']} times")
+        details = self.query_one("#agent-details", Static)
+        
+        # Build the content as a single string
+        content_lines = [
+            f"[bold yellow]Agent: {agent_info['display_name']}[/bold yellow]",
+            f"ID: {agent_info['id']}",
+            f"Category: {agent_info['category']}",
+            f"Active: {agent_info['is_active']}",
+            f"Usage: {agent_info['usage_count']} times"
+        ]
+        
         if agent_info['description']:
-            details.write(f"\n[dim]{agent_info['description']}[/dim]")
+            content_lines.append(f"\n[dim]{agent_info['description']}[/dim]")
+        
+        details.update("\n".join(content_lines))
         
         # Also update the main content area
         self.update_agent_content(agent_info)

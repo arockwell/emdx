@@ -15,7 +15,7 @@ from rich.syntax import Syntax
 from ..agents.registry import agent_registry
 from ..agents.executor import agent_executor
 from ..database.connection import db_connection
-from ..models.tags import TEXT_TO_EMOJI
+from ..utils.emoji_aliases import EMOJI_ALIASES
 from ..utils.logging import get_logger
 
 app = typer.Typer(help="Manage and run EMDX agents")
@@ -269,8 +269,8 @@ def create_agent(
         emoji_tags = []
         if output_tags:
             for tag in output_tags:
-                if tag in TEXT_TO_EMOJI:
-                    emoji_tags.append(TEXT_TO_EMOJI[tag])
+                if tag in EMOJI_ALIASES:
+                    emoji_tags.append(EMOJI_ALIASES[tag])
                 else:
                     # Keep as-is if not a known text tag
                     emoji_tags.append(tag)
@@ -474,8 +474,8 @@ def edit_agent(
             # Convert text tags to emojis
             emoji_tags = []
             for tag in output_tags:
-                if tag in TEXT_TO_EMOJI:
-                    emoji_tags.append(TEXT_TO_EMOJI[tag])
+                if tag in EMOJI_ALIASES:
+                    emoji_tags.append(EMOJI_ALIASES[tag])
                 else:
                     emoji_tags.append(tag)
             updates['output_tags'] = emoji_tags

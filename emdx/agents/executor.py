@@ -11,7 +11,8 @@ from typing import Optional, List, Dict, Any, Union
 from .base import AgentContext, AgentResult
 from .registry import agent_registry
 from ..models.executions import create_execution, update_execution_status
-from ..models.documents import get_document, save_document, search_documents_by_tags
+from ..models.documents import get_document, save_document
+from ..models.tags import search_by_tags
 from ..database.connection import db_connection
 from ..utils.logging import get_logger
 

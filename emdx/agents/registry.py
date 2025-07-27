@@ -1,6 +1,6 @@
 """Agent registry for managing agent types and instances."""
 
-from typing import Dict, Type, Optional, List
+from typing import Dict, Type, Optional, List, Any
 import json
 from ..database.connection import db_connection
 from .base import Agent, AgentConfig

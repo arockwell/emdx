@@ -130,6 +130,9 @@ class BrowserContainer(App):
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
+            elif browser_type == "agent":
+                from .agent_browser import AgentBrowser
+                self.browsers[browser_type] = AgentBrowser()
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -184,7 +187,11 @@ class BrowserContainer(App):
             await self.switch_browser("log")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git", "log"]:
+        elif key == "a" and self.current_browser == "document":
+            await self.switch_browser("agent")
+            event.stop()
+            return
+        elif key == "q" and self.current_browser in ["file", "git", "log", "agent"]:
             await self.switch_browser("document")
             event.stop()
             return
