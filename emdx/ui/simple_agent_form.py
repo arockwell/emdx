@@ -3,8 +3,8 @@
 Dead simple agent form that just works.
 """
 
-from textual.containers import Vertical
-from textual.widgets import Static, Input
+from textual.containers import Vertical, Horizontal
+from textual.widgets import Static, Input, TextArea, Button
 from textual.widget import Widget
 
 
@@ -40,25 +40,53 @@ class SimpleAgentForm(Widget):
         yield Static("")
         
         yield Static("Description:")
-        yield Input(
-            placeholder="What this agent does",
-            value=self.agent_data.get("description", ""),
+        yield TextArea(
+            text=self.agent_data.get("description", ""),
             id="agent-description"
         )
         yield Static("")
         
-        yield Static("[green]Ctrl+S[/green] to save | [red]ESC[/red] to cancel")
+        yield Static("System Prompt:")
+        yield TextArea(
+            text=self.agent_data.get("system_prompt", "You are a helpful assistant."),
+            id="agent-system-prompt"
+        )
+        yield Static("")
+        
+        yield Static("User Prompt Template:")
+        yield TextArea(
+            text=self.agent_data.get("user_prompt_template", "Help with: {{task}}"),
+            id="agent-user-prompt"
+        )
+        yield Static("")
+        
+        with Horizontal():
+            yield Button("Save Agent", variant="primary", id="save-btn")
+            yield Button("Cancel", id="cancel-btn")
+        
+        yield Static("")
+        yield Static("[green]Click Save[/green] or [red]Cancel[/red] | [yellow]Ctrl+S[/yellow] = save | [red]ESC[/red] = cancel")
     
     def on_mount(self):
         """Focus first input."""
         self.query_one("#agent-name").focus()
     
+    async def on_button_pressed(self, event):
+        """Handle button clicks."""
+        if event.button.id == "save-btn":
+            await self.save_form()
+        elif event.button.id == "cancel-btn":
+            await self.cancel_form()
+    
     async def on_key(self, event):
         """Handle save and cancel."""
+        print(f"SimpleAgentForm.on_key: {event.key}")  # Debug logging
         if event.key == "ctrl+s":
+            print("Saving form...")  # Debug logging
             await self.save_form()
             event.stop()
         elif event.key == "escape":
+            print("Cancelling form...")  # Debug logging
             await self.cancel_form()
             event.stop()
     
@@ -67,7 +95,9 @@ class SimpleAgentForm(Widget):
         try:
             name = self.query_one("#agent-name").value.strip()
             display_name = self.query_one("#agent-display-name").value.strip()
-            description = self.query_one("#agent-description").value.strip()
+            description = self.query_one("#agent-description").text.strip()
+            system_prompt = self.query_one("#agent-system-prompt").text.strip()
+            user_prompt = self.query_one("#agent-user-prompt").text.strip()
             
             if not name:
                 self.parent_browser.update_status("❌ Name required")
@@ -79,10 +109,10 @@ class SimpleAgentForm(Widget):
             config = {
                 "name": name,
                 "display_name": display_name,
-                "description": description,
+                "description": description or "An AI agent",
                 "category": "research",
-                "system_prompt": "You are a helpful assistant.",
-                "user_prompt_template": "Help with: {{task}}",
+                "system_prompt": system_prompt or "You are a helpful assistant.",
+                "user_prompt_template": user_prompt or "Help with: {{task}}",
                 "allowed_tools": ["Read", "Grep", "Glob"],
                 "timeout_seconds": 3600,
                 "created_by": "user"
