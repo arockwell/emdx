@@ -48,7 +48,7 @@ class AgentBrowser(Widget):
         Binding("g", "cursor_top", "Top"),
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("r", "run_agent", "Run"),
-        Binding("a", "new_agent", "Add Agent"),
+        # Binding("a", "new_agent", "Add Agent"),  # Temporarily disabled due to crashes
         Binding("n", "new_agent", "New"),
         Binding("e", "edit_agent", "Edit"),
         Binding("d", "delete_agent", "Delete"),
