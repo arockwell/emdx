@@ -11,8 +11,12 @@ def get_logger(name: str) -> logging.Logger:
     
     # Only configure if not already configured
     if not logger.handlers:
-        # Create console handler
-        handler = logging.StreamHandler(sys.stderr)
+        # Create file handler instead of console handler to avoid TUI interference
+        log_dir = Path.home() / ".config" / "emdx"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "emdx.log"
+        
+        handler = logging.FileHandler(log_file)
         handler.setLevel(logging.INFO)
         
         # Create formatter
