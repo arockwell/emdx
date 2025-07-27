@@ -432,8 +432,21 @@ class AgentBrowser(Widget):
             logger.error(f"Failed to update table: {e}", exc_info=True)
     
     def action_run_agent(self) -> None:
-        """Run agent - stub for now."""
-        self.update_status("Run agent - not implemented in minimal version")
+        """Run agent - basic implementation."""
+        if not self.current_agent_id:
+            self.update_status("No agent selected")
+            return
+            
+        agent = next((a for a in self.agents_list if a["id"] == self.current_agent_id), None)
+        if not agent:
+            self.update_status("Agent not found")
+            return
+            
+        self.update_status(f"Use CLI to run: emdx agent run {agent['name']} --query 'your query'")
+        content = self.query_one("#agent-content", Static)
+        content.update(f"To run agent '{agent['display_name']}':\n\n" +
+                      f"CLI command:\n  emdx agent run {agent['name']} --query 'your task'\n\n" +
+                      f"Or with document:\n  emdx agent run {agent['name']} --doc 123")
     
     async def action_edit_agent(self) -> None:
         """Start editing the selected agent using form."""
@@ -468,26 +481,21 @@ class AgentBrowser(Widget):
             "user_prompt_template": full_agent.config.user_prompt_template,
         }
         
-        # Enter form mode for editing
-        await self.enter_agent_form_mode(edit_mode=True, agent_data=agent_data)
+        # Temporarily disable editing to prevent crashes
+        self.update_status("Edit agent - temporarily disabled in this version")
+        content = self.query_one("#agent-content", Static)
+        content.update("Agent editing temporarily disabled\n\nUse CLI commands instead:\n  emdx agent edit <name>")
     
     async def action_new_agent(self) -> None:
         """Start interactive agent creation using form."""
         logger.info("action_new_agent called")
         
-        if not agent_registry:
-            self.update_status("❌ Agent registry not available - database may not be initialized")
-            logger.error("agent_registry is None")
-            return
+        # Temporarily disable new agent creation to prevent crashes
+        self.update_status("Create agent - temporarily disabled in this version")
         
-        # Try the form approach
-        logger.info("Calling enter_agent_form_mode...")
-        try:
-            await self.enter_agent_form_mode(edit_mode=False)
-            logger.info("enter_agent_form_mode completed")
-        except Exception as e:
-            logger.error(f"Error in action_new_agent: {e}", exc_info=True)
-            self.update_status(f"❌ Error creating form: {str(e)}")
+        # Show message in content area
+        content = self.query_one("#agent-content", Static)
+        content.update("Agent creation temporarily disabled\n\nUse CLI commands instead:\n  emdx agent create --name my-agent")
     
     def action_delete_agent(self) -> None:
         """Start agent deletion with confirmation."""
