@@ -678,8 +678,8 @@ class AgentBrowser(Widget):
                 self.input_mode = None
                 self.update_status("Agent creation cancelled")
                 # Clear the content panel
-                content = self.query_one("#agent-content", RichLog)
-                content.clear()
+                content = self.query_one("#agent-content", Static)
+                content.update("")
                 event.stop()
             elif key == "enter":
                 # Accept current input
@@ -719,8 +719,8 @@ class AgentBrowser(Widget):
                 self.input_mode = None
                 self.input_buffer = ""
                 self.update_status("Deletion cancelled")
-                content = self.query_one("#agent-content", RichLog)
-                content.clear()
+                content = self.query_one("#agent-content", Static)
+                content.update("")
                 event.stop()
             elif key == "enter":
                 # Check if confirmation matches
@@ -766,8 +766,8 @@ class AgentBrowser(Widget):
                 # Cancel editing
                 self.input_mode = None
                 self.update_status("Edit cancelled")
-                content = self.query_one("#agent-content", RichLog)
-                content.clear()
+                content = self.query_one("#agent-content", Static)
+                content.update("")
                 event.stop()
             elif key == "enter":
                 # Save current field value if changed
@@ -820,12 +820,12 @@ class AgentBrowser(Widget):
             return
         
         try:
-            # Hide existing content instead of removing it
+            # Remove the existing content container completely to prevent log bleeding
             content_scroll = self.query_one("#agent-preview", ScrollableContainer)
-            content_scroll.display = False
-            logger.info("Hidden existing content")
+            await content_scroll.remove()
+            logger.info("Removed existing content")
         except Exception as e:
-            logger.error(f"Error hiding content: {e}")
+            logger.error(f"Error removing content: {e}")
         
         # Create the agent form
         try:
@@ -840,12 +840,18 @@ class AgentBrowser(Widget):
             )
             logger.info(f"Created form: {agent_form}")
             
-            # Mount the form
+            # Mount the form directly to the container
             logger.info("Mounting form...")
             await content_container.mount(agent_form)
             logger.info("Form mounted successfully")
+            
+            # Focus the form to ensure it's active
+            agent_form.focus()
+            
         except Exception as e:
             logger.error(f"Error creating/mounting form: {e}", exc_info=True)
+            # Show error in status instead of letting logs bleed through
+            self.update_status(f"❌ Failed to create form: {str(e)}")
         
         # Update status
         action = "editing" if edit_mode else "creating"
@@ -868,20 +874,17 @@ class AgentBrowser(Widget):
         except Exception as e:
             logger.error(f"Error removing agent form: {e}")
         
-        # Restore normal content view
+        # Recreate the content area since we removed it
         try:
-            content_scroll = self.query_one("#agent-preview", ScrollableContainer)
-            content_scroll.display = True
-            logger.info("Restored content display")
-        except Exception as e:
-            logger.error(f"Error restoring content: {e}")
-            # Fallback - recreate the content if needed
             from textual.containers import ScrollableContainer
             content_scroll = ScrollableContainer(id="agent-preview")
             content_log = Static("", id="agent-content", markup=True)
             
             await content_container.mount(content_scroll)
             await content_scroll.mount(content_log)
+            logger.info("Recreated content area")
+        except Exception as e:
+            logger.error(f"Error recreating content: {e}")
         
         # Refresh the table and details
         self.update_table()

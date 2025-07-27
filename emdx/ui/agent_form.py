@@ -67,6 +67,8 @@ class AgentForm(Vertical):
         padding: 2;
         background: $surface;
         border: thick $primary;
+        height: 100%;
+        width: 100%;
     }
     
     .form-field {
