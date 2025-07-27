@@ -1,12 +1,199 @@
 """
-Command registration utilities for EMDX.
-Provides defensive error handling and preparation for Phase 2 architecture.
+Modern command registration system for EMDX.
+Replaces fragile typer internals manipulation with clean, maintainable patterns.
 """
-from typing import Dict, List, Optional, Callable, Any
+from typing import Protocol, Dict, List, Optional, Callable, Any
+from dataclasses import dataclass, field
 import typer
 from rich.console import Console
+from datetime import datetime
 
 console = Console()
+
+
+@dataclass
+class CommandDefinition:
+    """Definition of a single CLI command"""
+    name: str
+    function: Callable
+    help: str
+    aliases: List[str] = field(default_factory=list)
+    group: Optional[str] = None
+    hidden: bool = False
+    deprecated: bool = False
+    
+    def __post_init__(self):
+        if not callable(self.function):
+            raise ValueError(f"Command {self.name} function must be callable")
+
+
+class CommandModule(Protocol):
+    """Protocol for command modules with standardized interface"""
+    def get_commands(self) -> List[CommandDefinition]:
+        """Return list of commands provided by this module"""
+        ...
+
+
+class CommandRegistry:
+    """Central registry for all CLI commands"""
+    
+    def __init__(self):
+        self.commands: Dict[str, CommandDefinition] = {}
+        self.groups: Dict[str, typer.Typer] = {}
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+        self.registered_modules: List[str] = []
+    
+    def register_module(self, module: CommandModule, prefix: Optional[str] = None) -> int:
+        """Register all commands from a module"""
+        try:
+            commands = module.get_commands()
+            count = 0
+            
+            for cmd in commands:
+                full_name = f"{prefix}.{cmd.name}" if prefix else cmd.name
+                
+                if full_name in self.commands:
+                    self.errors.append(f"Duplicate command: {full_name}")
+                    continue
+                    
+                self.commands[full_name] = cmd
+                count += 1
+                
+            if count > 0:
+                console.print(f"[green]Registered {count} commands from module[/green]", style="dim")
+                self.registered_modules.append(getattr(module, '__name__', 'unknown'))
+            return count
+            
+        except Exception as e:
+            error_msg = f"Failed to register module: {e}"
+            self.errors.append(error_msg)
+            console.print(f"[red]{error_msg}[/red]")
+            return 0
+    
+    def register_subapp(self, subapp: typer.Typer, name: str, help: str) -> bool:
+        """Register a typer subapp (for complex command groups)"""
+        try:
+            if name in self.groups:
+                self.errors.append(f"Duplicate group: {name}")
+                return False
+                
+            self.groups[name] = subapp
+            console.print(f"[green]Registered subapp '{name}'[/green]", style="dim")
+            return True
+            
+        except Exception as e:
+            error_msg = f"Failed to register group {name}: {e}"
+            self.errors.append(error_msg)
+            console.print(f"[red]{error_msg}[/red]")
+            return False
+    
+    def register_function(self, function: Callable, name: Optional[str] = None, help: str = "") -> bool:
+        """Register a standalone function as a command"""
+        try:
+            cmd_name = name or function.__name__
+            if cmd_name in self.commands:
+                self.errors.append(f"Duplicate command: {cmd_name}")
+                return False
+            
+            # Extract help from docstring if not provided
+            if not help and function.__doc__:
+                help = function.__doc__.strip().split('\n')[0]
+            
+            cmd_def = CommandDefinition(
+                name=cmd_name,
+                function=function,
+                help=help
+            )
+            self.commands[cmd_name] = cmd_def
+            console.print(f"[green]Registered function '{cmd_name}'[/green]", style="dim")
+            return True
+            
+        except Exception as e:
+            error_msg = f"Failed to register function {name or 'unknown'}: {e}"
+            self.errors.append(error_msg)
+            console.print(f"[red]{error_msg}[/red]")
+            return False
+    
+    def build_app(self, 
+                  name: str = "emdx",
+                  help: str = "Documentation Index Management System") -> typer.Typer:
+        """Build the final typer application"""
+        
+        app = typer.Typer(
+            name=name,
+            help=help,
+            add_completion=True,
+            rich_markup_mode="rich"
+        )
+        
+        # Register individual commands
+        for cmd_name, cmd_def in self.commands.items():
+            try:
+                app.command(
+                    name=cmd_name,
+                    help=cmd_def.help,
+                    hidden=cmd_def.hidden,
+                    deprecated=cmd_def.deprecated
+                )(cmd_def.function)
+                
+                # Register aliases
+                for alias in cmd_def.aliases:
+                    app.command(
+                        name=alias,
+                        help=f"Alias for {cmd_name}",
+                        hidden=True
+                    )(cmd_def.function)
+                    
+            except Exception as e:
+                error_msg = f"Failed to register command {cmd_name}: {e}"
+                self.errors.append(error_msg)
+                console.print(f"[red]{error_msg}[/red]")
+        
+        # Register subgroups
+        for group_name, group_app in self.groups.items():
+            try:
+                app.add_typer(group_app, name=group_name)
+            except Exception as e:
+                error_msg = f"Failed to register group {group_name}: {e}"
+                self.errors.append(error_msg)
+                console.print(f"[red]{error_msg}[/red]")
+        
+        # Report any errors
+        if self.errors:
+            console.print(f"[yellow]Command registration completed with {len(self.errors)} errors[/yellow]")
+            for error in self.errors:
+                console.print(f"  [red]•[/red] {error}")
+        
+        return app
+    
+    def validate(self) -> bool:
+        """Validate the current registry state"""
+        valid = True
+        
+        # Check for naming conflicts
+        all_names = set(self.commands.keys()) | set(self.groups.keys())
+        
+        # Check command functions
+        for cmd_name, cmd_def in self.commands.items():
+            if not callable(cmd_def.function):
+                self.errors.append(f"Command {cmd_name} has non-callable function")
+                valid = False
+        
+        return valid and not self.errors
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current registration status"""
+        return {
+            "modules_registered": len(self.registered_modules),
+            "modules": self.registered_modules,
+            "commands_count": len(self.commands),
+            "groups_count": len(self.groups),
+            "errors": self.errors,
+            "warnings": self.warnings,
+            "has_errors": len(self.errors) > 0,
+            "timestamp": datetime.now().isoformat()
+        }
 
 
 def safe_register_commands(target_app: typer.Typer, source_app: typer.Typer, module_name: str) -> int:

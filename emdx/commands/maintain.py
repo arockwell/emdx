@@ -21,6 +21,7 @@ from ..commands.gc import GarbageCollector
 from ..config.settings import get_db_path
 from ..models.tags import add_tags_to_document
 from ..models.documents import update_document
+from ..cli.command_registry import CommandDefinition
 from datetime import datetime
 import sqlite3
 import subprocess
@@ -30,11 +31,9 @@ import time
 from pathlib import Path
 from datetime import timezone
 
-app = typer.Typer()
 console = Console()
 
 
-@app.command()
 def maintain(
     auto: bool = typer.Option(False, "--auto", "-a", help="Automatically fix all issues"),
     clean: bool = typer.Option(False, "--clean", "-c", help="Remove duplicates and empty documents"),
@@ -465,7 +464,6 @@ def _auto_transition_lifecycle(dry_run: bool) -> Optional[str]:
     return f"Transitioned {success_count} gameplans"
 
 
-@app.command(name="cleanup")
 def cleanup_main(
     branches: bool = typer.Option(False, "--branches", "-b", help="Clean up old execution branches"),
     processes: bool = typer.Option(False, "--processes", "-p", help="Clean up zombie processes"),
@@ -1004,7 +1002,6 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
     return f"Marked {updated} executions as failed" if updated > 0 else None
 
 
-@app.command(name="cleanup-dirs")
 def cleanup_temp_dirs(
     dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
     age_hours: int = typer.Option(24, "--age", help="Clean directories older than N hours"),
@@ -1109,5 +1106,33 @@ def cleanup_temp_dirs(
     console.print(f"[green]💾 Freed {freed_space / 1024 / 1024:.1f} MB of disk space[/green]")
 
 
+def get_commands() -> List[CommandDefinition]:
+    """Return all commands provided by the maintain module"""
+    return [
+        CommandDefinition(
+            name="maintain",
+            function=maintain,
+            help="Maintain your knowledge base by fixing issues and optimizing content",
+            aliases=["maint"]
+        ),
+        CommandDefinition(
+            name="cleanup",
+            function=cleanup_main,
+            help="Clean up system resources used by EMDX executions"
+        ),
+        CommandDefinition(
+            name="cleanup-dirs",
+            function=cleanup_temp_dirs,
+            help="Clean up temporary execution directories"
+        )
+    ]
+
+
 if __name__ == "__main__":
+    # For standalone testing
+    import typer
+    app = typer.Typer()
+    app.command()(maintain)
+    app.command(name="cleanup")(cleanup_main)
+    app.command(name="cleanup-dirs")(cleanup_temp_dirs)
     app()

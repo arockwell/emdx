@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 
 from emdx import __version__, __build_id__
-from emdx.cli.command_registry import CommandRegistryFoundation, safe_register_subapp, safe_register_function
+from emdx.cli.command_registry import CommandRegistry
 from emdx.commands.browse import app as browse_app
 from emdx.commands.core import app as core_app
 from emdx.commands.gist import app as gist_app
@@ -19,48 +19,13 @@ from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.ui.gui import gui
 
+# Import new-style command modules
+from emdx.commands import analyze, maintain
+
 console = Console()
-
-# Initialize command registry foundation
-registry = CommandRegistryFoundation()
-
-
-# Create main app
-app = typer.Typer(
-    name="emdx",
-    help="Documentation Index Management System - A powerful knowledge base for developers",
-    add_completion=True,
-    rich_markup_mode="rich",
-)
-
-# Add subcommand groups using safe registration
-registry.register_module_safe(app, core_app, "core")
-registry.register_module_safe(app, browse_app, "browse")
-registry.register_module_safe(app, gist_app, "gist")
-registry.register_module_safe(app, tag_app, "tags")
-
-# Add executions as a subcommand group
-safe_register_subapp(app, executions_app, "exec", "Manage Claude executions")
-
-# Add claude execution as a subcommand group
-safe_register_subapp(app, claude_app, "claude", "Execute documents with Claude")
-
-# Add the new unified analyze command (safe direct import)
-from emdx.commands.analyze import analyze
-from emdx.commands.maintain import maintain
-
-safe_register_function(app, analyze, "analyze")
-safe_register_function(app, maintain, "maintain")
-
-# Add lifecycle as a subcommand group
-safe_register_subapp(app, lifecycle_app, "lifecycle", "Track document lifecycles")
-
-# Add the gui command
-safe_register_function(app, gui)
 
 
 # Version command
-@app.command()
 def version():
     """Show emdx version"""
     typer.echo(f"emdx version {__version__}")
@@ -69,7 +34,6 @@ def version():
 
 
 # Callback for global options
-@app.callback()
 def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
@@ -110,15 +74,61 @@ def main(
     # TODO: Set up logging based on verbose/quiet flags
 
 
-def run():
-    """Entry point for the CLI"""
-    # Validate command registration before starting
-    if not registry.validate_app(app):
-        console.print("[red]Warning: Command registration validation failed[/red]")
+def create_app() -> typer.Typer:
+    """Create and configure the main CLI application"""
+    registry = CommandRegistry()
+    
+    # Register new-style command modules
+    registry.register_module(analyze)
+    registry.register_module(maintain)
+    
+    # Register legacy command modules (still using old typer apps)
+    from emdx.cli.command_registry import safe_register_commands
+    
+    # Create temporary app for legacy registration
+    temp_app = typer.Typer()
+    safe_register_commands(temp_app, core_app, "core")
+    safe_register_commands(temp_app, browse_app, "browse") 
+    safe_register_commands(temp_app, gist_app, "gist")
+    safe_register_commands(temp_app, tag_app, "tags")
+    
+    # Extract commands from temp app and add to registry
+    if hasattr(temp_app, 'registered_commands'):
+        for cmd in temp_app.registered_commands:
+            if hasattr(cmd, 'callback') and callable(cmd.callback):
+                registry.register_function(cmd.callback, getattr(cmd, 'name', cmd.callback.__name__))
+    
+    # Register subcommand groups
+    registry.register_subapp(executions_app, "exec", "Manage Claude executions")
+    registry.register_subapp(claude_app, "claude", "Execute documents with Claude")
+    registry.register_subapp(lifecycle_app, "lifecycle", "Track document lifecycles")
+    
+    # Register standalone functions
+    registry.register_function(gui)
+    registry.register_function(version)
+    
+    # Build and return the app
+    app = registry.build_app()
+    
+    # Add global callback
+    app.callback()(main)
+    
+    # Validate registry
+    if not registry.validate():
+        console.print("[red]Warning: Command registry validation failed[/red]")
         status = registry.get_status()
         for error in status["errors"]:
             console.print(f"  [red]•[/red] {error}")
     
+    return app
+
+
+# Create the app instance
+app = create_app()
+
+
+def run():
+    """Entry point for the CLI"""
     app()
 
 
