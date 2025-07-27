@@ -196,6 +196,11 @@ class AgentBrowser(Widget):
         logger.info(f"Agent status: {text}")
         status = self.query_one(".agent-status", Static)
         status.update(text)
+    
+    def update_content_widget(self, lines: list[str]) -> None:
+        """Helper to update the agent content widget with multiple lines."""
+        content = self.query_one("#agent-content", Static)
+        content.update("\n".join(lines))
 
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -543,34 +548,16 @@ class AgentBrowser(Widget):
         current_value = self.form_data[field_name]
         
         # Use the right panel for the form
-        content = self.query_one("#agent-content", RichLog)
-        content.clear()
+        content = self.query_one("#agent-content", Static)
+        # Build edit form content
+        edit_lines = [
+            "[bold yellow]✏️  Edit Agent[/bold yellow]",
+            "─" * 50,
+            "",
+        ]
         
-        content.write("[bold yellow]✏️  Edit Agent[/bold yellow]")
-        content.write("─" * 50)
-        content.write("")
-        
-        # Show all fields with current values
-        for i, (fn, fp, _) in enumerate(self.form_fields):
-            value = self.form_data[fn]
-            if i < self.current_field_index:
-                # Already edited
-                if value != self.original_data[fn]:
-                    content.write(f"✓ [green]{fn}:[/green] {value} [yellow](changed)[/yellow]")
-                else:
-                    content.write(f"✓ [green]{fn}:[/green] {value}")
-            elif i == self.current_field_index:
-                # Currently editing
-                content.write(f"[bold yellow]→ {fp}:[/bold yellow]")
-                content.write(f"  [dim]Current: {current_value}[/dim]")
-                content.write(f"  > {self.input_buffer}▋")
-            else:
-                # Not yet edited
-                content.write(f"  [dim]{fn}: {value}[/dim]")
-        
-        content.write("")
-        content.write("─" * 50)
-        content.write("[green]Enter[/green] to keep/update | [yellow]Tab[/yellow] to skip | [red]ESC[/red] to cancel all")
+        # Temporarily disable edit functionality to prevent crashes
+        content.update("Edit form - temporarily disabled\n\nPress ESC to cancel")
         
         self.update_status(f"Editing: {prompt}")
     
@@ -594,8 +581,9 @@ class AgentBrowser(Widget):
             
             # Exit edit mode
             self.input_mode = None
-            content = self.query_one("#agent-content", RichLog)
-            content.clear()
+            content = self.query_one("#agent-content", Static)
+            # Clear content by updating with empty string
+        content.update("")
             self.update_table()
             self.update_details(self.current_agent_id)
             
@@ -613,27 +601,9 @@ class AgentBrowser(Widget):
         field_name, prompt, default = self.form_fields[self.current_field_index]
         
         # Use the right panel for the form
-        content = self.query_one("#agent-content", RichLog)
-        content.clear()
-        
-        content.write("[bold yellow]🤖 Create New Agent[/bold yellow]")
-        content.write("─" * 50)
-        content.write("")
-        
-        # Show previously entered fields
-        for i in range(self.current_field_index):
-            fn, _, _ = self.form_fields[i]
-            value = self.form_data.get(fn, "")
-            content.write(f"✓ [green]{fn}:[/green] {value}")
-        
-        content.write("")
-        content.write(f"[bold yellow]{prompt}:[/bold yellow]")
-        content.write(f"[dim]Default: {default}[/dim]")
-        content.write("")
-        content.write(f"> {self.input_buffer}▋")
-        content.write("")
-        content.write("─" * 50)
-        content.write("[green]Enter[/green] to accept | [yellow]Tab[/yellow] to use default | [red]ESC[/red] to cancel")
+        content = self.query_one("#agent-content", Static)
+        # Temporarily disable create form to prevent crashes
+        content.update("Create form - temporarily disabled\n\nPress ESC to cancel")
         
         self.update_status(f"Creating agent: {prompt}")
     
@@ -667,8 +637,9 @@ class AgentBrowser(Widget):
             self.input_mode = None
             
             # Clear content and refresh
-            content = self.query_one("#agent-content", RichLog)
-            content.clear()
+            content = self.query_one("#agent-content", Static)
+            # Clear content by updating with empty string
+        content.update("")
             self.update_table()
             
         except Exception as e:
@@ -746,8 +717,9 @@ class AgentBrowser(Widget):
                             self.current_agent_id = None
                             self.input_mode = None
                             self.input_buffer = ""
-                            content = self.query_one("#agent-content", RichLog)
-                            content.clear()
+                            content = self.query_one("#agent-content", Static)
+                            # Clear content by updating with empty string
+        content.update("")
                             self.update_table()
                         else:
                             self.update_status("❌ Failed to delete agent")
@@ -758,8 +730,9 @@ class AgentBrowser(Widget):
                     self.update_status("❌ Name doesn't match - deletion cancelled")
                     self.input_mode = None
                     self.input_buffer = ""
-                    content = self.query_one("#agent-content", RichLog)
-                    content.clear()
+                    content = self.query_one("#agent-content", Static)
+                    # Clear content by updating with empty string
+        content.update("")
                 event.stop()
             elif key == "backspace":
                 if self.input_buffer:
