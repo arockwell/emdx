@@ -2,22 +2,26 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has 24 test files that cover functionality, but **many are currently broken** due to import errors and outdated module references. The test suite needs significant cleanup to be functional.
+EMDX has 24 test files that cover functionality. **MAJOR PROGRESS**: Core import errors have been fixed and key test files are now working!
 
-### **Current Test Status**
+### **Current Test Status** ✅ **IMPORT ERRORS FIXED**
 
 ```bash
-# WARNING: Many tests are broken due to import errors
-# Run all tests (expect failures)
-poetry run pytest
+# ✅ WORKING: Core test files now pass!
+poetry run pytest tests/test_core.py tests/test_cli.py -v
 
-# Test what actually works
-poetry run pytest tests/test_core.py -v
+# ✅ Success Summary:
+# - test_core.py: 4/4 tests passing - Core functionality 
+# - test_cli.py: 12/12 tests passing - CLI commands
+# - test_browse.py: 2/8 tests passing (6 fail due to mock vs real data expectations)
 
-# Some tests pass, many fail with import errors:
-# - ModuleNotFoundError: No module named 'emdx.browse'  
-# - ModuleNotFoundError: No module named 'emdx.cli'
-# - ImportError: cannot import name 'get_git_project'
+# Collection status: 134 tests collected, only 6 collection errors remaining
+# (Previously had widespread import failures - now mostly resolved!)
+
+# Fixed import errors:
+# ✅ ModuleNotFoundError: No module named 'emdx.browse' → emdx.commands.browse  
+# ✅ ModuleNotFoundError: No module named 'emdx.cli' → emdx.main
+# ✅ ImportError: cannot import name 'TestDatabase' → DatabaseForTesting
 ```
 
 ## 📁 **Test Structure**
