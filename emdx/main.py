@@ -6,6 +6,7 @@ Main CLI entry point for emdx
 from typing import Optional
 
 import typer
+from rich.console import Console
 
 from emdx import __version__, __build_id__
 from emdx.commands.browse import app as browse_app
@@ -14,11 +15,14 @@ from emdx.commands.gist import app as gist_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.executions import app as executions_app
 from emdx.commands.claude_execute import app as claude_app
+from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.agents import app as agents_app
 from emdx.ui.gui import gui
+
+console = Console()
 
 # Create main app
 app = typer.Typer(
@@ -88,10 +92,10 @@ def main(
     """
     emdx - Documentation Index Management System
 
-    A sophisticated SQLite-based knowledge management system with instant full-text search,
-    automatic project detection, and seamless integration with daily development workflows.
+    A powerful CLI tool for managing your knowledge base with full-text search,
+    Git integration, and seamless editor workflows.
 
-    [bold]Examples:[/bold]
+    Examples:
 
     Save a file:
         [cyan]emdx save README.md[/cyan]
@@ -116,6 +120,34 @@ def main(
 
     # TODO: Set up database connection using db_url
     # TODO: Set up logging based on verbose/quiet flags
+
+
+def safe_register_commands(target_app, source_app, prefix=""):
+    """Safely register commands from source app to target app"""
+    try:
+        if hasattr(source_app, 'registered_commands'):
+            for command in source_app.registered_commands:
+                if hasattr(command, 'callback') and callable(command.callback):
+                    target_app.command(name=command.name)(command.callback)
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not register {prefix} commands: {e}[/yellow]")
+
+
+# Register all command groups
+safe_register_commands(app, core_app, "core")
+safe_register_commands(app, browse_app, "browse")
+safe_register_commands(app, gist_app, "gist")
+safe_register_commands(app, tag_app, "tags")
+safe_register_commands(app, analyze_app, "analyze")
+safe_register_commands(app, maintain_app, "maintain")
+
+# Register subcommand groups
+app.add_typer(executions_app, name="exec", help="Manage Claude executions")
+app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
+app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
+
+# Register standalone commands
+app.command()(gui)
 
 
 def run():

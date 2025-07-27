@@ -1,7 +1,7 @@
 # emdx - Documentation Index Management System
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/arockwell/emdx/releases)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-0.6.1-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a modern terminal interface with seamless nvim integration.
@@ -29,11 +29,11 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.13+
 - textual (for interactive GUI - installed automatically)
 - nvim (for seamless editing integration)
 
-### Install from source
+### Quick Install (Production Use)
 
 ```bash
 git clone https://github.com/arockwell/emdx.git
@@ -41,26 +41,61 @@ cd emdx
 pip install -e .
 ```
 
-### Development installation
+### Development Installation (Recommended)
+
+For development work or contributing to EMDX, use the Poetry + Just workflow:
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/arockwell/emdx.git
 cd emdx
 
-# Install Just (task runner)
+# 2. Install Poetry (if not already installed)
+# macOS/Linux
+curl -sSL https://install.python-poetry.org | python3 -
+# Or via Homebrew
+brew install poetry
+
+# 3. Install Just task runner
 # macOS
 brew install just
 # Linux
 curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
-# Install dependencies
+# 4. Install dependencies with Poetry
 poetry install
 
-# Run development version
+# 5. Run development version using Just
 just dev
 
-# See all available commands
+# 6. See all available development commands
 just
+```
+
+#### Available Just Commands
+
+```bash
+just dev              # Run emdx using Poetry environment
+just test             # Run test suite
+just lint             # Run code linting (ruff)
+just format           # Format code (black)
+just typecheck        # Run type checking (mypy)
+just install          # Install dependencies
+just clean            # Clean temporary files
+just build            # Build distribution packages
+```
+
+#### Development vs Global Installation
+
+**Important**: In the EMDX project directory, always use `poetry run emdx` or `just dev` instead of the global `emdx` command to ensure you're using the correct dependencies and Python version.
+
+```bash
+# ✅ Correct (in project directory)
+poetry run emdx save README.md
+just dev save README.md
+
+# ❌ May cause issues (global installation may be outdated)
+emdx save README.md
 ```
 
 ### No database setup required!
@@ -237,27 +272,56 @@ emdx gist-list
 emdx gist-list --project "my-app"
 ```
 
-### Interactive browser
+### Advanced Multi-Modal Browser
 ```bash
-# Launch modern textual browser with seamless nvim integration
+# Launch modern textual browser with multiple modes
 emdx gui
 ```
 
-The GUI browser provides:
+The GUI browser provides four integrated browser modes:
+
+#### **📖 Document Browser Mode (Default)**
 - **In-place vim editing**: Full vim modal editing directly in the preview pane
 - **Modal interface**: True vim-style NORMAL/SEARCH modes  
 - **Live search**: Real-time document filtering as you type
 - **Rich markdown preview**: Clean document rendering with syntax highlighting
 - **Mouse support**: Click and scroll support alongside keyboard navigation
-- **Keyboard navigation**:
-  - `j/k` - Move up/down through documents
-  - `g/G` - Go to first/last document
-  - `/` - Enter search mode
-  - `e` - Edit document with vim keybindings (in-place)
-  - `s` - Text selection mode
-  - `d` - Delete document (modal confirmation)
-  - `v` or `Enter` - View document in full-screen
-  - `q` or `Esc` - Exit browser
+
+#### **📁 File Browser Mode (Press 'f')**
+- **Yazi-inspired navigation**: Modern file system browser with vim keybindings
+- **Real-time preview**: Instant file content preview with syntax highlighting
+- **File operations**: Create, delete, rename files directly from browser
+- **Git integration**: Shows git status indicators for tracked files
+- **Seamless editing**: Edit any file with integrated vim editor
+
+#### **🔀 Git Diff Browser Mode (Press 'd')**  
+- **Visual diff viewer**: Side-by-side or unified diff view with syntax highlighting
+- **Worktree switching**: Press 'w' to switch between git worktrees interactively
+- **Branch comparison**: Compare changes across branches and commits
+- **File-level navigation**: Navigate through changed files with j/k
+- **Git operations**: Stage, unstage, commit changes from browser
+
+#### **🚀 Claude Execution Integration**
+- **Execute from browser**: Press 'x' to execute current document with Claude Code
+- **Live streaming logs**: Press 'l' to view execution logs with real-time updates
+- **Execution history**: Browse previous executions with status indicators
+- **Contextual prompts**: Smart prompt selection based on document tags and content
+
+#### **Keyboard Navigation (Universal)**
+- `j/k` - Move up/down through items
+- `g/G` - Go to first/last item
+- `/` - Enter search mode
+- `e` - Edit item with vim keybindings (in-place)
+- `s` - Text selection mode
+- `d` - Delete item (modal confirmation)
+- `v` or `Enter` - View item in full-screen
+- `f` - Switch to file browser mode
+- `d` - Switch to git diff browser mode
+- `w` - Switch git worktrees (in git mode)
+- `x` - Execute with Claude (documents only)
+- `l` - View execution logs
+- `g` - Create GitHub gist
+- `q` or `Esc` - Exit browser or return to previous mode
 
 ### **🎯 Vim Editing Mode**
 
@@ -314,6 +378,42 @@ The status bar shows your current vim mode with color coding:
 - `emdx restore <id|title>` - Restore from trash
 - `emdx purge <id|title> [--force]` - Permanently delete
 
+### Execution Management Commands
+- `emdx exec list` - List recent Claude executions with status
+- `emdx exec show <execution-id>` - Show detailed execution information
+- `emdx exec logs <execution-id> [--follow] [--lines=N]` - View execution logs
+- `emdx exec stats` - Show execution statistics and performance metrics
+- `emdx exec cleanup` - Clean up old execution logs and data
+
+### Claude Execution Commands  
+- `emdx claude run <document-id>` - Execute a document with Claude Code
+- `emdx claude stage <document-id>` - Stage a document for execution with restricted tools
+- `emdx claude prompt <document-id>` - Show the prompt that would be sent to Claude
+- `emdx claude validate <document-id>` - Validate document for Claude execution
+
+### Document Lifecycle Commands
+- `emdx lifecycle track <document-id>` - Start tracking document lifecycle
+- `emdx lifecycle status <document-id>` - Show current lifecycle status
+- `emdx lifecycle progress` - Show progress of all tracked documents
+- `emdx lifecycle advance <document-id> <stage>` - Advance document to next stage
+- `emdx lifecycle report` - Generate lifecycle analytics report
+
+### Analysis Commands
+- `emdx analyze [--health] [--duplicates] [--similar] [--orphans] [--lifecycle]` - Comprehensive analysis
+  - `--health` - Show detailed health metrics and database statistics
+  - `--duplicates` - Find duplicate documents for cleanup
+  - `--similar` - Find similar documents for potential merging
+  - `--orphans` - Find orphaned documents with broken references
+  - `--lifecycle` - Show lifecycle stage distribution and trends
+
+### Database Maintenance Commands
+- `emdx maintain [--vacuum] [--reindex] [--merge-dupes] [--auto-tag] [--cleanup]` - Database maintenance
+  - `--vacuum` - Compact database and reclaim space
+  - `--reindex` - Rebuild search indexes for optimal performance
+  - `--merge-dupes` - Interactively merge duplicate documents
+  - `--auto-tag` - Automatically tag documents based on content analysis
+  - `--cleanup` - Remove orphaned data and temporary files
+
 ### Tag Commands
 - `emdx tag <id> [tags...]` - Add tags using text aliases (or view if no tags given)
 - `emdx untag <id> <tags...>` - Remove tags from a document
@@ -331,6 +431,129 @@ The status bar shows your current vim mode with color coding:
 - `emdx gist <id|title> [--public] [--copy] [--open]` - Create a GitHub Gist from a document
 - `emdx gist <id|title> --update <gist-id>` - Update an existing gist
 - `emdx gist-list [--project]` - List all created gists
+
+## Advanced Features
+
+### Claude Code Execution
+
+Execute your documents directly with Claude Code for automated implementation, analysis, and development tasks.
+
+```bash
+# Execute a document (gameplan, analysis, etc.)
+emdx claude run 42
+
+# Execute with staging mode (restricted tools for safety)
+emdx claude stage 42
+
+# Preview the prompt that would be sent to Claude
+emdx claude prompt 42
+
+# Validate a document is ready for execution
+emdx claude validate 42
+
+# Monitor execution progress
+emdx exec list
+emdx exec logs <execution-id> --follow
+
+# View execution statistics
+emdx exec stats
+```
+
+#### Execution Types
+
+EMDX automatically detects document types based on tags and content:
+
+- **🎯 Gameplans** (`gameplan` tag) - Implementation plans executed step-by-step
+- **🔍 Analysis** (`analysis` tag) - Analytical tasks with comprehensive reporting  
+- **📝 Notes** (`note` tag) - Simple note processing and enhancement
+- **⚡ Generic** - General document processing and transformation
+
+#### Smart Prompt Selection
+
+Claude receives contextually appropriate prompts based on document type:
+- Gameplans get implementation-focused prompts with todo tracking
+- Analysis documents get comprehensive research prompts
+- Notes get enhancement and organization prompts
+
+### Document Lifecycle Management
+
+Track and manage document progression through defined stages:
+
+```bash
+# Start tracking a document's lifecycle
+emdx lifecycle track 42
+
+# Check current lifecycle status
+emdx lifecycle status 42
+
+# View progress of all tracked documents
+emdx lifecycle progress
+
+# Advance a document to the next stage
+emdx lifecycle advance 42 active
+
+# Generate lifecycle analytics report
+emdx lifecycle report
+```
+
+#### Lifecycle Stages
+
+- **🎯 Planning** - Initial planning and design phase
+- **🚀 Active** - Currently being worked on
+- **🚧 Blocked** - Waiting on dependencies or decisions
+- **✅ Completed** - Work finished successfully
+- **🎉 Success** - Completed with successful outcome
+- **❌ Failed** - Did not complete successfully
+- **📦 Archived** - No longer active but preserved
+
+### Database Analysis & Maintenance
+
+Keep your knowledge base healthy and optimized:
+
+```bash
+# Comprehensive health check
+emdx analyze --health
+
+# Find and review duplicates
+emdx analyze --duplicates
+
+# Identify similar documents for merging
+emdx analyze --similar
+
+# Show lifecycle stage distribution
+emdx analyze --lifecycle
+
+# Database maintenance operations
+emdx maintain --vacuum          # Compact database
+emdx maintain --reindex         # Rebuild search indexes  
+emdx maintain --merge-dupes     # Interactive duplicate merging
+emdx maintain --auto-tag        # AI-powered automatic tagging
+emdx maintain --cleanup         # Remove orphaned data
+```
+
+### Advanced Search Capabilities
+
+Beyond basic text search, EMDX provides powerful search operators:
+
+```bash
+# Tag-based search (documents with ALL tags)
+emdx find --tags "gameplan,active"
+
+# Tag-based search (documents with ANY tag)
+emdx find --tags "python,rust,go" --any-tags
+
+# Combine text and tag search
+emdx find "authentication" --tags "security,feature"
+
+# Fuzzy search (typo-tolerant)
+emdx find "autentication" --fuzzy
+
+# Project-specific search
+emdx find "API endpoints" --project "my-web-app"
+
+# Search with context snippets
+emdx find "database migration" --snippets
+```
 
 ## Configuration
 
@@ -377,38 +600,84 @@ emdx uses SQLite with FTS5 (Full-Text Search 5) for powerful search capabilities
 ```
 emdx/
 ├── __init__.py
-├── main.py                    # Main CLI entry point using Typer
-├── commands/                  # CLI command implementations
+├── main.py                          # Main CLI entry point using Typer
+├── commands/                        # CLI command implementations (11 modules)
 │   ├── __init__.py
-│   ├── core.py               # Core commands (save, find, view, edit, delete)
-│   ├── browse.py             # Browse and stats commands
-│   ├── gist.py               # GitHub Gist integration
-│   └── tags.py               # Tag-related CLI commands
-├── models/                   # Data models and business logic
+│   ├── core.py                      # Core commands (save, find, view, edit, delete)
+│   ├── browse.py                    # Browse and stats commands
+│   ├── gist.py                      # GitHub Gist integration
+│   ├── tags.py                      # Tag-related CLI commands
+│   ├── executions.py                # NEW: Execution management subcommands
+│   ├── claude_execute.py            # NEW: Claude execution subcommands
+│   ├── lifecycle.py                 # NEW: Document lifecycle tracking
+│   ├── analyze.py                   # NEW: Document analysis command
+│   ├── maintain.py                  # NEW: Database maintenance command
+│   └── gc.py                        # Garbage collection utilities
+├── models/                          # Data models and business logic
 │   ├── __init__.py
-│   ├── documents.py          # Document model operations
-│   └── tags.py               # Tag model operations
-├── database/                 # Database layer (split from sqlite_database.py)
+│   ├── documents.py                 # Document model operations
+│   ├── tags.py                      # Tag model operations
+│   └── executions.py                # NEW: Execution model operations
+├── database/                        # Database layer (modular architecture)
 │   ├── __init__.py
-│   ├── connection.py         # Database connection management
-│   ├── documents.py          # Document database operations
-│   ├── search.py             # Search functionality
-│   └── migrations.py         # Database migration system
-├── ui/                       # User interface components
+│   ├── connection.py                # Database connection management
+│   ├── documents.py                 # Document database operations
+│   ├── search.py                    # Full-text search functionality
+│   └── migrations.py                # Database migration system
+├── ui/                              # Modular UI components (24 specialized files)
 │   ├── __init__.py
-│   ├── formatting.py         # Tag display and formatting
-│   ├── gui.py                # GUI wrapper
-│   ├── textual_browser.py    # Interactive TUI browser
-│   ├── nvim_wrapper.py       # Neovim integration
-│   ├── markdown_config.py    # Markdown rendering
-│   └── mdcat_renderer.py     # External mdcat integration
-├── utils/                    # Shared utilities
+│   ├── browser_container.py         # Main browser container widget
+│   ├── document_browser.py          # Document browsing interface
+│   ├── document_viewer.py           # Document viewing component
+│   ├── file_browser.py              # Yazi-inspired file browser with vim integration
+│   ├── file_list.py                 # File listing widget
+│   ├── file_modals.py               # File operation modals
+│   ├── file_preview.py              # Real-time file content preview
+│   ├── git_browser.py               # Git diff browser with worktree support
+│   ├── git_browser_standalone.py    # Standalone git browser mode
+│   ├── log_browser.py               # Execution log viewer with streaming
+│   ├── log_parser.py                # Structured log parsing
+│   ├── main_browser.py              # Main browser orchestration
+│   ├── vim_editor.py                # Complete vim modal editor implementation
+│   ├── vim_line_numbers.py          # Vim-style line numbering system
+│   ├── worktree_picker.py           # Git worktree switching interface
+│   ├── text_areas.py                # Enhanced text input components
+│   ├── modals.py                    # Modal dialog components
+│   ├── inputs.py                    # Custom input widgets
+│   ├── run_browser.py               # Execution browser interface
+│   ├── textual_browser.py           # Legacy unified browser (being modularized)
+│   ├── formatting.py                # Tag display and rich formatting
+│   ├── gui.py                       # GUI entry point and coordination
+│   ├── markdown_config.py           # Markdown rendering configuration
+│   ├── mdcat_renderer.py            # External mdcat integration
+│   └── nvim_wrapper.py              # Seamless Neovim integration
+├── services/                        # Business logic services (NEW!)
 │   ├── __init__.py
-│   ├── git.py                # Git project detection utilities
-│   └── emoji_aliases.py      # Emoji alias system (NEW!)
-└── config/                   # Configuration management
+│   ├── auto_tagger.py               # Automatic content-based tagging
+│   ├── document_merger.py           # Document merging and deduplication
+│   ├── duplicate_detector.py        # Duplicate document detection
+│   ├── execution_monitor.py         # Claude execution monitoring
+│   ├── health_monitor.py            # Database health monitoring
+│   └── lifecycle_tracker.py         # Document lifecycle management
+├── prompts/                         # Claude execution prompt templates (NEW!)
+│   ├── __init__.py
+│   ├── analyze_note.md              # Note analysis prompt template
+│   ├── create_gameplan.md           # Gameplan creation template
+│   └── implement_gameplan.md        # Gameplan implementation template
+├── utils/                           # Shared utilities
+│   ├── __init__.py
+│   ├── git.py                       # Git project detection utilities
+│   ├── git_ops.py                   # Advanced git operations
+│   ├── emoji_aliases.py             # Emoji alias system with text shortcuts
+│   ├── environment.py               # Environment validation for Claude execution
+│   ├── structured_logger.py         # Structured logging for executions
+│   ├── claude_wrapper.py            # Claude Code integration wrapper
+│   ├── file_size.py                 # File size utilities
+│   └── log_migration.py             # Log format migration utilities
+└── config/                          # Configuration management
     ├── __init__.py
-    └── settings.py
+    ├── settings.py                  # Core configuration settings
+    └── tagging_rules.py             # Automatic tagging rule definitions
 ```
 
 ## Data Management

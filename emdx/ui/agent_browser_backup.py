@@ -10,6 +10,7 @@ This widget displays execution logs in a dual-pane layout:
 import logging
 import time
 from pathlib import Path
+from typing import List
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -17,10 +18,10 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
+from emdx.commands.claude_execute import format_claude_output
 from emdx.models.executions import Execution, get_recent_executions
 
 from .text_areas import SelectionTextArea
-from .log_parser import LogParser, LogEntry
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class LogBrowserHost:
         # Exit selection mode
         try:
             import asyncio
+
             asyncio.create_task(self.log_browser.exit_selection_mode())
         except Exception as e:
             logger.error(f"Error exiting selection mode: {e}")
@@ -51,7 +53,6 @@ class LogBrowser(Widget):
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("s", "selection_mode", "Select"),
         Binding("r", "refresh", "Refresh"),
-        Binding("l", "toggle_live", "Live Mode"),
         # Note: 'q' key is handled by BrowserContainer to switch back to document browser
     ]
 
@@ -108,11 +109,8 @@ class LogBrowser(Widget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.executions: list[Execution] = []
+        self.executions: List[Execution] = []
         self.selection_mode = False
-        self.live_mode = False
-        self.refresh_timer = None
-        self.last_log_size = 0
 
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
@@ -142,12 +140,7 @@ class LogBrowser(Widget):
                     details_container.styles.padding = 0
                     details_container.styles.border_top = ("heavy", "gray")
 
-                    yield RichLog(
-                        id="log-details",
-                        wrap=True,
-                        markup=True,
-                        auto_scroll=False
-                    )
+                    yield RichLog(id="log-details", wrap=True, markup=True, auto_scroll=False)
 
             # Right preview panel (50% width) - equal split
             with Vertical(id="log-preview-container") as preview_container:
@@ -156,9 +149,10 @@ class LogBrowser(Widget):
                 preview_container.styles.padding = (0, 1)
 
                 yield ScrollableContainer(
-                    RichLog(id="log-content", wrap=True, highlight=True, markup=True,
-                            auto_scroll=False),
-                    id="log-preview"
+                    RichLog(
+                        id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+                    ),
+                    id="log-preview",
                 )
 
         # Status bar
@@ -178,16 +172,6 @@ class LogBrowser(Widget):
 
         # Load executions
         await self.load_executions()
-    
-    async def on_focus(self) -> None:
-        """Refresh executions when the log browser gains focus."""
-        logger.info("📋 LogBrowser focused - refreshing executions")
-        await self.load_executions()
-
-    async def on_unmount(self) -> None:
-        """Clean up when unmounting."""
-        logger.info("📋 LogBrowser unmounting")
-        self.stop_live_refresh()
 
     async def load_executions(self) -> None:
         """Load recent executions from the database."""
@@ -202,12 +186,10 @@ class LogBrowser(Widget):
             table = self.query_one("#log-table", DataTable)
             table.clear()
 
-            for execution in self.executions:
-                status_icon = {
-                    'running': '🔄',
-                    'completed': '✅',
-                    'failed': '❌'
-                }.get(execution.status, '❓')
+            for i, execution in enumerate(self.executions):
+                status_icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(
+                    execution.status, "❓"
+                )
 
                 # Format title with ID prefix
                 title_with_id = f"#{execution.id} - {execution.doc_title}"
@@ -215,16 +197,11 @@ class LogBrowser(Widget):
                 if len(title_with_id) > 47:
                     title_with_id = title_with_id[:44] + "..."
 
-                table.add_row(
-                    status_icon,
-                    title_with_id
-                )
+                table.add_row(status_icon, title_with_id)
 
-            status_text = (
-                f"📋 {len(self.executions)} executions | "
-                "j/k=navigate | s=select | l=live | q=back"
+            self.update_status(
+                f"📋 {len(self.executions)} executions | j/k=navigate | s=select | q=back"
             )
-            self.update_status(status_text)
 
             # Load first execution if available
             if self.executions:
@@ -266,50 +243,10 @@ class LogBrowser(Widget):
             metadata_lines.append(f"[yellow]Duration:[/yellow] {minutes}m {seconds}s")
 
         # Add status
-        status_icon = {
-            'running': '🔄',
-            'completed': '✅',
-            'failed': '❌'
-        }.get(execution.status, '❓')
+        status_icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(execution.status, "❓")
         metadata_lines.append(f"[yellow]Status:[/yellow] {status_icon} {execution.status}")
 
         return "\n".join(metadata_lines)
-
-    def _is_wrapper_noise(self, line: str) -> bool:
-        """Check if a line is wrapper orchestration noise that should be filtered out."""
-        if not line.strip():
-            return False
-
-        # Common wrapper patterns to filter out
-        wrapper_patterns = [
-            "🔄 Wrapper script started",
-            "📋 Command:",
-            "🚀 Starting Claude process...",
-            "✅ Claude process finished",
-            "📊 Updating execution status",
-            "✅ Database updated successfully",
-            "🔧 Background process started with PID:",
-            "📄 Output is being written to this log file",
-            "🔄 Wrapper will update status on completion",
-            "📝 Prompt being sent to Claude:",
-            "────────────────────────────────────────────────────────────",
-        ]
-
-        # Check for exact matches or patterns that start lines
-        for pattern in wrapper_patterns:
-            if pattern in line:
-                return True
-
-        # Filter out execution metadata lines
-        if any(line.startswith(prefix) for prefix in [
-            "⚡ Execution type:",
-            "📋 Available tools:",
-            "🔧 Background process",
-            "📄 Output is being",
-        ]):
-            return True
-
-        return False
 
     async def update_details_panel(self, execution: Execution) -> None:
         """Update the details panel with execution metadata."""
@@ -336,11 +273,8 @@ class LogBrowser(Widget):
             # Read log file content
             log_file = Path(execution.log_file)
             if log_file.exists():
-                # Store file size for live refresh detection
-                self.last_log_size = log_file.stat().st_size
-
                 try:
-                    with open(log_file, encoding='utf-8', errors='replace') as f:
+                    with open(log_file, encoding="utf-8", errors="replace") as f:
                         content = f.read()
                 except Exception as e:
                     logger.error(f"Error reading log file: {e}")
@@ -348,74 +282,54 @@ class LogBrowser(Widget):
                     return
 
                 if content.strip():
-                    # Simple header - just the execution info
-                    header_text = f"[bold]Execution #{execution.id}[/bold] - {execution.doc_title}"
-                    log_content.write(header_text)
+                    # Add execution header with rich formatting
+                    log_content.write(
+                        f"[bold cyan]=== Execution {execution.id} ===[/bold cyan]"
+                    )
+                    log_content.write(f"[yellow]Document:[/yellow] {execution.doc_title}")
+                    log_content.write(f"[yellow]Status:[/yellow] {execution.status}")
+                    log_content.write(
+                        "[yellow]Started:[/yellow] {}".format(
+                            execution.started_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+                        )
+                    )
+                    if execution.completed_at:
+                        log_content.write(
+                            "[yellow]Completed:[/yellow] {}".format(
+                                execution.completed_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+                            )
+                        )
+                    log_content.write(
+                        f"[yellow]Working Dir:[/yellow] {execution.working_dir}"
+                    )
+                    log_content.write(f"[yellow]Log File:[/yellow] {execution.log_file}")
+                    log_content.write("[bold cyan]=== Log Output ===[/bold cyan]")
                     log_content.write("")
 
-                    # Split content into header and log lines
-                    lines = content.splitlines()
-                    header_lines = []
-                    log_lines = []
-                    in_header = True
-
-                    for line in lines:
-                        if in_header and (
-                                line.startswith('=') or line.startswith('Version:') or
-                                line.startswith('Doc ID:') or line.startswith('Execution ID:') or
-                                line.startswith('Worktree:') or line.startswith('Started:') or
-                                line.startswith('Build ID:') or line.startswith('-')
+                    # Process log content to format JSON lines with emojis
+                    for line in content.splitlines():
+                        # Skip header lines and non-JSON lines
+                        if (
+                            line.startswith("=")
+                            or line.startswith("-")
+                            or line.startswith("Version:")
+                            or line.startswith("Doc ID:")
+                            or line.startswith("Execution ID:")
+                            or line.startswith("Worktree:")
+                            or line.startswith("Started:")
+                            or not line.strip()
                         ):
-                            header_lines.append(line)
+                            log_content.write(line)
                         else:
-                            in_header = False
-                            log_lines.append(line)
+                            # Try to format JSON lines with emojis
+                            formatted = format_claude_output(line, time.time())
+                            if formatted:
+                                log_content.write(formatted)
+                            else:
+                                log_content.write(line)
 
-                    # Extract prompt and filter out wrapper noise
-                    filtered_lines = []
-                    prompt_content = []
-                    in_prompt = False
-
-                    for line in log_lines:
-                        # Detect prompt section
-                        if "📝 Prompt being sent to Claude:" in line:
-                            in_prompt = True
-                            continue
-                        elif line.strip() == "─" * 60:
-                            if in_prompt:
-                                in_prompt = False
-                                continue
-                        elif in_prompt:
-                            prompt_content.append(line)
-                            continue
-
-                        # Skip wrapper orchestration messages
-                        if self._is_wrapper_noise(line):
-                            continue
-                        filtered_lines.append(line)
-
-                    # Show prompt first if we found one
-                    if prompt_content:
-                        log_content.write("[bold blue]Prompt:[/bold blue]")
-                        for prompt_line in prompt_content:
-                            if prompt_line.strip():
-                                log_content.write(prompt_line)
-                        log_content.write("")
-                        log_content.write("[bold blue]Claude Response:[/bold blue]")
-
-                    # Just display the log content as-is
-                    # The wrapper now writes human-readable logs directly
-                    for line in filtered_lines:
-                        log_content.write(line)
-
-                    # In live mode, scroll to bottom to see newest logs
-                    # In normal mode, stay at top
-                    if self.live_mode:
-                        # Scroll to bottom
-                        log_content.scroll_end(animate=False)
-                    else:
-                        # Stay at top
-                        log_content.scroll_to(0, 0, animate=False)
+                    # Scroll to top so users see the beginning of the log
+                    log_content.scroll_to(0, 0, animate=False)
                 else:
                     log_content.write("[dim](No log content yet)[/dim]")
             else:
@@ -430,12 +344,6 @@ class LogBrowser(Widget):
         if row_idx < len(self.executions):
             execution = self.executions[row_idx]
             await self.load_execution_log(execution)
-
-            # Update status to show live mode hint for running executions
-            if self.live_mode:
-                self.update_status("🔴 LIVE MODE | l=toggle off | Auto-refresh every 1s")
-            elif execution.status == 'running' and not self.selection_mode:
-                self.update_status("📋 Execution running | Press 'l' for live mode | q=back")
 
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -475,7 +383,7 @@ class LogBrowser(Widget):
                 execution = self.executions[row_idx]
                 log_file = Path(execution.log_file)
                 if log_file.exists():
-                    with open(log_file, encoding='utf-8', errors='replace') as f:
+                    with open(log_file, encoding="utf-8", errors="replace") as f:
                         content = f.read()
         except Exception as e:
             logger.error(f"Error reading log for selection: {e}")
@@ -488,12 +396,7 @@ class LogBrowser(Widget):
 
         # Create LogBrowserHost instance for SelectionTextArea
         host = LogBrowserHost(self)
-        selection_area = SelectionTextArea(
-            host,
-            content,
-            id="log-selection",
-            read_only=True
-        )
+        selection_area = SelectionTextArea(host, content, id="log-selection", read_only=True)
         await preview_container.mount(selection_area)
         selection_area.focus()
 
@@ -513,8 +416,9 @@ class LogBrowser(Widget):
             await selection_area.remove()
 
             # Re-mount RichLog widget with markup support
-            log_widget = RichLog(id="log-content", wrap=True, highlight=True, markup=True,
-                                 auto_scroll=False)
+            log_widget = RichLog(
+                id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+            )
             await preview_container.mount(log_widget)
 
             # Reload the current execution's log
@@ -531,87 +435,18 @@ class LogBrowser(Widget):
             logger.error(f"Error exiting selection mode: {e}")
 
         # Restore normal status
-        status_text = (
-            f"📋 {len(self.executions)} executions | "
-            "j/k=navigate | s=select | q=back"
+        self.update_status(
+            f"📋 {len(self.executions)} executions | j/k=navigate | s=select | q=back"
         )
-        self.update_status(status_text)
 
     async def action_refresh(self) -> None:
         """Refresh the execution list."""
         await self.load_executions()
-
-    async def action_toggle_live(self) -> None:
-        """Toggle live mode for auto-refreshing logs."""
-        self.live_mode = not self.live_mode
-
-        if self.live_mode:
-            # Start auto-refresh timer
-            self.start_live_refresh()
-            self.update_status("🔴 LIVE MODE | l=toggle off | Auto-refresh every 1s")
-        else:
-            # Stop auto-refresh
-            self.stop_live_refresh()
-            # Refresh status based on current state
-            if self.selection_mode:
-                self.update_status("Selection Mode | Enter=copy | ESC=cancel")
-            else:
-                status_text = (
-                f"📋 {len(self.executions)} executions | "
-                "j/k=navigate | s=select | l=live | q=back"
-            )
-            self.update_status(status_text)
-
-        # Reload current log with new ordering
-        table = self.query_one("#log-table", DataTable)
-        row_idx = table.cursor_row
-        if row_idx < len(self.executions):
-            execution = self.executions[row_idx]
-            await self.load_execution_log(execution)
-
-    def start_live_refresh(self) -> None:
-        """Start the auto-refresh timer for live mode."""
-        if self.refresh_timer:
-            self.refresh_timer.stop()
-
-        # Refresh every 1 second
-        self.refresh_timer = self.set_timer(1.0, self.live_refresh_log)
-
-    def stop_live_refresh(self) -> None:
-        """Stop the auto-refresh timer."""
-        if self.refresh_timer:
-            self.refresh_timer.stop()
-            self.refresh_timer = None
-
-    async def live_refresh_log(self) -> None:
-        """Refresh the current log in live mode."""
-        if not self.live_mode:
-            return
-
-        # Get current execution
-        table = self.query_one("#log-table", DataTable)
-        row_idx = table.cursor_row
-        if row_idx < len(self.executions):
-            execution = self.executions[row_idx]
-
-            # Check if file has grown
-            log_file = Path(execution.log_file)
-            if log_file.exists():
-                current_size = log_file.stat().st_size
-                if current_size != self.last_log_size:
-                    self.last_log_size = current_size
-                    await self.load_execution_log(execution)
-
-        # Schedule next refresh
-        if self.live_mode:
-            self.refresh_timer = self.set_timer(1.0, self.live_refresh_log)
-
 
     def update_status(self, text: str) -> None:
         """Update the status bar."""
         try:
             status = self.query_one(".log-status", Static)
             status.update(text)
-        except Exception:
+        except:
             pass
-
