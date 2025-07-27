@@ -137,8 +137,10 @@ class BrowserContainer(App):
                     logger.info("AgentBrowser created successfully")
                 except Exception as e:
                     logger.error(f"Failed to create AgentBrowser: {e}", exc_info=True)
-                    # Fall back to document browser
-                    browser_type = "document"
+                    # Create a simple error message widget instead
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Agent browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    logger.error(f"AgentBrowser creation failed, showing error message")
             else:
                 # Fallback to document
                 browser_type = "document"
