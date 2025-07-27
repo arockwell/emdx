@@ -505,24 +505,30 @@ class AgentBrowser(Widget):
         self.input_buffer = ""
         
         # Show confirmation prompt
-        content = self.query_one("#agent-content", RichLog)
-        content.clear()
+        content = self.query_one("#agent-content", Static)
         
-        content.write("[bold red]⚠️  Delete Agent[/bold red]")
-        content.write("─" * 50)
-        content.write("")
-        content.write(f"[yellow]Agent:[/yellow] {agent['display_name']}")
-        content.write(f"[yellow]ID:[/yellow] {agent['id']}")
-        content.write(f"[yellow]Usage:[/yellow] Used {agent['usage_count']} times")
-        content.write("")
-        content.write("[bold red]This action cannot be undone![/bold red]")
-        content.write("")
-        content.write(f"Type [bold]{agent['name']}[/bold] to confirm deletion:")
-        content.write("")
-        content.write(f"> {self.input_buffer}▋")
-        content.write("")
-        content.write("─" * 50)
-        content.write("[red]Enter[/red] to confirm | [green]ESC[/green] to cancel")
+        content_lines = [
+            "[bold red]⚠️  Delete Agent[/bold red]",
+            "─" * 50,
+            "",
+            f"[yellow]Agent:[/yellow] {agent['display_name']}",
+            f"[yellow]ID:[/yellow] {agent['id']}",
+            f"[yellow]Usage:[/yellow] Used {agent['usage_count']} times",
+            "",
+            "[bold red]This action cannot be undone![/bold red]",
+            "",
+            f"Type [bold]{agent['name']}[/bold] to confirm deletion:",
+            "",
+            f"> {self.input_buffer}▋"
+        ]
+        
+        content_lines.extend([
+            "",
+            "─" * 50,
+            "[red]Enter[/red] to confirm | [green]ESC[/green] to cancel"
+        ])
+        
+        content.update("\n".join(content_lines))
         
         self.update_status(f"Confirm deletion of '{agent['display_name']}'")
     
