@@ -1,5 +1,6 @@
 """Tests for browse commands."""
 
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -13,28 +14,30 @@ class TestBrowseCommands:
     """Test browse command-line interface."""
 
     @patch("emdx.commands.browse.db")
-    def test_list_command_empty_database(self, mock_db):
+    @patch("emdx.commands.browse.list_documents")
+    def test_list_command_empty_database(self, mock_list_docs, mock_db):
         """Test list command with empty database."""
         mock_db.ensure_schema = Mock()
-        mock_db.list_documents.return_value = []
+        mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
         assert "No documents found" in result.stdout
-        mock_db.list_documents.assert_called_once()
+        mock_list_docs.assert_called_once()
 
     @patch("emdx.commands.browse.db")
-    def test_list_command_with_documents(self, mock_db):
+    @patch("emdx.commands.browse.list_documents")
+    def test_list_command_with_documents(self, mock_list_docs, mock_db):
         """Test list command with documents."""
         mock_db.ensure_schema = Mock()
-        mock_db.list_documents.return_value = [
+        mock_list_docs.return_value = [
             {
                 "id": 1,
                 "title": "Test Document",
                 "project": "test-project",
-                "created_at": "2024-01-01 12:00:00",
-                "view_count": 5,
+                "created_at": datetime(2024, 1, 1, 12, 0, 0),
+                "access_count": 5,
             }
         ]
 
@@ -42,18 +45,19 @@ class TestBrowseCommands:
 
         assert result.exit_code == 0
         assert "Test Document" in result.stdout
-        mock_db.list_documents.assert_called_once()
+        mock_list_docs.assert_called_once()
 
     @patch("emdx.commands.browse.db")
-    def test_list_command_with_project_filter(self, mock_db):
+    @patch("emdx.commands.browse.list_documents")
+    def test_list_command_with_project_filter(self, mock_list_docs, mock_db):
         """Test list command with project filter."""
         mock_db.ensure_schema = Mock()
-        mock_db.list_documents.return_value = []
+        mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list", "--project", "test-project"])
 
         assert result.exit_code == 0
-        mock_db.list_documents.assert_called_once_with(project="test-project", limit=50)
+        mock_list_docs.assert_called_once_with(project="test-project", limit=50)
 
     @patch("emdx.commands.browse.db")
     def test_list_command_json_format(self, mock_db):

@@ -6,7 +6,7 @@ from pathlib import Path
 from test_fixtures import DatabaseForTesting
 
 
-class DatabaseForTestingOperations:
+class TestDatabaseOperations:
     """Test database operations."""
 
     def test_save_and_retrieve_document(self):
