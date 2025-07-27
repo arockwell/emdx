@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Dead simple agent form that just works.
+Agent form widget for creating and editing agents.
 """
 
 from textual.containers import Vertical, Horizontal
@@ -8,8 +8,8 @@ from textual.widgets import Static, Input, TextArea, Button
 from textual.widget import Widget
 
 
-class SimpleAgentForm(Widget):
-    """Simple agent form with just basic inputs."""
+class AgentForm(Widget):
+    """Agent form with basic inputs."""
     
     def __init__(self, parent_browser, agent_registry, edit_mode=False, agent_data=None, **kwargs):
         super().__init__(**kwargs)

@@ -1013,11 +1013,11 @@ class AgentBrowser(Widget):
         
         # Create the agent form
         try:
-            from .agent_form import SimpleAgentForm as AgentFormTabbed
-            logger.info("Creating AgentFormTabbed...")
+            from .agent_form import AgentForm
+            logger.info("Creating AgentForm...")
             logger.info(f"Parameters: self={self}, agent_registry={agent_registry}, edit_mode={edit_mode}, agent_data={agent_data}")
             
-            agent_form = AgentFormTabbed(
+            agent_form = AgentForm(
                 self, 
                 agent_registry,
                 edit_mode=edit_mode,
