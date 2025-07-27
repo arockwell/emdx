@@ -36,6 +36,7 @@ pygments = "^2.0.0"
 rapidfuzz = "^3.0.0"
 PyGithub = "^2.1.0"
 textual = "^4.0.0"
+psutil = "^7.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
@@ -54,7 +55,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 100
-target-version = ['py39']
+target-version = ['py313']
 
 [tool.ruff]
 line-length = 100
@@ -76,7 +77,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

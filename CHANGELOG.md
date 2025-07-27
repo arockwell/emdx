@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2025-07-27
+
+### 🚨 Critical Documentation Fixes
+
+#### Version Consistency
+- **Fixed version badge** - Updated README.md badge from 0.6.0 to 0.6.1
+- **Fixed Python requirement** - Updated from 3.9+ to 3.13+ (matches pyproject.toml)
+- **Updated Black config** - Target version updated from py39 to py313
+- **Updated MyPy config** - Python version updated from 3.9 to 3.13
+
+#### Missing Command Documentation
+- **Added missing command documentation** for new commands:
+  - `emdx exec` - Execution management subcommands
+  - `emdx claude` - Claude execution subcommands  
+  - `emdx lifecycle` - Document lifecycle tracking
+  - `emdx analyze` - Document analysis command
+  - `emdx maintain` - Database maintenance command
+
+#### Installation Process
+- **Updated development setup** - Reflects Poetry + Just workflow
+- **Added Just installation instructions** - Comprehensive setup guide
+- **Fixed dependency installation** - Clarified Poetry vs pip usage
+
+#### Architecture Documentation
+- **Updated project structure** - Reflects new modular architecture with 27 UI files
+- **Added UI component descriptions** - Complete documentation of modular UI system
+- **Updated command module structure** - Documents all 11 command modules
+
+### 🎯 Documentation Accuracy
+- **Critical fix**: Documentation now accurately reflects actual codebase
+- **User experience**: Installation instructions now work correctly
+- **Contributor onboarding**: Development setup properly documented
+
 ## [0.6.0] - 2025-07-14
 
 ### 🔥 Major Features Added

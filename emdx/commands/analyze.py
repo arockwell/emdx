@@ -17,13 +17,12 @@ from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
 from ..services.document_merger import DocumentMerger
 from ..config.settings import get_db_path
+# Removed CommandDefinition import - using standard typer pattern
 import sqlite3
 
-app = typer.Typer()
 console = Console()
 
 
-@app.command()
 def analyze(
     health: bool = typer.Option(False, "--health", "-h", help="Show detailed health metrics"),
     duplicates: bool = typer.Option(False, "--duplicates", "-d", help="Find duplicate documents"),
@@ -795,6 +794,11 @@ def _collect_projects_data() -> Dict[str, Any]:
         })
     
     return result
+
+
+# Create typer app for this module
+app = typer.Typer()
+app.command()(analyze)
 
 
 if __name__ == "__main__":
