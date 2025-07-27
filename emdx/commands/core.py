@@ -930,3 +930,23 @@ def purge(
         raise typer.Exit(1) from e
 
 
+@app.command(name="exec")
+def exec_document(
+    doc_id: str = typer.Argument(..., help="Document ID to execute"),
+    background: bool = typer.Option(True, "--background/--foreground", "-b/-f", 
+                                  help="Run in background (default) or foreground"),
+    tools: Optional[str] = typer.Option(None, "--tools", "-t",
+                                       help="Comma-separated list of allowed tools"),
+) -> None:
+    """Execute a document with Claude (shortcut for 'claude execute')."""
+    from . import claude_execute
+    
+    # Call the actual execute function
+    claude_execute.execute(
+        doc_id=doc_id,
+        background=background,
+        tools=tools,
+        smart=True  # Always use smart mode
+    )
+
+
