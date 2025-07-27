@@ -17,7 +17,7 @@ from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
 from ..services.document_merger import DocumentMerger
 from ..config.settings import get_db_path
-from ..cli.command_registry import CommandDefinition
+# Removed CommandDefinition import - using standard typer pattern
 import sqlite3
 
 console = Console()
@@ -796,21 +796,10 @@ def _collect_projects_data() -> Dict[str, Any]:
     return result
 
 
-def get_commands() -> List[CommandDefinition]:
-    """Return all commands provided by the analyze module"""
-    return [
-        CommandDefinition(
-            name="analyze",
-            function=analyze,
-            help="Analyze your knowledge base to discover patterns, issues, and insights",
-            aliases=["analysis"]
-        )
-    ]
+# Create typer app for this module
+app = typer.Typer()
+app.command()(analyze)
 
 
 if __name__ == "__main__":
-    # For standalone testing
-    import typer
-    app = typer.Typer()
-    app.command()(analyze)
     app()
