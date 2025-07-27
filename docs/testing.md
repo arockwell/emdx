@@ -2,22 +2,22 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has a comprehensive test suite with 24 test files covering most functionality, though it's admittedly a bit messy and could use organization.
+EMDX has 24 test files that cover functionality, but **many are currently broken** due to import errors and outdated module references. The test suite needs significant cleanup to be functional.
 
-### **Current Test Coverage**
+### **Current Test Status**
 
 ```bash
-# Run all tests
+# WARNING: Many tests are broken due to import errors
+# Run all tests (expect failures)
 poetry run pytest
 
-# Run with coverage
-poetry run pytest --cov=emdx
+# Test what actually works
+poetry run pytest tests/test_core.py -v
 
-# Run specific test file
-poetry run pytest tests/test_core.py
-
-# Run tests matching pattern
-poetry run pytest -k "test_save"
+# Some tests pass, many fail with import errors:
+# - ModuleNotFoundError: No module named 'emdx.browse'  
+# - ModuleNotFoundError: No module named 'emdx.cli'
+# - ImportError: cannot import name 'get_git_project'
 ```
 
 ## 📁 **Test Structure**
@@ -127,12 +127,19 @@ def test_log_browser():
 
 ## 🚨 **Known Test Issues**
 
-### **Current Problems**
-1. **Test organization could be better** - Some overlap between test files
-2. **TUI testing is limited** - Textual widget testing is challenging
-3. **Some tests are flaky** - Especially timing-dependent execution tests
-4. **Mock usage inconsistent** - Some tests use real files, others mock
-5. **Test data cleanup** - Some tests don't clean up properly
+### **Critical Problems**
+1. **Many tests don't run** - Import errors due to outdated module references
+2. **Old module paths** - Tests reference `emdx.browse`, `emdx.cli` that don't exist
+3. **Missing imports** - `get_git_project`, `sqlite_database` module references
+4. **Asyncio marker missing** - TUI tests fail with marker configuration errors
+5. **Test fixture issues** - Warnings about `__init__` constructors in test classes
+
+### **Secondary Issues**
+6. **Test organization could be better** - Some overlap between test files
+7. **TUI testing is limited** - Textual widget testing is challenging  
+8. **Some tests are flaky** - Especially timing-dependent execution tests
+9. **Mock usage inconsistent** - Some tests use real files, others mock
+10. **Test data cleanup** - Some tests don't clean up properly
 
 ### **Test Coverage Gaps**
 - **Full TUI integration** - Hard to test complete user workflows
@@ -220,18 +227,28 @@ class TestDocumentModel:
 - **Add integration tests** - Test complete workflows
 - **Performance tests** - Ensure no regressions
 
-## 🎯 **Future Testing Improvements**
+## 🛠️ **Fixing the Test Suite**
 
-### **Short Term**
-- Clean up test organization and remove duplication
-- Fix flaky execution system tests
-- Improve TUI testing with better patterns
-- Add more error condition tests
+### **Priority 1: Make Tests Run**
+1. **Fix import errors** - Update module paths to match current code structure
+2. **Add missing asyncio marker** - Fix pytest configuration for TUI tests
+3. **Fix import paths** - Update references to moved/renamed modules
+4. **Remove obsolete tests** - Delete tests for deleted functionality
 
-### **Long Term**
-- Add performance regression testing
-- Cross-platform testing automation
-- Visual regression testing for TUI
-- Load testing for large document collections
+### **Priority 2: Test Quality**
+5. **Clean up test organization** and remove duplication
+6. **Fix flaky execution system tests**  
+7. **Improve TUI testing** with better patterns
+8. **Add more error condition tests**
 
-The test suite is functional and covers most functionality, but there's definitely room for improvement in organization and reliability. The tests serve as good documentation of expected behavior, even if they're a bit messy.
+### **Priority 3: Enhancement**
+9. **Add performance regression testing**
+10. **Cross-platform testing automation**
+11. **Visual regression testing for TUI**
+12. **Load testing for large document collections**
+
+## 💡 **Test Fix Strategy**
+
+The test suite needs significant work before it can be considered functional. The tests contain valuable patterns and expected behavior documentation, but most don't currently run due to import errors from code refactoring.
+
+**Quick win**: Fix the import errors in a few key test files to have some working tests, rather than trying to fix all 24 at once.
