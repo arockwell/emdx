@@ -96,8 +96,8 @@ def run_agent(
         help="Input query string"),
     vars: Optional[List[str]] = typer.Option(None, "--var", "-v",
         help="Template variables as key=value pairs"),
-    background: bool = typer.Option(False, "--background", "-b",
-        help="Run in background"),
+    background: bool = typer.Option(True, "--background/--foreground", "-b",
+        help="Run in background (default: True)"),
     yes: bool = typer.Option(False, "--yes", "-y",
         help="Skip confirmation prompts")
 ):
