@@ -6,18 +6,24 @@ Main CLI entry point for emdx
 from typing import Optional
 
 import typer
+from rich.console import Console
 
 from emdx import __version__, __build_id__
+from emdx.cli.command_registry import CommandRegistryFoundation, safe_register_subapp, safe_register_function
 from emdx.commands.browse import app as browse_app
 from emdx.commands.core import app as core_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.executions import app as executions_app
 from emdx.commands.claude_execute import app as claude_app
-from emdx.commands.analyze import app as analyze_app
-from emdx.commands.maintain import app as maintain_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.ui.gui import gui
+
+console = Console()
+
+# Initialize command registry foundation
+registry = CommandRegistryFoundation()
+
 
 # Create main app
 app = typer.Typer(
@@ -27,40 +33,30 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
-# Add subcommand groups
-# Core commands are added directly to the main app
-for command in core_app.registered_commands:
-    app.registered_commands.append(command)
-
-# Browse commands are added directly to the main app
-for command in browse_app.registered_commands:
-    app.registered_commands.append(command)
-
-# Gist commands are added directly to the main app
-for command in gist_app.registered_commands:
-    app.registered_commands.append(command)
-
-# Tag commands are added directly to the main app
-for command in tag_app.registered_commands:
-    app.registered_commands.append(command)
+# Add subcommand groups using safe registration
+registry.register_module_safe(app, core_app, "core")
+registry.register_module_safe(app, browse_app, "browse")
+registry.register_module_safe(app, gist_app, "gist")
+registry.register_module_safe(app, tag_app, "tags")
 
 # Add executions as a subcommand group
-app.add_typer(executions_app, name="exec", help="Manage Claude executions")
+safe_register_subapp(app, executions_app, "exec", "Manage Claude executions")
 
 # Add claude execution as a subcommand group
-app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
+safe_register_subapp(app, claude_app, "claude", "Execute documents with Claude")
 
-# Add the new unified analyze command
-app.command(name="analyze")(analyze_app.registered_commands[0].callback)
+# Add the new unified analyze command (safe direct import)
+from emdx.commands.analyze import analyze
+from emdx.commands.maintain import maintain
 
-# Add the new unified maintain command
-app.command(name="maintain")(maintain_app.registered_commands[0].callback)
+safe_register_function(app, analyze, "analyze")
+safe_register_function(app, maintain, "maintain")
 
-# Add lifecycle as a subcommand group (keeping this as-is)
-app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
+# Add lifecycle as a subcommand group
+safe_register_subapp(app, lifecycle_app, "lifecycle", "Track document lifecycles")
 
 # Add the gui command
-app.command()(gui)
+safe_register_function(app, gui)
 
 
 # Version command
@@ -116,6 +112,13 @@ def main(
 
 def run():
     """Entry point for the CLI"""
+    # Validate command registration before starting
+    if not registry.validate_app(app):
+        console.print("[red]Warning: Command registration validation failed[/red]")
+        status = registry.get_status()
+        for error in status["errors"]:
+            console.print(f"  [red]•[/red] {error}")
+    
     app()
 
 
