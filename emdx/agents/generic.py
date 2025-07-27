@@ -66,7 +66,7 @@ class GenericAgent(Agent):
                 env={**os.environ, 'PYTHONUNBUFFERED': '1'}
             )
             
-            # Stream output to log file
+            # Stream output to log file with pretty formatting
             output_lines = []
             with open(log_file, 'a') as log_handle:
                 while True:
@@ -75,12 +75,60 @@ class GenericAgent(Agent):
                         break
                     if line:
                         output_lines.append(line.rstrip())
-                        log_handle.write(line)
-                        log_handle.flush()
+                        stripped = line.strip()
                         
-                        # Also log structured events
-                        if line.strip():
-                            structured_logger.info("Agent output", {"content": line.rstrip()})
+                        # Write raw output and let structured logger handle formatting
+                        log_handle.write(line)
+                        
+                        # Use structured logger with claude_type context for existing parser
+                        if stripped:
+                            try:
+                                if stripped.startswith('{"type":'):
+                                    data = json.loads(stripped)
+                                    msg_type = data.get("type")
+                                    
+                                    if msg_type == "assistant":
+                                        message = data.get("message", {})
+                                        content = message.get("content", [])
+                                        if content and isinstance(content, list):
+                                            first_content = content[0]
+                                            if isinstance(first_content, dict):
+                                                if first_content.get("type") == "tool_use":
+                                                    tool = first_content.get("name", "unknown")
+                                                    structured_logger.info(f"Using tool: {tool}", {
+                                                        "claude_type": "tool_use",
+                                                        "tool": tool
+                                                    })
+                                                elif first_content.get("type") == "text":
+                                                    text = first_content.get("text", "")[:100]
+                                                    structured_logger.info(f"Claude: {text}...", {
+                                                        "claude_type": "content"
+                                                    })
+                                    
+                                    elif msg_type == "user":
+                                        content = data.get("message", {}).get("content", [])
+                                        if content and isinstance(content, list):
+                                            first_content = content[0]
+                                            if isinstance(first_content, dict) and first_content.get("type") == "tool_result":
+                                                result = first_content.get("content", "")[:80]
+                                                structured_logger.info(f"Tool result: {result}...", {
+                                                    "claude_type": "tool_result"
+                                                })
+                                    
+                                    elif msg_type == "system" and data.get("subtype") == "init":
+                                        model = data.get("model", "unknown")
+                                        structured_logger.info(f"Session started with {model}", {
+                                            "claude_type": "system_init",
+                                            "model": model
+                                        })
+                                
+                                else:
+                                    structured_logger.info("Agent output", {"content": stripped})
+                            
+                            except (json.JSONDecodeError, KeyError):
+                                structured_logger.info("Agent output", {"content": stripped})
+                        
+                        log_handle.flush()
             
             stdout = '\n'.join(output_lines)
             stderr = ""  # Already combined with stdout
