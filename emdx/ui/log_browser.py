@@ -403,26 +403,10 @@ class LogBrowser(Widget):
                         log_content.write("")
                         log_content.write("[bold blue]Claude Response:[/bold blue]")
 
-                    # Show logs in chronological order (oldest first, newest last)
-                    last_timestamp = None
+                    # Just display the log content as-is
+                    # The wrapper now writes human-readable logs directly
                     for line in filtered_lines:
-                        if not line.strip():
-                            log_content.write(line)
-                        else:
-                            # Parse timestamp from log line if available
-                            parsed_timestamp = parse_log_timestamp(line)
-                            if parsed_timestamp:
-                                last_timestamp = parsed_timestamp
-
-                            # Use parsed timestamp or last known timestamp, fallback to current time
-                            timestamp_to_use = parsed_timestamp or last_timestamp or time.time()
-
-                            # Try to format JSON lines with emojis
-                            formatted = format_claude_output(line, timestamp_to_use)
-                            if formatted:
-                                log_content.write(formatted)
-                            else:
-                                log_content.write(line)
+                        log_content.write(line)
 
                     # In live mode, scroll to bottom to see newest logs
                     # In normal mode, stay at top
