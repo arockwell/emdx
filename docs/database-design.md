@@ -33,14 +33,6 @@ CREATE TABLE documents (
 );
 ```
 
-**Key Features:**
-- **Auto-incrementing ID** - Simple, efficient primary key
-- **Full content storage** - Documents stored completely in database
-- **Project detection** - Automatic git repository detection
-- **Access tracking** - Last accessed time and frequency
-- **Soft deletion** - Documents moved to trash, not permanently deleted
-- **File integrity** - Checksum verification for external files
-
 #### **`tags` - Tag Definitions**
 ```sql
 CREATE TABLE tags (
@@ -52,12 +44,6 @@ CREATE TABLE tags (
     usage_count INTEGER DEFAULT 0
 );
 ```
-
-**Design Features:**
-- **Emoji support** - Visual organization with space-efficient display
-- **Usage tracking** - Analytics for tag optimization
-- **Color coding** - Visual categorization (future feature)
-- **Unique names** - Prevents duplicate tags
 
 #### **`document_tags` - Many-to-Many Relationships**
 ```sql
@@ -71,11 +57,6 @@ CREATE TABLE document_tags (
     UNIQUE(document_id, tag_id)
 );
 ```
-
-**Junction Table Features:**
-- **Cascade deletion** - Clean up relationships when documents/tags deleted
-- **Unique constraint** - Prevents duplicate tag assignments
-- **Timestamped** - Track when tags were applied
 
 #### **`executions` - Execution Tracking**
 ```sql
@@ -97,13 +78,6 @@ CREATE TABLE executions (
 );
 ```
 
-**Execution Features:**
-- **UUID primary key** - Globally unique execution identification
-- **Process tracking** - PID and status monitoring
-- **Heartbeat system** - Detect stale executions
-- **Log integration** - Link to external log files
-- **Migration support** - Backward compatibility with old ID format
-
 ### **Search Infrastructure**
 
 #### **`documents_fts` - Full-Text Search**
@@ -116,12 +90,6 @@ CREATE VIRTUAL TABLE documents_fts USING fts5(
     content_rowid='id'
 );
 ```
-
-**FTS5 Features:**
-- **Fast searching** - Optimized full-text search with ranking
-- **Stemming** - Find related word forms automatically
-- **Phrase matching** - Exact phrase search with quotes
-- **Synchronized** - Automatically updated when documents change
 
 ### **Indexes for Performance**
 

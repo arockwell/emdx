@@ -2,89 +2,94 @@
 
 ## 🏗️ **System Design**
 
-EMDX is a modular, SQLite-based knowledge management system designed for scalability, maintainability, and user experience.
+EMDX is a modular, SQLite-based knowledge management system with a clean CLI interface and rich TUI browser.
 
 ### **Core Principles**
-- **Modular Architecture** - Clean separation of concerns across layers
-- **Event-Driven Design** - Reactive components with minimal coupling
-- **Performance First** - Optimized for real-time responsiveness
-- **User-Centric** - Multiple interfaces (CLI, TUI, API) for different workflows
+- **Local-first** - SQLite database, no cloud dependencies
+- **Simple and fast** - Direct command/database architecture  
+- **Rich TUI** - Multiple browser modes with vim-like navigation
+- **Git integration** - Automatic project detection
 
-## 📦 **Component Architecture**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     User Interfaces                          │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│   CLI Commands  │   TUI Browser   │    Future: Web API      │
-│                 │                 │                         │
-│ • save/find     │ • Document      │ • REST endpoints        │
-│ • tag/search    │   browser       │ • GraphQL API          │
-│ • exec/logs     │ • Log browser   │ • WebSocket events      │
-│ • lifecycle     │ • File browser  │                         │
-└─────────────────┴─────────────────┴─────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────────┐
-│                   Service Layer                             │
-├─────────────────────────────────────────────────────────────┤
-│ Business Logic & Coordination                               │
-│                                                             │
-│ • DocumentService    • ExecutionService                     │
-│ • TagService         • LogStreamService                     │
-│ • SearchService      • HealthMonitor                        │
-│ • LifecycleTracker   • AutoTagger                          │
-└─────────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────────┐
-│                    Data Layer                               │
-├─────────────────────────────────────────────────────────────┤
-│ Storage & Persistence                                       │
-│                                                             │
-│ • SQLite Database    • FTS5 Search                         │
-│ • Document Storage   • Tag Management                       │
-│ • Execution Logs     • Migration System                     │
-│ • Git Integration    • File System                          │
-└─────────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────────┐
-│                 External Systems                            │
-├─────────────────────────────────────────────────────────────┤
-│ • Git Repositories   • Claude Code Integration             │
-│ • File System        • GitHub API (Gists)                  │
-│ • Process Execution   • External Editors                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 🔄 **Event-Driven Architecture**
-
-### **Core Event Patterns**
-
-```python
-# Document Events
-DocumentCreated(doc_id, title, content)
-DocumentUpdated(doc_id, changes)
-DocumentTagged(doc_id, tags)
-
-# Execution Events  
-ExecutionStarted(exec_id, command, doc_id)
-ExecutionCompleted(exec_id, exit_code, duration)
-LogContentAdded(exec_id, new_content)
-
-# System Events
-SearchIndexUpdated(doc_ids)
-HealthCheckCompleted(status, metrics)
-```
-
-### **Event Flow Example: Log Streaming**
+## 📦 **Actual Code Structure**
 
 ```
-1. File changes → OS notification
-2. FileWatcher → LogStream.on_file_changed()
-3. LogStream → reads new content
-4. LogStream → notifies subscribers
-5. LogBrowser → updates UI display
-6. Multiple subscribers can listen simultaneously
+emdx/
+├── main.py                 # CLI entry point (typer)
+├── commands/               # CLI command implementations
+│   ├── core.py            # save, find, view, edit, delete
+│   ├── browse.py          # list, stats, recent
+│   ├── tags.py            # tag management
+│   ├── gist.py            # GitHub integration
+│   ├── executions.py      # execution monitoring
+│   ├── claude_execute.py  # Claude Code integration
+│   ├── analyze.py         # database analysis
+│   └── maintain.py        # maintenance operations
+├── database/               # SQLite operations
+│   ├── connection.py      # database connection
+│   ├── documents.py       # document CRUD
+│   ├── search.py          # FTS5 search
+│   └── migrations.py      # schema migrations
+├── models/                 # Data models
+│   ├── documents.py       # document model
+│   ├── tags.py           # tag model  
+│   └── executions.py     # execution model
+├── ui/                     # TUI components (Textual)
+│   ├── browser_container.py # main app container
+│   ├── document_browser.py  # document management
+│   ├── file_browser.py      # file system browser
+│   ├── log_browser.py       # execution logs
+│   ├── git_browser.py       # git diff viewer
+│   └── vim_editor.py        # vim modal editing
+├── services/               # Business logic
+│   ├── log_stream.py      # event-driven log streaming
+│   ├── file_watcher.py    # file monitoring
+│   ├── auto_tagger.py     # automatic tagging
+│   └── health_monitor.py  # system health
+└── utils/                  # Shared utilities
+    ├── git.py             # git operations
+    ├── emoji_aliases.py   # tag alias system
+    └── claude_wrapper.py  # Claude Code integration
 ```
+
+## 🖥️ **TUI Browser Modes**
+
+EMDX has a multi-modal TUI accessible via `emdx gui`:
+
+### **Browser Container** (`browser_container.py`)
+- **Document Mode** (default) - `d` or start here
+- **File Mode** - `f` to switch from document mode  
+- **Git Mode** - `d` to switch from document mode
+- **Log Mode** - `l` to switch from document mode
+- **Back to Document** - `q` from any other mode
+
+### **Actual Key Bindings** (from real code):
+
+**Document Browser** (`document_browser.py`):
+- `j/k` - move up/down
+- `g/G` - go to top/bottom  
+- `e` - edit document
+- `n` - new document
+- `/` - search
+- `t/T` - add/remove tags
+- `s` - selection mode
+- `x` - execute document  
+- `r` - refresh
+
+**File Browser** (`file_browser.py`):
+- `j/k` - move up/down
+- `h/l` - parent dir/enter dir  
+- `g/G` - go to top/bottom
+- `.` - toggle hidden files
+- `s` - selection mode
+- `e` - edit file
+- `/` - search
+
+**Log Browser** (`log_browser.py`):
+- `j/k` - move up/down
+- `g/G` - go to top/bottom
+- `s` - selection mode
+- `r` - refresh  
+- `l` - toggle live mode
 
 ## 🗃️ **Database Architecture**
 
@@ -127,101 +132,63 @@ App (emdx gui)
 - **Reactive Updates** - UI automatically updates when data changes
 - **Modal Editing** - Vim-like editing modes for power users
 
-## 🔧 **Service Layer Design**
+## 🔄 **Data Flow**
 
-### **Service Responsibilities**
+EMDX follows a simple, direct architecture:
 
-#### **DocumentService**
-- CRUD operations for documents
-- Content processing and normalization
-- Search coordination with FTS5
-- Git integration for project detection
+### **Command Flow**
+1. **CLI command** → `main.py` (typer) → specific `commands/*.py` module
+2. **Command logic** → `models/*.py` for data operations → `database/*.py` for SQL
+3. **Results** → back to command → formatted output via Rich
 
-#### **ExecutionService** 
-- Process lifecycle management
-- Log file coordination
-- Status tracking and health monitoring
-- Integration with Claude Code wrapper
+### **TUI Flow** 
+1. **User input** → browser widget → action method
+2. **Data change** → model operation → database update
+3. **UI update** → reactive properties → widget refresh
 
-#### **LogStreamService** (New!)
-- Event-driven file watching
-- Real-time content streaming  
-- Subscription management
-- Cross-platform file monitoring
+### **Log Streaming** (event-driven)
+1. **File change** → OS file watcher → `LogStream` callback
+2. **New content** → subscriber notification → UI widget update  
+3. **Live mode** → automatic scrolling → real-time display
 
-#### **TagService**
-- Tag CRUD with emoji aliases
-- Auto-tagging based on content patterns
-- Tag-based search and filtering
-- Usage analytics and optimization
+## 🎯 **Key Design Decisions**
 
-## 📊 **Data Flow Patterns**
+### **Why SQLite + FTS5**
+- **Zero setup** - No database server required
+- **Fast search** - Full-text search with ranking built-in
+- **Portable** - Single file database, easy backup/sync
+- **Reliable** - ACID transactions, battle-tested
 
-### **Document Lifecycle**
-```
-1. Content Input → DocumentService.save()
-2. Auto-tagging → TagService.analyze_content()
-3. FTS Indexing → SearchService.index_document()
-4. Git Detection → DocumentService.detect_project()
-5. UI Update → EventBus.document_created()
-```
+### **Why Textual TUI**
+- **Rich terminal UI** - Modern widgets, CSS styling, mouse support
+- **Cross-platform** - Works on all terminals consistently  
+- **Reactive** - Automatic UI updates when data changes
+- **Developer-friendly** - Good debugging tools, clear widget model
 
-### **Execution Lifecycle**
-```
-1. Command Start → ExecutionService.start()
-2. Log Creation → LogStreamService.create_stream()
-3. Real-time Updates → LogStream.subscribe()
-4. Health Monitoring → ExecutionMonitor.check_health()
-5. Completion → ExecutionService.complete()
-```
+### **Why Event-Driven Log Streaming**
+- **Performance** - No polling overhead, only update when files change
+- **Reliability** - OS-level file watching more reliable than timers
+- **Simplicity** - Eliminates complex timer/state coordination
+- **Scalability** - Can watch multiple files with one watcher
 
-## 🎯 **Performance Architecture**
+## 🔧 **Development Patterns**
 
-### **Optimization Strategies**
-- **Lazy Loading** - Load documents/logs only when needed
-- **Event-Driven Updates** - No polling, only reactive changes
-- **FTS5 Indexing** - Fast search across large document collections
-- **Connection Pooling** - Efficient SQLite connection management
-- **Incremental Operations** - Update only what changed
+### **Adding CLI Commands**
+1. Create function in appropriate `commands/*.py` module
+2. Add typer decorators with type hints
+3. Use `models/*.py` for data operations
+4. Return rich-formatted output
 
-### **Scalability Considerations**
-- **SQLite WAL Mode** - Concurrent reads during writes
-- **Chunked Processing** - Handle large files efficiently  
-- **Memory Management** - Stream processing for large logs
-- **Background Tasks** - Non-blocking operations for UI responsiveness
+### **Adding TUI Features**  
+1. Extend existing browser or create new widget
+2. Add key bindings in `BINDINGS` list
+3. Implement action methods
+4. Use reactive properties for state
 
-## 🔐 **Security & Reliability**
+### **Database Changes**
+1. Add migration in `database/migrations.py`
+2. Update models in `models/*.py`  
+3. Test with existing data
+4. Update related commands/UI
 
-### **Data Security**
-- **Local-first** - All data stored locally, no cloud dependencies
-- **Process Isolation** - Execution monitoring without interference
-- **Safe Parsing** - Robust handling of malformed log files
-- **Input Validation** - SQL injection prevention
-
-### **Error Handling**
-- **Graceful Degradation** - Fallback modes when components fail
-- **Comprehensive Logging** - Debug information for troubleshooting
-- **Resource Cleanup** - Automatic cleanup of streams and connections
-- **Transaction Safety** - Database consistency during failures
-
-## 🚀 **Extension Points**
-
-### **Adding New UI Components**
-1. Extend `Widget` base class
-2. Implement compose() method for layout
-3. Add to BrowserContainer routing
-4. Define keybindings and actions
-
-### **Adding New Services**
-1. Create service class with clear interface
-2. Add to service layer dependency injection
-3. Implement event publishing/subscription
-4. Add comprehensive error handling
-
-### **Adding New Data Types**
-1. Create database migration
-2. Add data models in `models/` directory
-3. Implement service layer operations
-4. Add UI components for management
-
-This architecture enables rapid development while maintaining code quality and user experience. The modular design allows components to be modified, tested, and deployed independently.
+This architecture prioritizes simplicity and directness over abstract patterns, making the codebase easy to understand and modify.

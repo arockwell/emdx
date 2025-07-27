@@ -20,7 +20,7 @@ emdx save document.md
 # Save with custom title
 emdx save document.md --title "Custom Title"
 
-# Save from stdin (IMPORTANT: Use this for text content)
+# Save from stdin
 echo "Content here" | emdx save --title "My Note"
 
 # Save with tags using text aliases
