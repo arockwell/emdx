@@ -6,30 +6,23 @@ This folder contains key project documentation for EMDX - Documentation Index Ma
 
 ### **Architecture & Design**
 - [**Architecture Overview**](architecture.md) - System design and component relationships
-- [**Event-Driven Streaming**](event-driven-streaming.md) - New log streaming architecture
+- [**Event-Driven Streaming**](event-driven-streaming.md) - Log streaming implementation details
 - [**Database Design**](database-design.md) - Schema, migrations, and data flow
 
 ### **Development Guides**  
 - [**Development Setup**](development-setup.md) - Getting started for contributors
 - [**UI Architecture**](ui-architecture.md) - TUI components, theming, and user experience
-- [**Testing Strategy**](testing-strategy.md) - Testing patterns and best practices
+- [**Testing Guide**](testing.md) - Test suite overview and patterns
 
-### **API & Integration**
-- [**CLI API Reference**](cli-api.md) - Complete command reference
-- [**Python API**](python-api.md) - Using EMDX as a library
-- [**Integration Examples**](integration-examples.md) - Common integration patterns
-
-### **Operations & Maintenance**
-- [**Deployment Guide**](deployment.md) - Installation and configuration
-- [**Performance Tuning**](performance.md) - Optimization and monitoring
-- [**Troubleshooting**](troubleshooting.md) - Common issues and solutions
+### **Reference**
+- [**CLI API Reference**](cli-api.md) - Complete command documentation
 
 ## 🎯 **Quick References**
 
 - **New Contributors**: Start with [Development Setup](development-setup.md)
 - **Architecture Questions**: See [Architecture Overview](architecture.md)
 - **UI Development**: Check [UI Architecture](ui-architecture.md) for TUI components
-- **Performance Issues**: Check [Event-Driven Streaming](event-driven-streaming.md) and [Performance Tuning](performance.md)
+- **Testing**: See [Testing Guide](testing.md) for running and writing tests
 - **CLI Usage**: Reference [CLI API](cli-api.md)
 
 ## 📖 **Documentation Standards**
