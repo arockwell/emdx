@@ -59,28 +59,10 @@ class AgentBrowser(Widget):
         super().__init__()
         self.agents_list = []
         self.current_agent_id = None
-        self.create_mode = False
-        self.create_form_visible = False
-        self.input_mode = None  # Track what we're inputting
-        self.input_buffer = ""  # Current input
-        self.form_data = {}  # Collected form data
-        self.form_fields = [
-            ("name", "Agent name (no spaces)", "my-agent"),
-            ("display_name", "Display name", "My Agent"), 
-            ("description", "Description", "What this agent does"),
-            ("category", "Category (research/generation/analysis/maintenance)", "research"),
-            ("system_prompt", "System prompt", "You are a helpful assistant."),
-            ("user_prompt_template", "User prompt template", "Help with: {{task}}"),
-        ]
-        self.current_field_index = 0
         
         # Form mode state (following document browser pattern)
         self.form_mode = False
         self.editing_agent_id = None
-        
-        # Vim editing state
-        self.vim_edit_mode = False
-        self.vim_field_name = None
 
     DEFAULT_CSS = """
     AgentBrowser {
@@ -457,7 +439,7 @@ class AgentBrowser(Widget):
                       f"Or with document:\n  emdx agent run {agent['name']} --doc 123")
     
     async def action_edit_agent(self) -> None:
-        """Start editing the selected agent using form."""
+        """Start editing the selected agent using new form."""
         if not self.current_agent_id:
             self.update_status("No agent selected")
             return
@@ -489,18 +471,8 @@ class AgentBrowser(Widget):
             "user_prompt_template": full_agent.config.user_prompt_template,
         }
         
-        # Enter edit mode
-        self.input_mode = "edit"
-        self.current_field_index = 0
-        self.form_data = agent_data.copy()
-        self.original_data = agent_data.copy()
-        
-        # Start with the first field's current value
-        field_name, _, _ = self.form_fields[self.current_field_index]
-        self.input_buffer = self.form_data.get(field_name, "")
-        
-        # Show the edit form
-        self.show_edit_field()
+        # Enter form mode for editing
+        await self.enter_agent_form_mode(edit_mode=True, agent_data=agent_data)
     
     async def action_new_agent(self) -> None:
         """Start interactive agent creation using tabbed form."""
@@ -513,8 +485,8 @@ class AgentBrowser(Widget):
             logger.error(f"Error in action_new_agent: {e}", exc_info=True)
             self.update_status(f"Error: {str(e)}")
     
-    def action_delete_agent(self) -> None:
-        """Start agent deletion with confirmation."""
+    async def action_delete_agent(self) -> None:
+        """Start agent deletion with confirmation dialog."""
         if not self.current_agent_id:
             self.update_status("No agent selected")
             return
@@ -529,461 +501,54 @@ class AgentBrowser(Widget):
             self.update_status("Cannot delete built-in agents")
             return
             
-        # Enter delete confirmation mode
-        self.input_mode = "delete"
-        self.input_buffer = ""
+        # Show delete confirmation dialog
+        from .agent_form import DeleteConfirmationDialog
         
-        # Show confirmation prompt
-        content = self.query_one("#agent-content", Static)
+        dialog = DeleteConfirmationDialog(
+            agent_name=agent["name"],
+            agent_display_name=agent["display_name"],
+            usage_count=agent["usage_count"]
+        )
         
-        content_lines = [
-            "[bold red]⚠️  Delete Agent[/bold red]",
-            "─" * 50,
-            "",
-            f"[yellow]Agent:[/yellow] {agent['display_name']}",
-            f"[yellow]ID:[/yellow] {agent['id']}",
-            f"[yellow]Usage:[/yellow] Used {agent['usage_count']} times",
-            "",
-            "[bold red]This action cannot be undone![/bold red]",
-            "",
-            f"Type [bold]{agent['name']}[/bold] to confirm deletion:",
-            "",
-            f"> {self.input_buffer}▋"
-        ]
+        # Show the dialog and wait for result
+        result = await self.app.push_screen_wait(dialog)
         
-        content_lines.extend([
-            "",
-            "─" * 50,
-            "[red]Enter[/red] to confirm | [green]ESC[/green] to cancel"
-        ])
-        
-        content.update("\n".join(content_lines))
-        
-        self.update_status(f"Confirm deletion of '{agent['display_name']}'")
-    
-    def show_edit_field(self) -> None:
-        """Show the current field being edited in edit mode."""
-        if self.current_field_index >= len(self.form_fields):
-            # All fields reviewed, save changes
-            self.save_agent_edits()
-            return
-            
-        field_name, prompt, _ = self.form_fields[self.current_field_index]
-        current_value = self.form_data[field_name]
-        
-        # Use the right panel for the form
-        content = self.query_one("#agent-content", Static)
-        # Build edit form content
-        edit_lines = [
-            "[bold yellow]✏️  Edit Agent[/bold yellow]",
-            "─" * 50,
-            "",
-            f"[bold]Step {self.current_field_index + 1} of {len(self.form_fields)}[/bold]",
-            "",
-            f"[yellow]{prompt}:[/yellow]",
-            "",
-            f"[dim]Current: {current_value}[/dim]",
-            "",
-            f"> {self.input_buffer}▋",
-            "",
-            "─" * 50,
-            "[green]Enter[/green] to save | [blue]Tab[/blue] to skip | [red]ESC[/red] to cancel"
-        ]
-        
-        content.update("\n".join(edit_lines))
-        
-        self.update_status(f"Editing: {prompt}")
-    
-    def save_agent_edits(self) -> None:
-        """Save the edited agent data."""
-        try:
-            # Check what changed
-            updates = {}
-            for field_name in self.form_data:
-                if self.form_data[field_name] != self.original_data[field_name]:
-                    updates[field_name] = self.form_data[field_name]
-            
-            if updates:
-                # Save changes
-                if agent_registry.update_agent(self.current_agent_id, updates):
-                    self.update_status(f"✅ Updated agent successfully")
+        if result:
+            # User confirmed deletion
+            try:
+                if agent_registry.delete_agent(self.current_agent_id, hard_delete=False):
+                    self.update_status(f"✅ Deleted agent '{agent['display_name']}'")
+                    self.current_agent_id = None
+                    
+                    # Refresh the table and show welcome screen
+                    self.update_table()
+                    self.show_welcome_screen()
                 else:
-                    self.update_status("❌ Failed to update agent")
-            else:
-                self.update_status("No changes made")
-            
-            # Exit edit mode
-            self.input_mode = None
-            content = self.query_one("#agent-content", Static)
-            # Clear content by updating with empty string
-            content.update("")
-            self.update_table()
-            self.update_details(self.current_agent_id)
-            
-        except Exception as e:
-            logger.error(f"Failed to save agent edits: {e}", exc_info=True)
-            self.update_status(f"❌ Error: {str(e)}")
+                    self.update_status("❌ Failed to delete agent")
+            except Exception as e:
+                logger.error(f"Failed to delete agent: {e}", exc_info=True)
+                self.update_status(f"❌ Error: {str(e)}")
+        else:
+            # User cancelled deletion
+            self.update_status("Agent deletion cancelled")
     
-    def show_current_field(self) -> None:
-        """Show the current field being edited."""
-        if self.current_field_index >= len(self.form_fields):
-            # All fields collected, create the agent
-            self.create_agent_from_form()
-            return
-            
-        field_name, prompt, default = self.form_fields[self.current_field_index]
-        
-        # Use the right panel for the form
-        content = self.query_one("#agent-content", Static)
-        
-        # Build form content
-        form_lines = [
-            "[bold green]✨ Create New Agent[/bold green]",
-            "─" * 50,
-            "",
-            f"[bold]Step {self.current_field_index + 1} of {len(self.form_fields)}[/bold]",
-            "",
-            f"[yellow]{prompt}:[/yellow]",
-            "",
-            f"> {self.input_buffer}▋",
-            "",
-            f"[dim]Default: {default}[/dim]",
-            "",
-            "─" * 50,
-            "[green]Enter[/green] to continue | [blue]Tab[/blue] for default | [magenta]Ctrl+V[/magenta] for vim | [red]ESC[/red] to cancel",
-            "[dim]Shift+Enter for newlines[/dim]"
-        ]
-        
-        content.update("\n".join(form_lines))
-        
-        self.update_status(f"Creating agent: {prompt}")
     
-    async def show_vim_editor(self, field_name: str, prompt: str) -> None:
-        """Show vim editor widget for multi-line field editing."""
-        try:
-            # Import the vim components
-            from .text_areas import VimEditTextArea
-            from textual.containers import Vertical
-            from textual.widgets import Static
-            
-            # Enter vim edit mode 
-            self.vim_edit_mode = True
-            self.vim_field_name = field_name
-            
-            # Get the content container
-            content_container = self.query_one("#agent-preview-container", Vertical)
-            
-            # Remove existing content
-            content_scroll = self.query_one("#agent-preview", ScrollableContainer)
-            await content_scroll.remove()
-            
-            # Create vim editor with current content
-            vim_editor = VimEditTextArea(
-                self,  # Pass self so it can call our exit_edit_mode method
-                text=self.input_buffer,
-                id="vim-field-editor"
-            )
-            
-            # Create a container for the vim editor with instructions
-            vim_container = Vertical(id="vim-editor-container")
-            
-            # Add instructions
-            instructions = Static(
-                f"[bold green]✏️  Editing {field_name}[/bold green]\n"
-                f"[yellow]{prompt}[/yellow]\n"
-                "─" * 50 + "\n"
-                "[dim]ESC ESC to save and exit | Normal vim commands available[/dim]",
-                id="vim-instructions"
-            )
-            
-            await vim_container.mount(instructions)
-            await vim_container.mount(vim_editor)
-            await content_container.mount(vim_container)
-            
-            # Focus the vim editor
-            vim_editor.focus()
-            
-            self.update_status(f"Vim editing {field_name} - ESC ESC to save and exit")
-            
-        except Exception as e:
-            logger.error(f"Error showing vim editor: {e}", exc_info=True)
-            self.update_status(f"❌ Vim editor error: {str(e)}")
     
-    async def save_vim_content(self) -> None:
-        """Save content from vim editor back to form."""
-        try:
-            # Get the vim editor
-            vim_editor = self.query_one("#vim-field-editor", VimEditTextArea)
-            
-            # Get the content
-            content = str(vim_editor.text)
-            
-            # Update the input buffer
-            self.input_buffer = content
-            
-            # Exit vim mode
-            self.vim_edit_mode = False
-            
-            # Remove vim editor and restore normal form
-            vim_container = self.query_one("#vim-editor-container", Vertical)
-            await vim_container.remove()
-            
-            # Restore normal content area
-            from textual.containers import ScrollableContainer
-            content_container = self.query_one("#agent-preview-container", Vertical)
-            content_scroll = ScrollableContainer(id="agent-preview")
-            content_static = Static("", id="agent-content", markup=True)
-            
-            await content_container.mount(content_scroll)
-            await content_scroll.mount(content_static)
-            
-            # Show the current field again
-            self.show_current_field()
-            self.update_status(f"✅ Saved {self.vim_field_name} content from vim")
-            
-        except Exception as e:
-            logger.error(f"Error saving vim content: {e}", exc_info=True)
-            self.update_status(f"❌ Error saving vim content: {str(e)}")
     
-    async def exit_edit_mode(self) -> None:
-        """Handle vim editor exit - called by VimEditTextArea."""
-        if getattr(self, 'vim_edit_mode', False):
-            await self.save_vim_content()
     
-    def create_agent_from_form(self) -> None:
-        """Create agent with collected form data."""
-        try:
-            logger.info(f"Creating agent with form_data: {self.form_data}")
-            
-            # Fill in any missing fields with defaults
-            for field_name, _, default in self.form_fields:
-                if field_name not in self.form_data:
-                    self.form_data[field_name] = default
-                    logger.info(f"Using default for {field_name}: {default}")
-            
-            # Validate required fields
-            required_fields = ["name", "display_name", "description", "category", "system_prompt", "user_prompt_template"]
-            for field in required_fields:
-                if not self.form_data.get(field, "").strip():
-                    raise ValueError(f"Field '{field}' is required")
-            
-            # Create config
-            config = {
-                "name": self.form_data["name"].strip(),
-                "display_name": self.form_data["display_name"].strip(),
-                "description": self.form_data["description"].strip(),
-                "category": self.form_data["category"].strip(),
-                "system_prompt": self.form_data["system_prompt"].strip(),
-                "user_prompt_template": self.form_data["user_prompt_template"].strip(),
-                "allowed_tools": ["Read", "Grep", "Glob"],
-                "timeout_seconds": 3600,
-                "created_by": "user"
-            }
-            
-            logger.info(f"Creating agent with config: {config}")
-            
-            # Check if agent_registry is available
-            if not agent_registry:
-                raise RuntimeError("Agent registry not available")
-            
-            # Create the agent
-            agent_id = agent_registry.create_agent(config)
-            logger.info(f"Created agent with ID: {agent_id}")
-            
-            self.update_status(f"✅ Created agent '{config['display_name']}' (ID: {agent_id})")
-            
-            # Exit create mode
-            self.create_mode = False
-            self.input_mode = None
-            self.form_data = {}
-            self.input_buffer = ""
-            self.current_field_index = 0
-            
-            # Clear content and refresh
-            content = self.query_one("#agent-content", Static)
-            content.update("")
-            self.update_table()
-            
-            # Show welcome screen or select the new agent
-            self.show_welcome_screen()
-            
-        except Exception as e:
-            logger.error(f"Failed to create agent: {e}", exc_info=True)
-            self.update_status(f"❌ Error: {str(e)}")
-            
-            # Don't exit create mode on error - let user retry or cancel
-            content = self.query_one("#agent-content", Static)
-            content.update(f"[red]Error creating agent:[/red]\n{str(e)}\n\nPress ESC to cancel or fix the inputs and try again.")
-            
-            # Reset to first field to let user try again
-            self.current_field_index = 0
-            field_name, _, _ = self.form_fields[0]
-            self.input_buffer = self.form_data.get(field_name, "")
+    
+    
     
     async def on_key(self, event) -> None:
         """Handle key events."""
         key = event.key
         
-        # Skip old key handling if we're in form mode
+        # Skip key handling if we're in form mode - let the form handle it
         if getattr(self, 'form_mode', False):
             return
         
-        # Handle vim edit mode - let vim editor handle most keys
-        if getattr(self, 'vim_edit_mode', False):
-            # The VimEditTextArea should handle ESC ESC itself, but we can add fallback
-            return
-        
-        # Handle create mode keys
-        if self.create_mode and self.input_mode == "create":
-            if key == "escape":
-                # Cancel creation
-                self.create_mode = False
-                self.input_mode = None
-                self.update_status("Agent creation cancelled")
-                # Clear the content panel
-                content = self.query_one("#agent-content", Static)
-                content.update("")
-                event.stop()
-            elif key == "enter":
-                # Accept current input
-                if self.input_buffer.strip():
-                    field_name, _, _ = self.form_fields[self.current_field_index]
-                    self.form_data[field_name] = self.input_buffer.strip()
-                    self.input_buffer = ""
-                    self.current_field_index += 1
-                    self.show_current_field()
-                event.stop()
-            elif key == "tab":
-                # Use default value
-                field_name, _, default = self.form_fields[self.current_field_index]
-                self.form_data[field_name] = default
-                self.input_buffer = ""
-                self.current_field_index += 1
-                self.show_current_field()
-                event.stop()
-            elif key == "backspace":
-                # Remove last character
-                if self.input_buffer:
-                    self.input_buffer = self.input_buffer[:-1]
-                    self.show_current_field()
-                event.stop()
-            elif key == "space":
-                # Handle space key specifically
-                self.input_buffer += " "
-                self.show_current_field()
-                event.stop()
-            elif key == "shift+enter":
-                # Handle Shift+Enter as newline for multi-line fields
-                self.input_buffer += "\n"
-                self.show_current_field()
-                event.stop()
-            elif key == "ctrl+v":
-                # Launch vim editor for multi-line fields
-                field_name, prompt, _ = self.form_fields[self.current_field_index]
-                if field_name in ["system_prompt", "user_prompt_template", "description"]:
-                    await self.show_vim_editor(field_name, prompt)
-                else:
-                    # Just show a message for single-line fields
-                    self.update_status("Vim editing available for system_prompt, user_prompt_template, and description fields")
-                event.stop()
-            elif len(key) == 1 and key.isprintable():
-                # Add character to buffer
-                self.input_buffer += key
-                self.show_current_field()
-                event.stop()
-            else:
-                event.stop()  # Consume all other keys in create mode
-        
-        # Handle delete confirmation mode
-        elif self.input_mode == "delete":
-            if key == "escape":
-                # Cancel deletion
-                self.input_mode = None
-                self.input_buffer = ""
-                self.update_status("Deletion cancelled")
-                content = self.query_one("#agent-content", Static)
-                content.update("")
-                event.stop()
-            elif key == "enter":
-                # Check if confirmation matches
-                agent = next((a for a in self.agents_list if a["id"] == self.current_agent_id), None)
-                if agent and self.input_buffer == agent["name"]:
-                    # Perform deletion
-                    try:
-                        if agent_registry.delete_agent(self.current_agent_id, hard_delete=False):
-                            self.update_status(f"✅ Deleted agent '{agent['display_name']}'")
-                            self.current_agent_id = None
-                            self.input_mode = None
-                            self.input_buffer = ""
-                            content = self.query_one("#agent-content", Static)
-                            # Clear content by updating with empty string
-                            content.update("")
-                            self.update_table()
-                        else:
-                            self.update_status("❌ Failed to delete agent")
-                    except Exception as e:
-                        logger.error(f"Failed to delete agent: {e}", exc_info=True)
-                        self.update_status(f"❌ Error: {str(e)}")
-                else:
-                    self.update_status("❌ Name doesn't match - deletion cancelled")
-                    self.input_mode = None
-                    self.input_buffer = ""
-                    content = self.query_one("#agent-content", Static)
-                    # Clear content by updating with empty string
-                    content.update("")
-                event.stop()
-            elif key == "backspace":
-                if self.input_buffer:
-                    self.input_buffer = self.input_buffer[:-1]
-                    self.action_delete_agent()  # Refresh display
-                event.stop()
-            elif len(key) == 1 and key.isprintable():
-                self.input_buffer += key
-                self.action_delete_agent()  # Refresh display
-                event.stop()
-            else:
-                event.stop()
-        
-        # Handle edit mode
-        elif self.input_mode == "edit":
-            if key == "escape":
-                # Cancel editing
-                self.input_mode = None
-                self.update_status("Edit cancelled")
-                content = self.query_one("#agent-content", Static)
-                content.update("")
-                event.stop()
-            elif key == "enter":
-                # Save current field value if changed
-                field_name, _, _ = self.form_fields[self.current_field_index]
-                if self.input_buffer.strip() and self.input_buffer != self.form_data[field_name]:
-                    self.form_data[field_name] = self.input_buffer.strip()
-                # Move to next field
-                self.current_field_index += 1
-                if self.current_field_index < len(self.form_fields):
-                    field_name, _, _ = self.form_fields[self.current_field_index]
-                    self.input_buffer = self.form_data[field_name]
-                self.show_edit_field()
-                event.stop()
-            elif key == "tab":
-                # Skip to next field without changing
-                self.current_field_index += 1
-                if self.current_field_index < len(self.form_fields):
-                    field_name, _, _ = self.form_fields[self.current_field_index]
-                    self.input_buffer = self.form_data[field_name]
-                self.show_edit_field()
-                event.stop()
-            elif key == "backspace":
-                if self.input_buffer:
-                    self.input_buffer = self.input_buffer[:-1]
-                    self.show_edit_field()
-                event.stop()
-            elif len(key) == 1 and key.isprintable():
-                self.input_buffer += key
-                self.show_edit_field()
-                event.stop()
-            else:
-                event.stop()
+        # All input handling is now done by the new form system and modal dialogs
+        # No need for character-by-character input handling
     
     async def enter_agent_form_mode(self, edit_mode=False, agent_data=None) -> None:
         """Enter agent form mode (following document browser pattern)."""
