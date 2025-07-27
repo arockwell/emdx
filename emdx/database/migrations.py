@@ -429,7 +429,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     
     # Insert default system agents
     cursor.execute("""
-        INSERT INTO agents (
+        INSERT OR IGNORE INTO agents (
             name, display_name, description, category,
             system_prompt, user_prompt_template,
             allowed_tools, is_builtin, created_by
