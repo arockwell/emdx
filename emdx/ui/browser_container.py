@@ -131,8 +131,14 @@ class BrowserContainer(App):
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
             elif browser_type == "agent":
-                from .agent_browser import AgentBrowser
-                self.browsers[browser_type] = AgentBrowser()
+                try:
+                    from .agent_browser import AgentBrowser
+                    self.browsers[browser_type] = AgentBrowser()
+                    logger.info("AgentBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create AgentBrowser: {e}", exc_info=True)
+                    # Fall back to document browser
+                    browser_type = "document"
             else:
                 # Fallback to document
                 browser_type = "document"
