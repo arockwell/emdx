@@ -105,14 +105,12 @@ class AgentExecutor:
         )
         
         if background:
-            # Launch in background
-            asyncio.create_task(
-                self._run_agent(agent, context, agent_execution_id, execution_id)
-            )
+            # Use the existing claude execute detached infrastructure
+            self._execute_with_claude_detached(agent, context, execution_id)
             logger.info(f"Launched agent {agent.config.name} in background (execution #{execution_id})")
         else:
-            # Run synchronously
-            await self._run_agent(agent, context, agent_execution_id, execution_id)
+            # Use the existing claude execute infrastructure for synchronous execution too
+            self._execute_with_claude_sync(agent, context, execution_id)
             
         return execution_id
     
@@ -324,6 +322,58 @@ class AgentExecutor:
                 """, (agent_id,))
             
             conn.commit()
+    
+    def _build_agent_prompt(self, agent, context: AgentContext) -> str:
+        """Build the prompt for agent execution."""
+        prompt = agent.format_prompt(**context.variables)
+        if context.input_type == 'document' and context.input_doc_id:
+            try:
+                from ..models.documents import get_document
+                doc = get_document(context.input_doc_id)
+                if doc:
+                    prompt = agent.format_prompt(content=doc.content, **context.variables)
+            except Exception as e:
+                logger.warning(f"Failed to load input document {context.input_doc_id}: {e}")
+        elif context.input_type == 'query' and context.input_query:
+            prompt = agent.format_prompt(query=context.input_query, **context.variables)
+        return prompt
+    
+    def _execute_with_claude_detached(self, agent, context: AgentContext, execution_id: int) -> None:
+        """Execute agent using the existing claude execute detached infrastructure."""
+        from ..commands.claude_execute import execute_with_claude_detached
+        from pathlib import Path
+        
+        prompt = self._build_agent_prompt(agent, context)
+        
+        # Use the existing claude execute detached function
+        execute_with_claude_detached(
+            task=prompt,
+            execution_id=execution_id,
+            log_file=Path(context.log_file),
+            allowed_tools=agent.config.allowed_tools,
+            working_dir=context.working_dir,
+            doc_id=str(context.input_doc_id) if context.input_doc_id else None,
+            context=None  # Agent context is different from execute context
+        )
+    
+    def _execute_with_claude_sync(self, agent, context: AgentContext, execution_id: int) -> None:
+        """Execute agent synchronously using the existing claude execute infrastructure."""
+        from ..commands.claude_execute import execute_with_claude
+        from pathlib import Path
+        
+        prompt = self._build_agent_prompt(agent, context)
+        
+        # Use the existing claude execute function
+        execute_with_claude(
+            task=prompt,
+            execution_id=execution_id,
+            log_file=Path(context.log_file),
+            allowed_tools=agent.config.allowed_tools,
+            verbose=True,
+            working_dir=context.working_dir,
+            doc_id=str(context.input_doc_id) if context.input_doc_id else None,
+            context=None  # Agent context is different from execute context
+        )
 
 
 # Global executor instance
