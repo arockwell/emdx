@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
 Agent form widget for creating and editing agents.
-Follows the document browser pattern with real Input/TextArea widgets.
+Based on the document form pattern with tabbed navigation and vim editors.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from textual.containers import Vertical, Horizontal
+from textual.widgets import Static, Input
+from textual.widget import Widget
 
-from textual import events
-from textual.containers import Horizontal, ScrollableContainer, Vertical
-from textual.widgets import Button, Input, Label, Select, TextArea
+from .vim_editor import VimEditor
+from ..utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AgentNameInput(Input):
