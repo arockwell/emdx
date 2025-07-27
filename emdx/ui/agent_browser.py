@@ -147,20 +147,21 @@ class AgentBrowser(Widget):
 
     def on_mount(self) -> None:
         """Set up when mounted."""
-        self.update_status("Agent browser mounted - minimal version")
-        
-        # Set up table
-        table = self.query_one("#agent-table", DataTable)
-        table.add_column("ID", width=8)
-        table.add_column("Name", width=30)
-        table.add_column("Status", width=10)
-        
-        # Try to load real agents
-        if agent_registry:
-            try:
-                agents = agent_registry.list_agents(include_inactive=True)
-                logger.info(f"Loaded {len(agents)} agents")
-                self.agents_list = agents
+        try:
+            self.update_status("Agent browser mounted - minimal version")
+            
+            # Set up table
+            table = self.query_one("#agent-table", DataTable)
+            table.add_column("ID", width=8)
+            table.add_column("Name", width=30)
+            table.add_column("Status", width=10)
+            
+            # Try to load real agents
+            if agent_registry:
+                try:
+                    agents = agent_registry.list_agents(include_inactive=True)
+                    logger.info(f"Loaded {len(agents)} agents")
+                    self.agents_list = agents
                 for agent in agents:
                     table.add_row(
                         str(agent["id"]),
@@ -185,11 +186,14 @@ class AgentBrowser(Widget):
             table.add_row("2", "Another Agent", "Inactive")
             self.show_welcome_screen()
         
-        # Focus the table
-        table.focus()
-        
-        # Initialize content areas properly - no clearing since they should be empty
-        # The key is to prevent logs from appearing in the first place
+            # Focus the table
+            table.focus()
+            
+            # Initialize content areas properly - no clearing since they should be empty
+            # The key is to prevent logs from appearing in the first place
+        except Exception as e:
+            logger.error(f"AgentBrowser on_mount failed: {e}", exc_info=True)
+            self.update_status(f"Error: {str(e)}")
 
     def update_status(self, text: str) -> None:
         """Update status bar."""
