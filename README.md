@@ -624,7 +624,7 @@ emdx/
 │   ├── documents.py                 # Document database operations
 │   ├── search.py                    # Full-text search functionality
 │   └── migrations.py                # Database migration system
-├── ui/                              # Modular UI components (24 specialized files)
+├── ui/                              # Modular UI components (25 specialized files)
 │   ├── __init__.py
 │   ├── browser_container.py         # Main browser container widget
 │   ├── document_browser.py          # Document browsing interface
