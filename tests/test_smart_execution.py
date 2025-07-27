@@ -7,21 +7,21 @@ from emdx.commands.claude_execute import ExecutionType, get_execution_context
 
 def test_execution_context_detection():
     """Test that execution context is correctly detected based on tags."""
-    # Test note detection
-    context = get_execution_context(['notes', 'other'])
+    # Test note detection (using emoji tags)
+    context = get_execution_context(['📝', 'other'])
     assert context['type'] == ExecutionType.NOTE
     assert 'analysis' in context['output_tags']
     assert context['output_title_prefix'] == 'Analysis: '
     
     # Test analysis detection
-    context = get_execution_context(['analysis', 'active'])
+    context = get_execution_context(['🔍', '🚀'])
     assert context['type'] == ExecutionType.ANALYSIS
     assert 'gameplan' in context['output_tags']
     assert 'active' in context['output_tags']
     assert context['output_title_prefix'] == 'Gameplan: '
     
     # Test gameplan detection
-    context = get_execution_context(['gameplan', 'active'])
+    context = get_execution_context(['🎯', '🚀'])
     assert context['type'] == ExecutionType.GAMEPLAN
     assert context.get('create_pr') is True
     assert len(context['output_tags']) == 0
@@ -58,7 +58,7 @@ def test_prompt_building():
     # Test with valid template
     prompt = build_prompt('analyze_note', 'Test content')
     assert 'Test content' in prompt
-    assert 'analyzing a note' in prompt
+    assert 'Analyze this note' in prompt
     
     # Test invalid template
     with pytest.raises(ValueError):

@@ -12,9 +12,9 @@ class TestSimpleMigrations:
         """Test basic schema version tracking."""
         conn = sqlite3.connect(":memory:")
 
-        # New database should have version 0
+        # New database should have version -1 (no migrations applied yet)
         version = get_schema_version(conn)
-        assert version == 0
+        assert version == -1
 
         conn.close()
 
@@ -39,7 +39,7 @@ class TestSimpleMigrations:
 
     def test_migrations_list_exists(self):
         """Test that MIGRATIONS list is properly defined."""
-        from emdx.migrations import MIGRATIONS
+        from emdx.database.migrations import MIGRATIONS
 
         assert len(MIGRATIONS) > 0
         assert all(len(m) == 3 for m in MIGRATIONS)  # version, description, function
