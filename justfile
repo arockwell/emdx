@@ -2,8 +2,9 @@
 default:
     @just --list
 
-# Install dependencies
+# Install dependencies and sync lock file
 install:
+    poetry lock
     poetry install
 
 # Check if dependencies are installed and install if needed
