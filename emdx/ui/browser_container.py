@@ -176,7 +176,7 @@ class BrowserContainer(App):
             await self.switch_browser("file")
             event.stop()
             return
-        elif key == "d" and self.current_browser == "document":
+        elif key == "g" and self.current_browser == "document":
             await self.switch_browser("git")
             event.stop()
             return

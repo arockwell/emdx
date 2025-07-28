@@ -18,7 +18,7 @@ from textual.widget import Widget
 from textual.binding import Binding
 
 from emdx.database import db
-from emdx.models.documents import get_document
+from emdx.models.documents import get_document, delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -421,6 +421,12 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
+        # Handle delete key
+        if key == "d" and not self.edit_mode and self.mode == "NORMAL":
+            await self._handle_delete()
+            event.stop()
+            return
+        
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -437,6 +443,34 @@ class DocumentBrowser(Widget):
                 self.exit_tag_mode()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
+    
+    async def _handle_delete(self) -> None:
+        """Handle delete key press - immediately delete document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            return
+            
+        row_idx = table.cursor_row
+        if row_idx >= len(self.filtered_docs):
+            return
+            
+        doc = self.filtered_docs[row_idx]
+        
+        try:
+            delete_document(str(doc["id"]), hard_delete=False)  # Soft delete by default
+            # Refresh the document list
+            await self.load_documents()
+            
+            # Restore cursor position, adjusting if needed
+            if len(self.filtered_docs) > 0:
+                # If we deleted the last item, move cursor to the new last item
+                new_cursor_row = min(row_idx, len(self.filtered_docs) - 1)
+                table.cursor_coordinate = (new_cursor_row, 0)
+            
+            self.update_status(f"Document '{doc['title']}' deleted")
+        except Exception as e:
+            logger.error(f"Error deleting document: {e}")
+            self.update_status(f"Error deleting document: {e}")
                 
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
