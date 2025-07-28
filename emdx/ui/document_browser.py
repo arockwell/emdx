@@ -19,6 +19,7 @@ from textual.binding import Binding
 
 from emdx.database import db
 from emdx.models.documents import get_document
+from emdx.models.operations import soft_delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -421,6 +422,12 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
+        # Handle delete key
+        if key == "d" and not self.edit_mode and self.mode == "NORMAL":
+            await self._handle_delete()
+            event.stop()
+            return
+        
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -437,6 +444,35 @@ class DocumentBrowser(Widget):
                 self.exit_tag_mode()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
+    
+    async def _handle_delete(self) -> None:
+        """Handle delete key press - show confirmation modal."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            return
+            
+        row_idx = table.cursor_row
+        if row_idx >= len(self.filtered_docs):
+            return
+            
+        doc = self.filtered_docs[row_idx]
+        
+        def handle_delete_result(result: bool) -> None:
+            """Handle the result from the delete confirmation modal."""
+            if result:
+                # User confirmed delete
+                try:
+                    soft_delete_document(str(doc["id"]))
+                    # Refresh the document list
+                    self.load_documents()
+                    self.update_status(f"Document '{doc['title']}' deleted")
+                except Exception as e:
+                    logger.error(f"Error deleting document: {e}")
+                    self.update_status(f"Error deleting document: {e}")
+        
+        # Show the delete confirmation modal
+        modal = DeleteConfirmScreen(doc["title"])
+        self.app.push_screen(modal, handle_delete_result)
                 
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
