@@ -7,8 +7,10 @@ Run this manually to validate the fixes:
 
 import subprocess
 import tempfile
+import pytest
 
 
+@pytest.mark.integration
 def test_execution_id_uniqueness():
     """Test that execution IDs are unique."""
     print("\n=== Test: Execution ID Uniqueness ===")
@@ -34,7 +36,7 @@ def test_execution_id_uniqueness():
     
     if not doc_id:
         print("❌ Failed to create test document")
-        return False
+        assert False, "Failed to create test document"
     
     print(f"✅ Created test document #{doc_id}")
     
@@ -57,12 +59,13 @@ def test_execution_id_uniqueness():
     # Check uniqueness
     if len(exec_ids) == len(set(exec_ids)):
         print(f"✅ All {len(exec_ids)} execution IDs are unique")
-        return True
+        assert True
     else:
         print(f"❌ Duplicate execution IDs found: {exec_ids}")
-        return False
+        assert False, f"Duplicate execution IDs found: {exec_ids}"
 
 
+@pytest.mark.integration
 def test_cleanup_commands():
     """Test cleanup commands work without errors."""
     print("\n=== Test: Cleanup Commands ===")
@@ -84,9 +87,10 @@ def test_cleanup_commands():
             print(f"❌ {' '.join(cmd[2:])}: Failed")
             all_passed = False
     
-    return all_passed
+    assert all_passed, "Some cleanup commands failed"
 
 
+@pytest.mark.integration
 def test_execution_monitoring():
     """Test execution monitoring commands."""
     print("\n=== Test: Execution Monitoring ===")
@@ -107,9 +111,10 @@ def test_execution_monitoring():
             print(f"❌ {' '.join(cmd[2:])}: Failed")
             all_passed = False
     
-    return all_passed
+    assert all_passed, "Some execution monitoring commands failed"
 
 
+@pytest.mark.integration
 def test_environment_validation():
     """Test environment validation."""
     print("\n=== Test: Environment Validation ===")
@@ -122,11 +127,11 @@ def test_environment_validation():
     
     if "properly configured" in result.stdout:
         print("✅ Environment is properly configured")
-        return True
+        assert True
     else:
         print("⚠️  Environment has issues (this may be expected)")
         print(result.stdout)
-        return True  # Don't fail test for env issues
+        assert True  # Don't fail test for env issues
 
 
 def main():

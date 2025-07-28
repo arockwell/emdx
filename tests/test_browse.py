@@ -60,13 +60,20 @@ class TestBrowseCommands:
         mock_list_docs.assert_called_once_with(project="test-project", limit=50)
 
     @patch("emdx.commands.browse.db")
-    def test_list_command_json_format(self, mock_db):
+    @patch("emdx.commands.browse.list_documents")
+    def test_list_command_json_format(self, mock_list_docs, mock_db):
         """Test list command with JSON format."""
+        from datetime import datetime
         mock_db.ensure_schema = Mock()
-        mock_db.list_documents.return_value = [{"id": 1, "title": "Test", "project": "test"}]
+        mock_list_docs.return_value = [{"id": 1, "title": "Test", "project": "test", "created_at": datetime.now(), "access_count": 0}]
 
         result = runner.invoke(app, ["list", "--format", "json"])
 
+        if result.exit_code != 0:
+            print(f"Command failed with exit code {result.exit_code}")
+            print(f"stdout: {result.stdout}")
+            if result.exception:
+                print(f"exception: {result.exception}")
         assert result.exit_code == 0
         assert "[" in result.stdout  # JSON array
         assert '"id": 1' in result.stdout
