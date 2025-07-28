@@ -1,10 +1,11 @@
 """Tests for claude_execute module."""
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import patch
 
-from emdx.commands.claude_execute import parse_log_timestamp, format_timestamp, format_claude_output
+import pytest
+
+from emdx.commands.claude_execute import format_claude_output, format_timestamp, parse_log_timestamp
 
 
 class TestTimestampParsing:

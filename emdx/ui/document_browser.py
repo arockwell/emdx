@@ -4,18 +4,14 @@ Document browser - extracted from the monolith.
 """
 
 import logging
-import os
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Optional, Dict, List, Any, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
-from textual.widgets import DataTable, Input, Label, RichLog, Static
 from textual.widget import Widget
-from textual.binding import Binding
+from textual.widgets import DataTable, Input, Label, RichLog, Static
 
 from emdx.database import db
 from emdx.models.documents import get_document, delete_document
@@ -23,14 +19,9 @@ from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
     remove_tags_from_document,
-    search_by_tags,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
-from emdx.utils.emoji_aliases import expand_aliases
 
-from .document_viewer import FullScreenView
-from .modals import DeleteConfirmScreen
-from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
@@ -495,7 +486,7 @@ class DocumentBrowser(Widget):
         self.edit_mode = True
         
         # Replace preview with edit area
-        from textual.containers import Vertical, ScrollableContainer
+        from textual.containers import ScrollableContainer, Vertical
         preview_container = self.query_one("#preview-container", Vertical)
         try:
             preview = self.query_one("#preview", ScrollableContainer)
@@ -785,7 +776,7 @@ class DocumentBrowser(Widget):
         self.new_document_mode = True
         
         # Replace preview with edit area for new document
-        from textual.containers import Vertical, ScrollableContainer
+        from textual.containers import ScrollableContainer, Vertical
         preview_container = self.query_one("#preview-container", Vertical)
         try:
             preview = self.query_one("#preview", ScrollableContainer)
@@ -874,11 +865,12 @@ class DocumentBrowser(Widget):
         
         try:
             from pathlib import Path
+
             from emdx.commands.claude_execute import (
-                get_execution_context,
+                EXECUTION_TYPE_EMOJIS,
                 execute_document_smart_background,
                 generate_unique_execution_id,
-                EXECUTION_TYPE_EMOJIS
+                get_execution_context,
             )
             from emdx.models.tags import get_document_tags
             
@@ -1113,10 +1105,6 @@ class DocumentBrowser(Widget):
             tags = get_document_tags(doc["id"])
             
             # Format details with emoji and rich formatting
-            from rich.text import Text
-            from rich.panel import Panel
-            from rich.columns import Columns
-            from datetime import datetime
             
             # Document metadata
             details = []

@@ -3,14 +3,13 @@
 Minimal browser container - just swaps browsers, no fancy shit.
 """
 
-from textual.app import App, ComposeResult
-from textual.containers import Vertical, Container
-from textual.widgets import Label, Static
-from textual.widget import Widget
-from textual.reactive import reactive
-from textual.binding import Binding
-
 import logging
+
+from textual.app import App, ComposeResult
+from textual.containers import Container, Vertical
+from textual.reactive import reactive
+from textual.widget import Widget
+
 logger = logging.getLogger(__name__)
 
 

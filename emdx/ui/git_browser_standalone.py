@@ -5,23 +5,21 @@ Standalone git browser - extracted from the mixin.
 
 import logging
 import os
-from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
-from textual.reactive import reactive
-from textual.widgets import DataTable, Label, RichLog
 from textual.widget import Widget
+from textual.widgets import DataTable, RichLog
 
 from emdx.utils.git_ops import (
-    get_git_status,
     get_comprehensive_git_diff,
     get_current_branch,
+    get_git_status,
     get_worktrees,
-    git_stage_file,
-    git_unstage_file,
     git_commit,
     git_discard_changes,
+    git_stage_file,
+    git_unstage_file,
 )
 
 logger = logging.getLogger(__name__)

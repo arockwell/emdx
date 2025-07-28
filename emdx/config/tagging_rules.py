@@ -3,12 +3,11 @@ Tagging rules and configuration for EMDX auto-tagger.
 Allows users to define custom patterns for auto-tagging.
 """
 
-import yaml
-import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
-import os
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 
 @dataclass

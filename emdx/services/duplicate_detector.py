@@ -3,12 +3,11 @@ Duplicate detection service for EMDX.
 Finds exact and near-duplicate documents based on content and metadata.
 """
 
-import sqlite3
 import hashlib
+import sqlite3
 from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Any, Tuple, Optional
-from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
 

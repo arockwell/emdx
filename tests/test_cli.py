@@ -53,10 +53,11 @@ class TestCLIBasics:
         )
 
     @patch("emdx.commands.browse.db")
-    def test_list_command(self, mock_db):
+    @patch("emdx.commands.browse.list_documents")
+    def test_list_command(self, mock_list_docs, mock_db):
         """Test list command."""
         mock_db.ensure_schema = Mock()
-        mock_db.list_documents.return_value = []
+        mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list"])
         # Should work even with empty database
@@ -68,8 +69,17 @@ class TestCLIBasics:
         # Should work even with empty database
         assert result.exit_code == 0 or "no documents" in result.stdout.lower()
 
-    def test_stats_command(self):
+    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands.browse.get_stats")
+    def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""
+        mock_db.ensure_schema = Mock()
+        mock_get_stats.return_value = {
+            "total": 0,
+            "by_project": {},
+            "recent_activity": []
+        }
+        
         result = runner.invoke(app, ["stats"])
         # Should show some statistics
         assert result.exit_code == 0

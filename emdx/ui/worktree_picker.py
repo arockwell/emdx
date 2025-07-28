@@ -3,12 +3,13 @@
 Worktree picker modal for EMDX TUI.
 """
 
+from typing import Callable, List
+
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, Static
-from typing import List, Optional, Callable
 
 from emdx.utils.git_ops import GitWorktree
 
