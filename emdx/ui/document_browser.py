@@ -18,8 +18,7 @@ from textual.widget import Widget
 from textual.binding import Binding
 
 from emdx.database import db
-from emdx.models.documents import get_document
-from emdx.models.operations import soft_delete_document
+from emdx.models.documents import get_document, delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
@@ -462,7 +461,7 @@ class DocumentBrowser(Widget):
             if result:
                 # User confirmed delete
                 try:
-                    soft_delete_document(str(doc["id"]))
+                    delete_document(str(doc["id"]), hard_delete=False)  # Soft delete by default
                     # Refresh the document list
                     self.load_documents()
                     self.update_status(f"Document '{doc['title']}' deleted")
