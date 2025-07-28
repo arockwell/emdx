@@ -829,7 +829,7 @@ class DocumentBrowser(Widget):
                 app.update_status(message)
     
     def action_execute_document(self) -> None:
-        """Open agent selection modal for the current document."""
+        """Open multi-stage agent execution overlay for the current document."""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row >= len(self.filtered_docs):
             self.update_status("No document selected for agent execution")
@@ -839,15 +839,16 @@ class DocumentBrowser(Widget):
         doc_id = int(doc["id"])
         doc_title = doc["title"]
         
-        # Import the agent selection modal
-        from .agent_modals import AgentSelectionModal
+        # Import the new agent execution overlay
+        from .agent_execution_overlay import AgentExecutionOverlay
         
-        def handle_agent_result(result):
-            """Handle the result from agent selection modal."""
-            if result and result.get('action') == 'run':
-                agent_id = result['agent_id']
-                agent_data = result['agent_data']
+        def handle_execution_result(result):
+            """Handle the result from agent execution overlay."""
+            if result and result.get('document_id') and result.get('agent_id'):
                 document_id = result['document_id']
+                agent_id = result['agent_id']
+                worktree_index = result.get('worktree_index')
+                config = result.get('config', {})
                 
                 # Execute the agent in background
                 try:
@@ -865,18 +866,24 @@ class DocumentBrowser(Widget):
                     
                     # Run the agent
                     execution_id = asyncio.run(run_agent())
-                    self.update_status(f"🤖 Agent '{agent_data['display_name']}' started (execution #{execution_id})")
+                    self.update_status(f"🤖 Agent execution started (#{execution_id}) for '{doc_title}'")
                     
                 except Exception as e:
                     logger.error(f"Error starting agent: {e}", exc_info=True)
                     self.update_status(f"Error starting agent: {str(e)}")
             else:
                 # User cancelled
-                self.update_status("Agent selection cancelled")
+                self.update_status("Agent execution cancelled")
         
-        # Open the agent selection modal
-        modal = AgentSelectionModal(doc_id, doc_title)
-        self.app.push_screen(modal, handle_agent_result)
+        # Open the new multi-stage agent execution overlay
+        # Note: Not passing initial_document_id to force starting at document selection stage
+        # This allows users to see and test the full overlay experience
+        overlay = AgentExecutionOverlay(
+            # initial_document_id=doc_id,  # Commented out to start at document stage
+            start_stage=None,  # Start at first stage (document)
+            callback=handle_execution_result
+        )
+        self.app.push_screen(overlay, handle_execution_result)
     
     async def action_new_document(self) -> None:
         """Create a new document."""
