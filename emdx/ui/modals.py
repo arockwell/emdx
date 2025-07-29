@@ -3,12 +3,12 @@
 Modal screens for EMDX TUI.
 """
 
+import logging
+
 from textual.app import ComposeResult
 from textual.containers import Grid
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label
-
-import logging
 
 # Set up logging for debugging
 logger = logging.getLogger(__name__)

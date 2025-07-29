@@ -3,14 +3,13 @@
 Minimal browser container - just swaps browsers, no fancy shit.
 """
 
-from textual.app import App, ComposeResult
-from textual.containers import Vertical, Container
-from textual.widgets import Label, Static
-from textual.widget import Widget
-from textual.reactive import reactive
-from textual.binding import Binding
-
 import logging
+
+from textual.app import App, ComposeResult
+from textual.containers import Container, Vertical
+from textual.reactive import reactive
+from textual.widget import Widget
+
 logger = logging.getLogger(__name__)
 
 
@@ -176,7 +175,7 @@ class BrowserContainer(App):
             await self.switch_browser("file")
             event.stop()
             return
-        elif key == "d" and self.current_browser == "document":
+        elif key == "g" and self.current_browser == "document":
             await self.switch_browser("git")
             event.stop()
             return

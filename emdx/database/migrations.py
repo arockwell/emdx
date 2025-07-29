@@ -221,6 +221,71 @@ def migration_004_add_execution_pid(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
+    """Add heartbeat tracking to executions table."""
+    cursor = conn.cursor()
+    
+    # Add last_heartbeat column to executions table
+    cursor.execute("ALTER TABLE executions ADD COLUMN last_heartbeat TIMESTAMP")
+    
+    # Create index for efficient heartbeat queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
+    
+    conn.commit()
+
+
+def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
+    """Convert executions table to use numeric IDs."""
+    cursor = conn.cursor()
+    
+    # Check if we need to migrate (if id column is still TEXT)
+    cursor.execute("PRAGMA table_info(executions)")
+    columns = cursor.fetchall()
+    id_col = next((col for col in columns if col[1] == 'id'), None)
+    
+    if id_col and id_col[2] == 'TEXT':
+        # Create new table with numeric ID
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS executions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id INTEGER NOT NULL,
+                doc_title TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+                started_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP,
+                log_file TEXT NOT NULL,
+                exit_code INTEGER,
+                working_dir TEXT,
+                pid INTEGER,
+                last_heartbeat TIMESTAMP,
+                old_id TEXT,  -- Keep old ID for reference
+                FOREIGN KEY (doc_id) REFERENCES documents(id)
+            )
+        """)
+        
+        # Copy data from old table
+        cursor.execute("""
+            INSERT INTO executions_new 
+            (doc_id, doc_title, status, started_at, completed_at, log_file, 
+             exit_code, working_dir, pid, last_heartbeat, old_id)
+            SELECT doc_id, doc_title, status, started_at, completed_at, log_file,
+                   exit_code, working_dir, pid, NULL, id
+            FROM executions
+        """)
+        
+        # Drop old table and rename new one
+        cursor.execute("DROP TABLE executions")
+        cursor.execute("ALTER TABLE executions_new RENAME TO executions")
+        
+        # Recreate indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
+    
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -228,12 +293,15 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (2, "Add executions tracking", migration_002_add_executions),
     (3, "Add document relationships", migration_003_add_document_relationships),
     (4, "Add execution PID tracking", migration_004_add_execution_pid),
+    (5, "Add execution heartbeat tracking", migration_005_add_execution_heartbeat),
+    (6, "Convert to numeric execution IDs", migration_006_numeric_execution_ids),
 ]
 
 
-def run_migrations():
+def run_migrations(db_path=None):
     """Run all pending migrations."""
-    db_path = get_db_path()
+    if db_path is None:
+        db_path = get_db_path()
     # Don't return early - we need to run migrations even for new databases
     # The database file will be created when we connect to it
     

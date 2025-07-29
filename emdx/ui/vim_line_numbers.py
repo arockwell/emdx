@@ -5,6 +5,7 @@ Extracted from main_browser.py to reduce technical debt.
 """
 
 import logging
+
 from textual.widgets import Static
 
 logger = logging.getLogger(__name__)

@@ -3,19 +3,18 @@ Lifecycle management commands for EMDX.
 Track and manage document lifecycles, especially for gameplans.
 """
 
+from typing import Optional
+
 import typer
+from rich import box
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.progress import track
+from rich.table import Table
 from rich.tree import Tree
-from rich import box
-from typing import Optional, List
-from datetime import datetime
 
-from ..services.lifecycle_tracker import LifecycleTracker
 from ..models.documents import get_document
-from ..ui.formatting import format_tags
+from ..services.lifecycle_tracker import LifecycleTracker
 
 app = typer.Typer()
 console = Console()
@@ -222,7 +221,10 @@ def analyze(
     # Key metrics
     console.print("[bold]Key Metrics:[/bold]")
     console.print(f"  • Total gameplans: {analysis['total_gameplans']}")
-    console.print(f"  • Success rate: [{'green' if analysis['success_rate'] >= 70 else 'yellow' if analysis['success_rate'] >= 50 else 'red'}]{analysis['success_rate']:.0f}%[/]")
+    # Color-code success rate based on performance
+    success_rate = analysis['success_rate']
+    color = 'green' if success_rate >= 70 else 'yellow' if success_rate >= 50 else 'red'
+    console.print(f"  • Success rate: [{color}]{success_rate:.0f}%[/]")
     console.print(f"  • Average duration: {analysis['average_duration']:.0f} days")
     
     # Stage distribution

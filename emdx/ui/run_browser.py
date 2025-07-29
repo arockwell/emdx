@@ -4,7 +4,6 @@ Run the new browser container.
 """
 
 import logging
-import sys
 from pathlib import Path
 
 # Set up logging

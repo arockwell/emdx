@@ -4,33 +4,24 @@ Document browser - extracted from the monolith.
 """
 
 import logging
-import os
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Optional, Dict, List, Any, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
-from textual.widgets import DataTable, Input, Label, RichLog, Static
 from textual.widget import Widget
-from textual.binding import Binding
+from textual.widgets import DataTable, Input, Label, RichLog, Static
 
 from emdx.database import db
-from emdx.models.documents import get_document
+from emdx.models.documents import get_document, delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
     remove_tags_from_document,
-    search_by_tags,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
-from emdx.utils.emoji_aliases import expand_aliases
 
-from .document_viewer import FullScreenView
-from .modals import DeleteConfirmScreen
-from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
@@ -421,6 +412,12 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
+        # Handle delete key
+        if key == "d" and not self.edit_mode and self.mode == "NORMAL":
+            await self._handle_delete()
+            event.stop()
+            return
+        
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -437,6 +434,34 @@ class DocumentBrowser(Widget):
                 self.exit_tag_mode()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
+    
+    async def _handle_delete(self) -> None:
+        """Handle delete key press - immediately delete document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            return
+            
+        row_idx = table.cursor_row
+        if row_idx >= len(self.filtered_docs):
+            return
+            
+        doc = self.filtered_docs[row_idx]
+        
+        try:
+            delete_document(str(doc["id"]), hard_delete=False)  # Soft delete by default
+            # Refresh the document list
+            await self.load_documents()
+            
+            # Restore cursor position, adjusting if needed
+            if len(self.filtered_docs) > 0:
+                # If we deleted the last item, move cursor to the new last item
+                new_cursor_row = min(row_idx, len(self.filtered_docs) - 1)
+                table.cursor_coordinate = (new_cursor_row, 0)
+            
+            self.update_status(f"Document '{doc['title']}' deleted")
+        except Exception as e:
+            logger.error(f"Error deleting document: {e}")
+            self.update_status(f"Error deleting document: {e}")
                 
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
@@ -461,7 +486,7 @@ class DocumentBrowser(Widget):
         self.edit_mode = True
         
         # Replace preview with edit area
-        from textual.containers import Vertical, ScrollableContainer
+        from textual.containers import ScrollableContainer, Vertical
         preview_container = self.query_one("#preview-container", Vertical)
         try:
             preview = self.query_one("#preview", ScrollableContainer)
@@ -751,7 +776,7 @@ class DocumentBrowser(Widget):
         self.new_document_mode = True
         
         # Replace preview with edit area for new document
-        from textual.containers import Vertical, ScrollableContainer
+        from textual.containers import ScrollableContainer, Vertical
         preview_container = self.query_one("#preview-container", Vertical)
         try:
             preview = self.query_one("#preview", ScrollableContainer)
@@ -839,81 +864,46 @@ class DocumentBrowser(Widget):
         doc_id = int(doc["id"])
         
         try:
-            import time
             from pathlib import Path
-            from emdx.commands.claude_execute import get_execution_context
+
+            from emdx.commands.claude_execute import (
+                EXECUTION_TYPE_EMOJIS,
+                execute_document_smart_background,
+                generate_unique_execution_id,
+                get_execution_context,
+            )
             from emdx.models.tags import get_document_tags
-            from emdx.models.executions import create_execution
             
             # Get document tags
             doc_tags = get_document_tags(str(doc_id))
             
             # Get execution context to show what will happen
             context = get_execution_context(doc_tags)
-            self.update_status(f"Executing {context['type'].value}: {context['description']}")
+            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+            self.update_status(f"{exec_emoji} Executing {context['type'].value}: {context['description']}")
             
-            # Create logs directory
-            log_dir = Path.home() / ".config/emdx/logs"
-            log_dir.mkdir(parents=True, exist_ok=True)
+            # Generate unique execution ID
+            execution_id = generate_unique_execution_id(str(doc_id))
             
-            # Create the execution record and get numeric ID
-            timestamp = int(time.time())
-            log_filename = f"claude-{doc_id}-{timestamp}.log"
-            log_path = log_dir / log_filename
+            # Set up log file
+            log_dir = Path.home() / ".config" / "emdx" / "logs"
+            log_file = log_dir / f"{execution_id}.log"
             
-            exec_id = create_execution(
+            # Use unified execution path
+            execute_document_smart_background(
                 doc_id=doc_id,
-                doc_title=doc['title'],
-                log_file=str(log_path)
-            )
-            
-            # Now execute in background using the wrapper script
-            import subprocess
-            import sys
-            
-            # Find the wrapper script
-            wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
-            
-            # Build the claude command using emdx CLI
-            # Use the emdx command instead of calling module directly
-            import shutil
-            emdx_path = shutil.which("emdx")
-            if not emdx_path:
-                # Fallback to python module if emdx not in PATH
-                emdx_path = sys.executable
-                claude_cmd = [
-                    emdx_path,
-                    "-m", "emdx",
-                    "claude", "execute",
-                    str(doc_id),
-                    "--background"
-                ]
-            else:
-                claude_cmd = [
-                    emdx_path,
-                    "claude", "execute", 
-                    str(doc_id),
-                    "--background"
-                ]
-            
-            # Execute with wrapper
-            wrapper_cmd = [sys.executable, str(wrapper_path), str(exec_id), str(log_path)] + claude_cmd
-            
-            # Start the process in background
-            subprocess.Popen(
-                wrapper_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True
+                execution_id=execution_id,
+                log_file=log_file,
+                use_stage_tools=True
             )
             
             # Show success message
-            self.update_status(f"🚀 Claude executing: {doc['title'][:25]}... → #{exec_id} (Press 'l' for logs)")
+            self.update_status(f"🚀 Claude executing: {doc['title'][:25]}... (Press 'l' for logs)")
             
         except Exception as e:
             logger.error(f"Error executing document: {e}", exc_info=True)
             self.update_status(f"Error: {str(e)}")
-        
+    
     async def action_new_document(self) -> None:
         """Create a new document."""
         # Don't allow new document in log browser mode
@@ -1115,10 +1105,6 @@ class DocumentBrowser(Widget):
             tags = get_document_tags(doc["id"])
             
             # Format details with emoji and rich formatting
-            from rich.text import Text
-            from rich.panel import Panel
-            from rich.columns import Columns
-            from datetime import datetime
             
             # Document metadata
             details = []

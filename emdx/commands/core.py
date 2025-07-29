@@ -28,10 +28,10 @@ from emdx.models.documents import (
     update_document,
 )
 from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
-from emdx.ui.formatting import format_tags
-from emdx.utils.git import get_git_project
-from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.services.auto_tagger import AutoTagger
+from emdx.ui.formatting import format_tags
+from emdx.utils.emoji_aliases import expand_alias_string
+from emdx.utils.git import get_git_project
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -928,5 +928,25 @@ def purge(
     except Exception as e:
         console.print(f"[red]Error purging documents: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@app.command(name="exec")
+def exec_document(
+    doc_id: str = typer.Argument(..., help="Document ID to execute"),
+    background: bool = typer.Option(True, "--background/--foreground", "-b/-f", 
+                                  help="Run in background (default) or foreground"),
+    tools: Optional[str] = typer.Option(None, "--tools", "-t",
+                                       help="Comma-separated list of allowed tools"),
+) -> None:
+    """Execute a document with Claude (shortcut for 'claude execute')."""
+    from . import claude_execute
+    
+    # Call the actual execute function
+    claude_execute.execute(
+        doc_id=doc_id,
+        background=background,
+        tools=tools,
+        smart=True  # Always use smart mode
+    )
 
 

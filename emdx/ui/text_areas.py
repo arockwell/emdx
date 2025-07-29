@@ -5,6 +5,7 @@ Text area widgets for EMDX TUI.
 
 import logging
 import re
+
 from textual import events
 from textual.widgets import TextArea
 

@@ -6,8 +6,8 @@ from typing import Optional
 
 from rich.syntax import Syntax
 from rich.text import Text
-from textual.widgets import RichLog, Static
 from textual.containers import ScrollableContainer
+from textual.widgets import RichLog
 
 from ..ui.markdown_config import MarkdownConfig
 

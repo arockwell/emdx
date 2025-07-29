@@ -4,14 +4,13 @@ Analyzes document content and suggests appropriate tags based on patterns.
 """
 
 import re
-from typing import List, Dict, Any, Tuple, Optional, Set
-from collections import defaultdict
 import sqlite3
-from pathlib import Path
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
-from ..utils.emoji_aliases import EMOJI_ALIASES
 from ..models.tags import get_or_create_tag
+from ..utils.emoji_aliases import EMOJI_ALIASES
 
 
 class AutoTagger:
@@ -87,7 +86,7 @@ class AutoTagger:
         
         # Priority
         'urgent': {
-            'title_patterns': [r'urgent:', r'critical:', r'asap'],
+            'title_patterns': [r'urgent:', r'urgent\s', r'critical:', r'critical\s', r'asap'],
             'content_patterns': [r'urgent', r'critical', r'immediately', r'asap'],
             'confidence': 0.85,
             'tags': ['urgent']
@@ -155,7 +154,7 @@ class AutoTagger:
                     if title_matches > 0:
                         confidence = min(1.0, confidence + 0.1)
                     else:
-                        confidence = base_confidence * 0.7  # Lower confidence for content-only match
+                        confidence = base_confidence * 0.75  # Lower confidence for content-only match
             
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:
