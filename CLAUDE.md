@@ -4,7 +4,6 @@
 
 **NEVER run these commands as they will hang Claude Code:**
 - `emdx gui` - Interactive TUI browser
-- `emdx tui` - Alternative TUI interface
 
 **KNOWN BUG**: As of July 2025, Claude Code's deny rules are NOT working. Even with:
 - Explicit deny patterns in settings.json
@@ -19,7 +18,7 @@ These commands STILL execute and hang the session. This is a critical bug in Cla
 
 Test these new features when working with EMDX:
 - **Event-driven log streaming** - Real-time log updates without polling
-- **Git diff browser** - Press 'd' in TUI to enter git diff browser mode
+- **Git diff browser** - Press 'g' in TUI to enter git diff browser mode
 - **Worktree switching** - Press 'w' in git mode to switch worktrees interactively
 - **Comprehensive docs** - New docs/ folder with detailed project documentation
 

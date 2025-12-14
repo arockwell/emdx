@@ -41,10 +41,15 @@ emdx gui
 ### Key TUI Commands
 - `j/k` - Navigate up/down
 - `e` - Edit with vim
+- `n` - New document
+- `/` - Search
+- `t/T` - Add/remove tags
 - `f` - File browser mode
-- `d` - Git diff browser  
+- `g` - Git diff browser
 - `l` - Log browser
+- `d` - Delete document
 - `x` - Execute with Claude
+- `r` - Refresh
 - `q` - Quit/back
 
 ## 📚 **Documentation**
@@ -80,13 +85,13 @@ emdx gui
 # Navigation
 # - Documents (default): manage knowledge base
 # - Files (f): browse filesystem with preview
-# - Git (d): visual diff viewer, worktree switching  
+# - Git (g): visual diff viewer, worktree switching  
 # - Logs (l): execution monitoring
 ```
 
 ## 🔧 **Configuration**
 
-- **Database**: `~/.emdx/emdx.db` (created automatically)
+- **Database**: `~/.config/emdx/knowledge.db` (created automatically)
 - **GitHub Integration**: Set `GITHUB_TOKEN` or use `gh auth login`
 - **Editor**: Set `EDITOR` environment variable for external editing
 
