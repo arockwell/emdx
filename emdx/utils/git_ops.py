@@ -17,11 +17,24 @@ class GitWorktree:
     branch: str
     commit: str
     is_current: bool = False
-    
+
     @property
     def name(self) -> str:
         """Get a display name for the worktree."""
         return Path(self.path).name
+
+
+@dataclass
+class GitProject:
+    """Represents a git project with its worktrees."""
+    name: str
+    main_path: str
+    worktree_count: int = 0
+
+    @property
+    def display_name(self) -> str:
+        """Get a display name for the project."""
+        return f"{self.name} ({self.worktree_count} worktrees)"
 
 
 @dataclass
@@ -58,14 +71,92 @@ class GitFileStatus:
         return descriptions.get(self.status, 'Unknown')
 
 
-def get_worktrees() -> List[GitWorktree]:
-    """Get list of all git worktrees."""
+def discover_git_projects(search_paths: Optional[List[str]] = None) -> List[GitProject]:
+    """
+    Discover git projects in common locations.
+
+    Args:
+        search_paths: Optional list of paths to search. Defaults to ~/dev and parent of current dir.
+
+    Returns:
+        List of GitProject objects
+    """
+    projects = []
+
+    if search_paths is None:
+        # Default search paths
+        search_paths = []
+
+        # Add ~/dev if it exists
+        home_dev = Path.home() / "dev"
+        if home_dev.exists():
+            search_paths.append(str(home_dev))
+
+        # Add ~/dev/worktrees if it exists
+        home_worktrees = Path.home() / "dev" / "worktrees"
+        if home_worktrees.exists():
+            search_paths.append(str(home_worktrees))
+
+        # Add parent of current directory
+        cwd_parent = Path.cwd().parent
+        if cwd_parent.exists():
+            search_paths.append(str(cwd_parent))
+
+    for search_path in search_paths:
+        try:
+            search_dir = Path(search_path)
+            if not search_dir.exists():
+                continue
+
+            # Look for directories with .git folder
+            for item in search_dir.iterdir():
+                if not item.is_dir():
+                    continue
+
+                git_dir = item / ".git"
+                if git_dir.exists():
+                    # This is a git repository
+                    try:
+                        # Count worktrees
+                        worktrees = get_worktrees(str(item))
+                        projects.append(GitProject(
+                            name=item.name,
+                            main_path=str(item),
+                            worktree_count=len(worktrees)
+                        ))
+                    except Exception:
+                        # Failed to get worktrees, but it's still a git repo
+                        projects.append(GitProject(
+                            name=item.name,
+                            main_path=str(item),
+                            worktree_count=0
+                        ))
+        except Exception as e:
+            # Skip directories we can't read
+            continue
+
+    # Sort by name
+    projects.sort(key=lambda p: p.name.lower())
+    return projects
+
+
+def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
+    """
+    Get list of all git worktrees for a project.
+
+    Args:
+        project_path: Optional path to a git project. If None, uses current directory.
+
+    Returns:
+        List of GitWorktree objects
+    """
     try:
         result = subprocess.run(
             ['git', 'worktree', 'list', '--porcelain'],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            cwd=project_path
         )
         
         worktrees = []

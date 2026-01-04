@@ -121,8 +121,11 @@ class WorktreeSelectionStage(OverlayStage):
     async def load_stage_data(self) -> None:
         """Load git worktrees data and auto-create new worktree for agent execution."""
         try:
+            # Get project path from host if project selection was used
+            project_path = getattr(self.host, 'selected_project_path', None)
+
             # Check if we're in a git repository
-            if not is_git_repository():
+            if not is_git_repository(project_path):
                 logger.info("Not in git repository - skipping worktree creation")
                 self.selected_index = 0
                 self.selected_worktree = None
@@ -132,8 +135,8 @@ class WorktreeSelectionStage(OverlayStage):
                 await self.update_worktree_list()
                 return
 
-            logger.info("Loading git worktrees")
-            self.worktrees = get_worktrees()
+            logger.info(f"Loading git worktrees for project: {project_path or 'current'}")
+            self.worktrees = get_worktrees(project_path)
             logger.info(f"Loaded {len(self.worktrees)} worktrees")
 
             # Find current worktree

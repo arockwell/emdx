@@ -18,6 +18,7 @@ from ..utils.logging import get_logger
 from .stages.base import OverlayStage, OverlayStageHost, PlaceholderStage
 from .stages.document_selection import DocumentSelectionStage
 from .stages.agent_selection import AgentSelectionStage
+from .stages.project_selection import ProjectSelectionStage
 from .stages.worktree_selection import WorktreeSelectionStage
 from .stages.config_selection import ConfigSelectionStage
 
@@ -27,7 +28,8 @@ logger = get_logger(__name__)
 class StageType(Enum):
     """Available overlay stages."""
     DOCUMENT = "document"
-    AGENT = "agent" 
+    AGENT = "agent"
+    PROJECT = "project"
     WORKTREE = "worktree"
     CONFIG = "config"
 
@@ -138,23 +140,27 @@ class AgentExecutionOverlay(ModalScreen):
         self.stages = [
             StageType.DOCUMENT,
             StageType.AGENT,
+            StageType.PROJECT,
             StageType.WORKTREE,
             StageType.CONFIG
         ]
-        
+
         # State management
         self.current_stage_index = 0
         self.callback = callback
-        
+
         # Selection data
         self.selected_document_id = initial_document_id
         self.selected_agent_id: Optional[int] = None
+        self.selected_project_index: Optional[int] = None
+        self.selected_project_path: Optional[str] = None
         self.selected_worktree_index: Optional[int] = None
         self.execution_config: Dict[str, Any] = {}
 
         # Detailed selection data from stages
         self.document_data: Dict[str, Any] = {}
         self.agent_data: Dict[str, Any] = {}
+        self.project_data: Dict[str, Any] = {}
         self.worktree_data: Dict[str, Any] = {}
         
         # Stage management
@@ -243,6 +249,8 @@ class AgentExecutionOverlay(ModalScreen):
             await self.show_document_stage(content_container)
         elif current_stage == StageType.AGENT:
             await self.show_agent_stage(content_container)
+        elif current_stage == StageType.PROJECT:
+            await self.show_project_stage(content_container)
         elif current_stage == StageType.WORKTREE:
             await self.show_worktree_stage(content_container)
         elif current_stage == StageType.CONFIG:
@@ -267,7 +275,14 @@ class AgentExecutionOverlay(ModalScreen):
             stage = AgentSelectionStage(self)
             self.stage_widgets[StageType.AGENT] = stage
             await container.mount(stage)
-    
+
+    async def show_project_stage(self, container: Vertical) -> None:
+        """Show project selection stage."""
+        if StageType.PROJECT not in self.stage_widgets:
+            stage = ProjectSelectionStage(self)
+            self.stage_widgets[StageType.PROJECT] = stage
+            await container.mount(stage)
+
     async def show_worktree_stage(self, container: Vertical) -> None:
         """Show worktree selection stage."""
         if StageType.WORKTREE not in self.stage_widgets:
@@ -435,7 +450,15 @@ class AgentExecutionOverlay(ModalScreen):
         self.stage_completed[StageType.AGENT] = True
         logger.info(f"Agent selected: {agent_id}")
         self.call_after_refresh(self.update_navigation_state)
-    
+
+    def set_project_selection(self, project_index: int, project_path: str) -> None:
+        """Set selected project."""
+        self.selected_project_index = project_index
+        self.selected_project_path = project_path
+        self.stage_completed[StageType.PROJECT] = True
+        logger.info(f"Project selected: index={project_index}, path={project_path}")
+        self.call_after_refresh(self.update_navigation_state)
+
     def set_worktree_selection(self, worktree_index: int) -> None:
         """Set selected worktree index."""
         self.selected_worktree_index = worktree_index
