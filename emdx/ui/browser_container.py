@@ -62,6 +62,20 @@ class BrowserContainer(App):
         self.browsers = {}  # Will store browser instances
         self.browser_states = {}  # Quick and dirty state storage
         self.container_widget = None  # Will be set in compose
+
+    def exit(self, *args, **kwargs):
+        """Override exit to log when it's called."""
+        import traceback
+        logger.error("BrowserContainer.exit() called!")
+        logger.error("".join(traceback.format_stack()))
+        super().exit(*args, **kwargs)
+
+    def _handle_exception(self, error: Exception) -> None:
+        """Override exception handler to log exceptions."""
+        import traceback
+        logger.error(f"BrowserContainer._handle_exception called with: {error}")
+        logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        super()._handle_exception(error)
         
     def compose(self) -> ComposeResult:
         """Yield the widget wrapper."""
@@ -165,6 +179,7 @@ class BrowserContainer(App):
         
     def action_quit(self) -> None:
         """Quit the application."""
+        logger.info("action_quit called - exiting app")
         self.exit()
         
     async def on_key(self, event) -> None:
@@ -180,6 +195,7 @@ class BrowserContainer(App):
         
         # Only handle browser switching keys, let browsers handle their own keys
         if key == "q" and self.current_browser == "document":
+            logger.info("Q key pressed in document browser - exiting app")
             self.exit()
             event.stop()
             return

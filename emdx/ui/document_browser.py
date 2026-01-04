@@ -749,41 +749,40 @@ class DocumentBrowser(Widget):
         self.editing_doc_id = None  # No existing document
         self.edit_mode = True
         self.new_document_mode = True
-        
+
         # Replace preview with edit area for new document
         from textual.containers import Vertical, ScrollableContainer
         preview_container = self.query_one("#preview-container", Vertical)
+
+        # Remove all children from preview container
         try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for new document mode: {e}")
-            # Try removing all children instead
             for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
+                await child.remove()
+            logger.info("Removed existing preview children for new document mode")
+        except Exception as e:
+            logger.error(f"Error removing preview children: {e}")
+
         # Create a vertical container for title input and content editor
         from textual.containers import Vertical
         edit_container = Vertical(id="edit-container")
-        
+
         # Create title input
         from .inputs import TitleInput
         title_input = TitleInput(self, placeholder="Enter document title...", id="title-input")
-        
+
         # Create vim editor with empty content
         vim_editor = VimEditor(self, content="", id="vim-editor-container")
-        
+
         # Mount the container and its children
         await preview_container.mount(edit_container)
         await edit_container.mount(title_input)
         await edit_container.mount(vim_editor)
-        
+
         # Vim editor will start in NORMAL mode by default
-        
+
         # Focus on title input first - use call_after_refresh to ensure it's ready
         self.call_after_refresh(lambda: title_input.focus())
-        
+
         # Update status
         self._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
         
@@ -842,47 +841,47 @@ class DocumentBrowser(Widget):
         # Import the new agent execution overlay
         from .agent_execution_overlay import AgentExecutionOverlay
         
-        def handle_execution_result(result):
+        async def handle_execution_result(result):
             """Handle the result from agent execution overlay."""
             if result and result.get('document_id') and result.get('agent_id'):
                 document_id = result['document_id']
                 agent_id = result['agent_id']
                 worktree_index = result.get('worktree_index')
                 config = result.get('config', {})
-                
-                # Execute the agent in background
+                background = config.get('background', True)
+
+                # Execute the agent
                 try:
-                    import asyncio
                     from ..agents.executor import agent_executor
-                    
-                    async def run_agent():
-                        execution_id = await agent_executor.execute_agent(
-                            agent_id=agent_id,
-                            input_type='document',
-                            input_doc_id=document_id,
-                            background=True
-                        )
-                        return execution_id
-                    
-                    # Run the agent
-                    execution_id = asyncio.run(run_agent())
+
+                    logger.info(f"Starting agent execution: agent={agent_id}, doc={document_id}, background={background}")
+
+                    execution_id = await agent_executor.execute_agent(
+                        agent_id=agent_id,
+                        input_type='document',
+                        input_doc_id=document_id,
+                        background=background,
+                        variables=config.get('variables', {})
+                    )
+
                     self.update_status(f"🤖 Agent execution started (#{execution_id}) for '{doc_title}'")
-                    
+                    logger.info(f"Agent execution started: #{execution_id}")
+
                 except Exception as e:
                     logger.error(f"Error starting agent: {e}", exc_info=True)
-                    self.update_status(f"Error starting agent: {str(e)}")
+                    self.update_status(f"❌ Error starting agent: {str(e)}")
             else:
                 # User cancelled
                 self.update_status("Agent execution cancelled")
+                logger.info("Agent execution cancelled by user")
         
         # Open the new multi-stage agent execution overlay
-        # Note: Not passing initial_document_id to force starting at document selection stage
-        # This allows users to see and test the full overlay experience
+        # Pre-select the current document and start at agent selection stage
         overlay = AgentExecutionOverlay(
-            # initial_document_id=doc_id,  # Commented out to start at document stage
-            start_stage=None,  # Start at first stage (document)
-            callback=handle_execution_result
+            initial_document_id=doc_id,  # Pre-select current document
+            start_stage=None,  # Will auto-start at agent stage when document is pre-selected
         )
+        # Pass the async callback to push_screen - it will be called when the overlay is dismissed
         self.app.push_screen(overlay, handle_execution_result)
     
     async def action_new_document(self) -> None:

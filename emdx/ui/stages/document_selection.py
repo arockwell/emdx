@@ -190,32 +190,18 @@ class DocumentSelectionStage(OverlayStage):
             logger.error(f"Could not show error in ListView: {e}")
     
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Handle ListView selection."""
+        """Handle ListView selection (when user presses Enter on an item)."""
         if not self.filtered_documents:
             return
         
-        # Get the selected index
-        list_view = self.query_one("#doc-list-view", ListView)
-        selected_index = list_view.index
-        
-        if 0 <= selected_index < len(self.filtered_documents):
-            # This is just highlighting, not final selection
-            pass
-    
-    def action_select_document(self) -> None:
-        """Select the current document."""
-        if not self.filtered_documents:
-            return
-        
-        # Get currently highlighted item from ListView
-        list_view = self.query_one("#doc-list-view", ListView)
-        selected_index = list_view.index
+        # Get the selected index from the event
+        selected_index = event.list_view.index
         
         if selected_index is not None and 0 <= selected_index < len(self.filtered_documents):
             document = self.filtered_documents[selected_index]
             self.selected_document = document
             
-            logger.info(f"Document selected: {document['id']} - {document.get('title', 'Untitled')}")
+            logger.info(f"Document selected via ListView: {document['id']} - {document.get('title', 'Untitled')}")
             
             # Update host selection
             self.host.set_document_selection(document["id"])
@@ -229,6 +215,42 @@ class DocumentSelectionStage(OverlayStage):
             
             # Request navigation to next stage
             self.request_navigation("next")
+    
+    def action_select_document(self) -> None:
+        """Select the current document (backup method for Enter key)."""
+        logger.info("action_select_document called")
+        if not self.filtered_documents:
+            logger.warning("No filtered documents available")
+            return
+        
+        # Get currently highlighted item from ListView
+        try:
+            list_view = self.query_one("#doc-list-view", ListView)
+            selected_index = list_view.index
+            logger.info(f"ListView index: {selected_index}, filtered_docs count: {len(self.filtered_documents)}")
+            
+            if selected_index is not None and 0 <= selected_index < len(self.filtered_documents):
+                document = self.filtered_documents[selected_index]
+                self.selected_document = document
+                
+                logger.info(f"Document selected via action: {document['id']} - {document.get('title', 'Untitled')}")
+                
+                # Update host selection
+                self.host.set_document_selection(document["id"])
+                
+                # Update selection data and mark as valid
+                self.update_selection(self.get_selection_data())
+                self._is_valid = True
+                
+                # Post selection message
+                self.post_message(self.DocumentSelected(document["id"], document))
+                
+                # Request navigation to next stage
+                self.request_navigation("next")
+            else:
+                logger.warning(f"Invalid selection index: {selected_index}")
+        except Exception as e:
+            logger.error(f"Error in action_select_document: {e}", exc_info=True)
     
     def action_next_stage(self) -> None:
         """Navigate to next stage."""

@@ -343,3 +343,81 @@ def git_discard_changes(file_path: str, worktree_path: Optional[str] = None) -> 
         return True
     except subprocess.CalledProcessError:
         return False
+
+
+def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: Optional[str] = None) -> Tuple[bool, str, str]:
+    """
+    Create a new git worktree.
+
+    Args:
+        branch_name: Name for the new branch
+        path: Optional path for the worktree (will be auto-generated if not provided)
+        base_branch: Optional base branch to create from (defaults to current branch)
+
+    Returns:
+        Tuple of (success, worktree_path, error_message)
+    """
+    try:
+        # Get repository root to create worktrees adjacent to it
+        repo_root = get_repository_root()
+        if not repo_root:
+            return False, "", "Not in a git repository"
+
+        # Auto-generate path if not provided
+        if not path:
+            # Create worktree path: ../repo-name-worktree/branch_name
+            repo_name = Path(repo_root).name
+            worktrees_dir = Path(repo_root).parent / f"{repo_name}-worktrees"
+            worktrees_dir.mkdir(exist_ok=True)
+            path = str(worktrees_dir / branch_name)
+
+        # Build git worktree add command
+        cmd = ['git', 'worktree', 'add', '-b', branch_name, path]
+        if base_branch:
+            cmd.append(base_branch)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=repo_root
+        )
+
+        return True, path, ""
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else "Failed to create worktree"
+        return False, "", error_msg
+    except Exception as e:
+        return False, "", str(e)
+
+
+def remove_worktree(path: str, force: bool = False) -> Tuple[bool, str]:
+    """
+    Remove a git worktree.
+
+    Args:
+        path: Path to the worktree to remove
+        force: Force removal even if worktree has modifications
+
+    Returns:
+        Tuple of (success, error_message)
+    """
+    try:
+        cmd = ['git', 'worktree', 'remove', path]
+        if force:
+            cmd.append('--force')
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        return True, ""
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else "Failed to remove worktree"
+        return False, error_msg

@@ -255,7 +255,15 @@ class AgentBrowser(Widget):
     
     def update_agent_content(self, agent_info: dict) -> None:
         """Update the main RHS content area with full agent details."""
-        content = self.query_one("#agent-content", Static)
+        # Don't update content if we're in form mode
+        if self.form_mode:
+            return
+
+        try:
+            content = self.query_one("#agent-content", Static)
+        except Exception:
+            # Content widget doesn't exist (probably in form mode)
+            return
         
         # Get full agent configuration if available
         full_agent = None
@@ -553,12 +561,12 @@ class AgentBrowser(Widget):
     async def enter_agent_form_mode(self, edit_mode=False, agent_data=None) -> None:
         """Enter agent form mode (following document browser pattern)."""
         logger.info(f"Entering agent form mode: edit_mode={edit_mode}, agent_data={agent_data}")
-        
+
         # Store that we're in form mode
         self.editing_agent_id = agent_data.get("id") if agent_data and isinstance(agent_data, dict) else None
         self.form_mode = True
         self.edit_mode = edit_mode
-        
+
         # Replace content with form
         from textual.containers import Vertical
         try:
@@ -567,40 +575,40 @@ class AgentBrowser(Widget):
         except Exception as e:
             logger.error(f"Could not find content container: {e}")
             return
-        
+
         try:
-            # Remove the existing content container completely to prevent log bleeding
-            content_scroll = self.query_one("#agent-preview", ScrollableContainer)
-            await content_scroll.remove()
-            logger.info("Removed existing content")
+            # Remove all children from the content container
+            for child in list(content_container.children):
+                await child.remove()
+            logger.info("Removed existing content children")
         except Exception as e:
             logger.error(f"Error removing content: {e}")
-        
+
         # Create the agent form
         try:
             from .agent_form import AgentForm
             logger.info("Creating AgentForm...")
             logger.info(f"Parameters: self={self}, agent_registry={agent_registry}, edit_mode={edit_mode}, agent_data={agent_data}")
-            
+
             agent_form = AgentForm(
-                self, 
+                self,
                 agent_registry,
                 edit_mode=edit_mode,
                 agent_data=agent_data,
                 id="agent-form"
             )
             logger.info(f"Created form: {agent_form}")
-            
+
             # Mount the form directly to the container
             logger.info("Mounting form...")
             await content_container.mount(agent_form)
             logger.info("Form mounted successfully")
-            
+
             # Focus the form to ensure it's active
             logger.info("Focusing form...")
             agent_form.focus()
             logger.info("Form focused")
-            
+
         except Exception as e:
             logger.error(f"Error creating/mounting form: {e}", exc_info=True)
             # Fallback to a simple error message
@@ -608,7 +616,7 @@ class AgentBrowser(Widget):
             error_widget = Static(f"[red]Failed to create agent form:[/red]\n{str(e)}\n\nPress ESC to cancel", id="agent-form")
             await content_container.mount(error_widget)
             self.update_status(f"❌ Failed to create form: {str(e)}")
-        
+
         # Update status
         action = "editing" if edit_mode else "creating"
         self.update_status(f"Agent {action} mode | Ctrl+S=save | ESC=cancel")

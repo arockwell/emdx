@@ -17,6 +17,9 @@ from textual.message import Message
 from ..utils.logging import get_logger
 from .stages.base import OverlayStage, OverlayStageHost, PlaceholderStage
 from .stages.document_selection import DocumentSelectionStage
+from .stages.agent_selection import AgentSelectionStage
+from .stages.worktree_selection import WorktreeSelectionStage
+from .stages.config_selection import ConfigSelectionStage
 
 logger = get_logger(__name__)
 
@@ -148,6 +151,11 @@ class AgentExecutionOverlay(ModalScreen):
         self.selected_agent_id: Optional[int] = None
         self.selected_worktree_index: Optional[int] = None
         self.execution_config: Dict[str, Any] = {}
+
+        # Detailed selection data from stages
+        self.document_data: Dict[str, Any] = {}
+        self.agent_data: Dict[str, Any] = {}
+        self.worktree_data: Dict[str, Any] = {}
         
         # Stage management
         self.stage_widgets: Dict[StageType, Any] = {}
@@ -256,41 +264,21 @@ class AgentExecutionOverlay(ModalScreen):
     async def show_agent_stage(self, container: Vertical) -> None:
         """Show agent selection stage."""
         if StageType.AGENT not in self.stage_widgets:
-            content = (
-                "[bold yellow]🤖 Agent Selection[/bold yellow]\n\n"
-                f"Current Selection: {self.selected_agent_id or '[yellow]None selected[/yellow]'}\n\n"
-                "[dim]This stage will integrate the existing AgentSelectionModal.\n"
-                "Press Tab to continue to Worktree Selection, or Enter to proceed.[/dim]"
-            )
-            stage = PlaceholderStage(self, "agent", content)
+            stage = AgentSelectionStage(self)
             self.stage_widgets[StageType.AGENT] = stage
             await container.mount(stage)
     
     async def show_worktree_stage(self, container: Vertical) -> None:
         """Show worktree selection stage."""
         if StageType.WORKTREE not in self.stage_widgets:
-            content = (
-                "[bold yellow]🌳 Worktree Selection[/bold yellow]\n\n"
-                f"Current Selection: {self.selected_worktree_index or '[yellow]None selected[/yellow]'}\n\n"
-                "[dim]This stage will integrate the existing WorktreePickerScreen.\n"
-                "Press Tab to continue to Configuration, or Enter to proceed.[/dim]"
-            )
-            stage = PlaceholderStage(self, "worktree", content)
+            stage = WorktreeSelectionStage(self)
             self.stage_widgets[StageType.WORKTREE] = stage
             await container.mount(stage)
     
     async def show_config_stage(self, container: Vertical) -> None:
         """Show execution configuration stage."""
         if StageType.CONFIG not in self.stage_widgets:
-            config_text = "\n".join([f"  {k}: {v}" for k, v in self.execution_config.items()]) or "  [dim]Default configuration[/dim]"
-            content = (
-                "[bold yellow]⚙️ Execution Configuration[/bold yellow]\n\n"
-                f"Current Config:\n{config_text}\n\n"
-                "[dim]This stage will allow setting execution parameters like\n"
-                "background mode, variables, timeouts, etc.\n"
-                "Press Ctrl+S to execute or Enter to proceed with current config.[/dim]"
-            )
-            stage = PlaceholderStage(self, "config", content)
+            stage = ConfigSelectionStage(self)
             self.stage_widgets[StageType.CONFIG] = stage
             await container.mount(stage)
     
@@ -346,24 +334,21 @@ class AgentExecutionOverlay(ModalScreen):
         if not self.selected_document_id or not self.selected_agent_id:
             logger.warning("Cannot execute: missing required selections")
             return
-        
+
         execution_data = {
             "document_id": self.selected_document_id,
             "agent_id": self.selected_agent_id,
             "worktree_index": self.selected_worktree_index,
             "config": self.execution_config.copy()
         }
-        
+
         logger.info(f"Executing with data: {execution_data}")
-        
+
         # Post execution message
         self.post_message(self.ExecutionRequested(execution_data))
-        
-        # Call callback if provided
-        if self.callback:
-            self.callback(execution_data)
-        
-        # Close overlay
+
+        # Close overlay and pass result to the callback via dismiss
+        # The callback will be called by push_screen's result handler
         self.dismiss(execution_data)
     
     def action_cancel(self) -> None:
@@ -382,7 +367,14 @@ class AgentExecutionOverlay(ModalScreen):
         """Handle stage selection changes."""
         logger.info(f"Stage {message.stage_name} selection changed: {message.selection_data}")
         # Update internal state based on stage
-        # This will be expanded when we implement actual stages
+        if message.stage_name == "document":
+            self.document_data = message.selection_data
+        elif message.stage_name == "agent":
+            self.agent_data = message.selection_data
+        elif message.stage_name == "worktree":
+            self.worktree_data = message.selection_data
+        elif message.stage_name == "config":
+            self.execution_config.update(message.selection_data)
     
     def on_overlay_stage_stage_completed(self, message: OverlayStage.StageCompleted) -> None:
         """Handle stage completion."""
@@ -411,8 +403,23 @@ class AgentExecutionOverlay(ModalScreen):
     def on_document_selection_stage_document_selected(self, message) -> None:
         """Handle document selection from document stage."""
         logger.info(f"Document selected via stage: {message.document_id}")
-        # The stage already called self.host.set_document_selection(), 
+        # The stage already called self.host.set_document_selection(),
         # so we just need to update our progress display
+        self.call_after_refresh(self.update_stage_progress)
+
+    def on_agent_selection_stage_agent_selected(self, message) -> None:
+        """Handle agent selection from agent stage."""
+        logger.info(f"Agent selected via stage: {message.agent_id}")
+        self.call_after_refresh(self.update_stage_progress)
+
+    def on_worktree_selection_stage_worktree_selected(self, message) -> None:
+        """Handle worktree selection from worktree stage."""
+        logger.info(f"Worktree selected via stage: {message.worktree_index}")
+        self.call_after_refresh(self.update_stage_progress)
+
+    def on_config_selection_stage_config_completed(self, message) -> None:
+        """Handle config completion from config stage."""
+        logger.info(f"Config completed via stage: {message.config}")
         self.call_after_refresh(self.update_stage_progress)
     
     def set_document_selection(self, document_id: int) -> None:
@@ -445,7 +452,7 @@ class AgentExecutionOverlay(ModalScreen):
     
     def get_selection_summary(self) -> Dict[str, Any]:
         """Get summary of current selections."""
-        return {
+        summary = {
             "document_id": self.selected_document_id,
             "agent_id": self.selected_agent_id,
             "worktree_index": self.selected_worktree_index,
@@ -453,7 +460,14 @@ class AgentExecutionOverlay(ModalScreen):
             "current_stage": self.get_current_stage().value,
             "stage_index": self.current_stage_index,
             "completed_stages": [
-                stage.value for stage, completed in self.stage_completed.items() 
+                stage.value for stage, completed in self.stage_completed.items()
                 if completed
             ]
         }
+
+        # Add detailed data from stages
+        summary.update(self.document_data)
+        summary.update(self.agent_data)
+        summary.update(self.worktree_data)
+
+        return summary

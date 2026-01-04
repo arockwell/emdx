@@ -42,15 +42,20 @@ class AgentNameInput(Input):
 
 class CategorySelect(Select):
     """Custom select widget for agent categories."""
-    
-    def __init__(self, **kwargs):
-        options = [
-            ("research", "🔍 Research"),
-            ("generation", "📝 Generation"), 
-            ("analysis", "📊 Analysis"),
-            ("maintenance", "🔧 Maintenance")
-        ]
-        super().__init__(options, **kwargs)
+
+    def __init__(self, initial_value="research", **kwargs):
+        self._initial_value = initial_value
+        # Pass options directly to Select constructor
+        super().__init__(
+            options=[
+                ("research", "🔍 Research"),
+                ("generation", "📝 Generation"),
+                ("analysis", "📊 Analysis"),
+                ("maintenance", "🔧 Maintenance")
+            ],
+            value=initial_value,
+            **kwargs
+        )
 
 
 class AgentDisplayNameInput(Input):
@@ -74,20 +79,25 @@ class AgentDescriptionArea(TextArea):
 
 class AgentForm(Widget):
     """Agent form with custom inputs and validation."""
-    
+
+    # Make the form focusable so it receives key events
+    can_focus = True
+
     DEFAULT_CSS = """
     AgentForm {
         height: 100%;
         padding: 1;
+        overflow-y: auto;
     }
-    
+
     #form-title {
         text-align: center;
         margin: 0 0 1 0;
     }
-    
+
     #form-container {
-        height: 1fr;
+        height: auto;
+        overflow-y: auto;
     }
     
     #basic-info-row {
@@ -161,34 +171,50 @@ class AgentForm(Widget):
         
     def compose(self):
         """Create comprehensive form layout with all fields visible."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("AgentForm.compose() called - START")
+
         # Form header
         title = "Edit Agent" if self.edit_mode else "Create New Agent"
+        logger.info(f"Creating title: {title}")
         yield Static(f"[bold green]{title}[/bold green]", id="form-title")
+        logger.info("Title created")
         
         # Main form container with grid layout
+        logger.info("Creating form container")
         with Vertical(id="form-container"):
             # Row 1: Basic Info
+            logger.info("Creating basic info row")
             with Horizontal(id="basic-info-row"):
                 with Vertical(id="name-column"):
                     yield Static("Agent Name:", classes="field-label")
+                    logger.info("Creating AgentNameInput")
                     yield AgentNameInput(
                         value=self.agent_data.get("name", ""),
                         id="agent-name"
                     )
-                
+                    logger.info("AgentNameInput created")
+
                 with Vertical(id="display-name-column"):
                     yield Static("Display Name:", classes="field-label")
+                    logger.info("Creating AgentDisplayNameInput")
                     yield AgentDisplayNameInput(
                         value=self.agent_data.get("display_name", ""),
                         id="agent-display-name"
                     )
-                
+                    logger.info("AgentDisplayNameInput created")
+
                 with Vertical(id="category-column"):
                     yield Static("Category:", classes="field-label")
-                    yield CategorySelect(
+                    logger.info("Creating CategorySelect - TEMPORARILY USING INPUT")
+                    # TEMPORARY: Use Input instead of Select to test if Select is the problem
+                    yield Input(
                         value=self.agent_data.get("category", "research"),
-                        id="agent-category"
+                        id="agent-category",
+                        placeholder="Category (research/generation/analysis/maintenance)"
                     )
+                    logger.info("Category input created")
             
             # Row 2: Description
             yield Static("Description:", classes="field-label")
@@ -228,7 +254,31 @@ class AgentForm(Widget):
     
     def on_mount(self):
         """Focus first input and set up tab navigation."""
-        self.query_one("#agent-name").focus()
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            logger.info("AgentForm.on_mount called - START")
+            # Focus the form itself so it receives key events
+            self.focus()
+            logger.info("AgentForm focused")
+            logger.info("AgentForm.on_mount completed successfully")
+        except Exception as e:
+            logger.error(f"ERROR in AgentForm.on_mount: {e}", exc_info=True)
+            raise
+
+    def focus_first_input(self):
+        """Focus the first input field."""
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            logger.info("focus_first_input called - attempting to focus #agent-name")
+            input_widget = self.query_one("#agent-name")
+            logger.info(f"Found input widget: {input_widget}")
+            input_widget.focus()
+            logger.info("First input focused successfully")
+        except Exception as e:
+            logger.error(f"ERROR focusing first input: {e}", exc_info=True)
+            # Don't raise - just log the error so app doesn't crash
     
     async def on_button_pressed(self, event):
         """Handle button clicks."""
@@ -239,10 +289,23 @@ class AgentForm(Widget):
     
     async def on_key(self, event):
         """Handle form keyboard shortcuts."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"AgentForm.on_key: {event.key}")
+
+        # Stop j/k from bubbling to parent
+        if event.key in ("j", "k", "up", "down"):
+            logger.info(f"Stopping {event.key} from bubbling to parent")
+            event.stop()
+            event.prevent_default()
+            return
+
         if event.key == "ctrl+s":
+            logger.info("Ctrl+S pressed - saving form")
             await self.save_form()
             event.stop()
         elif event.key == "escape":
+            logger.info("Escape pressed - cancelling form")
             await self.cancel_form()
             event.stop()
         elif event.key == "tab":
