@@ -3,16 +3,15 @@ Document merging service for EMDX.
 Intelligently merges related documents while preserving important information.
 """
 
-import sqlite3
-from datetime import datetime
-from typing import List, Dict, Any, Tuple, Optional
-from dataclasses import dataclass
 import difflib
-from collections import Counter
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
-from ..models.documents import get_document, update_document, delete_document
-from ..models.tags import get_document_tags, add_tags_to_document
+from ..models.documents import delete_document, get_document, update_document
+from ..models.tags import add_tags_to_document, get_document_tags
 
 
 @dataclass

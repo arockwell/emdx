@@ -1,12 +1,12 @@
 """Tag management commands for emdx."""
 
 
+from typing import Optional
+
 import typer
 from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from typing import List, Optional
+from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -18,9 +18,9 @@ from emdx.models.tags import (
     remove_tags_from_document,
     rename_tag,
 )
-from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import expand_aliases, generate_legend
 from emdx.services.auto_tagger import AutoTagger
+from emdx.ui.formatting import format_tags
+from emdx.utils.emoji_aliases import generate_legend
 
 app = typer.Typer()
 console = Console()

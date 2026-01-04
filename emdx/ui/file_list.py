@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from textual import events
-from textual.widgets import DataTable, Static
 from textual.reactive import reactive
+from textual.widgets import DataTable
 
 from emdx.database import db
 

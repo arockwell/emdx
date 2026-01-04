@@ -8,7 +8,6 @@ This widget displays execution logs in a dual-pane layout:
 """
 
 import logging
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -22,7 +21,6 @@ from emdx.models.executions import Execution, get_recent_executions
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
 from .text_areas import SelectionTextArea
-from .log_parser import LogParser, LogEntry
 
 logger = logging.getLogger(__name__)
 

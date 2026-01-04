@@ -1,11 +1,10 @@
 """Execution tracking models and database operations."""
 
 import os
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 from ..database.connection import db_connection
 

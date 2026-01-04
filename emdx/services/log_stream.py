@@ -1,9 +1,9 @@
 """Event-driven log file streaming with file watching."""
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Optional, List
-import logging
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -3,33 +3,31 @@ Unified maintain command for EMDX.
 Consolidates all modification and maintenance operations.
 """
 
+import sqlite3
+import subprocess
+import time
+
+# Removed CommandDefinition import - using standard typer pattern
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import psutil
 import typer
-from typing import Optional, List
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
-from rich.prompt import Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich import box
+from rich.prompt import Confirm
 
-from ..services.duplicate_detector import DuplicateDetector
-from ..services.auto_tagger import AutoTagger
-from ..services.document_merger import DocumentMerger
-from ..services.lifecycle_tracker import LifecycleTracker
-from ..services.health_monitor import HealthMonitor
 from ..commands.gc import GarbageCollector
 from ..config.settings import get_db_path
 from ..models.tags import add_tags_to_document
-from ..models.documents import update_document
-# Removed CommandDefinition import - using standard typer pattern
-from datetime import datetime
-import sqlite3
-import subprocess
-import psutil
-import os
-import time
-from pathlib import Path
-from datetime import timezone
+from ..services.auto_tagger import AutoTagger
+from ..services.document_merger import DocumentMerger
+from ..services.duplicate_detector import DuplicateDetector
+from ..services.health_monitor import HealthMonitor
+from ..services.lifecycle_tracker import LifecycleTracker
 
 console = Console()
 
@@ -861,10 +859,10 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
         check_heartbeat: Whether to use heartbeat checking (if available)
     """
     from ..models.executions import (
-        get_stale_executions, 
-        get_running_executions, 
+        get_execution_stats,
+        get_running_executions,
+        get_stale_executions,
         update_execution_status,
-        get_execution_stats
     )
     from ..services.execution_monitor import ExecutionMonitor
     
@@ -1017,8 +1015,8 @@ def cleanup_temp_dirs(
         emdx maintain cleanup-dirs --execute    # Actually clean directories
         emdx maintain cleanup-dirs --age 48     # Clean dirs older than 48 hours
     """
-    import tempfile
     import shutil
+    import tempfile
     from datetime import timedelta
     
     temp_base = Path(tempfile.gettempdir())

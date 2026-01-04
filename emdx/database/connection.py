@@ -43,7 +43,7 @@ class DatabaseConnection:
     def ensure_schema(self):
         """Ensure the tables and FTS5 virtual table exist"""
         # Run any pending migrations first
-        migrations.run_migrations()
+        migrations.run_migrations(self.db_path)
 
         with self.get_connection() as conn:
             # Enable foreign keys

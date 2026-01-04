@@ -4,15 +4,12 @@ Analyzes knowledge base health and provides actionable recommendations.
 """
 
 import sqlite3
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass
-from collections import defaultdict
-import statistics
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
 from ..services.duplicate_detector import DuplicateDetector
-from ..services.auto_tagger import AutoTagger
 
 
 @dataclass

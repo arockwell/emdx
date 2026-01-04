@@ -1,17 +1,17 @@
 """Monitor and manage execution lifecycle."""
 
-import os
-import psutil
-from typing import List, Dict, Any
 from datetime import datetime, timezone
+from typing import Any, Dict, List
 
+import psutil
+
+from ..database.connection import db_connection
 from ..models.executions import (
+    Execution,
     get_running_executions,
     get_stale_executions,
     update_execution_status,
-    Execution
 )
-from ..database.connection import db_connection
 
 
 class ExecutionMonitor:

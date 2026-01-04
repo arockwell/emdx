@@ -8,18 +8,17 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from emdx import __version__, __build_id__
-from emdx.commands.browse import app as browse_app
-from emdx.commands.core import app as core_app
-from emdx.commands.gist import app as gist_app
-from emdx.commands.tags import app as tag_app
-from emdx.commands.executions import app as executions_app
-from emdx.commands.claude_execute import app as claude_app
-from emdx.commands.lifecycle import app as lifecycle_app
+from emdx import __build_id__, __version__
 from emdx.commands.analyze import app as analyze_app
-from emdx.commands.maintain import app as maintain_app
+from emdx.commands.browse import app as browse_app
+from emdx.commands.claude_execute import app as claude_app
+from emdx.commands.core import app as core_app
+from emdx.commands.executions import app as executions_app
+from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
+from emdx.commands.maintain import app as maintain_app
 from emdx.commands.agents import app as agents_app
+from emdx.commands.tags import app as tag_app
 from emdx.ui.gui import gui
 
 console = Console()

@@ -9,11 +9,13 @@ import logging
 import sys
 from pathlib import Path
 
-# Import extracted components
-from .text_areas import SelectionTextArea, VimEditTextArea, EditTextArea
-from .inputs import TitleInput
 from .document_viewer import FullScreenView
+from .inputs import TitleInput
 from .modals import DeleteConfirmScreen
+
+# Import extracted components
+from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+
 # DEPRECATED: These imports now generate warnings
 try:
     from .main_browser import MinimalDocumentBrowser, run_minimal

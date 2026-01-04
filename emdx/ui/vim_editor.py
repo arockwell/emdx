@@ -5,8 +5,8 @@ Provides consistent vim editing experience across main browser and file browser.
 """
 
 import logging
+
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Static
 
 from .text_areas import VimEditTextArea
 

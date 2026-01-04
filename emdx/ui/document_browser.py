@@ -4,33 +4,24 @@ Document browser - extracted from the monolith.
 """
 
 import logging
-import os
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Optional, Dict, List, Any, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
-from textual.widgets import DataTable, Input, Label, RichLog, Static
 from textual.widget import Widget
-from textual.binding import Binding
+from textual.widgets import DataTable, Input, Label, RichLog, Static
 
 from emdx.database import db
-from emdx.models.documents import get_document
+from emdx.models.documents import get_document, delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
     remove_tags_from_document,
-    search_by_tags,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
-from emdx.utils.emoji_aliases import expand_aliases
 
-from .document_viewer import FullScreenView
-from .modals import DeleteConfirmScreen
-from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
@@ -421,6 +412,12 @@ class DocumentBrowser(Widget):
         """Handle key events."""
         key = event.key
         
+        # Handle delete key
+        if key == "d" and not self.edit_mode and self.mode == "NORMAL":
+            await self._handle_delete()
+            event.stop()
+            return
+        
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -437,6 +434,34 @@ class DocumentBrowser(Widget):
                 self.exit_tag_mode()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
+    
+    async def _handle_delete(self) -> None:
+        """Handle delete key press - immediately delete document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            return
+            
+        row_idx = table.cursor_row
+        if row_idx >= len(self.filtered_docs):
+            return
+            
+        doc = self.filtered_docs[row_idx]
+        
+        try:
+            delete_document(str(doc["id"]), hard_delete=False)  # Soft delete by default
+            # Refresh the document list
+            await self.load_documents()
+            
+            # Restore cursor position, adjusting if needed
+            if len(self.filtered_docs) > 0:
+                # If we deleted the last item, move cursor to the new last item
+                new_cursor_row = min(row_idx, len(self.filtered_docs) - 1)
+                table.cursor_coordinate = (new_cursor_row, 0)
+            
+            self.update_status(f"Document '{doc['title']}' deleted")
+        except Exception as e:
+            logger.error(f"Error deleting document: {e}")
+            self.update_status(f"Error deleting document: {e}")
                 
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
@@ -461,7 +486,7 @@ class DocumentBrowser(Widget):
         self.edit_mode = True
         
         # Replace preview with edit area
-        from textual.containers import Vertical, ScrollableContainer
+        from textual.containers import ScrollableContainer, Vertical
         preview_container = self.query_one("#preview-container", Vertical)
         try:
             preview = self.query_one("#preview", ScrollableContainer)
@@ -751,7 +776,7 @@ class DocumentBrowser(Widget):
         self.new_document_mode = True
 
         # Replace preview with edit area for new document
-        from textual.containers import Vertical, ScrollableContainer
+        from textual.containers import ScrollableContainer, Vertical
         preview_container = self.query_one("#preview-container", Vertical)
 
         # Remove all children from preview container
@@ -837,10 +862,10 @@ class DocumentBrowser(Widget):
         doc = self.filtered_docs[table.cursor_row]
         doc_id = int(doc["id"])
         doc_title = doc["title"]
-        
+
         # Import the new agent execution overlay
         from .agent_execution_overlay import AgentExecutionOverlay
-        
+
         async def handle_execution_result(result):
             """Handle the result from agent execution overlay."""
             if result and result.get('document_id') and result.get('agent_id'):
@@ -874,7 +899,7 @@ class DocumentBrowser(Widget):
                 # User cancelled
                 self.update_status("Agent execution cancelled")
                 logger.info("Agent execution cancelled by user")
-        
+
         # Open the new multi-stage agent execution overlay
         # Pre-select the current document and start at agent selection stage
         overlay = AgentExecutionOverlay(
@@ -1085,10 +1110,6 @@ class DocumentBrowser(Widget):
             tags = get_document_tags(doc["id"])
             
             # Format details with emoji and rich formatting
-            from rich.text import Text
-            from rich.panel import Panel
-            from rich.columns import Columns
-            from datetime import datetime
             
             # Document metadata
             details = []

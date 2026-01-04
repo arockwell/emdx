@@ -2,20 +2,20 @@
 
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from datetime import datetime, timezone
 
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
 from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from ..models.executions import (
-    get_recent_executions,
     get_execution,
     get_execution_stats,
+    get_recent_executions,
     get_running_executions,
     update_execution_status,
 )
@@ -385,8 +385,9 @@ def kill_all_executions():
 @app.command(name="health")
 def execution_health():
     """Show detailed health status of running executions."""
-    from ..services.execution_monitor import ExecutionMonitor
     import psutil
+
+    from ..services.execution_monitor import ExecutionMonitor
     
     monitor = ExecutionMonitor()
     running = get_running_executions()
@@ -474,6 +475,7 @@ def monitor_executions(
 ):
     """Monitor execution status in real-time."""
     import psutil
+
     from ..services.execution_monitor import ExecutionMonitor
     
     monitor = ExecutionMonitor()
