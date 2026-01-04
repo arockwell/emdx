@@ -267,35 +267,45 @@ class AgentExecutionOverlay(ModalScreen):
         if StageType.DOCUMENT not in self.stage_widgets:
             stage = DocumentSelectionStage(self)
             self.stage_widgets[StageType.DOCUMENT] = stage
-            await container.mount(stage)
-    
+        else:
+            stage = self.stage_widgets[StageType.DOCUMENT]
+        await container.mount(stage)
+
     async def show_agent_stage(self, container: Vertical) -> None:
         """Show agent selection stage."""
         if StageType.AGENT not in self.stage_widgets:
             stage = AgentSelectionStage(self)
             self.stage_widgets[StageType.AGENT] = stage
-            await container.mount(stage)
+        else:
+            stage = self.stage_widgets[StageType.AGENT]
+        await container.mount(stage)
 
     async def show_project_stage(self, container: Vertical) -> None:
         """Show project selection stage."""
         if StageType.PROJECT not in self.stage_widgets:
             stage = ProjectSelectionStage(self)
             self.stage_widgets[StageType.PROJECT] = stage
-            await container.mount(stage)
+        else:
+            stage = self.stage_widgets[StageType.PROJECT]
+        await container.mount(stage)
 
     async def show_worktree_stage(self, container: Vertical) -> None:
         """Show worktree selection stage."""
         if StageType.WORKTREE not in self.stage_widgets:
             stage = WorktreeSelectionStage(self)
             self.stage_widgets[StageType.WORKTREE] = stage
-            await container.mount(stage)
-    
+        else:
+            stage = self.stage_widgets[StageType.WORKTREE]
+        await container.mount(stage)
+
     async def show_config_stage(self, container: Vertical) -> None:
         """Show execution configuration stage."""
         if StageType.CONFIG not in self.stage_widgets:
             stage = ConfigSelectionStage(self)
             self.stage_widgets[StageType.CONFIG] = stage
-            await container.mount(stage)
+        else:
+            stage = self.stage_widgets[StageType.CONFIG]
+        await container.mount(stage)
     
     async def update_navigation_state(self) -> None:
         """Update navigation button states."""

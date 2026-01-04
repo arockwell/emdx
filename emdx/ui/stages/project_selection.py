@@ -133,14 +133,11 @@ class ProjectSelectionStage(OverlayStage):
             await asyncio.sleep(0.1)
             await self.update_project_list()
 
-            # Auto-select current project if found
-            if self.current_project_index is not None:
-                await self.auto_select_current()
+            # Don't auto-select - let user explicitly choose
+            # The list will highlight the current project by default
 
         except Exception as e:
             logger.error(f"Failed to discover projects: {e}", exc_info=True)
-            # If we can't discover projects, just use current directory
-            await self.auto_select_current()
 
     async def auto_select_current(self) -> None:
         """Automatically select the current project."""

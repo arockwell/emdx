@@ -71,35 +71,32 @@ class GitFileStatus:
         return descriptions.get(self.status, 'Unknown')
 
 
-def discover_git_projects(search_paths: Optional[List[str]] = None) -> List[GitProject]:
+def discover_git_projects(search_paths: Optional[List[str]] = None, max_depth: int = 1) -> List[GitProject]:
     """
     Discover git projects in common locations.
 
     Args:
-        search_paths: Optional list of paths to search. Defaults to ~/dev and parent of current dir.
+        search_paths: Optional list of paths to search. Defaults to ~/dev/worktrees and parent of current dir.
+        max_depth: Maximum directory depth to search (default 1 = only immediate children)
 
     Returns:
         List of GitProject objects
     """
     projects = []
+    seen_paths = set()
 
     if search_paths is None:
-        # Default search paths
+        # Default search paths - focus on worktree directories
         search_paths = []
 
-        # Add ~/dev if it exists
-        home_dev = Path.home() / "dev"
-        if home_dev.exists():
-            search_paths.append(str(home_dev))
-
-        # Add ~/dev/worktrees if it exists
+        # Add ~/dev/worktrees if it exists (most likely location)
         home_worktrees = Path.home() / "dev" / "worktrees"
         if home_worktrees.exists():
             search_paths.append(str(home_worktrees))
 
-        # Add parent of current directory
+        # Add parent of current directory (for current project)
         cwd_parent = Path.cwd().parent
-        if cwd_parent.exists():
+        if cwd_parent.exists() and str(cwd_parent) not in search_paths:
             search_paths.append(str(cwd_parent))
 
     for search_path in search_paths:
@@ -108,16 +105,22 @@ def discover_git_projects(search_paths: Optional[List[str]] = None) -> List[GitP
             if not search_dir.exists():
                 continue
 
-            # Look for directories with .git folder
+            # Look for directories with .git folder (only immediate children for speed)
             for item in search_dir.iterdir():
                 if not item.is_dir():
+                    continue
+
+                # Skip if we've already seen this project
+                resolved_path = str(item.resolve())
+                if resolved_path in seen_paths:
                     continue
 
                 git_dir = item / ".git"
                 if git_dir.exists():
                     # This is a git repository
+                    seen_paths.add(resolved_path)
                     try:
-                        # Count worktrees
+                        # Count worktrees (quick check)
                         worktrees = get_worktrees(str(item))
                         projects.append(GitProject(
                             name=item.name,
@@ -131,7 +134,7 @@ def discover_git_projects(search_paths: Optional[List[str]] = None) -> List[GitP
                             main_path=str(item),
                             worktree_count=0
                         ))
-        except Exception as e:
+        except Exception:
             # Skip directories we can't read
             continue
 
