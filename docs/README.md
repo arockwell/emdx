@@ -4,6 +4,12 @@ This folder contains key project documentation for EMDX - Documentation Index Ma
 
 ## 📚 **Documentation Index**
 
+### **AI Agents** 🤖
+- [**Agents Overview**](agents-overview.md) - Introduction to the agent system
+- [**Agent User Guide**](agents-user-guide.md) - Creating and using agents  
+- [**Agent API Reference**](agents-api.md) - Complete agent API documentation
+- [**Agent Development**](agents-development.md) - Building custom agents
+
 ### **Architecture & Design**
 - [**Architecture Overview**](architecture.md) - System design and component relationships
 - [**Event-Driven Streaming**](event-driven-streaming.md) - New log streaming architecture
@@ -26,6 +32,8 @@ This folder contains key project documentation for EMDX - Documentation Index Ma
 
 ## 🎯 **Quick References**
 
+- **New to Agents**: Start with [Agents Overview](agents-overview.md)
+- **Creating Agents**: See [Agent User Guide](agents-user-guide.md)
 - **New Contributors**: Start with [Development Setup](development-setup.md)
 - **Architecture Questions**: See [Architecture Overview](architecture.md)
 - **UI Development**: Check [UI Architecture](ui-architecture.md) for TUI components
