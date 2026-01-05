@@ -262,15 +262,20 @@ class DocumentBrowser(Widget):
         logger.info(f"DocumentBrowser mounted - LHS split implementation - {BUILD_ID}")
         logger.info("Details panel should be visible in bottom 1/3 of sidebar")
         print(f"🔴 MOUNTED WITH {BUILD_ID} 🔴")
-        
+
         # Log CSS content to verify it's loaded
         logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
         logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
-        
+
+        # Initialize preview mode manager
+        from .preview_mode_manager import PreviewModeManager
+        preview_container = self.query_one("#preview-container", Vertical)
+        self.preview_manager = PreviewModeManager(preview_container)
+
         # Setup table
         table = self.query_one("#doc-table", DataTable)
         table.add_column("ID", width=4)
-        table.add_column("Tags", width=8)  
+        table.add_column("Tags", width=8)
         table.add_column(" ", width=1)  # Padding column
         table.add_column("Title", width=74)
         table.cursor_type = "row"
@@ -468,60 +473,36 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is None:
             return
-            
+
         row_idx = table.cursor_row
         if row_idx >= len(self.filtered_docs):
             return
-            
+
         doc = self.filtered_docs[row_idx]
         self.editing_doc_id = doc["id"]
-        
+
         # Load full document
         full_doc = get_document(str(doc["id"]))
         if not full_doc:
             return
-            
+
         # Store original preview for restoration
         self.original_preview_content = full_doc["content"]
         self.edit_mode = True
-        
-        # Replace preview with edit area
-        from textual.containers import ScrollableContainer, Vertical
-        preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for edit mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create a vertical container for title input and content editor (same as new document mode)
-        edit_container = Vertical(id="edit-container")
-        
-        # Mount the container first
-        await preview_container.mount(edit_container)
-        
-        # Create title input with existing title
-        from .inputs import TitleInput
-        title_input = TitleInput(self, value=full_doc["title"], placeholder="Enter document title...", id="title-input")
-        
+
         # Extract content without unicode box if present
-        content = self._extract_content_without_title_box(full_doc["content"], full_doc["title"])
-        
-        # Create vim editor with the content (without the title box)
-        from .vim_editor import VimEditor
-        vim_editor = VimEditor(self, content=content, id="vim-editor-container")
-        
-        # Mount both components to the already-mounted container
-        await edit_container.mount(title_input)
-        await edit_container.mount(vim_editor)
-        
+        content = self._extract_content_without_title_box(
+            full_doc["content"], full_doc["title"]
+        )
+
+        # Switch to editing mode via manager
+        title_input, vim_editor = await self.preview_manager.switch_to_editing(
+            host=self, title=full_doc["title"], content=content, is_new=False
+        )
+
         # Focus on title input first
         self.call_after_refresh(lambda: title_input.focus())
-        
+
         # Update status
         self._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
         
@@ -711,34 +692,12 @@ class DocumentBrowser(Widget):
         """Exit edit mode and restore preview."""
         if not self.edit_mode:
             return
-            
-        # Clear preview container completely
-        preview_container = self.query_one("#preview-container", Vertical)
-        
-        # Remove all children
-        for child in list(preview_container.children):
-            await child.remove()
-        
-        # Restore original preview structure exactly
-        from textual.containers import ScrollableContainer
-        from textual.widgets import RichLog
-        
-        # Create preview container and mount directly to the attached container
-        preview = ScrollableContainer(id="preview")
-        await preview_container.mount(preview)
-        
-        # Now create and mount the content to the attached preview
-        preview_content = RichLog(
-            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
-        )
-        preview_content.can_focus = False  # Disable focus like original
-        await preview.mount(preview_content)
-        
+
         self.edit_mode = False
         # Clean up new document mode flag if it was set
-        if hasattr(self, 'new_document_mode'):
+        if hasattr(self, "new_document_mode"):
             self.new_document_mode = False
-        
+
         # Clear vim mode indicator
         try:
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
@@ -746,25 +705,19 @@ class DocumentBrowser(Widget):
             vim_indicator.remove_class("active")
         except:
             pass
-        
-        # Refresh the current document's preview
+
+        # Get current document content for preview
+        content = ""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[table.cursor_row]
             full_doc = get_document(str(doc["id"]))
-            
             if full_doc:
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview_content.write(markdown)
-                    else:
-                        preview_content.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    preview_content.write(full_doc["content"])
-        
+                content = full_doc["content"]
+
+        # Switch to viewing mode via manager
+        await self.preview_manager.switch_to_viewing(content)
+
         # Return focus to table
         table.focus()
         
@@ -775,41 +728,18 @@ class DocumentBrowser(Widget):
         self.edit_mode = True
         self.new_document_mode = True
 
-        # Replace preview with edit area for new document
-        from textual.containers import ScrollableContainer, Vertical
-        preview_container = self.query_one("#preview-container", Vertical)
-
-        # Remove all children from preview container
-        try:
-            for child in list(preview_container.children):
-                await child.remove()
-            logger.info("Removed existing preview children for new document mode")
-        except Exception as e:
-            logger.error(f"Error removing preview children: {e}")
-
-        # Create a vertical container for title input and content editor
-        from textual.containers import Vertical
-        edit_container = Vertical(id="edit-container")
-
-        # Create title input
-        from .inputs import TitleInput
-        title_input = TitleInput(self, placeholder="Enter document title...", id="title-input")
-
-        # Create vim editor with empty content
-        vim_editor = VimEditor(self, content="", id="vim-editor-container")
-
-        # Mount the container and its children
-        await preview_container.mount(edit_container)
-        await edit_container.mount(title_input)
-        await edit_container.mount(vim_editor)
-
-        # Vim editor will start in NORMAL mode by default
+        # Switch to editing mode via manager (with empty title and content)
+        title_input, vim_editor = await self.preview_manager.switch_to_editing(
+            host=self, title="", content="", is_new=True
+        )
 
         # Focus on title input first - use call_after_refresh to ensure it's ready
         self.call_after_refresh(lambda: title_input.focus())
 
         # Update status
-        self._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+        self._update_vim_status(
+            "NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel"
+        )
         
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -959,44 +889,27 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is None or table.cursor_row >= len(self.filtered_docs):
             return
-            
+
         doc = self.filtered_docs[table.cursor_row]
-        
+
         # Load full document for selection
         full_doc = get_document(str(doc["id"]))
         if not full_doc:
             return
-            
-        # Replace preview with selection text area
-        preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for selection mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create selection text area with proper app instance (self implements TextAreaHost)
-        from .text_areas import SelectionTextArea
-        selection_area: SelectionTextArea = SelectionTextArea(
-            self,
-            full_doc["content"], 
-            id="selection-area",
-            read_only=True
+
+        # Switch to selecting mode via manager
+        selection_area = await self.preview_manager.switch_to_selecting(
+            host=self, content=full_doc["content"]
         )
-        await preview_container.mount(selection_area)
         selection_area.focus()
-        
+
         # Update mode
         self.mode = "SELECTION"
-        
+
         # Update status
         try:
             app = self.app
-            if hasattr(app, 'update_status'):
+            if hasattr(app, "update_status"):
                 app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
         except:
             pass
@@ -1005,54 +918,28 @@ class DocumentBrowser(Widget):
         """Exit selection mode and restore preview."""
         if self.mode != "SELECTION":
             return
-            
-        # Clear preview container completely
-        preview_container = self.query_one("#preview-container", Vertical)
-        
-        # Remove all children
-        for child in list(preview_container.children):
-            await child.remove()
-        
-        # Restore preview structure
-        from textual.containers import ScrollableContainer
-        from textual.widgets import RichLog
-        
-        preview = ScrollableContainer(id="preview")
-        preview_content = RichLog(
-            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
-        )
-        preview_content.can_focus = False
-        
-        await preview_container.mount(preview)
-        await preview.mount(preview_content)
-        
+
         self.mode = "NORMAL"
-        
-        # Refresh current document preview
+
+        # Get current document content for preview
+        content = ""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[table.cursor_row]
             full_doc = get_document(str(doc["id"]))
-            
             if full_doc:
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview_content.write(markdown)
-                    else:
-                        preview_content.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    preview_content.write(full_doc["content"])
-        
+                content = full_doc["content"]
+
+        # Switch to viewing mode via manager
+        await self.preview_manager.switch_to_viewing(content)
+
         # Return focus to table
         table.focus()
-        
+
         # Update status
         try:
             app = self.app
-            if hasattr(app, 'update_status'):
+            if hasattr(app, "update_status"):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
