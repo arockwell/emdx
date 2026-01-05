@@ -889,8 +889,11 @@ class DocumentBrowser(Widget):
                         variables=config.get('variables', {})
                     )
 
-                    self.update_status(f"🤖 Agent execution started (#{execution_id}) for '{doc_title}'")
+                    self.update_status(f"✅ Agent #{execution_id} started! Press 'l' to view live logs")
                     logger.info(f"Agent execution started: #{execution_id}")
+
+                    # TODO: Auto-switch to log browser and select this task
+                    # For now, user can press 'l' to view logs manually
 
                 except Exception as e:
                     logger.error(f"Error starting agent: {e}", exc_info=True)
