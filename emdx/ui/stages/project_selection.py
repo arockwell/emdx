@@ -15,7 +15,7 @@ from textual.message import Message
 from textual.binding import Binding
 
 from ...utils.logging import get_logger
-from ...utils.git_ops import discover_git_projects, GitProject, get_repository_root
+from ...utils.git_ops import discover_projects_from_worktrees, GitProject, get_repository_root
 from .base import OverlayStage, OverlayStageHost
 
 logger = get_logger(__name__)
@@ -111,15 +111,15 @@ class ProjectSelectionStage(OverlayStage):
     async def load_stage_data(self) -> None:
         """Discover git projects and populate list."""
         try:
-            logger.info("Discovering git projects")
+            logger.info("Discovering git projects from worktrees")
 
             # Get current project path
             self.current_project_path = get_repository_root()
             logger.info(f"Current project path: {self.current_project_path}")
 
-            # Discover projects
-            self.projects = discover_git_projects()
-            logger.info(f"Discovered {len(self.projects)} projects")
+            # Discover projects (grouped from worktrees - much faster!)
+            self.projects = discover_projects_from_worktrees()
+            logger.info(f"Discovered {len(self.projects)} projects with worktrees already loaded")
 
             # Find current project in the list
             if self.current_project_path:
@@ -202,8 +202,13 @@ class ProjectSelectionStage(OverlayStage):
                 self.selected_project = self.projects[selected_index]
                 self._is_valid = True
 
-                logger.info(f"Selected project: {self.selected_project.name}")
-                self.host.set_project_selection(self.selected_index, self.selected_project.main_path)
+                logger.info(f"Selected project: {self.selected_project.name} with {len(self.selected_project.worktrees)} worktrees")
+                # Store both project info AND worktrees
+                self.host.set_project_selection(
+                    self.selected_index,
+                    self.selected_project.main_path,
+                    self.selected_project.worktrees
+                )
                 self.update_selection(self.get_selection_data())
 
         except Exception as e:
@@ -220,8 +225,13 @@ class ProjectSelectionStage(OverlayStage):
                 self.selected_project = self.projects[selected_index]
                 self._is_valid = True
 
-                logger.info(f"Selected project: {self.selected_project.name}")
-                self.host.set_project_selection(self.selected_index, self.selected_project.main_path)
+                logger.info(f"Selected project: {self.selected_project.name} with {len(self.selected_project.worktrees)} worktrees")
+                # Store both project info AND worktrees
+                self.host.set_project_selection(
+                    self.selected_index,
+                    self.selected_project.main_path,
+                    self.selected_project.worktrees
+                )
                 self.update_selection(self.get_selection_data())
 
         except Exception as e:

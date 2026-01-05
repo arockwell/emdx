@@ -461,12 +461,13 @@ class AgentExecutionOverlay(ModalScreen):
         logger.info(f"Agent selected: {agent_id}")
         self.call_after_refresh(self.update_navigation_state)
 
-    def set_project_selection(self, project_index: int, project_path: str) -> None:
-        """Set selected project."""
+    def set_project_selection(self, project_index: int, project_path: str, worktrees: list = None) -> None:
+        """Set selected project and its worktrees."""
         self.selected_project_index = project_index
         self.selected_project_path = project_path
+        self.selected_project_worktrees = worktrees or []
         self.stage_completed[StageType.PROJECT] = True
-        logger.info(f"Project selected: index={project_index}, path={project_path}")
+        logger.info(f"Project selected: index={project_index}, path={project_path}, worktrees={len(self.selected_project_worktrees)}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_worktree_selection(self, worktree_index: int) -> None:

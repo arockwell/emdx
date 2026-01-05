@@ -29,7 +29,16 @@ class GitProject:
     """Represents a git project with its worktrees."""
     name: str
     main_path: str
-    worktree_count: int = 0
+    worktrees: List['GitWorktree'] = None
+
+    def __post_init__(self):
+        if self.worktrees is None:
+            self.worktrees = []
+
+    @property
+    def worktree_count(self) -> int:
+        """Get the number of worktrees."""
+        return len(self.worktrees)
 
     @property
     def display_name(self) -> str:
@@ -69,6 +78,149 @@ class GitFileStatus:
             '??': 'Untracked',
         }
         return descriptions.get(self.status, 'Unknown')
+
+
+def extract_project_name_from_worktree(worktree_path: str) -> str:
+    """
+    Extract project name from worktree path.
+
+    Examples:
+        clauding-main -> clauding
+        emdx-feature-agents -> emdx
+        gopher-survivors-main -> gopher-survivors
+    """
+    name = Path(worktree_path).name
+
+    # Common suffixes that indicate branch names
+    branch_indicators = [
+        '-main', '-master', '-develop', '-dev',
+        '-feature-', '-fix-', '-hotfix-',
+        '-release-', '-staging-', '-prod-'
+    ]
+
+    # Try to find project name by removing branch suffix
+    for indicator in branch_indicators:
+        if indicator in name:
+            # Find the first occurrence and take everything before it
+            idx = name.find(indicator)
+            if idx > 0:
+                return name[:idx]
+
+    # If no indicator found, try to split on last dash and see if remainder looks like a branch
+    parts = name.rsplit('-', 1)
+    if len(parts) == 2:
+        potential_project, potential_branch = parts
+        # If it looks like a valid project name, use it
+        if len(potential_project) > 2:
+            return potential_project
+
+    # Fallback: return the whole name
+    return name
+
+
+def discover_projects_from_worktrees(worktree_dirs: Optional[List[str]] = None) -> List[GitProject]:
+    """
+    Discover projects by grouping worktrees.
+
+    This is optimized for the common pattern where worktrees are named like:
+    project-branch (e.g., clauding-main, gopher-survivors-feature-xyz)
+
+    Returns projects with their worktrees already loaded.
+    """
+    if worktree_dirs is None:
+        worktree_dirs = []
+        # Check ~/dev/worktrees
+        home_worktrees = Path.home() / "dev" / "worktrees"
+        if home_worktrees.exists():
+            worktree_dirs.append(str(home_worktrees))
+
+    # Map of project_name -> (main_path, [worktrees])
+    projects_map = {}
+
+    for worktree_dir in worktree_dirs:
+        try:
+            wt_path = Path(worktree_dir)
+            if not wt_path.exists():
+                continue
+
+            # Scan for worktrees
+            for item in wt_path.iterdir():
+                if not item.is_dir():
+                    continue
+
+                git_dir = item / ".git"
+                if not git_dir.exists():
+                    continue
+
+                # This is a worktree - extract project name
+                project_name = extract_project_name_from_worktree(str(item))
+
+                # Get worktree info
+                try:
+                    # Get the main repo path from this worktree
+                    result = subprocess.run(
+                        ['git', 'rev-parse', '--show-toplevel'],
+                        capture_output=True,
+                        text=True,
+                        cwd=str(item),
+                        check=True
+                    )
+                    main_path = result.stdout.strip()
+
+                    # Get branch info
+                    result = subprocess.run(
+                        ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                        capture_output=True,
+                        text=True,
+                        cwd=str(item),
+                        check=True
+                    )
+                    branch = result.stdout.strip()
+
+                    # Get commit hash
+                    result = subprocess.run(
+                        ['git', 'rev-parse', 'HEAD'],
+                        capture_output=True,
+                        text=True,
+                        cwd=str(item),
+                        check=True
+                    )
+                    commit = result.stdout.strip()
+
+                    # Create worktree object
+                    worktree = GitWorktree(
+                        path=str(item),
+                        branch=branch,
+                        commit=commit,
+                        is_current=(str(item) == os.getcwd())
+                    )
+
+                    # Add to project map
+                    if project_name not in projects_map:
+                        projects_map[project_name] = (main_path, [])
+                    projects_map[project_name][1].append(worktree)
+
+                except Exception:
+                    # Skip worktrees we can't read
+                    continue
+
+        except Exception:
+            continue
+
+    # Convert to GitProject list
+    projects = []
+    for project_name, (main_path, worktrees) in projects_map.items():
+        # Sort worktrees by branch name
+        worktrees.sort(key=lambda w: w.branch)
+        projects.append(GitProject(
+            name=project_name,
+            main_path=main_path,
+            worktrees=worktrees
+        ))
+
+    # Sort projects by name
+    projects.sort(key=lambda p: p.name.lower())
+    return projects
 
 
 def discover_git_projects(search_paths: Optional[List[str]] = None, max_depth: int = 1) -> List[GitProject]:

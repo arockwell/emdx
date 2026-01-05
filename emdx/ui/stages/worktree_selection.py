@@ -121,23 +121,31 @@ class WorktreeSelectionStage(OverlayStage):
     async def load_stage_data(self) -> None:
         """Load git worktrees data and auto-create new worktree for agent execution."""
         try:
-            # Get project path from host if project selection was used
-            project_path = getattr(self.host, 'selected_project_path', None)
+            # Check if worktrees were already loaded from project selection
+            preloaded_worktrees = getattr(self.host, 'selected_project_worktrees', None)
 
-            # Check if we're in a git repository
-            if not is_git_repository(project_path):
-                logger.info("Not in git repository - skipping worktree creation")
-                self.selected_index = 0
-                self.selected_worktree = None
-                self._is_valid = True
-                self.host.set_worktree_selection(0)
-                await asyncio.sleep(0.1)
-                await self.update_worktree_list()
-                return
+            if preloaded_worktrees:
+                # Use pre-loaded worktrees (much faster!)
+                logger.info(f"Using pre-loaded worktrees from project selection: {len(preloaded_worktrees)} worktrees")
+                self.worktrees = preloaded_worktrees
+            else:
+                # Fall back to loading worktrees
+                project_path = getattr(self.host, 'selected_project_path', None)
 
-            logger.info(f"Loading git worktrees for project: {project_path or 'current'}")
-            self.worktrees = get_worktrees(project_path)
-            logger.info(f"Loaded {len(self.worktrees)} worktrees")
+                # Check if we're in a git repository
+                if not is_git_repository(project_path):
+                    logger.info("Not in git repository - skipping worktree creation")
+                    self.selected_index = 0
+                    self.selected_worktree = None
+                    self._is_valid = True
+                    self.host.set_worktree_selection(0)
+                    await asyncio.sleep(0.1)
+                    await self.update_worktree_list()
+                    return
+
+                logger.info(f"Loading git worktrees for project: {project_path or 'current'}")
+                self.worktrees = get_worktrees(project_path)
+                logger.info(f"Loaded {len(self.worktrees)} worktrees")
 
             # Find current worktree
             for idx, wt in enumerate(self.worktrees):
