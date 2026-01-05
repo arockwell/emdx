@@ -16,7 +16,7 @@ from textual.binding import Binding
 
 from ...utils.logging import get_logger
 from ...models.documents import get_recent_documents, search_documents
-from .base import OverlayStage, OverlayStageHost
+from .base import OverlayStage
 
 logger = get_logger(__name__)
 
@@ -93,7 +93,7 @@ class DocumentSelectionStage(OverlayStage):
             self.document_data = document_data
             super().__init__()
     
-    def __init__(self, host: OverlayStageHost, **kwargs):
+    def __init__(self, host, **kwargs):
         super().__init__(host, "document", **kwargs)
         self.documents: List[Dict[str, Any]] = []
         self.filtered_documents: List[Dict[str, Any]] = []

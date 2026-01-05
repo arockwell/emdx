@@ -16,7 +16,7 @@ from textual.binding import Binding
 
 from ...utils.logging import get_logger
 from ...utils.git_ops import discover_projects_from_worktrees, GitProject, get_repository_root
-from .base import OverlayStage, OverlayStageHost
+from .base import OverlayStage
 
 logger = get_logger(__name__)
 
@@ -85,7 +85,7 @@ class ProjectSelectionStage(OverlayStage):
             self.project_data = project_data
             super().__init__()
 
-    def __init__(self, host: OverlayStageHost, **kwargs):
+    def __init__(self, host, **kwargs):
         super().__init__(host, "project", **kwargs)
         self.projects: List[GitProject] = []
         self.selected_project: Optional[GitProject] = None

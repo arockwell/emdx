@@ -14,7 +14,7 @@ from textual.message import Message
 from textual.binding import Binding
 
 from ...utils.logging import get_logger
-from .base import OverlayStage, OverlayStageHost
+from .base import OverlayStage
 
 logger = get_logger(__name__)
 
@@ -102,7 +102,7 @@ class ConfigSelectionStage(OverlayStage):
             self.config = config
             super().__init__()
 
-    def __init__(self, host: OverlayStageHost, **kwargs):
+    def __init__(self, host, **kwargs):
         super().__init__(host, "config", **kwargs)
         self.background_execution = True  # Default to background
         self.timeout_seconds = 3600  # Default 1 hour

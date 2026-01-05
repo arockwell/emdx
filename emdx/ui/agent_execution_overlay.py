@@ -15,7 +15,7 @@ from textual.binding import Binding
 from textual.message import Message
 
 from ..utils.logging import get_logger
-from .stages.base import OverlayStage, OverlayStageHost, PlaceholderStage
+from .stages.base import OverlayStage, PlaceholderStage
 from .stages.document_selection import DocumentSelectionStage
 from .stages.agent_selection import AgentSelectionStage
 from .stages.project_selection import ProjectSelectionStage
@@ -78,6 +78,10 @@ class AgentExecutionOverlay(ModalScreen):
     #stage-content {
         height: 1fr;
         padding: 1 2;
+    }
+
+    .stage-hidden {
+        display: none;
     }
     
     #overlay-footer {
@@ -149,20 +153,22 @@ class AgentExecutionOverlay(ModalScreen):
         self.current_stage_index = 0
         self.callback = callback
 
-        # Selection data
-        self.selected_document_id = initial_document_id
-        self.selected_agent_id: Optional[int] = None
-        self.selected_project_index: Optional[int] = None
-        self.selected_project_path: Optional[str] = None
-        self.selected_worktree_index: Optional[int] = None
-        self.execution_config: Dict[str, Any] = {}
+        # Simplified selection data - everything in one dict!
+        self.selections = {
+            'document_id': initial_document_id,
+            'agent_id': None,
+            'project_index': None,
+            'project_path': None,
+            'project_worktrees': [],  # Pre-loaded worktrees
+            'worktree_index': None,
+            'config': {},
+            # Additional data from stages
+            'document_data': {},
+            'agent_data': {},
+            'project_data': {},
+            'worktree_data': {},
+        }
 
-        # Detailed selection data from stages
-        self.document_data: Dict[str, Any] = {}
-        self.agent_data: Dict[str, Any] = {}
-        self.project_data: Dict[str, Any] = {}
-        self.worktree_data: Dict[str, Any] = {}
-        
         # Stage management
         self.stage_widgets: Dict[StageType, Any] = {}
         self.stage_completed: Dict[StageType, bool] = {
@@ -190,14 +196,16 @@ class AgentExecutionOverlay(ModalScreen):
             with Horizontal(id="overlay-header"):
                 yield Label("🤖 Agent Execution", id="overlay-title")
                 yield Label("", id="stage-progress")
-            
-            # Main content area for stages
+
+            # Main content area for stages - mount all stages at once
             with Vertical(id="stage-content"):
-                yield Static("Loading stage...", id="stage-placeholder")
-            
+                # All stages are mounted but hidden by default
+                # We'll show/hide them with CSS instead of removing/mounting
+                pass
+
             # Footer with navigation and help
             with Horizontal(id="overlay-footer"):
-                yield Static("Tab: Next Stage | Shift+Tab: Previous | Enter: Proceed | Esc: Cancel", 
+                yield Static("Tab: Next Stage | Shift+Tab: Previous | Enter: Proceed | Esc: Cancel",
                            classes="footer-help")
                 yield Button("Cancel", variant="default", id="cancel-btn")
                 yield Button("Execute", variant="primary", id="execute-btn", disabled=True)
@@ -205,8 +213,31 @@ class AgentExecutionOverlay(ModalScreen):
     async def on_mount(self) -> None:
         """Initialize overlay when mounted."""
         logger.info("AgentExecutionOverlay mounted")
+
+        # Mount all stages once
+        await self.initialize_all_stages()
+
+        # Update display
         await self.update_stage_progress()
         await self.show_current_stage()
+
+    async def initialize_all_stages(self) -> None:
+        """Mount all stage widgets once - they will be shown/hidden with CSS."""
+        container = self.query_one("#stage-content", Vertical)
+
+        # Create and mount all stages
+        self.stage_widgets[StageType.DOCUMENT] = DocumentSelectionStage(self)
+        self.stage_widgets[StageType.AGENT] = AgentSelectionStage(self)
+        self.stage_widgets[StageType.PROJECT] = ProjectSelectionStage(self)
+        self.stage_widgets[StageType.WORKTREE] = WorktreeSelectionStage(self)
+        self.stage_widgets[StageType.CONFIG] = ConfigSelectionStage(self)
+
+        # Mount all stages (they'll start hidden)
+        for stage_type, stage in self.stage_widgets.items():
+            await container.mount(stage)
+            stage.add_class("stage-hidden")  # Hide by default
+
+        logger.info("All stages initialized and mounted")
     
     def get_current_stage(self) -> StageType:
         """Get the current stage."""
@@ -235,89 +266,39 @@ class AgentExecutionOverlay(ModalScreen):
         progress.update(progress_text)
     
     async def show_current_stage(self) -> None:
-        """Display the current stage content."""
+        """Display the current stage content by hiding all others and showing the current one."""
         current_stage = self.get_current_stage()
         logger.info(f"Showing stage: {current_stage}")
-        
-        # Clear current content
-        content_container = self.query_one("#stage-content", Vertical)
-        for child in list(content_container.children):
-            await child.remove()
-        
-        # Create stage-specific content
-        if current_stage == StageType.DOCUMENT:
-            await self.show_document_stage(content_container)
-        elif current_stage == StageType.AGENT:
-            await self.show_agent_stage(content_container)
-        elif current_stage == StageType.PROJECT:
-            await self.show_project_stage(content_container)
-        elif current_stage == StageType.WORKTREE:
-            await self.show_worktree_stage(content_container)
-        elif current_stage == StageType.CONFIG:
-            await self.show_config_stage(content_container)
-        
+
+        # Hide all stages first
+        for stage_type, stage in self.stage_widgets.items():
+            if stage_type != current_stage:
+                stage.add_class("stage-hidden")
+
+        # Show current stage
+        current_widget = self.stage_widgets[current_stage]
+        current_widget.remove_class("stage-hidden")
+
+        # Set focus to the current stage's primary input
+        await current_widget.set_focus_to_primary_input()
+
         # Update navigation state
         await self.update_navigation_state()
-        
+
         # Post stage change message
         self.post_message(self.StageChanged(current_stage, self.current_stage_index))
-    
-    async def show_document_stage(self, container: Vertical) -> None:
-        """Show document selection stage."""
-        if StageType.DOCUMENT not in self.stage_widgets:
-            stage = DocumentSelectionStage(self)
-            self.stage_widgets[StageType.DOCUMENT] = stage
-        else:
-            stage = self.stage_widgets[StageType.DOCUMENT]
-        await container.mount(stage)
-
-    async def show_agent_stage(self, container: Vertical) -> None:
-        """Show agent selection stage."""
-        if StageType.AGENT not in self.stage_widgets:
-            stage = AgentSelectionStage(self)
-            self.stage_widgets[StageType.AGENT] = stage
-        else:
-            stage = self.stage_widgets[StageType.AGENT]
-        await container.mount(stage)
-
-    async def show_project_stage(self, container: Vertical) -> None:
-        """Show project selection stage."""
-        if StageType.PROJECT not in self.stage_widgets:
-            stage = ProjectSelectionStage(self)
-            self.stage_widgets[StageType.PROJECT] = stage
-        else:
-            stage = self.stage_widgets[StageType.PROJECT]
-        await container.mount(stage)
-
-    async def show_worktree_stage(self, container: Vertical) -> None:
-        """Show worktree selection stage."""
-        if StageType.WORKTREE not in self.stage_widgets:
-            stage = WorktreeSelectionStage(self)
-            self.stage_widgets[StageType.WORKTREE] = stage
-        else:
-            stage = self.stage_widgets[StageType.WORKTREE]
-        await container.mount(stage)
-
-    async def show_config_stage(self, container: Vertical) -> None:
-        """Show execution configuration stage."""
-        if StageType.CONFIG not in self.stage_widgets:
-            stage = ConfigSelectionStage(self)
-            self.stage_widgets[StageType.CONFIG] = stage
-        else:
-            stage = self.stage_widgets[StageType.CONFIG]
-        await container.mount(stage)
     
     async def update_navigation_state(self) -> None:
         """Update navigation button states."""
         execute_btn = self.query_one("#execute-btn", Button)
-        
+
         # Enable execute button if we have minimum required selections
         can_execute = (
-            self.selected_document_id is not None and
-            self.selected_agent_id is not None
+            self.selections['document_id'] is not None and
+            self.selections['agent_id'] is not None
         )
         execute_btn.disabled = not can_execute
-        
+
         # Update execute button text based on stage
         if self.get_current_stage() == StageType.CONFIG:
             execute_btn.label = "Execute Now"
@@ -328,16 +309,18 @@ class AgentExecutionOverlay(ModalScreen):
         """Navigate to next stage."""
         if self.current_stage_index < len(self.stages) - 1:
             self.current_stage_index += 1
-            self.call_after_refresh(self.update_stage_progress)
-            self.call_after_refresh(self.show_current_stage)
+            # Use run_worker to handle async operations properly
+            self.run_worker(self.update_stage_progress(), exclusive=True, group="stage_update")
+            self.run_worker(self.show_current_stage(), exclusive=True, group="stage_display")
             logger.info(f"Advanced to stage {self.current_stage_index}: {self.get_current_stage()}")
-    
+
     def action_prev_stage(self) -> None:
         """Navigate to previous stage."""
         if self.current_stage_index > 0:
             self.current_stage_index -= 1
-            self.call_after_refresh(self.update_stage_progress)
-            self.call_after_refresh(self.show_current_stage)
+            # Use run_worker to handle async operations properly
+            self.run_worker(self.update_stage_progress(), exclusive=True, group="stage_update")
+            self.run_worker(self.show_current_stage(), exclusive=True, group="stage_display")
             logger.info(f"Returned to stage {self.current_stage_index}: {self.get_current_stage()}")
     
     def action_proceed(self) -> None:
@@ -356,15 +339,15 @@ class AgentExecutionOverlay(ModalScreen):
     
     def action_execute(self) -> None:
         """Execute with current selections."""
-        if not self.selected_document_id or not self.selected_agent_id:
+        if not self.selections['document_id'] or not self.selections['agent_id']:
             logger.warning("Cannot execute: missing required selections")
             return
 
         execution_data = {
-            "document_id": self.selected_document_id,
-            "agent_id": self.selected_agent_id,
-            "worktree_index": self.selected_worktree_index,
-            "config": self.execution_config.copy()
+            "document_id": self.selections['document_id'],
+            "agent_id": self.selections['agent_id'],
+            "worktree_index": self.selections['worktree_index'],
+            "config": self.selections['config'].copy()
         }
 
         logger.info(f"Executing with data: {execution_data}")
@@ -391,15 +374,17 @@ class AgentExecutionOverlay(ModalScreen):
     def on_overlay_stage_selection_changed(self, message: OverlayStage.SelectionChanged) -> None:
         """Handle stage selection changes."""
         logger.info(f"Stage {message.stage_name} selection changed: {message.selection_data}")
-        # Update internal state based on stage
+        # Update selections dict directly
         if message.stage_name == "document":
-            self.document_data = message.selection_data
+            self.selections['document_data'] = message.selection_data
         elif message.stage_name == "agent":
-            self.agent_data = message.selection_data
+            self.selections['agent_data'] = message.selection_data
+        elif message.stage_name == "project":
+            self.selections['project_data'] = message.selection_data
         elif message.stage_name == "worktree":
-            self.worktree_data = message.selection_data
+            self.selections['worktree_data'] = message.selection_data
         elif message.stage_name == "config":
-            self.execution_config.update(message.selection_data)
+            self.selections['config'].update(message.selection_data)
     
     def on_overlay_stage_stage_completed(self, message: OverlayStage.StageCompleted) -> None:
         """Handle stage completion."""
@@ -449,59 +434,48 @@ class AgentExecutionOverlay(ModalScreen):
     
     def set_document_selection(self, document_id: int) -> None:
         """Set selected document ID."""
-        self.selected_document_id = document_id
+        self.selections['document_id'] = document_id
         self.stage_completed[StageType.DOCUMENT] = True
         logger.info(f"Document selected: {document_id}")
         self.call_after_refresh(self.update_navigation_state)
-    
+
     def set_agent_selection(self, agent_id: int) -> None:
         """Set selected agent ID."""
-        self.selected_agent_id = agent_id
+        self.selections['agent_id'] = agent_id
         self.stage_completed[StageType.AGENT] = True
         logger.info(f"Agent selected: {agent_id}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_project_selection(self, project_index: int, project_path: str, worktrees: list = None) -> None:
         """Set selected project and its worktrees."""
-        self.selected_project_index = project_index
-        self.selected_project_path = project_path
-        self.selected_project_worktrees = worktrees or []
+        self.selections['project_index'] = project_index
+        self.selections['project_path'] = project_path
+        self.selections['project_worktrees'] = worktrees or []
         self.stage_completed[StageType.PROJECT] = True
-        logger.info(f"Project selected: index={project_index}, path={project_path}, worktrees={len(self.selected_project_worktrees)}")
+        logger.info(f"Project selected: index={project_index}, path={project_path}, worktrees={len(worktrees or [])}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_worktree_selection(self, worktree_index: int) -> None:
         """Set selected worktree index."""
-        self.selected_worktree_index = worktree_index
+        self.selections['worktree_index'] = worktree_index
         self.stage_completed[StageType.WORKTREE] = True
         logger.info(f"Worktree selected: {worktree_index}")
         self.call_after_refresh(self.update_navigation_state)
-    
+
     def set_execution_config(self, config: Dict[str, Any]) -> None:
         """Set execution configuration."""
-        self.execution_config.update(config)
+        self.selections['config'].update(config)
         self.stage_completed[StageType.CONFIG] = True
         logger.info(f"Config updated: {config}")
         self.call_after_refresh(self.update_navigation_state)
-    
+
     def get_selection_summary(self) -> Dict[str, Any]:
-        """Get summary of current selections."""
-        summary = {
-            "document_id": self.selected_document_id,
-            "agent_id": self.selected_agent_id,
-            "worktree_index": self.selected_worktree_index,
-            "config": self.execution_config.copy(),
-            "current_stage": self.get_current_stage().value,
-            "stage_index": self.current_stage_index,
-            "completed_stages": [
-                stage.value for stage, completed in self.stage_completed.items()
-                if completed
-            ]
-        }
-
-        # Add detailed data from stages
-        summary.update(self.document_data)
-        summary.update(self.agent_data)
-        summary.update(self.worktree_data)
-
+        """Get summary of current selections - just return the selections dict."""
+        summary = self.selections.copy()
+        summary['current_stage'] = self.get_current_stage().value
+        summary['stage_index'] = self.current_stage_index
+        summary['completed_stages'] = [
+            stage.value for stage, completed in self.stage_completed.items()
+            if completed
+        ]
         return summary

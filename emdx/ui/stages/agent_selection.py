@@ -16,7 +16,7 @@ from textual.binding import Binding
 
 from ...utils.logging import get_logger
 from ...agents.registry import AgentRegistry
-from .base import OverlayStage, OverlayStageHost
+from .base import OverlayStage
 
 logger = get_logger(__name__)
 
@@ -118,7 +118,7 @@ class AgentSelectionStage(OverlayStage):
             self.agent_data = agent_data
             super().__init__()
 
-    def __init__(self, host: OverlayStageHost, **kwargs):
+    def __init__(self, host, **kwargs):
         super().__init__(host, "agent", **kwargs)
         self.agents: List[Dict[str, Any]] = []
         self.filtered_agents: List[Dict[str, Any]] = []

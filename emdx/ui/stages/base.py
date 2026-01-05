@@ -4,59 +4,42 @@ Base class and interface for overlay stages.
 """
 
 from abc import abstractmethod
-from typing import Dict, Any, Optional, Protocol
+from typing import Dict, Any, Optional
 
 from textual.widget import Widget
 from textual.message import Message
 
 
-class OverlayStageHost(Protocol):
-    """Protocol defining what overlay stages expect from their host."""
-    
-    def set_document_selection(self, document_id: int) -> None:
-        """Set selected document ID."""
-        ...
-    
-    def set_agent_selection(self, agent_id: int) -> None:
-        """Set selected agent ID."""
-        ...
-    
-    def set_worktree_selection(self, worktree_index: int) -> None:
-        """Set selected worktree index."""
-        ...
-    
-    def set_execution_config(self, config: Dict[str, Any]) -> None:
-        """Set execution configuration."""
-        ...
-    
-    def get_selection_summary(self) -> Dict[str, Any]:
-        """Get summary of current selections."""
-        ...
-
-
 class OverlayStage(Widget):
     """Base class for overlay stages."""
-    
+
     class SelectionChanged(Message):
         """Message sent when stage selection changes."""
         def __init__(self, stage_name: str, selection_data: Dict[str, Any]) -> None:
             self.stage_name = stage_name
             self.selection_data = selection_data
             super().__init__()
-    
+
     class StageCompleted(Message):
         """Message sent when stage is completed."""
         def __init__(self, stage_name: str) -> None:
             self.stage_name = stage_name
             super().__init__()
-    
+
     class NavigationRequested(Message):
         """Message sent when stage requests navigation."""
         def __init__(self, direction: str) -> None:
             self.direction = direction  # "next", "prev", "execute"
             super().__init__()
-    
-    def __init__(self, host: OverlayStageHost, stage_name: str, *args, **kwargs):
+
+    def __init__(self, host, stage_name: str, *args, **kwargs):
+        """
+        Initialize stage.
+
+        Args:
+            host: The overlay host - just stores selections dict directly on it
+            stage_name: Name of this stage
+        """
         super().__init__(*args, **kwargs)
         self.host = host
         self.stage_name = stage_name
@@ -114,8 +97,8 @@ class OverlayStage(Widget):
 
 class PlaceholderStage(OverlayStage):
     """Placeholder stage implementation for testing."""
-    
-    def __init__(self, host: OverlayStageHost, stage_name: str, content: str = ""):
+
+    def __init__(self, host, stage_name: str, content: str = ""):
         super().__init__(host, stage_name)
         self.content = content or f"Placeholder for {stage_name} stage"
     

@@ -16,7 +16,7 @@ from textual.binding import Binding
 
 from ...utils.logging import get_logger
 from ...utils.git_ops import get_worktrees, GitWorktree, create_worktree, is_git_repository, get_current_branch
-from .base import OverlayStage, OverlayStageHost
+from .base import OverlayStage
 
 logger = get_logger(__name__)
 
@@ -100,7 +100,7 @@ class WorktreeSelectionStage(OverlayStage):
             self.worktree_data = worktree_data
             super().__init__()
 
-    def __init__(self, host: OverlayStageHost, **kwargs):
+    def __init__(self, host, **kwargs):
         super().__init__(host, "worktree", **kwargs)
         self.worktrees: List[GitWorktree] = []
         self.selected_worktree: Optional[GitWorktree] = None
@@ -122,7 +122,7 @@ class WorktreeSelectionStage(OverlayStage):
         """Load git worktrees data and auto-create new worktree for agent execution."""
         try:
             # Check if worktrees were already loaded from project selection
-            preloaded_worktrees = getattr(self.host, 'selected_project_worktrees', None)
+            preloaded_worktrees = self.host.selections.get('project_worktrees')
 
             if preloaded_worktrees:
                 # Use pre-loaded worktrees (much faster!)
@@ -130,7 +130,7 @@ class WorktreeSelectionStage(OverlayStage):
                 self.worktrees = preloaded_worktrees
             else:
                 # Fall back to loading worktrees
-                project_path = getattr(self.host, 'selected_project_path', None)
+                project_path = self.host.selections.get('project_path')
 
                 # Check if we're in a git repository
                 if not is_git_repository(project_path):
@@ -327,9 +327,8 @@ class WorktreeSelectionStage(OverlayStage):
     async def create_new_worktree_auto(self) -> None:
         """Automatically create a new worktree for this agent execution."""
         try:
-            # Get document ID from host selection summary
-            summary = self.host.get_selection_summary()
-            doc_id = summary.get("document_id")
+            # Get document ID from host selections
+            doc_id = self.host.selections.get("document_id")
 
             if not doc_id:
                 logger.warning("No document ID available for worktree creation")
