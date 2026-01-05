@@ -37,7 +37,7 @@ class OverlayStage(Widget):
         Initialize stage.
 
         Args:
-            host: The overlay host - just stores selections dict directly on it
+            host: The overlay host - access selection data via host.data dict
             stage_name: Name of this stage
         """
         super().__init__(*args, **kwargs)

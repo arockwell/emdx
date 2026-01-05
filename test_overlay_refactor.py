@@ -7,29 +7,29 @@ import sys
 from emdx.ui.agent_execution_overlay import AgentExecutionOverlay, StageType
 
 def test_simplified_data_storage():
-    """Test that selections dict works correctly."""
+    """Test that data dict works correctly."""
     print("Testing simplified data storage...")
 
     overlay = AgentExecutionOverlay(initial_document_id=42)
 
     # Verify initial state
-    assert overlay.selections['document_id'] == 42
-    assert overlay.selections['agent_id'] is None
-    assert overlay.selections['config'] == {}
+    assert overlay.data['document_id'] == 42
+    assert overlay.data['agent_id'] is None
+    assert overlay.data['config'] == {}
 
     # Test set methods
     overlay.set_agent_selection(7)
-    assert overlay.selections['agent_id'] == 7
+    assert overlay.data['agent_id'] == 7
 
     overlay.set_project_selection(0, "/path/to/project", [])
-    assert overlay.selections['project_path'] == "/path/to/project"
-    assert overlay.selections['project_worktrees'] == []
+    assert overlay.data['project_path'] == "/path/to/project"
+    assert overlay.data['project_worktrees'] == []
 
     overlay.set_worktree_selection(3)
-    assert overlay.selections['worktree_index'] == 3
+    assert overlay.data['worktree_index'] == 3
 
     overlay.set_execution_config({"background": True})
-    assert overlay.selections['config']['background'] == True
+    assert overlay.data['config']['background'] == True
 
     # Test get_selection_summary
     summary = overlay.get_selection_summary()

@@ -153,8 +153,9 @@ class AgentExecutionOverlay(ModalScreen):
         self.current_stage_index = 0
         self.callback = callback
 
-        # Simplified selection data - everything in one dict!
-        self.selections = {
+        # Selection data - everything in one dict!
+        # Note: Using 'data' instead of 'selections' to avoid conflict with Textual's built-in selections attribute
+        self.data = {
             'document_id': initial_document_id,
             'agent_id': None,
             'project_index': None,
@@ -294,8 +295,8 @@ class AgentExecutionOverlay(ModalScreen):
 
         # Enable execute button if we have minimum required selections
         can_execute = (
-            self.selections['document_id'] is not None and
-            self.selections['agent_id'] is not None
+            self.data['document_id'] is not None and
+            self.data['agent_id'] is not None
         )
         execute_btn.disabled = not can_execute
 
@@ -339,15 +340,15 @@ class AgentExecutionOverlay(ModalScreen):
     
     def action_execute(self) -> None:
         """Execute with current selections."""
-        if not self.selections['document_id'] or not self.selections['agent_id']:
+        if not self.data['document_id'] or not self.data['agent_id']:
             logger.warning("Cannot execute: missing required selections")
             return
 
         execution_data = {
-            "document_id": self.selections['document_id'],
-            "agent_id": self.selections['agent_id'],
-            "worktree_index": self.selections['worktree_index'],
-            "config": self.selections['config'].copy()
+            "document_id": self.data['document_id'],
+            "agent_id": self.data['agent_id'],
+            "worktree_index": self.data['worktree_index'],
+            "config": self.data['config'].copy()
         }
 
         logger.info(f"Executing with data: {execution_data}")
@@ -376,15 +377,15 @@ class AgentExecutionOverlay(ModalScreen):
         logger.info(f"Stage {message.stage_name} selection changed: {message.selection_data}")
         # Update selections dict directly
         if message.stage_name == "document":
-            self.selections['document_data'] = message.selection_data
+            self.data['document_data'] = message.selection_data
         elif message.stage_name == "agent":
-            self.selections['agent_data'] = message.selection_data
+            self.data['agent_data'] = message.selection_data
         elif message.stage_name == "project":
-            self.selections['project_data'] = message.selection_data
+            self.data['project_data'] = message.selection_data
         elif message.stage_name == "worktree":
-            self.selections['worktree_data'] = message.selection_data
+            self.data['worktree_data'] = message.selection_data
         elif message.stage_name == "config":
-            self.selections['config'].update(message.selection_data)
+            self.data['config'].update(message.selection_data)
     
     def on_overlay_stage_stage_completed(self, message: OverlayStage.StageCompleted) -> None:
         """Handle stage completion."""
@@ -434,44 +435,44 @@ class AgentExecutionOverlay(ModalScreen):
     
     def set_document_selection(self, document_id: int) -> None:
         """Set selected document ID."""
-        self.selections['document_id'] = document_id
+        self.data['document_id'] = document_id
         self.stage_completed[StageType.DOCUMENT] = True
         logger.info(f"Document selected: {document_id}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_agent_selection(self, agent_id: int) -> None:
         """Set selected agent ID."""
-        self.selections['agent_id'] = agent_id
+        self.data['agent_id'] = agent_id
         self.stage_completed[StageType.AGENT] = True
         logger.info(f"Agent selected: {agent_id}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_project_selection(self, project_index: int, project_path: str, worktrees: list = None) -> None:
         """Set selected project and its worktrees."""
-        self.selections['project_index'] = project_index
-        self.selections['project_path'] = project_path
-        self.selections['project_worktrees'] = worktrees or []
+        self.data['project_index'] = project_index
+        self.data['project_path'] = project_path
+        self.data['project_worktrees'] = worktrees or []
         self.stage_completed[StageType.PROJECT] = True
         logger.info(f"Project selected: index={project_index}, path={project_path}, worktrees={len(worktrees or [])}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_worktree_selection(self, worktree_index: int) -> None:
         """Set selected worktree index."""
-        self.selections['worktree_index'] = worktree_index
+        self.data['worktree_index'] = worktree_index
         self.stage_completed[StageType.WORKTREE] = True
         logger.info(f"Worktree selected: {worktree_index}")
         self.call_after_refresh(self.update_navigation_state)
 
     def set_execution_config(self, config: Dict[str, Any]) -> None:
         """Set execution configuration."""
-        self.selections['config'].update(config)
+        self.data['config'].update(config)
         self.stage_completed[StageType.CONFIG] = True
         logger.info(f"Config updated: {config}")
         self.call_after_refresh(self.update_navigation_state)
 
     def get_selection_summary(self) -> Dict[str, Any]:
-        """Get summary of current selections - just return the selections dict."""
-        summary = self.selections.copy()
+        """Get summary of current selections - just return the data dict."""
+        summary = self.data.copy()
         summary['current_stage'] = self.get_current_stage().value
         summary['stage_index'] = self.current_stage_index
         summary['completed_stages'] = [

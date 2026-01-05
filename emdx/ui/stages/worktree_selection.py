@@ -122,7 +122,7 @@ class WorktreeSelectionStage(OverlayStage):
         """Load git worktrees data and auto-create new worktree for agent execution."""
         try:
             # Check if worktrees were already loaded from project selection
-            preloaded_worktrees = self.host.selections.get('project_worktrees')
+            preloaded_worktrees = self.host.data.get('project_worktrees')
 
             if preloaded_worktrees:
                 # Use pre-loaded worktrees (much faster!)
@@ -130,7 +130,7 @@ class WorktreeSelectionStage(OverlayStage):
                 self.worktrees = preloaded_worktrees
             else:
                 # Fall back to loading worktrees
-                project_path = self.host.selections.get('project_path')
+                project_path = self.host.data.get('project_path')
 
                 # Check if we're in a git repository
                 if not is_git_repository(project_path):
@@ -328,7 +328,7 @@ class WorktreeSelectionStage(OverlayStage):
         """Automatically create a new worktree for this agent execution."""
         try:
             # Get document ID from host selections
-            doc_id = self.host.selections.get("document_id")
+            doc_id = self.host.data.get("document_id")
 
             if not doc_id:
                 logger.warning("No document ID available for worktree creation")
