@@ -280,8 +280,8 @@ class AgentExecutionOverlay(ModalScreen):
         current_widget = self.stage_widgets[current_stage]
         current_widget.remove_class("stage-hidden")
 
-        # Set focus to the current stage's primary input
-        await current_widget.set_focus_to_primary_input()
+        # Lazy load stage data only when it's shown
+        await current_widget.ensure_loaded()
 
         # Update navigation state
         await self.update_navigation_state()

@@ -90,9 +90,19 @@ class OverlayStage(Widget):
         return "Use Tab/Shift+Tab to navigate stages, Enter to proceed"
     
     async def on_mount(self) -> None:
-        """Called when stage is mounted."""
-        await self.load_stage_data()
-        await self.set_focus_to_primary_input()
+        """Called when stage is mounted - don't load data here for performance."""
+        # Data loading is now deferred until the stage is shown
+        pass
+
+    async def ensure_loaded(self) -> None:
+        """Ensure stage data is loaded. Call this before showing the stage."""
+        if not hasattr(self, '_data_loaded'):
+            self._data_loaded = False
+
+        if not self._data_loaded:
+            await self.load_stage_data()
+            await self.set_focus_to_primary_input()
+            self._data_loaded = True
 
 
 class PlaceholderStage(OverlayStage):
