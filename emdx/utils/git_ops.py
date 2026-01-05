@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from .logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class GitWorktree:
@@ -116,6 +120,73 @@ def extract_project_name_from_worktree(worktree_path: str) -> str:
 
     # Fallback: return the whole name
     return name
+
+
+def discover_projects_from_main_repos() -> List[GitProject]:
+    """
+    Discover projects by scanning ~/dev/ for main repos.
+
+    This is faster and more reliable than scanning worktrees:
+    - Scans ~/dev/* for git repositories (skips worktrees subdir)
+    - Uses git worktree list to get each repo's worktrees
+    - More reliable than parsing worktree names
+
+    Returns:
+        List of GitProject objects with worktrees pre-loaded
+    """
+    dev_dir = Path.home() / "dev"
+    projects = []
+
+    if not dev_dir.exists():
+        logger.warning(f"Dev directory not found: {dev_dir}")
+        return projects
+
+    logger.info(f"Scanning {dev_dir} for git repositories")
+
+    for item in dev_dir.iterdir():
+        # Skip the worktrees directory itself
+        if item.name == "worktrees":
+            continue
+
+        if not item.is_dir():
+            continue
+
+        # Check if it's a git repository
+        git_dir = item / ".git"
+        if git_dir.exists() and git_dir.is_file():
+            # This is a worktree, not a main repo - skip it
+            continue
+
+        if git_dir.exists() and git_dir.is_dir():
+            # Found a main repo!
+            project_name = item.name
+            main_path = str(item)
+
+            try:
+                # Get worktrees from this repo
+                worktrees = get_worktrees(main_path)
+
+                projects.append(GitProject(
+                    name=project_name,
+                    main_path=main_path,
+                    worktrees=worktrees
+                ))
+
+                logger.debug(f"Found project '{project_name}' with {len(worktrees)} worktrees")
+
+            except Exception as e:
+                logger.warning(f"Failed to get worktrees for {project_name}: {e}")
+                # Still add the project even if we can't get worktrees
+                projects.append(GitProject(
+                    name=project_name,
+                    main_path=main_path,
+                    worktrees=[]
+                ))
+
+    # Sort projects by name
+    projects.sort(key=lambda p: p.name.lower())
+    logger.info(f"Discovered {len(projects)} projects from main repos")
+    return projects
 
 
 def discover_projects_from_worktrees(worktree_dirs: Optional[List[str]] = None) -> List[GitProject]:

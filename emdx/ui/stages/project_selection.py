@@ -15,7 +15,7 @@ from textual.message import Message
 from textual.binding import Binding
 
 from ...utils.logging import get_logger
-from ...utils.git_ops import discover_projects_from_worktrees, GitProject, get_repository_root
+from ...utils.git_ops import discover_projects_from_main_repos, GitProject, get_repository_root
 from .base import OverlayStage
 
 logger = get_logger(__name__)
@@ -117,8 +117,8 @@ class ProjectSelectionStage(OverlayStage):
             self.current_project_path = get_repository_root()
             logger.info(f"Current project path: {self.current_project_path}")
 
-            # Discover projects (grouped from worktrees - much faster!)
-            self.projects = discover_projects_from_worktrees()
+            # Discover projects from main repos (faster and more reliable!)
+            self.projects = discover_projects_from_main_repos()
             logger.info(f"Discovered {len(self.projects)} projects with worktrees already loaded")
 
             # Find current project in the list
