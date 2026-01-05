@@ -11,6 +11,7 @@ A powerful command-line tool for managing your personal knowledge base with SQLi
 - **🔍 Fast Search** - SQLite FTS5 full-text search with ranking
 - **🎨 Rich TUI** - Multiple browser modes (documents, files, git diffs) with vim editing  
 - **🏷️ Smart Tagging** - Emoji tags with intuitive text aliases (`gameplan`→🎯, `active`→🚀)
+- **🤖 AI Agents** - Create custom agents for research, analysis, and automation
 - **⚡ Claude Integration** - Execute documents directly with Claude Code
 - **🔧 Git Aware** - Auto-detects projects, diff viewer, worktree switching
 - **💾 Zero Setup** - SQLite backend, no database server required
@@ -38,12 +39,25 @@ emdx find --tags "gameplan,active"
 emdx gui
 ```
 
+### Agent Usage
+```bash
+# List available agents
+emdx agent list
+
+# Run an agent on a document
+emdx agent run code-reviewer --doc 123
+
+# Create custom agent via TUI
+emdx gui  # Then press 'a' for agent browser
+```
+
 ### Key TUI Commands
 - `j/k` - Navigate up/down
 - `e` - Edit with vim
 - `f` - File browser mode
 - `d` - Git diff browser  
 - `l` - Log browser
+- `a` - Agent browser
 - `x` - Execute with Claude
 - `q` - Quit/back
 
@@ -52,6 +66,7 @@ emdx gui
 For comprehensive guides and detailed information:
 
 - **[📖 Complete Documentation](docs/)** - Full project documentation
+- **[🤖 AI Agents Guide](docs/agents-overview.md)** - Agent system overview and user guide
 - **[🏗️ Architecture](docs/architecture.md)** - System design and code structure
 - **[⚙️ Development Setup](docs/development-setup.md)** - Contributing and development guide
 - **[📋 CLI Reference](docs/cli-api.md)** - Complete command documentation
@@ -72,16 +87,32 @@ emdx find --tags "analysis"
 echo "Phase 1: Setup infrastructure" | emdx save --title "Project Plan" --tags "gameplan,active"
 ```
 
+### AI Agent Workflows
+```bash
+# Run code review on recent changes
+emdx agent run code-reviewer
+
+# Generate weekly summary from your notes
+emdx agent run weekly-summary --query "last 7 days"
+
+# Research a topic across your knowledge base
+emdx agent run researcher --query "kubernetes best practices"
+
+# Create custom agent for your workflow
+emdx gui  # Press 'a', then 'n' to create new agent
+```
+
 ### TUI Browser
 ```bash
 # Launch interactive browser
 emdx gui
 
-# Navigation
+# Navigation modes:
 # - Documents (default): manage knowledge base
 # - Files (f): browse filesystem with preview
 # - Git (d): visual diff viewer, worktree switching  
 # - Logs (l): execution monitoring
+# - Agents (a): AI agent management and execution
 ```
 
 ## 🔧 **Configuration**
