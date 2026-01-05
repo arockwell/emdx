@@ -155,13 +155,13 @@ class AgentSelectionStage(OverlayStage):
             await self.show_error(f"Failed to load agents: {e}")
 
     async def set_focus_to_primary_input(self) -> None:
-        """Set focus to the agent list for navigation."""
+        """Set focus to the search input so user can start typing."""
         try:
-            # Focus the ListView for j/k navigation, not the search input
-            list_view = self.query_one("#agent-list-view", ListView)
-            list_view.focus()
+            # Focus the search input for immediate typing
+            search_input = self.query_one("#agent-search-input", Input)
+            search_input.focus()
         except Exception as e:
-            logger.warning(f"Could not focus list view: {e}")
+            logger.warning(f"Could not focus search input: {e}")
 
     def validate_selection(self) -> bool:
         """Check if an agent is selected."""
@@ -237,6 +237,35 @@ class AgentSelectionStage(OverlayStage):
             list_view.append(ListItem(Static(f"[red]Error: {message}[/red]")))
         except Exception as e:
             logger.error(f"Could not show error in ListView: {e}")
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in search input - select first filtered agent."""
+        if event.input.id == "agent-search-input" and self.filtered_agents:
+            # Get the currently highlighted item from ListView
+            try:
+                list_view = self.query_one("#agent-list-view", ListView)
+                selected_index = list_view.index if list_view.index is not None else 0
+
+                if 0 <= selected_index < len(self.filtered_agents):
+                    agent = self.filtered_agents[selected_index]
+                    self.selected_agent = agent
+
+                    logger.info(f"Agent selected via search input Enter: {agent['id']}")
+
+                    # Update host selection
+                    self.host.set_agent_selection(agent["id"])
+
+                    # Update selection data and mark as valid
+                    self.update_selection(self.get_selection_data())
+                    self._is_valid = True
+
+                    # Post selection message
+                    self.post_message(self.AgentSelected(agent["id"], agent))
+
+                    # Request navigation to next stage
+                    self.request_navigation("next")
+            except Exception as e:
+                logger.error(f"Error selecting agent from search: {e}")
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle ListView selection (when user presses Enter on an item)."""

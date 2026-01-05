@@ -327,23 +327,28 @@ class WorktreeSelectionStage(OverlayStage):
     async def create_new_worktree_auto(self) -> None:
         """Automatically create a new worktree for this agent execution."""
         try:
-            # Get document ID from host selections
+            # Get document ID and project path from host selections
             doc_id = self.host.data.get("document_id")
+            project_path = self.host.data.get("project_path")
 
             if not doc_id:
                 logger.warning("No document ID available for worktree creation")
                 await self.auto_select_current()
                 return
 
+            if not project_path:
+                logger.warning("No project selected - using current directory")
+                project_path = None
+
             # Generate unique branch name with timestamp to avoid conflicts
             # Format: agent-exec-doc<id>-<timestamp>
             timestamp = int(time.time())
             branch_name = f"agent-exec-doc{doc_id}-{timestamp}"
 
-            # Get current branch as base
-            base_branch = get_current_branch()
+            # Get current branch from the selected project as base
+            base_branch = get_current_branch(project_path)
 
-            logger.info(f"Creating new worktree: {branch_name} from {base_branch}")
+            logger.info(f"Creating new worktree for project '{project_path}': {branch_name} from {base_branch}")
 
             # Update info display to show creation in progress
             try:
@@ -352,8 +357,8 @@ class WorktreeSelectionStage(OverlayStage):
             except:
                 pass
 
-            # Create the worktree
-            success, worktree_path, error = create_worktree(branch_name, base_branch=base_branch)
+            # Create the worktree for the selected project
+            success, worktree_path, error = create_worktree(branch_name, base_branch=base_branch, repo_path=project_path)
 
             if success:
                 logger.info(f"Successfully created worktree at: {worktree_path}")
@@ -365,8 +370,8 @@ class WorktreeSelectionStage(OverlayStage):
                 except:
                     pass
 
-                # Reload worktrees list
-                self.worktrees = get_worktrees()
+                # Reload worktrees list for the selected project
+                self.worktrees = get_worktrees(project_path)
 
                 # Find and select the newly created worktree
                 for idx, wt in enumerate(self.worktrees):
