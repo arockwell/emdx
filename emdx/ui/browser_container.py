@@ -61,6 +61,20 @@ class BrowserContainer(App):
         self.browsers = {}  # Will store browser instances
         self.browser_states = {}  # Quick and dirty state storage
         self.container_widget = None  # Will be set in compose
+
+    def exit(self, *args, **kwargs):
+        """Override exit to log when it's called."""
+        import traceback
+        logger.error("BrowserContainer.exit() called!")
+        logger.error("".join(traceback.format_stack()))
+        super().exit(*args, **kwargs)
+
+    def _handle_exception(self, error: Exception) -> None:
+        """Override exception handler to log exceptions."""
+        import traceback
+        logger.error(f"BrowserContainer._handle_exception called with: {error}")
+        logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        super()._handle_exception(error)
         
     def compose(self) -> ComposeResult:
         """Yield the widget wrapper."""
@@ -129,6 +143,17 @@ class BrowserContainer(App):
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
+            elif browser_type == "agent":
+                try:
+                    from .agent_browser import AgentBrowser
+                    self.browsers[browser_type] = AgentBrowser()
+                    logger.info("AgentBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create AgentBrowser: {e}", exc_info=True)
+                    # Create a simple error message widget instead
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Agent browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    logger.error(f"AgentBrowser creation failed, showing error message")
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -153,6 +178,7 @@ class BrowserContainer(App):
         
     def action_quit(self) -> None:
         """Quit the application."""
+        logger.info("action_quit called - exiting app")
         self.exit()
         
     async def on_key(self, event) -> None:
@@ -168,6 +194,7 @@ class BrowserContainer(App):
         
         # Only handle browser switching keys, let browsers handle their own keys
         if key == "q" and self.current_browser == "document":
+            logger.info("Q key pressed in document browser - exiting app")
             self.exit()
             event.stop()
             return
@@ -183,7 +210,11 @@ class BrowserContainer(App):
             await self.switch_browser("log")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git", "log"]:
+        elif key == "a" and self.current_browser == "document":
+            await self.switch_browser("agent")
+            event.stop()
+            return
+        elif key == "q" and self.current_browser in ["file", "git", "log", "agent"]:
             await self.switch_browser("document")
             event.stop()
             return

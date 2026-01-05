@@ -17,13 +17,57 @@ from emdx.commands.executions import app as executions_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
+from emdx.commands.agents import app as agents_app
 from emdx.commands.tags import app as tag_app
 from emdx.ui.gui import gui
 
 console = Console()
 
 # Create main app
-app = typer.Typer()
+app = typer.Typer(
+    name="emdx",
+    help="Documentation Index Management System - A powerful knowledge base for developers",
+    add_completion=True,
+    rich_markup_mode="rich",
+)
+
+# Add subcommand groups
+# Core commands are added directly to the main app
+for command in core_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Browse commands are added directly to the main app
+for command in browse_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Gist commands are added directly to the main app
+for command in gist_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Tag commands are added directly to the main app
+for command in tag_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Add executions as a subcommand group
+app.add_typer(executions_app, name="exec", help="Manage Claude executions")
+
+# Add claude execution as a subcommand group
+app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
+
+# Add the new unified analyze command
+app.command(name="analyze")(analyze_app.registered_commands[0].callback)
+
+# Add the new unified maintain command
+app.command(name="maintain")(maintain_app.registered_commands[0].callback)
+
+# Add lifecycle as a subcommand group (keeping this as-is)
+app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
+
+# Add agents as a subcommand group
+app.add_typer(agents_app, name="agent", help="Manage and run AI agents")
+
+# Add the gui command
+app.command()(gui)
 
 
 # Version command

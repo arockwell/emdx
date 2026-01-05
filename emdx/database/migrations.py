@@ -286,6 +286,181 @@ def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_007_add_agent_tables(conn: sqlite3.Connection):
+    """Add tables for agent system."""
+    cursor = conn.cursor()
+    
+    # Create agents table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL CHECK (category IN ('research', 'generation', 'analysis', 'maintenance')),
+            
+            -- Prompt configuration
+            system_prompt TEXT NOT NULL,
+            user_prompt_template TEXT NOT NULL,
+            
+            -- Tool configuration
+            allowed_tools TEXT NOT NULL,  -- JSON array of tool names
+            tool_restrictions TEXT,       -- JSON object with per-tool restrictions
+            
+            -- Execution configuration
+            max_iterations INTEGER DEFAULT 10,
+            timeout_seconds INTEGER DEFAULT 3600,
+            requires_confirmation BOOLEAN DEFAULT FALSE,
+            
+            -- Context configuration
+            max_context_docs INTEGER DEFAULT 5,
+            context_search_query TEXT,
+            include_doc_content BOOLEAN DEFAULT TRUE,
+            
+            -- Output configuration
+            output_format TEXT DEFAULT 'markdown',
+            save_outputs BOOLEAN DEFAULT TRUE,
+            output_tags TEXT,  -- JSON array of tags
+            
+            -- Metadata
+            version INTEGER DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
+            is_builtin BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            
+            -- Usage tracking
+            usage_count INTEGER DEFAULT 0,
+            last_used_at TIMESTAMP,
+            success_count INTEGER DEFAULT 0,
+            failure_count INTEGER DEFAULT 0
+        )
+    """)
+    
+    # Create agent executions table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agent_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id INTEGER NOT NULL,
+            execution_id INTEGER NOT NULL,
+            
+            -- Input/Output tracking
+            input_type TEXT NOT NULL CHECK (input_type IN ('document', 'query', 'pipeline')),
+            input_doc_id INTEGER,
+            input_query TEXT,
+            output_doc_ids TEXT,  -- JSON array of created doc IDs
+            
+            -- Execution details
+            status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_message TEXT,
+            
+            -- Performance metrics
+            total_tokens_used INTEGER,
+            execution_time_ms INTEGER,
+            iterations_used INTEGER,
+            
+            -- Context tracking
+            context_doc_ids TEXT,  -- JSON array of doc IDs used as context
+            tools_used TEXT,       -- JSON array of tools actually used
+            
+            FOREIGN KEY (agent_id) REFERENCES agents(id),
+            FOREIGN KEY (execution_id) REFERENCES executions(id),
+            FOREIGN KEY (input_doc_id) REFERENCES documents(id)
+        )
+    """)
+    
+    # Create agent pipelines table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agent_pipelines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            
+            -- Pipeline configuration
+            agents TEXT NOT NULL,  -- JSON array of {agent_id, config}
+            execution_mode TEXT DEFAULT 'sequential' CHECK (execution_mode IN ('sequential', 'parallel', 'conditional')),
+            stop_on_error BOOLEAN DEFAULT TRUE,
+            
+            -- Metadata
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            
+            -- Usage tracking
+            usage_count INTEGER DEFAULT 0,
+            last_used_at TIMESTAMP
+        )
+    """)
+    
+    # Create agent templates table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agent_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            agent_config TEXT NOT NULL,  -- Full agent configuration as JSON
+            
+            -- Sharing metadata
+            is_public BOOLEAN DEFAULT FALSE,
+            author TEXT NOT NULL,
+            tags TEXT,  -- JSON array for categorization
+            
+            -- Usage tracking
+            install_count INTEGER DEFAULT 0,
+            rating_sum INTEGER DEFAULT 0,
+            rating_count INTEGER DEFAULT 0,
+            
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Create indexes for performance
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_executions(agent_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_started_at ON agent_executions(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agents_category ON agents(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agents_is_active ON agents(is_active)")
+    
+    # Insert default system agents
+    cursor.execute("""
+        INSERT OR IGNORE INTO agents (
+            name, display_name, description, category,
+            system_prompt, user_prompt_template,
+            allowed_tools, is_builtin, created_by
+        ) VALUES 
+        (
+            'doc-generator',
+            'Documentation Generator',
+            'Generates comprehensive documentation from code analysis',
+            'generation',
+            'You are a documentation expert. Your role is to analyze code and generate clear, comprehensive documentation that helps developers understand and use the codebase effectively.',
+            'Analyze {{target}} and generate {{doc_type}} documentation. Focus on clarity, completeness, and practical examples.',
+            '["Glob", "Grep", "Read", "Write", "Task"]',
+            TRUE,
+            'system'
+        ),
+        (
+            'code-reviewer',
+            'Code Reviewer',
+            'Reviews code changes and provides feedback',
+            'analysis',
+            'You are an expert code reviewer focusing on code quality, security, performance, and best practices. Provide constructive feedback that helps developers improve their code.',
+            'Review the following code changes:\n\n{{diff}}\n\nFocus on: {{focus_areas}}',
+            '["Read", "Grep", "Glob"]',
+            TRUE,
+            'system'
+        )
+    """)
+    
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -295,6 +470,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (4, "Add execution PID tracking", migration_004_add_execution_pid),
     (5, "Add execution heartbeat tracking", migration_005_add_execution_heartbeat),
     (6, "Convert to numeric execution IDs", migration_006_numeric_execution_ids),
+    (7, "Add agent system tables", migration_007_add_agent_tables),
 ]
 
 
