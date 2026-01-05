@@ -183,6 +183,21 @@ class AgentExecutionOverlay(ModalScreen):
         # If we have an initial document, mark document stage as completed
         if initial_document_id:
             self.stage_completed[StageType.DOCUMENT] = True
+            # Fetch document data to populate document_title
+            try:
+                from ..models.documents import get_document
+                doc = get_document(str(initial_document_id))
+                if doc:
+                    self.data['document_data'] = {
+                        'document_id': doc['id'],
+                        'document_title': doc.get('title', 'Untitled'),
+                        'document_project': doc.get('project', 'Default')
+                    }
+                    logger.info(f"Pre-selected document data: {self.data['document_data']}")
+                else:
+                    logger.warning(f"Could not fetch document {initial_document_id}")
+            except Exception as e:
+                logger.error(f"Failed to fetch pre-selected document data: {e}", exc_info=True)
             # Start at agent stage if document is pre-selected
             if start_stage is None:
                 self.current_stage_index = self.stages.index(StageType.AGENT)
@@ -471,8 +486,27 @@ class AgentExecutionOverlay(ModalScreen):
         self.call_after_refresh(self.update_navigation_state)
 
     def get_selection_summary(self) -> Dict[str, Any]:
-        """Get summary of current selections - just return the data dict."""
-        summary = self.data.copy()
+        """Get summary of current selections - flatten all nested data."""
+        summary = {}
+
+        # Add base data (IDs and paths)
+        summary.update({
+            'document_id': self.data.get('document_id'),
+            'agent_id': self.data.get('agent_id'),
+            'project_index': self.data.get('project_index'),
+            'project_path': self.data.get('project_path'),
+            'worktree_index': self.data.get('worktree_index'),
+        })
+
+        # Flatten nested data dicts (document_data, agent_data, etc.)
+        for key in ['document_data', 'agent_data', 'project_data', 'worktree_data', 'config']:
+            if key in self.data and self.data[key]:
+                logger.debug(f"Flattening {key}: {self.data[key]}")
+                summary.update(self.data[key])
+
+        logger.debug(f"Final summary: {summary}")
+
+        # Add metadata
         summary['current_stage'] = self.get_current_stage().value
         summary['stage_index'] = self.current_stage_index
         summary['completed_stages'] = [

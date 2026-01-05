@@ -45,6 +45,7 @@ class ProjectSelectionStage(OverlayStage):
         Binding("tab", "next_stage", "Next Stage"),
         Binding("shift+tab", "prev_stage", "Previous Stage"),
         Binding("c", "use_current", "Use Current Project"),
+        Binding("escape", "cancel", "Cancel"),
     ]
 
     DEFAULT_CSS = """
@@ -211,6 +212,9 @@ class ProjectSelectionStage(OverlayStage):
                 )
                 self.update_selection(self.get_selection_data())
 
+                # Auto-advance to next stage
+                self.request_navigation("next")
+
         except Exception as e:
             logger.error(f"Error selecting project: {e}", exc_info=True)
 
@@ -234,12 +238,32 @@ class ProjectSelectionStage(OverlayStage):
                 )
                 self.update_selection(self.get_selection_data())
 
+                # Auto-advance to next stage
+                self.request_navigation("next")
+
         except Exception as e:
             logger.error(f"Error selecting project: {e}", exc_info=True)
 
     def action_use_current(self) -> None:
         """Use current project."""
         asyncio.create_task(self.auto_select_current())
+        self.request_navigation("next")
+
+    def action_next_stage(self) -> None:
+        """Navigate to next stage."""
+        self.request_navigation("next")
+
+    def action_prev_stage(self) -> None:
+        """Navigate to previous stage."""
+        self.request_navigation("prev")
+
+    def action_cancel(self) -> None:
+        """Cancel the overlay."""
+        try:
+            if hasattr(self.host, 'action_cancel'):
+                self.host.action_cancel()
+        except Exception as e:
+            logger.error(f"Failed to cancel overlay: {e}")
 
     def get_selection_data(self) -> Dict[str, Any]:
         """Get current selection data."""

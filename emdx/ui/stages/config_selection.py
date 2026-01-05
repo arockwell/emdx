@@ -25,6 +25,7 @@ class ConfigSelectionStage(OverlayStage):
     BINDINGS = [
         Binding("enter", "execute", "Execute Agent", show=True, priority=True),
         Binding("shift+tab", "prev_stage", "Previous Stage"),
+        Binding("escape", "cancel", "Cancel"),
     ]
 
     DEFAULT_CSS = """
@@ -126,9 +127,12 @@ class ConfigSelectionStage(OverlayStage):
     async def update_summary_display(self, summary: Dict[str, Any]) -> None:
         """Update the summary display with current selections."""
         try:
+            logger.info(f"Config screen updating summary with: {summary}")
+
             # Document summary
             doc_id = summary.get("document_id", "None")
             doc_title = summary.get("document_title", "Unknown")
+            logger.info(f"Document display - ID: {doc_id}, Title: {doc_title}")
             doc_widget = self.query_one("#summary-document", Static)
             doc_widget.update(f"📄 Document:  [{doc_id}] {doc_title}")
 
@@ -193,6 +197,14 @@ class ConfigSelectionStage(OverlayStage):
     def action_prev_stage(self) -> None:
         """Navigate to previous stage."""
         self.request_navigation("prev")
+
+    def action_cancel(self) -> None:
+        """Cancel the overlay."""
+        try:
+            if hasattr(self.host, 'action_cancel'):
+                self.host.action_cancel()
+        except Exception as e:
+            logger.error(f"Failed to cancel overlay: {e}")
 
     def get_help_text(self) -> str:
         """Get help text for this stage."""

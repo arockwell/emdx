@@ -662,7 +662,7 @@ def git_discard_changes(file_path: str, worktree_path: Optional[str] = None) -> 
         return False
 
 
-def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: Optional[str] = None) -> Tuple[bool, str, str]:
+def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: Optional[str] = None, repo_path: Optional[str] = None) -> Tuple[bool, str, str]:
     """
     Create a new git worktree.
 
@@ -670,19 +670,21 @@ def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: O
         branch_name: Name for the new branch
         path: Optional path for the worktree (will be auto-generated if not provided)
         base_branch: Optional base branch to create from (defaults to current branch)
+        repo_path: Optional path to the repository (defaults to current directory)
 
     Returns:
         Tuple of (success, worktree_path, error_message)
     """
     try:
         # Get repository root to create worktrees adjacent to it
-        repo_root = get_repository_root()
+        # Use provided repo_path or current directory
+        repo_root = get_repository_root(repo_path)
         if not repo_root:
-            return False, "", "Not in a git repository"
+            return False, "", f"Not in a git repository (checked path: {repo_path or 'current directory'})"
 
         # Auto-generate path if not provided
         if not path:
-            # Create worktree path: ../repo-name-worktree/branch_name
+            # Create worktree path: ../repo-name-worktrees/branch_name
             repo_name = Path(repo_root).name
             worktrees_dir = Path(repo_root).parent / f"{repo_name}-worktrees"
             worktrees_dir.mkdir(exist_ok=True)
@@ -692,6 +694,8 @@ def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: O
         cmd = ['git', 'worktree', 'add', '-b', branch_name, path]
         if base_branch:
             cmd.append(base_branch)
+
+        logger.info(f"Creating worktree in repo {repo_root}: {' '.join(cmd)}")
 
         result = subprocess.run(
             cmd,
@@ -705,8 +709,10 @@ def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: O
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else "Failed to create worktree"
+        logger.error(f"Failed to create worktree: {error_msg}")
         return False, "", error_msg
     except Exception as e:
+        logger.error(f"Exception creating worktree: {e}", exc_info=True)
         return False, "", str(e)
 
 

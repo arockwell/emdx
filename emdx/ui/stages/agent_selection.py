@@ -332,6 +332,10 @@ class AgentSelectionStage(OverlayStage):
 
     def action_next_stage(self) -> None:
         """Navigate to next stage."""
+        # Validate we have a selection before advancing
+        if not self.validate_selection():
+            logger.warning("Cannot advance: no agent selected")
+            return
         self.request_navigation("next")
 
     def action_prev_stage(self) -> None:
@@ -344,11 +348,21 @@ class AgentSelectionStage(OverlayStage):
         search_input.focus()
 
     def action_clear_search(self) -> None:
-        """Clear search and show all agents."""
-        search_input = self.query_one("#agent-search-input", Input)
-        search_input.value = ""
-        self.search_query = ""
-        self.apply_filters()
+        """Clear search if there's a query, otherwise cancel the overlay."""
+        # If there's a search query or category filter, clear them
+        if self.search_query or self.category_filter:
+            search_input = self.query_one("#agent-search-input", Input)
+            search_input.value = ""
+            self.search_query = ""
+            self.category_filter = None
+            self.apply_filters()
+        else:
+            # No search query or filter - cancel the overlay
+            try:
+                if hasattr(self.host, 'action_cancel'):
+                    self.host.action_cancel()
+            except Exception as e:
+                logger.error(f"Failed to cancel overlay: {e}")
 
     def action_filter_research(self) -> None:
         """Filter to show only research agents."""

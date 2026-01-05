@@ -60,6 +60,7 @@ class WorktreeSelectionStage(OverlayStage):
         Binding("n", "create_new_worktree", "Create New (Default)", show=True, priority=True),
         Binding("c", "use_current", "Use Current"),
         Binding("s", "skip_worktree", "Skip (Use Current)"),
+        Binding("escape", "cancel", "Cancel"),
     ]
 
     DEFAULT_CSS = """
@@ -331,6 +332,9 @@ class WorktreeSelectionStage(OverlayStage):
             doc_id = self.host.data.get("document_id")
             project_path = self.host.data.get("project_path")
 
+            logger.info(f"Worktree creation - doc_id: {doc_id}, project_path: {project_path}")
+            logger.info(f"Full host.data: {self.host.data}")
+
             if not doc_id:
                 logger.warning("No document ID available for worktree creation")
                 await self.auto_select_current()
@@ -417,6 +421,14 @@ class WorktreeSelectionStage(OverlayStage):
     def action_prev_stage(self) -> None:
         """Navigate to previous stage."""
         self.request_navigation("prev")
+
+    def action_cancel(self) -> None:
+        """Cancel the overlay."""
+        try:
+            if hasattr(self.host, 'action_cancel'):
+                self.host.action_cancel()
+        except Exception as e:
+            logger.error(f"Failed to cancel overlay: {e}")
 
     def get_help_text(self) -> str:
         """Get help text for this stage."""

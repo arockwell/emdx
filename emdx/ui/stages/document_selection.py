@@ -283,6 +283,10 @@ class DocumentSelectionStage(OverlayStage):
     
     def action_next_stage(self) -> None:
         """Navigate to next stage."""
+        # Validate we have a selection before advancing
+        if not self.validate_selection():
+            logger.warning("Cannot advance: no document selected")
+            return
         self.request_navigation("next")
     
     def action_prev_stage(self) -> None:
@@ -295,12 +299,22 @@ class DocumentSelectionStage(OverlayStage):
         search_input.focus()
     
     def action_clear_search(self) -> None:
-        """Clear search and show all documents."""
-        search_input = self.query_one("#doc-search-input", Input)
-        search_input.value = ""
-        self.search_query = ""
-        self.filtered_documents = self.documents.copy()
-        self.call_after_refresh(self.update_document_list)
+        """Clear search if there's a query, otherwise cancel the overlay."""
+        # If there's a search query, clear it
+        if self.search_query:
+            search_input = self.query_one("#doc-search-input", Input)
+            search_input.value = ""
+            self.search_query = ""
+            self.filtered_documents = self.documents.copy()
+            self.call_after_refresh(self.update_document_list)
+        else:
+            # No search query - cancel the overlay
+            # Try to call parent's cancel action
+            try:
+                if hasattr(self.host, 'action_cancel'):
+                    self.host.action_cancel()
+            except Exception as e:
+                logger.error(f"Failed to cancel overlay: {e}")
     
     async def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
