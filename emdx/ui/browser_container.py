@@ -154,6 +154,9 @@ class BrowserContainer(App):
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Agent browser failed to load:\n{str(e)}\n\nCheck logs for details.")
                     logger.error(f"AgentBrowser creation failed, showing error message")
+            elif browser_type == "control":
+                from .control_center import ControlCenterBrowser
+                self.browsers[browser_type] = ControlCenterBrowser()
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -214,7 +217,11 @@ class BrowserContainer(App):
             await self.switch_browser("agent")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git", "log", "agent"]:
+        elif key == "c" and self.current_browser == "document":
+            await self.switch_browser("control")
+            event.stop()
+            return
+        elif key == "q" and self.current_browser in ["file", "git", "log", "agent", "control"]:
             await self.switch_browser("document")
             event.stop()
             return

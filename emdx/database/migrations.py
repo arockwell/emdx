@@ -461,6 +461,57 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_009_add_tasks(conn: sqlite3.Connection):
+    """Add tasks tables for task management system."""
+    cursor = conn.cursor()
+
+    # Create tasks table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'open',
+            priority INTEGER DEFAULT 3,
+            gameplan_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+            project TEXT,
+            current_step TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )
+    """)
+
+    # Create task dependencies table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_deps (
+            task_id INTEGER NOT NULL,
+            depends_on INTEGER NOT NULL,
+            PRIMARY KEY (task_id, depends_on),
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            FOREIGN KEY (depends_on) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Create task log table (append-only work log)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_gameplan ON tasks(gameplan_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_log_task ON task_log(task_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -471,6 +522,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (5, "Add execution heartbeat tracking", migration_005_add_execution_heartbeat),
     (6, "Convert to numeric execution IDs", migration_006_numeric_execution_ids),
     (7, "Add agent system tables", migration_007_add_agent_tables),
+    (9, "Add tasks system", migration_009_add_tasks),
 ]
 
 
