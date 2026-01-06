@@ -19,6 +19,7 @@ from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.agents import app as agents_app
 from emdx.commands.tags import app as tag_app
+from emdx.commands.tasks import app as tasks_app
 from emdx.ui.gui import gui
 
 console = Console()
@@ -65,6 +66,9 @@ app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add agents as a subcommand group
 app.add_typer(agents_app, name="agent", help="Manage and run AI agents")
+
+# Add tasks as a subcommand group
+app.add_typer(tasks_app, name="task", help="Task management")
 
 # Add the gui command
 app.command()(gui)
