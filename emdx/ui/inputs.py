@@ -4,6 +4,7 @@ Input widgets for EMDX TUI.
 """
 
 import logging
+import os
 
 from textual import events
 from textual.widgets import Input
@@ -15,9 +16,12 @@ try:
     log_dir = Path.home() / ".config" / "emdx"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "tui_debug.log"
-    
+
+    # Only use DEBUG level if environment variable is set
+    log_level = logging.DEBUG if os.getenv("EMDX_DEBUG") else logging.INFO
+
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_file),

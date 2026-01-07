@@ -6,6 +6,7 @@ This file now serves as a compatibility layer that imports components from their
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -23,7 +24,7 @@ except RuntimeError:
     # Handle case where these have been fully removed
     def MinimalDocumentBrowser(*args, **kwargs):
         raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
-    
+
     def run_minimal():
         raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
 
@@ -35,8 +36,11 @@ log_dir = Path.home() / ".config" / "emdx"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "tui_debug.log"
 
+# Only use DEBUG level if environment variable is set
+log_level = logging.DEBUG if os.getenv("EMDX_DEBUG") else logging.INFO
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(log_file),
