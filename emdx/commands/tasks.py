@@ -240,19 +240,99 @@ def delete(
 @app.command()
 def run(
     task_id: int = typer.Argument(..., help="Task ID"),
+    workflow: Optional[str] = typer.Option(None, "-w", "--workflow", help="Run via workflow (e.g., deep_analysis)"),
+    var: Optional[list[str]] = typer.Option(None, "--var", help="Workflow variables (key=value, can repeat)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show prompt only"),
 ):
-    """Run task with Claude."""
+    """Run task with Claude or workflow.
+
+    Examples:
+        emdx task run 1                    # Direct Claude execution
+        emdx task run 1 -w deep_analysis   # Run via deep_analysis workflow
+        emdx task run 1 -w code_fix --var fix_type=production_todos --var fix_description="Remove TODOs"
+        emdx task run 1 --dry-run          # Preview prompt
+    """
     from emdx.services.task_runner import run_task, build_task_prompt
 
     if dry_run:
         console.print(build_task_prompt(task_id))
         return
 
+    # Parse variables from --var options
+    variables = {}
+    if var:
+        for v in var:
+            if '=' in v:
+                key, value = v.split('=', 1)
+                variables[key.strip()] = value.strip()
+            else:
+                console.print(f"[yellow]Warning: Ignoring invalid variable '{v}' (use key=value format)[/yellow]")
+
     try:
-        exec_id = run_task(task_id)
-        console.print(f"[green]✅ Started task #{task_id}, exec #{exec_id}[/green]")
-        console.print(f"[dim]View: emdx exec logs {exec_id}[/dim]")
+        task_exec_id = run_task(task_id, workflow_name=workflow, variables=variables if variables else None)
+        mode = f"workflow '{workflow}'" if workflow else "direct"
+        console.print(f"[green]✅ Started task #{task_id} ({mode}), task_exec #{task_exec_id}[/green]")
+        if workflow:
+            console.print(f"[dim]View: emdx workflow runs[/dim]")
+        else:
+            console.print(f"[dim]View: emdx exec list[/dim]")
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command()
+def manual(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    note: Optional[str] = typer.Option(None, "-n", "--note", help="Completion note"),
+):
+    """Mark task as manually completed."""
+    from emdx.services.task_runner import mark_task_manual
+
+    try:
+        task_exec_id = mark_task_manual(task_id, notes=note)
+        console.print(f"[green]✅ Task #{task_id} marked as manually completed (exec #{task_exec_id})[/green]")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def executions(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    limit: int = typer.Option(10, "-n", "--limit"),
+):
+    """Show execution history for a task."""
+    from emdx.models.task_executions import list_task_executions, get_execution_stats
+
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    # Show stats
+    stats = get_execution_stats(task_id)
+    console.print(f"\n[bold]Task #{task_id}: {task['title']}[/bold]")
+    console.print(f"Executions: {stats['total']} total ({stats['completed']} completed, {stats['failed']} failed, {stats['running']} running)")
+    console.print(f"By type: {stats['workflow_runs']} workflow, {stats['direct_runs']} direct, {stats['manual_runs']} manual")
+
+    # Show history
+    execs = list_task_executions(task_id=task_id, limit=limit)
+    if execs:
+        console.print("\n[bold]Execution history:[/bold]")
+        table = Table()
+        table.add_column("ID", width=4)
+        table.add_column("Type", width=10)
+        table.add_column("Status", width=10)
+        table.add_column("Started", width=20)
+        table.add_column("Notes")
+
+        for e in execs:
+            table.add_row(
+                str(e['id']),
+                e['execution_type'],
+                e['status'],
+                str(e['started_at'])[:19] if e['started_at'] else "",
+                (e['notes'] or "")[:30],
+            )
+        console.print(table)
