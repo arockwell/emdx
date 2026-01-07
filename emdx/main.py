@@ -117,8 +117,29 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # TODO: Set up database connection using db_url
-    # TODO: Set up logging based on verbose/quiet flags
+    # Set up database connection using db_url
+    if db_url:
+        from .database.connection import db_connection
+        from pathlib import Path
+        # Parse db_url and set up custom database path if needed
+        # For SQLite URLs, extract the path
+        if db_url.startswith('sqlite:///'):
+            db_path = Path(db_url[10:])  # Remove 'sqlite:///' prefix
+            db_connection.db_path = db_path
+        elif db_url.startswith('sqlite://'):
+            db_path = Path(db_url[9:])  # Remove 'sqlite://' prefix
+            db_connection.db_path = db_path
+
+    # Set up logging based on verbose/quiet flags
+    import logging
+    from .utils.logging import get_logger
+
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif quiet:
+        logging.getLogger().setLevel(logging.WARNING)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
 
 
 def safe_register_commands(target_app, source_app, prefix=""):

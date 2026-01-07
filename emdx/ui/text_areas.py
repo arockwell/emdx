@@ -3,42 +3,15 @@
 Text area widgets for EMDX TUI.
 """
 
-import logging
 import re
 
 from textual import events
 from textual.widgets import TextArea
 
-# Set up logging
-log_dir = None
-try:
-    from pathlib import Path
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-    
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-    
-    # Also create a dedicated key events log
-    key_log_file = log_dir / "key_events.log"
-    key_logger = logging.getLogger("key_events")
-    key_handler = logging.FileHandler(key_log_file)
-    key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-    key_logger.addHandler(key_handler)
-    key_logger.setLevel(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-except Exception:
-    # Fallback if logging setup fails
-    import logging
-    key_logger = logging.getLogger("key_events")
-    logger = logging.getLogger(__name__)
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
+key_logger = get_logger("key_events")
 
 
 class SelectionTextArea(TextArea):
@@ -102,16 +75,6 @@ class VimEditTextArea(TextArea):
     VIM_COMMAND = "COMMAND"
     
     def __init__(self, app_instance, *args, **kwargs):
-        # Debug logging for VimEditTextArea initialization
-        logger.debug(f"🔍 VimEditTextArea.__init__: args={args[:1] if args else 'NO ARGS'}")
-        logger.debug(f"🔍 VimEditTextArea.__init__: kwargs.keys()={list(kwargs.keys())}")
-        if 'text' in kwargs:
-            logger.debug(f"🔍 VimEditTextArea.__init__: text kwarg length={len(kwargs['text'])}")
-            logger.debug(f"🔍 VimEditTextArea.__init__: text kwarg first 50 chars={repr(kwargs['text'][:50])}")
-        elif args:
-            logger.debug(f"🔍 VimEditTextArea.__init__: args[0] length={len(args[0]) if args[0] else 0}")
-            logger.debug(f"🔍 VimEditTextArea.__init__: args[0] first 50 chars={repr(args[0][:50]) if args[0] else 'EMPTY'}")
-            
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
         self.vim_mode = self.VIM_NORMAL  # Start in normal mode like vim
@@ -125,10 +88,6 @@ class VimEditTextArea(TextArea):
         self.command_buffer = ""  # For vim commands like :w, :q, etc.
         # Store original content to detect changes
         self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
-        
-        # Debug: Check what text we actually have after init
-        logger.debug(f"🔍 VimEditTextArea.__init__: After super().__init__, self.text length={len(self.text)}")
-        logger.debug(f"🔍 VimEditTextArea.__init__: self.text first 50 chars={repr(self.text[:50])}")
         
         # Set initial cursor style for NORMAL mode (solid, non-blinking)
         self.show_cursor = True
@@ -161,9 +120,7 @@ class VimEditTextArea(TextArea):
                 else:
                     current_line = 0
                 
-                # Log the actual cursor position to debug
                 total_lines = len(self.text.split('\n'))
-                logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
                 
                 # Pass the raw cursor position - no adjustment
                 # The issue might be in the display, not the data

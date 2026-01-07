@@ -236,19 +236,28 @@ class AgentExecutor:
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
                 
-                # Perform search
-                # TODO: Implement proper document search
-                # For now, just get recent documents
-                with db_connection.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT id FROM documents
-                        WHERE is_deleted = FALSE
-                        ORDER BY accessed_at DESC
-                        LIMIT ?
-                    """, (config.max_context_docs,))
-                    
-                    context_docs = [row['id'] for row in cursor.fetchall()]
+                # Perform search using proper document search
+                from ..database.search import search_documents
+
+                if search_query and search_query != "{{query}}":
+                    # Use proper FTS5 search
+                    search_results = search_documents(
+                        query=search_query,
+                        limit=config.max_context_docs
+                    )
+                    context_docs = [doc['id'] for doc in search_results]
+                else:
+                    # Fallback to recent documents if no search query
+                    with db_connection.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT id FROM documents
+                            WHERE is_deleted = FALSE
+                            ORDER BY accessed_at DESC
+                            LIMIT ?
+                        """, (config.max_context_docs,))
+
+                        context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:
                 # If no search query, try to find related documents

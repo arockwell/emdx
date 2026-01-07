@@ -3,23 +3,9 @@
 Run the new browser container.
 """
 
-import logging
-from pathlib import Path
+from ..utils.logging import get_logger
 
-# Set up logging
-log_dir = Path.home() / ".config" / "emdx"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / "tui_debug.log"
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-    ],
-)
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def run_browser():

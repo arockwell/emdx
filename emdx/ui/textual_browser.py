@@ -5,9 +5,9 @@ Minimal textual browser that signals for external nvim handling.
 This file now serves as a compatibility layer that imports components from their new locations.
 """
 
-import logging
 import sys
-from pathlib import Path
+
+from textual.widgets import Static
 
 from .document_viewer import FullScreenView
 from .inputs import TitleInput
@@ -15,6 +15,7 @@ from .modals import DeleteConfirmScreen
 
 # Import extracted components
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from ..utils.logging import get_logger
 
 # DEPRECATED: These imports now generate warnings
 try:
@@ -23,35 +24,12 @@ except RuntimeError:
     # Handle case where these have been fully removed
     def MinimalDocumentBrowser(*args, **kwargs):
         raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
-    
+
     def run_minimal():
         raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
 
-# Import the VimLineNumbers class that was missed in the initial extraction
-from textual.widgets import Static
-
-# Set up logging - needed for VimLineNumbers
-log_dir = Path.home() / ".config" / "emdx"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / "tui_debug.log"
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        # logging.StreamHandler()  # Uncomment for console output
-    ],
-)
-
-# Also create a dedicated key events log
-key_log_file = log_dir / "key_events.log"
-key_logger = logging.getLogger("key_events")
-key_handler = logging.FileHandler(key_log_file)
-key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-key_logger.addHandler(key_handler)
-key_logger.setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+key_logger = get_logger("key_events")
 
 
 class VimLineNumbers(Static):

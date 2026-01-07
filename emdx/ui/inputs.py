@@ -3,33 +3,12 @@
 Input widgets for EMDX TUI.
 """
 
-import logging
-
 from textual import events
 from textual.widgets import Input
 
-# Set up logging
-log_dir = None
-try:
-    from pathlib import Path
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-    
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-    
-    logger = logging.getLogger(__name__)
-except Exception:
-    # Fallback if logging setup fails
-    import logging
-    logger = logging.getLogger(__name__)
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class TitleInput(Input):
