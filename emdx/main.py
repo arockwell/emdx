@@ -4,11 +4,14 @@ Main CLI entry point for emdx
 """
 
 from typing import Optional
+import logging
 
 import typer
 from rich.console import Console
 
 from emdx import __build_id__, __version__
+from emdx.utils.logging import get_logger
+from emdx.database.connection import DatabaseConnection
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.browse import app as browse_app
 from emdx.commands.claude_execute import app as claude_app
@@ -117,8 +120,29 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # TODO: Set up database connection using db_url
-    # TODO: Set up logging based on verbose/quiet flags
+    # Set up logging based on verbose/quiet flags
+    logger = get_logger(__name__)
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+    elif quiet:
+        logging.getLogger().setLevel(logging.ERROR)
+        logger.setLevel(logging.ERROR)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
+        logger.setLevel(logging.INFO)
+
+    # Set up database connection using db_url
+    if db_url:
+        # Custom database URL provided
+        logger.debug(f"Using custom database URL: {db_url}")
+        # Note: DatabaseConnection currently doesn't support custom URLs
+        # This would need to be extended for full custom URL support
+    else:
+        # Use default database location
+        db = DatabaseConnection()
+        db.ensure_schema()
+        logger.debug(f"Using default database at: {db.db_path}")
 
 
 def safe_register_commands(target_app, source_app, prefix=""):

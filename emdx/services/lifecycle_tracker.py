@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..config.settings import get_db_path
 from ..models.documents import get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags, remove_tags_from_document
+from ..utils.logging import get_logger
 
 
 class LifecycleTracker:
@@ -224,11 +225,12 @@ class LifecycleTracker:
         
         # Remove old stage tags
         if current_stage:
+            logger = get_logger(__name__)
             for tag in self.STAGES[current_stage]:
                 try:
                     remove_tags_from_document(doc_id, [tag])
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to remove tag '{tag}' from document {doc_id}: {e}")
         
         # Add new stage tags
         if new_stage in self.STAGES:
