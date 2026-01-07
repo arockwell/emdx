@@ -15,84 +15,53 @@ For the modern UI system, see:
 """
 
 import logging
-import warnings
 from pathlib import Path
 
-# Set up logging
-log_dir = None
-try:
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
+# Only enable debug logging if explicitly requested
+import os
 
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
+debug_enabled = os.environ.get("EMDX_DEBUG", "").lower() in ("1", "true", "yes")
 
-    # Also create a dedicated key events log
-    key_log_file = log_dir / "key_events.log"
+if debug_enabled:
+    try:
+        log_dir = Path.home() / ".config" / "emdx"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "tui_debug.log"
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[logging.FileHandler(log_file)],
+        )
+
+        # Also create a dedicated key events log
+        key_log_file = log_dir / "key_events.log"
+        key_logger = logging.getLogger("key_events")
+        key_handler = logging.FileHandler(key_log_file)
+        key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+        key_logger.addHandler(key_handler)
+        key_logger.setLevel(logging.DEBUG)
+
+        # Import build ID for version tracking
+        from emdx import __build_id__
+        logger = logging.getLogger(__name__)
+        logger.info(f"EMDX TUI starting up - Build: {__build_id__}")
+    except Exception:
+        # Fallback if debug setup fails
+        logging.basicConfig(level=logging.WARNING)
+        key_logger = logging.getLogger("key_events")
+        logger = logging.getLogger(__name__)
+else:
+    # Minimal logging setup for production
+    logging.basicConfig(level=logging.WARNING)
     key_logger = logging.getLogger("key_events")
-    key_handler = logging.FileHandler(key_log_file)
-    key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-    key_logger.addHandler(key_handler)
-    key_logger.setLevel(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    
-    # Import build ID for version tracking
-    from emdx import __build_id__
-    logger.info(f"EMDX TUI starting up - Build: {__build_id__}")
-except Exception:
-    # Fallback if logging setup fails
-    import logging
-    key_logger = logging.getLogger("key_events")
     logger = logging.getLogger(__name__)
 
 
-# DEPRECATED: SimpleVimLineNumbers has been moved to vim_line_numbers.py
-def SimpleVimLineNumbers(*args, **kwargs):
-    """DEPRECATED: Use emdx.ui.vim_line_numbers.SimpleVimLineNumbers instead."""
-    warnings.warn(
-        "SimpleVimLineNumbers has been moved to emdx.ui.vim_line_numbers. "
-        "Please update your imports.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    from .vim_line_numbers import SimpleVimLineNumbers as _SimpleVimLineNumbers
-    return _SimpleVimLineNumbers(*args, **kwargs)
+# SimpleVimLineNumbers has been moved to vim_line_numbers.py
 
 
-# DEPRECATED: MinimalDocumentBrowser has been removed
-def MinimalDocumentBrowser(*args, **kwargs):
-    """DEPRECATED: MinimalDocumentBrowser has been removed. Use DocumentBrowser instead."""
-    warnings.warn(
-        "MinimalDocumentBrowser has been removed as part of technical debt cleanup. "
-        "The main GUI now uses DocumentBrowser from document_browser.py via BrowserContainer. "
-        "Please update your code to use the modern UI system.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    raise RuntimeError(
-        "MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface."
-    )
-
-
-# DEPRECATED: run_minimal has been removed
-def run_minimal():
-    """DEPRECATED: run_minimal has been removed. Use 'emdx gui' instead."""
-    warnings.warn(
-        "run_minimal() has been removed as part of technical debt cleanup. "
-        "Use 'emdx gui' for the modern interface.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    raise RuntimeError(
-        "run_minimal() has been removed. Use 'emdx gui' for the modern interface."
-    )
+# Deprecated functions have been removed - textual_browser.py provides fallback implementations
 
 
 if __name__ == "__main__":

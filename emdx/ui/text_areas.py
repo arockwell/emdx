@@ -9,36 +9,41 @@ import re
 from textual import events
 from textual.widgets import TextArea
 
-# Set up logging
-log_dir = None
-try:
-    from pathlib import Path
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-    
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-    
-    # Also create a dedicated key events log
-    key_log_file = log_dir / "key_events.log"
+# Set up logging only if debug mode is enabled
+import os
+
+debug_enabled = os.environ.get("EMDX_DEBUG", "").lower() in ("1", "true", "yes")
+
+if debug_enabled:
+    try:
+        from pathlib import Path
+        log_dir = Path.home() / ".config" / "emdx"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "tui_debug.log"
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[logging.FileHandler(log_file)],
+        )
+
+        # Also create a dedicated key events log
+        key_log_file = log_dir / "key_events.log"
+        key_logger = logging.getLogger("key_events")
+        key_handler = logging.FileHandler(key_log_file)
+        key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+        key_logger.addHandler(key_handler)
+        key_logger.setLevel(logging.DEBUG)
+    except Exception:
+        # Fallback if debug setup fails
+        logging.basicConfig(level=logging.WARNING)
+        key_logger = logging.getLogger("key_events")
+else:
+    # Minimal logging setup for production
+    logging.basicConfig(level=logging.WARNING)
     key_logger = logging.getLogger("key_events")
-    key_handler = logging.FileHandler(key_log_file)
-    key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-    key_logger.addHandler(key_handler)
-    key_logger.setLevel(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-except Exception:
-    # Fallback if logging setup fails
-    import logging
-    key_logger = logging.getLogger("key_events")
-    logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
 
 
 class SelectionTextArea(TextArea):

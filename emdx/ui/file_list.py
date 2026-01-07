@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -13,6 +14,15 @@ from textual.widgets import DataTable
 from emdx.database import db
 
 logger = logging.getLogger(__name__)
+
+# Only enable debug logging if explicitly requested
+debug_enabled = os.environ.get("EMDX_DEBUG", "").lower() in ("1", "true", "yes")
+
+
+def debug_log(message):
+    """Log debug message only if debug mode is enabled."""
+    if debug_enabled:
+        logger.debug(message)
 
 
 class FileList(DataTable):
@@ -36,9 +46,9 @@ class FileList(DataTable):
     
     def on_data_table_row_highlighted(self, event) -> None:
         """Handle row selection changes."""
-        logger.debug(f"📁 FileList.on_data_table_row_highlighted: {self.selected_index} → {event.cursor_row}")
+        debug_log(f"📁 FileList.on_data_table_row_highlighted: {self.selected_index} → {event.cursor_row}")
         self.selected_index = event.cursor_row
-        logger.debug(f"📁 Posting FileSelected message: {event.cursor_row}")
+        debug_log(f"📁 Posting FileSelected message: {event.cursor_row}")
         # Notify parent FileBrowser of selection change
         self.post_message(self.FileSelected(event.cursor_row))
     
@@ -50,9 +60,9 @@ class FileList(DataTable):
     
     def watch_selected_index(self, old: int, new: int) -> None:
         """Update cursor position when selection changes."""
-        logger.debug(f"📁 FileList.watch_selected_index: {old} → {new}, files={len(self.files)}, rows={self.row_count}")
+        debug_log(f"📁 FileList.watch_selected_index: {old} → {new}, files={len(self.files)}, rows={self.row_count}")
         if 0 <= new < len(self.files) and self.row_count > 0:
-            logger.debug(f"📁 FileList.move_cursor to row {new}")
+            debug_log(f"📁 FileList.move_cursor to row {new}")
             self.move_cursor(row=new)
     
     def populate_files(self, path: Path, show_hidden: bool = False) -> None:
@@ -114,7 +124,7 @@ class FileList(DataTable):
                     # Check if file is in EMDX
                     in_emdx = "✅" if self.check_file_in_emdx(entry) else ""
                     
-                    logger.debug(f"📁 Adding row {i}: {icon} {name} {size} {modified} {in_emdx}")
+                    debug_log(f"📁 Adding row {i}: {icon} {name} {size} {modified} {in_emdx}")
                     self.add_row(
                         icon, name, size, modified, in_emdx,
                         key=str(entry)
@@ -139,12 +149,12 @@ class FileList(DataTable):
     
     def get_selected_file(self) -> Optional[Path]:
         """Get the currently selected file path."""
-        logger.debug(f"📁 get_selected_file: selected_index={self.selected_index}, files_count={len(self.files)}")
+        debug_log(f"📁 get_selected_file: selected_index={self.selected_index}, files_count={len(self.files)}")
         if 0 <= self.selected_index < len(self.files):
             selected = self.files[self.selected_index]
-            logger.debug(f"📁 Selected file: {selected}")
+            debug_log(f"📁 Selected file: {selected}")
             return selected
-        logger.debug("📁 No file selected")
+        debug_log("📁 No file selected")
         return None
     
     def get_file_icon(self, path: Path) -> str:
