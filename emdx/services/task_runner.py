@@ -1,5 +1,11 @@
-"""Task runner - spawns Claude for tasks."""
+"""Task runner - spawns Claude for tasks.
 
+Supports two execution modes:
+- Direct: Simple one-shot Claude execution
+- Workflow: Multi-stage execution via workflow system
+"""
+
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -7,6 +13,7 @@ from typing import Optional
 from emdx.models import tasks
 from emdx.models.documents import get_document
 from emdx.models.executions import create_execution
+from emdx.models.task_executions import create_task_execution, complete_task_execution
 from emdx.commands.claude_execute import execute_with_claude_detached
 
 
@@ -54,8 +61,21 @@ def build_task_prompt(task_id: int) -> str:
     return "\n".join(lines)
 
 
-def run_task(task_id: int, background: bool = True) -> int:
-    """Run task with Claude. Returns execution ID."""
+def run_task(
+    task_id: int,
+    workflow_name: Optional[str] = None,
+    background: bool = True,
+) -> int:
+    """Run task with Claude or workflow. Returns task_execution ID.
+
+    Args:
+        task_id: Task to execute
+        workflow_name: If provided, run via workflow system instead of direct execution
+        background: Run in background (always True for now)
+
+    Returns:
+        task_execution_id: ID in task_executions table
+    """
     task = tasks.get_task(task_id)
     if not task:
         raise ValueError(f"Task {task_id} not found")
@@ -69,6 +89,19 @@ def run_task(task_id: int, background: bool = True) -> int:
     if unsatisfied:
         raise ValueError(f"Unsatisfied deps: {[d['id'] for d in unsatisfied]}")
 
+    # Update task status
+    tasks.update_task(task_id, status='active')
+
+    if workflow_name:
+        # Execute via workflow system
+        return _run_task_with_workflow(task_id, task, workflow_name)
+    else:
+        # Direct execution
+        return _run_task_direct(task_id, task)
+
+
+def _run_task_direct(task_id: int, task: dict) -> int:
+    """Run task via direct Claude execution."""
     # Setup log file
     log_dir = Path.home() / ".config" / "emdx" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -77,7 +110,6 @@ def run_task(task_id: int, background: bool = True) -> int:
     prompt = build_task_prompt(task_id)
 
     # Create execution record
-    # create_execution(doc_id: int, doc_title: str, log_file: str, working_dir, pid)
     exec_id = create_execution(
         doc_id=task['gameplan_id'] or 0,
         doc_title=f"Task #{task_id}: {task['title']}",
@@ -85,20 +117,109 @@ def run_task(task_id: int, background: bool = True) -> int:
         working_dir=str(Path.cwd()),
     )
 
-    # Update task
-    tasks.update_task(task_id, status='active')
-    tasks.log_progress(task_id, f"Started execution #{exec_id}")
+    # Create task_execution record (the join)
+    task_exec_id = create_task_execution(
+        task_id=task_id,
+        execution_type='direct',
+        execution_id=exec_id,
+        notes=f"Direct execution via Claude",
+    )
+
+    tasks.log_progress(task_id, f"Started direct execution #{exec_id} (task_exec #{task_exec_id})")
 
     # Run Claude
-    # execute_with_claude_detached(task, execution_id, log_file: Path, ...)
     execute_with_claude_detached(
         task=prompt,
         execution_id=exec_id,
-        log_file=log_file,  # Path object
+        log_file=log_file,
         allowed_tools=None,
         working_dir=str(Path.cwd()),
         doc_id=str(task['gameplan_id']) if task['gameplan_id'] else None,
         context=None,
     )
 
-    return exec_id
+    return task_exec_id
+
+
+def _run_task_with_workflow(task_id: int, task: dict, workflow_name: str) -> int:
+    """Run task via workflow system."""
+    import threading
+    from emdx.workflows.executor import workflow_executor
+
+    # Create task_execution record first (will be linked to workflow_run)
+    task_exec_id = create_task_execution(
+        task_id=task_id,
+        execution_type='workflow',
+        notes=f"Workflow: {workflow_name}",
+    )
+
+    tasks.log_progress(task_id, f"Starting workflow '{workflow_name}' (task_exec #{task_exec_id})")
+
+    def run_workflow_in_thread():
+        """Run the async workflow in a separate thread with its own event loop."""
+        async def run_workflow():
+            try:
+                # Execute workflow
+                workflow_run = await workflow_executor.execute_workflow(
+                    workflow_name_or_id=workflow_name,
+                    input_doc_id=task['gameplan_id'],
+                    task_id=task_id,
+                    input_variables={'task_id': task_id, 'task_title': task['title']},
+                )
+
+                # Update task_execution with workflow_run_id
+                from emdx.models.task_executions import update_task_execution
+                update_task_execution(
+                    task_exec_id,
+                    notes=f"Workflow: {workflow_name}, run #{workflow_run.id}",
+                )
+
+                # Check result
+                if workflow_run.status == 'completed':
+                    complete_task_execution(task_exec_id, success=True)
+                    tasks.update_task(task_id, status='done')
+                    tasks.log_progress(task_id, f"Workflow completed successfully")
+                else:
+                    complete_task_execution(task_exec_id, success=False)
+                    tasks.update_task(task_id, status='blocked')
+                    tasks.log_progress(task_id, f"Workflow failed: {workflow_run.error_message}")
+
+            except Exception as e:
+                complete_task_execution(task_exec_id, success=False)
+                tasks.update_task(task_id, status='blocked')
+                tasks.log_progress(task_id, f"Workflow error: {e}")
+
+        # Create new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(run_workflow())
+        finally:
+            loop.close()
+
+    # Run workflow in background thread so CLI can return immediately
+    thread = threading.Thread(target=run_workflow_in_thread, daemon=True)
+    thread.start()
+
+    return task_exec_id
+
+
+def mark_task_manual(task_id: int, notes: Optional[str] = None) -> int:
+    """Mark a task as manually completed. Returns task_execution ID."""
+    task = tasks.get_task(task_id)
+    if not task:
+        raise ValueError(f"Task {task_id} not found")
+
+    # Create task_execution record for manual completion
+    task_exec_id = create_task_execution(
+        task_id=task_id,
+        execution_type='manual',
+        notes=notes or "Manually completed",
+    )
+
+    # Mark as completed immediately
+    complete_task_execution(task_exec_id, success=True)
+    tasks.update_task(task_id, status='done')
+    tasks.log_progress(task_id, f"Marked as manually completed")
+
+    return task_exec_id
