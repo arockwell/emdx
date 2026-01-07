@@ -5,12 +5,17 @@ Provides consistent vim editing experience across main browser and file browser.
 """
 
 import logging
+import os
 
 from textual.containers import Horizontal, Vertical
 
 from .text_areas import VimEditTextArea
 
+# Set up logging - only debug if EMDX_DEBUG is set
 logger = logging.getLogger(__name__)
+debug_enabled = os.getenv("EMDX_DEBUG", "").lower() in ("1", "true", "yes", "on")
+if not debug_enabled:
+    logger.setLevel(logging.WARNING)
 
 
 # Import line numbers implementation

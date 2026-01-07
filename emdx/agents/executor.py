@@ -237,18 +237,27 @@ class AgentExecutor:
                     search_query = search_query.replace("{{query}}", input_query)
                 
                 # Perform search
-                # TODO: Implement proper document search
-                # For now, just get recent documents
-                with db_connection.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT id FROM documents
-                        WHERE is_deleted = FALSE
-                        ORDER BY accessed_at DESC
-                        LIMIT ?
-                    """, (config.max_context_docs,))
-                    
-                    context_docs = [row['id'] for row in cursor.fetchall()]
+                # Implement proper document search using FTS5
+                from emdx.database.search import search_documents
+                try:
+                    # Use the existing search functionality
+                    search_results = search_documents(
+                        query=search_query,
+                        limit=config.max_context_docs
+                    )
+                    context_docs = [doc['id'] for doc in search_results]
+                except Exception as search_error:
+                    # Fallback to recent documents if search fails
+                    logger.warning(f"Search failed, falling back to recent docs: {search_error}")
+                    with db_connection.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT id FROM documents
+                            WHERE is_deleted = FALSE
+                            ORDER BY accessed_at DESC
+                            LIMIT ?
+                        """, (config.max_context_docs,))
+                        context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:
                 # If no search query, try to find related documents

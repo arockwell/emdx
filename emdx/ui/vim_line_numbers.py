@@ -5,10 +5,15 @@ Extracted from main_browser.py to reduce technical debt.
 """
 
 import logging
+import os
 
 from textual.widgets import Static
 
+# Set up logging - only debug if EMDX_DEBUG is set
 logger = logging.getLogger(__name__)
+debug_enabled = os.getenv("EMDX_DEBUG", "").lower() in ("1", "true", "yes", "on")
+if not debug_enabled:
+    logger.setLevel(logging.WARNING)
 
 
 class SimpleVimLineNumbers(Static):

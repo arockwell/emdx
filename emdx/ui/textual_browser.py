@@ -30,28 +30,25 @@ except RuntimeError:
 # Import the VimLineNumbers class that was missed in the initial extraction
 from textual.widgets import Static
 
-# Set up logging - needed for VimLineNumbers
-log_dir = Path.home() / ".config" / "emdx"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / "tui_debug.log"
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        # logging.StreamHandler()  # Uncomment for console output
-    ],
-)
-
-# Also create a dedicated key events log
-key_log_file = log_dir / "key_events.log"
-key_logger = logging.getLogger("key_events")
-key_handler = logging.FileHandler(key_log_file)
-key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-key_logger.addHandler(key_handler)
-key_logger.setLevel(logging.DEBUG)
+# Set up logging - only enable debug logging if EMDX_DEBUG is set
+import os
+debug_enabled = os.getenv("EMDX_DEBUG", "").lower() in ("1", "true", "yes", "on")
 logger = logging.getLogger(__name__)
+
+if debug_enabled:
+    log_dir = Path.home() / ".config" / "emdx"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "tui_debug.log"
+
+    # Set up file logging for debug
+    debug_handler = logging.FileHandler(log_file)
+    debug_handler.setLevel(logging.DEBUG)
+    debug_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(debug_handler)
+    logger.setLevel(logging.DEBUG)
+else:
+    # Production mode - only log warnings and errors
+    logger.setLevel(logging.WARNING)
 
 
 class VimLineNumbers(Static):
