@@ -547,7 +547,8 @@ class VimEditTextArea(TextArea):
             self.app_instance.action_save_and_exit_edit()
         elif cmd in ["wa", "wall"]:
             # Save all (just save current in our case)
-            # TODO: Implement save-only functionality
+            if hasattr(self.app_instance, 'action_save_document'):
+                self.app_instance.action_save_document()
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
