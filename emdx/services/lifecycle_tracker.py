@@ -227,7 +227,8 @@ class LifecycleTracker:
             for tag in self.STAGES[current_stage]:
                 try:
                     remove_tags_from_document(doc_id, [tag])
-                except:
+                except Exception as e:
+                    # Silently continue if tag removal fails - non-critical
                     pass
         
         # Add new stage tags

@@ -4,6 +4,7 @@ Intelligently merges related documents while preserving important information.
 """
 
 import difflib
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..config.settings import get_db_path
 from ..models.documents import delete_document, get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -350,8 +353,8 @@ class DocumentMerger:
             return True
             
         except Exception as e:
-            # Log error
-            print(f"Merge failed: {e}")
+            # Log error using proper logging
+            logger.error(f"Merge failed: {e}")
             return False
     
     def find_related_documents(

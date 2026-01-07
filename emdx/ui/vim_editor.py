@@ -152,7 +152,8 @@ class VimEditor(Vertical):
                 try:
                     self.text_area.selection = None
                     logger.debug(f"🔢   Cleared selection")
-                except:
+                except Exception as e:
+                    # Continue if selection clearing fails - non-critical
                     pass
                     
             # Method 3: Force scroll to top using multiple methods
@@ -198,7 +199,8 @@ class VimEditor(Vertical):
                 try:
                     self.text_area.move_cursor((0, 0))
                     logger.debug(f"🔢   Called move_cursor((0, 0))")
-                except:
+                except Exception as e:
+                    # Continue if cursor positioning fails - non-critical UI operation
                     pass
                     
             # Focus the text area AFTER positioning

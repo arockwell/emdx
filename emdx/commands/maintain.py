@@ -794,11 +794,11 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                 try:
                     mem_mb = proc.memory_info().rss / 1024 / 1024
                     mem_str = f", {mem_mb:.0f}MB"
-                except:
+                except Exception as e:
                     mem_str = ""
-                
+
                 console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
-            except:
+            except Exception as e:
                 console.print(f"    • PID {proc.pid}: [process info unavailable] ({reason})")
         
         if len(all_procs) > 10:

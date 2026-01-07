@@ -223,7 +223,8 @@ class GenericAgent(Agent):
                 try:
                     input_doc = get_document(context.input_doc_id)
                     base_title = f"{self.config.display_name}: {input_doc.title}"
-                except:
+                except Exception as e:
+                    # Fallback title if document not found
                     base_title = f"{self.config.display_name} Output"
             elif context.input_type == 'query' and context.input_query:
                 query_preview = context.input_query[:50] + "..." if len(context.input_query) > 50 else context.input_query
