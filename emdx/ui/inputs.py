@@ -9,23 +9,29 @@ from textual import events
 from textual.widgets import Input
 
 # Set up logging
+import os
 log_dir = None
+debug_enabled = os.getenv("EMDX_DEBUG", "").lower() in ("1", "true", "yes", "on")
+
 try:
-    from pathlib import Path
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-    
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-    
+    if debug_enabled:
+        from pathlib import Path
+        log_dir = Path.home() / ".config" / "emdx"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "tui_debug.log"
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.FileHandler(log_file),
+                # logging.StreamHandler()  # Uncomment for console output
+            ],
+        )
+
     logger = logging.getLogger(__name__)
+    if not debug_enabled:
+        logger.setLevel(logging.INFO)
 except Exception:
     # Fallback if logging setup fails
     import logging

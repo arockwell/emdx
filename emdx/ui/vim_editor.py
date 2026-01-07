@@ -66,8 +66,8 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # TEMPORARILY DISABLED: Line numbers causing layout issues
-        # Just mount the text area directly without line numbers
+        # TODO: Fix line numbers layout issues and re-enable
+        # Currently mounting text area directly without line numbers due to layout bugs
         
         # Configure text area to take full space
         self.text_area.styles.width = "100%"
@@ -81,7 +81,7 @@ class VimEditor(Vertical):
         logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
         
         # Ensure the entire vim editor container starts at top
-        # TEMPORARILY DISABLED: This might be causing first line visibility issues
+        # TODO: Investigate scroll_to causing first line visibility issues
         # self.scroll_to(0, 0, animate=False)
         
         # Focus the text area and initialize line numbers
@@ -233,7 +233,7 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # TEMPORARILY DISABLED: Line numbers
+            # TODO: Re-enable line numbers once layout issues are resolved
             # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
             # self._update_line_number_width()
             # if hasattr(self.text_area, '_update_line_numbers'):

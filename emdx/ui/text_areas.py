@@ -10,30 +10,40 @@ from textual import events
 from textual.widgets import TextArea
 
 # Set up logging
+import os
 log_dir = None
+debug_enabled = os.getenv("EMDX_DEBUG", "").lower() in ("1", "true", "yes", "on")
+
 try:
-    from pathlib import Path
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-    
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-    
-    # Also create a dedicated key events log
-    key_log_file = log_dir / "key_events.log"
-    key_logger = logging.getLogger("key_events")
-    key_handler = logging.FileHandler(key_log_file)
-    key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-    key_logger.addHandler(key_handler)
-    key_logger.setLevel(logging.DEBUG)
+    if debug_enabled:
+        from pathlib import Path
+        log_dir = Path.home() / ".config" / "emdx"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "tui_debug.log"
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.FileHandler(log_file),
+                # logging.StreamHandler()  # Uncomment for console output
+            ],
+        )
+
+        # Also create a dedicated key events log
+        key_log_file = log_dir / "key_events.log"
+        key_logger = logging.getLogger("key_events")
+        key_handler = logging.FileHandler(key_log_file)
+        key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+        key_logger.addHandler(key_handler)
+        key_logger.setLevel(logging.DEBUG)
+    else:
+        key_logger = logging.getLogger("key_events")
+        key_logger.setLevel(logging.INFO)
+
     logger = logging.getLogger(__name__)
+    if not debug_enabled:
+        logger.setLevel(logging.INFO)
 except Exception:
     # Fallback if logging setup fails
     import logging
