@@ -3,6 +3,7 @@ Lifecycle tracking service for EMDX.
 Tracks document lifecycle, especially for gameplans and projects.
 """
 
+import logging
 import sqlite3
 from collections import defaultdict
 from datetime import datetime
@@ -11,6 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..config.settings import get_db_path
 from ..models.documents import get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags, remove_tags_from_document
+
+logger = logging.getLogger(__name__)
 
 
 class LifecycleTracker:
@@ -227,8 +230,9 @@ class LifecycleTracker:
             for tag in self.STAGES[current_stage]:
                 try:
                     remove_tags_from_document(doc_id, [tag])
-                except:
-                    pass
+                except (sqlite3.Error, ValueError) as e:
+                    logger.warning(f"Failed to remove tag '{tag}' from document {doc_id}: {e}")
+                    continue
         
         # Add new stage tags
         if new_stage in self.STAGES:

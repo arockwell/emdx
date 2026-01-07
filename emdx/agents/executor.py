@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any, Union
 from .base import AgentContext, AgentResult
 from .registry import agent_registry
 from ..models.executions import create_execution, update_execution_status
-from ..models.documents import get_document, save_document
+from ..models.documents import get_document, save_document, search_documents
 from ..models.tags import search_by_tags
 from ..database.connection import db_connection
 from ..utils.logging import get_logger
@@ -52,7 +52,8 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except:
+            except (ValueError, FileNotFoundError, KeyError) as e:
+                logger.warning(f"Failed to get document {input_doc_id} for title: {e}")
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
             query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
@@ -230,25 +231,32 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except:
-                        pass
+                    except (ValueError, FileNotFoundError, KeyError) as e:
+                        logger.warning(f"Failed to get document {input_doc_id} for search context: {e}")
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
                 
-                # Perform search
-                # TODO: Implement proper document search
-                # For now, just get recent documents
-                with db_connection.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT id FROM documents
-                        WHERE is_deleted = FALSE
-                        ORDER BY accessed_at DESC
-                        LIMIT ?
-                    """, (config.max_context_docs,))
-                    
-                    context_docs = [row['id'] for row in cursor.fetchall()]
+                # Perform search using proper search functionality
+                try:
+                    search_results = search_documents(
+                        query=search_query,
+                        limit=config.max_context_docs
+                    )
+                    context_docs = [doc.id for doc in search_results]
+                    logger.debug(f"Found {len(context_docs)} context documents using search")
+                except Exception as e:
+                    logger.warning(f"Search failed, falling back to recent documents: {e}")
+                    # Fallback to recent documents if search fails
+                    with db_connection.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT id FROM documents
+                            WHERE is_deleted = FALSE
+                            ORDER BY accessed_at DESC
+                            LIMIT ?
+                        """, (config.max_context_docs,))
+                        context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:
                 # If no search query, try to find related documents

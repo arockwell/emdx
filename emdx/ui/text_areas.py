@@ -230,8 +230,8 @@ class VimEditTextArea(TextArea):
             # Try to continue without crashing the app
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except:
-                pass
+            except Exception as status_error:
+                logger.error(f"Failed to update vim status during error recovery: {status_error}")
     
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""
@@ -440,7 +440,8 @@ class VimEditTextArea(TextArea):
                     self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
                 event.stop()
                 return
-            except:
+            except (AttributeError, LookupError):
+                logger.debug("Title input not found, tab key handled normally")
                 pass  # Title input might not exist
         
         # Don't stop the event - let it bubble up naturally for TextArea to handle

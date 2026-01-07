@@ -446,10 +446,14 @@ class AutoTagger:
     def get_pattern_stats(self) -> Dict[str, int]:
         """
         Get statistics on how often each pattern matches.
-        
+
         Returns:
             Dictionary mapping pattern names to match counts
+
+        Note: Pattern usage tracking is not yet implemented.
+        This would require adding a database table to track pattern
+        match history across document saves.
         """
-        # TODO: Implement tracking of pattern usage
-        # This would require storing pattern match history
+        # Pattern usage tracking not implemented yet
+        # Would require database schema changes to track pattern matches
         return {}
