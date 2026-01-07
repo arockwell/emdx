@@ -446,7 +446,8 @@ def execution_health():
                 cpu = proc.cpu_percent(interval=0.1)
                 mem = proc.memory_info().rss / 1024 / 1024  # MB
                 proc_status = f"CPU: {cpu:.0f}% MEM: {mem:.0f}MB"
-            except:
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+                # Process not accessible - show N/A
                 proc_status = "N/A"
         else:
             proc_status = "No PID"

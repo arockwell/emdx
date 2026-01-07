@@ -184,7 +184,8 @@ def transition(
                     for tag in tags:
                         try:
                             remove_tags_from_document(doc_id, [tag])
-                        except:
+                        except Exception as e:
+                            # Tag removal failed - continue with transition
                             pass
             tracker.transition_document(doc_id, new_stage, notes)
         

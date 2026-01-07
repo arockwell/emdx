@@ -794,11 +794,13 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                 try:
                     mem_mb = proc.memory_info().rss / 1024 / 1024
                     mem_str = f", {mem_mb:.0f}MB"
-                except:
+                except Exception as e:
+                    # Memory info unavailable
                     mem_str = ""
                 
                 console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
-            except:
+            except Exception as e:
+                # Process info unavailable
                 console.print(f"    • PID {proc.pid}: [process info unavailable] ({reason})")
         
         if len(all_procs) > 10:
@@ -1051,7 +1053,8 @@ def cleanup_temp_dirs(
                 # Calculate size
                 size = sum(f.stat().st_size for f in dir_path.rglob('*') if f.is_file())
                 total_size += size
-        except:
+        except (OSError, PermissionError) as e:
+            # Directory access failed - skip
             pass
     
     if not old_dirs:
@@ -1096,7 +1099,8 @@ def cleanup_temp_dirs(
                 shutil.rmtree(dir_path)
                 removed += 1
                 freed_space += size
-            except:
+            except (OSError, PermissionError) as e:
+                # Directory removal failed - skip
                 pass
             progress.update(task, advance=1)
     
