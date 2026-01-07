@@ -52,7 +52,7 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except:
+            except (ValueError, LookupError, RuntimeError):
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
             query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
@@ -230,7 +230,7 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except:
+                    except (ValueError, LookupError, RuntimeError):
                         pass
                 
                 if input_query:
