@@ -64,6 +64,7 @@ class WorkflowExecutor:
         input_variables: Optional[Dict[str, Any]] = None,
         gameplan_id: Optional[int] = None,
         task_id: Optional[int] = None,
+        working_dir: Optional[str] = None,
     ) -> WorkflowRun:
         """Execute a workflow.
 
@@ -73,6 +74,7 @@ class WorkflowExecutor:
             input_variables: Optional runtime variables
             gameplan_id: Optional link to gameplan
             task_id: Optional link to task
+            working_dir: Optional working directory for agent execution (e.g., worktree path)
 
         Returns:
             WorkflowRun with execution results
@@ -101,6 +103,10 @@ class WorkflowExecutor:
         start_time = datetime.now()
         context: Dict[str, Any] = {}
         total_tokens = 0
+
+        # Set working directory - use provided path or current directory
+        effective_working_dir = working_dir or str(Path.cwd())
+        context['_working_dir'] = effective_working_dir
 
         try:
             # Load input document content if provided
@@ -622,12 +628,15 @@ class WorkflowExecutor:
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             log_file = log_dir / f"workflow-agent-{individual_run_id}-{timestamp}.log"
 
+            # Get working directory from context (set by execute_workflow)
+            working_dir = context.get('_working_dir', str(Path.cwd()))
+
             # Create execution record
             exec_id = create_execution(
                 doc_id=context.get('input_doc_id', 0),
                 doc_title=f"Workflow Agent Run #{individual_run_id}",
                 log_file=str(log_file),
-                working_dir=str(Path.cwd()),
+                working_dir=working_dir,
             )
 
             # Build the full prompt with instructions to save output
@@ -650,7 +659,7 @@ Report the document ID that was created."""
                     log_file=log_file,
                     allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"],
                     verbose=False,
-                    working_dir=str(Path.cwd()),
+                    working_dir=working_dir,
                     doc_id=str(context.get('input_doc_id', 0)),
                     context=None,
                 )
@@ -802,12 +811,15 @@ Report the document ID that was created."""
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             log_file = log_dir / f"workflow-synthesis-{stage_run_id}-{timestamp}.log"
 
+            # Get working directory from context
+            working_dir = context.get('_working_dir', str(Path.cwd()))
+
             # Create execution record
             exec_id = create_execution(
                 doc_id=context.get('input_doc_id', 0),
                 doc_title=f"Workflow Synthesis #{stage_run_id}",
                 log_file=str(log_file),
-                working_dir=str(Path.cwd()),
+                working_dir=working_dir,
             )
 
             # Run Claude
@@ -820,7 +832,7 @@ Report the document ID that was created."""
                     log_file=log_file,
                     allowed_tools=["Read", "Write", "Bash", "Glob", "Grep"],
                     verbose=False,
-                    working_dir=str(Path.cwd()),
+                    working_dir=working_dir,
                     doc_id=str(context.get('input_doc_id', 0)),
                     context=None,
                 )

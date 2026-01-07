@@ -241,6 +241,7 @@ def delete(
 def run(
     task_id: int = typer.Argument(..., help="Task ID"),
     workflow: Optional[str] = typer.Option(None, "-w", "--workflow", help="Run via workflow (e.g., deep_analysis)"),
+    var: Optional[list[str]] = typer.Option(None, "--var", help="Workflow variables (key=value, can repeat)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show prompt only"),
 ):
     """Run task with Claude or workflow.
@@ -248,6 +249,7 @@ def run(
     Examples:
         emdx task run 1                    # Direct Claude execution
         emdx task run 1 -w deep_analysis   # Run via deep_analysis workflow
+        emdx task run 1 -w code_fix --var fix_type=production_todos --var fix_description="Remove TODOs"
         emdx task run 1 --dry-run          # Preview prompt
     """
     from emdx.services.task_runner import run_task, build_task_prompt
@@ -256,8 +258,18 @@ def run(
         console.print(build_task_prompt(task_id))
         return
 
+    # Parse variables from --var options
+    variables = {}
+    if var:
+        for v in var:
+            if '=' in v:
+                key, value = v.split('=', 1)
+                variables[key.strip()] = value.strip()
+            else:
+                console.print(f"[yellow]Warning: Ignoring invalid variable '{v}' (use key=value format)[/yellow]")
+
     try:
-        task_exec_id = run_task(task_id, workflow_name=workflow)
+        task_exec_id = run_task(task_id, workflow_name=workflow, variables=variables if variables else None)
         mode = f"workflow '{workflow}'" if workflow else "direct"
         console.print(f"[green]✅ Started task #{task_id} ({mode}), task_exec #{task_exec_id}[/green]")
         if workflow:

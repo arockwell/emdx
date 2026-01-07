@@ -64,6 +64,7 @@ def build_task_prompt(task_id: int) -> str:
 def run_task(
     task_id: int,
     workflow_name: Optional[str] = None,
+    variables: Optional[dict] = None,
     background: bool = True,
 ) -> int:
     """Run task with Claude or workflow. Returns task_execution ID.
@@ -71,6 +72,7 @@ def run_task(
     Args:
         task_id: Task to execute
         workflow_name: If provided, run via workflow system instead of direct execution
+        variables: Additional variables to pass to workflow (merged with task info)
         background: Run in background (always True for now)
 
     Returns:
@@ -94,7 +96,7 @@ def run_task(
 
     if workflow_name:
         # Execute via workflow system
-        return _run_task_with_workflow(task_id, task, workflow_name)
+        return _run_task_with_workflow(task_id, task, workflow_name, variables)
     else:
         # Direct execution
         return _run_task_direct(task_id, task)
@@ -141,65 +143,137 @@ def _run_task_direct(task_id: int, task: dict) -> int:
     return task_exec_id
 
 
-def _run_task_with_workflow(task_id: int, task: dict, workflow_name: str) -> int:
-    """Run task via workflow system."""
-    import threading
-    from emdx.workflows.executor import workflow_executor
+def _create_task_worktree(task_id: int, task: dict) -> tuple[str, str]:
+    """Create an isolated worktree for task execution.
+
+    Returns:
+        Tuple of (worktree_path, branch_name)
+    """
+    from emdx.utils.git_ops import create_worktree, get_repository_root
+
+    # Generate branch name from task
+    fix_type = task.get('title', '').lower()
+    # Sanitize for git branch name
+    fix_type = fix_type.replace(' ', '-').replace('/', '-')[:30]
+    branch_name = f"task-{task_id}-{fix_type}"
+
+    # Create worktree in ~/dev/worktrees/
+    repo_root = get_repository_root()
+    if not repo_root:
+        raise ValueError("Not in a git repository")
+
+    repo_name = Path(repo_root).name
+    worktree_base = Path.home() / "dev" / "worktrees"
+    worktree_path = worktree_base / f"{repo_name}-{branch_name}"
+
+    success, path, error = create_worktree(
+        branch_name=branch_name,
+        path=str(worktree_path),
+        base_branch="main",  # Always branch from main for clean slate
+        repo_path=repo_root,
+    )
+
+    if not success:
+        raise ValueError(f"Failed to create worktree: {error}")
+
+    return path, branch_name
+
+
+def _run_task_with_workflow(task_id: int, task: dict, workflow_name: str, variables: Optional[dict] = None) -> int:
+    """Run task via workflow system in an isolated worktree using a subprocess."""
+    import json
+    import subprocess
+
+    # Create isolated worktree for this task
+    try:
+        worktree_path, branch_name = _create_task_worktree(task_id, task)
+        tasks.log_progress(task_id, f"Created worktree: {worktree_path} (branch: {branch_name})")
+    except ValueError as e:
+        # Fall back to current directory if worktree creation fails
+        worktree_path = str(Path.cwd())
+        branch_name = None
+        tasks.log_progress(task_id, f"Warning: Could not create worktree ({e}), using current directory")
 
     # Create task_execution record first (will be linked to workflow_run)
     task_exec_id = create_task_execution(
         task_id=task_id,
         execution_type='workflow',
-        notes=f"Workflow: {workflow_name}",
+        notes=f"Workflow: {workflow_name}, worktree: {worktree_path}",
     )
 
     tasks.log_progress(task_id, f"Starting workflow '{workflow_name}' (task_exec #{task_exec_id})")
 
-    def run_workflow_in_thread():
-        """Run the async workflow in a separate thread with its own event loop."""
-        async def run_workflow():
-            try:
-                # Execute workflow
-                workflow_run = await workflow_executor.execute_workflow(
-                    workflow_name_or_id=workflow_name,
-                    input_doc_id=task['gameplan_id'],
-                    task_id=task_id,
-                    input_variables={'task_id': task_id, 'task_title': task['title']},
-                )
+    # Merge task info with user-provided variables
+    merged_variables = {
+        'task_id': task_id,
+        'task_title': task['title'],
+        'task_description': task.get('description', ''),
+    }
+    if variables:
+        merged_variables.update(variables)
 
-                # Update task_execution with workflow_run_id
-                from emdx.models.task_executions import update_task_execution
-                update_task_execution(
-                    task_exec_id,
-                    notes=f"Workflow: {workflow_name}, run #{workflow_run.id}",
-                )
+    # Build the workflow runner script
+    runner_script = f'''
+import asyncio
+import json
 
-                # Check result
-                if workflow_run.status == 'completed':
-                    complete_task_execution(task_exec_id, success=True)
-                    tasks.update_task(task_id, status='done')
-                    tasks.log_progress(task_id, f"Workflow completed successfully")
-                else:
-                    complete_task_execution(task_exec_id, success=False)
-                    tasks.update_task(task_id, status='blocked')
-                    tasks.log_progress(task_id, f"Workflow failed: {workflow_run.error_message}")
+from emdx.workflows.executor import workflow_executor
+from emdx.models import tasks
+from emdx.models.task_executions import complete_task_execution, update_task_execution
 
-            except Exception as e:
-                complete_task_execution(task_exec_id, success=False)
-                tasks.update_task(task_id, status='blocked')
-                tasks.log_progress(task_id, f"Workflow error: {e}")
+async def run():
+    try:
+        workflow_run = await workflow_executor.execute_workflow(
+            workflow_name_or_id="{workflow_name}",
+            input_doc_id={task['gameplan_id'] or 'None'},
+            task_id={task_id},
+            input_variables={json.dumps(merged_variables)},
+            working_dir="{worktree_path}",
+        )
 
-        # Create new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(run_workflow())
-        finally:
-            loop.close()
+        update_task_execution(
+            {task_exec_id},
+            notes=f"Workflow: {workflow_name}, run #{{workflow_run.id}}",
+        )
 
-    # Run workflow in background thread so CLI can return immediately
-    thread = threading.Thread(target=run_workflow_in_thread, daemon=True)
-    thread.start()
+        if workflow_run.status == "completed":
+            complete_task_execution({task_exec_id}, success=True)
+            tasks.update_task({task_id}, status="done")
+            tasks.log_progress({task_id}, "Workflow completed successfully")
+        else:
+            complete_task_execution({task_exec_id}, success=False)
+            tasks.update_task({task_id}, status="blocked")
+            tasks.log_progress({task_id}, f"Workflow failed: {{workflow_run.error_message}}")
+
+    except Exception as e:
+        complete_task_execution({task_exec_id}, success=False)
+        tasks.update_task({task_id}, status="blocked")
+        tasks.log_progress({task_id}, f"Workflow error: {{e}}")
+        raise
+
+asyncio.run(run())
+'''
+
+    # Setup log file
+    log_dir = Path.home() / ".config" / "emdx" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"task-workflow-{task_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
+
+    # Launch as detached subprocess using poetry to ensure correct environment
+    # Use the emdx project directory (where pyproject.toml lives)
+    emdx_project_dir = Path(__file__).parent.parent.parent
+
+    with open(log_file, 'w') as f:
+        subprocess.Popen(
+            ['poetry', 'run', 'python', '-c', runner_script],
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,  # Detach from parent process
+            cwd=str(emdx_project_dir),  # Run from project dir for poetry
+            env={**dict(__import__('os').environ), 'PYTHONUNBUFFERED': '1'},
+        )
+
+    tasks.log_progress(task_id, f"Workflow subprocess started, log: {log_file}")
 
     return task_exec_id
 
