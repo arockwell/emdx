@@ -52,7 +52,8 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to get document {input_doc_id} for title: {e}")
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
             query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
@@ -230,25 +231,33 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to get document {input_doc_id} for search template: {e}")
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
                 
-                # Perform search
-                # TODO: Implement proper document search
-                # For now, just get recent documents
-                with db_connection.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT id FROM documents
-                        WHERE is_deleted = FALSE
-                        ORDER BY accessed_at DESC
-                        LIMIT ?
-                    """, (config.max_context_docs,))
-                    
-                    context_docs = [row['id'] for row in cursor.fetchall()]
+                # Perform search with the prepared query
+                # Use simple text search for now - can be enhanced with FTS later
+                logger.debug(f"Searching for context docs with query: {search_query}")
+                try:
+                    # Simple search implementation for context
+                    from ..models.documents import search_documents
+                    search_results = search_documents(search_query, limit=config.max_context_docs)
+                    context_docs = [doc.id for doc in search_results]
+                except Exception as e:
+                    logger.warning(f"Failed to search for context documents, falling back to recent: {e}")
+                    # Fall back to recent documents as before
+                    with db_connection.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT id FROM documents
+                            WHERE is_deleted = FALSE
+                            ORDER BY accessed_at DESC
+                            LIMIT ?
+                        """, (config.max_context_docs,))
+
+                        context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:
                 # If no search query, try to find related documents

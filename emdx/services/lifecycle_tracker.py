@@ -227,8 +227,10 @@ class LifecycleTracker:
             for tag in self.STAGES[current_stage]:
                 try:
                     remove_tags_from_document(doc_id, [tag])
-                except:
-                    pass
+                except Exception as e:
+                    # Log but continue - tag removal is not critical
+                    import logging
+                    logging.getLogger(__name__).debug(f"Failed to remove tag {tag} from document {doc_id}: {e}")
         
         # Add new stage tags
         if new_stage in self.STAGES:
