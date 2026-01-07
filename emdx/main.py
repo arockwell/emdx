@@ -4,6 +4,8 @@ Main CLI entry point for emdx
 """
 
 from typing import Optional
+import logging
+import os
 
 import typer
 from rich.console import Console
@@ -117,8 +119,34 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # TODO: Set up database connection using db_url
-    # TODO: Set up logging based on verbose/quiet flags
+    # Set up logging based on verbose/quiet flags
+    if quiet:
+        logging_level = logging.ERROR
+    elif verbose:
+        logging_level = logging.DEBUG
+    else:
+        logging_level = logging.INFO
+
+    logging.basicConfig(
+        level=logging_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            # Add file handler if desired
+        ]
+    )
+
+    # Set up database connection using db_url
+    if db_url:
+        os.environ['EMDX_DATABASE_URL'] = db_url
+        logging.info(f"Database URL configured: {db_url}")
+    else:
+        # Use default database location if no custom URL provided
+        default_db_path = os.path.expanduser("~/.config/emdx/emdx.db")
+        if not os.path.exists(os.path.dirname(default_db_path)):
+            os.makedirs(os.path.dirname(default_db_path), exist_ok=True)
+        os.environ.setdefault('EMDX_DATABASE_URL', f"sqlite:///{default_db_path}")
+        logging.debug(f"Using default database: {default_db_path}")
 
 
 def safe_register_commands(target_app, source_app, prefix=""):

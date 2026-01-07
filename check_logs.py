@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Simple script to check and tail key event logs"""
 
-import os
+import subprocess
 from pathlib import Path
 
 
@@ -17,14 +17,18 @@ def check_logs():
     if key_log.exists():
         print(f"\n📋 Last 20 key events from {key_log}:")
         print("-" * 40)
-        os.system(f"tail -20 '{key_log}'")
+        subprocess.run(["tail", "-20", str(key_log)], check=False)
     else:
         print(f"\n❌ Key events log not found at {key_log}")
 
     if debug_log.exists():
         print(f"\n🐛 Last 10 debug entries from {debug_log}:")
         print("-" * 40)
-        os.system(f"tail -10 '{debug_log}' | grep -E 'CRASH|ERROR|Key event'")
+        # Use subprocess pipeline for safety
+        tail_process = subprocess.Popen(["tail", "-10", str(debug_log)], stdout=subprocess.PIPE)
+        subprocess.run(["grep", "-E", "CRASH|ERROR|Key event"], stdin=tail_process.stdout, check=False)
+        tail_process.stdout.close()
+        tail_process.wait()
     else:
         print(f"\n❌ Debug log not found at {debug_log}")
 
