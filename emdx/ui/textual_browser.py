@@ -19,7 +19,7 @@ from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 # DEPRECATED: These imports now generate warnings
 try:
     from .main_browser import MinimalDocumentBrowser, run_minimal
-except RuntimeError:
+except (ImportError, AttributeError):
     # Handle case where these have been fully removed
     def MinimalDocumentBrowser(*args, **kwargs):
         raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
