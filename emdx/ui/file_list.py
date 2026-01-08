@@ -285,7 +285,7 @@ class FileList(DataTable):
             content_hash = hashlib.sha256(content.encode()).hexdigest()
             
             # Check if this file is already saved by title match
-            # (content hash checking not implemented - uses title only)
+            # Note: content_hash computed above is unused - dedup uses title only
             with db.get_connection() as conn:
                 result = conn.execute(
                     "SELECT id FROM documents WHERE title = ? AND is_deleted = 0",

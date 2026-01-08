@@ -130,8 +130,7 @@ class MdcatWidget:
 
         try:
             rendered = MdcatRenderer.render(content)
-            # TODO: Create a custom widget that can display ANSI text
-            # For now, return the raw output
+            # Custom ANSI widget not implemented - returns raw output
             return rendered
         except Exception as e:
             return f"Error rendering with mdcat: {e}"

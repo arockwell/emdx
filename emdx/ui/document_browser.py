@@ -43,10 +43,6 @@ class TextAreaHost(Protocol):
         ...
 
 
-print("🔴🔴🔴 LOADING DOCUMENT BROWSER WITH BRIGHT COLORS 🔴🔴🔴")
-
-BUILD_ID = "BUILD-1752897674-DIRECT-STYLES"
-
 class DocumentBrowser(Widget):
     """Document browser widget that can host text areas."""
     
@@ -259,13 +255,7 @@ class DocumentBrowser(Widget):
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
-        logger.info(f"DocumentBrowser mounted - LHS split implementation - {BUILD_ID}")
-        logger.info("Details panel should be visible in bottom 1/3 of sidebar")
-        print(f"🔴 MOUNTED WITH {BUILD_ID} 🔴")
-
-        # Log CSS content to verify it's loaded
-        logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
-        logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
+        logger.info("DocumentBrowser mounted - LHS split implementation")
 
         # Initialize preview mode manager
         from .preview_mode_manager import PreviewModeManager
