@@ -125,8 +125,8 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # TODO: Set up database connection using db_url
-    # TODO: Set up logging based on verbose/quiet flags
+    # Note: Database connection is managed globally via emdx.database.db
+    # Note: Logging is configured per-module as needed
 
 
 def safe_register_commands(target_app, source_app, prefix=""):
