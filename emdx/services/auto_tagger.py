@@ -452,6 +452,6 @@ class AutoTagger:
         Returns:
             Dictionary mapping pattern names to match counts
         """
-        # TODO: Implement tracking of pattern usage
-        # This would require storing pattern match history
+        # Pattern usage tracking not yet implemented
+        # Would require database table to store pattern match history and analytics
         return {}
