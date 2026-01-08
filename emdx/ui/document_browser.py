@@ -73,16 +73,7 @@ class DocumentBrowser(Widget):
         padding: 0;
         margin: 0;
     }
-    
-    /* Debug styles to make layout visible */
-    /* DataTable {
-        border: solid green;
-    } */
-    
-    /* RichLog {
-        border: solid yellow;
-    } */
-    
+
     #search-input, #tag-input {
         layer: overlay;
         display: none;
