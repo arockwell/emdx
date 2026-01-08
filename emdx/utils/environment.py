@@ -72,8 +72,9 @@ class EnvironmentValidator:
                         )
                         if result.returncode == 0:
                             self.info[f"{cmd}_version"] = result.stdout.strip()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Version check failed - command exists but version query failed
+                    self.warnings.append(f"Could not get version for {cmd}: {str(e)}")
             else:
                 self.errors.append(f"Required command '{cmd}' not found in PATH")
     

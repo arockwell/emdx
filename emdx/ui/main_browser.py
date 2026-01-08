@@ -15,7 +15,6 @@ For the modern UI system, see:
 """
 
 import logging
-import warnings
 from pathlib import Path
 
 # Set up logging
@@ -53,46 +52,10 @@ except Exception:
     logger = logging.getLogger(__name__)
 
 
-# DEPRECATED: SimpleVimLineNumbers has been moved to vim_line_numbers.py
-def SimpleVimLineNumbers(*args, **kwargs):
-    """DEPRECATED: Use emdx.ui.vim_line_numbers.SimpleVimLineNumbers instead."""
-    warnings.warn(
-        "SimpleVimLineNumbers has been moved to emdx.ui.vim_line_numbers. "
-        "Please update your imports.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    from .vim_line_numbers import SimpleVimLineNumbers as _SimpleVimLineNumbers
-    return _SimpleVimLineNumbers(*args, **kwargs)
-
-
-# DEPRECATED: MinimalDocumentBrowser has been removed
-def MinimalDocumentBrowser(*args, **kwargs):
-    """DEPRECATED: MinimalDocumentBrowser has been removed. Use DocumentBrowser instead."""
-    warnings.warn(
-        "MinimalDocumentBrowser has been removed as part of technical debt cleanup. "
-        "The main GUI now uses DocumentBrowser from document_browser.py via BrowserContainer. "
-        "Please update your code to use the modern UI system.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    raise RuntimeError(
-        "MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface."
-    )
-
-
-# DEPRECATED: run_minimal has been removed
-def run_minimal():
-    """DEPRECATED: run_minimal has been removed. Use 'emdx gui' instead."""
-    warnings.warn(
-        "run_minimal() has been removed as part of technical debt cleanup. "
-        "Use 'emdx gui' for the modern interface.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    raise RuntimeError(
-        "run_minimal() has been removed. Use 'emdx gui' for the modern interface."
-    )
+# Deprecated functions have been removed as part of technical debt cleanup.
+# For modern replacements:
+# - Use emdx.ui.vim_line_numbers.SimpleVimLineNumbers instead of SimpleVimLineNumbers
+# - Use 'emdx gui' instead of MinimalDocumentBrowser or run_minimal()
 
 
 if __name__ == "__main__":
