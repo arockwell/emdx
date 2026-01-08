@@ -547,11 +547,14 @@ class VimEditTextArea(TextArea):
             self.app_instance.action_save_and_exit_edit()
         elif cmd in ["wa", "wall"]:
             # Save all (just save current in our case)
-            # TODO: Implement save-only functionality
+            if hasattr(self.app_instance, 'action_save'):
+                self.app_instance.action_save()
+            else:
+                # Fallback: just update status to indicate save attempt
+                self.app_instance._update_vim_status("NORMAL | Save not available in this context")
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
-            self.app_instance._update_vim_status("NORMAL | Saved")
         else:
             # Unknown command
             self.app_instance._update_vim_status(f"Not an editor command: {cmd}")

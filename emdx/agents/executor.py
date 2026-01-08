@@ -230,8 +230,10 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Document lookup failed, continue without template replacement
+                        import logging
+                        logging.debug(f"Failed to get document {input_doc_id} for template: {e}")
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)

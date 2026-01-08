@@ -35,12 +35,14 @@ class GenericAgent(Agent):
                 f.write(full_prompt)
             
             # Prepare Claude command using same format as claude_execute.py
+            from emdx.utils.constants import DEFAULT_CLAUDE_MODEL
+
             cmd = [
                 "claude",
                 "--print", full_prompt,
                 "--allowedTools", ",".join(self.config.allowed_tools),
                 "--output-format", "stream-json",
-                "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
+                "--model", DEFAULT_CLAUDE_MODEL,
                 "--verbose"
             ]
             
