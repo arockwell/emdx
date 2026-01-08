@@ -17,39 +17,16 @@ For the modern UI system, see:
 import logging
 from pathlib import Path
 
-# Set up logging
-log_dir = None
+# Set up logging using shared utility
+from ..utils.logging import setup_tui_logging
+logger, key_logger = setup_tui_logging(__name__)
+
+# Log build ID for version tracking
 try:
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-
-    # Also create a dedicated key events log
-    key_log_file = log_dir / "key_events.log"
-    key_logger = logging.getLogger("key_events")
-    key_handler = logging.FileHandler(key_log_file)
-    key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-    key_logger.addHandler(key_handler)
-    key_logger.setLevel(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    
-    # Import build ID for version tracking
     from emdx import __build_id__
     logger.info(f"EMDX TUI starting up - Build: {__build_id__}")
 except Exception:
-    # Fallback if logging setup fails
-    import logging
-    key_logger = logging.getLogger("key_events")
-    logger = logging.getLogger(__name__)
+    pass
 
 
 # Deprecated functions have been removed as part of technical debt cleanup.
