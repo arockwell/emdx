@@ -346,7 +346,7 @@ def project_stats(
 
                     doc_table.add_row(
                         str(doc_id),
-                        title[:40] + "..." if len(title) > 40 else title,
+                        truncate_description(title),
                         accessed_str,
                         str(access_count),
                     )

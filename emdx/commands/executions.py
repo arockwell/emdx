@@ -19,6 +19,7 @@ from ..models.executions import (
     get_running_executions,
     update_execution_status,
 )
+from ..utils.text_formatting import truncate_description
 
 app = typer.Typer()
 console = Console()
@@ -189,7 +190,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         
         table.add_row(
             str(exec.id),  # Show numeric ID
-            exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
+            truncate_description(exec.doc_title),
             status_display,
             formatted_time,
             worktree
@@ -219,7 +220,7 @@ def running():
         
         table.add_row(
             exec.id[:8] + "...",
-            exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
+            truncate_description(exec.doc_title),
             formatted_time
         )
     

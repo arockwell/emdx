@@ -21,6 +21,7 @@ from emdx.models.tags import (
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import generate_legend
+from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
 console = Console()
@@ -366,7 +367,7 @@ def batch(
             for doc_id, tags in eligible_docs[:sample_size]:
                 # Get document title
                 doc = get_document(str(doc_id))
-                title = doc['title'][:50] + "..." if len(doc['title']) > 50 else doc['title']
+                title = truncate_title(doc['title'])
                 
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")
                 for tag, conf in tags:

@@ -14,6 +14,7 @@ from ..models.documents import get_document, save_document
 from ..utils.logging import get_logger
 from ..utils.structured_logger import StructuredLogger, ProcessType
 from ..commands.claude_execute import format_claude_output, format_timestamp
+from ..utils.text_formatting import truncate_title
 
 logger = get_logger(__name__)
 
@@ -228,7 +229,7 @@ class GenericAgent(Agent):
                 except Exception:
                     base_title = f"{self.config.display_name} Output"
             elif context.input_type == 'query' and context.input_query:
-                query_preview = context.input_query[:50] + "..." if len(context.input_query) > 50 else context.input_query
+                query_preview = truncate_title(context.input_query)
                 base_title = f"{self.config.display_name}: {query_preview}"
             else:
                 base_title = f"{self.config.display_name} Output"

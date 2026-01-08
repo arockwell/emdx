@@ -15,6 +15,7 @@ from ..models.documents import get_document, save_document
 from ..models.tags import search_by_tags
 from ..database.connection import db_connection
 from ..utils.logging import get_logger
+from ..utils.text_formatting import truncate_title
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,7 @@ class AgentExecutor:
             except Exception:
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
-            query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
+            query_preview = truncate_title(input_query)
             doc_title += f" - {query_preview}"
             
         # Create working directory
