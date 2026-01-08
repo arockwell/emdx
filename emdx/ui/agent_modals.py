@@ -715,7 +715,7 @@ class AgentDetailPanel(Static):
             tools_str = ', '.join(tools[:3])
             if len(tools) > 3:
                 tools_str += f" +{len(tools) - 3} more"
-        except:
+        except Exception:
             tools_str = "Unknown"
         
         # Format usage stats

@@ -52,7 +52,7 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except:
+            except Exception:
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
             query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
@@ -230,15 +230,13 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except:
+                    except Exception:
                         pass
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
                 
-                # Perform search
-                # TODO: Implement proper document search
-                # For now, just get recent documents
+                # Perform search (uses recent documents - full search not implemented)
                 with db_connection.get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("""

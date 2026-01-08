@@ -152,7 +152,7 @@ class VimEditor(Vertical):
                 try:
                     self.text_area.selection = None
                     logger.debug(f"🔢   Cleared selection")
-                except:
+                except Exception:
                     pass
                     
             # Method 3: Force scroll to top using multiple methods
@@ -167,7 +167,7 @@ class VimEditor(Vertical):
             #     try:
             #         self.text_area.scroll_offset = (0, 0)
             #         logger.debug(f"🔢   Set scroll_offset to (0, 0)")
-            #     except:
+            #     except Exception:
             #         pass
                     
             # TEMPORARILY DISABLED: This might be hiding the first line
@@ -176,7 +176,7 @@ class VimEditor(Vertical):
             #         self.text_area.scroll_x = 0
             #         self.text_area.scroll_y = 0
             #         logger.debug(f"🔢   Set scroll_x/y to 0")
-            #     except:
+            #     except Exception:
             #         pass
             
             # Method 5: For markdown files, be extra aggressive
@@ -198,7 +198,7 @@ class VimEditor(Vertical):
                 try:
                     self.text_area.move_cursor((0, 0))
                     logger.debug(f"🔢   Called move_cursor((0, 0))")
-                except:
+                except Exception:
                     pass
                     
             # Focus the text area AFTER positioning

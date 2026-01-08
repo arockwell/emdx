@@ -687,7 +687,7 @@ Report the document ID that was created."""
                     status='completed',
                     output_doc_id=output_doc_id,
                     agent_execution_id=exec_id,
-                    tokens_used=0,  # TODO: Parse from log if available
+                    tokens_used=0,  # Token parsing from logs not implemented
                     completed_at=datetime.now(),
                 )
 

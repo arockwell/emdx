@@ -76,7 +76,7 @@ def test_execution_id_uniqueness():
         import os
         try:
             os.unlink(test_file)
-        except:
+        except OSError:
             pass
 
 

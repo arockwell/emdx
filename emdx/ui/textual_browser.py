@@ -88,7 +88,7 @@ class VimLineNumbers(Static):
                 container = self.edit_textarea.parent
                 if container and hasattr(container, 'scroll_offset'):
                     self.scroll_to(y=container.scroll_offset.y, animate=False)
-            except:
+            except Exception:
                 pass  # Scroll sync is nice-to-have
                 
         except Exception as e:

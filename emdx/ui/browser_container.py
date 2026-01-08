@@ -260,7 +260,7 @@ class BrowserContainer(App):
                 try:
                     computed_padding = widget.styles.get_rule('padding')
                     logger.info(f"{prefix}  computed padding: {computed_padding}")
-                except:
+                except Exception:
                     pass
 
             for child in widget.children:
