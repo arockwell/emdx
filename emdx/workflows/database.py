@@ -537,3 +537,87 @@ def create_iteration_strategy(
         )
         conn.commit()
         return cursor.lastrowid
+
+
+def get_active_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any]]:
+    """Get the currently running execution (log file) for a workflow run.
+
+    Returns the execution record with log_file path if there's an active individual run.
+    """
+    with db_connection.get_connection() as conn:
+        # Find any running individual run for this workflow
+        cursor = conn.execute(
+            """
+            SELECT ir.*, sr.stage_name
+            FROM workflow_individual_runs ir
+            JOIN workflow_stage_runs sr ON ir.stage_run_id = sr.id
+            WHERE sr.workflow_run_id = ?
+            AND ir.status = 'running'
+            ORDER BY ir.id DESC
+            LIMIT 1
+            """,
+            (workflow_run_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        result = dict(row)
+
+        # Try to find execution by agent_execution_id first
+        if result.get('agent_execution_id'):
+            exec_cursor = conn.execute(
+                "SELECT log_file, status as exec_status FROM executions WHERE id = ?",
+                (result['agent_execution_id'],),
+            )
+            exec_row = exec_cursor.fetchone()
+            if exec_row:
+                result['log_file'] = exec_row['log_file']
+                result['exec_status'] = exec_row['exec_status']
+                return result
+
+        # Fallback: find execution by title pattern "Workflow Agent Run #{individual_run_id}"
+        individual_run_id = result['id']
+        exec_cursor = conn.execute(
+            """
+            SELECT log_file, status as exec_status FROM executions
+            WHERE doc_title LIKE ?
+            AND status = 'running'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (f"Workflow Agent Run #{individual_run_id}%",),
+        )
+        exec_row = exec_cursor.fetchone()
+        if exec_row:
+            result['log_file'] = exec_row['log_file']
+            result['exec_status'] = exec_row['exec_status']
+        else:
+            result['log_file'] = None
+            result['exec_status'] = None
+
+        return result
+
+
+def get_latest_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any]]:
+    """Get the most recent execution (with log file) for a workflow run.
+
+    Returns the execution record for the most recently started individual run,
+    regardless of status. Useful for showing what just ran.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT ir.*, sr.stage_name, e.log_file, e.status as exec_status
+            FROM workflow_individual_runs ir
+            JOIN workflow_stage_runs sr ON ir.stage_run_id = sr.id
+            LEFT JOIN executions e ON ir.agent_execution_id = e.id
+            WHERE sr.workflow_run_id = ?
+            AND e.log_file IS NOT NULL
+            ORDER BY ir.started_at DESC, ir.id DESC
+            LIMIT 1
+            """,
+            (workflow_run_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
