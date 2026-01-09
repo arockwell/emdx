@@ -97,13 +97,6 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def save_execution(execution: Execution) -> None:
-    """Save execution to database (for backwards compatibility)."""
-    # This function is deprecated but kept for compatibility
-    # New code should use create_execution instead
-    pass
-
-
 def get_execution(exec_id: str) -> Optional[Execution]:
     """Get execution by ID."""
     with db_connection.get_connection() as conn:
