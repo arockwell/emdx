@@ -155,8 +155,8 @@ class BrowserContainer(App):
                     self.browsers[browser_type] = Static(f"Agent browser failed to load:\n{str(e)}\n\nCheck logs for details.")
                     logger.error(f"AgentBrowser creation failed, showing error message")
             elif browser_type == "control":
-                from .control_center import ControlCenterBrowser
-                self.browsers[browser_type] = ControlCenterBrowser()
+                from .pulse_browser import PulseBrowser
+                self.browsers[browser_type] = PulseBrowser()
             elif browser_type == "workflow":
                 try:
                     from .workflow_browser import WorkflowBrowser
@@ -166,6 +166,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create WorkflowBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Workflow browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "tasks":
+                try:
+                    from .task_browser import TaskBrowser
+                    self.browsers[browser_type] = TaskBrowser()
+                    logger.info("TaskBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             else:
                 # Fallback to document
                 browser_type = "document"
@@ -234,7 +243,11 @@ class BrowserContainer(App):
             await self.switch_browser("workflow")
             event.stop()
             return
-        elif key == "q" and self.current_browser in ["file", "git", "log", "agent", "control", "workflow"]:
+        elif key == "t" and self.current_browser == "document":
+            await self.switch_browser("tasks")
+            event.stop()
+            return
+        elif key == "q" and self.current_browser in ["file", "git", "log", "agent", "control", "workflow", "tasks"]:
             await self.switch_browser("document")
             event.stop()
             return

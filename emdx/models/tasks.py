@@ -117,6 +117,17 @@ def get_dependencies(task_id: int) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_dependents(task_id: int) -> list[dict[str, Any]]:
+    """Get tasks that depend on this task (tasks this one blocks)."""
+    with db.get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT t.* FROM tasks t
+            JOIN task_deps d ON t.id = d.task_id
+            WHERE d.depends_on = ?
+        """, (task_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def get_ready_tasks(gameplan_id: Optional[int] = None) -> list[dict[str, Any]]:
     """Get tasks ready to work (open + all deps done)."""
     conditions = ["t.status = 'open'"]
