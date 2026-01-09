@@ -4,6 +4,8 @@ Main CLI entry point for emdx
 """
 
 from typing import Optional
+import logging
+import os
 
 import typer
 from rich.console import Console

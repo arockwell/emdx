@@ -299,21 +299,6 @@ class DocumentBrowser(Widget):
         search_input.display = False
         tag_input.display = False
         
-        # Debug: Check sidebar children and their computed styles
-        try:
-            sidebar = self.query_one("#sidebar", Vertical)
-            logger.info(f"SIDEBAR CHILDREN COUNT: {len(sidebar.children)}")
-            for i, child in enumerate(sidebar.children):
-                logger.info(f"SIDEBAR CHILD {i}: {child.__class__.__name__} with id={child.id}")
-                # Log computed styles
-                logger.info(f"  - Size: {child.size}")
-                logger.info(f"  - Styles.height: {child.styles.height}")
-                logger.info(f"  - Styles.min_height: {child.styles.min_height}")
-                logger.info(f"  - Styles.max_height: {child.styles.max_height}")
-                logger.info(f"  - Styles.background: {child.styles.background}")
-        except Exception as e:
-            logger.error(f"ERROR CHECKING SIDEBAR: {e}")
-        
         # Set focus to table so keys work immediately
         table.focus()
         

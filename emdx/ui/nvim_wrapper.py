@@ -34,10 +34,8 @@ def clear_screen_completely():
     sys.stdout.write("\033[2J")  # Clear entire screen
     sys.stdout.write("\033[H")  # Move cursor to home
     sys.stdout.write("\033[3J")  # Clear scrollback
+    sys.stdout.write("\033[0m")  # Reset all attributes
     sys.stdout.flush()
-
-    # Also use system clear
-    os.system("clear")
 
 
 def run_textual_with_nvim_wrapper():
