@@ -10,6 +10,7 @@ from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_recent_documents, get_stats, list_documents
+from emdx.utils.text_formatting import truncate_description, truncate_title
 
 app = typer.Typer()
 console = Console()
@@ -52,7 +53,7 @@ def list(
             for doc in docs:
                 table.add_row(
                     str(doc["id"]),
-                    doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
+                    truncate_title(doc["title"]),
                     doc["project"] or "None",
                     doc["created_at"].strftime("%Y-%m-%d"),
                     str(doc["access_count"]),
@@ -115,7 +116,7 @@ def recent(
 
             table.add_row(
                 str(doc["id"]),
-                doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
+                truncate_title(doc["title"]),
                 doc["project"] or "None",
                 accessed_str,
                 str(doc["access_count"]),
@@ -345,7 +346,7 @@ def project_stats(
 
                     doc_table.add_row(
                         str(doc_id),
-                        title[:40] + "..." if len(title) > 40 else title,
+                        truncate_description(title),
                         accessed_str,
                         str(access_count),
                     )

@@ -17,6 +17,7 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
+from ..utils.constants import DEFAULT_CLAUDE_MODEL
 from ..models.executions import (
     Execution,
     create_execution,
@@ -396,7 +397,7 @@ def execute_with_claude_detached(
         "--print", expanded_task,
         "--allowedTools", ",".join(allowed_tools),
         "--output-format", "stream-json",
-        "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
+        "--model", DEFAULT_CLAUDE_MODEL,
         "--verbose"
     ]
 
@@ -543,7 +544,7 @@ def execute_with_claude(
         "--print", expanded_task,
         "--allowedTools", ",".join(allowed_tools),
         "--output-format", "stream-json",
-        "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
+        "--model", DEFAULT_CLAUDE_MODEL,
         "--verbose"
     ]
 

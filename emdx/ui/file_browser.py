@@ -284,7 +284,7 @@ class FileBrowser(Container):
         try:
             file_list = self.query_one("#file-list", FileList)
             file_list.focus()
-        except:
+        except Exception:
             # If that fails, focus the container itself
             self.focus()
     
@@ -710,10 +710,9 @@ class FileBrowser(Container):
             logger.error(f"🗂️ Error in delayed preview after save: {e}")
     
     def action_search(self) -> None:
-        """Search for files."""
-        # TODO: Implement search
+        """Search for files. Note: File search not yet implemented."""
         self.query_one("#file-status-bar", Static).update(
-            "Search coming soon..."
+            "Search not implemented - use shell commands to search"
         )
     
     def action_toggle_selection_mode(self) -> None:

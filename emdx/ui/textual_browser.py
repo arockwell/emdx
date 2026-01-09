@@ -20,7 +20,7 @@ from ..utils.logging import get_logger
 # DEPRECATED: These imports now generate warnings
 try:
     from .main_browser import MinimalDocumentBrowser, run_minimal
-except RuntimeError:
+except (ImportError, AttributeError):
     # Handle case where these have been fully removed
     def MinimalDocumentBrowser(*args, **kwargs):
         raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
@@ -28,8 +28,12 @@ except RuntimeError:
     def run_minimal():
         raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
 
-logger = get_logger(__name__)
-key_logger = get_logger("key_events")
+# Import the VimLineNumbers class that was missed in the initial extraction
+from textual.widgets import Static
+
+# Set up logging using shared utility
+from ..utils.logging import setup_tui_logging
+logger, key_logger = setup_tui_logging(__name__)
 
 
 class VimLineNumbers(Static):
@@ -66,7 +70,7 @@ class VimLineNumbers(Static):
                 container = self.edit_textarea.parent
                 if container and hasattr(container, 'scroll_offset'):
                     self.scroll_to(y=container.scroll_offset.y, animate=False)
-            except:
+            except Exception:
                 pass  # Scroll sync is nice-to-have
                 
         except Exception as e:

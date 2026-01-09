@@ -19,6 +19,8 @@ from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.agents import app as agents_app
 from emdx.commands.tags import app as tag_app
+from emdx.commands.tasks import app as tasks_app
+from emdx.commands.workflows import app as workflows_app
 from emdx.ui.gui import gui
 
 console = Console()
@@ -65,6 +67,12 @@ app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add agents as a subcommand group
 app.add_typer(agents_app, name="agent", help="Manage and run AI agents")
+
+# Add tasks as a subcommand group
+app.add_typer(tasks_app, name="task", help="Task management")
+
+# Add workflows as a subcommand group
+app.add_typer(workflows_app, name="workflow", help="Manage and run multi-stage workflows")
 
 # Add the gui command
 app.command()(gui)
@@ -117,29 +125,8 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # Set up database connection using db_url
-    if db_url:
-        from .database.connection import db_connection
-        from pathlib import Path
-        # Parse db_url and set up custom database path if needed
-        # For SQLite URLs, extract the path
-        if db_url.startswith('sqlite:///'):
-            db_path = Path(db_url[10:])  # Remove 'sqlite:///' prefix
-            db_connection.db_path = db_path
-        elif db_url.startswith('sqlite://'):
-            db_path = Path(db_url[9:])  # Remove 'sqlite://' prefix
-            db_connection.db_path = db_path
-
-    # Set up logging based on verbose/quiet flags
-    import logging
-    from .utils.logging import get_logger
-
-    if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    elif quiet:
-        logging.getLogger().setLevel(logging.WARNING)
-    else:
-        logging.getLogger().setLevel(logging.INFO)
+    # Note: Database connections are established per-command as needed
+    # Note: Logging is configured per-module as needed
 
 
 def safe_register_commands(target_app, source_app, prefix=""):

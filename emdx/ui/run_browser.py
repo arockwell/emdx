@@ -3,9 +3,9 @@
 Run the new browser container.
 """
 
-from ..utils.logging import get_logger
-
-logger = get_logger(__name__)
+# Set up logging using shared utility
+from ..utils.logging import setup_tui_logging
+logger, key_logger = setup_tui_logging(__name__)
 
 
 def run_browser():

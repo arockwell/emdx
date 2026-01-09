@@ -15,6 +15,7 @@ from ..models.documents import get_document, save_document
 from ..models.tags import search_by_tags
 from ..database.connection import db_connection
 from ..utils.logging import get_logger
+from ..utils.text_formatting import truncate_title
 
 logger = get_logger(__name__)
 
@@ -52,10 +53,10 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except:
+            except Exception:
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
-            query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
+            query_preview = truncate_title(input_query)
             doc_title += f" - {query_preview}"
             
         # Create working directory
@@ -230,8 +231,10 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except:
-                        pass
+                    except Exception as e:
+                        # Document lookup failed, continue without template replacement
+                        import logging
+                        logging.debug(f"Failed to get document {input_doc_id} for template: {e}")
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
@@ -256,7 +259,6 @@ class AgentExecutor:
                             ORDER BY accessed_at DESC
                             LIMIT ?
                         """, (config.max_context_docs,))
-
                         context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:

@@ -461,6 +461,262 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_008_add_workflow_tables(conn: sqlite3.Connection):
+    """Add tables for workflow orchestration system.
+
+    Workflows allow composing multiple agent runs with different execution modes:
+    - single: Run once
+    - parallel: Run N times simultaneously, synthesize results
+    - iterative: Run N times sequentially, each building on previous
+    - adversarial: Advocate -> Critic -> Synthesizer pattern
+    """
+    cursor = conn.cursor()
+
+    # Create workflows table - defines reusable workflow templates
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            definition_json TEXT NOT NULL,
+            category TEXT DEFAULT 'custom' CHECK (category IN ('analysis', 'planning', 'implementation', 'review', 'custom')),
+            is_builtin BOOLEAN DEFAULT FALSE,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            usage_count INTEGER DEFAULT 0,
+            last_used_at TIMESTAMP,
+            success_count INTEGER DEFAULT 0,
+            failure_count INTEGER DEFAULT 0
+        )
+    """)
+
+    # Create workflow_runs table - tracks each execution of a workflow
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_id INTEGER NOT NULL,
+            gameplan_id INTEGER,
+            task_id INTEGER,
+            parent_run_id INTEGER,
+            input_doc_id INTEGER,
+            input_variables TEXT,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'paused', 'completed', 'failed', 'cancelled')),
+            current_stage TEXT,
+            current_stage_run INTEGER DEFAULT 0,
+            context_json TEXT DEFAULT '{}',
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            output_doc_ids TEXT,
+            error_message TEXT,
+            total_tokens_used INTEGER DEFAULT 0,
+            total_execution_time_ms INTEGER DEFAULT 0,
+            FOREIGN KEY (workflow_id) REFERENCES workflows(id),
+            FOREIGN KEY (input_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (parent_run_id) REFERENCES workflow_runs(id)
+        )
+    """)
+
+    # Create workflow_stage_runs table - tracks each stage execution
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_stage_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_run_id INTEGER NOT NULL,
+            stage_name TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial')),
+            target_runs INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            runs_completed INTEGER DEFAULT 0,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            output_doc_id INTEGER,
+            synthesis_doc_id INTEGER,
+            error_message TEXT,
+            tokens_used INTEGER DEFAULT 0,
+            execution_time_ms INTEGER DEFAULT 0,
+            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Create workflow_individual_runs table - tracks each individual run within a stage
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_individual_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stage_run_id INTEGER NOT NULL,
+            run_number INTEGER NOT NULL,
+            agent_execution_id INTEGER,
+            prompt_used TEXT,
+            input_context TEXT,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            output_doc_id INTEGER,
+            error_message TEXT,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            tokens_used INTEGER DEFAULT 0,
+            execution_time_ms INTEGER DEFAULT 0,
+            FOREIGN KEY (stage_run_id) REFERENCES workflow_stage_runs(id),
+            FOREIGN KEY (agent_execution_id) REFERENCES agent_executions(id),
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Create iteration_strategies table - predefined prompt sequences for iterative mode
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS iteration_strategies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            prompts_json TEXT NOT NULL,
+            recommended_runs INTEGER DEFAULT 5,
+            category TEXT DEFAULT 'general',
+            is_builtin BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Create indexes for performance
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_category ON workflows(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_is_active ON workflows(is_active)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_started_at ON workflow_runs(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
+
+    # Insert builtin iteration strategies
+    cursor.execute("""
+        INSERT OR IGNORE INTO iteration_strategies (name, display_name, description, prompts_json, recommended_runs, category, is_builtin)
+        VALUES
+        ('analysis_deepening', 'Analysis Deepening', 'Progressive analysis that digs deeper with each iteration',
+         '["Analyze {{input}} thoroughly.", "What did {{prev}} miss?", "Synthesize {{all_prev}}.", "Steel-man weakest points.", "Final synthesis."]',
+         5, 'analysis', TRUE),
+        ('plan_refinement', 'Plan Refinement', 'Iterative planning that identifies and addresses risks',
+         '["Create initial plan for {{input}}.", "Review risks in {{prev}}.", "Revise plan.", "Identify failure modes.", "Final plan."]',
+         5, 'planning', TRUE),
+        ('adversarial_review', 'Adversarial Review', 'Advocate-Critic-Synthesizer pattern',
+         '["ADVOCATE: Argue FOR {{input}}.", "CRITIC: Argue AGAINST {{prev}}.", "SYNTHESIS: Balance views."]',
+         3, 'review', TRUE)
+    """)
+
+    # Insert builtin workflow templates
+    cursor.execute("""
+        INSERT OR IGNORE INTO workflows (name, display_name, description, definition_json, category, is_builtin, created_by)
+        VALUES
+        ('deep_analysis', 'Deep Analysis', 'Parallel coverage + iterative deepening',
+         '{"stages": [{"name": "initial_scan", "mode": "parallel", "runs": 3}, {"name": "deep_dive", "mode": "iterative", "runs": 5, "iteration_strategy": "analysis_deepening"}]}',
+         'analysis', TRUE, 'system'),
+        ('robust_planning', 'Robust Planning', 'Iterative refinement + adversarial review',
+         '{"stages": [{"name": "initial_plan", "mode": "iterative", "runs": 3, "iteration_strategy": "plan_refinement"}, {"name": "challenge", "mode": "adversarial", "runs": 3}]}',
+         'planning', TRUE, 'system'),
+        ('quick_analysis', 'Quick Analysis', 'Fast parallel analysis with synthesis',
+         '{"stages": [{"name": "analyze", "mode": "parallel", "runs": 3}]}',
+         'analysis', TRUE, 'system')
+    """)
+
+    conn.commit()
+
+
+def migration_009_add_tasks(conn: sqlite3.Connection):
+    """Add tasks tables for task management system."""
+    cursor = conn.cursor()
+
+    # Create tasks table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'open',
+            priority INTEGER DEFAULT 3,
+            gameplan_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+            project TEXT,
+            current_step TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )
+    """)
+
+    # Create task dependencies table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_deps (
+            task_id INTEGER NOT NULL,
+            depends_on INTEGER NOT NULL,
+            PRIMARY KEY (task_id, depends_on),
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            FOREIGN KEY (depends_on) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Create task log table (append-only work log)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_gameplan ON tasks(gameplan_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_log_task ON task_log(task_id)")
+
+    conn.commit()
+
+
+def migration_010_add_task_executions(conn: sqlite3.Connection):
+    """Add task_executions table - the join between tasks and workflows.
+
+    This table connects the task system to the workflow system, tracking
+    how each task was executed (via workflow, direct Claude call, or manually).
+    """
+    cursor = conn.cursor()
+
+    # Create task_executions table - the join table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+
+            -- Links to execution method (only one should be set based on type)
+            workflow_run_id INTEGER REFERENCES workflow_runs(id) ON DELETE SET NULL,
+            execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
+
+            -- Execution type determines which link is used
+            execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),
+
+            -- Status tracking
+            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+
+            -- Timing
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+
+            -- Notes/context
+            notes TEXT
+        )
+    """)
+
+    # Create indexes for efficient queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_workflow_run ON task_executions(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -471,6 +727,9 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (5, "Add execution heartbeat tracking", migration_005_add_execution_heartbeat),
     (6, "Convert to numeric execution IDs", migration_006_numeric_execution_ids),
     (7, "Add agent system tables", migration_007_add_agent_tables),
+    (8, "Add workflow orchestration tables", migration_008_add_workflow_tables),
+    (9, "Add tasks system", migration_009_add_tasks),
+    (10, "Add task executions join table", migration_010_add_task_executions),
 ]
 
 
