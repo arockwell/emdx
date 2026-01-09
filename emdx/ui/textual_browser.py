@@ -37,21 +37,21 @@ logger, key_logger = setup_tui_logging(__name__)
 
 class VimLineNumbers(Static):
     """Line numbers widget for vim editing mode."""
-    
+
     def __init__(self, edit_textarea, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.edit_textarea = edit_textarea
         self.add_class("vim-line-numbers")
-    
+
     def update_line_numbers(self):
         """Update the line numbers display based on cursor position."""
         try:
             if not hasattr(self.edit_textarea, 'cursor_location'):
                 return
-            
+
             current_line = self.edit_textarea.cursor_location[0]
             total_lines = len(self.edit_textarea.text.split('\n'))
-            
+
             # Build relative line numbers like vim
             lines = []
             for i in range(total_lines):
@@ -60,9 +60,9 @@ class VimLineNumbers(Static):
                 else:
                     relative = abs(i - current_line)
                     lines.append(f"{relative:3}")
-            
+
             self.update("\n".join(lines))
-            
+
             # Sync scroll position with the text area
             try:
                 # Try to match the scroll position of the text area
@@ -71,7 +71,7 @@ class VimLineNumbers(Static):
                     self.scroll_to(y=container.scroll_offset.y, animate=False)
             except Exception:
                 pass  # Scroll sync is nice-to-have
-                
+
         except Exception as e:
             logger.error(f"Error updating line numbers: {e}")
 
@@ -79,7 +79,7 @@ class VimLineNumbers(Static):
 # For backward compatibility, re-export everything
 __all__ = [
     'SelectionTextArea',
-    'TitleInput', 
+    'TitleInput',
     'VimEditTextArea',
     'EditTextArea',
     'VimLineNumbers',
