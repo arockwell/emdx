@@ -43,8 +43,6 @@ class TextAreaHost(Protocol):
         ...
 
 
-print("🔴🔴🔴 LOADING DOCUMENT BROWSER WITH BRIGHT COLORS 🔴🔴🔴")
-
 BUILD_ID = "BUILD-1752897674-DIRECT-STYLES"
 
 class DocumentBrowser(Widget):
