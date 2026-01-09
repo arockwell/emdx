@@ -213,7 +213,7 @@ class AgentSelectionStage(OverlayStage):
             logger.error(f"Failed to update agent list: {e}")
             try:
                 await self.show_error(f"UI Error: {e}")
-            except:
+            except Exception:
                 logger.error(f"Could not show error in UI: {e}")
 
     async def update_category_filter_display(self) -> None:

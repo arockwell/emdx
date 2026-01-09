@@ -5,9 +5,9 @@ Minimal textual browser that signals for external nvim handling.
 This file now serves as a compatibility layer that imports components from their new locations.
 """
 
-import logging
 import sys
-from pathlib import Path
+
+from textual.widgets import Static
 
 from .document_viewer import FullScreenView
 from .inputs import TitleInput
@@ -15,6 +15,7 @@ from .modals import DeleteConfirmScreen
 
 # Import extracted components
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
+from ..utils.logging import get_logger
 
 # DEPRECATED: These functions have been removed (main_browser.py was deleted)
 def MinimalDocumentBrowser(*args, **kwargs):
@@ -29,28 +30,9 @@ def run_minimal():
 # Import the VimLineNumbers class that was missed in the initial extraction
 from textual.widgets import Static
 
-# Set up logging - needed for VimLineNumbers
-log_dir = Path.home() / ".config" / "emdx"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / "tui_debug.log"
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        # logging.StreamHandler()  # Uncomment for console output
-    ],
-)
-
-# Also create a dedicated key events log
-key_log_file = log_dir / "key_events.log"
-key_logger = logging.getLogger("key_events")
-key_handler = logging.FileHandler(key_log_file)
-key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-key_logger.addHandler(key_handler)
-key_logger.setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
+# Set up logging using shared utility
+from ..utils.logging import setup_tui_logging
+logger, key_logger = setup_tui_logging(__name__)
 
 
 class VimLineNumbers(Static):
@@ -87,7 +69,7 @@ class VimLineNumbers(Static):
                 container = self.edit_textarea.parent
                 if container and hasattr(container, 'scroll_offset'):
                     self.scroll_to(y=container.scroll_offset.y, animate=False)
-            except:
+            except Exception:
                 pass  # Scroll sync is nice-to-have
                 
         except Exception as e:

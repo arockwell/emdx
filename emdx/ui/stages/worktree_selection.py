@@ -358,7 +358,7 @@ class WorktreeSelectionStage(OverlayStage):
             try:
                 info_widget = self.query_one("#worktree-info", Static)
                 info_widget.update(f"[yellow]Creating new worktree: {branch_name}...[/yellow]")
-            except:
+            except Exception:
                 pass
 
             # Create the worktree for the selected project
@@ -371,7 +371,7 @@ class WorktreeSelectionStage(OverlayStage):
                 try:
                     info_widget = self.query_one("#worktree-info", Static)
                     info_widget.update(f"[green]✓ Created new worktree: {branch_name}[/green]")
-                except:
+                except Exception:
                     pass
 
                 # Reload worktrees list for the selected project
@@ -400,7 +400,7 @@ class WorktreeSelectionStage(OverlayStage):
                 try:
                     info_widget = self.query_one("#worktree-info", Static)
                     info_widget.update(f"[red]Failed to create worktree: {error}[/red]\nPress C to use current worktree instead.")
-                except:
+                except Exception:
                     pass
 
                 # Fall back to current worktree

@@ -37,6 +37,7 @@ from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.utils.git import get_git_project
+from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -112,7 +113,7 @@ def generate_title(input_content: InputContent, provided_title: Optional[str]) -
         # Create title from first line or truncated content
         first_line = input_content.content.split("\n")[0].strip()
         if first_line:
-            return first_line[:50] + "..." if len(first_line) > 50 else first_line
+            return truncate_title(first_line)
         else:
             return f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 

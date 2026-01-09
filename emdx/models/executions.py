@@ -97,11 +97,28 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def save_execution(execution: Execution) -> None:
-    """Save execution to database (for backwards compatibility)."""
-    # This function is deprecated but kept for compatibility
-    # New code should use create_execution instead
-    pass
+def save_execution(execution: Execution) -> int:
+    """Save execution to database.
+
+    Creates a new execution record from an Execution object.
+    Returns the database ID of the created record.
+
+    .. deprecated:: 0.7.0
+        Use create_execution() instead. This function will be removed in v1.0.
+    """
+    import warnings
+    warnings.warn(
+        "save_execution() is deprecated. Use create_execution() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return create_execution(
+        doc_id=execution.doc_id,
+        doc_title=execution.doc_title,
+        log_file=execution.log_file,
+        working_dir=execution.working_dir,
+        pid=execution.pid,
+    )
 
 
 def get_execution(exec_id: str) -> Optional[Execution]:
@@ -282,12 +299,12 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
             FROM executions
             WHERE status = 'running'
             AND (
-                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, ?)
+                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, '+' || ? || ' seconds')
                 OR
-                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, ?)
+                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, '+' || ? || ' seconds')
             )
             ORDER BY started_at DESC
-        """, (timeout_modifier, timeout_modifier))
+        """, (timeout_seconds, timeout_seconds))
         
         executions = []
         for row in cursor.fetchall():
@@ -316,9 +333,9 @@ def cleanup_old_executions(days: int = 7) -> int:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            DELETE FROM executions 
-            WHERE started_at < datetime('now', '-{} days')
-        """.format(days))
+            DELETE FROM executions
+            WHERE started_at < datetime('now', '-' || ? || ' days')
+        """, (days,))
         conn.commit()
         return cursor.rowcount
 
