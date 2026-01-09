@@ -116,12 +116,12 @@ class WorkflowExecutor:
                     context['input'] = doc.get('content', '')
                     context['input_title'] = doc.get('title', '')
 
-            # Merge with provided variables
+            # Merge workflow default variables first
+            context.update(workflow.variables)
+
+            # Then merge user-provided variables (override defaults)
             if input_variables:
                 context.update(input_variables)
-
-            # Also merge workflow default variables
-            context.update(workflow.variables)
 
             # Execute stages sequentially
             for stage in workflow.stages:
