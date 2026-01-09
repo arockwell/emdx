@@ -3,42 +3,14 @@
 Text area widgets for EMDX TUI.
 """
 
-import logging
 import re
 
 from textual import events
 from textual.widgets import TextArea
 
-# Set up logging
-log_dir = None
-try:
-    from pathlib import Path
-    log_dir = Path.home() / ".config" / "emdx"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "tui_debug.log"
-    
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            # logging.StreamHandler()  # Uncomment for console output
-        ],
-    )
-    
-    # Also create a dedicated key events log
-    key_log_file = log_dir / "key_events.log"
-    key_logger = logging.getLogger("key_events")
-    key_handler = logging.FileHandler(key_log_file)
-    key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-    key_logger.addHandler(key_handler)
-    key_logger.setLevel(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-except Exception:
-    # Fallback if logging setup fails
-    import logging
-    key_logger = logging.getLogger("key_events")
-    logger = logging.getLogger(__name__)
+# Set up logging using shared utility
+from ..utils.logging import setup_tui_logging
+logger, key_logger = setup_tui_logging(__name__)
 
 
 class SelectionTextArea(TextArea):
@@ -102,16 +74,6 @@ class VimEditTextArea(TextArea):
     VIM_COMMAND = "COMMAND"
     
     def __init__(self, app_instance, *args, **kwargs):
-        # Debug logging for VimEditTextArea initialization
-        logger.debug(f"🔍 VimEditTextArea.__init__: args={args[:1] if args else 'NO ARGS'}")
-        logger.debug(f"🔍 VimEditTextArea.__init__: kwargs.keys()={list(kwargs.keys())}")
-        if 'text' in kwargs:
-            logger.debug(f"🔍 VimEditTextArea.__init__: text kwarg length={len(kwargs['text'])}")
-            logger.debug(f"🔍 VimEditTextArea.__init__: text kwarg first 50 chars={repr(kwargs['text'][:50])}")
-        elif args:
-            logger.debug(f"🔍 VimEditTextArea.__init__: args[0] length={len(args[0]) if args[0] else 0}")
-            logger.debug(f"🔍 VimEditTextArea.__init__: args[0] first 50 chars={repr(args[0][:50]) if args[0] else 'EMPTY'}")
-            
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
         self.vim_mode = self.VIM_NORMAL  # Start in normal mode like vim
@@ -125,10 +87,6 @@ class VimEditTextArea(TextArea):
         self.command_buffer = ""  # For vim commands like :w, :q, etc.
         # Store original content to detect changes
         self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
-        
-        # Debug: Check what text we actually have after init
-        logger.debug(f"🔍 VimEditTextArea.__init__: After super().__init__, self.text length={len(self.text)}")
-        logger.debug(f"🔍 VimEditTextArea.__init__: self.text first 50 chars={repr(self.text[:50])}")
         
         # Set initial cursor style for NORMAL mode (solid, non-blinking)
         self.show_cursor = True
@@ -161,9 +119,7 @@ class VimEditTextArea(TextArea):
                 else:
                     current_line = 0
                 
-                # Log the actual cursor position to debug
                 total_lines = len(self.text.split('\n'))
-                logger.debug(f"🔍 LINE NUMBERS: current_line={current_line}, total_lines={total_lines}")
                 
                 # Pass the raw cursor position - no adjustment
                 # The issue might be in the display, not the data
@@ -230,7 +186,7 @@ class VimEditTextArea(TextArea):
             # Try to continue without crashing the app
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except:
+            except Exception:
                 pass
     
     def _handle_normal_mode(self, event: events.Key) -> None:
@@ -440,7 +396,7 @@ class VimEditTextArea(TextArea):
                     self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
                 event.stop()
                 return
-            except:
+            except Exception:
                 pass  # Title input might not exist
         
         # Don't stop the event - let it bubble up naturally for TextArea to handle
@@ -547,11 +503,16 @@ class VimEditTextArea(TextArea):
             self.app_instance.action_save_and_exit_edit()
         elif cmd in ["wa", "wall"]:
             # Save all (just save current in our case)
-            # TODO: Implement save-only functionality
+            if hasattr(self.app_instance, 'action_save_document'):
+                self.app_instance.action_save_document()
+            elif hasattr(self.app_instance, 'action_save'):
+                self.app_instance.action_save()
+            else:
+                # Fallback: just update status to indicate save attempt
+                self.app_instance._update_vim_status("NORMAL | Save not available in this context")
             self.vim_mode = self.VIM_NORMAL
             self._update_cursor_style()
             self.command_buffer = ""
-            self.app_instance._update_vim_status("NORMAL | Saved")
         else:
             # Unknown command
             self.app_instance._update_vim_status(f"Not an editor command: {cmd}")
@@ -704,7 +665,7 @@ class VimEditTextArea(TextArea):
         """Delete character to the right, safely handling boundaries."""
         try:
             self.action_delete_right()
-        except:
+        except Exception:
             # Ignore if at end of document
             pass
     
@@ -715,7 +676,7 @@ class VimEditTextArea(TextArea):
             title_input.cursor_position = len(title_input.value)
             if hasattr(title_input, 'selection'):
                 title_input.selection = (title_input.cursor_position, title_input.cursor_position)
-        except:
+        except Exception:
             pass
 
 

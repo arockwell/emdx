@@ -213,7 +213,7 @@ class ControlCenterBrowser(Widget):
         try:
             ready_count = len(tasks.get_ready_tasks(gameplan_id=self.selected_gameplan))
             ready_text = f"{ready_count} ready" if ready_count else "0 ready"
-        except:
+        except Exception:
             ready_text = ""
 
         filter_text = "active" if self.active_only else "all"

@@ -2,6 +2,9 @@
 
 import asyncio
 import json
+import subprocess
+import time
+from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -14,9 +17,62 @@ from ..workflows import database as wf_db
 from ..workflows.base import ExecutionMode, WorkflowConfig, WorkflowRun
 from ..workflows.executor import workflow_executor
 from ..workflows.registry import workflow_registry
+from ..utils.text_formatting import truncate_title, truncate_description
 
 app = typer.Typer(help="Manage and run EMDX workflows")
 console = Console()
+
+
+def create_worktree_for_workflow(base_branch: str = "main") -> tuple[str, str]:
+    """Create a unique git worktree for a workflow run.
+
+    Args:
+        base_branch: Branch to base the worktree on
+
+    Returns:
+        Tuple of (worktree_path, branch_name)
+    """
+    import random
+    import os
+
+    # Get the repo root
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, check=True
+    )
+    repo_root = result.stdout.strip()
+
+    # Create unique branch and worktree names with timestamp + random + pid
+    timestamp = int(time.time())
+    random_suffix = random.randint(1000, 9999)
+    pid = os.getpid()
+    unique_id = f"{timestamp}-{pid}-{random_suffix}"
+    branch_name = f"workflow-{unique_id}"
+    worktree_dir = Path(repo_root).parent / f"emdx-workflow-{unique_id}"
+
+    # Create the worktree
+    subprocess.run(
+        ["git", "worktree", "add", "-b", branch_name, str(worktree_dir), base_branch],
+        capture_output=True, text=True, check=True
+    )
+
+    return str(worktree_dir), branch_name
+
+
+def cleanup_worktree(worktree_path: str):
+    """Clean up a workflow worktree after completion.
+
+    Args:
+        worktree_path: Path to the worktree to clean up
+    """
+    try:
+        # Remove the worktree
+        subprocess.run(
+            ["git", "worktree", "remove", worktree_path, "--force"],
+            capture_output=True, text=True
+        )
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not clean up worktree {worktree_path}: {e}[/yellow]")
 
 
 @app.command("list")
@@ -83,9 +139,7 @@ def list_workflows(
                 if wf.is_builtin:
                     status += " 🏛️"
 
-                description = wf.description or ""
-                if len(description) > 40:
-                    description = description[:40] + "..."
+                description = truncate_description(wf.description or "")
 
                 table.add_row(
                     str(wf.id),
@@ -184,8 +238,30 @@ def run_workflow(
         "-b",
         help="Run in background (default: foreground)",
     ),
+    worktree: bool = typer.Option(
+        False,
+        "--worktree/--no-worktree",
+        "-w",
+        help="Create isolated git worktree for this run (recommended for parallel runs)",
+    ),
+    base_branch: str = typer.Option(
+        "main",
+        "--base-branch",
+        help="Base branch for worktree (only used with --worktree)",
+    ),
+    keep_worktree: bool = typer.Option(
+        False,
+        "--keep-worktree",
+        help="Don't cleanup worktree after completion (for debugging)",
+    ),
 ):
-    """Run a workflow."""
+    """Run a workflow.
+
+    Use --worktree (-w) when running multiple workflows in parallel to avoid
+    git conflicts. Each workflow will get its own isolated worktree.
+    """
+    worktree_path = None
+
     try:
         # Try to parse as ID first
         try:
@@ -206,44 +282,71 @@ def run_workflow(
                     key, value = var.split("=", 1)
                     variables[key.strip()] = value.strip()
 
+        # Create worktree if requested
+        worktree_branch = None
+        working_dir = None
+
+        if worktree:
+            try:
+                worktree_path, worktree_branch = create_worktree_for_workflow(base_branch)
+                working_dir = worktree_path
+                console.print(f"[cyan]Created worktree:[/cyan] {worktree_path}")
+                console.print(f"  Branch: {worktree_branch}")
+            except subprocess.CalledProcessError as e:
+                console.print(f"[red]Failed to create worktree: {e.stderr}[/red]")
+                raise typer.Exit(1)
+
         console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name}")
         console.print(f"  Stages: {len(workflow.stages)}")
         if doc_id:
             console.print(f"  Input document: #{doc_id}")
         if variables:
             console.print(f"  Variables: {variables}")
+        if working_dir:
+            console.print(f"  Working dir: {working_dir}")
 
-        # Run workflow
-        result = asyncio.run(
-            workflow_executor.execute_workflow(
-                workflow_name_or_id=workflow.name,
-                input_doc_id=doc_id,
-                input_variables=variables if variables else None,
+        try:
+            # Run workflow
+            result = asyncio.run(
+                workflow_executor.execute_workflow(
+                    workflow_name_or_id=workflow.name,
+                    input_doc_id=doc_id,
+                    input_variables=variables if variables else None,
+                    working_dir=working_dir,
+                )
             )
-        )
 
-        # Display results
-        if result.status == "completed":
-            console.print(f"\n[green]✓ Workflow completed successfully[/green]")
-            console.print(f"  Run ID: #{result.id}")
-            console.print(f"  Tokens used: {result.total_tokens_used}")
-            console.print(
-                f"  Execution time: {result.total_execution_time_ms / 1000:.2f}s"
-            )
-            if result.output_doc_ids:
-                console.print(f"  Output documents: {result.output_doc_ids}")
-        else:
-            console.print(f"\n[red]✗ Workflow failed[/red]")
-            console.print(f"  Run ID: #{result.id}")
-            console.print(f"  Status: {result.status}")
-            if result.error_message:
-                console.print(f"  Error: {result.error_message}")
-            raise typer.Exit(1)
+            # Display results
+            if result.status == "completed":
+                console.print(f"\n[green]✓ Workflow completed successfully[/green]")
+                console.print(f"  Run ID: #{result.id}")
+                console.print(f"  Tokens used: {result.total_tokens_used}")
+                console.print(
+                    f"  Execution time: {result.total_execution_time_ms / 1000:.2f}s"
+                )
+                if result.output_doc_ids:
+                    console.print(f"  Output documents: {result.output_doc_ids}")
+            else:
+                console.print(f"\n[red]✗ Workflow failed[/red]")
+                console.print(f"  Run ID: #{result.id}")
+                console.print(f"  Status: {result.status}")
+                if result.error_message:
+                    console.print(f"  Error: {result.error_message}")
+                raise typer.Exit(1)
+
+        finally:
+            # Cleanup worktree unless told to keep it
+            if worktree_path and not keep_worktree:
+                console.print(f"[dim]Cleaning up worktree: {worktree_path}[/dim]")
+                cleanup_worktree(worktree_path)
 
     except typer.Exit:
         raise
     except Exception as e:
         console.print(f"[red]Error running workflow: {e}[/red]")
+        # Try to cleanup worktree on error
+        if worktree_path and not keep_worktree:
+            cleanup_worktree(worktree_path)
         raise typer.Exit(1)
 
 
@@ -451,9 +554,7 @@ def list_strategies(
 
         for strategy in strategies:
             builtin = "🏛️" if strategy.is_builtin else ""
-            description = strategy.description or ""
-            if len(description) > 50:
-                description = description[:50] + "..."
+            description = truncate_title(strategy.description or "")
 
             table.add_row(
                 strategy.display_name,
