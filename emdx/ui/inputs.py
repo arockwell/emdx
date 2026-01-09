@@ -3,8 +3,6 @@
 Input widgets for EMDX TUI.
 """
 
-import logging
-
 from textual import events
 from textual.widgets import Input
 

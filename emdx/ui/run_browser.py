@@ -3,9 +3,6 @@
 Run the new browser container.
 """
 
-import logging
-from pathlib import Path
-
 # Set up logging using shared utility
 from ..utils.logging import setup_tui_logging
 logger, key_logger = setup_tui_logging(__name__)
