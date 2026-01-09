@@ -125,7 +125,7 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # Note: Database connection is managed globally via emdx.database.db
+    # Note: Database connections are established per-command as needed
     # Note: Logging is configured per-module as needed
 
 

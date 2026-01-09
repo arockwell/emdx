@@ -93,18 +93,6 @@ class MdcatRenderer:
             # Clean up temp file
             os.unlink(temp_path)
 
-    @staticmethod
-    def render_to_html(content: str) -> str:
-        """
-        Render markdown to HTML using mdcat's HTML output.
-
-        Note: mdcat doesn't directly support HTML output,
-        so this would need a different tool like pandoc.
-        """
-        # This is a placeholder - mdcat focuses on terminal output
-        # For HTML, you'd want to use a different tool
-        raise NotImplementedError("mdcat does not support HTML output. Use pandoc or similar.")
-
 
 class MdcatWidget:
     """
