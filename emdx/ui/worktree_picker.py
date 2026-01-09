@@ -3,6 +3,7 @@
 Worktree picker modal for EMDX TUI.
 """
 
+from pathlib import Path
 from typing import Callable, List
 import os
 

@@ -14,6 +14,7 @@ from ..models.executions import create_execution, update_execution_status
 from ..models.documents import get_document, save_document
 from ..models.tags import search_by_tags
 from ..database.connection import db_connection
+from ..database.search import search_documents
 from ..utils.logging import get_logger
 from ..utils.text_formatting import truncate_title
 
@@ -232,24 +233,30 @@ class AgentExecutor:
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
                     except Exception as e:
-                        # Document lookup failed, continue without template replacement
-                        import logging
-                        logging.debug(f"Failed to get document {input_doc_id} for template: {e}")
+                        logger.warning(f"Failed to get document for context search: {e}")
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
                 
-                # Perform search (uses recent documents - full search not implemented)
-                with db_connection.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT id FROM documents
-                        WHERE is_deleted = FALSE
-                        ORDER BY accessed_at DESC
-                        LIMIT ?
-                    """, (config.max_context_docs,))
-                    
-                    context_docs = [row['id'] for row in cursor.fetchall()]
+                # Perform search using the proper search function
+                try:
+                    search_results = search_documents(
+                        query=search_query,
+                        limit=config.max_context_docs
+                    )
+                    context_docs = [doc['id'] for doc in search_results]
+                except Exception as e:
+                    logger.warning(f"Search failed, falling back to recent documents: {e}")
+                    # Fallback to recent documents if search fails
+                    with db_connection.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT id FROM documents
+                            WHERE is_deleted = FALSE
+                            ORDER BY accessed_at DESC
+                            LIMIT ?
+                        """, (config.max_context_docs,))
+                        context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:
                 # If no search query, try to find related documents
