@@ -126,7 +126,7 @@ def main(
         raise typer.Exit(1)
 
     # Note: Database connections are established per-command as needed
-    # Note: Logging is configured in individual commands based on context
+    # Note: Logging is configured per-module as needed
 
 
 def safe_register_commands(target_app, source_app, prefix=""):

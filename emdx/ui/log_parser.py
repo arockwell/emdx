@@ -144,7 +144,7 @@ class LogParser:
         timestamp_str = data.get("timestamp", "")
         try:
             timestamp = datetime.fromisoformat(timestamp_str)
-        except:
+        except Exception:
             timestamp = datetime.now(timezone.utc)
         
         # Extract process info

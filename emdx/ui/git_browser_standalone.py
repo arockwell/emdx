@@ -111,7 +111,7 @@ class GitBrowser(Widget):
                     status_text = f"Git: {current_branch} | {len(self.git_files)} changes"
                     status_text += " | a=stage | u=unstage | c=commit | q=back"
                     app.update_status(status_text)
-            except:
+            except Exception:
                 pass  # Status update failed, continue
                 
         except Exception as e:
@@ -140,7 +140,7 @@ class GitBrowser(Widget):
         try:
             table = self.query_one("#git-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except:
+        except Exception:
             pass
             
         return state
@@ -154,7 +154,7 @@ class GitBrowser(Widget):
             try:
                 table = self.query_one("#git-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except:
+            except Exception:
                 pass
                 
     async def on_key(self, event) -> None:

@@ -43,10 +43,6 @@ class TextAreaHost(Protocol):
         ...
 
 
-print("🔴🔴🔴 LOADING DOCUMENT BROWSER WITH BRIGHT COLORS 🔴🔴🔴")
-
-BUILD_ID = "BUILD-1752897674-DIRECT-STYLES"
-
 class DocumentBrowser(Widget):
     """Document browser widget that can host text areas."""
     
@@ -259,13 +255,7 @@ class DocumentBrowser(Widget):
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
-        logger.info(f"DocumentBrowser mounted - LHS split implementation - {BUILD_ID}")
-        logger.info("Details panel should be visible in bottom 1/3 of sidebar")
-        print(f"🔴 MOUNTED WITH {BUILD_ID} 🔴")
-
-        # Log CSS content to verify it's loaded
-        logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
-        logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
+        logger.info("DocumentBrowser mounted - LHS split implementation")
 
         # Initialize preview mode manager
         from .preview_mode_manager import PreviewModeManager
@@ -395,22 +385,22 @@ class DocumentBrowser(Widget):
         try:
             table = self.query_one("#doc-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except:
+        except Exception:
             pass
-            
+
         return state
-        
+
     def restore_state(self, state: Dict[str, Any]) -> None:
         """Restore saved state."""
         self.mode = state.get("mode", "NORMAL")
         self.current_search = state.get("current_search", "")
-        
+
         # Restore cursor position
         if "cursor_position" in state:
             try:
                 table = self.query_one("#doc-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except:
+            except Exception:
                 pass
                 
     async def on_key(self, event) -> None:
@@ -518,7 +508,7 @@ class DocumentBrowser(Widget):
             try:
                 import asyncio
                 asyncio.create_task(self.save_and_exit_edit_mode())
-            except:
+            except Exception:
                 pass
             
     def _async_exit_edit_mode(self) -> None:
@@ -671,7 +661,7 @@ class DocumentBrowser(Widget):
                     app.update_status(f"Edit Mode | {message}")
                 else:
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except:
+        except Exception:
             pass
             
     def action_toggle_selection_mode(self) -> None:
@@ -680,7 +670,7 @@ class DocumentBrowser(Widget):
             # Exit selection mode
             try:
                 self.call_after_refresh(self._async_exit_selection_mode)
-            except:
+            except Exception:
                 pass
         
     def _async_exit_selection_mode(self) -> None:
@@ -703,7 +693,7 @@ class DocumentBrowser(Widget):
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.update("")
             vim_indicator.remove_class("active")
-        except:
+        except Exception:
             pass
 
         # Get current document content for preview
@@ -911,7 +901,7 @@ class DocumentBrowser(Widget):
             app = self.app
             if hasattr(app, "update_status"):
                 app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
-        except:
+        except Exception:
             pass
             
     async def exit_selection_mode(self) -> None:
@@ -943,7 +933,7 @@ class DocumentBrowser(Widget):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
-        except:
+        except Exception:
             pass
     
     async def on_data_table_row_highlighted(self, event) -> None:
@@ -1054,7 +1044,7 @@ class DocumentBrowser(Widget):
                 details_panel = self.query_one("#details-panel", RichLog)
                 details_panel.clear()
                 details_panel.write(f"📄 Document {doc['id']}: {doc['title']}")
-            except:
+            except Exception:
                 pass
                 
     async def on_input_submitted(self, event) -> None:

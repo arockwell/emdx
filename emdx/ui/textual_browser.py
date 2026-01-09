@@ -19,7 +19,7 @@ from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 # DEPRECATED: These imports now generate warnings
 try:
     from .main_browser import MinimalDocumentBrowser, run_minimal
-except RuntimeError:
+except (ImportError, AttributeError):
     # Handle case where these have been fully removed
     def MinimalDocumentBrowser(*args, **kwargs):
         raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
@@ -30,28 +30,9 @@ except RuntimeError:
 # Import the VimLineNumbers class that was missed in the initial extraction
 from textual.widgets import Static
 
-# Set up logging - needed for VimLineNumbers
-log_dir = Path.home() / ".config" / "emdx"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / "tui_debug.log"
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        # logging.StreamHandler()  # Uncomment for console output
-    ],
-)
-
-# Also create a dedicated key events log
-key_log_file = log_dir / "key_events.log"
-key_logger = logging.getLogger("key_events")
-key_handler = logging.FileHandler(key_log_file)
-key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-key_logger.addHandler(key_handler)
-key_logger.setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
+# Set up logging using shared utility
+from ..utils.logging import setup_tui_logging
+logger, key_logger = setup_tui_logging(__name__)
 
 
 class VimLineNumbers(Static):
@@ -88,7 +69,7 @@ class VimLineNumbers(Static):
                 container = self.edit_textarea.parent
                 if container and hasattr(container, 'scroll_offset'):
                     self.scroll_to(y=container.scroll_offset.y, animate=False)
-            except:
+            except Exception:
                 pass  # Scroll sync is nice-to-have
                 
         except Exception as e:
