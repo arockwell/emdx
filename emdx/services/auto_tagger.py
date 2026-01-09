@@ -245,8 +245,8 @@ class AutoTagger:
                     
                     if cursor.rowcount > 0:
                         applied_tags.append(tag)
-                except Exception:
-                    # Skip if error (e.g., duplicate)
+                except sqlite3.IntegrityError:
+                    # Skip duplicate tag assignments
                     continue
         
         conn.commit()

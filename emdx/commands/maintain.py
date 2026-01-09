@@ -3,6 +3,8 @@ Unified maintain command for EMDX.
 Consolidates all modification and maintenance operations.
 """
 
+import logging
+import shutil
 import sqlite3
 import subprocess
 import time
@@ -29,6 +31,7 @@ from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -794,11 +797,11 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                 try:
                     mem_mb = proc.memory_info().rss / 1024 / 1024
                     mem_str = f", {mem_mb:.0f}MB"
-                except:
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
                     mem_str = ""
-                
+
                 console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
-            except:
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 console.print(f"    • PID {proc.pid}: [process info unavailable] ({reason})")
         
         if len(all_procs) > 10:
@@ -1051,8 +1054,8 @@ def cleanup_temp_dirs(
                 # Calculate size
                 size = sum(f.stat().st_size for f in dir_path.rglob('*') if f.is_file())
                 total_size += size
-        except:
-            pass
+        except (OSError, PermissionError) as e:
+            logger.warning(f"Could not scan directory {dir_path}: {e}")
     
     if not old_dirs:
         console.print(f"[green]✨ No directories older than {age_hours} hours![/green]")
@@ -1089,6 +1092,7 @@ def cleanup_temp_dirs(
     ) as progress:
         task = progress.add_task("Removing directories...", total=len(old_dirs))
         
+        failed = 0
         for dir_path, _ in old_dirs:
             try:
                 # Calculate size before removal
@@ -1096,12 +1100,15 @@ def cleanup_temp_dirs(
                 shutil.rmtree(dir_path)
                 removed += 1
                 freed_space += size
-            except:
-                pass
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Failed to remove directory {dir_path}: {e}")
+                failed += 1
             progress.update(task, advance=1)
     
     console.print(f"\n[green]✅ Removed {removed} directories[/green]")
     console.print(f"[green]💾 Freed {freed_space / 1024 / 1024:.1f} MB of disk space[/green]")
+    if failed > 0:
+        console.print(f"[yellow]⚠️ Failed to remove {failed} directories (check logs)[/yellow]")
 
 
 # Create typer app for this module
