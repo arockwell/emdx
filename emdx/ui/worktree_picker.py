@@ -5,6 +5,7 @@ Worktree picker modal for EMDX TUI.
 
 from pathlib import Path
 from typing import Callable, List
+import os
 
 from textual import events
 from textual.app import ComposeResult
@@ -117,14 +118,21 @@ class WorktreePickerScreen(ModalScreen):
             # Truncate long names for display
             name = worktree.name[:25]
             branch_name = worktree.branch.replace("refs/heads/", "")[:30]
-            # Create a more compact display path by showing relative to common parent or home
-            path = Path(worktree.path)
-            try:
-                # Try to get relative path from home directory
-                path_display = str(path.relative_to(Path.home()))[:40]
-            except ValueError:
-                # If not under home, just use the name or abbreviated absolute path
-                path_display = f".../{path.name}"[:40]
+            # Try to make path relative to common worktree directory or use basename
+            path_display = worktree.path
+            if len(self.filtered_worktrees) > 1:
+                try:
+                    common_parent = os.path.dirname(os.path.commonpath([w.path for w in self.filtered_worktrees]))
+                    if common_parent and len(common_parent) > 10:  # Only if common path is meaningful
+                        path_display = os.path.relpath(worktree.path, common_parent)
+                    else:
+                        path_display = os.path.basename(worktree.path)
+                except (ValueError, OSError):
+                    # Fall back to basename if path operations fail
+                    path_display = os.path.basename(worktree.path)
+            else:
+                path_display = os.path.basename(worktree.path)
+            path_display = path_display[:40]
             
             table.add_row(
                 str(i + 1),

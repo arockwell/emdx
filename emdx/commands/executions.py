@@ -19,6 +19,7 @@ from ..models.executions import (
     get_running_executions,
     update_execution_status,
 )
+from ..utils.text_formatting import truncate_description
 
 app = typer.Typer()
 console = Console()
@@ -189,7 +190,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         
         table.add_row(
             str(exec.id),  # Show numeric ID
-            exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
+            truncate_description(exec.doc_title),
             status_display,
             formatted_time,
             worktree
@@ -219,7 +220,7 @@ def running():
         
         table.add_row(
             exec.id[:8] + "...",
-            exec.doc_title[:40] + "..." if len(exec.doc_title) > 40 else exec.doc_title,
+            truncate_description(exec.doc_title),
             formatted_time
         )
     
@@ -446,7 +447,7 @@ def execution_health():
                 cpu = proc.cpu_percent(interval=0.1)
                 mem = proc.memory_info().rss / 1024 / 1024  # MB
                 proc_status = f"CPU: {cpu:.0f}% MEM: {mem:.0f}MB"
-            except:
+            except Exception:
                 proc_status = "N/A"
         else:
             proc_status = "No PID"

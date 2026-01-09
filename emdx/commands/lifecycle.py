@@ -15,6 +15,7 @@ from rich.tree import Tree
 
 from ..models.documents import get_document
 from ..services.lifecycle_tracker import LifecycleTracker
+from ..utils.text_formatting import truncate_description
 
 app = typer.Typer()
 console = Console()
@@ -105,7 +106,7 @@ def status(
             age = f"{doc['age_days']}d"
             table.add_row(
                 str(doc['id']),
-                doc['title'][:40] + "..." if len(doc['title']) > 40 else doc['title'],
+                truncate_description(doc['title']),
                 doc['project'] or '-',
                 age,
                 str(doc['access_count'])
@@ -184,7 +185,7 @@ def transition(
                     for tag in tags:
                         try:
                             remove_tags_from_document(doc_id, [tag])
-                        except:
+                        except Exception:
                             pass
             tracker.transition_document(doc_id, new_stage, notes)
         

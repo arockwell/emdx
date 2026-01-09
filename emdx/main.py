@@ -21,6 +21,8 @@ from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.agents import app as agents_app
 from emdx.commands.tags import app as tag_app
+from emdx.commands.tasks import app as tasks_app
+from emdx.commands.workflows import app as workflows_app
 from emdx.ui.gui import gui
 
 console = Console()
@@ -67,6 +69,12 @@ app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add agents as a subcommand group
 app.add_typer(agents_app, name="agent", help="Manage and run AI agents")
+
+# Add tasks as a subcommand group
+app.add_typer(tasks_app, name="task", help="Task management")
+
+# Add workflows as a subcommand group
+app.add_typer(workflows_app, name="workflow", help="Manage and run multi-stage workflows")
 
 # Add the gui command
 app.command()(gui)
@@ -119,34 +127,8 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # Set up logging based on verbose/quiet flags
-    if quiet:
-        logging_level = logging.ERROR
-    elif verbose:
-        logging_level = logging.DEBUG
-    else:
-        logging_level = logging.INFO
-
-    logging.basicConfig(
-        level=logging_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            # Add file handler if desired
-        ]
-    )
-
-    # Set up database connection using db_url
-    if db_url:
-        os.environ['EMDX_DATABASE_URL'] = db_url
-        logging.info(f"Database URL configured: {db_url}")
-    else:
-        # Use default database location if no custom URL provided
-        default_db_path = os.path.expanduser("~/.config/emdx/emdx.db")
-        if not os.path.exists(os.path.dirname(default_db_path)):
-            os.makedirs(os.path.dirname(default_db_path), exist_ok=True)
-        os.environ.setdefault('EMDX_DATABASE_URL', f"sqlite:///{default_db_path}")
-        logging.debug(f"Using default database: {default_db_path}")
+    # Note: Database connections are established per-command as needed
+    # Note: Logging is configured per-module as needed
 
 
 def safe_register_commands(target_app, source_app, prefix=""):

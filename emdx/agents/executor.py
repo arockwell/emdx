@@ -16,6 +16,7 @@ from ..models.tags import search_by_tags
 from ..database.connection import db_connection
 from ..database.search import search_documents
 from ..utils.logging import get_logger
+from ..utils.text_formatting import truncate_title
 
 logger = get_logger(__name__)
 
@@ -53,10 +54,10 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except:
+            except Exception:
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
-            query_preview = input_query[:50] + "..." if len(input_query) > 50 else input_query
+            query_preview = truncate_title(input_query)
             doc_title += f" - {query_preview}"
             
         # Create working directory
@@ -233,7 +234,6 @@ class AgentExecutor:
                         search_query = search_query.replace("{{project}}", doc.project or "")
                     except Exception as e:
                         logger.warning(f"Failed to get document for context search: {e}")
-                        pass
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)
@@ -256,7 +256,6 @@ class AgentExecutor:
                             ORDER BY accessed_at DESC
                             LIMIT ?
                         """, (config.max_context_docs,))
-
                         context_docs = [row['id'] for row in cursor.fetchall()]
             
             elif input_doc_id:

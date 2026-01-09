@@ -66,8 +66,8 @@ class VimEditor(Vertical):
     
     def on_mount(self):
         """Set up the vim editor after mounting."""
-        # TEMPORARILY DISABLED: Line numbers causing layout issues
-        # Just mount the text area directly without line numbers
+        # Note: Line numbers are disabled due to Textual TextArea layout conflicts
+        # Just mount the text area directly
         
         # Configure text area to take full space
         self.text_area.styles.width = "100%"
@@ -80,9 +80,7 @@ class VimEditor(Vertical):
         logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
         logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
         
-        # Ensure the entire vim editor container starts at top
-        # TEMPORARILY DISABLED: This might be causing first line visibility issues
-        # self.scroll_to(0, 0, animate=False)
+        # Note: Explicit scroll_to(0, 0) disabled - causes first line visibility issues
         
         # Focus the text area and initialize line numbers
         self.text_area.can_focus = True
@@ -152,53 +150,29 @@ class VimEditor(Vertical):
                 try:
                     self.text_area.selection = None
                     logger.debug(f"🔢   Cleared selection")
-                except:
+                except Exception:
                     pass
                     
-            # Method 3: Force scroll to top using multiple methods
-            # TEMPORARILY DISABLED: This might be hiding the first line
-            # if hasattr(self.text_area, 'scroll_to'):
-            #     self.text_area.scroll_to(0, 0, animate=False)
-            #     logger.debug(f"🔢   Called scroll_to(0, 0)")
-            
-            # Method 4: Try to access internal scroll attributes if they exist
-            # TEMPORARILY DISABLED: This might be hiding the first line
-            # if hasattr(self.text_area, 'scroll_offset'):
-            #     try:
-            #         self.text_area.scroll_offset = (0, 0)
-            #         logger.debug(f"🔢   Set scroll_offset to (0, 0)")
-            #     except:
-            #         pass
-                    
-            # TEMPORARILY DISABLED: This might be hiding the first line
-            # if hasattr(self.text_area, 'scroll_x'):
-            #     try:
-            #         self.text_area.scroll_x = 0
-            #         self.text_area.scroll_y = 0
-            #         logger.debug(f"🔢   Set scroll_x/y to 0")
-            #     except:
-            #         pass
-            
-            # Method 5: For markdown files, be extra aggressive
+            # Note: scroll_to, scroll_offset, scroll_x/y methods disabled due to
+            # first-line visibility issues in Textual TextArea
+
+            # Method 3: For markdown files, be extra aggressive
             is_markdown = False
             if hasattr(self.text_area, 'file_path') and self.text_area.file_path:
                 file_path_str = str(self.text_area.file_path).lower()
                 is_markdown = file_path_str.endswith(('.md', '.markdown'))
                 if is_markdown:
                     logger.debug(f"🔢   MARKDOWN FILE detected: {self.text_area.file_path}")
-                    # Triple-force for markdown files
+                    # Force cursor to top for markdown files
                     self.text_area.cursor_location = (0, 0)
-                    # TEMPORARILY DISABLED: scroll_to might be hiding first line
-                    # if hasattr(self.text_area, 'scroll_to'):
-                    #     self.text_area.scroll_to(0, 0, animate=False)
-                    logger.debug(f"🔢   Applied markdown-specific positioning (scroll disabled)")
+                    logger.debug(f"🔢   Applied markdown-specific positioning")
             
             # Method 6: Force cursor position using TextArea internal methods if available
             if hasattr(self.text_area, 'move_cursor'):
                 try:
                     self.text_area.move_cursor((0, 0))
                     logger.debug(f"🔢   Called move_cursor((0, 0))")
-                except:
+                except Exception:
                     pass
                     
             # Focus the text area AFTER positioning
@@ -233,13 +207,8 @@ class VimEditor(Vertical):
                 current_line = 0
                 logger.debug(f"🔢   Fallback to 0 for line numbers")
             
-            # TEMPORARILY DISABLED: Line numbers
-            # self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
-            # self._update_line_number_width()
-            # if hasattr(self.text_area, '_update_line_numbers'):
-            #     logger.debug(f"🔢 Calling text area's _update_line_numbers()")
-            #     self.text_area._update_line_numbers()
-                
+            # Note: Line number widget disabled due to Textual layout conflicts
+
             logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
         except Exception as e:
@@ -269,14 +238,8 @@ class VimEditor(Vertical):
                 self.text_area.cursor_location = (0, 0)
                 if hasattr(self.text_area, 'selection'):
                     self.text_area.selection = None
-                # TEMPORARILY DISABLED: scroll_to might be hiding first line
-                # if hasattr(self.text_area, 'scroll_to'):
-                #     self.text_area.scroll_to(0, 0, animate=False)
-                    
-                # TEMPORARILY DISABLED: Line numbers
-                # total_lines = len(self.text_area.text.split('\n'))
-                # self.line_numbers.set_line_numbers(0, total_lines, self.text_area)
-                
+                # Note: scroll_to and line numbers disabled due to layout issues
+
                 logger.debug(f"🔢   Forced positioning completed")
             else:
                 logger.debug(f"🔢   Position is correct, no adjustment needed")
