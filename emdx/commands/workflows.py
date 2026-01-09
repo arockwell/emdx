@@ -31,6 +31,9 @@ def create_worktree_for_workflow(base_branch: str = "main") -> tuple[str, str]:
     Returns:
         Tuple of (worktree_path, branch_name)
     """
+    import random
+    import os
+
     # Get the repo root
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -38,10 +41,13 @@ def create_worktree_for_workflow(base_branch: str = "main") -> tuple[str, str]:
     )
     repo_root = result.stdout.strip()
 
-    # Create unique branch and worktree names
+    # Create unique branch and worktree names with timestamp + random + pid
     timestamp = int(time.time())
-    branch_name = f"workflow-{timestamp}"
-    worktree_dir = Path(repo_root).parent / f"emdx-workflow-{timestamp}"
+    random_suffix = random.randint(1000, 9999)
+    pid = os.getpid()
+    unique_id = f"{timestamp}-{pid}-{random_suffix}"
+    branch_name = f"workflow-{unique_id}"
+    worktree_dir = Path(repo_root).parent / f"emdx-workflow-{unique_id}"
 
     # Create the worktree
     subprocess.run(
