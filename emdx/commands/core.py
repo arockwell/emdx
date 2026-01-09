@@ -27,7 +27,12 @@ from emdx.models.documents import (
     search_documents,
     update_document,
 )
-from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
+from emdx.models.tags import (
+    add_tags_to_document,
+    get_document_tags,
+    get_tags_for_documents,
+    search_by_tags,
+)
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string

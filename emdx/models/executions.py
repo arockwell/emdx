@@ -277,13 +277,20 @@ def update_execution_heartbeat(exec_id: int) -> None:
 
 def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
     """Get executions that haven't sent a heartbeat recently.
-    
+
     Args:
         timeout_seconds: Seconds after which an execution is considered stale (default 30 min)
-        
+
     Returns:
         List of stale executions
     """
+    # Validate timeout_seconds is a positive integer to prevent SQL injection
+    if not isinstance(timeout_seconds, int) or timeout_seconds < 0:
+        raise ValueError("timeout_seconds must be a non-negative integer")
+
+    # Build the datetime modifier string in Python (safe from SQL injection)
+    timeout_modifier = f"+{timeout_seconds} seconds"
+
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""

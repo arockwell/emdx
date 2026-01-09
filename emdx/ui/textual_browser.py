@@ -17,16 +17,15 @@ from .modals import DeleteConfirmScreen
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
 from ..utils.logging import get_logger
 
-# DEPRECATED: These imports now generate warnings
-try:
-    from .main_browser import MinimalDocumentBrowser, run_minimal
-except (ImportError, AttributeError):
-    # Handle case where these have been fully removed
-    def MinimalDocumentBrowser(*args, **kwargs):
-        raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
+# DEPRECATED: These functions have been removed (main_browser.py was deleted)
+def MinimalDocumentBrowser(*args, **kwargs):
+    """Deprecated stub - raises RuntimeError."""
+    raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
 
-    def run_minimal():
-        raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
+
+def run_minimal():
+    """Deprecated stub - raises RuntimeError."""
+    raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
 
 # Import the VimLineNumbers class that was missed in the initial extraction
 from textual.widgets import Static
