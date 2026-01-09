@@ -269,18 +269,20 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
     """
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
+        # Build interval string safely - timeout_seconds is validated as int by function signature
+        interval = f'+{int(timeout_seconds)} seconds'
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, 
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
                    log_file, exit_code, working_dir, pid
-            FROM executions 
+            FROM executions
             WHERE status = 'running'
             AND (
-                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, '+{} seconds')
-                OR 
-                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, '+{} seconds')
+                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, ?)
+                OR
+                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, ?)
             )
             ORDER BY started_at DESC
-        """.format(timeout_seconds, timeout_seconds))
+        """, (interval, interval))
         
         executions = []
         for row in cursor.fetchall():
@@ -308,10 +310,12 @@ def cleanup_old_executions(days: int = 7) -> int:
     """Clean up executions older than specified days."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
+        # Build interval string safely - days is validated as int by function signature
+        interval = f'-{int(days)} days'
         cursor.execute("""
-            DELETE FROM executions 
-            WHERE started_at < datetime('now', '-{} days')
-        """.format(days))
+            DELETE FROM executions
+            WHERE started_at < datetime('now', ?)
+        """, (interval,))
         conn.commit()
         return cursor.rowcount
 
