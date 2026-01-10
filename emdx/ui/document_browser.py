@@ -208,6 +208,9 @@ class DocumentBrowser(Widget):
         # LRU cache for full document content (preview)
         self._doc_cache: Dict[int, Dict[str, Any]] = {}
         self._doc_cache_max = 50  # Keep last 50 documents in memory
+        # Debounce preview updates
+        self._pending_preview_doc_id: Optional[int] = None
+        self._preview_timer = None
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
@@ -1002,30 +1005,48 @@ class DocumentBrowser(Widget):
                 self._doc_cache[doc_id] = full_doc
             
         if full_doc and not self.edit_mode:
-            # Update main preview
+            # Schedule preview update with debouncing (50ms delay)
+            self._pending_preview_doc_id = doc_id
+            if self._preview_timer:
+                self._preview_timer.stop()
+            self._preview_timer = self.set_timer(0.05, lambda: self._do_preview_update(full_doc))
+
+    def _do_preview_update(self, full_doc: Dict[str, Any]) -> None:
+        """Actually update the preview (called after debounce delay)."""
+        if self.edit_mode:
+            return
+
+        try:
+            preview_container = self.query_one("#preview", ScrollableContainer)
+            preview = preview_container.query_one("#preview-content", RichLog)
+            preview.clear()
+
+            # Render content as markdown (limit size for performance)
+            from rich.markdown import Markdown
             try:
-                preview_container = self.query_one("#preview", ScrollableContainer)
-                preview = preview_container.query_one("#preview-content", RichLog)
-                preview.clear()
-                
-                # Render content as markdown
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview.write(markdown)
-                    else:
-                        preview.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    # Fallback to plain text if markdown fails
-                    preview.write(full_doc["content"])
-            except Exception as e:
-                # Preview widget not found or not ready - ignore
-                pass
-            
-            # Update details panel
-            await self.update_details_panel(full_doc)
+                content = full_doc["content"]
+                # Limit preview to first 5000 chars for performance
+                if len(content) > 5000:
+                    content = content[:5000] + "\n\n[dim]... (truncated for preview)[/dim]"
+                if content.strip():
+                    markdown = Markdown(content)
+                    preview.write(markdown)
+                else:
+                    preview.write("[dim]Empty document[/dim]")
+            except Exception:
+                # Fallback to plain text if markdown fails
+                preview.write(full_doc["content"][:5000])
+        except Exception:
+            # Preview widget not found or not ready - ignore
+            pass
+
+        # Update details panel (sync, it's fast now with caching)
+        self.call_later(lambda: self._update_details_sync(full_doc))
+
+    def _update_details_sync(self, full_doc: Dict[str, Any]) -> None:
+        """Update details panel synchronously."""
+        import asyncio
+        asyncio.create_task(self.update_details_panel(full_doc))
     
     async def update_details_panel(self, doc: dict) -> None:
         """Update the details panel with rich document information."""
