@@ -17,7 +17,6 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
-from ..utils.constants import DEFAULT_CLAUDE_MODEL
 from ..models.executions import (
     Execution,
     create_execution,

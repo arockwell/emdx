@@ -37,8 +37,6 @@ class GenericAgent(Agent):
                 f.write(full_prompt)
             
             # Prepare Claude command using same format as claude_execute.py
-            from emdx.utils.constants import DEFAULT_CLAUDE_MODEL
-
             cmd = [
                 "claude",
                 "--print", full_prompt,
