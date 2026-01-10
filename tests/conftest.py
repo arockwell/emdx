@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from test_fixtures import TestDatabase
+from test_fixtures import DatabaseForTesting
 
 from emdx.models.tags import add_tags_to_document
 
@@ -12,7 +12,7 @@ from emdx.models.tags import add_tags_to_document
 @pytest.fixture
 def temp_db():
     """Create a temporary in-memory SQLite database for testing."""
-    db = TestDatabase(":memory:")
+    db = DatabaseForTesting(":memory:")
     yield db
     db.close()
 
@@ -23,7 +23,7 @@ def temp_db_file():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
 
-    db = TestDatabase(str(db_path))
+    db = DatabaseForTesting(str(db_path))
     yield db
 
     # Cleanup

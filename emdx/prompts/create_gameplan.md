@@ -5,7 +5,7 @@ Write a clear implementation plan in markdown with:
 - Step-by-step implementation plan
 - Testing approach
 
-When done, write to /tmp/gameplan.md then: cat /tmp/gameplan.md | emdx save --title "Gameplan: [topic]" --tags "gameplan,active"
+When done, write to a temporary file gameplan.md then: cat gameplan.md | emdx save --title "Gameplan: [topic]" --tags "gameplan,active"
 
 Analysis:
 ---

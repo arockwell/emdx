@@ -1,6 +1,5 @@
 """Tests for file size formatting utilities."""
 
-import pytest
 from emdx.utils.file_size import format_file_size
 
 

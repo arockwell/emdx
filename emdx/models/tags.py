@@ -130,6 +130,47 @@ def get_document_tags(doc_id: int) -> list[str]:
         return unique_tags
 
 
+def get_tags_for_documents(doc_ids: list[int]) -> dict[int, list[str]]:
+    """Get tags for multiple documents in a single query.
+
+    This batch function eliminates N+1 query patterns by fetching all tags
+    for multiple documents in one database call.
+
+    Args:
+        doc_ids: List of document IDs
+
+    Returns:
+        Dict mapping doc_id to list of tag names (normalized to emojis)
+    """
+    if not doc_ids:
+        return {}
+
+    with db.get_connection() as conn:
+        placeholders = ",".join("?" * len(doc_ids))
+        cursor = conn.execute(
+            f"""
+            SELECT dt.document_id, t.name
+            FROM tags t
+            JOIN document_tags dt ON t.id = dt.tag_id
+            WHERE dt.document_id IN ({placeholders})
+            ORDER BY dt.document_id, t.name
+        """,
+            doc_ids,
+        )
+
+        # Initialize result dict with empty lists for all requested doc_ids
+        result: dict[int, list[str]] = {doc_id: [] for doc_id in doc_ids}
+
+        for row in cursor.fetchall():
+            doc_id, tag_name = row
+            normalized = normalize_tag_to_emoji(tag_name)
+            # Dedupe (in case both text alias and emoji exist)
+            if normalized not in result[doc_id]:
+                result[doc_id].append(normalized)
+
+        return result
+
+
 def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
     """List all tags with statistics.
 

@@ -24,7 +24,6 @@ class TestModuleImports:
         assert hasattr(tags, "tag")
         assert hasattr(tags, "untag")
 
-
     def test_nvim_wrapper_import(self):
         """Test that nvim_wrapper module can be imported."""
         from emdx.ui import nvim_wrapper

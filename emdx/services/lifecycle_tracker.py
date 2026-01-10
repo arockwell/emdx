@@ -4,14 +4,14 @@ Tracks document lifecycle, especially for gameplans and projects.
 """
 
 import sqlite3
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
+import sys
 from collections import defaultdict
-import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
-from ..models.tags import get_document_tags, add_tags_to_document, remove_tags_from_document
 from ..models.documents import get_document, update_document
+from ..models.tags import add_tags_to_document, get_document_tags, remove_tags_from_document
 
 
 class LifecycleTracker:
@@ -228,8 +228,10 @@ class LifecycleTracker:
             for tag in self.STAGES[current_stage]:
                 try:
                     remove_tags_from_document(doc_id, [tag])
-                except:
-                    pass
+                except Exception as e:
+                    # Tag removal might fail if tag doesn't exist or DB is locked
+                    # This is non-critical for stage transitions
+                    print(f"Warning: Could not remove tag '{tag}': {e}", file=sys.stderr)
         
         # Add new stage tags
         if new_stage in self.STAGES:
