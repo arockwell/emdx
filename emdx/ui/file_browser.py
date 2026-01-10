@@ -1,6 +1,7 @@
 """File browser widget for EMDX TUI."""
 
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -69,7 +70,7 @@ class FileBrowserVimApp:
                 else:
                     status = f"📝 VIM {mode} - ESC to save and exit"
                 self.file_browser.query_one("#file-status-bar", Static).update(status)
-        except Exception as e:
+        except (LookupError, AttributeError) as e:
             logger.debug(f"Error updating vim status: {e}")
 
 
@@ -284,7 +285,7 @@ class FileBrowser(Container):
         try:
             file_list = self.query_one("#file-list", FileList)
             file_list.focus()
-        except Exception:
+        except (LookupError, AttributeError):
             # If that fails, focus the container itself
             self.focus()
     
@@ -295,7 +296,7 @@ class FileBrowser(Container):
             self.refresh_files()
             try:
                 self.query_one("#path-breadcrumb", Static).update(str(new_path))
-            except Exception:
+            except (LookupError, AttributeError):
                 pass  # Widget not ready yet
             self.selected_index = 0
     
@@ -306,7 +307,7 @@ class FileBrowser(Container):
                 file_list = self.query_one("#file-list", FileList)
                 file_list.selected_index = new
                 self.update_preview()
-            except Exception as e:
+            except (LookupError, AttributeError):
                 pass  # Widget not ready yet
     
     def watch_show_hidden(self, old: bool, new: bool) -> None:
@@ -334,7 +335,7 @@ class FileBrowser(Container):
                 status += " (hidden files excluded)"
             logger.info(f"🗂️ Updating status bar with: {status}")
             self.query_one("#file-status-bar", Static).update(status)
-        except Exception as e:
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error in refresh_files: {e}")
             pass  # Widgets not ready yet
     
@@ -356,7 +357,7 @@ class FileBrowser(Container):
                 preview.scroll_to(0, 0, animate=False)
             else:
                 logger.info("🗂️ No file selected for preview")
-        except Exception as e:
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error in update_preview: {e}")
             pass  # Widgets not ready yet
     
@@ -367,17 +368,14 @@ class FileBrowser(Container):
             old_index = self.selected_index
             if self.selected_index < len(file_list.files) - 1:
                 self.selected_index += 1
-            else:
-        except Exception as e:
-            pass
+        except (LookupError, AttributeError):
+            pass  # Widgets not ready yet
     
     def action_move_up(self) -> None:
         """Move selection up."""
-        old_index = self.selected_index
         if self.selected_index > 0:
             self.selected_index -= 1
-        else:
-    
+
     def action_go_top(self) -> None:
         """Go to first item."""
         self.selected_index = 0
@@ -408,8 +406,8 @@ class FileBrowser(Container):
                 else:
                     # For files, default action is save
                     self.action_save_file()
-        except Exception:
-            pass
+        except (LookupError, AttributeError):
+            pass  # Widgets not ready yet
     
     def action_parent_dir(self) -> None:
         """Go to parent directory."""
@@ -441,19 +439,19 @@ class FileBrowser(Container):
                 )
             else:
                 self.app.bell()
-        except Exception:
-            pass
-    
+        except (LookupError, AttributeError):
+            pass  # Widgets not ready yet
+
     def action_execute_file(self) -> None:
         """Execute selected file with Claude."""
         try:
             file_list = self.query_one("#file-list", FileList)
             selected = file_list.get_selected_file()
-            
+
             if selected and selected.is_file():
                 # Check if file is in EMDX first
                 doc_id = self._get_file_doc_id(selected)
-                
+
                 from .file_modals import ExecuteFileModal
                 self.app.push_screen(
                     ExecuteFileModal(selected, doc_id),
@@ -461,8 +459,8 @@ class FileBrowser(Container):
                 )
             else:
                 self.app.bell()
-        except Exception:
-            pass
+        except (LookupError, AttributeError):
+            pass  # Widgets not ready yet
     
     def action_edit_file(self) -> None:
         """Edit selected file in integrated editor."""
@@ -484,8 +482,8 @@ class FileBrowser(Container):
             logger.info(f"🗂️ Entering edit mode for {selected_file}")
             self.edit_mode = True
             self._switch_to_edit_mode(selected_file)
-                
-        except Exception as e:
+
+        except (LookupError, AttributeError, OSError) as e:
             logger.error(f"🗂️ Error entering edit mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Edit mode error: {e}"
@@ -497,7 +495,7 @@ class FileBrowser(Container):
             # Read file content
             try:
                 content = selected_file.read_text(encoding='utf-8', errors='ignore')
-            except Exception as e:
+            except (OSError, IOError, UnicodeDecodeError) as e:
                 self.query_one("#file-status-bar", Static).update(
                     f"❌ Cannot read file: {e}"
                 )
@@ -510,7 +508,7 @@ class FileBrowser(Container):
             try:
                 old_preview = self.query_one("#file-preview", FilePreview)
                 old_preview.remove()
-            except Exception as e:
+            except (LookupError, AttributeError) as e:
                 logger.warning(f"🗂️ Could not remove old preview: {e}")
             
             # Use unified vim editor with line numbers
@@ -541,8 +539,8 @@ class FileBrowser(Container):
             self.query_one("#file-status-bar", Static).update(
                 f"📝 VIM {mode}: {selected_file.name} - ESC to save and exit"
             )
-            
-        except Exception as e:
+
+        except (LookupError, AttributeError, TypeError) as e:
             logger.error(f"🗂️ Error switching to edit mode: {e}")
             raise
     
@@ -587,7 +585,7 @@ class FileBrowser(Container):
                 self.save_and_exit_edit_mode(self.vim_editor.text_area)
             self.edit_mode = False
 
-        except Exception as e:
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error exiting edit mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Exit edit mode error: {e}"
@@ -603,8 +601,8 @@ class FileBrowser(Container):
                 # Use the existing toggle method to exit selection mode
                 self.selection_mode = False
                 self._switch_to_formatted_mode(None, selected_file)
-            
-        except Exception as e:
+
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error exiting selection mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Exit selection mode error: {e}"
@@ -624,7 +622,7 @@ class FileBrowser(Container):
             try:
                 file_path.write_text(new_content, encoding='utf-8')
                 logger.info(f"🗂️ Saved file: {file_path}")
-            except Exception as e:
+            except (OSError, IOError, PermissionError) as e:
                 self.query_one("#file-status-bar", Static).update(
                     f"❌ Save failed: {e}"
                 )
@@ -648,8 +646,8 @@ class FileBrowser(Container):
                     try:
                         vim_editor = self.query_one("#edit-preview-container")
                         vim_editor.remove()
-                    except Exception:
-                        pass
+                    except (LookupError, AttributeError):
+                        pass  # Vim editor not found
                     
                     # Just recreate the FilePreview widget to replace the vim editor
                     from .file_preview import FilePreview
@@ -669,21 +667,21 @@ class FileBrowser(Container):
                             def _restore_cursor():
                                 try:
                                     self.selected_index = current_cursor_row
-                                except Exception as e:
+                                except (IndexError, ValueError) as e:
                                     logger.error(f"🗂️ Error restoring cursor: {e}")
                             self.call_after_refresh(_restore_cursor)
-                    except Exception as e:
+                    except (LookupError, AttributeError) as e:
                         logger.error(f"🗂️ Error refreshing file list: {e}")
-                    
+
                     # Preview the file after everything is mounted
                     self.call_after_refresh(lambda: self._preview_after_save(new_preview, file_path))
-                    
-                except Exception as e:
+
+                except (LookupError, AttributeError) as e:
                     logger.error(f"🗂️ Error recreating widgets: {e}")
-                    
+
             self.call_after_refresh(_recreate_widgets)
-            
-        except Exception as e:
+
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error saving and exiting edit mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Save error: {e}"
@@ -703,10 +701,10 @@ class FileBrowser(Container):
                 if not self.show_hidden:
                     status += " (hidden files excluded)"
                 self.query_one("#file-status-bar", Static).update(status)
-            except Exception as e:
+            except (LookupError, AttributeError) as e:
                 logger.error(f"🗂️ Error updating status after save: {e}")
-                
-        except Exception as e:
+
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error in delayed preview after save: {e}")
     
     def action_search(self) -> None:
@@ -737,8 +735,8 @@ class FileBrowser(Container):
                 logger.info("🗂️ Exiting selection mode")
                 self.selection_mode = False
                 self._switch_to_formatted_mode(preview_container, selected_file)
-                
-        except Exception as e:
+
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error toggling selection mode: {e}")
             self.query_one("#file-status-bar", Static).update(
                 f"❌ Selection mode error: {e}"
@@ -760,7 +758,7 @@ class FileBrowser(Container):
             try:
                 old_preview = self.query_one("#file-preview", FilePreview)
                 old_preview.remove()
-            except Exception as e:
+            except (LookupError, AttributeError) as e:
                 logger.warning(f"🗂️ Could not remove old preview: {e}")
             
             # Create a simple container for selection with unique ID
@@ -782,8 +780,8 @@ class FileBrowser(Container):
             self.query_one("#file-status-bar", Static).update(
                 "📝 SELECTION MODE: Select text with mouse, 's' to exit"
             )
-            
-        except Exception as e:
+
+        except (LookupError, AttributeError, OSError) as e:
             logger.error(f"🗂️ Error switching to selection mode: {e}")
             raise
     
@@ -808,7 +806,7 @@ class FileBrowser(Container):
                     new_preview.preview_file(selected_file)
                     # Ensure preview starts at the top
                     new_preview.scroll_to(0, 0, animate=False)
-                except Exception as e:
+                except (LookupError, AttributeError, OSError) as e:
                     logger.error(f"🗂️ Error in delayed preview: {e}")
             
             self.call_after_refresh(_preview_after_mount)
@@ -820,7 +818,7 @@ class FileBrowser(Container):
                 status += " (hidden files excluded)"
             self.query_one("#file-status-bar", Static).update(status)
             
-        except Exception as e:
+        except (LookupError, AttributeError) as e:
             logger.error(f"🗂️ Error switching to formatted mode: {e}")
             # Fallback: just clear and show basic info
             try:
@@ -829,8 +827,8 @@ class FileBrowser(Container):
                 from textual.widgets import Static
                 fallback_container.mount(Static(f"Preview of {selected_file.name}"))
                 horizontal_container.mount(fallback_container)
-            except Exception:
-                pass
+            except (LookupError, AttributeError):
+                pass  # Widgets not available
     
     def handle_save_result(self, result: Optional[dict]) -> None:
         """Handle result from save modal."""
@@ -846,9 +844,9 @@ class FileBrowser(Container):
                     self.query_one("#file-status-bar", Static).update(
                         f"❌ Save failed: {result.get('error', 'Unknown error')}"
                     )
-            except Exception:
-                pass
-    
+            except (LookupError, AttributeError):
+                pass  # Status bar not available
+
     def handle_execute_result(self, result: Optional[dict]) -> None:
         """Handle result from execute modal."""
         if result:
@@ -861,8 +859,8 @@ class FileBrowser(Container):
                     self.query_one("#file-status-bar", Static).update(
                         f"❌ Execute failed: {result.get('error', 'Unknown error')}"
                     )
-            except Exception:
-                pass
+            except (LookupError, AttributeError):
+                pass  # Status bar not available
     
     def _get_file_doc_id(self, file_path: Path) -> Optional[int]:
         """Get EMDX document ID if file is already saved."""
@@ -879,8 +877,8 @@ class FileBrowser(Container):
                 if result:
                     return result['id']
 
-        except Exception:
-            pass
+        except (sqlite3.Error, LookupError):
+            pass  # Database error or file not found
 
         return None
 
@@ -899,7 +897,7 @@ class FileBrowser(Container):
             if self.edit_mode or self.selection_mode:
                 event.stop()
 
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
             logger.error(f"🗂️ Error in FileBrowser key handling: {e}")
 
     class QuitFileBrowser(events.Event):

@@ -271,11 +271,12 @@ def discover_projects_from_worktrees(worktree_dirs: Optional[List[str]] = None) 
                         projects_map[project_name] = (main_path, [])
                     projects_map[project_name][1].append(worktree)
 
-                except Exception:
-                    # Skip worktrees we can't read
+                except subprocess.CalledProcessError:
+                    # Skip worktrees we can't read (git command failed)
                     continue
 
-        except Exception:
+        except (OSError, PermissionError) as e:
+            logger.debug(f"Cannot access worktree directory {worktree_dir}: {e}")
             continue
 
     # Convert to GitProject list
@@ -350,15 +351,16 @@ def discover_git_projects(search_paths: Optional[List[str]] = None, max_depth: i
                             main_path=str(item),
                             worktree_count=len(worktrees)
                         ))
-                    except Exception:
+                    except subprocess.CalledProcessError:
                         # Failed to get worktrees, but it's still a git repo
                         projects.append(GitProject(
                             name=item.name,
                             main_path=str(item),
                             worktree_count=0
                         ))
-        except Exception:
+        except (OSError, PermissionError) as e:
             # Skip directories we can't read
+            logger.debug(f"Cannot access directory {search_path}: {e}")
             continue
 
     # Sort by name

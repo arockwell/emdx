@@ -57,7 +57,7 @@ class SelectionTextArea(TextArea):
                 event.prevent_default()
                 return
                 
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             key_logger.error(f"CRASH in SelectionTextArea.on_key: {e}")
             logger.error(f"Error in SelectionTextArea.on_key: {e}", exc_info=True)
             # Don't re-raise - let app continue
@@ -132,7 +132,7 @@ class VimEditTextArea(TextArea):
                         parent._update_line_number_width()
                         break
                     parent = parent.parent if hasattr(parent, 'parent') else None
-        except Exception as e:
+        except (AttributeError, TypeError, IndexError) as e:
             logger.debug(f"Error updating line numbers: {e}")
         
     def on_key(self, event: events.Key) -> None:
@@ -180,13 +180,13 @@ class VimEditTextArea(TextArea):
             elif self.vim_mode == self.VIM_COMMAND:
                 self._handle_command_mode(event)
                 
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError, IndexError) as e:
             key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
             logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
             # Try to continue without crashing the app
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
     
     def _handle_normal_mode(self, event: events.Key) -> None:
@@ -368,7 +368,7 @@ class VimEditTextArea(TextArea):
                     self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
                 event.stop()
                 return
-            except Exception as e:
+            except (AttributeError, LookupError) as e:
                 logger.debug(f"Error switching to title: {e}")
                 pass  # Title input might not exist
         
@@ -396,7 +396,7 @@ class VimEditTextArea(TextArea):
                     self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
                 event.stop()
                 return
-            except Exception:
+            except (AttributeError, LookupError):
                 pass  # Title input might not exist
         
         # Don't stop the event - let it bubble up naturally for TextArea to handle
@@ -665,7 +665,7 @@ class VimEditTextArea(TextArea):
         """Delete character to the right, safely handling boundaries."""
         try:
             self.action_delete_right()
-        except Exception:
+        except (IndexError, ValueError):
             # Ignore if at end of document
             pass
     
@@ -676,7 +676,7 @@ class VimEditTextArea(TextArea):
             title_input.cursor_position = len(title_input.value)
             if hasattr(title_input, 'selection'):
                 title_input.selection = (title_input.cursor_position, title_input.cursor_position)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
 

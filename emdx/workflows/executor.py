@@ -1097,7 +1097,8 @@ Report the document ID that was created."""
             return {
                 'output_doc_id': doc_id,
                 'tokens_used': 0,
-        }
+                'error_message': str(e),
+            }
 
     def _resolve_template(self, template: Optional[str], context: Dict[str, Any]) -> str:
         """Resolve {{variable}} templates in a string.

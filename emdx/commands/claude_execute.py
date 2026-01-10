@@ -624,7 +624,7 @@ def execute_with_claude(
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
         return 1
-    except Exception as e:
+    except (OSError, IOError, subprocess.SubprocessError) as e:
         error_msg = f"Error executing Claude: {e}"
         with open(log_file, 'a') as log:
             log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
@@ -853,7 +853,7 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         console.print(f"[green]✅ Created execution directory: {final_path}[/green]")
         return final_path
 
-    except Exception as e:
+    except (OSError, IOError, PermissionError) as e:
         console.print(f"[yellow]Warning: Directory creation failed: {e}[/yellow]")
         # Fallback to a simple temp directory
         import tempfile
@@ -861,8 +861,8 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
             fallback_dir = tempfile.mkdtemp(prefix="emdx-exec-")
             console.print(f"[yellow]Using fallback directory: {fallback_dir}[/yellow]")
             return Path(fallback_dir)
-        except Exception:
-            console.print("[red]Failed to create any execution directory[/red]")
+        except (OSError, IOError, PermissionError) as fallback_error:
+            console.print(f"[red]Failed to create any execution directory: {fallback_error}[/red]")
             return None
 
 
@@ -904,14 +904,14 @@ def monitor_execution_detached(
 
         # Update execution with PID
         update_execution_pid(execution_id, pid)
-    except Exception as e:
+    except (OSError, IOError, subprocess.SubprocessError, RuntimeError) as e:
         # Log error but don't update status - let the wrapper handle it
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
                 f.write(f"\n❌ Error starting execution: {e}\n")
             # Don't update status here - wrapper will handle it
-        except Exception:
+        except (OSError, IOError):
             pass  # Silent fail if we can't even log the error
 
 
@@ -963,14 +963,14 @@ def monitor_execution(
 
         # Don't update status here - the wrapper already did it
         pass
-    except Exception as e:
+    except (OSError, IOError, subprocess.SubprocessError, RuntimeError) as e:
         # Log error but don't update status - wrapper handles it
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
                 f.write(f"\n❌ Error in execution: {e}\n")
             # Don't update status - wrapper handles it
-        except Exception:
+        except (OSError, IOError):
             pass  # Silent fail if we can't even log the error
 
 
@@ -1000,8 +1000,8 @@ def check_environment(
                 console.print(f"  {name}: [green]{result}[/green]")
             else:
                 console.print(f"  {name}: [red]Not found[/red]")
-        except Exception:
-            console.print(f"  {name}: [red]Error[/red]")
+        except (OSError, RuntimeError, AttributeError) as e:
+            console.print(f"  {name}: [red]Error ({e})[/red]")
     
     # Show PATH info if verbose
     if verbose:

@@ -264,7 +264,7 @@ class AgentExecutor:
                 # For now, just include the input document itself
                 context_docs = [input_doc_id]
         
-        except Exception as e:
+        except (KeyError, ValueError, TypeError) as e:
             logger.warning(f"Failed to load context documents: {e}")
         
         return context_docs
@@ -341,7 +341,7 @@ class AgentExecutor:
                 doc = get_document(context.input_doc_id)
                 if doc:
                     prompt = agent.format_prompt(content=doc.content, **context.variables)
-            except Exception as e:
+            except (KeyError, ValueError, TypeError) as e:
                 logger.warning(f"Failed to load input document {context.input_doc_id}: {e}")
         elif context.input_type == 'query' and context.input_query:
             prompt = agent.format_prompt(query=context.input_query, **context.variables)

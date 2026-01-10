@@ -4,6 +4,7 @@ Document browser - extracted from the monolith.
 """
 
 import logging
+import sqlite3
 from typing import Any, Dict, List, Optional, Protocol
 
 from textual.app import ComposeResult
@@ -290,7 +291,7 @@ class DocumentBrowser(Widget):
             details_panel.write("📋 **Document Details**")
             details_panel.write("")
             details_panel.write("[dim]Select a document to view details[/dim]")
-        except Exception as e:
+        except (LookupError, AttributeError) as e:
             logger.error(f"Error setting up details panel: {e}")
             import traceback
             logger.error(traceback.format_exc())
@@ -349,7 +350,7 @@ class DocumentBrowser(Widget):
 
                 logger.info(f"Loaded {len(new_docs)} documents (total loaded: {len(self.documents)}, total available: {self.total_doc_count})")
                 await self.update_table()
-        except Exception as e:
+        except (sqlite3.Error, LookupError) as e:
             logger.error(f"Error loading documents: {e}")
             import traceback
             logger.error(traceback.format_exc())
@@ -403,7 +404,7 @@ class DocumentBrowser(Widget):
             elif self.mode == "SEARCH":
                 status_text += " | Enter=apply | ESC=cancel"
             self.update_status(status_text)
-        except Exception as e:
+        except (LookupError, AttributeError, TypeError) as e:
             logger.error(f"Status update failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
@@ -419,8 +420,8 @@ class DocumentBrowser(Widget):
         try:
             table = self.query_one("#doc-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except Exception:
-            pass
+        except (LookupError, AttributeError):
+            pass  # Table not ready, cursor position unavailable
 
         return state
 
@@ -434,8 +435,8 @@ class DocumentBrowser(Widget):
             try:
                 table = self.query_one("#doc-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except Exception:
-                pass
+            except (LookupError, AttributeError, ValueError):
+                pass  # Table not ready or invalid cursor position
                 
     async def on_key(self, event) -> None:
         """Handle key events."""
@@ -488,7 +489,7 @@ class DocumentBrowser(Widget):
                 table.cursor_coordinate = (new_cursor_row, 0)
             
             self.update_status(f"Document '{doc['title']}' deleted")
-        except Exception as e:
+        except (sqlite3.Error, LookupError, KeyError) as e:
             logger.error(f"Error deleting document: {e}")
             self.update_status(f"Error deleting document: {e}")
                 
@@ -536,14 +537,14 @@ class DocumentBrowser(Widget):
         try:
             # Use call_after_refresh to avoid timing issues
             self.call_after_refresh(self._async_save_and_exit_edit_mode)
-        except Exception as e:
+        except (AttributeError, RuntimeError) as e:
             logger.error(f"Error in action_save_and_exit_edit: {e}")
             # Fallback - try direct call
             try:
                 import asyncio
                 asyncio.create_task(self.save_and_exit_edit_mode())
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError):
+                pass  # Cannot save - app state is inconsistent
             
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
@@ -592,7 +593,7 @@ class DocumentBrowser(Widget):
                     # Clean up new document mode flag
                     self.new_document_mode = False
                     
-                except Exception as e:
+                except (sqlite3.Error, ValueError, KeyError) as e:
                     logger.error(f"Error saving new document: {e}")
                     self._update_vim_status(f"ERROR: {str(e)}")
                     return
@@ -618,7 +619,7 @@ class DocumentBrowser(Widget):
                         update_document(str(self.editing_doc_id), title=title, content=formatted_content)
                         
                         logger.info(f"Updated document ID: {self.editing_doc_id}")
-                    except Exception as e:
+                    except (sqlite3.Error, LookupError, ValueError) as e:
                         logger.error(f"Error updating document: {e}")
                         self._update_vim_status(f"ERROR: {str(e)}")
                         return
@@ -626,8 +627,8 @@ class DocumentBrowser(Widget):
             # Exit edit mode and reload documents
             await self.exit_edit_mode()
             await self.load_documents()
-            
-        except Exception as e:
+
+        except (sqlite3.Error, LookupError, AttributeError, ValueError) as e:
             logger.error(f"Error in save_and_exit_edit_mode: {e}")
             import traceback
             logger.error(traceback.format_exc())
@@ -695,8 +696,8 @@ class DocumentBrowser(Widget):
                     app.update_status(f"Edit Mode | {message}")
                 else:
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except Exception:
-            pass
+        except (LookupError, AttributeError):
+            pass  # UI element not available
             
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (called by SelectionTextArea)."""
@@ -704,8 +705,8 @@ class DocumentBrowser(Widget):
             # Exit selection mode
             try:
                 self.call_after_refresh(self._async_exit_selection_mode)
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError):
+                pass  # Cannot exit selection mode - app state is inconsistent
         
     def _async_exit_selection_mode(self) -> None:
         """Async wrapper for exit_selection_mode."""
@@ -727,8 +728,8 @@ class DocumentBrowser(Widget):
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.update("")
             vim_indicator.remove_class("active")
-        except Exception:
-            pass
+        except (LookupError, AttributeError):
+            pass  # Vim indicator not available
 
         # Get current document content for preview
         content = ""
@@ -804,7 +805,7 @@ class DocumentBrowser(Widget):
         try:
             status = self.query_one("#browser-status", Static)
             status.update(message)
-        except Exception:
+        except (LookupError, AttributeError):
             # Fallback to app status if our status bar doesn't exist
             app = self.app
             if hasattr(app, 'update_status'):
@@ -850,7 +851,7 @@ class DocumentBrowser(Widget):
                     self.update_status(f"✅ Agent #{execution_id} started!")
                     logger.info(f"Agent execution started: #{execution_id}")
 
-                except Exception as e:
+                except (ValueError, RuntimeError, OSError) as e:
                     logger.error(f"Error starting agent: {e}", exc_info=True)
                     self.update_status(f"❌ Error starting agent: {str(e)}")
             else:
@@ -939,9 +940,9 @@ class DocumentBrowser(Widget):
             app = self.app
             if hasattr(app, "update_status"):
                 app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
-        except Exception:
-            pass
-            
+        except AttributeError:
+            pass  # App status not available
+
     async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore preview."""
         if self.mode != "SELECTION":
@@ -971,9 +972,9 @@ class DocumentBrowser(Widget):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
-        except Exception:
-            pass
-    
+        except AttributeError:
+            pass  # App status not available
+
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview and details panel when row is highlighted."""
         if self.edit_mode:
@@ -1033,10 +1034,10 @@ class DocumentBrowser(Widget):
                     preview.write(markdown)
                 else:
                     preview.write("[dim]Empty document[/dim]")
-            except Exception:
+            except (ValueError, TypeError):
                 # Fallback to plain text if markdown fails
                 preview.write(full_doc["content"][:5000])
-        except Exception:
+        except (LookupError, AttributeError):
             # Preview widget not found or not ready - ignore
             pass
 
@@ -1107,16 +1108,16 @@ class DocumentBrowser(Widget):
             # Write each detail on a separate line
             for detail in details:
                 details_panel.write(detail)
-                
-        except Exception as e:
+
+        except (LookupError, AttributeError, KeyError) as e:
             logger.error(f"Error updating details panel: {e}")
             # Fallback - just show basic info
             try:
                 details_panel = self.query_one("#details-panel", RichLog)
                 details_panel.clear()
                 details_panel.write(f"📄 Document {doc['id']}: {doc['title']}")
-            except Exception:
-                pass
+            except (LookupError, AttributeError):
+                pass  # Details panel not available
                 
     async def on_input_submitted(self, event) -> None:
         """Handle input submission."""
