@@ -116,12 +116,12 @@ class WorkflowExecutor:
                     context['input'] = doc.get('content', '')
                     context['input_title'] = doc.get('title', '')
 
-            # Merge with provided variables
+            # Merge workflow default variables first
+            context.update(workflow.variables)
+
+            # Then override with provided variables (so user input wins)
             if input_variables:
                 context.update(input_variables)
-
-            # Also merge workflow default variables
-            context.update(workflow.variables)
 
             # Execute stages sequentially
             for stage in workflow.stages:
@@ -687,7 +687,7 @@ Report the document ID that was created."""
                     status='completed',
                     output_doc_id=output_doc_id,
                     agent_execution_id=exec_id,
-                    tokens_used=0,  # TODO: Parse from log if available
+                    tokens_used=0,  # Note: Token usage tracking not yet implemented
                     completed_at=datetime.now(),
                 )
 
