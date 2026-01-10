@@ -14,8 +14,8 @@ suitable for display.
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from emdx.database import db
-from emdx.models.documents import (
+from emdx.database import (
+    db,
     delete_document,
     get_document,
     save_document,

@@ -13,7 +13,7 @@ from emdx.services.document_executor import (
     execute_document_background,
     generate_unique_execution_id,
 )
-from emdx.models.documents import save_document
+from emdx.database import save_document
 from emdx.models.tags import add_tags_to_document
 from emdx.utils.emoji_aliases import expand_aliases
 

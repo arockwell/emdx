@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from emdx.models import tasks
-from emdx.models.documents import get_document
+from emdx.database import get_document
 from emdx.models.executions import create_execution
 from emdx.models.task_executions import create_task_execution, complete_task_execution
 from emdx.services.claude_executor import execute_claude_detached

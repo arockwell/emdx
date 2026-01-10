@@ -10,7 +10,7 @@ from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import Label, RichLog
 
-from emdx.models.documents import get_document
+from emdx.database import get_document
 
 
 class FullScreenView(Screen):

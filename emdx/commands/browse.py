@@ -9,8 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from emdx.database import db
-from emdx.models.documents import get_recent_documents, get_stats, list_documents
+from emdx.database import db, get_recent_documents, get_stats, list_documents
 from emdx.utils.text_formatting import truncate_description, truncate_title
 
 app = typer.Typer()

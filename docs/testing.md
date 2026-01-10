@@ -195,27 +195,28 @@ tox
 ### **Test Template**
 ```python
 import pytest
-from emdx.models.documents import Document
+from emdx.database import save_document, get_document
 
-class TestDocumentModel:
-    """Test the Document model operations."""
-    
+class TestDocumentOperations:
+    """Test the document database operations."""
+
     def test_create_document_success(self, temp_db):
         """Test successful document creation."""
-        doc = Document.create(
+        doc_id = save_document(
             title="Test Document",
             content="Test content",
             project="test-project"
         )
-        
-        assert doc.id is not None
-        assert doc.title == "Test Document"
-        assert doc.project == "test-project"
-    
-    def test_create_document_missing_title_fails(self, temp_db):
-        """Test document creation fails with missing title."""
-        with pytest.raises(ValueError, match="Title is required"):
-            Document.create(title="", content="content")
+
+        assert doc_id is not None
+        doc = get_document(str(doc_id))
+        assert doc["title"] == "Test Document"
+        assert doc["project"] == "test-project"
+
+    def test_get_nonexistent_document_returns_none(self, temp_db):
+        """Test getting a nonexistent document returns None."""
+        doc = get_document("999999")
+        assert doc is None
 ```
 
 ## 🔄 **Test Maintenance**
