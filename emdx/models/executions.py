@@ -97,30 +97,6 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def save_execution(execution: Execution) -> int:
-    """Save execution to database.
-
-    Creates a new execution record from an Execution object.
-    Returns the database ID of the created record.
-
-    .. deprecated:: 0.7.0
-        Use create_execution() instead. This function will be removed in v1.0.
-    """
-    import warnings
-    warnings.warn(
-        "save_execution() is deprecated. Use create_execution() instead.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    return create_execution(
-        doc_id=execution.doc_id,
-        doc_title=execution.doc_title,
-        log_file=execution.log_file,
-        working_dir=execution.working_dir,
-        pid=execution.pid,
-    )
-
-
 def get_execution(exec_id: str) -> Optional[Execution]:
     """Get execution by ID."""
     with db_connection.get_connection() as conn:

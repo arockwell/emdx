@@ -21,7 +21,6 @@ from ..utils.constants import DEFAULT_CLAUDE_MODEL
 from ..models.executions import (
     Execution,
     create_execution,
-    save_execution,
     update_execution_pid,
     update_execution_status,
 )
@@ -891,7 +890,6 @@ def monitor_execution_detached(
             log_file=str(log_file),
             working_dir=working_dir
         )
-        save_execution(execution)
 
         # Execute with Claude in detached mode
         pid = execute_with_claude_detached(
@@ -950,7 +948,6 @@ def monitor_execution(
             log_file=str(log_file),
             working_dir=working_dir
         )
-        save_execution(execution)
 
         # Execute with Claude in the worktree
         exit_code = execute_with_claude(
@@ -1159,7 +1156,6 @@ def execute(
                 log_file=str(log_file),
                 working_dir=working_dir
             )
-            save_execution(execution)
 
             # Execute in worktree
             exit_code = execute_with_claude(
