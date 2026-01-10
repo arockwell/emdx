@@ -13,6 +13,7 @@ class ExecutionMode(Enum):
     PARALLEL = "parallel"       # Run N times simultaneously, synthesize
     ITERATIVE = "iterative"     # Run N times sequentially, building on previous
     ADVERSARIAL = "adversarial" # Advocate -> Critic -> Synthesizer
+    DYNAMIC = "dynamic"         # Discover items at runtime, process each in parallel
 
 
 @dataclass
@@ -25,9 +26,14 @@ class StageConfig:
     prompt: Optional[str] = None  # Custom prompt for this stage
     prompts: Optional[List[str]] = None  # For iterative/adversarial: per-run prompts
     iteration_strategy: Optional[str] = None  # Name of builtin strategy to use
-    synthesis_prompt: Optional[str] = None  # For parallel mode
+    synthesis_prompt: Optional[str] = None  # For parallel/dynamic mode
     input: Optional[str] = None  # Template reference like "{{prev_stage.output}}"
     timeout_seconds: int = 3600
+    # Dynamic mode fields
+    discovery_command: Optional[str] = None  # Shell command that outputs items (one per line)
+    item_variable: str = "item"  # Variable name for each discovered item in prompt
+    max_concurrent: int = 5  # Max parallel executions for dynamic mode
+    continue_on_failure: bool = True  # Continue processing other items if one fails
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'StageConfig':
@@ -44,6 +50,10 @@ class StageConfig:
             synthesis_prompt=data.get('synthesis_prompt'),
             input=data.get('input'),
             timeout_seconds=data.get('timeout_seconds', 3600),
+            discovery_command=data.get('discovery_command'),
+            item_variable=data.get('item_variable', 'item'),
+            max_concurrent=data.get('max_concurrent', 5),
+            continue_on_failure=data.get('continue_on_failure', True),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -59,6 +69,10 @@ class StageConfig:
             'synthesis_prompt': self.synthesis_prompt,
             'input': self.input,
             'timeout_seconds': self.timeout_seconds,
+            'discovery_command': self.discovery_command,
+            'item_variable': self.item_variable,
+            'max_concurrent': self.max_concurrent,
+            'continue_on_failure': self.continue_on_failure,
         }
 
 

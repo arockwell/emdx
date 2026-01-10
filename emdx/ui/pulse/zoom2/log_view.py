@@ -125,7 +125,7 @@ class LogView(Widget):
             self._show_error(str(e))
 
     async def load_workflow_run(self, run: Dict[str, Any], stage_name: Optional[str] = None) -> None:
-        """Load logs from a workflow run's context."""
+        """Load logs from a workflow run's context or individual execution logs."""
         # Stop current stream if any
         if self.current_stream:
             self.current_stream.unsubscribe(self.subscriber)
@@ -144,8 +144,15 @@ class LogView(Widget):
         log_output = self.query_one("#log-output", RichLog)
         log_output.clear()
 
-        # Get context from run
         try:
+            # Try to load individual run execution logs (for dynamic mode)
+            if HAS_WORKFLOWS and wf_db:
+                await self._load_individual_run_logs(run, stage_name, log_output)
+                if self.line_count > 0:
+                    self._update_status()
+                    return
+
+            # Fallback: Get context from run
             context = run.get('context_json')
             if isinstance(context, str):
                 context = json.loads(context)
@@ -185,6 +192,57 @@ class LogView(Widget):
         except Exception as e:
             logger.error(f"Error loading workflow run logs: {e}", exc_info=True)
             self._show_error(str(e))
+
+    async def _load_individual_run_logs(
+        self,
+        run: Dict[str, Any],
+        stage_name: Optional[str],
+        log_output: RichLog
+    ) -> None:
+        """Load logs from individual run execution files (for dynamic mode)."""
+        # Get stage runs for this workflow run
+        stage_runs = wf_db.list_stage_runs(run['id'])
+
+        for stage_run in stage_runs:
+            # Skip if filtering by stage name and this isn't the one
+            if stage_name and stage_run.get('stage_name') != stage_name:
+                continue
+
+            # Get individual runs for this stage
+            individual_runs = wf_db.list_individual_runs(stage_run['id'])
+
+            if not individual_runs:
+                continue
+
+            for ind_run in individual_runs:
+                exec_id = ind_run.get('agent_execution_id')
+                if not exec_id:
+                    continue
+
+                # Get the execution to find the log file
+                execution = get_execution(str(exec_id))
+                if not execution:
+                    continue
+
+                log_path = execution.log_path
+                if not log_path.exists():
+                    continue
+
+                # Write header for this individual run
+                branch_name = ind_run.get('input_context', f"Run #{ind_run.get('run_number', '?')}")
+                status_icon = "✅" if ind_run.get('status') == 'completed' else (
+                    "🔄" if ind_run.get('status') == 'running' else "❌"
+                )
+                log_output.write(f"\n[bold cyan]═══ {status_icon} {branch_name} ═══[/bold cyan]\n")
+                self.line_count += 2
+
+                # Read and display the log content
+                try:
+                    content = log_path.read_text()
+                    self._write_content(content)
+                except Exception as e:
+                    log_output.write(f"[red]Error reading log: {e}[/red]")
+                    self.line_count += 1
 
     async def _load_execution_logs(self, execution: Execution) -> None:
         """Load logs from an execution."""
