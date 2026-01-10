@@ -25,23 +25,30 @@ except ImportError:
     HAS_WORKFLOWS = False
 
 
-class PreviewStreamSubscriber(LogStreamSubscriber):
-    """Subscriber that forwards log content to the preview pane."""
+class AgentLogStreamSubscriber(LogStreamSubscriber):
+    """Subscriber that forwards log content to the agent log pane."""
 
     def __init__(self, pulse_view: 'PulseView'):
         self.pulse_view = pulse_view
 
     def on_log_content(self, new_content: str) -> None:
         """Called when new log content is available."""
-        self.pulse_view._handle_stream_content(new_content)
+        self.pulse_view._handle_agent_stream_content(new_content)
 
     def on_log_error(self, error: Exception) -> None:
         """Called when log reading encounters an error."""
-        logger.error(f"Preview stream error: {error}")
+        logger.error(f"Agent log stream error: {error}")
 
 
 class PulseView(Widget):
     """Workflow execution observer - shows running and recent workflow runs."""
+
+    BINDINGS = [
+        ("tab", "focus_next_panel", "Next Panel"),
+        ("shift+tab", "focus_prev_panel", "Prev Panel"),
+        ("j", "cursor_down", "Down"),
+        ("k", "cursor_up", "Up"),
+    ]
 
     DEFAULT_CSS = """
     PulseView {
@@ -77,24 +84,28 @@ class PulseView(Widget):
         background: $surface;
     }
 
-    #preview-content {
+    /* Agent runs panel - top half of RHS */
+    #agents-panel {
+        height: 50%;
+        border-bottom: solid $surface;
+    }
+
+    #agents-table {
         height: 1fr;
-        padding: 0 1;
     }
 
-    #preview-header {
-        height: auto;
-        max-height: 6;
-        padding: 0;
+    /* Agent log panel - bottom half of RHS */
+    #agent-log-panel {
+        height: 50%;
     }
 
-    #preview-log {
+    #agent-log {
         height: 1fr;
         scrollbar-gutter: stable;
         overflow-x: hidden;
     }
 
-    #preview-status {
+    #agent-log-status {
         height: 1;
         background: $surface;
         padding: 0 1;
@@ -105,10 +116,13 @@ class PulseView(Widget):
         super().__init__()
         self.workflow_runs: List[Dict[str, Any]] = []
         self.on_selection_changed = on_selection_changed
-        # Log streaming
-        self.current_stream: Optional[LogStream] = None
-        self.stream_subscriber = PreviewStreamSubscriber(self)
-        self.streaming_run_id: Optional[int] = None
+        # Individual agent runs for selected workflow
+        self.individual_runs: List[Dict[str, Any]] = []
+        self.selected_agent_idx: int = 0
+        # Log streaming for selected agent
+        self.agent_stream: Optional[LogStream] = None
+        self.agent_stream_subscriber = AgentLogStreamSubscriber(self)
+        self.streaming_agent_run_id: Optional[int] = None
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -118,15 +132,22 @@ class PulseView(Widget):
                 yield DataTable(id="runs-table", cursor_type="row")
                 yield Static("Loading...", id="pulse-summary")
 
-            # Right panel - preview with streaming log
+            # Right panel - split into agents list (top) and log viewer (bottom)
             with Vertical(id="preview-panel"):
-                yield Static("📋 PREVIEW", classes="pulse-header")
-                yield Static("", id="preview-header")
-                yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
-                yield Static("", id="preview-status")
+                # Top half - agent runs list
+                with Vertical(id="agents-panel"):
+                    yield Static("🤖 AGENTS", classes="pulse-header")
+                    yield DataTable(id="agents-table", cursor_type="row")
+
+                # Bottom half - selected agent's log
+                with Vertical(id="agent-log-panel"):
+                    yield Static("📋 AGENT LOG", classes="pulse-header")
+                    yield RichLog(id="agent-log", highlight=True, markup=True, wrap=True)
+                    yield Static("", id="agent-log-status")
 
     async def on_mount(self) -> None:
         """Setup table and load data."""
+        # Workflow runs table (left panel)
         table = self.query_one("#runs-table", DataTable)
         table.add_column("", width=2)  # Status icon
         table.add_column("Run", width=5)
@@ -135,14 +156,29 @@ class PulseView(Widget):
         table.add_column("Stage", width=10)
         table.add_column("Time", width=6)
 
+        # Agents table (right panel, top half)
+        agents_table = self.query_one("#agents-table", DataTable)
+        agents_table.add_column("", width=2)  # Status
+        agents_table.add_column("#", width=3)  # Run number
+        agents_table.add_column("Time", width=6)
+        agents_table.add_column("Tokens", width=7)
+        agents_table.add_column("Output", width=16)
+
         await self.load_data()
 
         # Focus the table so j/k work immediately
         table.focus()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Update preview when row selection changes."""
-        self.call_later(self._update_preview)
+        """Update when row selection changes in either table."""
+        if event.data_table.id == "runs-table":
+            # Workflow run selection changed - load agents for this run
+            self.call_later(self._update_agents_panel)
+        elif event.data_table.id == "agents-table":
+            # Agent selection changed - update log viewer
+            if event.cursor_row is not None and event.cursor_row < len(self.individual_runs):
+                self.selected_agent_idx = event.cursor_row
+                self.call_later(self._update_agent_log)
 
     async def load_data(self) -> None:
         """Load workflow runs."""
@@ -195,7 +231,7 @@ class PulseView(Widget):
 
             await self._update_runs_table()
             await self._update_summary()
-            await self._update_preview()
+            await self._update_agents_panel()
 
         except Exception as e:
             logger.error(f"Error loading workflow runs: {e}", exc_info=True)
@@ -291,139 +327,258 @@ class PulseView(Widget):
         text = f"Running: {running} | Done: {completed} | Failed: {failed} | Total: {len(self.workflow_runs)}"
         summary.update(text)
 
-    async def _update_preview(self) -> None:
-        """Update the preview panel with selected run's log - streaming for running workflows."""
-        header = self.query_one("#preview-header", Static)
-        preview_log = self.query_one("#preview-log", RichLog)
-        status_bar = self.query_one("#preview-status", Static)
-        run = self.get_selected_run()
+    async def _update_agents_panel(self) -> None:
+        """Update the agents panel with individual runs for selected workflow."""
+        agents_table = self.query_one("#agents-table", DataTable)
+        agents_table.clear()
 
-        # Stop any existing stream if we switched runs
-        if run and run['id'] != self.streaming_run_id:
-            self._stop_stream()
+        run = self.get_selected_run()
+        self.individual_runs = []
+        self.selected_agent_idx = 0
 
         if not run:
-            header.update("[dim]No run selected[/dim]")
-            preview_log.clear()
-            status_bar.update("")
+            agents_table.add_row("", "", "[dim]Select a run[/dim]", "", "")
+            await self._update_agent_log()
+            return
+
+        if not HAS_WORKFLOWS or not wf_db:
+            agents_table.add_row("", "", "[dim]No data[/dim]", "", "")
+            await self._update_agent_log()
             return
 
         try:
-            # Get workflow name
-            wf_name = "Unknown"
-            if workflow_registry:
-                try:
-                    wf = workflow_registry.get_workflow(run['workflow_id'])
-                    if wf:
-                        wf_name = wf.display_name
-                except Exception:
-                    pass
+            # Get stage runs for this workflow run
+            stage_runs = wf_db.list_stage_runs(run['id'])
 
-            # Status with color
-            status = run.get('status', 'unknown')
-            status_display = {
-                'running': '[green]● Running[/green]',
-                'completed': '[blue]✓ Completed[/blue]',
-                'failed': '[red]✗ Failed[/red]',
-                'paused': '[yellow]⏸ Paused[/yellow]',
-            }.get(status, f'○ {status}')
+            # Collect all individual runs from all stages
+            for sr in stage_runs:
+                ind_runs = wf_db.list_individual_runs(sr['id'])
+                self.individual_runs.extend(ind_runs)
 
-            # Task info
-            task_title = "—"
-            try:
-                input_vars = run.get('input_variables')
-                if isinstance(input_vars, str):
-                    input_vars = json.loads(input_vars)
-                if input_vars:
-                    task_title = input_vars.get('task_title', '—')
-            except Exception:
-                pass
+            if not self.individual_runs:
+                # Single-run workflow - show placeholder
+                status = run.get('status', 'unknown')
+                icon = "✅" if status == 'completed' else ("🔄" if status == 'running' else "⚪")
 
-            # Update header
-            header.update(
-                f"[bold]Run #{run['id']}[/bold] - {wf_name}\n"
-                f"Status: {status_display}  Stage: {run.get('current_stage', '—')}\n"
-                f"Task: {task_title[:50]}"
-            )
+                time_str = "—"
+                if run.get('total_execution_time_ms'):
+                    secs = run['total_execution_time_ms'] / 1000
+                    time_str = f"{secs:.0f}s"
 
-            # For RUNNING workflows: try to stream from the active log file
-            if status == 'running' and HAS_WORKFLOWS and wf_db:
-                await self._setup_live_stream(run, preview_log, status_bar)
+                agents_table.add_row(icon, "1", time_str, str(run.get('total_tokens_used', '—')), "")
+                await self._update_agent_log()
                 return
 
-            # For completed/failed: show context output
-            preview_log.clear()
-            context = run.get('context_json')
-            if isinstance(context, str):
-                context = json.loads(context) if context else {}
-
-            if context:
-                # Find the most recent stage output
-                output_keys = sorted([k for k in context.keys() if k.endswith('.output')], reverse=True)
-                if output_keys:
-                    latest_key = output_keys[0]
-                    stage_name = latest_key.replace('.output', '')
-                    preview_log.write(f"[dim]─── Stage: {stage_name} ───[/dim]")
-                    latest_output = context[latest_key]
-                    if isinstance(latest_output, str):
-                        for line in latest_output.strip().split('\n')[-50:]:
-                            preview_log.write(line)
-                    else:
-                        preview_log.write("[dim]No text output[/dim]")
-                    status_bar.update(f"Showing last stage output | {len(output_keys)} stages completed")
+            # Populate agents table
+            for ir in self.individual_runs:
+                status = ir.get('status', 'unknown')
+                if status == 'running':
+                    icon = "🔄"
+                elif status == 'completed':
+                    icon = "✅"
+                elif status == 'failed':
+                    icon = "❌"
                 else:
-                    preview_log.write("[dim]No stage outputs yet[/dim]")
-                    status_bar.update("")
-            else:
-                preview_log.write("[dim]No context data[/dim]")
-                status_bar.update("")
+                    icon = "⚪"
+
+                # Time
+                time_str = "—"
+                if ir.get('execution_time_ms'):
+                    secs = ir['execution_time_ms'] / 1000
+                    time_str = f"{secs:.0f}s"
+
+                # Output
+                output = ""
+                if ir.get('output_doc_id'):
+                    output = f"Doc #{ir['output_doc_id']}"
+                elif ir.get('error_message'):
+                    output = f"[red]{ir['error_message'][:12]}…[/red]"
+
+                agents_table.add_row(
+                    icon,
+                    str(ir.get('run_number', '?')),
+                    time_str,
+                    str(ir.get('tokens_used', '—')),
+                    output[:14]
+                )
+
+            # Select first row
+            if self.individual_runs:
+                agents_table.move_cursor(row=0)
+
+            # Update log viewer for first agent
+            await self._update_agent_log()
 
         except Exception as e:
-            logger.error(f"Error updating preview: {e}", exc_info=True)
-            preview_log.clear()
-            preview_log.write(f"[red]Error: {e}[/red]")
+            logger.error(f"Error loading individual runs: {e}", exc_info=True)
+            agents_table.add_row("", "", f"[red]Error[/red]", "", "")
 
-    async def _setup_live_stream(self, run: Dict[str, Any], preview_log: RichLog, status_bar: Static) -> None:
-        """Setup live streaming from the active execution's log file."""
+    async def _update_agent_log(self) -> None:
+        """Update the agent log viewer for the selected agent."""
+        agent_log = self.query_one("#agent-log", RichLog)
+        status_bar = self.query_one("#agent-log-status", Static)
+
+        # Stop any existing stream if agent changed
+        if self.individual_runs and self.selected_agent_idx < len(self.individual_runs):
+            selected_run = self.individual_runs[self.selected_agent_idx]
+            if selected_run.get('id') != self.streaming_agent_run_id:
+                self._stop_agent_stream()
+
+        run = self.get_selected_run()
+        if not run:
+            agent_log.clear()
+            agent_log.write("[dim]No workflow run selected[/dim]")
+            status_bar.update("")
+            return
+
+        if not self.individual_runs:
+            # No individual runs - try to show workflow-level log
+            agent_log.clear()
+            if run.get('status') == 'running' and HAS_WORKFLOWS and wf_db:
+                await self._setup_workflow_stream(run, agent_log, status_bar)
+            else:
+                # Show context output for completed workflows
+                context = run.get('context_json')
+                if isinstance(context, str):
+                    context = json.loads(context) if context else {}
+
+                if context:
+                    output_keys = sorted([k for k in context.keys() if k.endswith('.output')], reverse=True)
+                    if output_keys:
+                        latest_output = context[output_keys[0]]
+                        if isinstance(latest_output, str):
+                            for line in latest_output.strip().split('\n')[-30:]:
+                                agent_log.write(line)
+                        status_bar.update(f"Stage output | {len(output_keys)} stages")
+                    else:
+                        agent_log.write("[dim]No outputs yet[/dim]")
+                        status_bar.update("")
+                else:
+                    agent_log.write("[dim]No log data[/dim]")
+                    status_bar.update("")
+            return
+
+        if self.selected_agent_idx >= len(self.individual_runs):
+            agent_log.clear()
+            agent_log.write("[dim]Select an agent[/dim]")
+            status_bar.update("")
+            return
+
+        selected = self.individual_runs[self.selected_agent_idx]
+
+        # For running agents: stream from log file
+        if selected.get('status') == 'running' and HAS_WORKFLOWS and wf_db:
+            await self._setup_agent_stream(selected, agent_log, status_bar)
+            return
+
+        # For completed/failed: try to get log from execution record
+        agent_log.clear()
+        exec_id = selected.get('agent_execution_id')
+
+        if exec_id and wf_db:
+            try:
+                execution = wf_db.get_agent_execution(exec_id)
+                if execution and execution.get('log_file'):
+                    log_path = Path(execution['log_file'])
+                    if log_path.exists():
+                        content = log_path.read_text()
+                        lines = content.strip().split('\n')
+                        for line in lines[-40:]:
+                            agent_log.write(line)
+                        status_bar.update(f"Agent #{selected.get('run_number', '?')} log | {len(lines)} lines")
+                        return
+            except Exception as e:
+                logger.error(f"Error reading agent log: {e}")
+
+        # Fallback - show what info we have
+        agent_log.write(f"[bold]Agent #{selected.get('run_number', '?')}[/bold]")
+        agent_log.write(f"Status: {selected.get('status', '?')}")
+        if selected.get('execution_time_ms'):
+            agent_log.write(f"Time: {selected['execution_time_ms']/1000:.1f}s")
+        if selected.get('output_doc_id'):
+            agent_log.write(f"Output: Doc #{selected['output_doc_id']}")
+        if selected.get('error_message'):
+            agent_log.write(f"[red]Error: {selected['error_message']}[/red]")
+        status_bar.update("")
+
+    async def _setup_agent_stream(self, ind_run: Dict[str, Any], agent_log: RichLog, status_bar: Static) -> None:
+        """Setup live streaming for a running agent."""
         from datetime import datetime
 
-        # Check if we're already streaming this run
-        if self.streaming_run_id == run['id'] and self.current_stream:
-            return  # Already streaming
+        exec_id = ind_run.get('agent_execution_id')
+        if not exec_id:
+            agent_log.clear()
+            agent_log.write(f"[yellow]Agent #{ind_run.get('run_number', '?')} running...[/yellow]")
+            agent_log.write("[dim]Waiting for log file...[/dim]")
+            status_bar.update("[yellow]Starting...[/yellow]")
+            return
 
-        preview_log.clear()
+        # Check if already streaming this agent
+        if self.streaming_agent_run_id == ind_run.get('id') and self.agent_stream:
+            return
 
-        # Try to get the active execution
+        agent_log.clear()
+
+        try:
+            execution = wf_db.get_agent_execution(exec_id)
+            if execution and execution.get('log_file'):
+                log_path = Path(execution['log_file'])
+                if log_path.exists():
+                    self._stop_agent_stream()
+
+                    agent_log.write(f"[green]● LIVE[/green] Agent #{ind_run.get('run_number', '?')}")
+                    agent_log.write("")
+
+                    self.agent_stream = LogStream(log_path)
+                    self.streaming_agent_run_id = ind_run.get('id')
+
+                    # Get initial content
+                    initial = self.agent_stream.get_initial_content()
+                    if initial:
+                        lines = initial.strip().split('\n')
+                        for line in lines[-30:]:
+                            agent_log.write(line)
+                        agent_log.scroll_end(animate=False)
+
+                    self.agent_stream.subscribe(self.agent_stream_subscriber)
+                    status_bar.update(f"[green]● LIVE[/green] Agent #{ind_run.get('run_number', '?')}")
+                    return
+        except Exception as e:
+            logger.error(f"Error setting up agent stream: {e}")
+
+        agent_log.write(f"[yellow]Agent #{ind_run.get('run_number', '?')} running...[/yellow]")
+        status_bar.update("[yellow]Waiting for log...[/yellow]")
+
+    async def _setup_workflow_stream(self, run: Dict[str, Any], agent_log: RichLog, status_bar: Static) -> None:
+        """Setup streaming for workflow-level log (for single-run workflows)."""
+        from datetime import datetime
+
         active_exec = wf_db.get_active_execution_for_run(run['id'])
 
         if active_exec and active_exec.get('log_file'):
             log_path = Path(active_exec['log_file'])
             if log_path.exists():
-                # Setup streaming
-                self._stop_stream()  # Clean up any previous stream
+                self._stop_agent_stream()
 
                 stage_name = active_exec.get('stage_name', '?')
-                preview_log.write(f"[green]● LIVE[/green] [dim]Stage: {stage_name}[/dim]")
-                preview_log.write("")
+                agent_log.write(f"[green]● LIVE[/green] [dim]Stage: {stage_name}[/dim]")
+                agent_log.write("")
 
-                self.current_stream = LogStream(log_path)
-                self.streaming_run_id = run['id']
+                self.agent_stream = LogStream(log_path)
+                self.streaming_agent_run_id = run['id']
 
-                # Get initial content
-                initial = self.current_stream.get_initial_content()
+                initial = self.agent_stream.get_initial_content()
                 if initial:
-                    # Show last 40 lines
                     lines = initial.strip().split('\n')
-                    for line in lines[-40:]:
-                        preview_log.write(line)
-                    preview_log.scroll_end(animate=False)
+                    for line in lines[-30:]:
+                        agent_log.write(line)
+                    agent_log.scroll_end(animate=False)
 
-                # Subscribe for live updates
-                self.current_stream.subscribe(self.stream_subscriber)
-                status_bar.update(f"[green]● LIVE[/green] streaming from {stage_name} | l=toggle")
+                self.agent_stream.subscribe(self.agent_stream_subscriber)
+                status_bar.update(f"[green]● LIVE[/green] streaming {stage_name}")
                 return
 
-        # No active log file - show elapsed time
+        # Show elapsed time
         started = run.get('started_at')
         if started:
             if isinstance(started, str):
@@ -431,31 +586,28 @@ class PulseView(Widget):
             elapsed = datetime.now() - started
             mins = int(elapsed.total_seconds() // 60)
             secs = int(elapsed.total_seconds() % 60)
-            preview_log.write(f"[yellow]⏳ Running for {mins}m {secs}s[/yellow]")
-            preview_log.write("")
-            preview_log.write("[dim]Waiting for agent to start writing logs...[/dim]")
-            preview_log.write("[dim]Stream will begin when execution starts.[/dim]")
+            agent_log.write(f"[yellow]⏳ Running for {mins}m {secs}s[/yellow]")
+            agent_log.write("[dim]Waiting for log file...[/dim]")
         else:
-            preview_log.write("[dim]Starting up...[/dim]")
+            agent_log.write("[dim]Starting up...[/dim]")
+        status_bar.update("[yellow]Waiting...[/yellow]")
 
-        status_bar.update("[yellow]Waiting for log file...[/yellow]")
-
-    def _handle_stream_content(self, new_content: str) -> None:
-        """Handle new content from the log stream."""
+    def _handle_agent_stream_content(self, new_content: str) -> None:
+        """Handle new content from the agent log stream."""
         try:
-            preview_log = self.query_one("#preview-log", RichLog)
+            agent_log = self.query_one("#agent-log", RichLog)
             for line in new_content.splitlines():
-                preview_log.write(line)
-            preview_log.scroll_end(animate=False)
+                agent_log.write(line)
+            agent_log.scroll_end(animate=False)
         except Exception as e:
-            logger.error(f"Error handling stream content: {e}")
+            logger.error(f"Error handling agent stream content: {e}")
 
-    def _stop_stream(self) -> None:
-        """Stop the current log stream."""
-        if self.current_stream:
-            self.current_stream.unsubscribe(self.stream_subscriber)
-            self.current_stream = None
-        self.streaming_run_id = None
+    def _stop_agent_stream(self) -> None:
+        """Stop the current agent log stream."""
+        if self.agent_stream:
+            self.agent_stream.unsubscribe(self.agent_stream_subscriber)
+            self.agent_stream = None
+        self.streaming_agent_run_id = None
 
     def get_selected_run(self) -> Optional[Dict[str, Any]]:
         """Get the currently selected workflow run."""
@@ -464,6 +616,62 @@ class PulseView(Widget):
             return self.workflow_runs[table.cursor_row]
         return None
 
+    def get_selected_agent_run(self) -> Optional[Dict[str, Any]]:
+        """Get the currently selected agent run."""
+        if self.individual_runs and self.selected_agent_idx < len(self.individual_runs):
+            return self.individual_runs[self.selected_agent_idx]
+        return None
+
     def on_unmount(self) -> None:
         """Clean up when unmounting."""
-        self._stop_stream()
+        self._stop_agent_stream()
+
+    def action_focus_next_panel(self) -> None:
+        """Move focus to the next panel (LHS -> RHS agents table)."""
+        runs_table = self.query_one("#runs-table", DataTable)
+        agents_table = self.query_one("#agents-table", DataTable)
+
+        if runs_table.has_focus:
+            # LHS focused -> move to RHS agents table
+            agents_table.focus()
+        elif agents_table.has_focus:
+            # RHS agents table focused -> wrap back to LHS
+            runs_table.focus()
+        else:
+            # Neither focused, focus agents table
+            agents_table.focus()
+
+    def action_focus_prev_panel(self) -> None:
+        """Move focus to the previous panel."""
+        runs_table = self.query_one("#runs-table", DataTable)
+        agents_table = self.query_one("#agents-table", DataTable)
+
+        if agents_table.has_focus:
+            # RHS focused -> move to LHS
+            runs_table.focus()
+        elif runs_table.has_focus:
+            # LHS focused -> wrap to RHS
+            agents_table.focus()
+        else:
+            # Neither focused, focus runs table
+            runs_table.focus()
+
+    def action_cursor_down(self) -> None:
+        """Move cursor down in the focused table."""
+        runs_table = self.query_one("#runs-table", DataTable)
+        agents_table = self.query_one("#agents-table", DataTable)
+
+        if runs_table.has_focus:
+            runs_table.action_cursor_down()
+        elif agents_table.has_focus:
+            agents_table.action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        """Move cursor up in the focused table."""
+        runs_table = self.query_one("#runs-table", DataTable)
+        agents_table = self.query_one("#agents-table", DataTable)
+
+        if runs_table.has_focus:
+            runs_table.action_cursor_up()
+        elif agents_table.has_focus:
+            agents_table.action_cursor_up()

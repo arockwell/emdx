@@ -123,13 +123,26 @@ class PulseBrowser(Widget):
             container = self.query_one(f"#zoom{i}")
             container.display = (i == new_level)
 
-        # Load data for new zoom level
-        if new_level == 1 and self.outcomes_view and self.selected_run:
+        # Load data for new zoom level and set focus
+        if new_level == 0 and self.pulse_view:
+            # Focus the runs table when entering zoom 0
+            self.call_later(self._focus_zoom0)
+        elif new_level == 1 and self.outcomes_view and self.selected_run:
             self.call_later(lambda: self._show_run_outcomes())
         elif new_level == 2 and self.log_view and self.selected_run:
             self.call_later(lambda: self._show_run_logs())
 
         self._update_status()
+
+    def _focus_zoom0(self) -> None:
+        """Focus the runs table in zoom 0."""
+        if self.pulse_view:
+            try:
+                from textual.widgets import DataTable
+                table = self.pulse_view.query_one("#runs-table", DataTable)
+                table.focus()
+            except Exception as e:
+                logger.error(f"Error focusing runs table: {e}")
 
     async def _show_run_outcomes(self) -> None:
         """Show outcomes for selected run."""
