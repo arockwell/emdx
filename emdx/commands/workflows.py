@@ -254,6 +254,17 @@ def run_workflow(
         "--keep-worktree",
         help="Don't cleanup worktree after completion (for debugging)",
     ),
+    discover: Optional[str] = typer.Option(
+        None,
+        "--discover",
+        help="Override discovery command for dynamic stages (outputs items one per line)",
+    ),
+    max_concurrent: Optional[int] = typer.Option(
+        None,
+        "--max-concurrent",
+        "-j",
+        help="Override max concurrent executions for dynamic stages",
+    ),
 ):
     """Run a workflow.
 
@@ -296,12 +307,24 @@ def run_workflow(
                 console.print(f"[red]Failed to create worktree: {e.stderr}[/red]")
                 raise typer.Exit(1)
 
+        # Add discovery and max_concurrent overrides to variables
+        if discover:
+            variables['_discovery_override'] = discover
+        if max_concurrent:
+            variables['_max_concurrent_override'] = max_concurrent
+        variables['base_branch'] = base_branch
+
         console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name}")
         console.print(f"  Stages: {len(workflow.stages)}")
         if doc_id:
             console.print(f"  Input document: #{doc_id}")
-        if variables:
-            console.print(f"  Variables: {variables}")
+        if discover:
+            console.print(f"  Discovery command: {discover}")
+        if max_concurrent:
+            console.print(f"  Max concurrent: {max_concurrent}")
+        if variables and any(not k.startswith('_') for k in variables):
+            user_vars = {k: v for k, v in variables.items() if not k.startswith('_')}
+            console.print(f"  Variables: {user_vars}")
         if working_dir:
             console.print(f"  Working dir: {working_dir}")
 

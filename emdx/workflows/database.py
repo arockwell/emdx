@@ -327,6 +327,7 @@ def update_stage_run(
     stage_run_id: int,
     status: Optional[str] = None,
     runs_completed: Optional[int] = None,
+    target_runs: Optional[int] = None,
     output_doc_id: Optional[int] = None,
     synthesis_doc_id: Optional[int] = None,
     error_message: Optional[str] = None,
@@ -346,6 +347,9 @@ def update_stage_run(
         if runs_completed is not None:
             updates.append("runs_completed = ?")
             params.append(runs_completed)
+        if target_runs is not None:
+            updates.append("target_runs = ?")
+            params.append(target_runs)
         if output_doc_id is not None:
             updates.append("output_doc_id = ?")
             params.append(output_doc_id)
