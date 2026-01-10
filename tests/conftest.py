@@ -9,7 +9,7 @@ from test_fixtures import DatabaseForTesting
 from emdx.models.tags import add_tags_to_document
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def temp_db():
     """Create a temporary in-memory SQLite database for testing."""
     db = DatabaseForTesting(":memory:")
@@ -17,7 +17,7 @@ def temp_db():
     db.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def temp_db_file():
     """Create a temporary SQLite database file for testing."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -30,7 +30,7 @@ def temp_db_file():
     db_path.unlink(missing_ok=True)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def sample_documents(temp_db):
     """Add some sample documents to the database."""
     docs = [
