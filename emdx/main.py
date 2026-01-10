@@ -3,6 +3,7 @@
 Main CLI entry point for emdx
 """
 
+from pathlib import Path
 from typing import Optional
 import logging
 import os
@@ -11,6 +12,7 @@ import typer
 from rich.console import Console
 
 from emdx import __build_id__, __version__
+from emdx.config.settings import set_db_path
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.browse import app as browse_app
 from emdx.commands.claude_execute import app as claude_app
@@ -127,8 +129,9 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # Note: Database connections are established per-command as needed
-    # Note: Logging is configured per-module as needed
+    # Wire up database URL to configuration layer
+    if db_url:
+        set_db_path(Path(db_url))
 
 
 def safe_register_commands(target_app, source_app, prefix=""):
