@@ -54,7 +54,8 @@ class AgentExecutor:
             try:
                 doc = get_document(input_doc_id)
                 doc_title += f" - {doc.title}"
-            except Exception:
+            except (KeyError, ValueError) as e:
+                logger.debug(f"Could not fetch document {input_doc_id} for title: {e}")
                 doc_title += f" - Document #{input_doc_id}"
         elif input_query:
             query_preview = truncate_title(input_query)
@@ -232,8 +233,8 @@ class AgentExecutor:
                         doc = get_document(input_doc_id)
                         search_query = search_query.replace("{{title}}", doc.title)
                         search_query = search_query.replace("{{project}}", doc.project or "")
-                    except Exception as e:
-                        logger.warning(f"Failed to get document for context search: {e}")
+                    except (KeyError, ValueError) as e:
+                        logger.debug(f"Could not fetch document {input_doc_id} for template vars: {e}")
                 
                 if input_query:
                     search_query = search_query.replace("{{query}}", input_query)

@@ -226,7 +226,8 @@ class GenericAgent(Agent):
                 try:
                     input_doc = get_document(context.input_doc_id)
                     base_title = f"{self.config.display_name}: {input_doc.title}"
-                except Exception:
+                except (KeyError, ValueError) as e:
+                    logger.debug(f"Could not fetch document {context.input_doc_id} for title: {e}")
                     base_title = f"{self.config.display_name} Output"
             elif context.input_type == 'query' and context.input_query:
                 query_preview = truncate_title(context.input_query)
