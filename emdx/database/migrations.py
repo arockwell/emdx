@@ -772,6 +772,31 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_012_add_gdocs(conn: sqlite3.Connection):
+    """Add gdocs table for tracking Google Docs exports."""
+    cursor = conn.cursor()
+
+    # Create gdocs table for tracking document-gdoc relationships
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS gdocs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            gdoc_id TEXT NOT NULL,
+            gdoc_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(document_id, gdoc_id),
+            FOREIGN KEY (document_id) REFERENCES documents (id)
+        )
+    """)
+
+    # Create indexes for gdocs table
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_document ON gdocs(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_gdoc_id ON gdocs(gdoc_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -786,6 +811,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (9, "Add tasks system", migration_009_add_tasks),
     (10, "Add task executions join table", migration_010_add_task_executions),
     (11, "Add dynamic workflow mode", migration_011_add_dynamic_workflow_mode),
+    (12, "Add Google Docs exports", migration_012_add_gdocs),
 ]
 
 
