@@ -91,6 +91,71 @@ EXECUTION_TYPE_EMOJIS = {
 }
 
 
+# Environment variables that should be removed before passing to subprocesses
+# These may contain sensitive credentials or tokens
+SENSITIVE_ENV_VARS = frozenset({
+    # API keys and tokens
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AZURE_CLIENT_SECRET",
+    "GCP_SERVICE_ACCOUNT_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITLAB_TOKEN",
+    "NPM_TOKEN",
+    "PYPI_TOKEN",
+    # Database credentials
+    "DATABASE_PASSWORD",
+    "DB_PASSWORD",
+    "POSTGRES_PASSWORD",
+    "MYSQL_PASSWORD",
+    "REDIS_PASSWORD",
+    "MONGODB_PASSWORD",
+    # Generic sensitive patterns
+    "SECRET_KEY",
+    "PRIVATE_KEY",
+    "ENCRYPTION_KEY",
+    "JWT_SECRET",
+    "SESSION_SECRET",
+    # Cloud provider secrets
+    "HEROKU_API_KEY",
+    "DIGITALOCEAN_TOKEN",
+    "LINODE_TOKEN",
+    "VULTR_API_KEY",
+    # CI/CD tokens
+    "CIRCLE_TOKEN",
+    "TRAVIS_TOKEN",
+    "JENKINS_TOKEN",
+})
+
+
+def sanitize_environment() -> dict[str, str]:
+    """Create a sanitized copy of the environment for subprocess execution.
+
+    Removes sensitive environment variables that may contain credentials,
+    tokens, or secrets that should not be exposed to subprocesses.
+
+    Returns:
+        A dictionary containing the sanitized environment variables.
+    """
+    sanitized = {}
+    for key, value in os.environ.items():
+        # Skip explicitly sensitive variables
+        if key in SENSITIVE_ENV_VARS:
+            continue
+        # Skip variables matching sensitive patterns (case-insensitive check)
+        key_upper = key.upper()
+        if any(pattern in key_upper for pattern in ("_SECRET", "_TOKEN", "_KEY", "_PASSWORD", "_CREDENTIAL")):
+            # Allow PATH and similar non-sensitive keys
+            if key_upper not in ("PATH", "HOME", "USER", "SHELL", "LANG", "TERM"):
+                continue
+        sanitized[key] = value
+    return sanitized
+
+
 def generate_unique_execution_id(doc_id: str) -> str:
     """Generate a guaranteed unique execution ID.
     
@@ -456,6 +521,10 @@ def execute_with_claude(
 
     # Start subprocess
     try:
+        # Use sanitized environment to prevent credential leakage
+        sanitized_env = sanitize_environment()
+        sanitized_env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered for subprocesses
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -464,8 +533,7 @@ def execute_with_claude(
             bufsize=0,  # Unbuffered
             universal_newlines=True,
             cwd=working_dir,  # Run in specified working directory
-            # Force unbuffered for any Python subprocesses
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            env=sanitized_env,
             # Detach from parent process group so it survives parent exit
             preexec_fn=os.setsid if os.name != 'nt' else None
         )
