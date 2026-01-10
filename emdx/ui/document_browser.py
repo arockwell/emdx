@@ -290,8 +290,10 @@ class DocumentBrowser(Widget):
             details_panel.write("📋 **Document Details**")
             details_panel.write("")
             details_panel.write("[dim]Select a document to view details[/dim]")
+        except (LookupError, AttributeError) as e:
+            logger.error(f"Error setting up details panel: {type(e).__name__}: {e}")
         except Exception as e:
-            logger.error(f"Error setting up details panel: {e}")
+            logger.error(f"Unexpected error setting up details panel: {type(e).__name__}: {e}")
             import traceback
             logger.error(traceback.format_exc())
         
@@ -695,8 +697,8 @@ class DocumentBrowser(Widget):
                     app.update_status(f"Edit Mode | {message}")
                 else:
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not update vim status: {type(e).__name__}: {e}")
             
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (called by SelectionTextArea)."""
@@ -704,8 +706,8 @@ class DocumentBrowser(Widget):
             # Exit selection mode
             try:
                 self.call_after_refresh(self._async_exit_selection_mode)
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug(f"Could not exit selection mode: {type(e).__name__}: {e}")
         
     def _async_exit_selection_mode(self) -> None:
         """Async wrapper for exit_selection_mode."""
@@ -971,8 +973,8 @@ class DocumentBrowser(Widget):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not update status after exiting selection mode: {type(e).__name__}: {e}")
     
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview and details panel when row is highlighted."""
