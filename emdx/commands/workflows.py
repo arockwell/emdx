@@ -17,6 +17,7 @@ from ..workflows import database as wf_db
 from ..workflows.base import ExecutionMode, WorkflowConfig, WorkflowRun
 from ..workflows.executor import workflow_executor
 from ..workflows.registry import workflow_registry
+from ..utils.text_formatting import truncate_title, truncate_description
 
 app = typer.Typer(help="Manage and run EMDX workflows")
 console = Console()
@@ -138,9 +139,7 @@ def list_workflows(
                 if wf.is_builtin:
                     status += " 🏛️"
 
-                description = wf.description or ""
-                if len(description) > 40:
-                    description = description[:40] + "..."
+                description = truncate_description(wf.description or "")
 
                 table.add_row(
                     str(wf.id),
@@ -555,9 +554,7 @@ def list_strategies(
 
         for strategy in strategies:
             builtin = "🏛️" if strategy.is_builtin else ""
-            description = strategy.description or ""
-            if len(description) > 50:
-                description = description[:50] + "..."
+            description = truncate_title(strategy.description or "")
 
             table.add_row(
                 strategy.display_name,

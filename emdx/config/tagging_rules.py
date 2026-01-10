@@ -3,11 +3,14 @@ Tagging rules and configuration for EMDX auto-tagger.
 Allows users to define custom patterns for auto-tagging.
 """
 
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,7 +58,7 @@ class TaggingConfig:
                     })
             except Exception as e:
                 # If config is invalid, start fresh but log the error
-                print(f"Warning: Could not load tagging config: {e}")
+                logger.warning(f"Could not load tagging config: {e}")
                 self.rules = {}
         else:
             # Create default config

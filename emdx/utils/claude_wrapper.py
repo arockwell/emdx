@@ -26,9 +26,12 @@ def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         try:
             update_execution_heartbeat(exec_id)
-        except Exception:
-            # Silently ignore heartbeat failures
-            pass
+        except Exception as e:
+            # Heartbeat failures are expected and non-critical
+            # Database might be locked during heavy operations
+            # Silently continue, but log for debugging
+            import logging
+            logging.debug(f"Heartbeat update failed: {e}")
         
         # Wait 30 seconds or until stop event
         stop_event.wait(30)

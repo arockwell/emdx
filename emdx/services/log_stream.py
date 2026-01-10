@@ -100,7 +100,10 @@ class LogStream:
             for subscriber in self.subscribers:
                 try:
                     subscriber.on_log_error(e)
-                except Exception:
+                except Exception as e:
+                    # Log subscriber error but continue with others
+                    import logging
+                    logging.debug(f"Subscriber error in log stream: {e}")
                     pass
     
     def _read_new_content(self) -> str:

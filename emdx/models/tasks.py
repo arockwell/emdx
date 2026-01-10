@@ -166,7 +166,13 @@ def add_dependency(task_id: int, depends_on: int) -> bool:
             )
             conn.commit()
             return True
-        except Exception:
+        except sqlite3.IntegrityError:
+            # Dependency already exists or would create invalid state
+            return False
+        except sqlite3.Error as e:
+            # Other database error
+            import logging
+            logging.error(f"Database error adding task dependency: {e}")
             return False
 
 
