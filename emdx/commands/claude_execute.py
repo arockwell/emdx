@@ -26,6 +26,7 @@ from ..models.executions import (
 )
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
+from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
 
@@ -402,7 +403,7 @@ def execute_with_claude_detached(
 
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize structured logger for main process
     main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
     main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'}", {
@@ -549,7 +550,7 @@ def execute_with_claude(
 
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize structured logger for main process
     main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
     main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {

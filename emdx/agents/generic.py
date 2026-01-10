@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 from .base import Agent, AgentContext, AgentResult
+from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..models.documents import get_document, save_document
 from ..utils.logging import get_logger
 from ..utils.structured_logger import StructuredLogger, ProcessType
