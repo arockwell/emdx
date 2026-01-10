@@ -2,9 +2,9 @@
 Search functionality for emdx documents using FTS5
 """
 
-from datetime import datetime
 from typing import Any, Optional
 
+from ..utils.datetime import parse_datetime
 from .connection import db_connection
 
 
@@ -97,6 +97,6 @@ def search_documents(
             doc = dict(row)
             for field in ["created_at", "updated_at", "last_accessed"]:
                 if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
+                    doc[field] = parse_datetime(doc[field])
             docs.append(doc)
         return docs

@@ -19,6 +19,7 @@ from ..models.tags import (
     get_tags_for_documents,
     remove_tags_from_document,
 )
+from ..utils.datetime import parse_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +123,8 @@ class LifecycleTracker:
             doc['stage'] = self._get_stage_from_tags(set(doc_tags))
 
             # Calculate age
-            created = datetime.fromisoformat(doc['created_at'])
-            doc['age_days'] = (datetime.now() - created).days
+            created = parse_datetime(doc['created_at'])
+            doc['age_days'] = (datetime.now() - created).days if created else 0
 
             if stage is None or doc['stage'] == stage:
                 gameplans.append(doc)
@@ -162,10 +163,11 @@ class LifecycleTracker:
         # Duration analysis
         completed_durations = []
         for gp in completed:
-            created = datetime.fromisoformat(gp['created_at'])
-            updated = datetime.fromisoformat(gp['updated_at'])
-            duration = (updated - created).days
-            completed_durations.append(duration)
+            created = parse_datetime(gp['created_at'])
+            updated = parse_datetime(gp['updated_at'])
+            if created and updated:
+                duration = (updated - created).days
+                completed_durations.append(duration)
         
         avg_duration = sum(completed_durations) / len(completed_durations) if completed_durations else 0
         

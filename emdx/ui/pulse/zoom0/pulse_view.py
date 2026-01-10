@@ -11,6 +11,7 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Static, RichLog
 
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
+from emdx.utils.datetime import parse_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -209,13 +210,14 @@ class PulseView(Widget):
                 started = r.get('started_at')
                 if not started:
                     return False
-                try:
-                    if isinstance(started, str):
-                        started = datetime.fromisoformat(started.replace('Z', '+00:00')).replace(tzinfo=None)
-                    now = datetime.now()
-                    return (now - started) < timedelta(minutes=minutes)
-                except ValueError:
+                started_dt = parse_datetime(started)
+                if not started_dt:
                     return False
+                # Remove timezone for comparison with local time
+                if started_dt.tzinfo is not None:
+                    started_dt = started_dt.replace(tzinfo=None)
+                now = datetime.now()
+                return (now - started_dt) < timedelta(minutes=minutes)
 
             # Running: show if has context OR is recent (might still be starting up)
             running = [r for r in all_runs if r.get('status') == 'running' and (has_context(r) or is_recent(r))]
@@ -580,10 +582,13 @@ class PulseView(Widget):
 
         # Show elapsed time
         started = run.get('started_at')
-        if started:
-            if isinstance(started, str):
-                started = datetime.fromisoformat(started.replace('Z', '+00:00')).replace(tzinfo=None)
-            elapsed = datetime.now() - started
+        started_dt = parse_datetime(started) if started else None
+        if started_dt:
+            # Remove timezone for comparison with local time
+            if started_dt.tzinfo is not None:
+                started_dt = started_dt.replace(tzinfo=None)
+            from datetime import datetime
+            elapsed = datetime.now() - started_dt
             mins = int(elapsed.total_seconds() // 60)
             secs = int(elapsed.total_seconds() % 60)
             agent_log.write(f"[yellow]⏳ Running for {mins}m {secs}s[/yellow]")
