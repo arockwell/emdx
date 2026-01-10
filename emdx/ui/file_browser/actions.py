@@ -118,8 +118,10 @@ class FileBrowserActions:
                 )
             else:
                 self.app.bell()
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not save file: {type(e).__name__}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error saving file: {type(e).__name__}: {e}", exc_info=True)
 
     def action_execute_file(self: "FileBrowserView") -> None:
         """Execute selected file with Claude."""
@@ -140,8 +142,10 @@ class FileBrowserActions:
                 )
             else:
                 self.app.bell()
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not execute file: {type(e).__name__}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error executing file: {type(e).__name__}: {e}", exc_info=True)
 
     def action_edit_file(self: "FileBrowserView") -> None:
         """Edit selected file in integrated editor."""

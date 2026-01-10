@@ -519,12 +519,31 @@ def execute_with_claude(
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
         return 1
-    except Exception as e:
-        error_msg = f"Error executing Claude: {e}"
+    except subprocess.SubprocessError as e:
+        error_msg = f"Subprocess error executing Claude: {type(e).__name__}: {e}"
         with open(log_file, 'a') as log:
             log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
+        return 1
+    except OSError as e:
+        error_msg = f"OS error executing Claude: {type(e).__name__}: {e}"
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        if verbose:
+            console.print(f"[red]{error_msg}[/red]")
+        return 1
+    except Exception as e:
+        error_msg = f"Unexpected error executing Claude: {type(e).__name__}: {e}"
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        if verbose:
+            console.print(f"[red]{error_msg}[/red]")
+        # Log with traceback for unexpected errors
+        import traceback
+        main_logger.error(f"Unexpected error in execute_with_claude: {error_msg}", {
+            "traceback": traceback.format_exc()
+        })
         return 1
 
 

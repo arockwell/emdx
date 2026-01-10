@@ -963,7 +963,17 @@ Report the document ID that was created."""
                     return int(match.group(1))
 
             return None
-        except Exception:
+        except (OSError, IOError) as e:
+            # Log file read errors
+            from emdx.utils.logging import get_logger
+            logger = get_logger(__name__)
+            logger.debug(f"Could not read log file {log_file} for output doc ID extraction: {type(e).__name__}: {e}")
+            return None
+        except Exception as e:
+            # Log unexpected errors during parsing
+            from emdx.utils.logging import get_logger
+            logger = get_logger(__name__)
+            logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
     async def _synthesize_outputs(
