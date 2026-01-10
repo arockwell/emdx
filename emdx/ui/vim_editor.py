@@ -118,11 +118,6 @@ class VimEditor(Vertical):
     def _initialize_editor(self):
         """Initialize editor after mounting - focus and set up line numbers."""
         try:
-            
-            # DEBUG: Check TextArea state
-            if hasattr(self.text_area, 'size'):
-            if hasattr(self.text_area, 'region'):
-            
             # AGGRESSIVE positioning: Force cursor to top MULTIPLE times with different approaches
             
             # Method 1: Force cursor to start at beginning
@@ -157,16 +152,6 @@ class VimEditor(Vertical):
             # Focus the text area AFTER positioning
             self.text_area.focus()
             
-            # VERIFICATION: Log what actually happened after all our positioning attempts
-            final_cursor = getattr(self.text_area, 'cursor_location', (0, 0))
-            final_selection = getattr(self.text_area, 'selection', None)
-            total_lines = len(self.text_area.text.split('\n'))
-            
-            
-            # Try to get scroll position if available
-            if hasattr(self.text_area, 'scroll_offset'):
-            if hasattr(self.text_area, 'scroll_x'):
-            
             # Use cursor position for line numbers
             if hasattr(self.text_area, 'selection') and self.text_area.selection:
                 current_line = self.text_area.selection.end[0]
@@ -200,8 +185,6 @@ class VimEditor(Vertical):
                 if hasattr(self.text_area, 'selection'):
                     self.text_area.selection = None
                 # Note: scroll_to and line numbers disabled due to layout issues
-            else:
-                
         except Exception as e:
             logger.error(f"Error in delayed positioning check: {e}")
     
