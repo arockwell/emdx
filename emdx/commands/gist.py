@@ -6,15 +6,17 @@ import os
 import subprocess
 import webbrowser
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import typer
-from github import Github, GithubException
 from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
+
+if TYPE_CHECKING:
+    from github import Github, GithubException
 
 app = typer.Typer()
 console = Console()
@@ -115,6 +117,9 @@ def create_gist_with_api(
     if not token:
         return None
 
+    # Lazy import - PyGithub is slow to import (~300ms)
+    from github import Github, GithubException
+
     try:
         g = Github(token)
         user = g.get_user()
@@ -171,6 +176,9 @@ def update_gist_with_api(
     """Update an existing gist using GitHub API."""
     if not token:
         return False
+
+    # Lazy import - PyGithub is slow to import (~300ms)
+    from github import Github, GithubException
 
     try:
         g = Github(token)
