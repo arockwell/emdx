@@ -146,3 +146,12 @@ cython_debug/
 
 # Testing
 test-*.md.beads/
+test_output.txt
+
+# Patch artifacts
+*.patch
+*.orig
+*.rej
+
+# Misnamed log files
+*.lo

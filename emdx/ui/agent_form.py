@@ -207,14 +207,12 @@ class AgentForm(Widget):
 
                 with Vertical(id="category-column"):
                     yield Static("Category:", classes="field-label")
-                    logger.info("Creating CategorySelect - TEMPORARILY USING INPUT")
-                    # TEMPORARY: Use Input instead of Select to test if Select is the problem
-                    yield Input(
-                        value=self.agent_data.get("category", "research"),
+                    logger.info("Creating CategorySelect")
+                    yield CategorySelect(
+                        initial_value=self.agent_data.get("category", "research"),
                         id="agent-category",
-                        placeholder="Category (research/generation/analysis/maintenance)"
                     )
-                    logger.info("Category input created")
+                    logger.info("CategorySelect created")
             
             # Row 2: Description
             yield Static("Description:", classes="field-label")

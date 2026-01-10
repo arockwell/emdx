@@ -245,8 +245,10 @@ class AutoTagger:
                     
                     if cursor.rowcount > 0:
                         applied_tags.append(tag)
-                except Exception:
-                    # Skip if error (e.g., duplicate)
+                except sqlite3.Error as e:
+                    # Skip if database error (e.g., duplicate constraint)
+                    import logging
+                    logging.debug(f"Failed to apply tag {tag} to document {document_id}: {e}")
                     continue
         
         conn.commit()
@@ -453,4 +455,6 @@ class AutoTagger:
         Note: Pattern usage tracking is not currently implemented.
         This would require persistent storage of match history.
         """
+        # Pattern usage tracking not yet implemented
+        # Would require database table to store pattern match history and analytics
         return {}

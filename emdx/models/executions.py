@@ -97,11 +97,28 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def save_execution(execution: Execution) -> None:
-    """Save execution to database (for backwards compatibility)."""
-    # This function is deprecated but kept for compatibility
-    # New code should use create_execution instead
-    pass
+def save_execution(execution: Execution) -> int:
+    """Save execution to database.
+
+    Creates a new execution record from an Execution object.
+    Returns the database ID of the created record.
+
+    .. deprecated:: 0.7.0
+        Use create_execution() instead. This function will be removed in v1.0.
+    """
+    import warnings
+    warnings.warn(
+        "save_execution() is deprecated. Use create_execution() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return create_execution(
+        doc_id=execution.doc_id,
+        doc_title=execution.doc_title,
+        log_file=execution.log_file,
+        working_dir=execution.working_dir,
+        pid=execution.pid,
+    )
 
 
 def get_execution(exec_id: str) -> Optional[Execution]:
@@ -260,13 +277,20 @@ def update_execution_heartbeat(exec_id: int) -> None:
 
 def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
     """Get executions that haven't sent a heartbeat recently.
-    
+
     Args:
         timeout_seconds: Seconds after which an execution is considered stale (default 30 min)
-        
+
     Returns:
         List of stale executions
     """
+    # Validate timeout_seconds is a positive integer to prevent SQL injection
+    if not isinstance(timeout_seconds, int) or timeout_seconds < 0:
+        raise ValueError("timeout_seconds must be a non-negative integer")
+
+    # Build the datetime modifier string in Python (safe from SQL injection)
+    timeout_modifier = f"+{timeout_seconds} seconds"
+
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         # Build interval string safely - timeout_seconds is validated as int by function signature

@@ -17,6 +17,7 @@ from ..agents.executor import agent_executor
 from ..database.connection import db_connection
 from ..utils.emoji_aliases import EMOJI_ALIASES
 from ..utils.logging import get_logger
+from ..utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Manage and run EMDX agents")
 console = Console()
@@ -71,7 +72,7 @@ def list_agents(
                     str(agent['id']),
                     agent['display_name'],
                     agent['category'],
-                    agent['description'][:50] + "..." if len(agent['description']) > 50 else agent['description'],
+                    truncate_title(agent['description']),
                     tools,
                     str(agent['usage_count']),
                     status
