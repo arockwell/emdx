@@ -3,7 +3,7 @@
 from pathlib import Path
 
 # Claude model configuration
-DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
 
 
 def get_db_path() -> Path:
