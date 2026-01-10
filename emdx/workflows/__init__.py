@@ -19,6 +19,14 @@ from .base import (
 )
 from .registry import workflow_registry
 from .executor import WorkflowExecutor, workflow_executor
+from .services import (
+    DocumentService,
+    ExecutionService,
+    ClaudeService,
+    document_service,
+    execution_service,
+    claude_service,
+)
 
 __all__ = [
     # Data classes
@@ -34,4 +42,11 @@ __all__ = [
     # Executor
     "WorkflowExecutor",
     "workflow_executor",
+    # Services
+    "DocumentService",
+    "ExecutionService",
+    "ClaudeService",
+    "document_service",
+    "execution_service",
+    "claude_service",
 ]

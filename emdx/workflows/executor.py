@@ -9,10 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from emdx.database import db_connection
-from emdx.models.documents import save_document, get_document
-from emdx.models.executions import create_execution, get_execution, update_execution_status
-
+from .services import document_service, execution_service, claude_service
 from .base import (
     ExecutionMode,
     IterationStrategy,
@@ -111,7 +108,7 @@ class WorkflowExecutor:
         try:
             # Load input document content if provided
             if input_doc_id:
-                doc = get_document(input_doc_id)
+                doc = document_service.get_document(input_doc_id)
                 if doc:
                     context['input'] = doc.get('content', '')
                     context['input_title'] = doc.get('title', '')
@@ -151,13 +148,13 @@ class WorkflowExecutor:
 
                 # Store stage output in context for later stages
                 if result.output_doc_id:
-                    doc = get_document(result.output_doc_id)
+                    doc = document_service.get_document(result.output_doc_id)
                     if doc:
                         context[f"{stage.name}.output"] = doc.get('content', '')
                         context[f"{stage.name}.output_id"] = result.output_doc_id
 
                 if result.synthesis_doc_id:
-                    doc = get_document(result.synthesis_doc_id)
+                    doc = document_service.get_document(result.synthesis_doc_id)
                     if doc:
                         context[f"{stage.name}.synthesis"] = doc.get('content', '')
                         context[f"{stage.name}.synthesis_id"] = result.synthesis_doc_id
@@ -166,7 +163,7 @@ class WorkflowExecutor:
                 if result.individual_outputs:
                     outputs_content = []
                     for doc_id in result.individual_outputs:
-                        doc = get_document(doc_id)
+                        doc = document_service.get_document(doc_id)
                         if doc:
                             outputs_content.append(doc.get('content', ''))
                     context[f"{stage.name}.outputs"] = outputs_content
@@ -478,7 +475,7 @@ class WorkflowExecutor:
 
             # Collect output for next iteration
             if result.get('output_doc_id'):
-                doc = get_document(result['output_doc_id'])
+                doc = document_service.get_document(result['output_doc_id'])
                 if doc:
                     previous_outputs.append(doc.get('content', ''))
                     output_doc_ids.append(result['output_doc_id'])
@@ -577,7 +574,7 @@ class WorkflowExecutor:
 
             # Collect output
             if result.get('output_doc_id'):
-                doc = get_document(result['output_doc_id'])
+                doc = document_service.get_document(result['output_doc_id'])
                 if doc:
                     outputs.append(doc.get('content', ''))
                     output_doc_ids.append(result['output_doc_id'])
@@ -820,8 +817,6 @@ class WorkflowExecutor:
         Returns:
             Dict with success, output_doc_id, tokens_used, error_message
         """
-        from emdx.commands.claude_execute import execute_with_claude
-
         wf_db.update_individual_run(
             individual_run_id,
             status='running',
@@ -839,7 +834,7 @@ class WorkflowExecutor:
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
-            exec_id = create_execution(
+            exec_id = execution_service.create_execution(
                 doc_id=context.get('input_doc_id', 0),
                 doc_title=f"Workflow Agent Run #{individual_run_id}",
                 log_file=str(log_file),
@@ -860,7 +855,7 @@ Report the document ID that was created."""
             loop = asyncio.get_event_loop()
             exit_code = await loop.run_in_executor(
                 None,
-                lambda: execute_with_claude(
+                lambda: claude_service.execute_with_claude(
                     task=full_prompt,
                     execution_id=exec_id,
                     log_file=log_file,
@@ -874,7 +869,7 @@ Report the document ID that was created."""
 
             # Update execution status
             status = 'completed' if exit_code == 0 else 'failed'
-            update_execution_status(exec_id, status, exit_code)
+            execution_service.update_execution_status(exec_id, status, exit_code)
 
             if exit_code == 0:
                 # Try to extract output document ID from log
@@ -883,7 +878,7 @@ Report the document ID that was created."""
                 if not output_doc_id:
                     # If no document was created, save the log content as output
                     log_content = log_file.read_text() if log_file.exists() else "No output captured"
-                    output_doc_id = save_document(
+                    output_doc_id = document_service.save_document(
                         title=f"Workflow Agent Output - {datetime.now().isoformat()}",
                         content=f"# Agent Execution Log\n\n{log_content}",
                         tags=['workflow-output'],
@@ -994,12 +989,10 @@ Report the document ID that was created."""
         Returns:
             Dict with output_doc_id and tokens_used
         """
-        from emdx.commands.claude_execute import execute_with_claude
-
         # Gather all outputs
         outputs = []
         for doc_id in output_doc_ids:
-            doc = get_document(doc_id)
+            doc = document_service.get_document(doc_id)
             if doc:
                 outputs.append(doc.get('content', ''))
 
@@ -1032,7 +1025,7 @@ Report the document ID that was created."""
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
-            exec_id = create_execution(
+            exec_id = execution_service.create_execution(
                 doc_id=context.get('input_doc_id', 0),
                 doc_title=f"Workflow Synthesis #{stage_run_id}",
                 log_file=str(log_file),
@@ -1043,7 +1036,7 @@ Report the document ID that was created."""
             loop = asyncio.get_event_loop()
             exit_code = await loop.run_in_executor(
                 None,
-                lambda: execute_with_claude(
+                lambda: claude_service.execute_with_claude(
                     task=full_prompt,
                     execution_id=exec_id,
                     log_file=log_file,
@@ -1055,7 +1048,7 @@ Report the document ID that was created."""
                 )
             )
 
-            update_execution_status(exec_id, 'completed' if exit_code == 0 else 'failed', exit_code)
+            execution_service.update_execution_status(exec_id, 'completed' if exit_code == 0 else 'failed', exit_code)
 
             if exit_code == 0:
                 # Try to extract output document ID
@@ -1064,7 +1057,7 @@ Report the document ID that was created."""
                 if not output_doc_id:
                     # Fallback: save log content
                     log_content = log_file.read_text() if log_file.exists() else "No synthesis output"
-                    output_doc_id = save_document(
+                    output_doc_id = document_service.save_document(
                         title=f"Synthesis - {datetime.now().isoformat()}",
                         content=f"# Synthesis Log\n\n{log_content}",
                         tags=['workflow-synthesis'],
@@ -1081,7 +1074,7 @@ Report the document ID that was created."""
                 for i, output in enumerate(outputs, 1):
                     combined += f"## Output {i}\n{output}\n\n"
 
-                doc_id = save_document(
+                doc_id = document_service.save_document(
                     title=f"Synthesis (fallback) - {datetime.now().isoformat()}",
                     content=combined,
                     tags=['workflow-synthesis'],
@@ -1098,7 +1091,7 @@ Report the document ID that was created."""
             for i, output in enumerate(outputs, 1):
                 combined += f"## Output {i}\n{output}\n\n"
 
-            doc_id = save_document(
+            doc_id = document_service.save_document(
                 title=f"Synthesis (error) - {datetime.now().isoformat()}",
                 content=combined,
                 tags=['workflow-synthesis'],
