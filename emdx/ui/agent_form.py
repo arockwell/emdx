@@ -323,7 +323,7 @@ class AgentForm(Widget):
                 next_index = (current_index + 1) % len(self.field_order)
                 next_field_id = self.field_order[next_index]
                 self.query_one(f"#{next_field_id}").focus()
-        except (ValueError, Exception):
+        except ValueError:
             # If current field not found, focus first field
             self.query_one("#agent-name").focus()
     
@@ -337,7 +337,7 @@ class AgentForm(Widget):
                 prev_index = (current_index - 1) % len(self.field_order)
                 prev_field_id = self.field_order[prev_index]
                 self.query_one(f"#{prev_field_id}").focus()
-        except (ValueError, Exception):
+        except ValueError:
             # If current field not found, focus last field
             self.query_one("#agent-user-prompt").focus()
     
