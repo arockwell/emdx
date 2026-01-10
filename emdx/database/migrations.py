@@ -772,7 +772,32 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_012_make_execution_doc_id_nullable(conn: sqlite3.Connection):
+def migration_012_add_gdocs(conn: sqlite3.Connection):
+    """Add gdocs table for tracking Google Docs exports."""
+    cursor = conn.cursor()
+
+    # Create gdocs table for tracking document-gdoc relationships
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS gdocs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            gdoc_id TEXT NOT NULL,
+            gdoc_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(document_id, gdoc_id),
+            FOREIGN KEY (document_id) REFERENCES documents (id)
+        )
+    """)
+
+    # Create indexes for gdocs table
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_document ON gdocs(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_gdoc_id ON gdocs(gdoc_id)")
+
+    conn.commit()
+
+
+def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
     """Make doc_id nullable in executions table for workflow agent runs.
 
     Workflow agent executions don't always have an associated document,
@@ -823,7 +848,7 @@ def migration_012_make_execution_doc_id_nullable(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_013_fix_individual_runs_fk(conn: sqlite3.Connection):
+def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
     """Fix workflow_individual_runs FK to reference executions instead of agent_executions.
 
     The workflow executor uses the executions table directly for tracking,
@@ -890,8 +915,9 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (9, "Add tasks system", migration_009_add_tasks),
     (10, "Add task executions join table", migration_010_add_task_executions),
     (11, "Add dynamic workflow mode", migration_011_add_dynamic_workflow_mode),
-    (12, "Make execution doc_id nullable", migration_012_make_execution_doc_id_nullable),
-    (13, "Fix individual_runs FK to executions", migration_013_fix_individual_runs_fk),
+    (12, "Add Google Docs exports", migration_012_add_gdocs),
+    (13, "Make execution doc_id nullable", migration_013_make_execution_doc_id_nullable),
+    (14, "Fix individual_runs FK to executions", migration_014_fix_individual_runs_fk),
 ]
 
 
