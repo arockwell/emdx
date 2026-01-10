@@ -38,7 +38,7 @@ def parse_timestamp(ts) -> datetime:
 class Execution:
     """Represents a Claude execution."""
     id: int  # Now numeric auto-incrementing ID
-    doc_id: int
+    doc_id: Optional[int]  # Can be None for workflow agent executions
     doc_title: str
     status: str  # 'running', 'completed', 'failed'
     started_at: datetime
@@ -83,9 +83,20 @@ class Execution:
         return Path(self.log_file).expanduser()
 
 
-def create_execution(doc_id: int, doc_title: str, log_file: str, 
+def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
                     working_dir: Optional[str] = None, pid: Optional[int] = None) -> int:
-    """Create a new execution and return its ID."""
+    """Create a new execution and return its ID.
+
+    Args:
+        doc_id: Document ID (can be None for workflow agent executions)
+        doc_title: Title for the execution
+        log_file: Path to log file
+        working_dir: Working directory for execution
+        pid: Process ID
+
+    Returns:
+        Created execution ID
+    """
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
