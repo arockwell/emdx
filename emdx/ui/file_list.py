@@ -139,85 +139,60 @@ class FileList(DataTable):
             return selected
         return None
     
+    # Icon mappings for file types
+    _EXTENSION_ICONS = {
+        # Code files
+        ".py": "🐍", ".pyw": "🐍",
+        ".js": "📜", ".jsx": "📜", ".ts": "📜", ".tsx": "📜",
+        ".rs": "🦀",
+        ".go": "🐹",
+        ".java": "☕", ".class": "☕", ".jar": "☕",
+        ".c": "⚙️", ".cpp": "⚙️", ".cc": "⚙️", ".h": "⚙️", ".hpp": "⚙️",
+        ".swift": "🦉",
+        ".rb": "💎",
+        # Web files
+        ".html": "🌐", ".htm": "🌐",
+        ".css": "🎨", ".scss": "🎨", ".sass": "🎨",
+        # Data files
+        ".json": "📊", ".yaml": "📊", ".yml": "📊", ".toml": "📊",
+        ".xml": "📋",
+        ".sql": "🗃️", ".db": "🗃️", ".sqlite": "🗃️",
+        # Docs
+        ".md": "📝", ".markdown": "📝",
+        ".txt": "📄", ".text": "📄",
+        ".pdf": "📕",
+        ".doc": "📘", ".docx": "📘",
+        # Images
+        ".png": "🖼️", ".jpg": "🖼️", ".jpeg": "🖼️", ".gif": "🖼️", ".svg": "🖼️", ".ico": "🖼️",
+        # Archives
+        ".zip": "📦", ".tar": "📦", ".gz": "📦", ".bz2": "📦", ".xz": "📦", ".7z": "📦",
+        # Scripts
+        ".sh": "🔨", ".bash": "🔨", ".zsh": "🔨", ".fish": "🔨",
+        ".bat": "🪟",
+    }
+
+    _SPECIAL_DIRS = {
+        ".git": "🔧",
+        "node_modules": "📦", "__pycache__": "📦", ".venv": "📦", "venv": "📦",
+    }
+
+    _SPECIAL_FILES = {
+        ".gitignore": "⚙️", ".env": "⚙️", ".editorconfig": "⚙️",
+        "Makefile": "🔧",
+        "Dockerfile": "🐳", "docker-compose.yml": "🐳",
+    }
+
     def get_file_icon(self, path: Path) -> str:
         """Return emoji icon for file type."""
         if path.is_dir():
-            # Special folders
-            if path.name == ".git":
-                return "🔧"
-            elif path.name in {"node_modules", "__pycache__", ".venv", "venv"}:
-                return "📦"
-            return "📁"
-        
-        # File icons by extension
+            return self._SPECIAL_DIRS.get(path.name, "📁")
+
+        # Check special filename first, then extension
+        if path.name in self._SPECIAL_FILES:
+            return self._SPECIAL_FILES[path.name]
+
         ext = path.suffix.lower()
-        
-        # Code files
-        if ext in {".py", ".pyw"}:
-            return "🐍"
-        elif ext in {".js", ".jsx", ".ts", ".tsx"}:
-            return "📜"
-        elif ext in {".rs"}:
-            return "🦀"
-        elif ext in {".go"}:
-            return "🐹"
-        elif ext in {".java", ".class", ".jar"}:
-            return "☕"
-        elif ext in {".c", ".cpp", ".cc", ".h", ".hpp"}:
-            return "⚙️"
-        elif ext in {".swift"}:
-            return "🦉"
-        elif ext in {".rb"}:
-            return "💎"
-        
-        # Web files
-        elif ext in {".html", ".htm"}:
-            return "🌐"
-        elif ext in {".css", ".scss", ".sass"}:
-            return "🎨"
-        
-        # Data files
-        elif ext in {".json", ".yaml", ".yml", ".toml"}:
-            return "📊"
-        elif ext in {".xml"}:
-            return "📋"
-        elif ext in {".sql", ".db", ".sqlite"}:
-            return "🗃️"
-        
-        # Docs
-        elif ext in {".md", ".markdown"}:
-            return "📝"
-        elif ext in {".txt", ".text"}:
-            return "📄"
-        elif ext in {".pdf"}:
-            return "📕"
-        elif ext in {".doc", ".docx"}:
-            return "📘"
-        
-        # Images
-        elif ext in {".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico"}:
-            return "🖼️"
-        
-        # Archives
-        elif ext in {".zip", ".tar", ".gz", ".bz2", ".xz", ".7z"}:
-            return "📦"
-        
-        # Scripts
-        elif ext in {".sh", ".bash", ".zsh", ".fish"}:
-            return "🔨"
-        elif ext == ".bat":
-            return "🪟"
-        
-        # Config files
-        elif path.name in {".gitignore", ".env", ".editorconfig"}:
-            return "⚙️"
-        elif path.name == "Makefile":
-            return "🔧"
-        elif path.name in {"Dockerfile", "docker-compose.yml"}:
-            return "🐳"
-        
-        # Default
-        return "📄"
+        return self._EXTENSION_ICONS.get(ext, "📄")
     
     def format_size(self, size: int) -> str:
         """Format file size in human readable format."""
