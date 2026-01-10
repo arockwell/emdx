@@ -1,11 +1,19 @@
 """
 GitHub Gist integration for emdx
+
+Security Note:
+    This module handles GitHub authentication tokens. When using environment
+    variables for tokens (GITHUB_TOKEN), be aware that these can be exposed
+    in process listings and may be inherited by child processes. For better
+    security, prefer using `gh auth login` which stores credentials securely.
 """
 
 import os
 import subprocess
+import tempfile
 import webbrowser
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -21,25 +29,39 @@ console = Console()
 
 
 def get_github_auth() -> Optional[str]:
-    """Get GitHub authentication token."""
-    # Priority order:
-    # 1. Environment variable GITHUB_TOKEN
-    token = os.getenv("GITHUB_TOKEN")
-    if token:
-        return token
+    """Get GitHub authentication token.
 
-    # 2. Try to get token from gh CLI if available
+    Security Note:
+        This function retrieves GitHub tokens from environment variables or
+        the gh CLI. Using `gh auth login` is preferred over environment
+        variables as it stores credentials more securely and handles token
+        refresh automatically.
+
+    Returns:
+        GitHub token string if found, None otherwise.
+    """
+    # Priority order:
+    # 1. Try to get token from gh CLI if available (more secure)
     try:
-        result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5  # Prevent hanging
+        )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # 3. Check config file (future enhancement)
-    # config_path = Path.home() / '.config' / 'emdx' / 'config.yml'
-    # if config_path.exists():
-    #     # Load token from config
+    # 2. Environment variable GITHUB_TOKEN (less secure fallback)
+    token = os.getenv("GITHUB_TOKEN")
+    if token:
+        # Warn about environment variable usage in debug scenarios
+        # Note: We don't warn every time to avoid noise, but the security
+        # note in the module docstring covers this
+        return token
 
     return None
 
@@ -47,33 +69,49 @@ def get_github_auth() -> Optional[str]:
 def create_gist_with_gh(
     content: str, filename: str, description: str, public: bool = False
 ) -> Optional[dict[str, str]]:
-    """Create a gist using gh CLI."""
-    try:
-        # Create a temporary file
-        import tempfile
+    """Create a gist using gh CLI.
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            f.write(content)
-            temp_path = f.name
+    Uses secure temp file handling to prevent race conditions.
+    """
+    temp_path = None
+    try:
+        # Create a secure temporary file with restricted permissions
+        # Using mkstemp for atomic creation with secure permissions
+        fd, temp_path = tempfile.mkstemp(suffix=".md", prefix="emdx_gist_")
+        try:
+            # Write content using the file descriptor for atomicity
+            os.write(fd, content.encode("utf-8"))
+        finally:
+            os.close(fd)
 
         # Build gh command
         cmd = ["gh", "gist", "create", temp_path, "--desc", description]
         if public:
             cmd.append("--public")
 
-        # Execute command
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-        # Clean up temp file
-        os.unlink(temp_path)
+        # Execute command with timeout to prevent hanging
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
 
         if result.returncode == 0:
             gist_url = result.stdout.strip()
             # Extract gist ID from URL
             gist_id = gist_url.split("/")[-1]
             return {"id": gist_id, "url": gist_url}
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         pass
+    finally:
+        # Ensure temp file is always cleaned up
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass  # Ignore cleanup errors
 
     return None
 
@@ -101,25 +139,39 @@ def create_gist_with_api(
 
 
 def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
-    """Update an existing gist using gh CLI."""
+    """Update an existing gist using gh CLI.
+
+    Uses secure temp file handling to prevent race conditions.
+    """
+    temp_path = None
     try:
-        # Create a temporary file
-        import tempfile
+        # Create a secure temporary file with restricted permissions
+        fd, temp_path = tempfile.mkstemp(suffix=".md", prefix="emdx_gist_")
+        try:
+            os.write(fd, content.encode("utf-8"))
+        finally:
+            os.close(fd)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            f.write(content)
-            temp_path = f.name
-
-        # Execute gh command
+        # Execute gh command with timeout
         cmd = ["gh", "gist", "edit", gist_id, temp_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-        # Clean up temp file
-        os.unlink(temp_path)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
 
         return result.returncode == 0
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         pass
+    finally:
+        # Ensure temp file is always cleaned up
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
     return False
 
