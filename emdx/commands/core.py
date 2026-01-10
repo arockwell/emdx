@@ -36,7 +36,6 @@ from emdx.models.tags import (
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string
-from emdx.utils.git import get_git_project
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
@@ -122,6 +121,9 @@ def detect_project(input_content: InputContent, provided_project: Optional[str])
     """Detect project from git repository"""
     if provided_project:
         return provided_project
+
+    # Lazy import - GitPython is slow to import (~135ms)
+    from emdx.utils.git import get_git_project
 
     # Try to detect from file path if it's a file
     if input_content.source_type == "file" and input_content.source_path:
