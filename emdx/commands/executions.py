@@ -464,7 +464,7 @@ def execution_health():
 @app.command(name="monitor")
 def monitor_executions(
     interval: int = typer.Option(5, "--interval", "-i", help="Refresh interval in seconds"),
-    follow: bool = typer.Option(True, "--follow/--no-follow", "-f/-F", help="Continuously monitor")
+    follow: bool = typer.Option(True, "--follow/--no-follow", help="Continuously monitor")
 ):
     """Monitor execution status in real-time."""
     import psutil
