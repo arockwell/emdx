@@ -10,7 +10,7 @@ Organized database operations split into focused modules:
 This package maintains backward compatibility with the original sqlite_database.py API.
 """
 
-from .connection import DatabaseConnection, db_connection
+from .connection import ConnectionPool, DatabaseConnection, db_connection
 from .documents import (
     delete_document,
     get_document,
@@ -92,6 +92,8 @@ db = SQLiteDatabase()
 __all__ = [
     "db",
     "SQLiteDatabase",
+    "ConnectionPool",
+    "DatabaseConnection",
     "db_connection",
     "save_document",
     "get_document",
