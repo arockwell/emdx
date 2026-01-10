@@ -76,11 +76,11 @@ class ExecutionService:
         )
 
     @staticmethod
-    def get_execution(exec_id: str) -> Optional[Any]:
+    def get_execution(exec_id: int) -> Optional[Any]:
         """Get an execution by ID.
 
         Args:
-            exec_id: Execution ID
+            exec_id: Execution ID (int)
 
         Returns:
             Execution object or None if not found

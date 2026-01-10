@@ -81,7 +81,7 @@ class WorkflowLogLoader:
                     continue
 
                 # Get the execution to find the log file
-                execution = get_execution(str(exec_id))
+                execution = get_execution(exec_id)
                 if not execution:
                     continue
 
