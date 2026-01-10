@@ -8,12 +8,13 @@ This module extracts the complex orchestration logic from commands/maintain.py
 into a dedicated application service layer.
 """
 
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 from ..config.settings import get_db_path
+from ..database.connection import DatabaseConnection
 from ..models.tags import add_tags_to_document
 from ..services.auto_tagger import AutoTagger
 from ..services.document_merger import DocumentMerger
@@ -88,14 +89,15 @@ class MaintenanceApplication:
         result = app.clean_duplicates(dry_run=False)
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[Union[str, Path]] = None):
         """
         Initialize maintenance application with optional database path.
 
         Args:
             db_path: Path to database. Uses default if not provided.
         """
-        self._db_path = db_path or get_db_path()
+        self._db_path = Path(db_path) if db_path else get_db_path()
+        self._db = DatabaseConnection(self._db_path)
 
         # Lazily initialize services
         self._duplicate_detector: Optional[DuplicateDetector] = None
@@ -175,19 +177,16 @@ class MaintenanceApplication:
         Returns:
             MaintenanceResult with operation details.
         """
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
+        # Find duplicates
+        duplicates = self.duplicate_detector.find_duplicates()
+        duplicate_count = (
+            sum(len(group) - 1 for group in duplicates) if duplicates else 0
+        )
 
-        try:
+        # Find empty documents
+        with self._db.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Find duplicates
-            duplicates = self.duplicate_detector.find_duplicates()
-            duplicate_count = (
-                sum(len(group) - 1 for group in duplicates) if duplicates else 0
-            )
-
-            # Find empty documents
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM documents
@@ -196,37 +195,39 @@ class MaintenanceApplication:
             )
             empty_count = cursor.fetchone()[0]
 
-            total = duplicate_count + empty_count
+        total = duplicate_count + empty_count
 
-            if total == 0:
-                return MaintenanceResult(
-                    operation="clean",
-                    success=True,
-                    items_processed=0,
-                    items_affected=0,
-                    message="No duplicates or empty documents found",
-                )
+        if total == 0:
+            return MaintenanceResult(
+                operation="clean",
+                success=True,
+                items_processed=0,
+                items_affected=0,
+                message="No duplicates or empty documents found",
+            )
 
-            if dry_run:
-                return MaintenanceResult(
-                    operation="clean",
-                    success=True,
-                    items_processed=total,
-                    items_affected=total,
-                    message=f"Would remove {total} documents ({duplicate_count} duplicates, {empty_count} empty)",
-                )
+        if dry_run:
+            return MaintenanceResult(
+                operation="clean",
+                success=True,
+                items_processed=total,
+                items_affected=total,
+                message=f"Would remove {total} documents ({duplicate_count} duplicates, {empty_count} empty)",
+            )
 
-            # Remove duplicates
-            deleted_dupes = 0
-            if duplicate_count > 0:
-                docs_to_delete = self.duplicate_detector.get_documents_to_delete(
-                    duplicates, "highest-views"
-                )
-                deleted_dupes = self.duplicate_detector.delete_documents(docs_to_delete)
+        # Remove duplicates
+        deleted_dupes = 0
+        if duplicate_count > 0:
+            docs_to_delete = self.duplicate_detector.get_documents_to_delete(
+                duplicates, "highest-views"
+            )
+            deleted_dupes = self.duplicate_detector.delete_documents(docs_to_delete)
 
-            # Remove empty documents
-            deleted_empty = 0
-            if empty_count > 0:
+        # Remove empty documents
+        deleted_empty = 0
+        if empty_count > 0:
+            with self._db.get_connection() as conn:
+                cursor = conn.cursor()
                 cursor.execute(
                     """
                     UPDATE documents
@@ -238,19 +239,17 @@ class MaintenanceApplication:
                 deleted_empty = cursor.rowcount
                 conn.commit()
 
-            return MaintenanceResult(
-                operation="clean",
-                success=True,
-                items_processed=total,
-                items_affected=deleted_dupes + deleted_empty,
-                message=f"Removed {deleted_dupes + deleted_empty} documents",
-                details=[
-                    f"Deleted {deleted_dupes} duplicates",
-                    f"Deleted {deleted_empty} empty documents",
-                ],
-            )
-        finally:
-            conn.close()
+        return MaintenanceResult(
+            operation="clean",
+            success=True,
+            items_processed=total,
+            items_affected=deleted_dupes + deleted_empty,
+            message=f"Removed {deleted_dupes + deleted_empty} documents",
+            details=[
+                f"Deleted {deleted_dupes} duplicates",
+                f"Deleted {deleted_empty} empty documents",
+            ],
+        )
 
     def auto_tag_documents(
         self, dry_run: bool = True, confidence_threshold: float = 0.6, limit: int = 100
@@ -266,10 +265,7 @@ class MaintenanceApplication:
         Returns:
             MaintenanceResult with operation details.
         """
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-
-        try:
+        with self._db.get_connection() as conn:
             cursor = conn.cursor()
 
             # Find untagged documents
@@ -288,65 +284,63 @@ class MaintenanceApplication:
 
             untagged = cursor.fetchall()
 
-            if not untagged:
-                return MaintenanceResult(
-                    operation="auto_tag",
-                    success=True,
-                    items_processed=0,
-                    items_affected=0,
-                    message="All documents are already tagged",
-                )
+        if not untagged:
+            return MaintenanceResult(
+                operation="auto_tag",
+                success=True,
+                items_processed=0,
+                items_affected=0,
+                message="All documents are already tagged",
+            )
 
-            if dry_run:
-                # Preview suggestions
-                preview = []
-                for doc in untagged[:3]:
-                    suggestions = self.auto_tagger.analyze_document(
-                        doc["title"], doc["content"]
-                    )
-                    if suggestions:
-                        tags = [
-                            tag
-                            for tag, conf in suggestions[:3]
-                            if conf > confidence_threshold
-                        ]
-                        if tags:
-                            preview.append(f"#{doc['id']}: {', '.join(tags)}")
-
-                return MaintenanceResult(
-                    operation="auto_tag",
-                    success=True,
-                    items_processed=len(untagged),
-                    items_affected=len(untagged),
-                    message=f"Would auto-tag {len(untagged)} documents",
-                    details=preview,
-                )
-
-            # Actually tag documents
-            tagged_count = 0
-            for doc in untagged:
+        if dry_run:
+            # Preview suggestions
+            preview = []
+            for doc in untagged[:3]:
                 suggestions = self.auto_tagger.analyze_document(
                     doc["title"], doc["content"]
                 )
                 if suggestions:
                     tags = [
                         tag
-                        for tag, conf in suggestions
+                        for tag, conf in suggestions[:3]
                         if conf > confidence_threshold
-                    ][:3]
+                    ]
                     if tags:
-                        add_tags_to_document(doc["id"], tags)
-                        tagged_count += 1
+                        preview.append(f"#{doc['id']}: {', '.join(tags)}")
 
             return MaintenanceResult(
                 operation="auto_tag",
                 success=True,
                 items_processed=len(untagged),
-                items_affected=tagged_count,
-                message=f"Auto-tagged {tagged_count} documents",
+                items_affected=len(untagged),
+                message=f"Would auto-tag {len(untagged)} documents",
+                details=preview,
             )
-        finally:
-            conn.close()
+
+        # Actually tag documents
+        tagged_count = 0
+        for doc in untagged:
+            suggestions = self.auto_tagger.analyze_document(
+                doc["title"], doc["content"]
+            )
+            if suggestions:
+                tags = [
+                    tag
+                    for tag, conf in suggestions
+                    if conf > confidence_threshold
+                ][:3]
+                if tags:
+                    add_tags_to_document(doc["id"], tags)
+                    tagged_count += 1
+
+        return MaintenanceResult(
+            operation="auto_tag",
+            success=True,
+            items_processed=len(untagged),
+            items_affected=tagged_count,
+            message=f"Auto-tagged {tagged_count} documents",
+        )
 
     def merge_similar(
         self, dry_run: bool = True, threshold: float = 0.7
@@ -393,26 +387,25 @@ class MaintenanceApplication:
 
         # Actually merge documents
         merged_count = 0
-        conn = sqlite3.connect(self._db_path)
 
-        try:
-            cursor = conn.cursor()
+        for candidate in candidates:
+            try:
+                # Keep the document with more views
+                if (
+                    candidate.doc1["access_count"]
+                    >= candidate.doc2["access_count"]
+                ):
+                    keep, remove = candidate.doc1, candidate.doc2
+                else:
+                    keep, remove = candidate.doc2, candidate.doc1
 
-            for candidate in candidates:
-                try:
-                    # Keep the document with more views
-                    if (
-                        candidate.doc1["access_count"]
-                        >= candidate.doc2["access_count"]
-                    ):
-                        keep, remove = candidate.doc1, candidate.doc2
-                    else:
-                        keep, remove = candidate.doc2, candidate.doc1
+                # Merge content
+                merged_content = self.document_merger._merge_content(
+                    keep["content"], remove["content"]
+                )
 
-                    # Merge content
-                    merged_content = self.document_merger._merge_content(
-                        keep["content"], remove["content"]
-                    )
+                with self._db.get_connection() as conn:
+                    cursor = conn.cursor()
 
                     # Update the kept document
                     cursor.execute(
@@ -435,19 +428,17 @@ class MaintenanceApplication:
                     )
 
                     conn.commit()
-                    merged_count += 1
-                except Exception:
-                    continue
+                merged_count += 1
+            except Exception:
+                continue
 
-            return MaintenanceResult(
-                operation="merge",
-                success=True,
-                items_processed=len(candidates),
-                items_affected=merged_count,
-                message=f"Merged {merged_count} document pairs",
-            )
-        finally:
-            conn.close()
+        return MaintenanceResult(
+            operation="merge",
+            success=True,
+            items_processed=len(candidates),
+            items_affected=merged_count,
+            message=f"Merged {merged_count} document pairs",
+        )
 
     def transition_lifecycle(self, dry_run: bool = True) -> MaintenanceResult:
         """
