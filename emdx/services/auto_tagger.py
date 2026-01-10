@@ -450,9 +450,11 @@ class AutoTagger:
         Returns:
             Dictionary mapping pattern names to match counts
 
-        Note: Pattern usage tracking is not currently implemented.
-        This would require persistent storage of match history.
+        Raises:
+            NotImplementedError: Pattern usage tracking is not currently implemented.
+                This would require persistent storage of match history.
         """
-        # Pattern usage tracking not yet implemented
-        # Would require database table to store pattern match history and analytics
-        return {}
+        raise NotImplementedError(
+            "Pattern usage tracking is not implemented. "
+            "This would require a database table to store pattern match history."
+        )
