@@ -198,6 +198,11 @@ class DocumentBrowser(Widget):
         self.edit_mode: bool = False
         self.editing_doc_id: Optional[int] = None
         self.tag_action: Optional[str] = None
+        # Pagination state
+        self.total_doc_count: int = 0
+        self.current_offset: int = 0
+        self.has_more: bool = False
+        self._loading_more: bool = False
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
@@ -297,24 +302,58 @@ class DocumentBrowser(Widget):
         # Load documents
         await self.load_documents()
         
-    async def load_documents(self) -> None:
-        """Load documents from database."""
+    async def load_documents(self, limit: int = 100, offset: int = 0, append: bool = False) -> None:
+        """Load documents from database with pagination.
+
+        Args:
+            limit: Number of documents to fetch
+            offset: Starting offset for pagination
+            append: If True, append to existing docs instead of replacing
+        """
         try:
             with db.get_connection() as conn:
+                # Get total count for status display
+                if not append:
+                    cursor = conn.execute("""
+                        SELECT COUNT(*) FROM documents WHERE is_deleted = 0
+                    """)
+                    self.total_doc_count = cursor.fetchone()[0]
+
+                # Fetch paginated documents
                 cursor = conn.execute("""
                     SELECT id, title, project, created_at, accessed_at, access_count
                     FROM documents
                     WHERE is_deleted = 0
                     ORDER BY id DESC
-                """)
-                self.documents = cursor.fetchall()
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+
+                new_docs = cursor.fetchall()
+
+                if append:
+                    self.documents = self.documents + new_docs
+                else:
+                    self.documents = new_docs
+
                 self.filtered_docs = self.documents
-                logger.info(f"Loaded {len(self.documents)} documents")
+                self.current_offset = offset + len(new_docs)
+                self.has_more = len(new_docs) == limit
+
+                logger.info(f"Loaded {len(new_docs)} documents (total loaded: {len(self.documents)}, total available: {self.total_doc_count})")
                 await self.update_table()
         except Exception as e:
             logger.error(f"Error loading documents: {e}")
             import traceback
             logger.error(traceback.format_exc())
+
+    async def load_more_documents(self) -> None:
+        """Load more documents when user scrolls near the end."""
+        if self.has_more and not self._loading_more:
+            self._loading_more = True
+            try:
+                await self.load_documents(limit=100, offset=self.current_offset, append=True)
+            finally:
+                self._loading_more = False
             
     async def update_table(self) -> None:
         """Update the table with filtered documents."""
@@ -344,7 +383,11 @@ class DocumentBrowser(Widget):
 
         # Update status using our own status bar
         try:
-            status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
+            # Show loaded/total count
+            if self.has_more:
+                status_text = f"{len(self.filtered_docs)}/{self.total_doc_count} docs (scroll for more)"
+            else:
+                status_text = f"{len(self.filtered_docs)}/{self.total_doc_count} docs"
             if self.mode == "NORMAL":
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
             elif self.mode == "SEARCH":
@@ -728,8 +771,12 @@ class DocumentBrowser(Widget):
         if table.row_count > 0:
             table.cursor_coordinate = (0, 0)
             
-    def action_cursor_bottom(self) -> None:
-        """Move cursor to bottom."""
+    async def action_cursor_bottom(self) -> None:
+        """Move cursor to bottom - loads all remaining documents first."""
+        # Load all remaining documents before going to bottom
+        while self.has_more:
+            await self.load_more_documents()
+
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
             table.cursor_coordinate = (table.row_count - 1, 0)
@@ -921,9 +968,13 @@ class DocumentBrowser(Widget):
         """Update preview and details panel when row is highlighted."""
         if self.edit_mode:
             return
-            
+
         row_idx = event.cursor_row
-        
+
+        # Load more documents when near the end (within 20 rows)
+        if self.has_more and row_idx >= len(self.filtered_docs) - 20:
+            await self.load_more_documents()
+
         if row_idx >= len(self.filtered_docs):
             return
             
