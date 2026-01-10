@@ -43,10 +43,6 @@ class TextAreaHost(Protocol):
         ...
 
 
-print("🔴🔴🔴 LOADING DOCUMENT BROWSER WITH BRIGHT COLORS 🔴🔴🔴")
-
-BUILD_ID = "BUILD-1752897674-DIRECT-STYLES"
-
 class DocumentBrowser(Widget):
     """Document browser widget that can host text areas."""
     
@@ -61,7 +57,7 @@ class DocumentBrowser(Widget):
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
-        Binding("x", "execute_document", "Execute"),
+        Binding("x", "execute_document", "Run Agent"),
         Binding("r", "refresh", "Refresh"),
     ]
     
@@ -73,16 +69,7 @@ class DocumentBrowser(Widget):
         padding: 0;
         margin: 0;
     }
-    
-    /* Debug styles to make layout visible */
-    /* DataTable {
-        border: solid green;
-    } */
-    
-    /* RichLog {
-        border: solid yellow;
-    } */
-    
+
     #search-input, #tag-input {
         layer: overlay;
         display: none;
@@ -259,18 +246,17 @@ class DocumentBrowser(Widget):
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
-        logger.info(f"DocumentBrowser mounted - LHS split implementation - {BUILD_ID}")
-        logger.info("Details panel should be visible in bottom 1/3 of sidebar")
-        print(f"🔴 MOUNTED WITH {BUILD_ID} 🔴")
-        
-        # Log CSS content to verify it's loaded
-        logger.info(f"CSS contains 'background: green': {'background: green' in self.DEFAULT_CSS}")
-        logger.info(f"First 200 chars of CSS: {self.DEFAULT_CSS[:200]}")
-        
+        logger.info("DocumentBrowser mounted - LHS split implementation")
+
+        # Initialize preview mode manager
+        from .preview_mode_manager import PreviewModeManager
+        preview_container = self.query_one("#preview-container", Vertical)
+        self.preview_manager = PreviewModeManager(preview_container)
+
         # Setup table
         table = self.query_one("#doc-table", DataTable)
         table.add_column("ID", width=4)
-        table.add_column("Tags", width=8)  
+        table.add_column("Tags", width=8)
         table.add_column(" ", width=1)  # Padding column
         table.add_column("Title", width=74)
         table.cursor_type = "row"
@@ -303,21 +289,6 @@ class DocumentBrowser(Widget):
         # Hide inputs initially
         search_input.display = False
         tag_input.display = False
-        
-        # Debug: Check sidebar children and their computed styles
-        try:
-            sidebar = self.query_one("#sidebar", Vertical)
-            logger.info(f"SIDEBAR CHILDREN COUNT: {len(sidebar.children)}")
-            for i, child in enumerate(sidebar.children):
-                logger.info(f"SIDEBAR CHILD {i}: {child.__class__.__name__} with id={child.id}")
-                # Log computed styles
-                logger.info(f"  - Size: {child.size}")
-                logger.info(f"  - Styles.height: {child.styles.height}")
-                logger.info(f"  - Styles.min_height: {child.styles.min_height}")
-                logger.info(f"  - Styles.max_height: {child.styles.max_height}")
-                logger.info(f"  - Styles.background: {child.styles.background}")
-        except Exception as e:
-            logger.error(f"ERROR CHECKING SIDEBAR: {e}")
         
         # Set focus to table so keys work immediately
         table.focus()
@@ -390,22 +361,22 @@ class DocumentBrowser(Widget):
         try:
             table = self.query_one("#doc-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except:
+        except Exception:
             pass
-            
+
         return state
-        
+
     def restore_state(self, state: Dict[str, Any]) -> None:
         """Restore saved state."""
         self.mode = state.get("mode", "NORMAL")
         self.current_search = state.get("current_search", "")
-        
+
         # Restore cursor position
         if "cursor_position" in state:
             try:
                 table = self.query_one("#doc-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except:
+            except Exception:
                 pass
                 
     async def on_key(self, event) -> None:
@@ -468,60 +439,36 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is None:
             return
-            
+
         row_idx = table.cursor_row
         if row_idx >= len(self.filtered_docs):
             return
-            
+
         doc = self.filtered_docs[row_idx]
         self.editing_doc_id = doc["id"]
-        
+
         # Load full document
         full_doc = get_document(str(doc["id"]))
         if not full_doc:
             return
-            
+
         # Store original preview for restoration
         self.original_preview_content = full_doc["content"]
         self.edit_mode = True
-        
-        # Replace preview with edit area
-        from textual.containers import ScrollableContainer, Vertical
-        preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for edit mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create a vertical container for title input and content editor (same as new document mode)
-        edit_container = Vertical(id="edit-container")
-        
-        # Mount the container first
-        await preview_container.mount(edit_container)
-        
-        # Create title input with existing title
-        from .inputs import TitleInput
-        title_input = TitleInput(self, value=full_doc["title"], placeholder="Enter document title...", id="title-input")
-        
+
         # Extract content without unicode box if present
-        content = self._extract_content_without_title_box(full_doc["content"], full_doc["title"])
-        
-        # Create vim editor with the content (without the title box)
-        from .vim_editor import VimEditor
-        vim_editor = VimEditor(self, content=content, id="vim-editor-container")
-        
-        # Mount both components to the already-mounted container
-        await edit_container.mount(title_input)
-        await edit_container.mount(vim_editor)
-        
+        content = self._extract_content_without_title_box(
+            full_doc["content"], full_doc["title"]
+        )
+
+        # Switch to editing mode via manager
+        title_input, vim_editor = await self.preview_manager.switch_to_editing(
+            host=self, title=full_doc["title"], content=content, is_new=False
+        )
+
         # Focus on title input first
         self.call_after_refresh(lambda: title_input.focus())
-        
+
         # Update status
         self._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
         
@@ -537,7 +484,7 @@ class DocumentBrowser(Widget):
             try:
                 import asyncio
                 asyncio.create_task(self.save_and_exit_edit_mode())
-            except:
+            except Exception:
                 pass
             
     def _async_exit_edit_mode(self) -> None:
@@ -690,7 +637,7 @@ class DocumentBrowser(Widget):
                     app.update_status(f"Edit Mode | {message}")
                 else:
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except:
+        except Exception:
             pass
             
     def action_toggle_selection_mode(self) -> None:
@@ -699,7 +646,7 @@ class DocumentBrowser(Widget):
             # Exit selection mode
             try:
                 self.call_after_refresh(self._async_exit_selection_mode)
-            except:
+            except Exception:
                 pass
         
     def _async_exit_selection_mode(self) -> None:
@@ -711,60 +658,32 @@ class DocumentBrowser(Widget):
         """Exit edit mode and restore preview."""
         if not self.edit_mode:
             return
-            
-        # Clear preview container completely
-        preview_container = self.query_one("#preview-container", Vertical)
-        
-        # Remove all children
-        for child in list(preview_container.children):
-            await child.remove()
-        
-        # Restore original preview structure exactly
-        from textual.containers import ScrollableContainer
-        from textual.widgets import RichLog
-        
-        # Create preview container and mount directly to the attached container
-        preview = ScrollableContainer(id="preview")
-        await preview_container.mount(preview)
-        
-        # Now create and mount the content to the attached preview
-        preview_content = RichLog(
-            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
-        )
-        preview_content.can_focus = False  # Disable focus like original
-        await preview.mount(preview_content)
-        
+
         self.edit_mode = False
         # Clean up new document mode flag if it was set
-        if hasattr(self, 'new_document_mode'):
+        if hasattr(self, "new_document_mode"):
             self.new_document_mode = False
-        
+
         # Clear vim mode indicator
         try:
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.update("")
             vim_indicator.remove_class("active")
-        except:
+        except Exception:
             pass
-        
-        # Refresh the current document's preview
+
+        # Get current document content for preview
+        content = ""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[table.cursor_row]
             full_doc = get_document(str(doc["id"]))
-            
             if full_doc:
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview_content.write(markdown)
-                    else:
-                        preview_content.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    preview_content.write(full_doc["content"])
-        
+                content = full_doc["content"]
+
+        # Switch to viewing mode via manager
+        await self.preview_manager.switch_to_viewing(content)
+
         # Return focus to table
         table.focus()
         
@@ -774,43 +693,19 @@ class DocumentBrowser(Widget):
         self.editing_doc_id = None  # No existing document
         self.edit_mode = True
         self.new_document_mode = True
-        
-        # Replace preview with edit area for new document
-        from textual.containers import ScrollableContainer, Vertical
-        preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for new document mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create a vertical container for title input and content editor
-        from textual.containers import Vertical
-        edit_container = Vertical(id="edit-container")
-        
-        # Create title input
-        from .inputs import TitleInput
-        title_input = TitleInput(self, placeholder="Enter document title...", id="title-input")
-        
-        # Create vim editor with empty content
-        vim_editor = VimEditor(self, content="", id="vim-editor-container")
-        
-        # Mount the container and its children
-        await preview_container.mount(edit_container)
-        await edit_container.mount(title_input)
-        await edit_container.mount(vim_editor)
-        
-        # Vim editor will start in NORMAL mode by default
-        
+
+        # Switch to editing mode via manager (with empty title and content)
+        title_input, vim_editor = await self.preview_manager.switch_to_editing(
+            host=self, title="", content="", is_new=True
+        )
+
         # Focus on title input first - use call_after_refresh to ensure it's ready
         self.call_after_refresh(lambda: title_input.focus())
-        
+
         # Update status
-        self._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+        self._update_vim_status(
+            "NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel"
+        )
         
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -854,55 +749,61 @@ class DocumentBrowser(Widget):
                 app.update_status(message)
     
     def action_execute_document(self) -> None:
-        """Execute the current document with context-aware behavior based on tags."""
+        """Open multi-stage agent execution overlay for the current document."""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row >= len(self.filtered_docs):
-            self.update_status("No document selected for execution")
+            self.update_status("No document selected for agent execution")
             return
             
         doc = self.filtered_docs[table.cursor_row]
         doc_id = int(doc["id"])
-        
-        try:
-            from pathlib import Path
+        doc_title = doc["title"]
 
-            from emdx.commands.claude_execute import (
-                EXECUTION_TYPE_EMOJIS,
-                execute_document_smart_background,
-                generate_unique_execution_id,
-                get_execution_context,
-            )
-            from emdx.models.tags import get_document_tags
-            
-            # Get document tags
-            doc_tags = get_document_tags(str(doc_id))
-            
-            # Get execution context to show what will happen
-            context = get_execution_context(doc_tags)
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            self.update_status(f"{exec_emoji} Executing {context['type'].value}: {context['description']}")
-            
-            # Generate unique execution ID
-            execution_id = generate_unique_execution_id(str(doc_id))
-            
-            # Set up log file
-            log_dir = Path.home() / ".config" / "emdx" / "logs"
-            log_file = log_dir / f"{execution_id}.log"
-            
-            # Use unified execution path
-            execute_document_smart_background(
-                doc_id=doc_id,
-                execution_id=execution_id,
-                log_file=log_file,
-                use_stage_tools=True
-            )
-            
-            # Show success message
-            self.update_status(f"🚀 Claude executing: {doc['title'][:25]}... (Press 'l' for logs)")
-            
-        except Exception as e:
-            logger.error(f"Error executing document: {e}", exc_info=True)
-            self.update_status(f"Error: {str(e)}")
+        # Import the new agent execution overlay
+        from .agent_execution_overlay import AgentExecutionOverlay
+
+        async def handle_execution_result(result):
+            """Handle the result from agent execution overlay."""
+            if result and result.get('document_id') and result.get('agent_id'):
+                document_id = result['document_id']
+                agent_id = result['agent_id']
+                worktree_index = result.get('worktree_index')
+                config = result.get('config', {})
+                background = config.get('background', True)
+
+                # Execute the agent
+                try:
+                    from ..agents.executor import agent_executor
+
+                    logger.info(f"Starting agent execution: agent={agent_id}, doc={document_id}, background={background}")
+
+                    execution_id = await agent_executor.execute_agent(
+                        agent_id=agent_id,
+                        input_type='document',
+                        input_doc_id=document_id,
+                        background=background,
+                        variables=config.get('variables', {})
+                    )
+
+                    self.update_status(f"✅ Agent #{execution_id} started!")
+                    logger.info(f"Agent execution started: #{execution_id}")
+
+                except Exception as e:
+                    logger.error(f"Error starting agent: {e}", exc_info=True)
+                    self.update_status(f"❌ Error starting agent: {str(e)}")
+            else:
+                # User cancelled
+                self.update_status("Agent execution cancelled")
+                logger.info("Agent execution cancelled by user")
+
+        # Open the new multi-stage agent execution overlay
+        # Pre-select the current document and start at agent selection stage
+        overlay = AgentExecutionOverlay(
+            initial_document_id=doc_id,  # Pre-select current document
+            start_stage=None,  # Will auto-start at agent stage when document is pre-selected
+        )
+        # Pass the async callback to push_screen - it will be called when the overlay is dismissed
+        self.app.push_screen(overlay, handle_execution_result)
     
     async def action_new_document(self) -> None:
         """Create a new document."""
@@ -954,104 +855,61 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is None or table.cursor_row >= len(self.filtered_docs):
             return
-            
+
         doc = self.filtered_docs[table.cursor_row]
-        
+
         # Load full document for selection
         full_doc = get_document(str(doc["id"]))
         if not full_doc:
             return
-            
-        # Replace preview with selection text area
-        preview_container = self.query_one("#preview-container", Vertical)
-        try:
-            preview = self.query_one("#preview", ScrollableContainer)
-            await preview.remove()
-        except Exception as e:
-            logger.error(f"Error removing preview for selection mode: {e}")
-            # Try removing all children instead
-            for child in list(preview_container.children):
-                if child.id in ["preview", "preview-content"]:
-                    await child.remove()
-        
-        # Create selection text area with proper app instance (self implements TextAreaHost)
-        from .text_areas import SelectionTextArea
-        selection_area: SelectionTextArea = SelectionTextArea(
-            self,
-            full_doc["content"], 
-            id="selection-area",
-            read_only=True
+
+        # Switch to selecting mode via manager
+        selection_area = await self.preview_manager.switch_to_selecting(
+            host=self, content=full_doc["content"]
         )
-        await preview_container.mount(selection_area)
         selection_area.focus()
-        
+
         # Update mode
         self.mode = "SELECTION"
-        
+
         # Update status
         try:
             app = self.app
-            if hasattr(app, 'update_status'):
+            if hasattr(app, "update_status"):
                 app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
-        except:
+        except Exception:
             pass
             
     async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore preview."""
         if self.mode != "SELECTION":
             return
-            
-        # Clear preview container completely
-        preview_container = self.query_one("#preview-container", Vertical)
-        
-        # Remove all children
-        for child in list(preview_container.children):
-            await child.remove()
-        
-        # Restore preview structure
-        from textual.containers import ScrollableContainer
-        from textual.widgets import RichLog
-        
-        preview = ScrollableContainer(id="preview")
-        preview_content = RichLog(
-            id="preview-content", wrap=True, highlight=True, markup=True, auto_scroll=False
-        )
-        preview_content.can_focus = False
-        
-        await preview_container.mount(preview)
-        await preview.mount(preview_content)
-        
+
         self.mode = "NORMAL"
-        
-        # Refresh current document preview
+
+        # Get current document content for preview
+        content = ""
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
             doc = self.filtered_docs[table.cursor_row]
             full_doc = get_document(str(doc["id"]))
-            
             if full_doc:
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview_content.write(markdown)
-                    else:
-                        preview_content.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    preview_content.write(full_doc["content"])
-        
+                content = full_doc["content"]
+
+        # Switch to viewing mode via manager
+        await self.preview_manager.switch_to_viewing(content)
+
         # Return focus to table
         table.focus()
-        
+
         # Update status
         try:
             app = self.app
-            if hasattr(app, 'update_status'):
+            if hasattr(app, "update_status"):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
-        except:
+        except Exception:
             pass
     
     async def on_data_table_row_highlighted(self, event) -> None:
@@ -1162,7 +1020,7 @@ class DocumentBrowser(Widget):
                 details_panel = self.query_one("#details-panel", RichLog)
                 details_panel.clear()
                 details_panel.write(f"📄 Document {doc['id']}: {doc['title']}")
-            except:
+            except Exception:
                 pass
                 
     async def on_input_submitted(self, event) -> None:

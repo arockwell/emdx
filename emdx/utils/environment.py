@@ -72,8 +72,9 @@ class EnvironmentValidator:
                         )
                         if result.returncode == 0:
                             self.info[f"{cmd}_version"] = result.stdout.strip()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Version check failed - command exists but version query failed
+                    self.warnings.append(f"Could not get version for {cmd}: {str(e)}")
             else:
                 self.errors.append(f"Required command '{cmd}' not found in PATH")
     
@@ -91,8 +92,9 @@ class EnvironmentValidator:
                     module = importlib.import_module(package)
                     if hasattr(module, "__version__"):
                         self.info[f"{package}_version"] = module.__version__
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Package version check failed
+                    self.warnings.append(f"Could not get version for {package}: {str(e)}")
     
     def check_paths(self) -> None:
         """Check PATH and important directories."""
@@ -146,8 +148,8 @@ class EnvironmentValidator:
                 )
                 if result.returncode != 0:
                     self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
-            except Exception:
-                self.warnings.append("Cannot verify claude installation")
+            except Exception as e:
+                self.warnings.append(f"Cannot verify claude installation: {e}")
     
     def print_report(self, verbose: bool = False) -> None:
         """Print validation report."""

@@ -271,7 +271,7 @@ class FileBrowser(Container):
         try:
             file_list = self.query_one("#file-list", FileList)
             file_list.focus()
-        except:
+        except Exception:
             # If that fails, focus the container itself
             self.focus()
     
@@ -288,15 +288,12 @@ class FileBrowser(Container):
     
     def watch_selected_index(self, old: int, new: int) -> None:
         """React to selection changes."""
-        logger.debug(f"🗂️ FileBrowser.watch_selected_index: {old} → {new}, mounted={self.is_mounted}")
         if self.is_mounted:
             try:
                 file_list = self.query_one("#file-list", FileList)
-                logger.debug(f"🗂️ FileBrowser updating FileList.selected_index: {file_list.selected_index} → {new}")
                 file_list.selected_index = new
                 self.update_preview()
             except Exception as e:
-                logger.debug(f"🗂️ FileBrowser.watch_selected_index error: {e}")
                 pass  # Widget not ready yet
     
     def watch_show_hidden(self, old: bool, new: bool) -> None:
@@ -357,11 +354,8 @@ class FileBrowser(Container):
             old_index = self.selected_index
             if self.selected_index < len(file_list.files) - 1:
                 self.selected_index += 1
-                logger.debug(f"🗂️ FileBrowser.action_move_down: {old_index} → {self.selected_index}")
             else:
-                logger.debug(f"🗂️ FileBrowser.action_move_down: at bottom, staying at {self.selected_index}")
         except Exception as e:
-            logger.debug(f"🗂️ FileBrowser.action_move_down error: {e}")
             pass
     
     def action_move_up(self) -> None:
@@ -369,9 +363,7 @@ class FileBrowser(Container):
         old_index = self.selected_index
         if self.selected_index > 0:
             self.selected_index -= 1
-            logger.debug(f"🗂️ FileBrowser.action_move_up: {old_index} → {self.selected_index}")
         else:
-            logger.debug(f"🗂️ FileBrowser.action_move_up: at top, staying at {self.selected_index}")
     
     def action_go_top(self) -> None:
         """Go to first item."""
@@ -705,10 +697,9 @@ class FileBrowser(Container):
             logger.error(f"🗂️ Error in delayed preview after save: {e}")
     
     def action_search(self) -> None:
-        """Search for files."""
-        # TODO: Implement search
+        """Search for files. Note: File search not yet implemented."""
         self.query_one("#file-status-bar", Static).update(
-            "Search coming soon..."
+            "Search not implemented - use shell commands to search"
         )
     
     def action_toggle_selection_mode(self) -> None:
@@ -882,7 +873,6 @@ class FileBrowser(Container):
 
     def on_file_list_file_selected(self, event) -> None:
         """Handle file selection changes from FileList."""
-        logger.debug(f"🗂️ FileBrowser.on_file_list_file_selected: {self.selected_index} → {event.index}")
         self.selected_index = event.index
         self.update_preview()
 
@@ -891,7 +881,6 @@ class FileBrowser(Container):
         # Ensure file browser handles its own keys and doesn't let them bubble to main browser
         try:
             # Log key events for debugging
-            logger.debug(f"🗂️ FileBrowser received key: {event.key}")
 
             # If we're in edit or selection mode, ensure keys don't bubble up
             if self.edit_mode or self.selection_mode:

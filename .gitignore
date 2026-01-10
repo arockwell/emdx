@@ -145,4 +145,13 @@ cython_debug/
 .DS_Store
 
 # Testing
-test-*.md
+test-*.md.beads/
+test_output.txt
+
+# Patch artifacts
+*.patch
+*.orig
+*.rej
+
+# Misnamed log files
+*.lo
