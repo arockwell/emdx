@@ -97,7 +97,7 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def get_execution(exec_id: str) -> Optional[Execution]:
+def get_execution(exec_id: int) -> Optional[Execution]:
     """Get execution by ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
