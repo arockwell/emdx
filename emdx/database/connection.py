@@ -31,6 +31,9 @@ class DatabaseConnection:
         )
         conn.row_factory = sqlite3.Row  # Enable column access by name
 
+        # Enable foreign key constraints for this connection
+        conn.execute("PRAGMA foreign_keys = ON")
+
         # Register datetime adapter
         sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
         sqlite3.register_converter("timestamp", lambda b: datetime.fromisoformat(b.decode()))
