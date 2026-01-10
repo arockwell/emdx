@@ -177,7 +177,7 @@ class DocumentSelectionStage(OverlayStage):
             # Fallback: try to show error without ListView if it's not available
             try:
                 await self.show_error(f"UI Error: {e}")
-            except:
+            except Exception:
                 logger.error(f"Could not show error in UI: {e}")
     
     async def show_error(self, message: str) -> None:

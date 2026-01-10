@@ -17,6 +17,7 @@ from rich.tree import Tree
 
 from ..models.documents import get_document
 from ..services.lifecycle_tracker import LifecycleTracker
+from ..utils.text_formatting import truncate_description
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
@@ -108,7 +109,7 @@ def status(
             age = f"{doc['age_days']}d"
             table.add_row(
                 str(doc['id']),
-                doc['title'][:40] + "..." if len(doc['title']) > 40 else doc['title'],
+                truncate_description(doc['title']),
                 doc['project'] or '-',
                 age,
                 str(doc['access_count'])

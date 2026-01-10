@@ -16,6 +16,7 @@ from textual.message import Message
 from ..agents.registry import agent_registry
 from ..models.documents import get_recent_documents
 from ..utils.logging import get_logger
+from ..utils.text_formatting import truncate_description
 
 # Set up logging for debugging
 logger = get_logger(__name__)
@@ -715,7 +716,7 @@ class AgentDetailPanel(Static):
             tools_str = ', '.join(tools[:3])
             if len(tools) > 3:
                 tools_str += f" +{len(tools) - 3} more"
-        except:
+        except Exception:
             tools_str = "Unknown"
         
         # Format usage stats
@@ -810,7 +811,7 @@ class AgentSelectionModal(ModalScreen):
         with Grid(id="dialog"):
             # Title
             yield Label(
-                f'Select Agent for: "{self.document_title[:40]}{"..." if len(self.document_title) > 40 else ""}"',
+                f'Select Agent for: "{truncate_description(self.document_title)}"',
                 id="title"
             )
             

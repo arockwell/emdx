@@ -453,4 +453,6 @@ class AutoTagger:
         Note: Pattern usage tracking is not currently implemented.
         This would require persistent storage of match history.
         """
+        # Pattern usage tracking not yet implemented
+        # Would require database table to store pattern match history and analytics
         return {}

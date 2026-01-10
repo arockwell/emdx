@@ -14,6 +14,7 @@ from ..models.documents import get_document, save_document
 from ..utils.logging import get_logger
 from ..utils.structured_logger import StructuredLogger, ProcessType
 from ..commands.claude_execute import format_claude_output, format_timestamp
+from ..utils.text_formatting import truncate_title
 
 logger = get_logger(__name__)
 
@@ -35,12 +36,14 @@ class GenericAgent(Agent):
                 f.write(full_prompt)
             
             # Prepare Claude command using same format as claude_execute.py
+            from emdx.utils.constants import DEFAULT_CLAUDE_MODEL
+
             cmd = [
                 "claude",
                 "--print", full_prompt,
                 "--allowedTools", ",".join(self.config.allowed_tools),
                 "--output-format", "stream-json",
-                "--model", "claude-sonnet-4-20250514",  # Force Sonnet 4 as default
+                "--model", DEFAULT_CLAUDE_MODEL,
                 "--verbose"
             ]
             
@@ -227,7 +230,7 @@ class GenericAgent(Agent):
                     logger.debug(f"Could not fetch document {context.input_doc_id} for title: {e}")
                     base_title = f"{self.config.display_name} Output"
             elif context.input_type == 'query' and context.input_query:
-                query_preview = context.input_query[:50] + "..." if len(context.input_query) > 50 else context.input_query
+                query_preview = truncate_title(context.input_query)
                 base_title = f"{self.config.display_name}: {query_preview}"
             else:
                 base_title = f"{self.config.display_name} Output"
