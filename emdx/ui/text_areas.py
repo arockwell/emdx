@@ -413,8 +413,9 @@ class VimEditTextArea(TextArea):
         
         # Don't stop the event - let it bubble up naturally for TextArea to handle
         # Only update line numbers for operations that might change line count
+        # Use call_after_refresh to ensure TextArea has processed the event first
         if event.key in ["enter", "backspace", "delete"]:
-            self._update_line_numbers()
+            self.call_after_refresh(lambda: self._update_line_numbers())
     
     def _handle_visual_mode(self, event: events.Key) -> None:
         """Handle keys in VISUAL mode."""
