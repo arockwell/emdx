@@ -3,20 +3,29 @@ Search functionality for emdx documents using FTS5
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from .connection import db_connection
+from .connection import DatabaseConnection, db_connection
+
+if TYPE_CHECKING:
+    from .connection import DatabaseConnection
+
+
+def _get_db(db: Optional["DatabaseConnection"] = None) -> "DatabaseConnection":
+    """Get database connection instance, using global default if not provided."""
+    return db if db is not None else db_connection
 
 
 def search_documents(
-    query: str, 
-    project: Optional[str] = None, 
-    limit: int = 10, 
+    query: str,
+    project: Optional[str] = None,
+    limit: int = 10,
     fuzzy: bool = False,
     created_after: Optional[str] = None,
     created_before: Optional[str] = None,
     modified_after: Optional[str] = None,
-    modified_before: Optional[str] = None
+    modified_before: Optional[str] = None,
+    db: Optional["DatabaseConnection"] = None,
 ) -> list[dict[str, Any]]:
     """Search documents using FTS5
 
@@ -25,11 +34,13 @@ def search_documents(
         project: Optional project filter
         limit: Maximum number of results to return
         fuzzy: Enable fuzzy search (currently uses regular FTS5)
+        db: Optional database connection instance for dependency injection
 
     Returns:
         List of document dictionaries with search results including snippets and ranking
     """
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         # Build dynamic query with date filters
         # Handle special case where we only have date filters (no text search)
         if query == "*":

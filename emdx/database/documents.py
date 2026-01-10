@@ -3,14 +3,30 @@ Document CRUD operations for emdx knowledge base
 """
 
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
-from .connection import db_connection
+from .connection import DatabaseConnection, db_connection
+
+if TYPE_CHECKING:
+    from .connection import DatabaseConnection
 
 
-def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
+def _get_db(db: Optional["DatabaseConnection"] = None) -> "DatabaseConnection":
+    """Get database connection instance, using global default if not provided."""
+    return db if db is not None else db_connection
+
+
+def save_document(
+    title: str,
+    content: str,
+    project: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    parent_id: Optional[int] = None,
+    db: Optional["DatabaseConnection"] = None,
+) -> int:
     """Save a document to the knowledge base"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         cursor = conn.execute(
             """
             INSERT INTO documents (title, content, project, parent_id)
@@ -30,9 +46,13 @@ def save_document(title: str, content: str, project: Optional[str] = None, tags:
         return doc_id
 
 
-def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
+def get_document(
+    identifier: Union[str, int],
+    db: Optional["DatabaseConnection"] = None,
+) -> Optional[dict[str, Any]]:
     """Get a document by ID or title"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
         
@@ -85,9 +105,14 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
         return None
 
 
-def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_documents(
+    project: Optional[str] = None,
+    limit: int = 50,
+    db: Optional["DatabaseConnection"] = None,
+) -> list[dict[str, Any]]:
     """List documents with optional project filter"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         if project:
             cursor = conn.execute(
                 """
@@ -122,9 +147,15 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
         return docs
 
 
-def update_document(doc_id: int, title: str, content: str) -> bool:
+def update_document(
+    doc_id: int,
+    title: str,
+    content: str,
+    db: Optional["DatabaseConnection"] = None,
+) -> bool:
     """Update a document"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         cursor = conn.execute(
             """
             UPDATE documents
@@ -138,9 +169,14 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
         return cursor.rowcount > 0
 
 
-def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> bool:
+def delete_document(
+    identifier: Union[str, int],
+    hard_delete: bool = False,
+    db: Optional["DatabaseConnection"] = None,
+) -> bool:
     """Delete a document by ID or title (soft delete by default)"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
         
@@ -185,9 +221,13 @@ def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> b
         return cursor.rowcount > 0
 
 
-def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_documents(
+    limit: int = 10,
+    db: Optional["DatabaseConnection"] = None,
+) -> list[dict[str, Any]]:
     """Get recently accessed documents"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT id, title, project, accessed_at, access_count
@@ -210,9 +250,13 @@ def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
         return docs
 
 
-def get_stats(project: Optional[str] = None) -> dict[str, Any]:
+def get_stats(
+    project: Optional[str] = None,
+    db: Optional["DatabaseConnection"] = None,
+) -> dict[str, Any]:
     """Get database statistics"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         if project:
             # Project-specific stats
             cursor = conn.execute(
@@ -247,7 +291,7 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
         stats = dict(cursor.fetchone())
 
         # Get database file size
-        stats["table_size"] = f"{db_connection.db_path.stat().st_size / 1024 / 1024:.2f} MB"
+        stats["table_size"] = f"{db_conn.db_path.stat().st_size / 1024 / 1024:.2f} MB"
 
         # Get most viewed document
         if project:
@@ -279,9 +323,14 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
         return stats
 
 
-def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_deleted_documents(
+    days: Optional[int] = None,
+    limit: int = 50,
+    db: Optional["DatabaseConnection"] = None,
+) -> list[dict[str, Any]]:
     """List soft-deleted documents"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         if days:
             cursor = conn.execute(
                 """
@@ -317,9 +366,13 @@ def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[
         return docs
 
 
-def restore_document(identifier: Union[str, int]) -> bool:
+def restore_document(
+    identifier: Union[str, int],
+    db: Optional["DatabaseConnection"] = None,
+) -> bool:
     """Restore a soft-deleted document"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
         if identifier_str.isdigit():
@@ -345,9 +398,13 @@ def restore_document(identifier: Union[str, int]) -> bool:
         return cursor.rowcount > 0
 
 
-def purge_deleted_documents(older_than_days: Optional[int] = None) -> int:
+def purge_deleted_documents(
+    older_than_days: Optional[int] = None,
+    db: Optional["DatabaseConnection"] = None,
+) -> int:
     """Permanently delete soft-deleted documents"""
-    with db_connection.get_connection() as conn:
+    db_conn = _get_db(db)
+    with db_conn.get_connection() as conn:
         if older_than_days:
             cursor = conn.execute(
                 """
