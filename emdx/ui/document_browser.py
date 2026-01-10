@@ -203,6 +203,11 @@ class DocumentBrowser(Widget):
         self.current_offset: int = 0
         self.has_more: bool = False
         self._loading_more: bool = False
+        # Cache for tags (loaded in batch with documents)
+        self._tags_cache: Dict[int, List[str]] = {}
+        # LRU cache for full document content (preview)
+        self._doc_cache: Dict[int, Dict[str, Any]] = {}
+        self._doc_cache_max = 50  # Keep last 50 documents in memory
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
@@ -363,6 +368,8 @@ class DocumentBrowser(Widget):
         # Batch load all tags in one query to avoid N+1
         doc_ids = [doc["id"] for doc in self.filtered_docs]
         all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
+        # Update cache
+        self._tags_cache.update(all_tags)
 
         for doc in self.filtered_docs:
             # Format row data - ID, Tags, and Title
@@ -979,9 +986,20 @@ class DocumentBrowser(Widget):
             return
             
         doc = self.filtered_docs[row_idx]
-        
-        # Load full document for preview
-        full_doc = get_document(str(doc["id"]))
+        doc_id = doc["id"]
+
+        # Load full document for preview (with caching)
+        if doc_id in self._doc_cache:
+            full_doc = self._doc_cache[doc_id]
+        else:
+            full_doc = get_document(str(doc_id))
+            if full_doc:
+                # Add to cache, evict oldest if needed
+                if len(self._doc_cache) >= self._doc_cache_max:
+                    # Remove first (oldest) item
+                    oldest_key = next(iter(self._doc_cache))
+                    del self._doc_cache[oldest_key]
+                self._doc_cache[doc_id] = full_doc
             
         if full_doc and not self.edit_mode:
             # Update main preview
@@ -1014,9 +1032,9 @@ class DocumentBrowser(Widget):
         try:
             details_panel = self.query_one("#details-panel", RichLog)
             details_panel.clear()
-            
-            # Get tags for this document
-            tags = get_document_tags(doc["id"])
+
+            # Get tags from cache (already loaded in batch)
+            tags = self._tags_cache.get(doc["id"], [])
             
             # Format details with emoji and rich formatting
             
