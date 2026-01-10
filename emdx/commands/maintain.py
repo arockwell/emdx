@@ -836,7 +836,7 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
             except psutil.NoSuchProcess:
                 # Process already gone
                 terminated += 1
-            except (psutil.AccessDenied, Exception):
+            except Exception:
                 failed += 1
             
             progress.update(task, advance=1)
@@ -1054,7 +1054,7 @@ def cleanup_temp_dirs(
                 # Calculate size
                 size = sum(f.stat().st_size for f in dir_path.rglob('*') if f.is_file())
                 total_size += size
-        except (OSError, PermissionError) as e:
+        except OSError as e:
             logger.warning(f"Could not scan directory {dir_path}: {e}")
     
     if not old_dirs:
@@ -1100,7 +1100,7 @@ def cleanup_temp_dirs(
                 shutil.rmtree(dir_path)
                 removed += 1
                 freed_space += size
-            except (OSError, PermissionError) as e:
+            except OSError as e:
                 logger.warning(f"Failed to remove directory {dir_path}: {e}")
                 failed += 1
             progress.update(task, advance=1)
