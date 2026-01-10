@@ -515,7 +515,7 @@ def move_to_folder(doc_id: str, folder_name: str) -> bool:
 
 def create(
     identifier: str = typer.Argument(..., help="Document ID or title"),
-    folder: Optional[str] = typer.Option(None, "--folder", "-f", help="Google Drive folder name"),
+    folder: Optional[str] = typer.Option(None, "--folder", help="Google Drive folder name"),
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy doc URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open doc in browser"),
 ):
@@ -588,7 +588,7 @@ def create(
 
 @app.command("gdoc-list")
 def list_gdocs(
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    project: Optional[str] = typer.Option(None, "--project", help="Filter by project"),
 ):
     """List all Google Docs created from documents."""
     db.ensure_schema()
