@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-# Claude model configuration
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+# Re-export constants for backward compatibility
+from .constants import DEFAULT_CLAUDE_MODEL
 
 
 def get_db_path() -> Path:
