@@ -6,7 +6,7 @@ default:
 install:
     poetry lock
     poetry install
-    poetry env info --path > .venv-path
+    poetry env list --full-path | head -1 | awk '{print $$1}' > .venv-path
 
 # Check if dependencies are installed and install if needed
 _ensure-installed:
@@ -37,7 +37,7 @@ run *args:
     @if [ ! -f .venv-path ] || [ ! -x "$(cat .venv-path)/bin/emdx" ]; then \
         echo "📦 Setting up emdx..." && \
         poetry install -q && \
-        poetry env info --path > .venv-path; \
+        poetry env list --full-path | head -1 | awk '{print $1}' > .venv-path; \
     fi && \
     "$(cat .venv-path)/bin/emdx" {{args}}
 
