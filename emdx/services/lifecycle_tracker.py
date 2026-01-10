@@ -11,7 +11,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
 from ..models.documents import get_document, update_document
-from ..models.tags import add_tags_to_document, get_document_tags, remove_tags_from_document
+from ..models.tags import (
+    add_tags_to_document,
+    get_document_tags,
+    get_tags_for_documents,
+    remove_tags_from_document,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,36 +52,47 @@ class LifecycleTracker:
     def get_document_stage(self, doc_id: int) -> Optional[str]:
         """
         Determine the current lifecycle stage of a document.
-        
+
         Args:
             doc_id: Document ID
-            
+
         Returns:
             Current stage name or None
         """
         tags = set(get_document_tags(doc_id))
-        
+        return self._get_stage_from_tags(tags)
+
+    def _get_stage_from_tags(self, tags: set) -> Optional[str]:
+        """
+        Determine lifecycle stage from a set of tags.
+
+        Args:
+            tags: Set of tag names
+
+        Returns:
+            Stage name or None
+        """
         # Check stages in reverse order (later stages take precedence)
         for stage in reversed(list(self.STAGES.keys())):
             if any(tag in tags for tag in self.STAGES[stage]):
                 return stage
-        
+
         return None
     
     def get_gameplans(self, stage: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get all gameplans, optionally filtered by stage.
-        
+
         Args:
             stage: Filter by specific lifecycle stage
-            
+
         Returns:
             List of gameplan documents with stage info
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         # Find all documents with gameplan tag
         cursor.execute("""
             SELECT DISTINCT d.id, d.title, d.project, d.created_at, d.updated_at, d.access_count
@@ -86,21 +102,31 @@ class LifecycleTracker:
             WHERE d.is_deleted = 0 AND t.name = '🎯'
             ORDER BY d.updated_at DESC
         """)
-        
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return []
+
+        # Batch load all tags for gameplans (fix N+1 query)
+        doc_ids = [row['id'] for row in rows]
+        all_tags = get_tags_for_documents(doc_ids)
+
         gameplans = []
-        for row in cursor.fetchall():
+        for row in rows:
             doc = dict(row)
-            doc['stage'] = self.get_document_stage(doc['id'])
-            doc['tags'] = get_document_tags(doc['id'])
-            
+            doc_tags = all_tags.get(doc['id'], [])
+            doc['tags'] = doc_tags
+            doc['stage'] = self._get_stage_from_tags(set(doc_tags))
+
             # Calculate age
             created = datetime.fromisoformat(doc['created_at'])
             doc['age_days'] = (datetime.now() - created).days
-            
+
             if stage is None or doc['stage'] == stage:
                 gameplans.append(doc)
-        
-        conn.close()
+
         return gameplans
     
     def analyze_lifecycle_patterns(self) -> Dict[str, Any]:
