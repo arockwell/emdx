@@ -1,11 +1,10 @@
 """Execution tracking models and database operations."""
 
 import os
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 from ..database.connection import db_connection
 
@@ -98,11 +97,28 @@ def create_execution(doc_id: int, doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def save_execution(execution: Execution) -> None:
-    """Save execution to database (for backwards compatibility)."""
-    # This function is deprecated but kept for compatibility
-    # New code should use create_execution instead
-    pass
+def save_execution(execution: Execution) -> int:
+    """Save execution to database.
+
+    Creates a new execution record from an Execution object.
+    Returns the database ID of the created record.
+
+    .. deprecated:: 0.7.0
+        Use create_execution() instead. This function will be removed in v1.0.
+    """
+    import warnings
+    warnings.warn(
+        "save_execution() is deprecated. Use create_execution() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return create_execution(
+        doc_id=execution.doc_id,
+        doc_title=execution.doc_title,
+        log_file=execution.log_file,
+        working_dir=execution.working_dir,
+        pid=execution.pid,
+    )
 
 
 def get_execution(exec_id: str) -> Optional[Execution]:
@@ -211,17 +227,18 @@ def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] 
     """Update execution status and completion time."""
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:
-            conn.execute("""
+            cursor = conn.execute("""
                 UPDATE executions 
                 SET status = ?, completed_at = CURRENT_TIMESTAMP, exit_code = ?
                 WHERE id = ?
             """, (status, exit_code, exec_id))
         else:
-            conn.execute("""
+            cursor = conn.execute("""
                 UPDATE executions 
                 SET status = ?
                 WHERE id = ?
             """, (status, exec_id))
+        
         conn.commit()
 
 
@@ -236,14 +253,89 @@ def update_execution_pid(exec_id: int, pid: int) -> None:
         conn.commit()
 
 
+def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
+    """Update execution working directory."""
+    with db_connection.get_connection() as conn:
+        conn.execute("""
+            UPDATE executions 
+            SET working_dir = ?
+            WHERE id = ?
+        """, (working_dir, exec_id))
+        conn.commit()
+
+
+def update_execution_heartbeat(exec_id: int) -> None:
+    """Update execution heartbeat timestamp."""
+    with db_connection.get_connection() as conn:
+        conn.execute("""
+            UPDATE executions 
+            SET last_heartbeat = CURRENT_TIMESTAMP
+            WHERE id = ? AND status = 'running'
+        """, (exec_id,))
+        conn.commit()
+
+
+def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
+    """Get executions that haven't sent a heartbeat recently.
+
+    Args:
+        timeout_seconds: Seconds after which an execution is considered stale (default 30 min)
+
+    Returns:
+        List of stale executions
+    """
+    # Validate timeout_seconds is a positive integer to prevent SQL injection
+    if not isinstance(timeout_seconds, int) or timeout_seconds < 0:
+        raise ValueError("timeout_seconds must be a non-negative integer")
+
+    # Build the datetime modifier string in Python (safe from SQL injection)
+    timeout_modifier = f"+{timeout_seconds} seconds"
+
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
+            FROM executions
+            WHERE status = 'running'
+            AND (
+                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, '+' || ? || ' seconds')
+                OR
+                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, '+' || ? || ' seconds')
+            )
+            ORDER BY started_at DESC
+        """, (timeout_seconds, timeout_seconds))
+        
+        executions = []
+        for row in cursor.fetchall():
+            # Parse timestamps with timezone handling
+            started_at = parse_timestamp(row[4])
+            completed_at = parse_timestamp(row[5]) if row[5] else None
+                
+            executions.append(Execution(
+                id=int(row[0]),
+                doc_id=row[1],
+                doc_title=row[2],
+                status=row[3],
+                started_at=started_at,
+                completed_at=completed_at,
+                log_file=row[6],
+                exit_code=row[7],
+                working_dir=row[8],
+                pid=row[9] if len(row) > 9 else None
+            ))
+        
+        return executions
+
+
 def cleanup_old_executions(days: int = 7) -> int:
     """Clean up executions older than specified days."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            DELETE FROM executions 
-            WHERE started_at < datetime('now', '-{} days')
-        """.format(days))
+            DELETE FROM executions
+            WHERE started_at < datetime('now', '-' || ? || ' days')
+        """, (days,))
         conn.commit()
         return cursor.rowcount
 

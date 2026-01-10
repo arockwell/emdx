@@ -4,14 +4,13 @@ Analyzes document content and suggests appropriate tags based on patterns.
 """
 
 import re
-from typing import List, Dict, Any, Tuple, Optional, Set
-from collections import defaultdict
 import sqlite3
-from pathlib import Path
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.settings import get_db_path
-from ..utils.emoji_aliases import EMOJI_ALIASES
 from ..models.tags import get_or_create_tag
+from ..utils.emoji_aliases import EMOJI_ALIASES
 
 
 class AutoTagger:
@@ -87,7 +86,7 @@ class AutoTagger:
         
         # Priority
         'urgent': {
-            'title_patterns': [r'urgent:', r'critical:', r'asap'],
+            'title_patterns': [r'urgent:', r'urgent\s', r'critical:', r'critical\s', r'asap'],
             'content_patterns': [r'urgent', r'critical', r'immediately', r'asap'],
             'confidence': 0.85,
             'tags': ['urgent']
@@ -155,7 +154,7 @@ class AutoTagger:
                     if title_matches > 0:
                         confidence = min(1.0, confidence + 0.1)
                     else:
-                        confidence = base_confidence * 0.7  # Lower confidence for content-only match
+                        confidence = base_confidence * 0.75  # Lower confidence for content-only match
             
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:
@@ -246,8 +245,10 @@ class AutoTagger:
                     
                     if cursor.rowcount > 0:
                         applied_tags.append(tag)
-                except Exception:
-                    # Skip if error (e.g., duplicate)
+                except sqlite3.Error as e:
+                    # Skip if database error (e.g., duplicate constraint)
+                    import logging
+                    logging.debug(f"Failed to apply tag {tag} to document {document_id}: {e}")
                     continue
         
         conn.commit()
@@ -447,10 +448,13 @@ class AutoTagger:
     def get_pattern_stats(self) -> Dict[str, int]:
         """
         Get statistics on how often each pattern matches.
-        
+
         Returns:
             Dictionary mapping pattern names to match counts
+
+        Note: Pattern usage tracking is not currently implemented.
+        This would require persistent storage of match history.
         """
-        # TODO: Implement tracking of pattern usage
-        # This would require storing pattern match history
+        # Pattern usage tracking not yet implemented
+        # Would require database table to store pattern match history and analytics
         return {}

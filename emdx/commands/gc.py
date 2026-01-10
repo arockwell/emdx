@@ -3,16 +3,16 @@ Garbage collection commands for EMDX.
 Clean up orphaned data, optimize database, and perform maintenance.
 """
 
-import typer
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
+from typing import Any, Dict
+
+import typer
+from rich import box
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich import box
-from typing import Dict, Any, List
+from rich.table import Table
 
 from ..config.settings import get_db_path
 

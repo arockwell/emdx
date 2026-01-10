@@ -93,18 +93,6 @@ class MdcatRenderer:
             # Clean up temp file
             os.unlink(temp_path)
 
-    @staticmethod
-    def render_to_html(content: str) -> str:
-        """
-        Render markdown to HTML using mdcat's HTML output.
-
-        Note: mdcat doesn't directly support HTML output,
-        so this would need a different tool like pandoc.
-        """
-        # This is a placeholder - mdcat focuses on terminal output
-        # For HTML, you'd want to use a different tool
-        raise NotImplementedError("mdcat does not support HTML output. Use pandoc or similar.")
-
 
 class MdcatWidget:
     """
@@ -130,8 +118,7 @@ class MdcatWidget:
 
         try:
             rendered = MdcatRenderer.render(content)
-            # TODO: Create a custom widget that can display ANSI text
-            # For now, return the raw output
+            # Custom ANSI widget not implemented - returns raw output
             return rendered
         except Exception as e:
             return f"Error rendering with mdcat: {e}"

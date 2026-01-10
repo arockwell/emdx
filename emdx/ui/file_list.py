@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from textual import events
-from textual.widgets import DataTable, Static
 from textual.reactive import reactive
+from textual.widgets import DataTable
 
 from emdx.database import db
 
@@ -37,7 +37,6 @@ class FileList(DataTable):
     def on_data_table_row_highlighted(self, event) -> None:
         """Handle row selection changes."""
         self.selected_index = event.cursor_row
-        logger.debug(f"📁 Row highlighted: {event.cursor_row}, updating selected_index")
         # Notify parent FileBrowser of selection change
         self.post_message(self.FileSelected(event.cursor_row))
     
@@ -111,7 +110,6 @@ class FileList(DataTable):
                     # Check if file is in EMDX
                     in_emdx = "✅" if self.check_file_in_emdx(entry) else ""
                     
-                    logger.debug(f"📁 Adding row {i}: {icon} {name} {size} {modified} {in_emdx}")
                     self.add_row(
                         icon, name, size, modified, in_emdx,
                         key=str(entry)
@@ -136,12 +134,9 @@ class FileList(DataTable):
     
     def get_selected_file(self) -> Optional[Path]:
         """Get the currently selected file path."""
-        logger.debug(f"📁 get_selected_file: selected_index={self.selected_index}, files_count={len(self.files)}")
         if 0 <= self.selected_index < len(self.files):
             selected = self.files[self.selected_index]
-            logger.debug(f"📁 Selected file: {selected}")
             return selected
-        logger.debug("📁 No file selected")
         return None
     
     def get_file_icon(self, path: Path) -> str:
@@ -281,9 +276,8 @@ class FileList(DataTable):
             # Hash the content for comparison
             content_hash = hashlib.sha256(content.encode()).hexdigest()
             
-            # Check if this file is already saved
-            # For now, just check by exact title match
-            # TODO: Implement proper content hash checking
+            # Check if this file is already saved by title match
+            # Note: content_hash computed above is unused - dedup uses title only
             with db.get_connection() as conn:
                 result = conn.execute(
                     "SELECT id FROM documents WHERE title = ? AND is_deleted = 0",
