@@ -3,9 +3,10 @@ Git utility functions for emdx
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import git
+if TYPE_CHECKING:
+    import git
 
 
 def get_git_project(path: Optional[Path] = None) -> Optional[str]:
@@ -18,6 +19,9 @@ def get_git_project(path: Optional[Path] = None) -> Optional[str]:
     Returns:
         The repository name if in a git repo, None otherwise.
     """
+    # Lazy import - GitPython is slow to import (~135ms)
+    import git
+
     if path is None:
         path = Path.cwd()
 

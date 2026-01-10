@@ -155,3 +155,4 @@ test_output.txt
 
 # Misnamed log files
 *.lo
+.venv-path

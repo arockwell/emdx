@@ -110,7 +110,7 @@ class LogView(Widget):
     async def load_execution(self, exec_id: int) -> None:
         """Load logs for a specific execution."""
         try:
-            execution = get_execution(str(exec_id))
+            execution = get_execution(exec_id)
             if not execution:
                 self._show_error(f"Execution #{exec_id} not found")
                 return

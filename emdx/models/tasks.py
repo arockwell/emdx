@@ -1,7 +1,13 @@
 """Task operations for emdx."""
 
+import sqlite3
 from typing import Any, Optional
 
+from emdx.config.constants import (
+    DEFAULT_BROWSE_LIMIT,
+    DEFAULT_RECENT_LIMIT,
+    DEFAULT_TASK_PRIORITY,
+)
 from emdx.database import db
 
 # Valid status values
@@ -11,7 +17,7 @@ STATUSES = ('open', 'active', 'blocked', 'done', 'failed')
 def create_task(
     title: str,
     description: str = "",
-    priority: int = 3,
+    priority: int = DEFAULT_TASK_PRIORITY,
     gameplan_id: Optional[int] = None,
     project: Optional[str] = None,
     depends_on: Optional[list[int]] = None,
@@ -47,7 +53,7 @@ def list_tasks(
     status: Optional[list[str]] = None,
     gameplan_id: Optional[int] = None,
     project: Optional[str] = None,
-    limit: int = 50,
+    limit: int = DEFAULT_BROWSE_LIMIT,
 ) -> list[dict[str, Any]]:
     """List tasks with filters."""
     conditions, params = ["1=1"], []
@@ -210,7 +216,7 @@ def log_progress(task_id: int, message: str) -> int:
         return cursor.lastrowid
 
 
-def get_task_log(task_id: int, limit: int = 20) -> list[dict[str, Any]]:
+def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[dict[str, Any]]:
     """Get task log entries."""
     with db.get_connection() as conn:
         cursor = conn.execute("""

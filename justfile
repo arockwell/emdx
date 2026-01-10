@@ -6,6 +6,7 @@ default:
 install:
     poetry lock
     poetry install
+    poetry env info --path > .venv-path
 
 # Check if dependencies are installed and install if needed
 _ensure-installed:
@@ -30,8 +31,18 @@ dev:
     @echo ""
     @echo "Or run: just run --help"
 
-# Run emdx with arguments
-run *args: _ensure-installed
+# Run emdx with arguments (fast - bypasses poetry run overhead)
+# Uses venv directly for ~4x speedup. Auto-installs on first run if needed.
+run *args:
+    @if [ ! -f .venv-path ] || [ ! -x "$(cat .venv-path)/bin/emdx" ]; then \
+        echo "📦 Setting up emdx..." && \
+        poetry install -q && \
+        poetry env info --path > .venv-path; \
+    fi && \
+    "$(cat .venv-path)/bin/emdx" {{args}}
+
+# Run emdx with dependency check (slower but ensures deps installed)
+run-safe *args: _ensure-installed
     poetry run emdx {{args}}
 
 # Run tests

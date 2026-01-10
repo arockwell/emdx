@@ -13,10 +13,12 @@ import time
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import psutil
 import typer
+
+if TYPE_CHECKING:
+    import psutil
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -568,22 +570,25 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
 
 def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[str]:
     """Clean up zombie and stuck EMDX processes.
-    
+
     Args:
         dry_run: If True, only show what would be done
         max_runtime_hours: Maximum runtime before considering a process stuck
     """
+    # Lazy import - psutil is slow to import (~16ms)
+    import psutil
+
     from ..models.executions import get_running_executions
-    
+
     # Categorize problematic processes
     zombie_procs = []
     stuck_procs = []
     orphaned_procs = []
-    
+
     # Get running executions from database
     running_execs = get_running_executions()
     known_pids = {exec.pid for exec in running_execs if exec.pid}
-    
+
     # Find EMDX-related processes
     for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status', 'create_time']):
         try:

@@ -36,7 +36,6 @@ from emdx.models.tags import (
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string
-from emdx.utils.git import get_git_project
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
@@ -122,6 +121,9 @@ def detect_project(input_content: InputContent, provided_project: Optional[str])
     """Detect project from git repository"""
     if provided_project:
         return provided_project
+
+    # Lazy import - GitPython is slow to import (~135ms)
+    from emdx.utils.git import get_git_project
 
     # Try to detect from file path if it's a file
     if input_content.source_type == "file" and input_content.source_path:
@@ -322,23 +324,27 @@ def find(
                     console.print("[yellow]No results found matching the date filters[/yellow]")
                 return
         
+        # Batch fetch tags for all results to avoid N+1 queries
+        doc_ids = [result["id"] for result in results]
+        all_tags_map = get_tags_for_documents(doc_ids)
+
         # Filter out documents with excluded tags if --no-tags is specified
         if no_tags:
             expanded_no_tags = expand_alias_string(no_tags)
             no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
-            
+
             if no_tag_list:
                 # Filter results to exclude documents with any of the no_tags
                 filtered_results = []
                 for result in results:
-                    doc_tags = get_document_tags(result["id"])
+                    doc_tags = all_tags_map.get(result["id"], [])
                     # Check if document has any excluded tags
                     has_excluded_tag = any(tag in doc_tags for tag in no_tag_list)
                     if not has_excluded_tag:
                         filtered_results.append(result)
-                
+
                 results = filtered_results
-                
+
                 if not results:
                     console.print(
                         f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"
@@ -356,9 +362,9 @@ def find(
             # Output as JSON with all metadata
             output_results = []
             for result in results:
-                # Get tags for each document
-                doc_tags = get_document_tags(result["id"])
-                
+                # Use batch-fetched tags
+                doc_tags = all_tags_map.get(result["id"], [])
+
                 # Build clean result object
                 output_result = {
                     "id": result["id"],
@@ -428,8 +434,8 @@ def find(
 
             console.print(" • ".join(metadata))
 
-            # Display tags
-            doc_tags = get_document_tags(result["id"])
+            # Display tags (using batch-fetched tags)
+            doc_tags = all_tags_map.get(result["id"], [])
             if doc_tags:
                 console.print(f"[dim]Tags: {format_tags(doc_tags)}[/dim]")
 
