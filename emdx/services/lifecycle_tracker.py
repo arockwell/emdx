@@ -7,9 +7,11 @@ import logging
 import sqlite3
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..config.settings import get_db_path
+from ..database.connection import DatabaseConnection
 from ..models.documents import get_document, update_document
 from ..models.tags import (
     add_tags_to_document,
@@ -46,8 +48,9 @@ class LifecycleTracker:
         'archived': []  # Terminal state
     }
     
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or get_db_path()
+    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+        self.db_path = Path(db_path) if db_path else get_db_path()
+        self._db = DatabaseConnection(self.db_path)
     
     def get_document_stage(self, doc_id: int) -> Optional[str]:
         """
@@ -89,22 +92,20 @@ class LifecycleTracker:
         Returns:
             List of gameplan documents with stage info
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
 
-        # Find all documents with gameplan tag
-        cursor.execute("""
-            SELECT DISTINCT d.id, d.title, d.project, d.created_at, d.updated_at, d.access_count
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0 AND t.name = '🎯'
-            ORDER BY d.updated_at DESC
-        """)
+            # Find all documents with gameplan tag
+            cursor.execute("""
+                SELECT DISTINCT d.id, d.title, d.project, d.created_at, d.updated_at, d.access_count
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0 AND t.name = '🎯'
+                ORDER BY d.updated_at DESC
+            """)
 
-        rows = cursor.fetchall()
-        conn.close()
+            rows = cursor.fetchall()
 
         if not rows:
             return []
@@ -280,71 +281,69 @@ class LifecycleTracker:
     def auto_detect_transitions(self) -> List[Dict[str, Any]]:
         """
         Automatically detect documents that should transition stages.
-        
+
         Returns:
             List of suggested transitions
         """
         suggestions = []
-        
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Find active gameplans not updated in 30+ days
-        cursor.execute("""
-            SELECT DISTINCT d.id, d.title, d.updated_at
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0 
-            AND t.name = '🚀'
-            AND julianday('now') - julianday(d.updated_at) > 30
-        """)
-        
-        for row in cursor.fetchall():
-            suggestions.append({
-                'doc_id': row['id'],
-                'title': row['title'],
-                'current_stage': 'active',
-                'suggested_stage': 'blocked',
-                'reason': 'No updates in 30+ days'
-            })
-        
-        # Find completed docs without outcome
-        cursor.execute("""
-            SELECT DISTINCT d.id, d.title, d.content
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0 
-            AND t.name = '✅'
-            AND NOT EXISTS (
-                SELECT 1 FROM document_tags dt2
-                JOIN tags t2 ON dt2.tag_id = t2.id
-                WHERE dt2.document_id = d.id
-                AND t2.name IN ('🎉', '❌')
-            )
-        """)
-        
-        for row in cursor.fetchall():
-            # Try to detect success/failure from content
-            content = (row['content'] or '').lower()
-            if any(word in content for word in ['success', 'achieved', 'completed successfully']):
-                suggested = 'success'
-            elif any(word in content for word in ['failed', 'abandoned', 'cancelled']):
-                suggested = 'failed'
-            else:
-                suggested = 'success'  # Default to success
-            
-            suggestions.append({
-                'doc_id': row['id'],
-                'title': row['title'],
-                'current_stage': 'completed',
-                'suggested_stage': suggested,
-                'reason': 'Completed without outcome specified'
-            })
-        
-        conn.close()
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Find active gameplans not updated in 30+ days
+            cursor.execute("""
+                SELECT DISTINCT d.id, d.title, d.updated_at
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0
+                AND t.name = '🚀'
+                AND julianday('now') - julianday(d.updated_at) > 30
+            """)
+
+            for row in cursor.fetchall():
+                suggestions.append({
+                    'doc_id': row['id'],
+                    'title': row['title'],
+                    'current_stage': 'active',
+                    'suggested_stage': 'blocked',
+                    'reason': 'No updates in 30+ days'
+                })
+
+            # Find completed docs without outcome
+            cursor.execute("""
+                SELECT DISTINCT d.id, d.title, d.content
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0
+                AND t.name = '✅'
+                AND NOT EXISTS (
+                    SELECT 1 FROM document_tags dt2
+                    JOIN tags t2 ON dt2.tag_id = t2.id
+                    WHERE dt2.document_id = d.id
+                    AND t2.name IN ('🎉', '❌')
+                )
+            """)
+
+            for row in cursor.fetchall():
+                # Try to detect success/failure from content
+                content = (row['content'] or '').lower()
+                if any(word in content for word in ['success', 'achieved', 'completed successfully']):
+                    suggested = 'success'
+                elif any(word in content for word in ['failed', 'abandoned', 'cancelled']):
+                    suggested = 'failed'
+                else:
+                    suggested = 'success'  # Default to success
+
+                suggestions.append({
+                    'doc_id': row['id'],
+                    'title': row['title'],
+                    'current_stage': 'completed',
+                    'suggested_stage': suggested,
+                    'reason': 'Completed without outcome specified'
+                })
+
         return suggestions
     
     def get_stage_duration_stats(self) -> Dict[str, Dict[str, float]]:
