@@ -10,7 +10,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, RichLog, Static
 
-from emdx.commands.claude_execute import (
+from emdx.services.claude_executor import (
     execute_document_smart_background,
 )
 from emdx.models.documents import save_document

@@ -14,7 +14,7 @@ from emdx.models import tasks
 from emdx.models.documents import get_document
 from emdx.models.executions import create_execution
 from emdx.models.task_executions import create_task_execution, complete_task_execution
-from emdx.commands.claude_execute import execute_with_claude_detached
+from emdx.services.claude_executor import execute_with_claude_detached
 
 
 def build_task_prompt(task_id: int) -> str:

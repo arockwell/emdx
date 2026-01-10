@@ -820,7 +820,7 @@ class WorkflowExecutor:
         Returns:
             Dict with success, output_doc_id, tokens_used, error_message
         """
-        from emdx.commands.claude_execute import execute_with_claude
+        from emdx.services.claude_executor import execute_with_claude
 
         wf_db.update_individual_run(
             individual_run_id,
@@ -984,7 +984,7 @@ Report the document ID that was created."""
         Returns:
             Dict with output_doc_id and tokens_used
         """
-        from emdx.commands.claude_execute import execute_with_claude
+        from emdx.services.claude_executor import execute_with_claude
 
         # Gather all outputs
         outputs = []
