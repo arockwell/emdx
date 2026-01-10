@@ -199,9 +199,17 @@ class LogView(Widget):
         stage_name: Optional[str],
         log_output: RichLog
     ) -> None:
-        """Load logs from individual run execution files (for dynamic mode)."""
+        """Load logs from individual run execution files (for dynamic mode).
+
+        Shows a summary first, then loads full logs asynchronously to avoid blocking.
+        """
+        import asyncio
+
         # Get stage runs for this workflow run
         stage_runs = wf_db.list_stage_runs(run['id'])
+
+        # Collect all log files to load
+        logs_to_load = []
 
         for stage_run in stage_runs:
             # Skip if filtering by stage name and this isn't the one
@@ -228,21 +236,43 @@ class LogView(Widget):
                 if not log_path.exists():
                     continue
 
-                # Write header for this individual run
                 branch_name = ind_run.get('input_context', f"Run #{ind_run.get('run_number', '?')}")
-                status_icon = "✅" if ind_run.get('status') == 'completed' else (
-                    "🔄" if ind_run.get('status') == 'running' else "❌"
-                )
-                log_output.write(f"\n[bold cyan]═══ {status_icon} {branch_name} ═══[/bold cyan]\n")
-                self.line_count += 2
+                status = ind_run.get('status', 'unknown')
+                logs_to_load.append((branch_name, status, log_path))
 
-                # Read and display the log content
-                try:
-                    content = log_path.read_text()
-                    self._write_content(content)
-                except Exception as e:
-                    log_output.write(f"[red]Error reading log: {e}[/red]")
+        if not logs_to_load:
+            return
+
+        # Show summary header
+        log_output.write(f"[bold]Loading {len(logs_to_load)} execution logs...[/bold]\n")
+        self.line_count += 1
+
+        # Load logs one at a time with yields to keep UI responsive
+        for branch_name, status, log_path in logs_to_load:
+            status_icon = "✅" if status == 'completed' else (
+                "🔄" if status == 'running' else "❌"
+            )
+            log_output.write(f"\n[bold cyan]═══ {status_icon} {branch_name} ═══[/bold cyan]\n")
+            self.line_count += 2
+
+            # Read file in a thread to avoid blocking
+            try:
+                content = await asyncio.to_thread(log_path.read_text)
+                # Only show last 100 lines per log to avoid overwhelming the UI
+                lines = content.strip().split('\n')
+                if len(lines) > 100:
+                    log_output.write(f"[dim]... ({len(lines) - 100} lines omitted) ...[/dim]")
                     self.line_count += 1
+                    lines = lines[-100:]
+                for line in lines:
+                    log_output.write(line)
+                    self.line_count += 1
+            except Exception as e:
+                log_output.write(f"[red]Error reading log: {e}[/red]")
+                self.line_count += 1
+
+            # Yield to let UI update
+            await asyncio.sleep(0)
 
     async def _load_execution_logs(self, execution: Execution) -> None:
         """Load logs from an execution."""
