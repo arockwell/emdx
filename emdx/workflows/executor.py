@@ -3,8 +3,6 @@
 import asyncio
 import json
 import re
-import time
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,27 +10,13 @@ from typing import Any, Dict, List, Optional
 from .services import document_service, execution_service, claude_service
 from .base import (
     ExecutionMode,
-    IterationStrategy,
     StageConfig,
     WorkflowConfig,
-    WorkflowIndividualRun,
     WorkflowRun,
-    WorkflowStageRun,
 )
 from . import database as wf_db
 from .registry import workflow_registry
-
-
-@dataclass
-class StageResult:
-    """Result of executing a stage."""
-    success: bool
-    output_doc_id: Optional[int] = None
-    synthesis_doc_id: Optional[int] = None
-    individual_outputs: List[int] = field(default_factory=list)
-    tokens_used: int = 0
-    execution_time_ms: int = 0
-    error_message: Optional[str] = None
+from .strategies import get_strategy, StageResult
 
 
 class WorkflowExecutor:
@@ -41,8 +25,12 @@ class WorkflowExecutor:
     Supports:
     - single: Run agent once
     - parallel: Run agent N times simultaneously, synthesize results
-    - iterative: Run agent N times sequentially, each building on previous
+    - iterative: Run agent N times sequentially, building on previous
     - adversarial: Advocate -> Critic -> Synthesizer pattern
+    - dynamic: Discover items at runtime, process each in parallel
+
+    This class acts as the context in the Strategy pattern, delegating
+    actual execution to strategy implementations based on execution mode.
     """
 
     def __init__(self, max_concurrent: int = 10):
@@ -213,7 +201,7 @@ class WorkflowExecutor:
         stage: StageConfig,
         context: Dict[str, Any],
     ) -> StageResult:
-        """Execute a single stage.
+        """Execute a single stage using the appropriate strategy.
 
         Args:
             workflow_run_id: Parent workflow run ID
@@ -236,21 +224,18 @@ class WorkflowExecutor:
 
         try:
             # Resolve input template if specified
-            stage_input = self._resolve_template(stage.input, context) if stage.input else None
+            stage_input = self.resolve_template(stage.input, context) if stage.input else None
 
-            # Execute based on mode
-            if stage.mode == ExecutionMode.SINGLE:
-                result = await self._execute_single(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.PARALLEL:
-                result = await self._execute_parallel(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.ITERATIVE:
-                result = await self._execute_iterative(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.ADVERSARIAL:
-                result = await self._execute_adversarial(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.DYNAMIC:
-                result = await self._execute_dynamic(stage_run_id, stage, context, stage_input)
-            else:
-                raise ValueError(f"Unknown execution mode: {stage.mode}")
+            # Get the appropriate strategy for this execution mode
+            strategy = get_strategy(stage.mode, self)
+
+            # Execute using the strategy
+            result = await strategy.execute(
+                stage_run_id=stage_run_id,
+                stage=stage,
+                context=context,
+                stage_input=stage_input,
+            )
 
             execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
             result.execution_time_ms = execution_time_ms
@@ -279,524 +264,53 @@ class WorkflowExecutor:
             )
             return StageResult(success=False, error_message=str(e))
 
-    async def _execute_single(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute a single run.
+    # Protocol methods for strategies to use
+
+    def resolve_template(self, template: Optional[str], context: Dict[str, Any]) -> str:
+        """Resolve {{variable}} templates in a string.
 
         Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
+            template: String with {{variable}} placeholders
+            context: Dictionary of values to substitute
 
         Returns:
-            StageResult
+            Resolved string
         """
-        # Create individual run record
-        prompt = self._resolve_template(stage.prompt, context) if stage.prompt else None
-        individual_run_id = wf_db.create_individual_run(
-            stage_run_id=stage_run_id,
-            run_number=1,
-            prompt_used=prompt,
-            input_context=stage_input,
-        )
-
-        # Execute agent
-        result = await self._run_agent(
-            individual_run_id=individual_run_id,
-            agent_id=stage.agent_id,
-            prompt=prompt or stage_input or "",
-            context=context,
-        )
-
-        return StageResult(
-            success=result.get('success', False),
-            output_doc_id=result.get('output_doc_id'),
-            individual_outputs=[result.get('output_doc_id')] if result.get('output_doc_id') else [],
-            tokens_used=result.get('tokens_used', 0),
-            error_message=result.get('error_message'),
-        )
-
-    async def _execute_parallel(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute N runs in parallel and synthesize results.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult with synthesis
-        """
-        # Create individual run records
-        individual_runs = []
-        for i in range(stage.runs):
-            prompt = self._resolve_template(stage.prompt, context) if stage.prompt else None
-            individual_run_id = wf_db.create_individual_run(
-                stage_run_id=stage_run_id,
-                run_number=i + 1,
-                prompt_used=prompt,
-                input_context=stage_input,
-            )
-            individual_runs.append((individual_run_id, prompt))
-
-        # Execute all runs in parallel (with semaphore limiting)
-        async def run_with_limit(run_id: int, prompt: str):
-            async with self._semaphore:
-                return await self._run_agent(
-                    individual_run_id=run_id,
-                    agent_id=stage.agent_id,
-                    prompt=prompt or stage_input or "",
-                    context=context,
-                )
-
-        tasks = [run_with_limit(run_id, prompt) for run_id, prompt in individual_runs]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Collect successful outputs
-        output_doc_ids = []
-        total_tokens = 0
-        errors = []
-
-        for result in results:
-            if isinstance(result, Exception):
-                errors.append(str(result))
-            elif result.get('success'):
-                if result.get('output_doc_id'):
-                    output_doc_ids.append(result['output_doc_id'])
-                total_tokens += result.get('tokens_used', 0)
-            else:
-                errors.append(result.get('error_message', 'Unknown error'))
-
-        if not output_doc_ids:
-            return StageResult(
-                success=False,
-                error_message=f"All parallel runs failed: {'; '.join(errors)}",
-            )
-
-        # Synthesize results
-        synthesis_result = await self._synthesize_outputs(
-            stage_run_id=stage_run_id,
-            output_doc_ids=output_doc_ids,
-            synthesis_prompt=stage.synthesis_prompt,
-            context=context,
-        )
-
-        return StageResult(
-            success=True,
-            output_doc_id=synthesis_result.get('output_doc_id'),
-            synthesis_doc_id=synthesis_result.get('output_doc_id'),
-            individual_outputs=output_doc_ids,
-            tokens_used=total_tokens + synthesis_result.get('tokens_used', 0),
-        )
-
-    async def _execute_iterative(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute N runs sequentially, each building on previous.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult
-        """
-        # Load iteration strategy if specified
-        strategy = None
-        if stage.iteration_strategy:
-            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
-
-        previous_outputs: List[str] = []
-        output_doc_ids: List[int] = []
-        total_tokens = 0
-        last_output_id = None
-
-        for i in range(stage.runs):
-            run_number = i + 1
-
-            # Build prompt for this iteration
-            if strategy:
-                prompt_template = strategy.get_prompt_for_run(run_number)
-            elif stage.prompts and i < len(stage.prompts):
-                prompt_template = stage.prompts[i]
-            else:
-                prompt_template = stage.prompt or ""
-
-            # Build context for template resolution
-            iter_context = dict(context)
-            iter_context['input'] = stage_input or context.get('input', '')
-            iter_context['prev'] = previous_outputs[-1] if previous_outputs else ''
-            iter_context['all_prev'] = '\n\n---\n\n'.join(previous_outputs)
-            iter_context['run_number'] = run_number
-
-            prompt = self._resolve_template(prompt_template, iter_context)
-
-            # Create individual run record
-            individual_run_id = wf_db.create_individual_run(
-                stage_run_id=stage_run_id,
-                run_number=run_number,
-                prompt_used=prompt,
-                input_context=iter_context.get('prev', ''),
-            )
-
-            # Execute this iteration
-            result = await self._run_agent(
-                individual_run_id=individual_run_id,
-                agent_id=stage.agent_id,
-                prompt=prompt,
-                context=iter_context,
-            )
-
-            if not result.get('success'):
-                return StageResult(
-                    success=False,
-                    error_message=f"Iteration {run_number} failed: {result.get('error_message')}",
-                    tokens_used=total_tokens,
-                )
-
-            # Collect output for next iteration
-            if result.get('output_doc_id'):
-                doc = document_service.get_document(result['output_doc_id'])
-                if doc:
-                    previous_outputs.append(doc.get('content', ''))
-                    output_doc_ids.append(result['output_doc_id'])
-                    last_output_id = result['output_doc_id']
-
-            total_tokens += result.get('tokens_used', 0)
-
-            # Update stage progress
-            wf_db.update_stage_run(stage_run_id, runs_completed=run_number)
-
-        return StageResult(
-            success=True,
-            output_doc_id=last_output_id,
-            individual_outputs=output_doc_ids,
-            tokens_used=total_tokens,
-        )
-
-    async def _execute_adversarial(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute adversarial pattern: Advocate -> Critic -> Synthesizer.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult
-        """
-        # Load iteration strategy (adversarial uses same mechanism)
-        strategy = None
-        if stage.iteration_strategy:
-            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
-
-        # Default adversarial prompts if no strategy
-        default_prompts = [
-            "ADVOCATE: Argue FOR this approach: {{input}}\n\nWhat are its strengths?",
-            "CRITIC: Given this advocacy: {{prev}}\n\nArgue AGAINST. What are the weaknesses?",
-            "SYNTHESIS: Advocate: {{all_prev[0]}}\nCritic: {{prev}}\n\nProvide balanced assessment.",
-        ]
-
-        outputs: List[str] = []
-        output_doc_ids: List[int] = []
-        total_tokens = 0
-        last_output_id = None
-
-        num_runs = stage.runs if stage.runs else 3  # Default to 3 for adversarial
-
-        for i in range(num_runs):
-            run_number = i + 1
-
-            # Get prompt for this role
-            if strategy:
-                prompt_template = strategy.get_prompt_for_run(run_number)
-            elif stage.prompts and i < len(stage.prompts):
-                prompt_template = stage.prompts[i]
-            else:
-                prompt_template = default_prompts[min(i, len(default_prompts) - 1)]
-
-            # Build context
-            iter_context = dict(context)
-            iter_context['input'] = stage_input or context.get('input', '')
-            iter_context['prev'] = outputs[-1] if outputs else ''
-            iter_context['all_prev'] = outputs  # Keep as list for indexed access
-
-            prompt = self._resolve_template(prompt_template, iter_context)
-
-            # Create individual run record
-            individual_run_id = wf_db.create_individual_run(
-                stage_run_id=stage_run_id,
-                run_number=run_number,
-                prompt_used=prompt,
-                input_context=iter_context.get('prev', ''),
-            )
-
-            # Execute
-            result = await self._run_agent(
-                individual_run_id=individual_run_id,
-                agent_id=stage.agent_id,
-                prompt=prompt,
-                context=iter_context,
-            )
-
-            if not result.get('success'):
-                return StageResult(
-                    success=False,
-                    error_message=f"Adversarial run {run_number} failed: {result.get('error_message')}",
-                    tokens_used=total_tokens,
-                )
-
-            # Collect output
-            if result.get('output_doc_id'):
-                doc = document_service.get_document(result['output_doc_id'])
-                if doc:
-                    outputs.append(doc.get('content', ''))
-                    output_doc_ids.append(result['output_doc_id'])
-                    last_output_id = result['output_doc_id']
-
-            total_tokens += result.get('tokens_used', 0)
-            wf_db.update_stage_run(stage_run_id, runs_completed=run_number)
-
-        return StageResult(
-            success=True,
-            output_doc_id=last_output_id,  # Final synthesis is the output
-            synthesis_doc_id=last_output_id,
-            individual_outputs=output_doc_ids,
-            tokens_used=total_tokens,
-        )
-
-    async def _run_discovery(
-        self,
-        command: str,
-        context: Dict[str, Any],
-    ) -> List[str]:
-        """Run discovery command and return list of items.
-
-        Args:
-            command: Shell command that outputs items (one per line)
-            context: Execution context for template resolution
-
-        Returns:
-            List of discovered items (strings)
-        """
-        import subprocess
-
-        # Resolve any templates in the command
-        resolved_command = self._resolve_template(command, context)
-
-        # Run command
-        result = await asyncio.to_thread(
-            subprocess.run,
-            resolved_command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=context.get('_working_dir'),
-        )
-
-        if result.returncode != 0:
-            raise ValueError(f"Discovery command failed: {result.stderr}")
-
-        # Parse output - one item per line, strip whitespace
-        items = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
-        return items
-
-    async def _execute_dynamic(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute dynamic mode: discover items and process each in parallel.
-
-        Dynamic mode:
-        1. Runs discovery_command to get a list of items
-        2. Creates a worktree for each item (up to max_concurrent)
-        3. Processes items in parallel, respecting concurrency limits
-        4. Optionally synthesizes results at the end
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult with all outputs
-        """
-        from .worktree_pool import WorktreePool
-
-        # Get discovery command (CLI override takes precedence)
-        discovery_command = context.get('_discovery_override') or stage.discovery_command
-
-        # Validate configuration
-        if not discovery_command:
-            return StageResult(
-                success=False,
-                error_message="Dynamic mode requires discovery_command"
-            )
-
-        # Get max_concurrent (CLI override takes precedence)
-        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent
-
-        # Step 1: Run discovery
-        try:
-            items = await self._run_discovery(discovery_command, context)
-        except Exception as e:
-            return StageResult(
-                success=False,
-                error_message=f"Discovery failed: {e}"
-            )
-
-        if not items:
-            return StageResult(
-                success=True,
-                error_message="No items discovered"
-            )
-
-        # Update target_runs to reflect discovered item count
-        wf_db.update_stage_run(stage_run_id, target_runs=len(items))
-
-        # Step 2: Set up worktree pool
-        base_branch = context.get('base_branch', 'main')
-        pool = WorktreePool(
-            max_size=max_concurrent,
-            base_branch=base_branch,
-            repo_root=context.get('_working_dir'),
-        )
-
-        output_doc_ids: List[int] = []
-        total_tokens = 0
-        errors: List[str] = []
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def process_item(item_index: int, item: str) -> Dict[str, Any]:
-            """Process a single discovered item."""
-            async with semaphore:
-                async with pool.acquire(target_branch=item) as worktree:
-                    # Build item-specific context
-                    item_context = dict(context)
-                    item_context[stage.item_variable] = item
-                    item_context['_working_dir'] = worktree.path
-                    item_context['item_index'] = item_index
-                    item_context['total_items'] = len(items)
-
-                    # Resolve prompt with item context
-                    prompt = self._resolve_template(stage.prompt, item_context) if stage.prompt else item
-
-                    # Create individual run record
-                    individual_run_id = wf_db.create_individual_run(
-                        stage_run_id=stage_run_id,
-                        run_number=item_index + 1,
-                        prompt_used=prompt,
-                        input_context=item,
-                    )
-
-                    # Execute agent
-                    result = await self._run_agent(
-                        individual_run_id=individual_run_id,
-                        agent_id=stage.agent_id,
-                        prompt=prompt,
-                        context=item_context,
-                    )
-
-                    return {
-                        'item': item,
-                        'index': item_index,
-                        **result
-                    }
-
-        try:
-            # Step 3: Process all items in parallel
-            tasks = [process_item(i, item) for i, item in enumerate(items)]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Collect results
-            successful_items = 0
-            for result in results:
-                if isinstance(result, Exception):
-                    errors.append(str(result))
-                    if not stage.continue_on_failure:
-                        break
-                elif result.get('success'):
-                    successful_items += 1
-                    if result.get('output_doc_id'):
-                        output_doc_ids.append(result['output_doc_id'])
-                    total_tokens += result.get('tokens_used', 0)
+        if not template:
+            return ""
+
+        result = template
+
+        # Handle indexed access like {{all_prev[0]}}
+        indexed_pattern = r'\{\{(\w+)\[(\d+)\]\}\}'
+        for match in re.finditer(indexed_pattern, template):
+            var_name = match.group(1)
+            index = int(match.group(2))
+            if var_name in context and isinstance(context[var_name], list):
+                if index < len(context[var_name]):
+                    result = result.replace(match.group(0), str(context[var_name][index]))
                 else:
-                    error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
-                    errors.append(error_msg)
-                    if not stage.continue_on_failure:
-                        break
+                    result = result.replace(match.group(0), '')
 
-            # Update stage progress
-            wf_db.update_stage_run(stage_run_id, runs_completed=successful_items)
+        # Handle simple variables like {{input}}
+        simple_pattern = r'\{\{(\w+(?:\.\w+)*)\}\}'
+        for match in re.finditer(simple_pattern, result):
+            var_name = match.group(1)
+            # Handle dotted access like stage_name.output
+            if '.' in var_name:
+                value = context.get(var_name, '')
+            else:
+                value = context.get(var_name, '')
+            result = result.replace(match.group(0), str(value))
 
-            # Step 4: Optional synthesis
-            synthesis_doc_id = None
-            if output_doc_ids and stage.synthesis_prompt:
-                synthesis_result = await self._synthesize_outputs(
-                    stage_run_id=stage_run_id,
-                    output_doc_ids=output_doc_ids,
-                    synthesis_prompt=stage.synthesis_prompt,
-                    context=context,
-                )
-                synthesis_doc_id = synthesis_result.get('output_doc_id')
-                total_tokens += synthesis_result.get('tokens_used', 0)
+        return result
 
-            # Determine overall success
-            if not stage.continue_on_failure and errors:
-                return StageResult(
-                    success=False,
-                    error_message=f"Dynamic execution failed: {'; '.join(errors)}",
-                    individual_outputs=output_doc_ids,
-                    tokens_used=total_tokens,
-                )
+    # Kept for backward compatibility
+    def _resolve_template(self, template: Optional[str], context: Dict[str, Any]) -> str:
+        """Deprecated: Use resolve_template instead."""
+        return self.resolve_template(template, context)
 
-            # Success if at least one item succeeded
-            success = successful_items > 0
-
-            return StageResult(
-                success=success,
-                output_doc_id=synthesis_doc_id or (output_doc_ids[-1] if output_doc_ids else None),
-                synthesis_doc_id=synthesis_doc_id,
-                individual_outputs=output_doc_ids,
-                tokens_used=total_tokens,
-                error_message=f"Processed {successful_items}/{len(items)} items. Errors: {'; '.join(errors)}" if errors else None,
-            )
-
-        finally:
-            # Clean up worktree pool
-            await pool.cleanup()
-
-    async def _run_agent(
+    async def run_agent(
         self,
         individual_run_id: int,
         agent_id: Optional[int],
@@ -977,7 +491,7 @@ Report the document ID that was created."""
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
-    async def _synthesize_outputs(
+    async def synthesize_outputs(
         self,
         stage_run_id: int,
         output_doc_ids: List[int],
@@ -1007,7 +521,7 @@ Report the document ID that was created."""
         synth_context['outputs'] = '\n\n---\n\n'.join(outputs)
         synth_context['output_count'] = len(outputs)
 
-        base_prompt = self._resolve_template(
+        base_prompt = self.resolve_template(
             synthesis_prompt or "Synthesize these outputs into a coherent summary:\n\n{{outputs}}",
             synth_context,
         )
@@ -1106,46 +620,63 @@ Report the document ID that was created."""
             return {
                 'output_doc_id': doc_id,
                 'tokens_used': 0,
-        }
+            }
 
-    def _resolve_template(self, template: Optional[str], context: Dict[str, Any]) -> str:
-        """Resolve {{variable}} templates in a string.
+    def get_document(self, doc_id: int) -> Optional[Dict[str, Any]]:
+        """Get a document by ID.
 
         Args:
-            template: String with {{variable}} placeholders
-            context: Dictionary of values to substitute
+            doc_id: Document ID
 
         Returns:
-            Resolved string
+            Document dict or None
         """
-        if not template:
-            return ""
+        return document_service.get_document(doc_id)
 
-        result = template
+    def create_individual_run(
+        self,
+        stage_run_id: int,
+        run_number: int,
+        prompt_used: Optional[str] = None,
+        input_context: Optional[str] = None,
+    ) -> int:
+        """Create an individual run record.
 
-        # Handle indexed access like {{all_prev[0]}}
-        indexed_pattern = r'\{\{(\w+)\[(\d+)\]\}\}'
-        for match in re.finditer(indexed_pattern, template):
-            var_name = match.group(1)
-            index = int(match.group(2))
-            if var_name in context and isinstance(context[var_name], list):
-                if index < len(context[var_name]):
-                    result = result.replace(match.group(0), str(context[var_name][index]))
-                else:
-                    result = result.replace(match.group(0), '')
+        Args:
+            stage_run_id: Parent stage run ID
+            run_number: Run number within the stage
+            prompt_used: The prompt used for this run
+            input_context: Input context for this run
 
-        # Handle simple variables like {{input}}
-        simple_pattern = r'\{\{(\w+(?:\.\w+)*)\}\}'
-        for match in re.finditer(simple_pattern, result):
-            var_name = match.group(1)
-            # Handle dotted access like stage_name.output
-            if '.' in var_name:
-                value = context.get(var_name, '')
-            else:
-                value = context.get(var_name, '')
-            result = result.replace(match.group(0), str(value))
+        Returns:
+            The individual run ID
+        """
+        return wf_db.create_individual_run(
+            stage_run_id=stage_run_id,
+            run_number=run_number,
+            prompt_used=prompt_used,
+            input_context=input_context,
+        )
 
-        return result
+    def update_stage_run(self, stage_run_id: int, **kwargs) -> None:
+        """Update a stage run record.
+
+        Args:
+            stage_run_id: Stage run ID
+            **kwargs: Fields to update
+        """
+        wf_db.update_stage_run(stage_run_id, **kwargs)
+
+    def get_iteration_strategy(self, name: str):
+        """Get an iteration strategy by name.
+
+        Args:
+            name: Strategy name
+
+        Returns:
+            IterationStrategy or None
+        """
+        return workflow_registry.get_iteration_strategy(name)
 
 
 # Global executor instance
