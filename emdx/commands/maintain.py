@@ -836,7 +836,7 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
             except psutil.NoSuchProcess:
                 # Process already gone
                 terminated += 1
-            except (psutil.AccessDenied, Exception):
+            except Exception:
                 failed += 1
             
             progress.update(task, advance=1)
