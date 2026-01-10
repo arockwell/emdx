@@ -18,6 +18,7 @@ from emdx.models.documents import get_document, delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
+    get_tags_for_documents,
     remove_tags_from_document,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
@@ -319,24 +320,28 @@ class DocumentBrowser(Widget):
         """Update the table with filtered documents."""
         table = self.query_one("#doc-table", DataTable)
         table.clear()
-        
+
+        # Batch load all tags in one query to avoid N+1
+        doc_ids = [doc["id"] for doc in self.filtered_docs]
+        all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
+
         for doc in self.filtered_docs:
             # Format row data - ID, Tags, and Title
             title, was_truncated = truncate_emoji_safe(doc["title"], 74)
             if was_truncated:
                 title += "..."
-            
+
             # Get first 3 tags as emojis with spaces between, pad to 5 chars
-            doc_tags = get_document_tags(doc["id"])
+            doc_tags = all_tags.get(doc["id"], [])
             tags_display = " ".join(doc_tags[:3]).ljust(8)  # Pad to exactly 8 chars
-            
+
             table.add_row(
                 str(doc["id"]),
                 tags_display,
                 "",  # Empty padding column
                 title,
             )
-            
+
         # Update status using our own status bar
         try:
             status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
