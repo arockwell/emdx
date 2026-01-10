@@ -4,11 +4,11 @@ Analyzes document content and suggests appropriate tags based on patterns.
 """
 
 import re
-import sqlite3
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ..config.settings import get_db_path
+from ..database import DatabaseConnection
 from ..models.tags import get_or_create_tag
 from ..utils.emoji_aliases import EMOJI_ALIASES
 
@@ -93,15 +93,24 @@ class AutoTagger:
         }
     }
     
-    def __init__(self, db_path: Optional[str] = None, patterns: Optional[Dict] = None):
-        self.db_path = db_path or get_db_path()
-        
+    def __init__(
+        self,
+        db_path: Optional[Union[str, Path]] = None,
+        patterns: Optional[Dict] = None,
+    ):
+        # Use centralized database connection management
+        if db_path is not None:
+            self.db = DatabaseConnection(Path(db_path) if isinstance(db_path, str) else db_path)
+        else:
+            self.db = DatabaseConnection()
+
         # Load patterns with configuration
         if patterns:
             self.patterns = patterns
         else:
             # Merge default patterns with user configuration
             from ..config.tagging_rules import merge_with_defaults
+
             self.patterns = merge_with_defaults(None)
     
     def analyze_document(
@@ -169,153 +178,154 @@ class AutoTagger:
         return sorted_suggestions
     
     def suggest_tags(
-        self, 
-        document_id: int, 
+        self,
+        document_id: int,
         max_suggestions: int = 5
     ) -> List[Tuple[str, float]]:
         """
         Suggest tags for a specific document.
-        
+
         Args:
             document_id: Document ID
             max_suggestions: Maximum number of suggestions to return
-            
+
         Returns:
             List of tuples (tag, confidence)
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get document details
-        cursor.execute("""
-            SELECT d.title, d.content, GROUP_CONCAT(t.name) as tags
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            LEFT JOIN tags t ON dt.tag_id = t.id
-            WHERE d.id = ? AND d.is_deleted = 0
-            GROUP BY d.id
-        """, (document_id,))
-        
-        doc = cursor.fetchone()
-        conn.close()
-        
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get document details
+            cursor.execute(
+                """
+                SELECT d.title, d.content, GROUP_CONCAT(t.name) as tags
+                FROM documents d
+                LEFT JOIN document_tags dt ON d.id = dt.document_id
+                LEFT JOIN tags t ON dt.tag_id = t.id
+                WHERE d.id = ? AND d.is_deleted = 0
+                GROUP BY d.id
+            """,
+                (document_id,),
+            )
+
+            doc = cursor.fetchone()
+
         if not doc:
             return []
-        
-        existing_tags = doc['tags'].split(',') if doc['tags'] else []
-        suggestions = self.analyze_document(doc['title'], doc['content'], existing_tags)
-        
+
+        existing_tags = doc["tags"].split(",") if doc["tags"] else []
+        suggestions = self.analyze_document(doc["title"], doc["content"], existing_tags)
+
         return suggestions[:max_suggestions]
     
     def auto_tag_document(
-        self, 
-        document_id: int, 
+        self,
+        document_id: int,
         confidence_threshold: float = 0.7,
-        max_tags: int = 3
+        max_tags: int = 3,
     ) -> List[str]:
         """
         Automatically apply high-confidence tags to a document.
-        
+
         Args:
             document_id: Document ID
             confidence_threshold: Minimum confidence to apply tag
             max_tags: Maximum number of tags to apply
-            
+
         Returns:
             List of applied tags
         """
+        import sqlite3
+
         suggestions = self.suggest_tags(document_id, max_suggestions=max_tags)
         applied_tags = []
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        for tag, confidence in suggestions:
-            if confidence >= confidence_threshold:
-                try:
-                    # Get or create tag
-                    tag_id = get_or_create_tag(conn, tag)
-                    
-                    # Apply tag to document
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO document_tags (document_id, tag_id)
-                        VALUES (?, ?)
-                    """, (document_id, tag_id))
-                    
-                    if cursor.rowcount > 0:
-                        applied_tags.append(tag)
-                except sqlite3.Error as e:
-                    # Skip if database error (e.g., duplicate constraint)
-                    import logging
-                    logging.debug(f"Failed to apply tag {tag} to document {document_id}: {e}")
-                    continue
-        
-        conn.commit()
-        conn.close()
-        
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            for tag, confidence in suggestions:
+                if confidence >= confidence_threshold:
+                    try:
+                        # Get or create tag
+                        tag_id = get_or_create_tag(conn, tag)
+
+                        # Apply tag to document
+                        cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO document_tags (document_id, tag_id)
+                            VALUES (?, ?)
+                        """,
+                            (document_id, tag_id),
+                        )
+
+                        if cursor.rowcount > 0:
+                            applied_tags.append(tag)
+                    except sqlite3.IntegrityError:
+                        # Skip duplicate tag assignments
+                        continue
+
+            conn.commit()
+
         return applied_tags
     
     def batch_suggest(
-        self, 
+        self,
         untagged_only: bool = True,
         project: Optional[str] = None,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
     ) -> Dict[int, List[Tuple[str, float]]]:
         """
         Suggest tags for multiple documents.
-        
+
         Args:
             untagged_only: Only process documents without tags
             project: Filter by project
             limit: Maximum number of documents to process
-            
+
         Returns:
             Dictionary mapping document IDs to suggestions
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Build query
-        query = """
-            SELECT d.id, d.title, d.content, GROUP_CONCAT(t.name) as tags
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            LEFT JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0
-        """
-        
-        params = []
-        
-        if project:
-            query += " AND d.project = ?"
-            params.append(project)
-        
-        query += " GROUP BY d.id"
-        
-        if untagged_only:
-            query += " HAVING tags IS NULL"
-        
-        if limit:
-            query += f" LIMIT {limit}"
-        
-        cursor.execute(query, params)
-        documents = cursor.fetchall()
-        conn.close()
-        
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Build query
+            query = """
+                SELECT d.id, d.title, d.content, GROUP_CONCAT(t.name) as tags
+                FROM documents d
+                LEFT JOIN document_tags dt ON d.id = dt.document_id
+                LEFT JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0
+            """
+
+            params: List[Any] = []
+
+            if project:
+                query += " AND d.project = ?"
+                params.append(project)
+
+            query += " GROUP BY d.id"
+
+            if untagged_only:
+                query += " HAVING tags IS NULL"
+
+            if limit:
+                query += f" LIMIT {limit}"
+
+            cursor.execute(query, params)
+            documents = cursor.fetchall()
+
         # Generate suggestions for each document
         suggestions = {}
         for doc in documents:
-            existing_tags = doc['tags'].split(',') if doc['tags'] else []
+            existing_tags = doc["tags"].split(",") if doc["tags"] else []
             doc_suggestions = self.analyze_document(
-                doc['title'], 
-                doc['content'], 
-                existing_tags
+                doc["title"],
+                doc["content"],
+                existing_tags,
             )
             if doc_suggestions:
-                suggestions[doc['id']] = doc_suggestions
-        
+                suggestions[doc["id"]] = doc_suggestions
+
         return suggestions
     
     def batch_auto_tag(
@@ -452,9 +462,11 @@ class AutoTagger:
         Returns:
             Dictionary mapping pattern names to match counts
 
-        Note: Pattern usage tracking is not currently implemented.
-        This would require persistent storage of match history.
+        Raises:
+            NotImplementedError: Pattern usage tracking is not currently implemented.
+                This would require persistent storage of match history.
         """
-        # Pattern usage tracking not yet implemented
-        # Would require database table to store pattern match history and analytics
-        return {}
+        raise NotImplementedError(
+            "Pattern usage tracking is not implemented. "
+            "This would require a database table to store pattern match history."
+        )

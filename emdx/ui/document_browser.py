@@ -18,6 +18,7 @@ from emdx.models.documents import get_document, delete_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,
+    get_tags_for_documents,
     remove_tags_from_document,
 )
 from emdx.ui.formatting import format_tags, truncate_emoji_safe
@@ -197,6 +198,19 @@ class DocumentBrowser(Widget):
         self.edit_mode: bool = False
         self.editing_doc_id: Optional[int] = None
         self.tag_action: Optional[str] = None
+        # Pagination state
+        self.total_doc_count: int = 0
+        self.current_offset: int = 0
+        self.has_more: bool = False
+        self._loading_more: bool = False
+        # Cache for tags (loaded in batch with documents)
+        self._tags_cache: Dict[int, List[str]] = {}
+        # LRU cache for full document content (preview)
+        self._doc_cache: Dict[int, Dict[str, Any]] = {}
+        self._doc_cache_max = 50  # Keep last 50 documents in memory
+        # Debounce preview updates
+        self._pending_preview_doc_id: Optional[int] = None
+        self._preview_timer = None
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
@@ -276,8 +290,10 @@ class DocumentBrowser(Widget):
             details_panel.write("📋 **Document Details**")
             details_panel.write("")
             details_panel.write("[dim]Select a document to view details[/dim]")
+        except (LookupError, AttributeError) as e:
+            logger.error(f"Error setting up details panel: {type(e).__name__}: {e}")
         except Exception as e:
-            logger.error(f"Error setting up details panel: {e}")
+            logger.error(f"Unexpected error setting up details panel: {type(e).__name__}: {e}")
             import traceback
             logger.error(traceback.format_exc())
         
@@ -296,50 +312,94 @@ class DocumentBrowser(Widget):
         # Load documents
         await self.load_documents()
         
-    async def load_documents(self) -> None:
-        """Load documents from database."""
+    async def load_documents(self, limit: int = 100, offset: int = 0, append: bool = False) -> None:
+        """Load documents from database with pagination.
+
+        Args:
+            limit: Number of documents to fetch
+            offset: Starting offset for pagination
+            append: If True, append to existing docs instead of replacing
+        """
         try:
             with db.get_connection() as conn:
+                # Get total count for status display
+                if not append:
+                    cursor = conn.execute("""
+                        SELECT COUNT(*) FROM documents WHERE is_deleted = 0
+                    """)
+                    self.total_doc_count = cursor.fetchone()[0]
+
+                # Fetch paginated documents
                 cursor = conn.execute("""
                     SELECT id, title, project, created_at, accessed_at, access_count
                     FROM documents
                     WHERE is_deleted = 0
                     ORDER BY id DESC
-                """)
-                self.documents = cursor.fetchall()
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+
+                new_docs = cursor.fetchall()
+
+                if append:
+                    self.documents = self.documents + new_docs
+                else:
+                    self.documents = new_docs
+
                 self.filtered_docs = self.documents
-                logger.info(f"Loaded {len(self.documents)} documents")
+                self.current_offset = offset + len(new_docs)
+                self.has_more = len(new_docs) == limit
+
+                logger.info(f"Loaded {len(new_docs)} documents (total loaded: {len(self.documents)}, total available: {self.total_doc_count})")
                 await self.update_table()
         except Exception as e:
             logger.error(f"Error loading documents: {e}")
             import traceback
             logger.error(traceback.format_exc())
+
+    async def load_more_documents(self) -> None:
+        """Load more documents when user scrolls near the end."""
+        if self.has_more and not self._loading_more:
+            self._loading_more = True
+            try:
+                await self.load_documents(limit=100, offset=self.current_offset, append=True)
+            finally:
+                self._loading_more = False
             
     async def update_table(self) -> None:
         """Update the table with filtered documents."""
         table = self.query_one("#doc-table", DataTable)
         table.clear()
-        
+
+        # Batch load all tags in one query to avoid N+1
+        doc_ids = [doc["id"] for doc in self.filtered_docs]
+        all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
+        # Update cache
+        self._tags_cache.update(all_tags)
+
         for doc in self.filtered_docs:
             # Format row data - ID, Tags, and Title
             title, was_truncated = truncate_emoji_safe(doc["title"], 74)
             if was_truncated:
                 title += "..."
-            
+
             # Get first 3 tags as emojis with spaces between, pad to 5 chars
-            doc_tags = get_document_tags(doc["id"])
+            doc_tags = all_tags.get(doc["id"], [])
             tags_display = " ".join(doc_tags[:3]).ljust(8)  # Pad to exactly 8 chars
-            
+
             table.add_row(
                 str(doc["id"]),
                 tags_display,
                 "",  # Empty padding column
                 title,
             )
-            
+
         # Update status using our own status bar
         try:
-            status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
+            # Show loaded/total count
+            if self.has_more:
+                status_text = f"{len(self.filtered_docs)}/{self.total_doc_count} docs (scroll for more)"
+            else:
+                status_text = f"{len(self.filtered_docs)}/{self.total_doc_count} docs"
             if self.mode == "NORMAL":
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
             elif self.mode == "SEARCH":
@@ -637,8 +697,8 @@ class DocumentBrowser(Widget):
                     app.update_status(f"Edit Mode | {message}")
                 else:
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not update vim status: {type(e).__name__}: {e}")
             
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (called by SelectionTextArea)."""
@@ -646,8 +706,8 @@ class DocumentBrowser(Widget):
             # Exit selection mode
             try:
                 self.call_after_refresh(self._async_exit_selection_mode)
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug(f"Could not exit selection mode: {type(e).__name__}: {e}")
         
     def _async_exit_selection_mode(self) -> None:
         """Async wrapper for exit_selection_mode."""
@@ -723,8 +783,12 @@ class DocumentBrowser(Widget):
         if table.row_count > 0:
             table.cursor_coordinate = (0, 0)
             
-    def action_cursor_bottom(self) -> None:
-        """Move cursor to bottom."""
+    async def action_cursor_bottom(self) -> None:
+        """Move cursor to bottom - loads all remaining documents first."""
+        # Load all remaining documents before going to bottom
+        while self.has_more:
+            await self.load_more_documents()
+
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
             table.cursor_coordinate = (table.row_count - 1, 0)
@@ -909,58 +973,91 @@ class DocumentBrowser(Widget):
                 status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not update status after exiting selection mode: {type(e).__name__}: {e}")
     
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview and details panel when row is highlighted."""
         if self.edit_mode:
             return
-            
+
         row_idx = event.cursor_row
-        
+
+        # Load more documents when near the end (within 20 rows)
+        if self.has_more and row_idx >= len(self.filtered_docs) - 20:
+            await self.load_more_documents()
+
         if row_idx >= len(self.filtered_docs):
             return
             
         doc = self.filtered_docs[row_idx]
-        
-        # Load full document for preview
-        full_doc = get_document(str(doc["id"]))
+        doc_id = doc["id"]
+
+        # Load full document for preview (with caching)
+        if doc_id in self._doc_cache:
+            full_doc = self._doc_cache[doc_id]
+        else:
+            full_doc = get_document(str(doc_id))
+            if full_doc:
+                # Add to cache, evict oldest if needed
+                if len(self._doc_cache) >= self._doc_cache_max:
+                    # Remove first (oldest) item
+                    oldest_key = next(iter(self._doc_cache))
+                    del self._doc_cache[oldest_key]
+                self._doc_cache[doc_id] = full_doc
             
         if full_doc and not self.edit_mode:
-            # Update main preview
+            # Schedule preview update with debouncing (50ms delay)
+            self._pending_preview_doc_id = doc_id
+            if self._preview_timer:
+                self._preview_timer.stop()
+            self._preview_timer = self.set_timer(0.05, lambda: self._do_preview_update(full_doc))
+
+    def _do_preview_update(self, full_doc: Dict[str, Any]) -> None:
+        """Actually update the preview (called after debounce delay)."""
+        if self.edit_mode:
+            return
+
+        try:
+            preview_container = self.query_one("#preview", ScrollableContainer)
+            preview = preview_container.query_one("#preview-content", RichLog)
+            preview.clear()
+
+            # Render content as markdown (limit size for performance)
+            from rich.markdown import Markdown
             try:
-                preview_container = self.query_one("#preview", ScrollableContainer)
-                preview = preview_container.query_one("#preview-content", RichLog)
-                preview.clear()
-                
-                # Render content as markdown
-                from rich.markdown import Markdown
-                try:
-                    content = full_doc["content"]
-                    if content.strip():
-                        markdown = Markdown(content)
-                        preview.write(markdown)
-                    else:
-                        preview.write("[dim]Empty document[/dim]")
-                except Exception as e:
-                    # Fallback to plain text if markdown fails
-                    preview.write(full_doc["content"])
-            except Exception as e:
-                # Preview widget not found or not ready - ignore
-                pass
-            
-            # Update details panel
-            await self.update_details_panel(full_doc)
+                content = full_doc["content"]
+                # Limit preview to first 5000 chars for performance
+                if len(content) > 5000:
+                    content = content[:5000] + "\n\n[dim]... (truncated for preview)[/dim]"
+                if content.strip():
+                    markdown = Markdown(content)
+                    preview.write(markdown)
+                else:
+                    preview.write("[dim]Empty document[/dim]")
+            except Exception:
+                # Fallback to plain text if markdown fails
+                preview.write(full_doc["content"][:5000])
+        except Exception:
+            # Preview widget not found or not ready - ignore
+            pass
+
+        # Update details panel (sync, it's fast now with caching)
+        self.call_later(lambda: self._update_details_sync(full_doc))
+
+    def _update_details_sync(self, full_doc: Dict[str, Any]) -> None:
+        """Update details panel synchronously."""
+        import asyncio
+        asyncio.create_task(self.update_details_panel(full_doc))
     
     async def update_details_panel(self, doc: dict) -> None:
         """Update the details panel with rich document information."""
         try:
             details_panel = self.query_one("#details-panel", RichLog)
             details_panel.clear()
-            
-            # Get tags for this document
-            tags = get_document_tags(doc["id"])
+
+            # Get tags from cache (already loaded in batch)
+            tags = self._tags_cache.get(doc["id"], [])
             
             # Format details with emoji and rich formatting
             

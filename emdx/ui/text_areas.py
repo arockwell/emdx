@@ -57,9 +57,13 @@ class SelectionTextArea(TextArea):
                 event.prevent_default()
                 return
                 
+        except (AttributeError, RuntimeError) as e:
+            key_logger.error(f"Known error in SelectionTextArea.on_key: {type(e).__name__}: {e}")
+            logger.error(f"Error in SelectionTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
+            # Don't re-raise - let app continue
         except Exception as e:
-            key_logger.error(f"CRASH in SelectionTextArea.on_key: {e}")
-            logger.error(f"Error in SelectionTextArea.on_key: {e}", exc_info=True)
+            key_logger.error(f"Unexpected error in SelectionTextArea.on_key: {type(e).__name__}: {e}")
+            logger.error(f"Unexpected error in SelectionTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
             # Don't re-raise - let app continue
 
 
@@ -180,13 +184,21 @@ class VimEditTextArea(TextArea):
             elif self.vim_mode == self.VIM_COMMAND:
                 self._handle_command_mode(event)
                 
-        except Exception as e:
-            key_logger.error(f"CRASH in VimEditTextArea.on_key: {e}")
-            logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
+        except (AttributeError, RuntimeError) as e:
+            key_logger.error(f"Known error in VimEditTextArea.on_key: {type(e).__name__}: {e}")
+            logger.error(f"Error in VimEditTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
             # Try to continue without crashing the app
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except Exception:
+            except (AttributeError, RuntimeError):
+                pass
+        except Exception as e:
+            key_logger.error(f"Unexpected error in VimEditTextArea.on_key: {type(e).__name__}: {e}")
+            logger.error(f"Unexpected error in VimEditTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
+            # Try to continue without crashing the app
+            try:
+                self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
+            except (AttributeError, RuntimeError):
                 pass
     
     def _handle_normal_mode(self, event: events.Key) -> None:

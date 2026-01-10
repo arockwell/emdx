@@ -26,11 +26,11 @@ def create_task(
         task_id = cursor.lastrowid
 
         if depends_on:
-            for dep_id in depends_on:
-                cursor.execute(
-                    "INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)",
-                    (task_id, dep_id)
-                )
+            # Use executemany for efficient batch insertion
+            cursor.executemany(
+                "INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)",
+                [(task_id, dep_id) for dep_id in depends_on]
+            )
         conn.commit()
         return task_id
 

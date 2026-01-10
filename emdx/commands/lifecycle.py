@@ -3,6 +3,8 @@ Lifecycle management commands for EMDX.
 Track and manage document lifecycles, especially for gameplans.
 """
 
+import logging
+import sqlite3
 from typing import Optional
 
 import typer
@@ -17,6 +19,7 @@ from ..models.documents import get_document
 from ..services.lifecycle_tracker import LifecycleTracker
 from ..utils.text_formatting import truncate_description
 
+logger = logging.getLogger(__name__)
 app = typer.Typer()
 console = Console()
 
@@ -185,8 +188,8 @@ def transition(
                     for tag in tags:
                         try:
                             remove_tags_from_document(doc_id, [tag])
-                        except Exception:
-                            pass
+                        except (sqlite3.Error, ValueError) as e:
+                            logger.warning(f"Failed to remove tag {tag} from document {doc_id}: {e}")
             tracker.transition_document(doc_id, new_stage, notes)
         
         console.print(f"[green]✅ Transitioned #{doc_id} from {current_stage or 'untracked'} → {new_stage}[/green]")

@@ -164,7 +164,7 @@ class PulseView(Widget):
                 if isinstance(context, str):
                     try:
                         context = json.loads(context)
-                    except:
+                    except json.JSONDecodeError:
                         return False
                 return len(context) > 0
 
@@ -178,7 +178,7 @@ class PulseView(Widget):
                         started = datetime.fromisoformat(started.replace('Z', '+00:00')).replace(tzinfo=None)
                     now = datetime.now()
                     return (now - started) < timedelta(minutes=minutes)
-                except:
+                except ValueError:
                     return False
 
             # Running: show if has context OR is recent (might still be starting up)

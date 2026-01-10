@@ -717,6 +717,61 @@ def migration_010_add_task_executions(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
+    """Add 'dynamic' to workflow stage mode CHECK constraint.
+
+    Dynamic mode allows stages to discover items at runtime and process
+    them in parallel with isolated worktrees.
+    """
+    cursor = conn.cursor()
+
+    # Temporarily disable foreign key checks for the table recreation
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
+    # recreate the table with the new constraint
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_run_id INTEGER NOT NULL,
+            stage_name TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
+            target_runs INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            runs_completed INTEGER DEFAULT 0,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            output_doc_id INTEGER,
+            synthesis_doc_id INTEGER,
+            error_message TEXT,
+            tokens_used INTEGER DEFAULT 0,
+            execution_time_ms INTEGER DEFAULT 0,
+            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Copy data from old table
+    cursor.execute("""
+        INSERT INTO workflow_stage_runs_new
+        SELECT * FROM workflow_stage_runs
+    """)
+
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE workflow_stage_runs")
+    cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+
+    # Re-enable foreign key checks
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -730,6 +785,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (8, "Add workflow orchestration tables", migration_008_add_workflow_tables),
     (9, "Add tasks system", migration_009_add_tasks),
     (10, "Add task executions join table", migration_010_add_task_executions),
+    (11, "Add dynamic workflow mode", migration_011_add_dynamic_workflow_mode),
 ]
 
 
