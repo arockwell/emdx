@@ -8,6 +8,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from ..config.constants import (
+    DEFAULT_MAX_SUGGESTIONS,
+    DEFAULT_MAX_TAGS_PER_DOC,
+    DEFAULT_TAGGING_CONFIDENCE,
+)
 from ..database import DatabaseConnection
 from ..models.tags import get_or_create_tag
 from ..utils.emoji_aliases import EMOJI_ALIASES
@@ -180,7 +185,7 @@ class AutoTagger:
     def suggest_tags(
         self,
         document_id: int,
-        max_suggestions: int = 5
+        max_suggestions: int = DEFAULT_MAX_SUGGESTIONS
     ) -> List[Tuple[str, float]]:
         """
         Suggest tags for a specific document.
@@ -221,8 +226,8 @@ class AutoTagger:
     def auto_tag_document(
         self,
         document_id: int,
-        confidence_threshold: float = 0.7,
-        max_tags: int = 3,
+        confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
+        max_tags: int = DEFAULT_MAX_TAGS_PER_DOC,
     ) -> List[str]:
         """
         Automatically apply high-confidence tags to a document.
@@ -333,8 +338,8 @@ class AutoTagger:
         document_ids: Optional[List[int]] = None,
         untagged_only: bool = True,
         project: Optional[str] = None,
-        confidence_threshold: float = 0.7,
-        max_tags_per_doc: int = 3,
+        confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
+        max_tags_per_doc: int = DEFAULT_MAX_TAGS_PER_DOC,
         dry_run: bool = True
     ) -> Dict[str, Any]:
         """
@@ -431,7 +436,7 @@ class AutoTagger:
         title_patterns: Optional[List[str]] = None,
         content_patterns: Optional[List[str]] = None,
         tags: List[str] = None,
-        confidence: float = 0.75
+        confidence: float = DEFAULT_TAGGING_CONFIDENCE
     ):
         """
         Add a custom pattern for auto-tagging.
