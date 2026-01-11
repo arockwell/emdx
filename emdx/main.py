@@ -16,6 +16,8 @@ from emdx.commands.browse import app as browse_app
 from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.core import app as core_app
 from emdx.commands.executions import app as executions_app
+from emdx.commands.export import app as export_app
+from emdx.commands.export_profiles import app as export_profiles_app
 from emdx.commands.gdoc import app as gdoc_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
@@ -81,6 +83,12 @@ app.add_typer(tasks_app, name="task", help="Task management")
 
 # Add workflows as a subcommand group
 app.add_typer(workflows_app, name="workflow", help="Manage and run multi-stage workflows")
+
+# Add export profile management as a subcommand group
+app.add_typer(export_profiles_app, name="export-profile", help="Manage export profiles")
+
+# Add export commands as a subcommand group
+app.add_typer(export_app, name="export", help="Export documents using profiles")
 
 # Add the gui command
 app.command()(gui)
