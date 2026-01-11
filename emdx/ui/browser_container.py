@@ -20,7 +20,6 @@ class BrowserContainerWidget(Widget):
     BrowserContainerWidget {
         layout: vertical;
         height: 100%;
-        offset: 0 -1;
     }
 
     #browser-mount {
@@ -83,8 +82,6 @@ class BrowserContainer(App):
 
     async def on_mount(self) -> None:
         """Mount the default browser on startup."""
-        from .document_browser import DocumentBrowser
-
         logger.info("=== BrowserContainer.on_mount START ===")
         logger.info(f"Screen size: {self.screen.size}")
         logger.info(f"Screen region: {self.screen.region}")
@@ -93,9 +90,20 @@ class BrowserContainer(App):
         logger.info(f"Container widget size: {self.container_widget.size}")
         logger.info(f"Container widget region: {self.container_widget.region}")
 
-        # Create and mount document browser
-        browser = DocumentBrowser()
-        self.browsers["document"] = browser
+        # Create and mount Activity browser as the default (Mission Control)
+        try:
+            from .activity_browser import ActivityBrowser
+            browser = ActivityBrowser()
+            self.browsers["activity"] = browser
+            self.current_browser = "activity"
+            logger.info("ActivityBrowser created successfully as default")
+        except Exception as e:
+            # Fallback to document browser if activity fails
+            logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
+            from .document_browser import DocumentBrowser
+            browser = DocumentBrowser()
+            self.browsers["document"] = browser
+            self.current_browser = "document"
 
         mount_point = self.container_widget.query_one("#browser-mount", Container)
         logger.info(f"Mount point size before mount: {mount_point.size}")
@@ -107,11 +115,6 @@ class BrowserContainer(App):
         logger.info(f"Mount point size after mount: {mount_point.size}")
         logger.info(f"Mount point region after mount: {mount_point.region}")
         logger.info("=== BrowserContainer.on_mount END ===")
-
-        # Browser will have parent reference automatically after mounting
-
-        # Don't set a default status - let the browser update it once it loads
-        # The DocumentBrowser will call update_status() from its update_table() method
 
     def update_status(self, text: str) -> None:
         """Update the status bar - delegate to current browser."""
@@ -134,7 +137,16 @@ class BrowserContainer(App):
 
         # Create or get the new browser
         if browser_type not in self.browsers:
-            if browser_type == "file":
+            if browser_type == "activity":
+                try:
+                    from .activity_browser import ActivityBrowser
+                    self.browsers[browser_type] = ActivityBrowser()
+                    logger.info("ActivityBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{str(e)}")
+            elif browser_type == "file":
                 from .file_browser import FileBrowser
                 self.browsers[browser_type] = FileBrowser()
             elif browser_type == "git":
@@ -175,17 +187,27 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "document":
+                from .document_browser import DocumentBrowser
+                self.browsers[browser_type] = DocumentBrowser()
+                logger.info("DocumentBrowser created successfully")
             else:
-                # Fallback to document
+                # Unknown browser type - fallback to document
+                logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
+                from .document_browser import DocumentBrowser
+                self.browsers["document"] = DocumentBrowser()
                 browser_type = "document"
 
         # Mount the new browser
         browser = self.browsers[browser_type]
         await mount_point.mount(browser)
 
-        # Set focus to the new browser
-        if hasattr(browser, 'focus'):
-            browser.focus()
+        # Set focus to the new browser after mount is complete
+        def do_focus():
+            if hasattr(browser, 'focus'):
+                browser.focus()
+
+        self.call_after_refresh(do_focus)
 
         # Parent reference is set automatically by Textual during mount
 
@@ -204,7 +226,14 @@ class BrowserContainer(App):
 
     async def on_pulse_view_view_document(self, event) -> None:
         """Handle ViewDocument message from PulseView - switch to document browser."""
-        doc_id = event.doc_id
+        await self._view_document(event.doc_id)
+
+    async def on_activity_view_view_document(self, event) -> None:
+        """Handle ViewDocument message from ActivityView - switch to document browser."""
+        await self._view_document(event.doc_id)
+
+    async def _view_document(self, doc_id: int) -> None:
+        """Switch to document browser and view a specific document."""
         logger.info(f"Switching to document browser to view doc #{doc_id}")
 
         # Switch to document browser
@@ -220,7 +249,7 @@ class BrowserContainer(App):
                 await doc_browser.search(f"#{doc_id}")
 
     async def on_key(self, event) -> None:
-        """Global key routing - only handle browser switching keys."""
+        """Global key routing - handle screen switching and browser-specific keys."""
         key = event.key
         logger.info(f"BrowserContainer.on_key: {key}")
 
@@ -230,46 +259,69 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Only handle browser switching keys, let browsers handle their own keys
-        if key == "q" and self.current_browser == "document":
-            logger.info("Q key pressed in document browser - exiting app")
-            self.exit()
+        # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents)
+        if key == "1":
+            await self.switch_browser("activity")
             event.stop()
             return
-        elif key == "f" and self.current_browser == "document":
-            await self.switch_browser("file")
-            event.stop()
-            return
-        elif key == "g" and self.current_browser == "document":
-            await self.switch_browser("git")
-            event.stop()
-            return
-        elif key == "l" and self.current_browser == "document":
-            await self.switch_browser("log")
-            event.stop()
-            return
-        elif key == "a" and self.current_browser == "document":
-            await self.switch_browser("agent")
-            event.stop()
-            return
-        elif key == "c" and self.current_browser == "document":
-            await self.switch_browser("control")
-            event.stop()
-            return
-        elif key == "w" and self.current_browser == "document":
+        elif key == "2":
             await self.switch_browser("workflow")
             event.stop()
             return
-        elif key == "t" and self.current_browser == "document":
-            await self.switch_browser("tasks")
-            event.stop()
-            return
-        elif key == "q" and self.current_browser in ["file", "git", "log", "agent", "control", "workflow", "tasks"]:
+        elif key == "3":
             await self.switch_browser("document")
             event.stop()
             return
 
+        # Q to quit from activity or document browser
+        if key == "q" and self.current_browser in ["activity", "document"]:
+            logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
+            self.exit()
+            event.stop()
+            return
+
+        # Browser-specific keys from document browser
+        if self.current_browser == "document":
+            if key == "f":
+                await self.switch_browser("file")
+                event.stop()
+                return
+            elif key == "g":
+                await self.switch_browser("git")
+                event.stop()
+                return
+            elif key == "l":
+                await self.switch_browser("log")
+                event.stop()
+                return
+            elif key == "a":
+                await self.switch_browser("agent")
+                event.stop()
+                return
+            elif key == "c":
+                await self.switch_browser("control")
+                event.stop()
+                return
+            elif key == "w":
+                await self.switch_browser("workflow")
+                event.stop()
+                return
+            elif key == "t":
+                await self.switch_browser("tasks")
+                event.stop()
+                return
+
+        # Q from sub-browsers goes back to activity (the new default)
+        if key == "q" and self.current_browser in ["file", "git", "log", "agent", "control", "workflow", "tasks"]:
+            await self.switch_browser("activity")
+            event.stop()
+            return
+
         # Don't handle any other keys - let them bubble to browsers
+
+    async def view_document_fullscreen(self, doc_id: int) -> None:
+        """View a document fullscreen - switch to document browser and open it."""
+        await self._view_document(doc_id)
 
     def _dump_widget_tree(self) -> None:
         """Debug function to dump the widget tree and regions."""
