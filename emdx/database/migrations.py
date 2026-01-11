@@ -1052,6 +1052,27 @@ def migration_015_add_export_profiles(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_016_add_input_output_tokens(conn: sqlite3.Connection):
+    """Add input_tokens and output_tokens columns to workflow_individual_runs.
+
+    This allows tracking input vs output token usage separately for better
+    cost analysis and debugging.
+    """
+    cursor = conn.cursor()
+
+    # Add input_tokens column
+    cursor.execute("""
+        ALTER TABLE workflow_individual_runs ADD COLUMN input_tokens INTEGER DEFAULT 0
+    """)
+
+    # Add output_tokens column
+    cursor.execute("""
+        ALTER TABLE workflow_individual_runs ADD COLUMN output_tokens INTEGER DEFAULT 0
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1070,6 +1091,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (13, "Make execution doc_id nullable", migration_013_make_execution_doc_id_nullable),
     (14, "Fix individual_runs FK to executions", migration_014_fix_individual_runs_fk),
     (15, "Add export profiles", migration_015_add_export_profiles),
+    (16, "Add input/output tokens to individual runs", migration_016_add_input_output_tokens),
 ]
 
 
