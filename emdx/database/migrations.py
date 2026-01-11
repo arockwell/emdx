@@ -717,6 +717,190 @@ def migration_010_add_task_executions(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
+    """Add 'dynamic' to workflow stage mode CHECK constraint.
+
+    Dynamic mode allows stages to discover items at runtime and process
+    them in parallel with isolated worktrees.
+    """
+    cursor = conn.cursor()
+
+    # Temporarily disable foreign key checks for the table recreation
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
+    # recreate the table with the new constraint
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_run_id INTEGER NOT NULL,
+            stage_name TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
+            target_runs INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            runs_completed INTEGER DEFAULT 0,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            output_doc_id INTEGER,
+            synthesis_doc_id INTEGER,
+            error_message TEXT,
+            tokens_used INTEGER DEFAULT 0,
+            execution_time_ms INTEGER DEFAULT 0,
+            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Copy data from old table
+    cursor.execute("""
+        INSERT INTO workflow_stage_runs_new
+        SELECT * FROM workflow_stage_runs
+    """)
+
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE workflow_stage_runs")
+    cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+
+    # Re-enable foreign key checks
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    conn.commit()
+
+
+def migration_012_add_gdocs(conn: sqlite3.Connection):
+    """Add gdocs table for tracking Google Docs exports."""
+    cursor = conn.cursor()
+
+    # Create gdocs table for tracking document-gdoc relationships
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS gdocs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            gdoc_id TEXT NOT NULL,
+            gdoc_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(document_id, gdoc_id),
+            FOREIGN KEY (document_id) REFERENCES documents (id)
+        )
+    """)
+
+    # Create indexes for gdocs table
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_document ON gdocs(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_gdoc_id ON gdocs(gdoc_id)")
+
+    conn.commit()
+
+
+def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
+    """Make doc_id nullable in executions table for workflow agent runs.
+
+    Workflow agent executions don't always have an associated document,
+    so doc_id should be nullable instead of NOT NULL.
+    """
+    cursor = conn.cursor()
+
+    # Temporarily disable foreign key checks for the table recreation
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
+    # recreate the table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS executions_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id INTEGER,
+            doc_title TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            started_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP,
+            log_file TEXT NOT NULL,
+            exit_code INTEGER,
+            working_dir TEXT,
+            pid INTEGER,
+            FOREIGN KEY (doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Copy data from old table
+    cursor.execute("""
+        INSERT INTO executions_new (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)
+        SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+        FROM executions
+    """)
+
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE executions")
+    cursor.execute("ALTER TABLE executions_new RENAME TO executions")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
+
+    # Re-enable foreign key checks
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    conn.commit()
+
+
+def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
+    """Fix workflow_individual_runs FK to reference executions instead of agent_executions.
+
+    The workflow executor uses the executions table directly for tracking,
+    not agent_executions. This migration fixes the foreign key constraint.
+    """
+    cursor = conn.cursor()
+
+    # Temporarily disable foreign key checks for the table recreation
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # Recreate table with corrected FK
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_individual_runs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stage_run_id INTEGER NOT NULL,
+            run_number INTEGER NOT NULL,
+            agent_execution_id INTEGER,
+            prompt_used TEXT,
+            input_context TEXT,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            output_doc_id INTEGER,
+            error_message TEXT,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            tokens_used INTEGER DEFAULT 0,
+            execution_time_ms INTEGER DEFAULT 0,
+            FOREIGN KEY (stage_run_id) REFERENCES workflow_stage_runs(id),
+            FOREIGN KEY (agent_execution_id) REFERENCES executions(id),
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Copy data from old table
+    cursor.execute("""
+        INSERT INTO workflow_individual_runs_new
+        SELECT * FROM workflow_individual_runs
+    """)
+
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE workflow_individual_runs")
+    cursor.execute("ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)")
+
+    # Re-enable foreign key checks
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -730,6 +914,10 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (8, "Add workflow orchestration tables", migration_008_add_workflow_tables),
     (9, "Add tasks system", migration_009_add_tasks),
     (10, "Add task executions join table", migration_010_add_task_executions),
+    (11, "Add dynamic workflow mode", migration_011_add_dynamic_workflow_mode),
+    (12, "Add Google Docs exports", migration_012_add_gdocs),
+    (13, "Make execution doc_id nullable", migration_013_make_execution_doc_id_nullable),
+    (14, "Fix individual_runs FK to executions", migration_014_fix_individual_runs_fk),
 ]
 
 

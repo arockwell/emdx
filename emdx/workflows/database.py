@@ -327,6 +327,7 @@ def update_stage_run(
     stage_run_id: int,
     status: Optional[str] = None,
     runs_completed: Optional[int] = None,
+    target_runs: Optional[int] = None,
     output_doc_id: Optional[int] = None,
     synthesis_doc_id: Optional[int] = None,
     error_message: Optional[str] = None,
@@ -346,6 +347,9 @@ def update_stage_run(
         if runs_completed is not None:
             updates.append("runs_completed = ?")
             params.append(runs_completed)
+        if target_runs is not None:
+            updates.append("target_runs = ?")
+            params.append(target_runs)
         if output_doc_id is not None:
             updates.append("output_doc_id = ?")
             params.append(output_doc_id)
@@ -423,6 +427,28 @@ def list_individual_runs(stage_run_id: int) -> List[Dict[str, Any]]:
             (stage_run_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+def count_individual_runs(stage_run_id: int) -> Dict[str, int]:
+    """Count individual runs by status for a stage run.
+
+    Returns:
+        Dict with 'total', 'completed', 'running', 'failed', 'pending' counts
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """SELECT status, COUNT(*) as count
+               FROM workflow_individual_runs
+               WHERE stage_run_id = ?
+               GROUP BY status""",
+            (stage_run_id,),
+        )
+        counts = {'total': 0, 'completed': 0, 'running': 0, 'failed': 0, 'pending': 0}
+        for row in cursor.fetchall():
+            status = row['status'] or 'pending'
+            counts[status] = row['count']
+            counts['total'] += row['count']
+        return counts
 
 
 def update_individual_run(
@@ -597,6 +623,20 @@ def get_active_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any
             result['exec_status'] = None
 
         return result
+
+
+def get_agent_execution(execution_id: int) -> Optional[Dict[str, Any]]:
+    """Get an execution record by ID.
+
+    Returns the execution record with log_file path.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM executions WHERE id = ?",
+            (execution_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def get_latest_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any]]:

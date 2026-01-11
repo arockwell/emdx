@@ -203,27 +203,27 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
 def running():
     """Show currently running executions."""
     executions = get_running_executions()
-    
+
     if not executions:
         console.print("[green]No running executions.[/green]")
         return
-    
+
     table = Table(title="Running Executions")
-    table.add_column("ID", style="cyan", width=36)
+    table.add_column("ID", style="cyan", width=8)
     table.add_column("Document", style="white")
     table.add_column("Started", style="green")
-    
+
     for exec in executions:
         # Format timestamp in local timezone
         local_time = exec.started_at.astimezone()
         formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
-        
+
         table.add_row(
-            exec.id[:8] + "...",
+            str(exec.id),
             truncate_description(exec.doc_title),
             formatted_time
         )
-    
+
     console.print(table)
     console.print(f"\n[yellow]Total: {len(executions)} running execution(s)[/yellow]")
 
@@ -243,14 +243,14 @@ def stats():
 
 @app.command()
 def show(
-    exec_id: str,
-    follow: bool = typer.Option(None, "--follow", "-f", 
+    exec_id: int,
+    follow: bool = typer.Option(None, "--follow", "-f",
                                help="Follow log output (auto for running)"),
-    lines: int = typer.Option(50, "--lines", "-n", 
+    lines: int = typer.Option(50, "--lines", "-n",
                              help="Number of log lines to show"),
-    no_header: bool = typer.Option(False, "--no-header", 
+    no_header: bool = typer.Option(False, "--no-header",
                                   help="Skip metadata, show only logs"),
-    full: bool = typer.Option(False, "--full", 
+    full: bool = typer.Option(False, "--full",
                              help="Show entire log file")
 ):
     """Show execution details with integrated log viewer."""
@@ -294,7 +294,7 @@ def show(
 
 @app.command()
 def logs(
-    exec_id: str,
+    exec_id: int,
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
     lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show")
 ):
@@ -303,55 +303,47 @@ def logs(
 
 
 @app.command()
-def tail(exec_id: str):
+def tail(exec_id: int):
     """Follow the log of a running execution (alias for show -f)."""
     show(exec_id, follow=True)
 
 
 @app.command(name="kill")
-def kill_execution(exec_id: Optional[str] = typer.Argument(None)):
+def kill_execution(exec_id: Optional[int] = typer.Argument(None)):
     """Kill a running execution and mark it as completed.
-    
+
     If no exec_id provided, shows running executions to choose from.
-    Use partial exec_id (first 8+ chars) for convenience.
     """
-    if not exec_id:
+    if exec_id is None:
         # Show running executions for user to choose
         executions = get_running_executions()
-        
+
         if not executions:
             console.print("[green]No running executions to kill.[/green]")
             return
-        
+
         console.print("\n[bold]Running Executions:[/bold]")
         for i, exec in enumerate(executions, 1):
-            console.print(f"{i}. [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
-        
+            console.print(f"{i}. [cyan]{exec.id}[/cyan] - {exec.doc_title}")
+
         console.print(f"\n[dim]Usage: emdx exec kill <exec_id>[/dim]")
-        console.print(f"[dim]Example: emdx exec kill {executions[0].id[:8]}[/dim]")
+        console.print(f"[dim]Example: emdx exec kill {executions[0].id}[/dim]")
         return
-    
-    # Find execution by partial or full ID
+
+    # Find execution by ID
     all_running = get_running_executions()
-    matching_executions = [e for e in all_running if e.id.startswith(exec_id)]
-    
+    matching_executions = [e for e in all_running if e.id == exec_id]
+
     if not matching_executions:
-        console.print(f"[red]No running execution found with ID starting with '{exec_id}'[/red]")
+        console.print(f"[red]No running execution found with ID {exec_id}[/red]")
         return
-    
-    if len(matching_executions) > 1:
-        console.print(f"[yellow]Multiple executions match '{exec_id}':[/yellow]")
-        for exec in matching_executions:
-            console.print(f"  [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
-        console.print("[dim]Use more characters to uniquely identify the execution.[/dim]")
-        return
-    
+
     execution = matching_executions[0]
-    
+
     # Mark as completed with exit code 130 (interrupted)
     update_execution_status(execution.id, "completed", 130)
-    
-    console.print(f"[green]✅ Killed execution {execution.id[:8]}...[/green]")
+
+    console.print(f"[green]✅ Killed execution {execution.id}[/green]")
     console.print(f"[dim]Document: {execution.doc_title}[/dim]")
     console.print(f"[dim]Marked as completed with exit code 130 (interrupted)[/dim]")
 
@@ -360,25 +352,25 @@ def kill_execution(exec_id: Optional[str] = typer.Argument(None)):
 def kill_all_executions():
     """Kill ALL running executions at once."""
     executions = get_running_executions()
-    
+
     if not executions:
         console.print("[green]No running executions to kill.[/green]")
         return
-    
+
     console.print(f"[yellow]About to kill {len(executions)} running execution(s):[/yellow]")
     for exec in executions:
-        console.print(f"  [cyan]{exec.id[:8]}...[/cyan] - {exec.doc_title}")
-    
+        console.print(f"  [cyan]{exec.id}[/cyan] - {exec.doc_title}")
+
     # Ask for confirmation
     confirm = typer.confirm("Are you sure you want to kill all running executions?")
     if not confirm:
         console.print("[yellow]Cancelled.[/yellow]")
         return
-    
+
     # Kill all running executions
     for execution in executions:
         update_execution_status(execution.id, "completed", 130)
-    
+
     console.print(f"[green]✅ Killed {len(executions)} execution(s)[/green]")
     console.print("[dim]All marked as completed with exit code 130 (interrupted)[/dim]")
 
@@ -447,7 +439,7 @@ def execution_health():
                 cpu = proc.cpu_percent(interval=0.1)
                 mem = proc.memory_info().rss / 1024 / 1024  # MB
                 proc_status = f"CPU: {cpu:.0f}% MEM: {mem:.0f}MB"
-            except Exception:
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 proc_status = "N/A"
         else:
             proc_status = "No PID"
@@ -472,7 +464,7 @@ def execution_health():
 @app.command(name="monitor")
 def monitor_executions(
     interval: int = typer.Option(5, "--interval", "-i", help="Refresh interval in seconds"),
-    follow: bool = typer.Option(True, "--follow/--no-follow", "-f/-F", help="Continuously monitor")
+    follow: bool = typer.Option(True, "--follow/--no-follow", help="Continuously monitor")
 ):
     """Monitor execution status in real-time."""
     import psutil

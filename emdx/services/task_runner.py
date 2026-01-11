@@ -14,7 +14,7 @@ from emdx.models import tasks
 from emdx.models.documents import get_document
 from emdx.models.executions import create_execution
 from emdx.models.task_executions import create_task_execution, complete_task_execution
-from emdx.commands.claude_execute import execute_with_claude_detached
+from emdx.services.claude_executor import execute_claude_detached
 
 
 def build_task_prompt(task_id: int) -> str:
@@ -130,14 +130,13 @@ def _run_task_direct(task_id: int, task: dict) -> int:
     tasks.log_progress(task_id, f"Started direct execution #{exec_id} (task_exec #{task_exec_id})")
 
     # Run Claude
-    execute_with_claude_detached(
+    execute_claude_detached(
         task=prompt,
         execution_id=exec_id,
         log_file=log_file,
         allowed_tools=None,
         working_dir=str(Path.cwd()),
         doc_id=str(task['gameplan_id']) if task['gameplan_id'] else None,
-        context=None,
     )
 
     return task_exec_id
