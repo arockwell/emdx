@@ -346,6 +346,10 @@ def execute_with_claude(
             preexec_fn=os.setsid if os.name != 'nt' else None
         )
 
+        # Store the PID in the execution record so TUI can track it
+        from emdx.models.executions import update_execution_pid
+        update_execution_pid(execution_id, process.pid)
+
         exec_start_time = time.time()
 
         # Stream output

@@ -132,10 +132,16 @@ class ExecutionStrategy(ABC):
 
             # Create execution record
             exec_id = execution_service.create_execution(
-                doc_id=context.get('input_doc_id', 0),
+                doc_id=context.get('input_doc_id') or None,
                 doc_title=f"Workflow Agent Run #{individual_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,
+            )
+
+            # Link execution to individual run immediately so TUI can track it
+            wf_db.update_individual_run(
+                individual_run_id,
+                agent_execution_id=exec_id,
             )
 
             # Build the full prompt with instructions to save output
@@ -325,7 +331,7 @@ Report the document ID that was created."""
 
             # Create execution record
             exec_id = execution_service.create_execution(
-                doc_id=context.get('input_doc_id', 0),
+                doc_id=context.get('input_doc_id') or None,
                 doc_title=f"Workflow Synthesis #{stage_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,
