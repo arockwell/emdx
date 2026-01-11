@@ -3,20 +3,23 @@ Lifecycle management commands for EMDX.
 Track and manage document lifecycles, especially for gameplans.
 """
 
+import logging
+import sqlite3
+from typing import Optional
+
 import typer
+from rich import box
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.progress import track
+from rich.table import Table
 from rich.tree import Tree
-from rich import box
-from typing import Optional, List
-from datetime import datetime
 
-from ..services.lifecycle_tracker import LifecycleTracker
 from ..models.documents import get_document
-from ..ui.formatting import format_tags
+from ..services.lifecycle_tracker import LifecycleTracker
+from ..utils.text_formatting import truncate_description
 
+logger = logging.getLogger(__name__)
 app = typer.Typer()
 console = Console()
 
@@ -106,7 +109,7 @@ def status(
             age = f"{doc['age_days']}d"
             table.add_row(
                 str(doc['id']),
-                doc['title'][:40] + "..." if len(doc['title']) > 40 else doc['title'],
+                truncate_description(doc['title']),
                 doc['project'] or '-',
                 age,
                 str(doc['access_count'])
@@ -185,8 +188,8 @@ def transition(
                     for tag in tags:
                         try:
                             remove_tags_from_document(doc_id, [tag])
-                        except:
-                            pass
+                        except (sqlite3.Error, ValueError) as e:
+                            logger.warning(f"Failed to remove tag {tag} from document {doc_id}: {e}")
             tracker.transition_document(doc_id, new_stage, notes)
         
         console.print(f"[green]✅ Transitioned #{doc_id} from {current_stage or 'untracked'} → {new_stage}[/green]")
@@ -222,7 +225,10 @@ def analyze(
     # Key metrics
     console.print("[bold]Key Metrics:[/bold]")
     console.print(f"  • Total gameplans: {analysis['total_gameplans']}")
-    console.print(f"  • Success rate: [{'green' if analysis['success_rate'] >= 70 else 'yellow' if analysis['success_rate'] >= 50 else 'red'}]{analysis['success_rate']:.0f}%[/]")
+    # Color-code success rate based on performance
+    success_rate = analysis['success_rate']
+    color = 'green' if success_rate >= 70 else 'yellow' if success_rate >= 50 else 'red'
+    console.print(f"  • Success rate: [{color}]{success_rate:.0f}%[/]")
     console.print(f"  • Average duration: {analysis['average_duration']:.0f} days")
     
     # Stage distribution

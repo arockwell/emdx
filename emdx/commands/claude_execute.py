@@ -3,9 +3,11 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -18,12 +20,15 @@ from ..models.documents import get_document
 from ..models.executions import (
     Execution,
     create_execution,
-    save_execution,
     update_execution_pid,
     update_execution_status,
 )
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
+from ..config.settings import DEFAULT_CLAUDE_MODEL
+from ..utils.environment import ensure_claude_in_path, validate_execution_environment
+from ..utils.structured_logger import ProcessType, StructuredLogger
+from ..services.claude_executor import execute_claude_detached as _execute_claude_detached
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
 console = Console()
@@ -84,6 +89,93 @@ EXECUTION_TYPE_EMOJIS = {
     ExecutionType.GAMEPLAN: "🎯",
     ExecutionType.GENERIC: "⚡"
 }
+
+
+# Environment variables that should be removed before passing to subprocesses
+# These may contain sensitive credentials or tokens
+SENSITIVE_ENV_VARS = frozenset({
+    # API keys and tokens
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AZURE_CLIENT_SECRET",
+    "GCP_SERVICE_ACCOUNT_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITLAB_TOKEN",
+    "NPM_TOKEN",
+    "PYPI_TOKEN",
+    # Database credentials
+    "DATABASE_PASSWORD",
+    "DB_PASSWORD",
+    "POSTGRES_PASSWORD",
+    "MYSQL_PASSWORD",
+    "REDIS_PASSWORD",
+    "MONGODB_PASSWORD",
+    # Generic sensitive patterns
+    "SECRET_KEY",
+    "PRIVATE_KEY",
+    "ENCRYPTION_KEY",
+    "JWT_SECRET",
+    "SESSION_SECRET",
+    # Cloud provider secrets
+    "HEROKU_API_KEY",
+    "DIGITALOCEAN_TOKEN",
+    "LINODE_TOKEN",
+    "VULTR_API_KEY",
+    # CI/CD tokens
+    "CIRCLE_TOKEN",
+    "TRAVIS_TOKEN",
+    "JENKINS_TOKEN",
+})
+
+
+def sanitize_environment() -> dict[str, str]:
+    """Create a sanitized copy of the environment for subprocess execution.
+
+    Removes sensitive environment variables that may contain credentials,
+    tokens, or secrets that should not be exposed to subprocesses.
+
+    Returns:
+        A dictionary containing the sanitized environment variables.
+    """
+    sanitized = {}
+    for key, value in os.environ.items():
+        # Skip explicitly sensitive variables
+        if key in SENSITIVE_ENV_VARS:
+            continue
+        # Skip variables matching sensitive patterns (case-insensitive check)
+        key_upper = key.upper()
+        if any(pattern in key_upper for pattern in ("_SECRET", "_TOKEN", "_KEY", "_PASSWORD", "_CREDENTIAL")):
+            # Allow PATH and similar non-sensitive keys
+            if key_upper not in ("PATH", "HOME", "USER", "SHELL", "LANG", "TERM"):
+                continue
+        sanitized[key] = value
+    return sanitized
+
+
+def generate_unique_execution_id(doc_id: str) -> str:
+    """Generate a guaranteed unique execution ID.
+    
+    Uses multiple sources of entropy to ensure uniqueness:
+    - Document ID
+    - Microsecond timestamp
+    - Process ID
+    - Random UUID component
+    
+    Args:
+        doc_id: Document ID being executed
+        
+    Returns:
+        Unique execution ID string
+    """
+    timestamp = int(time.time() * 1000000)  # Microsecond precision
+    pid = os.getpid()
+    # Use last 8 chars of UUID for additional entropy
+    uuid_suffix = str(uuid.uuid4()).split('-')[0]
+    return f"claude-{doc_id}-{timestamp}-{pid}-{uuid_suffix}"
 
 
 def get_execution_context(doc_tags: list[str]) -> dict[str, Any]:
@@ -159,27 +251,25 @@ def parse_task_content(task: str) -> str:
 
 
 def format_timestamp(timestamp: Optional[float] = None) -> str:
-    """Get formatted timestamp for log output with millisecond precision.
+    """Get formatted timestamp for log output.
 
     Args:
         timestamp: Optional epoch timestamp. If None, uses current time.
 
     Returns:
-        Formatted timestamp string in [HH:MM:SS.mmm] format
+        Formatted timestamp string in [HH:MM:SS] format
     """
     if timestamp is None:
-        now = datetime.now()
-        return now.strftime("[%H:%M:%S.%f")[:-3] + "]"  # Trim to milliseconds
+        return datetime.now().strftime("[%H:%M:%S]")
     else:
-        dt = datetime.fromtimestamp(timestamp)
-        return dt.strftime("[%H:%M:%S.%f")[:-3] + "]"  # Trim to milliseconds
+        return datetime.fromtimestamp(timestamp).strftime("[%H:%M:%S]")
 
 
 def parse_log_timestamp(line: str) -> Optional[float]:
     """Parse timestamp from a log line.
 
     Args:
-        line: Log line that may contain a timestamp in format [HH:MM:SS] or [HH:MM:SS.mmm]
+        line: Log line that may contain a timestamp in format [HH:MM:SS]
 
     Returns:
         Epoch timestamp as float if found, None otherwise
@@ -187,13 +277,12 @@ def parse_log_timestamp(line: str) -> Optional[float]:
     if not line:
         return None
 
-    # Look for timestamp pattern at the beginning of the line (with optional milliseconds)
-    timestamp_match = re.match(r'^\[(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?\]', line.strip())
+    # Look for timestamp pattern at the beginning of the line
+    timestamp_match = re.match(r'^\[(\d{2}):(\d{2}):(\d{2})\]', line.strip())
     if timestamp_match:
         hour = int(timestamp_match.group(1))
         minute = int(timestamp_match.group(2))
         second = int(timestamp_match.group(3))
-        millisecond = int(timestamp_match.group(4)) if timestamp_match.group(4) else 0
 
         # Validate time components
         if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
@@ -201,12 +290,7 @@ def parse_log_timestamp(line: str) -> Optional[float]:
 
         # Create datetime for today with the parsed time
         now = datetime.now()
-        timestamp_dt = now.replace(
-            hour=hour,
-            minute=minute,
-            second=second,
-            microsecond=millisecond * 1000  # Convert milliseconds to microseconds
-        )
+        timestamp_dt = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
 
         # If the timestamp appears to be in the future (log from before midnight)
         # adjust the date accordingly
@@ -236,7 +320,7 @@ def format_claude_output(line: str, timestamp: float) -> Optional[str]:
 
     # Check if line already has a timestamp - if so, return as-is
     import re
-    timestamp_pattern = r'^\[\d{2}:\d{2}:\d{2}(?:\.\d{3})?\]'
+    timestamp_pattern = r'^\[\d{2}:\d{2}:\d{2}\]'
     if re.match(timestamp_pattern, line):
         return line
 
@@ -308,6 +392,37 @@ def format_claude_output(line: str, timestamp: float) -> Optional[str]:
     return None
 
 
+def validate_environment() -> tuple[bool, str]:
+    """Validate that the execution environment is properly configured.
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    import shutil
+    
+    # Check if claude is available
+    if not shutil.which("claude"):
+        return False, "Claude Code not found. Please install Claude Code: https://github.com/anthropics/claude-code"
+    
+    # Check if Python is available (should always be true since we're running Python)
+    if not shutil.which("python3") and not shutil.which("python"):
+        return False, "Python not found in PATH"
+    
+    # Check if git is available (needed for many operations)
+    if not shutil.which("git"):
+        return False, "Git not found. Please install Git: https://git-scm.com/"
+    
+    # Check if emdx is available in PATH (for piping operations)
+    if not shutil.which("emdx"):
+        # Try to find it in the current environment
+        python_path = sys.executable
+        emdx_path = Path(python_path).parent / "emdx"
+        if not emdx_path.exists():
+            return False, "EMDX not found in PATH. This may cause issues with document creation."
+    
+    return True, ""
+
+
 def execute_with_claude_detached(
     task: str,
     execution_id: int,  # Now expects numeric database ID
@@ -322,112 +437,24 @@ def execute_with_claude_detached(
     This function starts Claude and returns immediately without waiting.
     The subprocess continues running independently of the parent process.
 
+    Note: This is a thin wrapper around the service layer implementation.
+    The context parameter is ignored (kept for backwards compatibility).
+
     Returns:
         The process ID of the started subprocess.
     """
     if allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
-    # Expand @filename references
-    expanded_task = parse_task_content(task)
-
-    # Build Claude command
-    cmd = [
-        "claude",
-        "--print", expanded_task,
-        "--allowedTools", ",".join(allowed_tools),
-        "--output-format", "stream-json",
-        "--verbose"
-    ]
-
-    # Ensure log directory exists
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Don't write anything to log - let the wrapper handle ALL logging to avoid coordination issues
-
-    # Start subprocess in detached mode using wrapper
-    try:
-        # Get the wrapper script path
-        wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
-
-        # Build wrapper command: wrapper.py exec_id log_file claude_command...
-        # Use the Python interpreter from the current environment
-        # If we're in pipx, use the underlying venv Python
-        python_path = sys.executable
-        if "pipx" in python_path and "venvs" in python_path:
-            # We're running from pipx, use the venv's python directly
-            import sysconfig
-            venv_bin = Path(sysconfig.get_path("scripts"))
-            python_path = str(venv_bin / "python")
-
-        wrapper_cmd = [
-            python_path,
-            str(wrapper_path),
-            str(execution_id),  # Convert numeric ID to string for command line
-            str(log_file)
-        ] + cmd
-
-        # Use nohup for true detachment
-        nohup_cmd = ["nohup"] + wrapper_cmd
-
-        # Open log file for wrapper's output
-        log_handle = open(log_file, 'a')
-
-        # Ensure PATH contains the claude binary location
-        env = os.environ.copy()
-        env['PYTHONUNBUFFERED'] = '1'
-        # Make sure PATH is preserved
-        if 'PATH' not in env:
-            env['PATH'] = '/usr/local/bin:/usr/bin:/bin'
-
-        process = subprocess.Popen(
-            nohup_cmd,
-            stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
-            stdout=log_handle,  # Wrapper output goes to log
-            stderr=subprocess.STDOUT,  # Combine stderr with stdout
-            cwd=working_dir,
-            env=env,
-            start_new_session=True,  # Better than preexec_fn
-            close_fds=True  # Don't inherit file descriptors
-        )
-
-        # Close the file handle in parent process
-        log_handle.close()
-
-        # Don't write to log - let wrapper handle all logging
-
-        # Return immediately - don't wait or read from pipes
-        # Note: Don't use console.print here as stdout might be redirected
-        # Print to stderr instead to avoid log pollution
-        print(f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr)
-        print(f"Monitor with: emdx exec show {execution_id}", file=sys.stderr)
-
-        return process.pid
-
-    except FileNotFoundError as e:
-        # Handle missing nohup
-        if "nohup" in str(e):
-            # Fallback without nohup
-            log_handle = open(log_file, 'a')
-
-            process = subprocess.Popen(
-                wrapper_cmd,  # Use wrapper even without nohup
-                stdin=subprocess.DEVNULL,
-                stdout=log_handle,  # Wrapper output goes to log
-                stderr=subprocess.STDOUT,  # Combine stderr with stdout
-                cwd=working_dir,
-                env=env,  # Use same env as nohup version
-                start_new_session=True,
-                close_fds=True
-            )
-
-            log_handle.close()
-
-            # Print to stderr to avoid log pollution
-            print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)
-            return process.pid
-        else:
-            raise
+    # Delegate to service layer
+    return _execute_claude_detached(
+        task=task,
+        execution_id=execution_id,
+        log_file=log_file,
+        allowed_tools=allowed_tools,
+        working_dir=working_dir,
+        doc_id=doc_id,
+    )
 
 
 def execute_with_claude(
@@ -455,6 +482,18 @@ def execute_with_claude(
     if allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
+    # Validate environment first
+    is_valid, env_info = validate_execution_environment(verbose=False)
+    if not is_valid:
+        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
+        console.print(f"[red]Environment validation failed: {error_msg}[/red]")
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ Environment validation failed: {error_msg}\n")
+        return 1
+    
+    # Ensure claude is in PATH
+    ensure_claude_in_path()
+
     # Expand @filename references
     expanded_task = parse_task_content(task)
 
@@ -464,16 +503,28 @@ def execute_with_claude(
         "--print", expanded_task,
         "--allowedTools", ",".join(allowed_tools),
         "--output-format", "stream-json",
+        "--model", DEFAULT_CLAUDE_MODEL,
         "--verbose"
     ]
 
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Don't write anything to log - let the wrapper handle ALL logging to avoid coordination issues
+    # Initialize structured logger for main process
+    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
+    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {
+        "doc_id": doc_id,
+        "working_dir": working_dir,
+        "allowed_tools": allowed_tools,
+        "mode": "synchronous"
+    })
 
     # Start subprocess
     try:
+        # Use sanitized environment to prevent credential leakage
+        sanitized_env = sanitize_environment()
+        sanitized_env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered for subprocesses
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -482,8 +533,7 @@ def execute_with_claude(
             bufsize=0,  # Unbuffered
             universal_newlines=True,
             cwd=working_dir,  # Run in specified working directory
-            # Force unbuffered for any Python subprocesses
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            env=sanitized_env,
             # Detach from parent process group so it survives parent exit
             preexec_fn=os.setsid if os.name != 'nt' else None
         )
@@ -537,12 +587,31 @@ def execute_with_claude(
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
         return 1
-    except Exception as e:
-        error_msg = f"Error executing Claude: {e}"
+    except subprocess.SubprocessError as e:
+        error_msg = f"Subprocess error executing Claude: {type(e).__name__}: {e}"
         with open(log_file, 'a') as log:
             log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
+        return 1
+    except OSError as e:
+        error_msg = f"OS error executing Claude: {type(e).__name__}: {e}"
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        if verbose:
+            console.print(f"[red]{error_msg}[/red]")
+        return 1
+    except Exception as e:
+        error_msg = f"Unexpected error executing Claude: {type(e).__name__}: {e}"
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        if verbose:
+            console.print(f"[red]{error_msg}[/red]")
+        # Log with traceback for unexpected errors
+        import traceback
+        main_logger.error(f"Unexpected error in execute_with_claude: {error_msg}", {
+            "traceback": traceback.format_exc()
+        })
         return 1
 
 
@@ -695,9 +764,7 @@ def execute_document_smart(
         context=context
     )
 
-    # Update execution status
-    status = "completed" if exit_code == 0 else "failed"
-    update_execution_status(db_execution_id, status, exit_code)
+    # Don't update status here - the wrapper already handled it
 
     # Handle output based on context
     if exit_code == 0:
@@ -718,7 +785,10 @@ def execute_document_smart(
 
 
 def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Path]:
-    """Create a dedicated git worktree for Claude execution.
+    """Create a dedicated temporary directory for Claude execution.
+    
+    NOTE: We do NOT create git worktrees anymore to avoid Claude editing
+    the source code of the system it's running in!
 
     Args:
         execution_id: Unique execution ID
@@ -728,109 +798,54 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         Path to created worktree or None if creation failed
     """
     try:
-        # Get project name from git remote
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=os.getcwd()
-        )
-
-        if result.returncode == 0:
-            remote_url = result.stdout.strip()
-            # Extract project name from URL
-            match = re.search(r'([^/]+)(\.git)?$', remote_url)
-            if match:
-                project_name = match.group(1).replace('.git', '')
-            else:
-                project_name = Path.cwd().name
-        else:
-            project_name = Path.cwd().name
-
-        # Create unique branch name using full execution ID (includes timestamp)
-        # This ensures each execution gets a unique branch and worktree
-        # Extract doc ID from execution_id (format: "claude-{doc_id}-{timestamp}")
+        # Extract components from execution ID
+        # Format: "claude-{doc_id}-{timestamp}-{pid}-{uuid}"
         exec_parts = execution_id.split('-')
         doc_id = exec_parts[1] if len(exec_parts) > 1 else "unknown"
-        timestamp = exec_parts[2] if len(exec_parts) > 2 else str(int(time.time()))
+        
+        # Sanitize doc title for directory name
+        safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:30]
+        safe_title = re.sub(r'-+', '-', safe_title).strip('-')  # Clean up multiple dashes
+        
+        # Use last 12 chars of execution ID for uniqueness
+        # This includes part of timestamp, PID, and UUID
+        unique_suffix = execution_id.split('-', 2)[-1][-12:]
+        
+        # Create temp directory
+        import tempfile
+        temp_base = Path(tempfile.gettempdir())
+        dir_name = f"emdx-exec-{doc_id}-{safe_title}-{unique_suffix}"
+        worktree_path = temp_base / dir_name
 
-        # Sanitize doc title for git branch name
-        safe_title = re.sub(r'[^a-zA-Z0-9-]', '-', doc_title.lower())[:20]
-        # Extract short unique ID from timestamp
-        # For microsecond timestamps, use last 6 digits
-        # For second timestamps, add random suffix for uniqueness
-        if len(timestamp) > 10:  # Microsecond timestamp
-            short_uid = timestamp[-6:]
-        else:  # Second timestamp, needs more entropy
-            import random
-            short_uid = f"{timestamp[-4:]}{random.randint(10, 99)}"
-
-        # Include short UID to ensure uniqueness
-        branch_name = f"exec-{doc_id}-{safe_title}-{short_uid}"
-
-        # Worktree directory - also unique per execution
-        worktrees_dir = Path.home() / "dev" / "worktrees"
-        worktrees_dir.mkdir(parents=True, exist_ok=True)
-        worktree_name = f"{project_name}-{branch_name}"
-        worktree_path = worktrees_dir / worktree_name
-
-        # Check if branch already exists
-        check_branch = subprocess.run(
-            ["git", "rev-parse", "--verify", branch_name],
-            capture_output=True,
-            text=True
-        )
-
-        if check_branch.returncode == 0:
-            # Branch exists - add more uniqueness
+        # Handle existing directory (shouldn't happen with unique IDs, but be safe)
+        attempt = 0
+        final_path = worktree_path
+        while final_path.exists() and attempt < 10:
+            attempt += 1
+            final_path = temp_base / f"{dir_name}-{attempt}"
+        
+        if final_path.exists():
+            # Very unlikely, but use a completely random directory
             import uuid
-            unique_suffix = uuid.uuid4().hex[:8]
-            branch_name = f"{branch_name}-{unique_suffix}"
-            # Also update worktree path
-            worktree_name = f"{project_name}-{branch_name}"
-            worktree_path = worktrees_dir / worktree_name
-            console.print(f"[yellow]Branch already exists, using: {branch_name}[/yellow]")
+            final_path = temp_base / f"emdx-exec-{uuid.uuid4()}"
+        
+        # Create the directory
+        final_path.mkdir(parents=True, exist_ok=True)
+        
+        console.print(f"[green]✅ Created execution directory: {final_path}[/green]")
+        return final_path
 
-        # Create the branch
-        subprocess.run(
-            ["git", "branch", branch_name],
-            check=True,
-            capture_output=True
-        )
-
-        # Create worktree - should never exist due to unique naming
-        if worktree_path.exists():
-            # This should not happen with timestamp-based naming
-            console.print(f"[red]ERROR: Worktree already exists (unexpected): {worktree_path}[/red]")
-            # Generate an even more unique name
-            import uuid
-            branch_name = f"{branch_name}-{uuid.uuid4().hex[:8]}"
-            worktree_name = f"{project_name}-{branch_name}"
-            worktree_path = worktrees_dir / worktree_name
-
-            subprocess.run(
-                ["git", "branch", branch_name],
-                check=True,
-                capture_output=True
-            )
-
-        # Create worktree
-        subprocess.run(
-            ["git", "worktree", "add", str(worktree_path), branch_name],
-            check=True,
-            capture_output=True
-        )
-
-        console.print(f"[green]✅ Created execution worktree: {worktree_path}[/green]")
-        return worktree_path
-
-    except subprocess.CalledProcessError as e:
-        console.print(f"[yellow]Warning: Could not create worktree: {e}[/yellow]")
-        console.print("[yellow]Execution will run in current directory[/yellow]")
-        return None
     except Exception as e:
-        console.print(f"[yellow]Warning: Worktree creation failed: {e}[/yellow]")
-        return None
+        console.print(f"[yellow]Warning: Directory creation failed: {e}[/yellow]")
+        # Fallback to a simple temp directory
+        import tempfile
+        try:
+            fallback_dir = tempfile.mkdtemp(prefix="emdx-exec-")
+            console.print(f"[yellow]Using fallback directory: {fallback_dir}[/yellow]")
+            return Path(fallback_dir)
+        except Exception:
+            console.print("[red]Failed to create any execution directory[/red]")
+            return None
 
 
 def monitor_execution_detached(
@@ -857,7 +872,6 @@ def monitor_execution_detached(
             log_file=str(log_file),
             working_dir=working_dir
         )
-        save_execution(execution)
 
         # Execute with Claude in detached mode
         pid = execute_with_claude_detached(
@@ -873,12 +887,12 @@ def monitor_execution_detached(
         # Update execution with PID
         update_execution_pid(execution_id, pid)
     except Exception as e:
-        # Log error
+        # Log error but don't update status - let the wrapper handle it
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
-                f.write(f"\n❌ Error in monitor_execution_detached: {e}\n")
-            update_execution_status(execution_id, "failed", 1)
+                f.write(f"\n❌ Error starting execution: {e}\n")
+            # Don't update status here - wrapper will handle it
         except Exception:
             pass  # Silent fail if we can't even log the error
 
@@ -916,7 +930,6 @@ def monitor_execution(
             log_file=str(log_file),
             working_dir=working_dir
         )
-        save_execution(execution)
 
         # Execute with Claude in the worktree
         exit_code = execute_with_claude(
@@ -930,18 +943,71 @@ def monitor_execution(
             context=None  # Context not available in these functions yet
         )
 
-        # Update execution status
-        status = "completed" if exit_code == 0 else "failed"
-        update_execution_status(execution_id, status, exit_code)
+        # Don't update status here - the wrapper already did it
+        pass
     except Exception as e:
-        # Log error and update status
+        # Log error but don't update status - wrapper handles it
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
-                f.write(f"\n❌ Error in monitor_execution: {e}\n")
-            update_execution_status(execution_id, "failed", 1)
+                f.write(f"\n❌ Error in execution: {e}\n")
+            # Don't update status - wrapper handles it
         except Exception:
             pass  # Silent fail if we can't even log the error
+
+
+@app.command(name="check-env")
+def check_environment(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed environment info")
+):
+    """Check if the execution environment is properly configured."""
+    console.print("[bold]Checking EMDX execution environment...[/bold]\n")
+    
+    # Use the comprehensive validation
+    is_valid, env_info = validate_execution_environment(verbose=True)
+    
+    # Additional quick checks
+    console.print("\n[bold]Quick Status:[/bold]")
+    checks = [
+        ("Python", lambda: sys.version.split()[0]),
+        ("Claude Code", lambda: "✓" if shutil.which("claude") else "✗"),
+        ("Git", lambda: "✓" if shutil.which("git") else "✗"),
+        ("EMDX", lambda: "✓" if shutil.which("emdx") else "✗"),
+    ]
+    
+    for name, check_func in checks:
+        try:
+            result = check_func()
+            if result and result != "✗":
+                console.print(f"  {name}: [green]{result}[/green]")
+            else:
+                console.print(f"  {name}: [red]Not found[/red]")
+        except Exception:
+            console.print(f"  {name}: [red]Error[/red]")
+    
+    # Show PATH info if verbose
+    if verbose:
+        console.print(f"\n[dim]PATH entries: {len(os.environ.get('PATH', '').split(os.pathsep))}[/dim]")
+        console.print(f"[dim]Installation: {env_info.get('info', {}).get('installation', 'unknown')}[/dim]")
+    
+    # Overall result
+    if is_valid:
+        console.print("\n[bold green]✅ Environment is properly configured![/bold green]")
+        console.print("[dim]You can run executions without issues.[/dim]")
+    else:
+        console.print("\n[bold red]❌ Environment issues detected[/bold red]")
+        console.print("[dim]Please fix the issues above before running executions.[/dim]")
+        
+        # Suggest fixes
+        if env_info and env_info.get('errors'):
+            console.print("\n[yellow]Suggested fixes:[/yellow]")
+            for error in env_info['errors']:
+                if "claude" in error.lower():
+                    console.print("  • Install Claude Code: https://github.com/anthropics/claude-code")
+                elif "git" in error.lower():
+                    console.print("  • Install Git: https://git-scm.com/")
+                elif "python" in error.lower():
+                    console.print("  • Upgrade Python to 3.8 or later")
 
 
 @app.command()
@@ -967,8 +1033,7 @@ def execute(
 
     # Handle execution ID and log file
     import os
-    import time
-
+    
     if exec_id:
         # Use provided execution ID from database
         from ..models.executions import get_execution
@@ -976,17 +1041,15 @@ def execute(
         if not existing_exec:
             console.print(f"[red]Execution #{exec_id} not found[/red]")
             raise typer.Exit(1)
-
+        
         # Use the existing log file path
         log_file = Path(existing_exec.log_file)
         execution_id = f"claude-{doc['id']}-{exec_id}"  # Keep simple for backward compat
         console.print(f"[yellow]Using existing execution #{exec_id}[/yellow]")
     else:
-        # Generate new execution ID with microsecond precision + PID to prevent collisions
-        timestamp = int(time.time() * 1000000)  # Microsecond precision
-        pid = os.getpid()
-        execution_id = f"claude-{doc['id']}-{timestamp}-{pid}"
-
+        # Generate new execution ID with guaranteed uniqueness
+        execution_id = generate_unique_execution_id(doc['id'])
+        
         # Set up log file
         log_dir = Path.home() / ".config" / "emdx" / "logs"
         log_file = log_dir / f"{execution_id}.log"
@@ -1075,7 +1138,6 @@ def execute(
                 log_file=str(log_file),
                 working_dir=working_dir
             )
-            save_execution(execution)
 
             # Execute in worktree
             exit_code = execute_with_claude(
