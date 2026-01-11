@@ -181,12 +181,13 @@ def format_claude_output(line: str, timestamp: float) -> Optional[str]:
 
         elif data.get("type") == "result":
             # Handle the final result message
+            # Include raw JSON on a separate line so we can extract token usage later
+            raw_result_line = f"__RAW_RESULT_JSON__:{line}"
             if data.get("subtype") == "success":
-                # Duration calculation isn't possible here without tracking start time
-                return f"{format_timestamp(timestamp)} ✅ Task completed successfully!"
+                return f"{format_timestamp(timestamp)} ✅ Task completed successfully!\n{raw_result_line}"
             else:
                 result = data.get('result', 'Unknown error')
-                return f"{format_timestamp(timestamp)} ❌ Task failed: {result}"
+                return f"{format_timestamp(timestamp)} ❌ Task failed: {result}\n{raw_result_line}"
 
         # For debugging: show unhandled JSON types
         debug_info = f"{data.get('type', 'unknown')} - {str(data)[:100]}..."

@@ -232,8 +232,8 @@ Report the document ID that was created."""
     def _extract_output_doc_id(self, log_file: Path) -> Optional[int]:
         """Extract output document ID from execution log.
 
-        Looks for patterns like "Created document #123" or "Saved as #123"
-        in the log file.
+        Looks for the emdx save output pattern "Saved as #123" in the log file.
+        Handles ANSI escape codes that may be present in the log.
 
         Args:
             log_file: Path to the execution log
@@ -246,19 +246,31 @@ Report the document ID that was created."""
 
         try:
             content = log_file.read_text()
-            # Look for document creation patterns
+
+            # Strip ANSI escape codes for reliable pattern matching
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            clean_content = ansi_escape.sub('', content)
+
+            # Look for document creation patterns (most specific first)
+            # The emdx save command outputs: "✅ Saved as #123: Title"
             patterns = [
-                r'Created document #(\d+)',
-                r'Saved as #(\d+)',
-                r'document ID[:\s]+(\d+)',
-                r'doc_id[:\s]+(\d+)',
-                r'#(\d+)\s*\[green\]',  # Rich output format
+                r'Saved as #(\d+)',           # Primary: emdx save output
+                r'saved as ID #(\d+)',        # Alternative text mention
+                r'Created document #(\d+)',   # Alternative format
+                r'Document saved.*#(\d+)',    # Another variation
             ]
 
+            found_ids = []
             for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE)
-                if match:
-                    return int(match.group(1))
+                matches = re.findall(pattern, clean_content, re.IGNORECASE)
+                for match in matches:
+                    doc_id = int(match)
+                    if doc_id > 0:  # Skip doc #0 references
+                        found_ids.append(doc_id)
+
+            # Return the last valid doc ID found (most recent save)
+            if found_ids:
+                return found_ids[-1]
 
             return None
         except (OSError, IOError) as e:

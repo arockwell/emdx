@@ -99,6 +99,12 @@ class PulseBrowser(Widget):
 
         self._update_status()
 
+    def on_pulse_view_view_document(self, event) -> None:
+        """Handle request to view a document - bubble up to BrowserContainer."""
+        logger.info(f"ViewDocument request for doc #{event.doc_id}")
+        # Re-post the message so BrowserContainer can handle it
+        self.post_message(event)
+
     def on_outcomes_view_stage_selected(self, event: OutcomesView.StageSelected) -> None:
         """Handle stage selection from OutcomesView - drill down to stage logs."""
         logger.info(f"Stage selected: {event.stage_name}")
@@ -250,8 +256,24 @@ class PulseBrowser(Widget):
             self.log_view.action_scroll_end()
 
     def action_zoom_in(self) -> None:
-        """Zoom in to more detail."""
+        """Zoom in to more detail, or open document if agent selected."""
         if self.zoom_level == 0:
+            # Check if agents table is focused and has a completed agent with output
+            if self.pulse_view:
+                try:
+                    from textual.widgets import DataTable
+                    agents_table = self.pulse_view.query_one("#agents-table", DataTable)
+                    if agents_table.has_focus:
+                        agent_run = self.pulse_view.get_selected_agent_run()
+                        if agent_run and agent_run.get('output_doc_id') and agent_run.get('status') == 'completed':
+                            # Open the document
+                            from .pulse.zoom0.pulse_view import PulseView
+                            self.post_message(PulseView.ViewDocument(agent_run['output_doc_id']))
+                            return
+                except Exception as e:
+                    logger.error(f"Error checking agent selection: {e}")
+
+            # Default: zoom in to outcomes view
             self.selected_run = self._get_selected_run()
             self.selected_stage_name = None  # Clear stage filter
             if self.selected_run:
@@ -291,6 +313,8 @@ class PulseBrowser(Widget):
         """Refresh current view."""
         if self.zoom_level == 0 and self.pulse_view:
             await self.pulse_view.load_data()
+            # Also refresh the agent panel and log
+            await self.pulse_view._update_agents_panel()
         elif self.zoom_level == 1 and self.outcomes_view and self.selected_run:
             await self.outcomes_view.show_run(self.selected_run)
         elif self.zoom_level == 2 and self.log_view and self.selected_run:

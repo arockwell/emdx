@@ -7,13 +7,26 @@ from typing import Any, Callable, Dict, List, Optional
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import DataTable, Static, RichLog
+from textual.widgets import DataTable, Static, RichLog, Markdown
 
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
 from emdx.utils.datetime import parse_datetime
 
 logger = logging.getLogger(__name__)
+
+
+def format_tokens(tokens: int) -> str:
+    """Format token count with K/M abbreviations."""
+    if tokens is None or tokens == 0:
+        return "—"
+    if tokens >= 1_000_000:
+        return f"{tokens / 1_000_000:.1f}M"
+    if tokens >= 1_000:
+        return f"{tokens / 1_000:.0f}K"
+    return str(tokens)
+
 
 # Import workflow components
 try:
@@ -43,6 +56,12 @@ class AgentLogStreamSubscriber(LogStreamSubscriber):
 
 class PulseView(Widget):
     """Workflow execution observer - shows running and recent workflow runs."""
+
+    class ViewDocument(Message):
+        """Message to request viewing a document."""
+        def __init__(self, doc_id: int) -> None:
+            self.doc_id = doc_id
+            super().__init__()
 
     BINDINGS = [
         ("tab", "focus_next_panel", "Next Panel"),
@@ -106,6 +125,13 @@ class PulseView(Widget):
         overflow-x: hidden;
     }
 
+    #agent-doc {
+        height: 1fr;
+        scrollbar-gutter: stable;
+        padding: 0 1;
+        display: none;
+    }
+
     #agent-log-status {
         height: 1;
         background: $surface;
@@ -140,10 +166,12 @@ class PulseView(Widget):
                     yield Static("🤖 AGENTS", classes="pulse-header")
                     yield DataTable(id="agents-table", cursor_type="row")
 
-                # Bottom half - selected agent's log
+                # Bottom half - selected agent's log OR document content
                 with Vertical(id="agent-log-panel"):
-                    yield Static("📋 AGENT LOG", classes="pulse-header")
+                    yield Static("📋 AGENT OUTPUT", classes="pulse-header")
+                    # Two widgets - we show one or the other
                     yield RichLog(id="agent-log", highlight=True, markup=True, wrap=True)
+                    yield Markdown("", id="agent-doc")
                     yield Static("", id="agent-log-status")
 
     async def on_mount(self) -> None:
@@ -164,6 +192,9 @@ class PulseView(Widget):
         agents_table.add_column("Time", width=6)
         agents_table.add_column("Tokens", width=7)
         agents_table.add_column("Output", width=16)
+
+        # Hide doc widget initially (we'll show it when needed)
+        self.query_one("#agent-doc").display = False
 
         await self.load_data()
 
@@ -366,8 +397,26 @@ class PulseView(Widget):
                 if run.get('total_execution_time_ms'):
                     secs = run['total_execution_time_ms'] / 1000
                     time_str = f"{secs:.0f}s"
+                elif run.get('started_at'):
+                    # Calculate from timestamps as fallback
+                    try:
+                        from datetime import datetime
+                        started = run['started_at']
+                        if isinstance(started, str):
+                            started = datetime.fromisoformat(started)
+                        # Use completed_at if available, otherwise use current time (for running)
+                        if run.get('completed_at'):
+                            completed = run['completed_at']
+                            if isinstance(completed, str):
+                                completed = datetime.fromisoformat(completed)
+                        else:
+                            completed = datetime.now()
+                        secs = (completed - started).total_seconds()
+                        time_str = f"{secs:.0f}s"
+                    except (ValueError, TypeError):
+                        pass
 
-                agents_table.add_row(icon, "1", time_str, str(run.get('total_tokens_used', '—')), "")
+                agents_table.add_row(icon, "1", time_str, format_tokens(run.get('total_tokens_used')), "")
                 await self._update_agent_log()
                 return
 
@@ -383,16 +432,37 @@ class PulseView(Widget):
                 else:
                     icon = "⚪"
 
-                # Time
+                # Time - use execution_time_ms if available, otherwise calculate from timestamps
                 time_str = "—"
                 if ir.get('execution_time_ms'):
                     secs = ir['execution_time_ms'] / 1000
                     time_str = f"{secs:.0f}s"
+                elif ir.get('started_at'):
+                    # Calculate from timestamps as fallback
+                    try:
+                        from datetime import datetime
+                        started = ir['started_at']
+                        # Handle both string and datetime objects
+                        if isinstance(started, str):
+                            started = datetime.fromisoformat(started)
+                        # Use completed_at if available, otherwise use current time (for running)
+                        if ir.get('completed_at'):
+                            completed = ir['completed_at']
+                            if isinstance(completed, str):
+                                completed = datetime.fromisoformat(completed)
+                        else:
+                            completed = datetime.now()
+                        secs = (completed - started).total_seconds()
+                        time_str = f"{secs:.0f}s"
+                    except (ValueError, TypeError):
+                        pass
 
                 # Output
                 output = ""
                 if ir.get('output_doc_id'):
                     output = f"Doc #{ir['output_doc_id']}"
+                elif status == 'running':
+                    output = "[green]● LIVE[/green]"
                 elif ir.get('error_message'):
                     output = f"[red]{ir['error_message'][:12]}…[/red]"
 
@@ -400,15 +470,17 @@ class PulseView(Widget):
                     icon,
                     str(ir.get('run_number', '?')),
                     time_str,
-                    str(ir.get('tokens_used', '—')),
+                    format_tokens(ir.get('tokens_used')),
                     output[:14]
                 )
 
             # Select first row
             if self.individual_runs:
                 agents_table.move_cursor(row=0)
+                logger.info(f"Selected first agent, individual_runs[0]={self.individual_runs[0]}")
 
             # Update log viewer for first agent
+            logger.info(f"Calling _update_agent_log with selected_agent_idx={self.selected_agent_idx}")
             await self._update_agent_log()
 
         except Exception as e:
@@ -416,103 +488,141 @@ class PulseView(Widget):
             agents_table.add_row("", "", f"[red]Error[/red]", "", "")
 
     async def _update_agent_log(self) -> None:
-        """Update the agent log viewer for the selected agent."""
+        """Update the agent output panel for the selected agent.
+
+        Shows either:
+        - Document content (for completed agents with output)
+        - Log stream (for running agents)
+        - Basic info (for agents without output)
+        """
+        # Debug to file - at the very start
+        from pathlib import Path
+        debug_log = Path.home() / ".emdx" / "pulse_debug.log"
+        def dbg_early(msg):
+            with open(debug_log, "a") as f:
+                f.write(f"{msg}\n")
+
+        dbg_early(f"_update_agent_log called: individual_runs={len(self.individual_runs)}, selected_idx={self.selected_agent_idx}")
+
         agent_log = self.query_one("#agent-log", RichLog)
+        agent_doc = self.query_one("#agent-doc", Markdown)
         status_bar = self.query_one("#agent-log-status", Static)
 
-        # Stop any existing stream if agent changed
-        if self.individual_runs and self.selected_agent_idx < len(self.individual_runs):
-            selected_run = self.individual_runs[self.selected_agent_idx]
-            if selected_run.get('id') != self.streaming_agent_run_id:
-                self._stop_agent_stream()
+        # Stop any existing stream
+        self._stop_agent_stream()
 
-        run = self.get_selected_run()
-        if not run:
-            agent_log.clear()
-            agent_log.write("[dim]No workflow run selected[/dim]")
-            status_bar.update("")
-            return
+        # Helper to show log widget
+        def show_log():
+            agent_log.display = True
+            agent_doc.display = False
 
-        if not self.individual_runs:
-            # No individual runs - try to show workflow-level log
-            agent_log.clear()
-            if run.get('status') == 'running' and HAS_WORKFLOWS and wf_db:
-                await self._setup_workflow_stream(run, agent_log, status_bar)
-            else:
-                # Show context output for completed workflows
-                context = run.get('context_json')
-                if isinstance(context, str):
-                    context = json.loads(context) if context else {}
+        # Helper to show doc widget
+        def show_doc():
+            agent_log.display = False
+            agent_doc.display = True
 
-                if context:
-                    output_keys = sorted([k for k in context.keys() if k.endswith('.output')], reverse=True)
-                    if output_keys:
-                        latest_output = context[output_keys[0]]
-                        if isinstance(latest_output, str):
-                            for line in latest_output.strip().split('\n')[-30:]:
-                                agent_log.write(line)
-                        status_bar.update(f"Stage output | {len(output_keys)} stages")
-                    else:
-                        agent_log.write("[dim]No outputs yet[/dim]")
-                        status_bar.update("")
-                else:
-                    agent_log.write("[dim]No log data[/dim]")
-                    status_bar.update("")
-            return
+        agent_log.clear()
 
-        if self.selected_agent_idx >= len(self.individual_runs):
-            agent_log.clear()
+        # No individual runs selected
+        if not self.individual_runs or self.selected_agent_idx >= len(self.individual_runs):
+            show_log()
             agent_log.write("[dim]Select an agent[/dim]")
             status_bar.update("")
             return
 
         selected = self.individual_runs[self.selected_agent_idx]
+        agent_status = selected.get('status', '?')
+        output_doc_id = selected.get('output_doc_id')
 
-        # For running agents: stream from log file
-        if selected.get('status') == 'running' and HAS_WORKFLOWS and wf_db:
-            await self._setup_agent_stream(selected, agent_log, status_bar)
-            return
-
-        # For completed/failed: try to get log from execution record
-        agent_log.clear()
-        exec_id = selected.get('agent_execution_id')
-
-        if not exec_id:
-            agent_log.write(f"[dim]No exec_id for agent #{selected.get('run_number', '?')}[/dim]")
-        elif not wf_db:
-            agent_log.write(f"[dim]wf_db not available[/dim]")
-        else:
+        # Completed agent with document -> show document in Static widget
+        dbg_early(f"status={agent_status}, output_doc_id={output_doc_id}")
+        if agent_status == 'completed' and output_doc_id:
             try:
-                execution = wf_db.get_agent_execution(exec_id)
-                if not execution:
-                    agent_log.write(f"[dim]exec_id={exec_id} not found[/dim]")
-                elif not execution.get('log_file'):
-                    agent_log.write(f"[dim]No log_file for exec {exec_id}[/dim]")
-                else:
-                    log_path = Path(execution['log_file'])
-                    if not log_path.exists():
-                        agent_log.write(f"[dim]Log file missing: {log_path.name}[/dim]")
-                    else:
-                        content = log_path.read_text()
-                        lines = content.strip().split('\n')
-                        for line in lines[-40:]:
-                            agent_log.write(line)
-                        status_bar.update(f"Agent #{selected.get('run_number', '?')} log | {len(lines)} lines")
-                        return
-            except Exception as e:
-                logger.error(f"Error reading agent log: {e}", exc_info=True)
-                agent_log.write(f"[red]Error: {e}[/red]")
+                from emdx.models import documents as doc_model
+                import re
 
-        # Fallback - show what info we have
-        agent_log.write(f"[bold]Agent #{selected.get('run_number', '?')}[/bold]")
-        agent_log.write(f"Status: {selected.get('status', '?')}")
-        if selected.get('execution_time_ms'):
-            agent_log.write(f"Time: {selected['execution_time_ms']/1000:.1f}s")
-        if selected.get('output_doc_id'):
-            agent_log.write(f"Output: Doc #{selected['output_doc_id']}")
+                # First, load the log document
+                doc = doc_model.get_document(output_doc_id)
+
+                # Check if this is a workflow log (not the actual output)
+                # If so, try to find the real output by parsing the log for saved doc IDs
+                if doc and doc.get('title', '').startswith('Workflow Agent Output'):
+                    dbg_early(f"Doc #{output_doc_id} is a workflow log, searching for actual output...")
+                    content = doc.get('content', '')
+
+                    # Strip ANSI codes and look for saved document pattern
+                    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+                    clean_content = ansi_escape.sub('', content)
+
+                    # Find "Saved as #123" patterns
+                    matches = re.findall(r'Saved as #(\d+)', clean_content, re.IGNORECASE)
+                    for doc_id_str in reversed(matches):
+                        doc_id = int(doc_id_str)
+                        if doc_id > 0:
+                            actual_doc = doc_model.get_document(doc_id)
+                            if actual_doc:
+                                doc = actual_doc
+                                dbg_early(f"Found actual output: #{doc_id} - {actual_doc.get('title')}")
+                                break
+
+                dbg_early(f"Showing doc: {doc.get('title') if doc else 'None'}")
+                if doc:
+                    # Use Markdown widget for nice formatting
+                    show_doc()
+
+                    # Build document display with markdown header
+                    agent_num = selected.get('run_number', '?')
+                    time_str = f"{selected['execution_time_ms']/1000:.0f}s" if selected.get('execution_time_ms') else "—"
+                    tokens_str = format_tokens(selected.get('tokens_used'))
+
+                    header = f"## ✓ Agent #{agent_num}\n"
+                    header += f"*Time: {time_str} | Tokens: {tokens_str}*\n\n"
+                    header += f"### 📄 {doc.get('title', 'Untitled')}\n\n"
+
+                    content = doc.get('content', '')
+                    agent_doc.update(header + content)
+
+                    # Scroll to top
+                    agent_doc.scroll_home(animate=False)
+
+                    dbg_early(f"Content set in Markdown widget")
+                    status_bar.update(f"Doc #{doc.get('id', output_doc_id)} | Enter=open full doc")
+                    return
+            except Exception as e:
+                dbg_early(f"Error loading document: {e}")
+                logger.error(f"Error loading document: {e}")
+                # Fall through to show log view with error
+
+        # Show log view for running/failed/no-doc agents
+        show_log()
+
+        agent_num = selected.get('run_number', '?')
+        time_str = f"{selected['execution_time_ms']/1000:.0f}s" if selected.get('execution_time_ms') else "—"
+        tokens_str = format_tokens(selected.get('tokens_used'))
+
+        if agent_status == 'completed':
+            agent_log.write(f"[bold green]━━━ Agent #{agent_num} ✓ ━━━[/bold green]")
+        elif agent_status == 'failed':
+            agent_log.write(f"[bold red]━━━ Agent #{agent_num} ✗ ━━━[/bold red]")
+        elif agent_status == 'running':
+            agent_log.write(f"[bold yellow]━━━ Agent #{agent_num} ⟳ ━━━[/bold yellow]")
+        else:
+            agent_log.write(f"[bold]━━━ Agent #{agent_num} ━━━[/bold]")
+
+        agent_log.write(f"[dim]Time: {time_str} | Tokens: {tokens_str}[/dim]")
+        agent_log.write("")
+
+        # Show error if present
         if selected.get('error_message'):
             agent_log.write(f"[red]Error: {selected['error_message']}[/red]")
-        status_bar.update("")
+            agent_log.write("")
+
+        # For running agents, set up live log streaming
+        if agent_status == 'running':
+            dbg_early(f"Setting up agent stream for running agent #{agent_num}")
+            await self._setup_agent_stream(selected, agent_log, status_bar)
+        else:
+            status_bar.update("")
 
     async def _setup_agent_stream(self, ind_run: Dict[str, Any], agent_log: RichLog, status_bar: Static) -> None:
         """Setup live streaming for a running agent."""
@@ -706,3 +816,28 @@ class PulseView(Widget):
             runs_table.action_cursor_up()
         elif agents_table.has_focus:
             agents_table.action_cursor_up()
+
+    def action_open_document(self) -> None:
+        """Open the output document for the selected agent run."""
+        # Check if agents table is focused - if so, use selected agent's doc
+        agents_table = self.query_one("#agents-table", DataTable)
+        if agents_table.has_focus:
+            agent_run = self.get_selected_agent_run()
+            if agent_run and agent_run.get('output_doc_id'):
+                self.post_message(self.ViewDocument(agent_run['output_doc_id']))
+                return
+
+        # Otherwise check the workflow run for output docs
+        run = self.get_selected_run()
+        if run:
+            # Try to get output from the workflow run
+            # Check for output_doc_ids in the run context or stages
+            if HAS_WORKFLOWS and wf_db:
+                stage_runs = wf_db.list_stage_runs(run['id'])
+                for sr in stage_runs:
+                    if sr.get('output_doc_id'):
+                        self.post_message(self.ViewDocument(sr['output_doc_id']))
+                        return
+                    if sr.get('synthesis_doc_id'):
+                        self.post_message(self.ViewDocument(sr['synthesis_doc_id']))
+                        return
