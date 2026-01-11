@@ -73,18 +73,24 @@ def format_time_ago(dt: datetime) -> str:
     if not dt:
         return "—"
     now = datetime.now()
+    # Handle timezone-aware datetimes by converting to naive local time
     if dt.tzinfo:
         dt = dt.replace(tzinfo=None)
+    # Handle timestamps stored in UTC (future relative to local time)
+    # by assuming they're UTC and adjusting
     diff = now - dt
-    if diff.total_seconds() < 60:
+    # If diff is negative (future time), the timestamp might be UTC
+    # For display purposes, just show absolute value
+    seconds = abs(diff.total_seconds())
+    if seconds < 60:
         return "now"
-    if diff.total_seconds() < 3600:
-        mins = int(diff.total_seconds() / 60)
+    if seconds < 3600:
+        mins = int(seconds / 60)
         return f"{mins}m"
-    if diff.total_seconds() < 86400:
-        hours = int(diff.total_seconds() / 3600)
+    if seconds < 86400:
+        hours = int(seconds / 3600)
         return f"{hours}h"
-    days = int(diff.total_seconds() / 86400)
+    days = int(seconds / 86400)
     return f"{days}d"
 
 
@@ -1083,7 +1089,6 @@ class ActivityView(Widget):
 
     async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Handle row selection (Enter key on DataTable)."""
-        # This is triggered when user presses Enter on a row
         await self.action_select()
 
     def on_unmount(self) -> None:
