@@ -19,7 +19,11 @@ from emdx.workflows.base import (
     WorkflowConfig,
     WorkflowRun,
 )
-from emdx.workflows.executor import WorkflowExecutor, StageResult
+from emdx.workflows.executor import WorkflowExecutor
+from emdx.workflows.strategies import StageResult
+from emdx.workflows.strategies.base import ExecutionStrategy
+from emdx.workflows.strategies.single import SingleExecutionStrategy
+from emdx.workflows.strategies.dynamic import DynamicExecutionStrategy
 
 
 class MockDocumentService:
@@ -331,60 +335,60 @@ class TestStageConfig:
 
 
 class TestWorkflowExecutorTemplateResolution:
-    """Tests for template resolution in WorkflowExecutor."""
+    """Tests for template resolution in ExecutionStrategy."""
 
     def test_resolve_simple_variable(self):
         """Test resolving simple {{variable}} templates."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         template = "Hello, {{name}}!"
         context = {'name': 'World'}
-        result = executor._resolve_template(template, context)
+        result = strategy.resolve_template(template, context)
         assert result == "Hello, World!"
 
     def test_resolve_multiple_variables(self):
         """Test resolving multiple variables in same template."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         template = "{{greeting}}, {{name}}! Welcome to {{place}}."
         context = {'greeting': 'Hello', 'name': 'User', 'place': 'EMDX'}
-        result = executor._resolve_template(template, context)
+        result = strategy.resolve_template(template, context)
         assert result == "Hello, User! Welcome to EMDX."
 
     def test_resolve_missing_variable(self):
         """Test that missing variables resolve to empty string."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         template = "Value: {{missing}}"
         context = {}
-        result = executor._resolve_template(template, context)
+        result = strategy.resolve_template(template, context)
         assert result == "Value: "
 
     def test_resolve_indexed_access(self):
         """Test resolving indexed access like {{all_prev[0]}}."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         template = "First: {{items[0]}}, Second: {{items[1]}}"
         context = {'items': ['apple', 'banana', 'cherry']}
-        result = executor._resolve_template(template, context)
+        result = strategy.resolve_template(template, context)
         assert result == "First: apple, Second: banana"
 
     def test_resolve_indexed_access_out_of_bounds(self):
         """Test that out of bounds index resolves to empty string."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         template = "Item: {{items[10]}}"
         context = {'items': ['only_one']}
-        result = executor._resolve_template(template, context)
+        result = strategy.resolve_template(template, context)
         assert result == "Item: "
 
     def test_resolve_dotted_variable(self):
         """Test resolving dotted variable names like {{stage.output}}."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         template = "Previous output: {{analyze.output}}"
         context = {'analyze.output': 'Analysis result'}
-        result = executor._resolve_template(template, context)
+        result = strategy.resolve_template(template, context)
         assert result == "Previous output: Analysis result"
 
     def test_resolve_none_template(self):
         """Test that None template returns empty string."""
-        executor = WorkflowExecutor()
-        result = executor._resolve_template(None, {})
+        strategy = SingleExecutionStrategy()
+        result = strategy.resolve_template(None, {})
         assert result == ""
 
 
@@ -431,47 +435,47 @@ class TestWorkflowExecutorDocIdExtraction:
 
     def test_extract_doc_id_created_pattern(self):
         """Test extracting doc ID from 'Created document #123' pattern."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
             f.write("Some output...\nCreated document #456\nMore output...")
             log_path = Path(f.name)
 
         try:
-            doc_id = executor._extract_output_doc_id(log_path)
+            doc_id = strategy._extract_output_doc_id(log_path)
             assert doc_id == 456
         finally:
             log_path.unlink()
 
     def test_extract_doc_id_saved_pattern(self):
         """Test extracting doc ID from 'Saved as #123' pattern."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
             f.write("Processing...\nSaved as #789\nDone!")
             log_path = Path(f.name)
 
         try:
-            doc_id = executor._extract_output_doc_id(log_path)
+            doc_id = strategy._extract_output_doc_id(log_path)
             assert doc_id == 789
         finally:
             log_path.unlink()
 
     def test_extract_doc_id_not_found(self):
         """Test that None is returned when no doc ID pattern found."""
-        executor = WorkflowExecutor()
+        strategy = SingleExecutionStrategy()
         with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
             f.write("No document ID in this log")
             log_path = Path(f.name)
 
         try:
-            doc_id = executor._extract_output_doc_id(log_path)
+            doc_id = strategy._extract_output_doc_id(log_path)
             assert doc_id is None
         finally:
             log_path.unlink()
 
     def test_extract_doc_id_missing_file(self):
         """Test that None is returned for missing log file."""
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(Path("/nonexistent/path.log"))
+        strategy = SingleExecutionStrategy()
+        doc_id = strategy._extract_output_doc_id(Path("/nonexistent/path.log"))
         assert doc_id is None
 
 
@@ -620,7 +624,7 @@ class TestWorkflowExecutorDiscovery:
 
     async def test_run_discovery_success(self):
         """Test successful discovery command execution."""
-        executor = WorkflowExecutor()
+        strategy = DynamicExecutionStrategy()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create some test files
@@ -628,14 +632,14 @@ class TestWorkflowExecutorDiscovery:
                 Path(tmpdir, f"file{i}.txt").touch()
 
             context = {'_working_dir': tmpdir}
-            items = await executor._run_discovery(f"ls {tmpdir}", context)
+            items = await strategy._run_discovery(f"ls {tmpdir}", context)
 
             assert len(items) == 3
             assert all('file' in item for item in items)
 
     async def test_run_discovery_with_template(self):
         """Test discovery command with template variable."""
-        executor = WorkflowExecutor()
+        strategy = DynamicExecutionStrategy()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             Path(tmpdir, "test.py").touch()
@@ -643,25 +647,25 @@ class TestWorkflowExecutorDiscovery:
 
             context = {'_working_dir': tmpdir, 'extension': 'py'}
             # Note: Using echo to simulate a templated command
-            items = await executor._run_discovery("echo 'item1\nitem2'", context)
+            items = await strategy._run_discovery("echo 'item1\nitem2'", context)
 
             assert len(items) == 2
 
     async def test_run_discovery_empty_result(self):
         """Test discovery command that returns no items."""
-        executor = WorkflowExecutor()
+        strategy = DynamicExecutionStrategy()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             context = {'_working_dir': tmpdir}
             # List an empty directory with a pattern that won't match
-            items = await executor._run_discovery(f"ls {tmpdir}/*.nonexistent 2>/dev/null || true", context)
+            items = await strategy._run_discovery(f"ls {tmpdir}/*.nonexistent 2>/dev/null || true", context)
 
             assert items == []
 
     async def test_run_discovery_failure(self):
         """Test discovery command that fails."""
-        executor = WorkflowExecutor()
+        strategy = DynamicExecutionStrategy()
 
         context = {'_working_dir': '/tmp'}
         with pytest.raises(ValueError, match="Discovery command failed"):
-            await executor._run_discovery("exit 1", context)
+            await strategy._run_discovery("exit 1", context)

@@ -235,13 +235,11 @@ def run_workflow(
     background: bool = typer.Option(
         False,
         "--background/--foreground",
-        "-b",
         help="Run in background (default: foreground)",
     ),
     worktree: bool = typer.Option(
         False,
         "--worktree/--no-worktree",
-        "-w",
         help="Create isolated git worktree for this run (recommended for parallel runs)",
     ),
     base_branch: str = typer.Option(
