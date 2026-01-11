@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from ..utils.datetime import parse_datetime
+
 
 class LogEntry:
     """Represents a parsed log entry."""
@@ -140,12 +142,9 @@ class LogParser:
     
     def _parse_json_entry(self, data: Dict[str, Any]) -> LogEntry:
         """Parse a structured JSON log entry."""
-        # Parse timestamp
+        # Parse timestamp using centralized utility
         timestamp_str = data.get("timestamp", "")
-        try:
-            timestamp = datetime.fromisoformat(timestamp_str)
-        except ValueError:
-            timestamp = datetime.now(timezone.utc)
+        timestamp = parse_datetime(timestamp_str, default=datetime.now(timezone.utc))
         
         # Extract process info
         process_info = data.get("process", {})

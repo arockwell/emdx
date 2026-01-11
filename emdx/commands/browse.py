@@ -2,8 +2,7 @@
 Browse and analytics commands for emdx
 """
 
-from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -11,19 +10,11 @@ from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_recent_documents, get_stats, list_documents
+from emdx.utils.datetime import format_datetime as _format_datetime
 from emdx.utils.text_formatting import truncate_description, truncate_title
 
 app = typer.Typer()
 console = Console()
-
-
-def _format_datetime(dt: Union[str, datetime, None], format_str: str = "%Y-%m-%d %H:%M") -> str:
-    """Format a datetime value (string or datetime object) to a string."""
-    if dt is None:
-        return "N/A"
-    if isinstance(dt, str):
-        dt = datetime.fromisoformat(dt)
-    return dt.strftime(format_str)
 
 
 def _format_size(size_bytes: int) -> str:
