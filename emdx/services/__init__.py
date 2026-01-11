@@ -10,11 +10,15 @@ from .document_executor import (
     execute_document_background,
     generate_unique_execution_id,
 )
+from .similarity import IndexStats, SimilarDocument, SimilarityService
 
 __all__ = [
-    'DuplicateDetector',
     'AutoTagger',
+    'DuplicateDetector',
     'ExecutionType',
+    'IndexStats',
+    'SimilarDocument',
+    'SimilarityService',
     'execute_claude_detached',
     'execute_document_background',
     'generate_unique_execution_id',
