@@ -353,7 +353,7 @@ class AgentExecutor:
     
     def _execute_with_claude_detached(self, agent, context: AgentContext, execution_id: int) -> None:
         """Execute agent using the existing claude execute detached infrastructure."""
-        from ..services.claude_executor import execute_with_claude_detached
+        from ..commands.claude_execute import execute_with_claude_detached
         from pathlib import Path
         
         prompt = self._build_agent_prompt(agent, context)
@@ -371,7 +371,7 @@ class AgentExecutor:
     
     def _execute_with_claude_sync(self, agent, context: AgentContext, execution_id: int) -> None:
         """Execute agent synchronously using the existing claude execute infrastructure."""
-        from ..services.claude_executor import execute_with_claude
+        from ..commands.claude_execute import execute_with_claude
         from pathlib import Path
         
         prompt = self._build_agent_prompt(agent, context)
