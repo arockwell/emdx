@@ -5,6 +5,224 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-07-28
+
+### 🔥 Major Features Added
+
+#### Execution System Overhaul
+- **Event-driven Log Streaming** - Real-time log updates without polling overhead
+- **Comprehensive Process Management** - Heartbeat tracking, PID management, and lifecycle monitoring
+- **Database Cleanup Tools** - New `emdx maintain cleanup` commands for branches, processes, and executions
+- **Enhanced Execution Environment** - Comprehensive validation and better error handling
+- **Unique Execution ID Generation** - Better collision detection with UUID components and microsecond precision
+
+#### Test Suite Achievement
+- **100% Test Passing Rate** - Complete test suite restoration from broken state
+- **Comprehensive Test Coverage** - 172 tests now passing, up from ~50% pass rate
+- **Robust Testing Framework** - Fixed auto-tagger, browse, migration, and smart execution tests
+
+### 🏗️ Architecture Improvements
+
+#### Process & Execution Management
+- **Heartbeat Mechanism** - 30-second heartbeat updates for execution tracking
+- **ExecutionMonitor Service** - Real-time process monitoring and health checks
+- **Cleanup Commands** - Automated cleanup of zombie processes, stuck executions, and old branches
+- **Enhanced Branch Management** - Better collision detection and unique branch naming
+
+#### Database Enhancements
+- **State Consistency** - Fixed 94 stuck 'running' executions in database
+- **Execution Lifecycle** - Proper status tracking with timeout handling
+- **Directory Management** - Improved temp directory cleanup and collision avoidance
+
+### 🐛 Critical Bug Fixes
+
+#### TUI Stability
+- **Delete Key Crash** - Fixed parameter mismatch in DeleteConfirmScreen constructor
+- **Git Branch Conflicts** - Resolved branch creation collisions and cleanup issues
+- **Process Zombies** - Fixed zombie process accumulation and resource leaks
+- **Database Corruption** - Cleaned up inconsistent execution states
+
+#### Log System Improvements
+- **Timestamp Preservation** - Maintain original timestamps during real-time streaming
+- **Log Browser Performance** - Eliminated polling overhead with event-driven updates
+- **Wrapper Coordination** - Fixed log coordination issues by making wrapper sole writer
+
+### 🎨 User Experience Improvements
+
+#### Enhanced Delete Behavior
+- **Immediate Deletion** - Removed confirmation modal for faster workflow
+- **Cursor Preservation** - Maintain cursor position after document deletion
+- **Smart Positioning** - Intelligent cursor adjustment when deleting final document
+
+#### Interface Improvements
+- **Better Status Messages** - Clearer feedback for operations and errors
+- **Header Visibility** - Restored and improved document browser headers
+- **Tab Navigation** - Enhanced Tab navigation in edit mode between title and content
+- **Refresh Command** - Restored 'r' key refresh functionality
+
+#### Editor Enhancements
+- **Markdown Headers** - Use clean markdown headers instead of unicode boxes
+- **Document Creation** - Improved new document experience with better UI flow
+- **Edit Mode Stability** - Fixed mounting errors and improved editor lifecycle
+
+### 🔧 Technical Improvements
+
+#### Environment & Tooling
+- **Sonnet 4 Upgrade** - Default to claude-sonnet-4-20250514 model
+- **Tool Display** - Improved visualization of allowed tools during execution
+- **Python Environment** - Better detection and handling of pipx/venv environments
+- **Error Recovery** - Enhanced error handling throughout the system
+
+#### Documentation
+- **Comprehensive Guides** - Updated testing guide and development documentation
+- **Architecture Documentation** - Clean documentation structure in docs/ folder
+- **Installation Instructions** - Fixed dependency management and setup process
+
+### 💥 Breaking Changes
+- **Delete Behavior** - 'd' key now immediately deletes without confirmation
+- **Git Browser** - Moved to 'g' key (from 'd' key which now deletes)
+- **Python Requirement** - Requires Python 3.13+ (was 3.9+)
+
+### 🎯 Success Metrics
+- **Test Success Rate**: 172/172 tests passing (100%)
+- **Performance**: Event-driven log streaming eliminates polling overhead
+- **Reliability**: Zero zombie processes and stuck executions after cleanup
+- **User Experience**: Immediate delete response with cursor preservation
+
+## [0.6.1] - 2025-07-27
+
+### 🚨 Critical Documentation Fixes
+
+#### Version Consistency
+- **Fixed version badge** - Updated README.md badge from 0.6.0 to 0.6.1
+- **Fixed Python requirement** - Updated from 3.9+ to 3.13+ (matches pyproject.toml)
+- **Updated Black config** - Target version updated from py39 to py313
+- **Updated MyPy config** - Python version updated from 3.9 to 3.13
+
+#### Missing Command Documentation
+- **Added missing command documentation** for new commands:
+  - `emdx exec` - Execution management subcommands
+  - `emdx claude` - Claude execution subcommands  
+  - `emdx lifecycle` - Document lifecycle tracking
+  - `emdx analyze` - Document analysis command
+  - `emdx maintain` - Database maintenance command
+
+#### Installation Process
+- **Updated development setup** - Reflects Poetry + Just workflow
+- **Added Just installation instructions** - Comprehensive setup guide
+- **Fixed dependency installation** - Clarified Poetry vs pip usage
+
+#### Architecture Documentation
+- **Updated project structure** - Reflects new modular architecture with 27 UI files
+- **Added UI component descriptions** - Complete documentation of modular UI system
+- **Updated command module structure** - Documents all 11 command modules
+
+### 🎯 Documentation Accuracy
+- **Critical fix**: Documentation now accurately reflects actual codebase
+- **User experience**: Installation instructions now work correctly
+- **Contributor onboarding**: Development setup properly documented
+
+## [0.6.0] - 2025-07-14
+
+### 🔥 Major Features Added
+
+#### File System Integration
+- **Yazi-Inspired File Browser** - Built-in file system navigation with vim keybindings
+- **File Preview** - Real-time file content preview in file browser
+- **Seamless File Editing** - Edit files directly from browser with vim integration
+
+#### Git Integration Enhancements  
+- **Git Diff Browser** - Visual git diff viewer with syntax highlighting
+- **Worktree Support** - Switch between git worktrees interactively with 'w' key
+- **Git Operations** - Enhanced git project detection and repository management
+
+#### Advanced TUI Features
+- **Complete Vim Editor** - Full modal editing (NORMAL/INSERT/VISUAL/VISUAL LINE modes)
+- **Vim Line Numbers** - Relative line numbers with proper cursor positioning
+- **Enhanced Text Selection** - Robust text selection mode with copy/paste
+- **Modal Navigation** - Multiple browser modes (documents, files, git diffs)
+
+#### Execution System
+- **Claude Execution Integration** - Execute prompts directly from TUI with 'x' key
+- **Live Streaming Logs** - Real-time execution log viewer with 'l' key  
+- **Execution History** - Track and view all execution attempts
+- **Contextual Prompts** - Smart prompt selection based on document content
+
+### 🏗️ Architecture Improvements
+
+#### Modular Refactoring
+- **Split Monolithic Browser** - Broke 3,097-line textual_browser.py into focused modules
+- **Clean Component Architecture** - Separate modules for file browser, git browser, vim editor
+- **Mixin Pattern** - Reusable GitBrowserMixin for git functionality across components
+
+#### Database Enhancements  
+- **Modular Database Layer** - Split database operations into focused modules
+- **Migration System** - Robust schema migration support
+- **Performance Optimizations** - Improved query performance and indexing
+
+### 🐛 Critical Bug Fixes
+
+#### TUI Stability
+- **Keyboard Crash Fixes** - Resolved crashes with Ctrl+C, ESC, and modal key handling
+- **Selection Mode Stability** - Fixed text selection mode crashes and escape handling
+- **Widget Lifecycle** - Proper widget mounting/unmounting to prevent ID conflicts
+
+#### Data Integrity  
+- **Empty Documents Bug** - Fixed critical save command bug creating empty documents
+- **Tag Display Issues** - Resolved tag formatting and display problems in TUI
+- **Database Consistency** - Fixed schema migration issues and data corruption
+
+#### Editor Improvements
+- **Vim Line Numbers** - Fixed alignment and positioning issues with relative line numbers
+- **Cursor Positioning** - Accurate cursor tracking across edit modes
+- **Text Area Integration** - Seamless vim editor integration with Textual framework
+
+### 🎨 User Experience
+
+#### Enhanced UI/UX
+- **Clean Mode Indicators** - Minimal, vim-style mode indicators
+- **Better Error Handling** - Comprehensive error messages and recovery
+- **Responsive Design** - Improved layout and spacing across all modes
+- **Visual Feedback** - Real-time status updates and operation confirmation
+
+#### Workflow Improvements
+- **Quick Actions** - Fast gist creation with 'g' key in TUI
+- **Smart Defaults** - Intelligent mode switching and content detection
+- **Keyboard Efficiency** - Comprehensive vim-style keybindings throughout
+
+### 🔧 Developer Experience
+
+#### Code Quality
+- **Python 3.9+ Modernization** - Full type annotations using built-in generics
+- **Comprehensive Testing** - Expanded test suite with vim editor testing
+- **Code Formatting** - Consistent black/ruff formatting throughout codebase
+- **Documentation Updates** - Enhanced inline documentation and examples
+
+#### Development Tools
+- **justfile Integration** - Streamlined development workflow commands
+- **Pre-commit Hooks** - Automated code quality checks
+- **CI/CD Improvements** - Enhanced testing and release automation
+
+## [0.5.0] - Previous Release
+
+### Added
+- **Vim-like Editing Mode** - Full vim modal editing directly in the TUI preview pane
+  - Complete modal system: NORMAL, INSERT, VISUAL, and VISUAL LINE modes
+  - Core vim navigation: h/j/k/l, w/b/e (word motions), 0/$ (line), gg/G (document)
+  - Mode switching commands: i/a/I/A/o/O (insert variants), v/V (visual modes)
+  - Editing operations: x (delete char), dd (delete line), yy (yank), p/P (paste)
+  - Repeat count support: 3j, 5w, 2dd etc.
+  - Smart dual ESC behavior: INSERT→NORMAL→EXIT edit mode
+  - Color-coded status bar showing current vim mode and pending commands
+  - Backward compatibility: EditTextArea alias maintains existing functionality
+
+### Changed
+- **TUI Edit Mode Enhanced** - Press 'e' now enters vim editing mode instead of external nvim
+  - Starts in INSERT mode for immediate text editing
+  - Full vim command set available in NORMAL mode
+  - Visual feedback with mode indicators in status bar
+  - Seamless integration with existing width constraint fixes
+
 ## [0.5.0] - 2025-01-10
 
 ### Added

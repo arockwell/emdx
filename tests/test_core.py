@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from test_fixtures import TestDatabase
+from test_fixtures import DatabaseForTesting
 
 
 class TestCoreFunctionality:
@@ -10,12 +10,12 @@ class TestCoreFunctionality:
 
     def test_save_and_search_workflow(self):
         """Test saving documents and then searching for them."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Save some documents
-        doc1 = db.save_document("Python Guide", "Learn Python programming", "tutorials")
-        doc2 = db.save_document("JavaScript Guide", "Learn JavaScript", "tutorials")
-        doc3 = db.save_document("Python Testing", "Testing with pytest", "testing")
+        db.save_document("Python Guide", "Learn Python programming", "tutorials")
+        db.save_document("JavaScript Guide", "Learn JavaScript", "tutorials")
+        db.save_document("Python Testing", "Testing with pytest", "testing")
 
         # Search for Python documents
         results = db.search_documents("Python")
@@ -28,7 +28,7 @@ class TestCoreFunctionality:
 
     def test_document_lifecycle(self):
         """Test complete document lifecycle: create, update, delete."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Create
         doc_id = db.save_document("Original Title", "Original content", "test")
@@ -48,7 +48,7 @@ class TestCoreFunctionality:
         doc = db.get_document(doc_id)
         assert doc is None
 
-    @patch("emdx.sqlite_database.db")
+    @patch("emdx.database.db")
     def test_mock_database_operations(self, mock_db):
         """Test using mocked database for isolated testing."""
         # Mock the database responses
@@ -72,7 +72,7 @@ class TestCoreFunctionality:
 
     def test_project_filtering(self):
         """Test filtering documents by project."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Create documents in different projects
         db.save_document("Project A Doc 1", "Content", "project-a")
