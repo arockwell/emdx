@@ -28,6 +28,17 @@ def format_tokens(tokens: int) -> str:
     return str(tokens)
 
 
+def format_cost(cost: float) -> str:
+    """Format cost in dollars with appropriate precision."""
+    if not cost or cost == 0:
+        return "—"
+    if cost < 0.01:
+        return f"${cost:.3f}"
+    if cost < 1.00:
+        return f"${cost:.2f}"
+    return f"${cost:.2f}"
+
+
 # Import workflow components
 try:
     from emdx.workflows import database as wf_db
@@ -189,10 +200,11 @@ class PulseView(Widget):
         agents_table = self.query_one("#agents-table", DataTable)
         agents_table.add_column("", width=2)  # Status
         agents_table.add_column("#", width=3)  # Run number
-        agents_table.add_column("Time", width=6)
-        agents_table.add_column("In", width=6)  # Input tokens
-        agents_table.add_column("Out", width=6)  # Output tokens
-        agents_table.add_column("Output", width=12)
+        agents_table.add_column("Time", width=5)
+        agents_table.add_column("In", width=5)  # Input tokens
+        agents_table.add_column("Out", width=5)  # Output tokens
+        agents_table.add_column("Cost", width=6)  # Estimated cost
+        agents_table.add_column("Output", width=10)
 
         # Hide doc widget initially (we'll show it when needed)
         self.query_one("#agent-doc").display = False
@@ -371,12 +383,12 @@ class PulseView(Widget):
         self.selected_agent_idx = 0
 
         if not run:
-            agents_table.add_row("", "", "[dim]Select a run[/dim]", "", "")
+            agents_table.add_row("", "", "[dim]Select a run[/dim]", "", "", "", "")
             await self._update_agent_log()
             return
 
         if not HAS_WORKFLOWS or not wf_db:
-            agents_table.add_row("", "", "[dim]No data[/dim]", "", "")
+            agents_table.add_row("", "", "[dim]No data[/dim]", "", "", "", "")
             await self._update_agent_log()
             return
 
@@ -417,7 +429,7 @@ class PulseView(Widget):
                     except (ValueError, TypeError):
                         pass
 
-                agents_table.add_row(icon, "1", time_str, "—", "—", "")
+                agents_table.add_row(icon, "1", time_str, "—", "—", "—", "")
                 await self._update_agent_log()
                 return
 
@@ -467,13 +479,15 @@ class PulseView(Widget):
                 elif ir.get('error_message'):
                     output = ir['error_message'][:12] + "…"
 
-                # Token display - show "..." for running agents
+                # Token and cost display - show "..." for running agents
                 if status == 'running':
                     in_str = "..."
                     out_str = "..."
+                    cost_str = "..."
                 else:
                     in_str = format_tokens(ir.get('input_tokens'))
                     out_str = format_tokens(ir.get('output_tokens'))
+                    cost_str = format_cost(ir.get('cost_usd'))
 
                 agents_table.add_row(
                     icon,
@@ -481,7 +495,8 @@ class PulseView(Widget):
                     time_str,
                     in_str,
                     out_str,
-                    output[:12]
+                    cost_str,
+                    output[:10]
                 )
 
             # Select first row
@@ -495,7 +510,7 @@ class PulseView(Widget):
 
         except Exception as e:
             logger.error(f"Error loading individual runs: {e}", exc_info=True)
-            agents_table.add_row("", "", f"[red]Error[/red]", "", "")
+            agents_table.add_row("", "", f"[red]Error[/red]", "", "", "", "")
 
     async def _update_agent_log(self) -> None:
         """Update the agent output panel for the selected agent.
@@ -585,9 +600,10 @@ class PulseView(Widget):
                     time_str = f"{selected['execution_time_ms']/1000:.0f}s" if selected.get('execution_time_ms') else "—"
                     in_tokens = format_tokens(selected.get('input_tokens'))
                     out_tokens = format_tokens(selected.get('output_tokens'))
+                    cost_str = format_cost(selected.get('cost_usd'))
 
                     header = f"## ✓ Agent #{agent_num}\n"
-                    header += f"*Time: {time_str} | In: {in_tokens} | Out: {out_tokens}*\n\n"
+                    header += f"*Time: {time_str} | In: {in_tokens} | Out: {out_tokens} | Cost: {cost_str}*\n\n"
                     header += f"### 📄 {doc.get('title', 'Untitled')}\n\n"
 
                     content = doc.get('content', '')
@@ -611,6 +627,7 @@ class PulseView(Widget):
         time_str = f"{selected['execution_time_ms']/1000:.0f}s" if selected.get('execution_time_ms') else "—"
         in_tokens = format_tokens(selected.get('input_tokens'))
         out_tokens = format_tokens(selected.get('output_tokens'))
+        cost_str = format_cost(selected.get('cost_usd'))
 
         if agent_status == 'completed':
             agent_log.write(f"[bold green]━━━ Agent #{agent_num} ✓ ━━━[/bold green]")
@@ -621,7 +638,7 @@ class PulseView(Widget):
         else:
             agent_log.write(f"[bold]━━━ Agent #{agent_num} ━━━[/bold]")
 
-        agent_log.write(f"[dim]Time: {time_str} | In: {in_tokens} | Out: {out_tokens}[/dim]")
+        agent_log.write(f"[dim]Time: {time_str} | In: {in_tokens} | Out: {out_tokens} | Cost: {cost_str}[/dim]")
         agent_log.write("")
 
         # Show error if present

@@ -885,11 +885,12 @@ Report the document ID that was created."""
             status = 'completed' if exit_code == 0 else 'failed'
             execution_service.update_execution_status(exec_id, status, exit_code)
 
-            # Extract token usage from the log file (detailed version with in/out)
+            # Extract token usage from the log file (detailed version with in/out and cost)
             token_usage = self._extract_token_usage_detailed(log_file)
             tokens_used = token_usage.get('total', 0)
             input_tokens = token_usage.get('input', 0) + token_usage.get('cache_in', 0) + token_usage.get('cache_create', 0)
             output_tokens = token_usage.get('output', 0)
+            cost_usd = token_usage.get('cost_usd', 0.0)
 
             if exit_code == 0:
                 # Try to extract output document ID from log
@@ -912,6 +913,7 @@ Report the document ID that was created."""
                     tokens_used=tokens_used,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    cost_usd=cost_usd,
                     execution_time_ms=execution_time_ms,
                     completed_at=exec_end_time,
                 )
@@ -922,6 +924,7 @@ Report the document ID that was created."""
                     'tokens_used': tokens_used,
                     'input_tokens': input_tokens,
                     'output_tokens': output_tokens,
+                    'cost_usd': cost_usd,
                     'execution_time_ms': execution_time_ms,
                     'execution_id': exec_id,
                 }
@@ -1023,9 +1026,9 @@ Report the document ID that was created."""
             log_file: Path to the execution log
 
         Returns:
-            Dict with 'input', 'output', 'cache_in', 'cache_create', 'total' keys
+            Dict with 'input', 'output', 'cache_in', 'cache_create', 'total', 'cost_usd' keys
         """
-        empty = {'input': 0, 'output': 0, 'cache_in': 0, 'cache_create': 0, 'total': 0}
+        empty = {'input': 0, 'output': 0, 'cache_in': 0, 'cache_create': 0, 'total': 0, 'cost_usd': 0.0}
         if not log_file.exists():
             return empty
 
@@ -1045,12 +1048,14 @@ Report the document ID that was created."""
                             cache_creation = usage.get('cache_creation_input_tokens', 0)
                             cache_read = usage.get('cache_read_input_tokens', 0)
                             total = input_tokens + output_tokens + cache_creation + cache_read
+                            cost_usd = data.get('total_cost_usd', 0.0)
                             return {
                                 'input': input_tokens + cache_read,  # Effective input
                                 'output': output_tokens,
                                 'cache_in': cache_read,
                                 'cache_create': cache_creation,
                                 'total': total,
+                                'cost_usd': cost_usd,
                             }
                     except json.JSONDecodeError:
                         continue
