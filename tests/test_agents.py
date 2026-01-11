@@ -989,7 +989,7 @@ class TestGenericAgent:
 
         assert result.status == 'completed'
         assert result.error_message is None
-        assert result.execution_time_ms > 0
+        assert result.execution_time_ms >= 0  # Can be 0 with mocked subprocess
 
     @pytest.mark.asyncio
     async def test_execute_failure(self, sample_agent_config):
