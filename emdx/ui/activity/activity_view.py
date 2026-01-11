@@ -72,16 +72,23 @@ def format_time_ago(dt: datetime) -> str:
     """Format datetime as relative time."""
     if not dt:
         return "—"
+
+    # If datetime is naive (no timezone), assume it's UTC and convert to local
+    if dt.tzinfo is None:
+        # Assume UTC and convert to local time
+        from datetime import timezone
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+        dt_local = dt_utc.astimezone()
+        dt = dt_local.replace(tzinfo=None)
+
     now = datetime.now()
-    # Handle timezone-aware datetimes by converting to naive local time
-    if dt.tzinfo:
-        dt = dt.replace(tzinfo=None)
-    # Handle timestamps stored in UTC (future relative to local time)
-    # by assuming they're UTC and adjusting
     diff = now - dt
-    # If diff is negative (future time), the timestamp might be UTC
-    # For display purposes, just show absolute value
-    seconds = abs(diff.total_seconds())
+    seconds = diff.total_seconds()
+
+    # Handle future times (shouldn't happen but be safe)
+    if seconds < 0:
+        return "now"
+
     if seconds < 60:
         return "now"
     if seconds < 3600:
@@ -326,6 +333,15 @@ class ActivityView(Widget):
     async def load_data(self) -> None:
         """Load activity data."""
         self.activity_items = []
+
+        # Clean up zombie workflow runs on first load
+        if HAS_WORKFLOWS and wf_db:
+            try:
+                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=2.0)
+                if cleaned > 0:
+                    logger.info(f"Cleaned up {cleaned} zombie workflow runs")
+            except Exception as e:
+                logger.debug(f"Could not cleanup zombies: {e}")
 
         # Load workflows
         if HAS_WORKFLOWS and wf_db:

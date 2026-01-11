@@ -281,6 +281,67 @@ def update_workflow_run(
         return cursor.rowcount > 0
 
 
+def cleanup_zombie_workflow_runs(max_age_hours: float = 2.0) -> int:
+    """Mark stale 'running' workflow runs as failed.
+
+    This cleans up zombie runs from processes that died without updating status.
+    Call this on application startup.
+
+    Args:
+        max_age_hours: Workflows running longer than this are considered zombies
+
+    Returns:
+        Number of workflow runs marked as failed
+    """
+    with db_connection.get_connection() as conn:
+        # Find and update zombie runs
+        cursor = conn.execute(
+            """
+            UPDATE workflow_runs
+            SET status = 'failed',
+                error_message = 'Marked as failed: process appears to have died without cleanup',
+                completed_at = datetime('now')
+            WHERE status = 'running'
+            AND started_at < datetime('now', ? || ' hours')
+            """,
+            (f"-{max_age_hours}",),
+        )
+        conn.commit()
+
+        # Also clean up associated stage runs and individual runs
+        conn.execute(
+            """
+            UPDATE workflow_stage_runs
+            SET status = 'failed'
+            WHERE status IN ('pending', 'running')
+            AND workflow_run_id IN (
+                SELECT id FROM workflow_runs
+                WHERE status = 'failed'
+                AND error_message LIKE 'Marked as failed: process appears%'
+            )
+            """
+        )
+        conn.execute(
+            """
+            UPDATE workflow_individual_runs
+            SET status = 'failed'
+            WHERE status IN ('pending', 'running')
+            AND stage_run_id IN (
+                SELECT id FROM workflow_stage_runs
+                WHERE status = 'failed'
+                AND workflow_run_id IN (
+                    SELECT id FROM workflow_runs
+                    WHERE status = 'failed'
+                    AND error_message LIKE 'Marked as failed: process appears%'
+                )
+            )
+            """
+        )
+        conn.commit()
+
+        return cursor.rowcount
+
+
 # =============================================================================
 # Workflow Stage Run operations
 # =============================================================================
