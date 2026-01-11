@@ -39,8 +39,7 @@ def test_execution_id_uniqueness():
         if not doc_id:
             print("❌ Failed to create test document - skipping execution test")
             print(f"Save result: {result.stdout}")
-            assert True  # Skip if save fails due to environment issues
-            return
+            pytest.skip("Save failed due to environment issues - cannot run execution test")
         
         print(f"✅ Created test document #{doc_id}")
         
@@ -63,20 +62,18 @@ def test_execution_id_uniqueness():
         # Check uniqueness
         if len(exec_ids) == 0:
             print("⚠️ No executions started - environment may not be configured")
-            assert True  # Skip if executions can't start
+            pytest.skip("No executions started - environment may not be configured")
         elif len(exec_ids) == len(set(exec_ids)):
             print(f"✅ All {len(exec_ids)} execution IDs are unique")
-            assert True
         else:
-            print(f"❌ Duplicate execution IDs found: {exec_ids}")
-            assert False, f"Duplicate execution IDs found: {exec_ids}"
+            pytest.fail(f"Duplicate execution IDs found: {exec_ids}")
     
     finally:
         # Clean up temp file
         import os
         try:
             os.unlink(test_file)
-        except:
+        except OSError:
             pass
 
 
@@ -145,11 +142,10 @@ def test_environment_validation():
     
     if "properly configured" in result.stdout:
         print("✅ Environment is properly configured")
-        assert True
     else:
         print("⚠️  Environment has issues (this may be expected)")
         print(result.stdout)
-        assert True  # Don't fail test for env issues
+        pytest.skip("Environment has issues - skipping validation test")
 
 
 def main():

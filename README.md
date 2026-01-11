@@ -1,112 +1,202 @@
-# emdx - Documentation Index Management System
+# emdx
 
 [![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-A powerful command-line tool for managing your personal knowledge base with SQLite full-text search, Git integration, and a modern terminal interface.
+**A terminal-native knowledge base with full-text search, emoji tags, and AI agent integration.**
 
-## ✨ **Key Features**
+Stop losing notes in scattered markdown files. EMDX gives you instant search across all your documents, smart tagging with emoji aliases, and deep integration with Claude Code for AI-powered workflows.
 
-- **🔍 Fast Search** - SQLite FTS5 full-text search with ranking
-- **🎨 Rich TUI** - Multiple browser modes (documents, files, git diffs) with vim editing  
-- **🏷️ Smart Tagging** - Emoji tags with intuitive text aliases (`gameplan`→🎯, `active`→🚀)
-- **⚡ Claude Integration** - Execute documents directly with Claude Code
-- **🔧 Git Aware** - Auto-detects projects, diff viewer, worktree switching
-- **💾 Zero Setup** - SQLite backend, no database server required
+## Key Features
 
-## 🚀 **Quick Start**
+- **Instant Search** - SQLite FTS5 full-text search with ranking
+- **Emoji Tags** - Type `gameplan` and get 🎯, type `active` and get 🚀
+- **Rich TUI** - Vim-style navigation across documents, files, git diffs, and logs
+- **AI Agents** - Create custom agents for code review, research, and automation
+- **Claude Integration** - Execute documents directly with Claude Code
+- **Git Aware** - Auto-detects projects, visual diff browser, worktree switching
+- **Zero Config** - SQLite backend, no server required
 
-### Installation
+## Quick Start
+
 ```bash
+# Install
 git clone https://github.com/arockwell/emdx.git
-cd emdx
-pip install -e .
+cd emdx && pip install -e .
+
+# Save your first document
+echo "Remember to refactor the auth module" | emdx save --title "Auth TODO" --tags "bug,active"
+
+# Search
+emdx find "auth"
+emdx find --tags "active"
+
+# Browse in TUI
+emdx gui
 ```
 
-### Basic Usage
+## Core Concepts
+
+### Documents
+Every piece of content is a **document** with a unique ID. Documents belong to **projects** (auto-detected from git repos).
+
+```bash
+emdx save notes.md                    # Save a file
+echo "quick note" | emdx save --title "Note"  # Save from stdin
+emdx view 42                          # View document #42
+emdx edit 42                          # Edit in $EDITOR
+```
+
+### Emoji Tags
+Tags use emoji for visual density. Type text aliases instead of hunting for emoji:
+
+| Type this | Get this | Use for |
+|-----------|----------|---------|
+| `gameplan`, `plan` | 🎯 | Strategic documents |
+| `analysis`, `research` | 🔍 | Investigations |
+| `notes`, `memo` | 📝 | General notes |
+| `docs` | 📚 | Documentation |
+| `active`, `working` | 🚀 | Currently in progress |
+| `done`, `complete` | ✅ | Finished work |
+| `blocked`, `stuck` | 🚧 | Waiting on something |
+| `success`, `win` | 🎉 | Positive outcome |
+| `failed` | ❌ | Negative outcome |
+| `bug`, `issue` | 🐛 | Problems to fix |
+| `feature` | ✨ | New functionality |
+| `urgent`, `critical` | 🚨 | High priority |
+| `refactor` | 🔧 | Code improvements |
+
+```bash
+# Add tags when saving
+emdx save plan.md --tags "gameplan,active"
+
+# Add tags to existing document
+emdx tag 42 analysis done success
+
+# Search by tags
+emdx find --tags "active"
+emdx find --tags "gameplan,done"
+```
+
+## Essential Commands
+
 ```bash
 # Save content
-emdx save README.md
-echo "Remember to fix the API" | emdx save --title "API Note"
+emdx save file.md                         # Save file (title from filename)
+emdx save file.md --title "Custom Title"  # Save with custom title
+echo "text" | emdx save --title "Title"   # Save from stdin (CORRECT)
 
-# Search documents  
-emdx find "docker compose"
-emdx find --tags "gameplan,active"
+# Search
+emdx find "search terms"                  # Full-text search
+emdx find --tags "tag1,tag2"              # Search by tags
 
-# Launch TUI browser
-emdx gui
+# Browse
+emdx list                                 # List all documents
+emdx recent                               # Recently accessed
+emdx view <id>                            # View document
+emdx edit <id>                            # Edit in $EDITOR
+
+# Tags
+emdx tag <id> tag1 tag2                   # Add tags
+emdx untag <id> tag1                      # Remove tag
+emdx tags                                 # List all tags with counts
+emdx legend                               # Show emoji alias reference
+
+# TUI
+emdx gui                                  # Launch interactive browser
 ```
 
-### Key TUI Commands
-- `j/k` - Navigate up/down
-- `e` - Edit with vim
-- `n` - New document
-- `/` - Search
-- `t/T` - Add/remove tags
-- `f` - File browser mode
-- `g` - Git diff browser
-- `l` - Log browser
-- `d` - Delete document
-- `x` - Execute with Claude
-- `r` - Refresh
-- `q` - Quit/back
+## AI Integration
 
-## 📚 **Documentation**
+EMDX is designed to work with Claude Code and other AI assistants.
 
-For comprehensive guides and detailed information:
+### For AI Agents: Critical Syntax
 
-- **[📖 Complete Documentation](docs/)** - Full project documentation
-- **[🏗️ Architecture](docs/architecture.md)** - System design and code structure
-- **[⚙️ Development Setup](docs/development-setup.md)** - Contributing and development guide
-- **[📋 CLI Reference](docs/cli-api.md)** - Complete command documentation
-- **[🎨 UI Guide](docs/ui-architecture.md)** - TUI components and key bindings
-
-## 💡 **Common Workflows**
-
-### Knowledge Management
 ```bash
-# Quick note capture
-echo "Bug in auth system" | emdx save --title "Auth Bug" --tags "bug,urgent"
+# CORRECT: Save text via stdin
+echo "My content here" | emdx save --title "Title"
 
-# Research documentation  
-emdx save research.md --tags "analysis,done"
-emdx find --tags "analysis"
-
-# Project tracking
-echo "Phase 1: Setup infrastructure" | emdx save --title "Project Plan" --tags "gameplan,active"
+# WRONG: This looks for a FILE named "My content here"
+emdx save "My content here"
 ```
 
-### TUI Browser
+### Using with Claude Code
+
+Documents can be executed directly with Claude:
+
 ```bash
-# Launch interactive browser
-emdx gui
-
-# Navigation
-# - Documents (default): manage knowledge base
-# - Files (f): browse filesystem with preview
-# - Git (g): visual diff viewer, worktree switching  
-# - Logs (l): execution monitoring
+# In TUI: press 'x' on any document to execute with Claude
+# Or run agents on documents:
+emdx agent run code-reviewer --doc 123
 ```
 
-## 🔧 **Configuration**
+### Custom Agents
 
-- **Database**: `~/.config/emdx/knowledge.db` (created automatically)
-- **GitHub Integration**: Set `GITHUB_TOKEN` or use `gh auth login`
-- **Editor**: Set `EDITOR` environment variable for external editing
+Create AI agents for repeatable tasks:
 
-## 🤝 **Contributing**
+```bash
+emdx agent list                           # List available agents
+emdx agent run <name> --doc <id>          # Run agent on document
+emdx agent run <name> --query "text"      # Run agent with query
+```
 
-See [Development Setup](docs/development-setup.md) for:
-- Installation with Poetry
-- Code quality tools
-- Testing guidelines
-- Architecture patterns
+See [AI Agents Guide](docs/ai-agents.md) for creating custom agents.
 
-## 📄 **License**
+## TUI Browser
+
+Launch with `emdx gui`. Vim-style keybindings:
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Navigate down/up |
+| `Enter` | Select/open |
+| `e` | Edit with vim |
+| `f` | File browser mode |
+| `d` | Git diff browser |
+| `l` | Log browser |
+| `a` | Agent browser |
+| `x` | Execute with Claude |
+| `/` | Search |
+| `q` | Quit/back |
+
+### Browser Modes
+
+- **Documents** (default) - Browse and manage your knowledge base
+- **Files** (`f`) - Browse filesystem with preview
+- **Git** (`d`) - Visual diff viewer, worktree switching
+- **Logs** (`l`) - Execution monitoring
+- **Agents** (`a`) - AI agent management
+
+## Configuration
+
+| Setting | Location | Notes |
+|---------|----------|-------|
+| Database | `~/.emdx/emdx.db` | Created automatically |
+| Editor | `$EDITOR` env var | For external editing |
+| GitHub | `GITHUB_TOKEN` or `gh auth login` | For GitHub integration |
+
+## Documentation
+
+- [AI Agents Guide](docs/ai-agents.md) - Create and run custom AI agents
+- [CLI Reference](docs/cli-api.md) - Complete command documentation
+- [Architecture](docs/architecture.md) - System design and code structure
+- [UI Guide](docs/ui-architecture.md) - TUI components and theming
+- [Development Setup](docs/development-setup.md) - Contributing guide
+- [Database Design](docs/database-design.md) - Schema and migrations
+
+## Contributing
+
+```bash
+# Development install
+git clone https://github.com/arockwell/emdx.git
+cd emdx
+poetry install
+poetry run emdx --help
+```
+
+See [Development Setup](docs/development-setup.md) for testing and code quality guidelines.
+
+## License
 
 MIT License - see LICENSE file for details.
-
----
-
-**Quick Links**: [Installation](#-quick-start) • [Documentation](docs/) • [CLI Reference](docs/cli-api.md) • [Contributing](docs/development-setup.md)

@@ -19,11 +19,15 @@ emdx/
 │   ├── core.py            # save, find, view, edit, delete
 │   ├── browse.py          # list, stats, recent
 │   ├── tags.py            # tag management
+│   ├── agents.py          # AI agent management and execution
 │   ├── gist.py            # GitHub integration
 │   ├── executions.py      # execution monitoring
 │   ├── claude_execute.py  # Claude Code integration
 │   ├── analyze.py         # database analysis
 │   └── maintain.py        # maintenance operations
+├── agents/                 # AI agent system
+│   ├── executor.py        # Agent execution engine
+│   └── registry.py        # Agent management and storage
 ├── database/               # SQLite operations
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
@@ -39,6 +43,13 @@ emdx/
 │   ├── file_browser.py      # file system browser
 │   ├── log_browser.py       # execution logs
 │   ├── git_browser.py       # git diff viewer
+│   ├── agent_browser.py     # AI agent management
+│   ├── agent_modals.py      # Agent dialogs and forms
+│   ├── agent_form.py        # Agent creation/editing
+│   ├── agent_execution_overlay.py # Multi-stage execution
+│   ├── stages/              # Agent execution stages
+│   │   ├── base.py         # Base stage framework
+│   │   └── document_selection.py # Document picker
 │   └── vim_editor.py        # vim modal editing
 ├── services/               # Business logic
 │   ├── log_stream.py      # event-driven log streaming
@@ -60,6 +71,7 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **File Mode** - `f` to switch from document mode  
 - **Git Mode** - `d` to switch from document mode
 - **Log Mode** - `l` to switch from document mode
+- **Agent Mode** - `a` to switch from document mode
 - **Back to Document** - `q` from any other mode
 
 ### **Actual Key Bindings** (from real code):
@@ -91,6 +103,16 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - `r` - refresh  
 - `l` - toggle live mode
 
+**Agent Browser** (`agent_browser.py`):
+- `j/k` - move up/down
+- `g/G` - go to top/bottom
+- `r` - run selected agent
+- `n` - create new agent
+- `e` - edit selected agent
+- `d` - delete selected agent
+- `h` - view execution history
+- `v` - toggle active/inactive
+
 ## 🗃️ **Database Architecture**
 
 ### **Core Tables**
@@ -99,6 +121,12 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **`document_tags`** - Many-to-many document-tag relationships
 - **`executions`** - Execution tracking and lifecycle
 - **`documents_fts`** - Full-text search virtual table
+
+### **Agent System Tables**
+- **`agents`** - AI agent definitions and configuration
+- **`agent_executions`** - Agent execution history and results
+- **`agent_pipelines`** - Multi-agent workflow definitions
+- **`agent_templates`** - Shareable agent configurations
 
 ### **Key Design Decisions**
 - **SQLite with FTS5** - Fast full-text search with simple deployment
@@ -121,9 +149,17 @@ App (emdx gui)
     │   ├── ExecutionTable
     │   ├── LogViewer (with streaming)
     │   └── MetadataPanel
-    └── FileBrowser (press 'f')
-        ├── FileTree
-        └── FilePreview
+    ├── FileBrowser (press 'f')
+    │   ├── FileTree
+    │   └── FilePreview
+    └── AgentBrowser (press 'a')
+        ├── AgentTable (categorized)
+        ├── AgentDetailPanel
+        └── AgentForm (create/edit)
+            └── AgentExecutionOverlay
+                ├── DocumentSelectionStage
+                ├── AgentConfigStage
+                └── ExecutionMonitorStage
 ```
 
 ### **Key Patterns**

@@ -4,6 +4,8 @@ Main CLI entry point for emdx
 """
 
 from typing import Optional
+import logging
+import os
 
 import typer
 from rich.console import Console
@@ -14,16 +16,73 @@ from emdx.commands.browse import app as browse_app
 from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.core import app as core_app
 from emdx.commands.executions import app as executions_app
+from emdx.commands.gdoc import app as gdoc_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
+from emdx.commands.agents import app as agents_app
 from emdx.commands.tags import app as tag_app
+from emdx.commands.tasks import app as tasks_app
+from emdx.commands.workflows import app as workflows_app
 from emdx.ui.gui import gui
 
 console = Console()
 
 # Create main app
-app = typer.Typer()
+app = typer.Typer(
+    name="emdx",
+    help="Documentation Index Management System - A powerful knowledge base for developers",
+    add_completion=True,
+    rich_markup_mode="rich",
+)
+
+# Add subcommand groups
+# Core commands are added directly to the main app
+for command in core_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Browse commands are added directly to the main app
+for command in browse_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Gist commands are added directly to the main app
+for command in gist_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Google Docs commands are added directly to the main app
+for command in gdoc_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Tag commands are added directly to the main app
+for command in tag_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Add executions as a subcommand group
+app.add_typer(executions_app, name="exec", help="Manage Claude executions")
+
+# Add claude execution as a subcommand group
+app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
+
+# Add the new unified analyze command
+app.command(name="analyze")(analyze_app.registered_commands[0].callback)
+
+# Add the new unified maintain command
+app.command(name="maintain")(maintain_app.registered_commands[0].callback)
+
+# Add lifecycle as a subcommand group (keeping this as-is)
+app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
+
+# Add agents as a subcommand group
+app.add_typer(agents_app, name="agent", help="Manage and run AI agents")
+
+# Add tasks as a subcommand group
+app.add_typer(tasks_app, name="task", help="Task management")
+
+# Add workflows as a subcommand group
+app.add_typer(workflows_app, name="workflow", help="Manage and run multi-stage workflows")
+
+# Add the gui command
+app.command()(gui)
 
 
 # Version command
@@ -73,8 +132,8 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # TODO: Set up database connection using db_url
-    # TODO: Set up logging based on verbose/quiet flags
+    # Note: Database connections are established per-command as needed
+    # Note: Logging is configured per-module as needed
 
 
 def safe_register_commands(target_app, source_app, prefix=""):
@@ -92,6 +151,7 @@ def safe_register_commands(target_app, source_app, prefix=""):
 safe_register_commands(app, core_app, "core")
 safe_register_commands(app, browse_app, "browse")
 safe_register_commands(app, gist_app, "gist")
+safe_register_commands(app, gdoc_app, "gdoc")
 safe_register_commands(app, tag_app, "tags")
 safe_register_commands(app, analyze_app, "analyze")
 safe_register_commands(app, maintain_app, "maintain")

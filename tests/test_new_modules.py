@@ -25,11 +25,11 @@ class TestModuleImports:
         assert hasattr(tag_commands, "untag")
 
     def test_textual_browser_minimal_import(self):
-        """Test that textual_browser_minimal module can be imported."""
+        """Test that textual_browser module can be imported."""
         from emdx.ui import textual_browser as textual_browser_minimal
 
         assert hasattr(textual_browser_minimal, "FullScreenView")
-        assert hasattr(textual_browser_minimal, "MinimalDocumentBrowser")
+        # Note: MinimalDocumentBrowser was deprecated and removed
 
     def test_nvim_wrapper_import(self):
         """Test that nvim_wrapper module can be imported."""
