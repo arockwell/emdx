@@ -70,8 +70,9 @@ class AgentExecutor:
         log_file = log_dir / f"agent-{agent_id}-{datetime.now().timestamp()}.log"
         
         # Create execution record
+        # Use None for doc_id when there's no input document (FK constraint allows NULL)
         execution_id = create_execution(
-            doc_id=input_doc_id or 0,
+            doc_id=input_doc_id if input_doc_id else None,
             doc_title=doc_title,
             log_file=str(log_file),
             working_dir=work_dir

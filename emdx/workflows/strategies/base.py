@@ -131,8 +131,10 @@ class ExecutionStrategy(ABC):
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
+            # Use None for doc_id when there's no input document (FK constraint allows NULL)
+            input_doc_id = context.get('input_doc_id')
             exec_id = execution_service.create_execution(
-                doc_id=context.get('input_doc_id', 0),
+                doc_id=input_doc_id if input_doc_id else None,
                 doc_title=f"Workflow Agent Run #{individual_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,
@@ -324,8 +326,10 @@ Report the document ID that was created."""
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
+            # Use None for doc_id when there's no input document (FK constraint allows NULL)
+            input_doc_id = context.get('input_doc_id')
             exec_id = execution_service.create_execution(
-                doc_id=context.get('input_doc_id', 0),
+                doc_id=input_doc_id if input_doc_id else None,
                 doc_title=f"Workflow Synthesis #{stage_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,
