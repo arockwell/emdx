@@ -116,7 +116,7 @@ class WorkflowExecutor:
             # Merge workflow default variables first
             context.update(workflow.variables)
 
-            # Then override with provided variables (so user input wins)
+            # Then merge user-provided variables (override defaults)
             if input_variables:
                 context.update(input_variables)
 
