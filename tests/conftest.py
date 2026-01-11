@@ -1,10 +1,63 @@
 """Shared pytest fixtures for emdx tests."""
 
+import os
 import tempfile
 from pathlib import Path
 
 import pytest
 from test_fixtures import DatabaseForTesting
+
+
+# =============================================================================
+# CRITICAL: Automatic test database isolation
+# =============================================================================
+# This fixture runs automatically for ALL tests, ensuring that no test can
+# ever accidentally write to the real user database at ~/.config/emdx/knowledge.db
+#
+# It works by setting EMDX_TEST_DB environment variable before any emdx imports,
+# which redirects all database operations to a temporary file.
+# =============================================================================
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_test_database(tmp_path_factory):
+    """Automatically isolate ALL tests from the real database.
+
+    This session-scoped fixture runs once before any tests and ensures that
+    the global db_connection in emdx.database.connection uses a temp database
+    instead of the real user database.
+
+    This protects against:
+    - Tests that forget to mock the database
+    - Tests that use CLI commands (emdx save, etc.)
+    - Tests that import modules that use the global db_connection
+    - Workflow agents that generate tests without proper isolation
+    """
+    # Create a temp database file that persists for the entire test session
+    test_db_dir = tmp_path_factory.mktemp("emdx_test_db")
+    test_db_path = test_db_dir / "test_knowledge.db"
+
+    # Set environment variable BEFORE any emdx imports
+    old_env = os.environ.get("EMDX_TEST_DB")
+    os.environ["EMDX_TEST_DB"] = str(test_db_path)
+
+    # Force reload of the db_connection singleton with the new path
+    # This is necessary because the module may have been imported already
+    try:
+        import emdx.database.connection as conn_module
+        # Recreate the global instance with the test path
+        conn_module.db_connection = conn_module.DatabaseConnection()
+        # Run migrations on the test database
+        conn_module.db_connection.ensure_schema()
+    except ImportError:
+        pass  # Module not imported yet, will pick up env var on first import
+
+    yield test_db_path
+
+    # Cleanup
+    if old_env is None:
+        os.environ.pop("EMDX_TEST_DB", None)
+    else:
+        os.environ["EMDX_TEST_DB"] = old_env
 
 
 @pytest.fixture(scope="function")

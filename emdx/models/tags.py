@@ -4,6 +4,7 @@ import sqlite3
 from typing import Any, Optional
 
 from emdx.database import db
+from emdx.utils.datetime import parse_datetime
 from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
 
@@ -199,16 +200,12 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 
         tags = []
         for row in cursor.fetchall():
-            from datetime import datetime
-
             created_at = row[3]
             last_used = row[4]
 
-            # Parse datetime strings if needed
-            if isinstance(created_at, str):
-                created_at = datetime.fromisoformat(created_at) if created_at else None
-            if isinstance(last_used, str):
-                last_used = datetime.fromisoformat(last_used) if last_used else None
+            # Parse datetime strings if needed using centralized utility
+            created_at = parse_datetime(created_at)
+            last_used = parse_datetime(last_used)
 
             # Normalize tag name to emoji for display
             normalized_name = normalize_tag_to_emoji(row[1])

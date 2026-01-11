@@ -14,6 +14,7 @@ from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
 from ..models.documents import delete_document, get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags
+from ..utils.datetime import parse_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -251,11 +252,13 @@ class DocumentMerger:
         
         # Recent access
         if doc.get('accessed_at'):
-            days_since_access = (datetime.now() - datetime.fromisoformat(doc['accessed_at'])).days
-            if days_since_access < 7:
-                score += 2
-            elif days_since_access < 30:
-                score += 1
+            accessed_at = parse_datetime(doc['accessed_at'])
+            if accessed_at:
+                days_since_access = (datetime.now() - accessed_at).days
+                if days_since_access < 7:
+                    score += 2
+                elif days_since_access < 30:
+                    score += 1
         
         return score
     

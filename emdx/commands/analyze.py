@@ -20,6 +20,7 @@ from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
+from ..utils.datetime import parse_datetime
 
 console = Console()
 
@@ -475,9 +476,9 @@ def _analyze_projects():
     table.add_column("Last Updated")
     
     for proj in projects:
-        last_updated = datetime.fromisoformat(proj['last_updated'])
-        days_ago = (datetime.now() - last_updated).days
-        
+        last_updated = parse_datetime(proj['last_updated'])
+        days_ago = (datetime.now() - last_updated).days if last_updated else 0
+
         table.add_row(
             proj['project'] or "[No Project]",
             str(proj['doc_count']),
@@ -771,8 +772,8 @@ def _collect_projects_data() -> Dict[str, Any]:
     }
 
     for proj in projects:
-        last_updated = datetime.fromisoformat(proj['last_updated'])
-        days_ago = (datetime.now() - last_updated).days
+        last_updated = parse_datetime(proj['last_updated'])
+        days_ago = (datetime.now() - last_updated).days if last_updated else 0
 
         result["projects"].append({
             "name": proj['project'] or "[No Project]",

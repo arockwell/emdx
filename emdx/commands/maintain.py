@@ -656,13 +656,14 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                     cmd_display = ' '.join(cmdline[:3]) + '...'
                 else:
                     cmd_display = ' '.join(cmdline)
-                
+
                 # Get memory usage
+                mem_str = ""
                 try:
                     mem_mb = proc.memory_info().rss / 1024 / 1024
                     mem_str = f", {mem_mb:.0f}MB"
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    mem_str = ""
+                    pass
 
                 console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
             except (psutil.NoSuchProcess, psutil.AccessDenied):

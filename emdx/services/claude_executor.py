@@ -9,6 +9,7 @@ This separation breaks the bidirectional dependency between commands and service
 """
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,8 +36,6 @@ def parse_task_content(task: str) -> str:
     Returns:
         Expanded task content with file contents included
     """
-    import re
-
     # Find all @filename references
     pattern = r'@([^\s]+)'
 
