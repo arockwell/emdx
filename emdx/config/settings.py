@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
-# Claude model configuration
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+# Re-export constants for backward compatibility
+from .constants import DEFAULT_CLAUDE_MODEL
 
 # Module-level variable for runtime database path override
 _db_path_override: Optional[Path] = None

@@ -2,6 +2,7 @@
 
 from typing import Any, Optional
 
+from emdx.config.constants import DEFAULT_BROWSE_LIMIT, DEFAULT_LIST_LIMIT
 from emdx.database import db
 
 
@@ -15,15 +16,15 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
     return db.get_document(identifier)
 
 
-def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_documents(project: Optional[str] = None, limit: int = DEFAULT_BROWSE_LIMIT) -> list[dict[str, Any]]:
     """List documents with optional project filter"""
     return db.list_documents(project, limit)
 
 
 def search_documents(
-    query: str, 
-    project: Optional[str] = None, 
-    limit: int = 10, 
+    query: str,
+    project: Optional[str] = None,
+    limit: int = DEFAULT_LIST_LIMIT, 
     fuzzy: bool = False,
     created_after: Optional[str] = None,
     created_before: Optional[str] = None,
@@ -46,7 +47,7 @@ def delete_document(identifier: str, hard_delete: bool = False) -> bool:
     return db.delete_document(identifier, hard_delete)
 
 
-def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_documents(limit: int = DEFAULT_LIST_LIMIT) -> list[dict[str, Any]]:
     """Get recently accessed documents"""
     return db.get_recent_documents(limit)
 
@@ -56,7 +57,7 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
     return db.get_stats(project)
 
 
-def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_deleted_documents(days: Optional[int] = None, limit: int = DEFAULT_BROWSE_LIMIT) -> list[dict[str, Any]]:
     """List soft-deleted documents"""
     return db.list_deleted_documents(days, limit)
 

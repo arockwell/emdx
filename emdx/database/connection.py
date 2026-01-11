@@ -68,6 +68,9 @@ class DatabaseConnection:
         if conn is None:
             conn = self._create_connection()
 
+        # Enable foreign key constraints for this connection
+        conn.execute("PRAGMA foreign_keys = ON")
+
         try:
             yield conn
         finally:

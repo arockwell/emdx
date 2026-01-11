@@ -17,7 +17,6 @@ import typer
 from rich.console import Console
 
 from ..models.documents import get_document
-from ..utils.constants import DEFAULT_CLAUDE_MODEL
 from ..models.executions import (
     Execution,
     create_execution,
@@ -29,6 +28,7 @@ from ..prompts import build_prompt
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
+from ..services.claude_executor import execute_claude_detached as _execute_claude_detached
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
 console = Console()
@@ -89,6 +89,71 @@ EXECUTION_TYPE_EMOJIS = {
     ExecutionType.GAMEPLAN: "🎯",
     ExecutionType.GENERIC: "⚡"
 }
+
+
+# Environment variables that should be removed before passing to subprocesses
+# These may contain sensitive credentials or tokens
+SENSITIVE_ENV_VARS = frozenset({
+    # API keys and tokens
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AZURE_CLIENT_SECRET",
+    "GCP_SERVICE_ACCOUNT_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITLAB_TOKEN",
+    "NPM_TOKEN",
+    "PYPI_TOKEN",
+    # Database credentials
+    "DATABASE_PASSWORD",
+    "DB_PASSWORD",
+    "POSTGRES_PASSWORD",
+    "MYSQL_PASSWORD",
+    "REDIS_PASSWORD",
+    "MONGODB_PASSWORD",
+    # Generic sensitive patterns
+    "SECRET_KEY",
+    "PRIVATE_KEY",
+    "ENCRYPTION_KEY",
+    "JWT_SECRET",
+    "SESSION_SECRET",
+    # Cloud provider secrets
+    "HEROKU_API_KEY",
+    "DIGITALOCEAN_TOKEN",
+    "LINODE_TOKEN",
+    "VULTR_API_KEY",
+    # CI/CD tokens
+    "CIRCLE_TOKEN",
+    "TRAVIS_TOKEN",
+    "JENKINS_TOKEN",
+})
+
+
+def sanitize_environment() -> dict[str, str]:
+    """Create a sanitized copy of the environment for subprocess execution.
+
+    Removes sensitive environment variables that may contain credentials,
+    tokens, or secrets that should not be exposed to subprocesses.
+
+    Returns:
+        A dictionary containing the sanitized environment variables.
+    """
+    sanitized = {}
+    for key, value in os.environ.items():
+        # Skip explicitly sensitive variables
+        if key in SENSITIVE_ENV_VARS:
+            continue
+        # Skip variables matching sensitive patterns (case-insensitive check)
+        key_upper = key.upper()
+        if any(pattern in key_upper for pattern in ("_SECRET", "_TOKEN", "_KEY", "_PASSWORD", "_CREDENTIAL")):
+            # Allow PATH and similar non-sensitive keys
+            if key_upper not in ("PATH", "HOME", "USER", "SHELL", "LANG", "TERM"):
+                continue
+        sanitized[key] = value
+    return sanitized
 
 
 def generate_unique_execution_id(doc_id: str) -> str:
@@ -372,130 +437,24 @@ def execute_with_claude_detached(
     This function starts Claude and returns immediately without waiting.
     The subprocess continues running independently of the parent process.
 
+    Note: This is a thin wrapper around the service layer implementation.
+    The context parameter is ignored (kept for backwards compatibility).
+
     Returns:
         The process ID of the started subprocess.
     """
     if allowed_tools is None:
         allowed_tools = DEFAULT_ALLOWED_TOOLS
 
-    # Validate environment first
-    is_valid, env_info = validate_execution_environment(verbose=False)
-    if not is_valid:
-        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
-        console.print(f"[red]Environment validation failed: {error_msg}[/red]")
-        raise RuntimeError(f"Environment validation failed: {error_msg}")
-    
-    # Ensure claude is in PATH
-    ensure_claude_in_path()
-
-    # Expand @filename references
-    expanded_task = parse_task_content(task)
-
-    # Build Claude command
-    cmd = [
-        "claude",
-        "--print", expanded_task,
-        "--allowedTools", ",".join(allowed_tools),
-        "--output-format", "stream-json",
-        "--model", DEFAULT_CLAUDE_MODEL,
-        "--verbose"
-    ]
-
-    # Ensure log directory exists
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Initialize structured logger for main process
-    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
-    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'}", {
-        "doc_id": doc_id,
-        "working_dir": working_dir,
-        "allowed_tools": allowed_tools
-    })
-
-    # Start subprocess in detached mode using wrapper
-    try:
-        # Get the wrapper script path
-        wrapper_path = Path(__file__).parent.parent / "utils" / "claude_wrapper.py"
-
-        # Build wrapper command: wrapper.py exec_id log_file claude_command...
-        # Use the Python interpreter from the current environment
-        # If we're in pipx, use the underlying venv Python
-        python_path = sys.executable
-        if "pipx" in python_path and "venvs" in python_path:
-            # We're running from pipx, use the venv's python directly
-            import sysconfig
-            venv_bin = Path(sysconfig.get_path("scripts"))
-            python_path = str(venv_bin / "python")
-        
-        wrapper_cmd = [
-            python_path,
-            str(wrapper_path),
-            str(execution_id),  # Convert numeric ID to string for command line
-            str(log_file)
-        ] + cmd
-
-        # Use nohup for true detachment
-        nohup_cmd = ["nohup"] + wrapper_cmd
-
-
-        # Open log file for appending
-        log_handle = open(log_file, 'a')
-
-        # Ensure PATH contains the claude binary location
-        env = os.environ.copy()
-        env['PYTHONUNBUFFERED'] = '1'
-        # Make sure PATH is preserved
-        if 'PATH' not in env:
-            env['PATH'] = '/usr/local/bin:/usr/bin:/bin'
-
-        process = subprocess.Popen(
-            nohup_cmd,
-            stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
-            stdout=log_handle,  # Direct to file, no pipe
-            stderr=subprocess.STDOUT,
-            cwd=working_dir,
-            env=env,
-            start_new_session=True,  # Better than preexec_fn
-            close_fds=True  # Don't inherit file descriptors
-        )
-
-        # Close the file handle in parent process
-        log_handle.close()
-
-        # Don't write to log - let wrapper handle all logging
-
-        # Return immediately - don't wait or read from pipes
-        # Note: Don't use console.print here as stdout might be redirected
-        # Print to stderr instead to avoid log pollution
-        print(f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr)
-        print(f"Monitor with: emdx exec show {execution_id}", file=sys.stderr)
-
-        return process.pid
-
-    except FileNotFoundError as e:
-        # Handle missing nohup
-        if "nohup" in str(e):
-            # Fallback without nohup
-            log_handle = open(log_file, 'a')
-
-            process = subprocess.Popen(
-                wrapper_cmd,  # Use wrapper even without nohup
-                stdin=subprocess.DEVNULL,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                cwd=working_dir,
-                env=env,  # Use same env as nohup version
-                start_new_session=True,
-                close_fds=True
-            )
-
-            log_handle.close()
-
-            # Print to stderr to avoid log pollution
-            print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)
-            return process.pid
-        else:
-            raise
+    # Delegate to service layer
+    return _execute_claude_detached(
+        task=task,
+        execution_id=execution_id,
+        log_file=log_file,
+        allowed_tools=allowed_tools,
+        working_dir=working_dir,
+        doc_id=doc_id,
+    )
 
 
 def execute_with_claude(
@@ -562,6 +521,10 @@ def execute_with_claude(
 
     # Start subprocess
     try:
+        # Use sanitized environment to prevent credential leakage
+        sanitized_env = sanitize_environment()
+        sanitized_env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered for subprocesses
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -570,8 +533,7 @@ def execute_with_claude(
             bufsize=0,  # Unbuffered
             universal_newlines=True,
             cwd=working_dir,  # Run in specified working directory
-            # Force unbuffered for any Python subprocesses
-            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
+            env=sanitized_env,
             # Detach from parent process group so it survives parent exit
             preexec_fn=os.setsid if os.name != 'nt' else None
         )
@@ -625,12 +587,31 @@ def execute_with_claude(
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
         return 1
-    except Exception as e:
-        error_msg = f"Error executing Claude: {e}"
+    except subprocess.SubprocessError as e:
+        error_msg = f"Subprocess error executing Claude: {type(e).__name__}: {e}"
         with open(log_file, 'a') as log:
             log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
         if verbose:
             console.print(f"[red]{error_msg}[/red]")
+        return 1
+    except OSError as e:
+        error_msg = f"OS error executing Claude: {type(e).__name__}: {e}"
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        if verbose:
+            console.print(f"[red]{error_msg}[/red]")
+        return 1
+    except Exception as e:
+        error_msg = f"Unexpected error executing Claude: {type(e).__name__}: {e}"
+        with open(log_file, 'a') as log:
+            log.write(f"\n{format_timestamp()} ❌ {error_msg}\n")
+        if verbose:
+            console.print(f"[red]{error_msg}[/red]")
+        # Log with traceback for unexpected errors
+        import traceback
+        main_logger.error(f"Unexpected error in execute_with_claude: {error_msg}", {
+            "traceback": traceback.format_exc()
+        })
         return 1
 
 

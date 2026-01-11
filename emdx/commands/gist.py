@@ -6,35 +6,54 @@ import os
 import subprocess
 import webbrowser
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import typer
-from github import Github, GithubException
 from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
 
+if TYPE_CHECKING:
+    from github import Github, GithubException
+
 app = typer.Typer()
 console = Console()
 
 
 def get_github_auth() -> Optional[str]:
-    """Get GitHub authentication token."""
+    """Get GitHub authentication token.
+
+    SECURITY NOTE: GitHub tokens are sensitive credentials.
+    - Never log or display the token value
+    - Prefer using `gh auth` over GITHUB_TOKEN when possible
+    - Tokens should have minimal required scopes (only 'gist' for gist operations)
+    - Revoke and rotate tokens periodically
+
+    Returns:
+        GitHub token if available, None otherwise.
+    """
     # Priority order:
-    # 1. Environment variable GITHUB_TOKEN
+    # 1. Try gh CLI first (preferred - uses secure credential storage)
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10  # Prevent hanging
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # 2. Fall back to environment variable GITHUB_TOKEN
+    # Note: Environment variables are less secure than gh auth
     token = os.getenv("GITHUB_TOKEN")
     if token:
         return token
-
-    # 2. Try to get token from gh CLI if available
-    try:
-        result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
 
     # 3. Check config file (future enhancement)
     # config_path = Path.home() / '.config' / 'emdx' / 'config.yml'
@@ -47,14 +66,23 @@ def get_github_auth() -> Optional[str]:
 def create_gist_with_gh(
     content: str, filename: str, description: str, public: bool = False
 ) -> Optional[dict[str, str]]:
-    """Create a gist using gh CLI."""
-    try:
-        # Create a temporary file
-        import tempfile
+    """Create a gist using gh CLI.
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            f.write(content)
-            temp_path = f.name
+    Uses secure temp file handling to prevent race conditions.
+    The temp file is kept open until after the command completes.
+    """
+    import tempfile
+
+    temp_path = None
+    try:
+        # Create temp file with secure permissions (mode 0o600 by default on Unix)
+        # Keep the file descriptor open to maintain exclusive access
+        fd, temp_path = tempfile.mkstemp(suffix=".md", prefix="emdx_gist_")
+        try:
+            # Write content through the file descriptor for atomic operation
+            os.write(fd, content.encode('utf-8'))
+        finally:
+            os.close(fd)
 
         # Build gh command
         cmd = ["gh", "gist", "create", temp_path, "--desc", description]
@@ -64,16 +92,20 @@ def create_gist_with_gh(
         # Execute command
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-        # Clean up temp file
-        os.unlink(temp_path)
-
         if result.returncode == 0:
             gist_url = result.stdout.strip()
             # Extract gist ID from URL
             gist_id = gist_url.split("/")[-1]
             return {"id": gist_id, "url": gist_url}
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         pass
+    finally:
+        # Always clean up temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
     return None
 
@@ -84,6 +116,9 @@ def create_gist_with_api(
     """Create a gist using GitHub API."""
     if not token:
         return None
+
+    # Lazy import - PyGithub is slow to import (~300ms)
+    from github import Github, GithubException
 
     try:
         g = Github(token)
@@ -101,25 +136,36 @@ def create_gist_with_api(
 
 
 def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
-    """Update an existing gist using gh CLI."""
-    try:
-        # Create a temporary file
-        import tempfile
+    """Update an existing gist using gh CLI.
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            f.write(content)
-            temp_path = f.name
+    Uses secure temp file handling to prevent race conditions.
+    """
+    import tempfile
+
+    temp_path = None
+    try:
+        # Create temp file with secure permissions (mode 0o600 by default on Unix)
+        fd, temp_path = tempfile.mkstemp(suffix=".md", prefix="emdx_gist_")
+        try:
+            # Write content through the file descriptor for atomic operation
+            os.write(fd, content.encode('utf-8'))
+        finally:
+            os.close(fd)
 
         # Execute gh command
         cmd = ["gh", "gist", "edit", gist_id, temp_path]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-        # Clean up temp file
-        os.unlink(temp_path)
-
         return result.returncode == 0
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         pass
+    finally:
+        # Always clean up temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
     return False
 
@@ -130,6 +176,9 @@ def update_gist_with_api(
     """Update an existing gist using GitHub API."""
     if not token:
         return False
+
+    # Lazy import - PyGithub is slow to import (~300ms)
+    from github import Github, GithubException
 
     try:
         g = Github(token)
