@@ -141,10 +141,10 @@ class DocumentBrowserPresenter:
                             title=title,
                             tags=doc_tags,
                             tags_display=tags_display,
-                            project=doc.get("project", "default"),
-                            access_count=doc.get("access_count", 0),
-                            created_at=doc.get("created_at"),
-                            accessed_at=doc.get("accessed_at"),
+                            project=doc["project"] if doc["project"] else "default",
+                            access_count=doc["access_count"] or 0,
+                            created_at=doc["created_at"],
+                            accessed_at=doc["accessed_at"],
                         )
                     )
 

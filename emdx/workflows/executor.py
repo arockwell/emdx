@@ -834,8 +834,9 @@ class WorkflowExecutor:
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
+            # Use None for doc_id if no input document (workflow agents don't always have one)
             exec_id = execution_service.create_execution(
-                doc_id=context.get('input_doc_id', 0),
+                doc_id=context.get('input_doc_id'),
                 doc_title=f"Workflow Agent Run #{individual_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,
