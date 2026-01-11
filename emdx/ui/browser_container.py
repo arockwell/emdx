@@ -20,7 +20,6 @@ class BrowserContainerWidget(Widget):
     BrowserContainerWidget {
         layout: vertical;
         height: 100%;
-        offset: 0 -1;
     }
 
     #browser-mount {
@@ -188,17 +187,27 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "document":
+                from .document_browser import DocumentBrowser
+                self.browsers[browser_type] = DocumentBrowser()
+                logger.info("DocumentBrowser created successfully")
             else:
-                # Fallback to document
+                # Unknown browser type - fallback to document
+                logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
+                from .document_browser import DocumentBrowser
+                self.browsers["document"] = DocumentBrowser()
                 browser_type = "document"
 
         # Mount the new browser
         browser = self.browsers[browser_type]
         await mount_point.mount(browser)
 
-        # Set focus to the new browser
-        if hasattr(browser, 'focus'):
-            browser.focus()
+        # Set focus to the new browser after mount is complete
+        def do_focus():
+            if hasattr(browser, 'focus'):
+                browser.focus()
+
+        self.call_after_refresh(do_focus)
 
         # Parent reference is set automatically by Textual during mount
 

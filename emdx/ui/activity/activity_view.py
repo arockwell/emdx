@@ -18,7 +18,7 @@ from textual.containers import Horizontal, Vertical, ScrollableContainer
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import DataTable, Static, Markdown, RichLog
+from textual.widgets import DataTable, Static, RichLog
 
 from .sparkline import sparkline
 
@@ -233,8 +233,11 @@ class ActivityView(Widget):
         padding: 0 1;
     }
 
-    #preview-content {
+    #preview-scroll {
         height: 1fr;
+    }
+
+    #preview-content {
         padding: 0 1;
     }
 
@@ -264,8 +267,8 @@ class ActivityView(Widget):
     notification_visible = reactive(False)
     notification_is_error = reactive(False)
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.activity_items: List[ActivityItem] = []
         self.flat_items: List[ActivityItem] = []  # Flattened for display
         self.selected_idx: int = 0
@@ -277,7 +280,7 @@ class ActivityView(Widget):
 
     def compose(self) -> ComposeResult:
         # Status bar
-        yield Static("", id="status-bar")
+        yield Static("Loading...", id="status-bar")
 
         # Notification bar (hidden by default)
         yield Static("", id="notification", classes="notification")
@@ -292,7 +295,8 @@ class ActivityView(Widget):
             # Right: Preview
             with Vertical(id="preview-panel"):
                 yield Static("PREVIEW", id="preview-header")
-                yield ScrollableContainer(Markdown("", id="preview-content"))
+                with ScrollableContainer(id="preview-scroll"):
+                    yield RichLog(id="preview-content", highlight=True, markup=True, wrap=True, auto_scroll=False)
                 yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
 
     async def on_mount(self) -> None:
@@ -399,7 +403,7 @@ class ActivityView(Widget):
     async def _load_direct_saves(self) -> None:
         """Load documents that weren't created by workflows."""
         try:
-            # Get recent documents
+            # Get recent documents (top-level only)
             docs = doc_db.list_documents(limit=100, include_archived=False, parent_id=None)
 
             # Filter to last week
@@ -421,6 +425,10 @@ class ActivityView(Widget):
                 ):
                     continue
 
+                # Check if this document has children
+                children_docs = doc_db.get_children(doc["id"], include_archived=False)
+                has_children = len(children_docs) > 0
+
                 item = ActivityItem(
                     item_type="document",
                     item_id=doc["id"],
@@ -429,6 +437,10 @@ class ActivityView(Widget):
                     timestamp=created,
                     doc_id=doc["id"],
                 )
+
+                # Mark that this document can be expanded
+                if has_children:
+                    item._has_doc_children = True
 
                 self.activity_items.append(item)
 
@@ -459,9 +471,13 @@ class ActivityView(Widget):
             # Indentation based on depth
             indent = "  " * item.depth
 
-            # Expand indicator for items with children
-            if item.children:
-                expand = "▼ " if item.expanded else "▶ "
+            # Expand indicator for items that can have children
+            # Workflows, synthesis items, and documents with children can be expanded
+            has_doc_children = getattr(item, '_has_doc_children', False)
+            if item.expanded and item.children:
+                expand = "▼ "
+            elif item.item_type == "workflow" or (item.item_type == "synthesis" and item.children) or has_doc_children:
+                expand = "▶ "
             else:
                 expand = "  "
 
@@ -551,19 +567,48 @@ class ActivityView(Widget):
 
         return counts
 
+    def _render_markdown_preview(self, content: str) -> None:
+        """Render markdown content to the preview RichLog."""
+        from rich.markdown import Markdown as RichMarkdown
+
+        preview = self.query_one("#preview-content", RichLog)
+        preview.clear()
+
+        try:
+            # Limit preview to first 5000 chars for performance
+            if len(content) > 5000:
+                content = content[:5000] + "\n\n[dim]... (truncated for preview)[/dim]"
+            if content.strip():
+                markdown = RichMarkdown(content)
+                preview.write(markdown)
+            else:
+                preview.write("[dim]Empty document[/dim]")
+        except Exception:
+            # Fallback to plain text if markdown fails
+            preview.write(content[:5000] if content else "[dim]No content[/dim]")
+
     async def _update_preview(self) -> None:
         """Update the preview pane with selected item."""
-        preview = self.query_one("#preview-content", Markdown)
+        preview = self.query_one("#preview-content", RichLog)
+        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
         preview_log = self.query_one("#preview-log", RichLog)
         header = self.query_one("#preview-header", Static)
 
         # Stop any existing stream
         self._stop_stream()
 
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            preview.update("*Select an item to preview*")
-            preview.display = True
+        def show_markdown():
+            preview_scroll.display = True
             preview_log.display = False
+
+        def show_log():
+            preview_scroll.display = False
+            preview_log.display = True
+
+        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+            preview.clear()
+            preview.write("[dim]Select an item to preview[/dim]")
+            show_markdown()
             header.update("PREVIEW")
             return
 
@@ -581,9 +626,8 @@ class ActivityView(Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    preview.update(f"# {title}\n\n{content}")
-                    preview.display = True
-                    preview_log.display = False
+                    self._render_markdown_preview(f"# {title}\n\n{content}")
+                    show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
             except Exception as e:
@@ -595,13 +639,13 @@ class ActivityView(Widget):
             return
 
         # Default
-        preview.update(f"*{item.title}*")
-        preview.display = True
-        preview_log.display = False
+        preview.clear()
+        preview.write(f"[italic]{item.title}[/italic]")
+        show_markdown()
 
     async def _show_workflow_summary(self, item: ActivityItem) -> None:
         """Show workflow summary in preview."""
-        preview = self.query_one("#preview-content", Markdown)
+        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
         preview_log = self.query_one("#preview-log", RichLog)
         header = self.query_one("#preview-header", Static)
 
@@ -632,18 +676,18 @@ class ActivityView(Widget):
             for child in item.children:
                 lines.append(f"- {child.status_icon} {child.title}")
 
-        preview.update("\n".join(lines))
-        preview.display = True
+        self._render_markdown_preview("\n".join(lines))
+        preview_scroll.display = True
         preview_log.display = False
         header.update(f"⚡ Workflow #{run['id']}")
 
     async def _show_live_log(self, item: ActivityItem) -> None:
         """Show live log for running workflow."""
-        preview = self.query_one("#preview-content", Markdown)
+        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
         preview_log = self.query_one("#preview-log", RichLog)
         header = self.query_one("#preview-header", Static)
 
-        preview.display = False
+        preview_scroll.display = False
         preview_log.display = True
         preview_log.clear()
 
@@ -847,6 +891,61 @@ class ActivityView(Widget):
         self._flatten_items()
         await self._update_table()
 
+    async def _expand_document(self, item: ActivityItem) -> None:
+        """Expand a document to show its children."""
+        if item.item_type != "document" or not item.doc_id:
+            return
+
+        if item.expanded:
+            return
+
+        if not getattr(item, '_has_doc_children', False):
+            return
+
+        children = []
+
+        try:
+            if HAS_DOCS:
+                child_docs = doc_db.get_children(item.doc_id, include_archived=False)
+
+                for child_doc in child_docs:
+                    # Get relationship type
+                    relationship = child_doc.get("relationship", "")
+                    rel_icon = {
+                        "supersedes": "↑",
+                        "exploration": "◇",
+                        "variant": "≈",
+                    }.get(relationship, "")
+
+                    title = child_doc.get("title", "")[:30]
+                    if rel_icon:
+                        title = f"{rel_icon} {title}"
+
+                    child_item = ActivityItem(
+                        item_type="document",
+                        item_id=child_doc["id"],
+                        title=title,
+                        status="completed",
+                        timestamp=item.timestamp,
+                        doc_id=child_doc["id"],
+                        depth=item.depth + 1,
+                    )
+
+                    # Check if this child also has children
+                    grandchildren = doc_db.get_children(child_doc["id"], include_archived=False)
+                    if grandchildren:
+                        child_item._has_doc_children = True
+
+                    children.append(child_item)
+
+        except Exception as e:
+            logger.error(f"Error expanding document: {e}", exc_info=True)
+
+        item.children = children
+        item.expanded = True
+        self._flatten_items()
+        await self._update_table()
+
     def _collapse_item(self, item: ActivityItem) -> None:
         """Collapse an expanded item."""
         item.expanded = False
@@ -868,9 +967,12 @@ class ActivityView(Widget):
             return
 
         item = self.flat_items[self.selected_idx]
+        has_doc_children = getattr(item, '_has_doc_children', False)
 
         if item.item_type == "workflow" and not item.expanded:
             await self._expand_workflow(item)
+        elif item.item_type == "document" and not item.expanded and has_doc_children:
+            await self._expand_document(item)
         elif item.expanded:
             self._collapse_item(item)
             await self._update_table()
@@ -886,6 +988,8 @@ class ActivityView(Widget):
         item = self.flat_items[self.selected_idx]
         if item.item_type == "workflow" and not item.expanded:
             await self._expand_workflow(item)
+        elif item.item_type == "document" and not item.expanded and getattr(item, '_has_doc_children', False):
+            await self._expand_document(item)
         elif item.item_type == "synthesis" and not item.expanded:
             item.expanded = True
             self._flatten_items()
@@ -937,6 +1041,11 @@ class ActivityView(Widget):
         if event.cursor_row is not None:
             self.selected_idx = event.cursor_row
             self.call_later(self._update_preview)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Handle row selection (Enter key on DataTable)."""
+        # This is triggered when user presses Enter on a row
+        self.call_later(self.action_select)
 
     def on_unmount(self) -> None:
         """Cleanup on unmount."""

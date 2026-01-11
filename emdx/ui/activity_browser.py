@@ -45,7 +45,7 @@ class ActivityBrowser(Widget):
         self.activity_view: Optional[ActivityView] = None
 
     def compose(self) -> ComposeResult:
-        self.activity_view = ActivityView()
+        self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
             "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ "
@@ -70,19 +70,19 @@ class ActivityBrowser(Widget):
         # Could trigger app-level notifications here
         pass
 
-    def action_switch_activity(self) -> None:
+    async def action_switch_activity(self) -> None:
         """Already on activity, do nothing."""
         pass
 
-    def action_switch_workflow(self) -> None:
+    async def action_switch_workflow(self) -> None:
         """Switch to workflow browser."""
         if hasattr(self.app, "switch_browser"):
-            self.app.call_later(lambda: self.app.switch_browser("workflow"))
+            await self.app.switch_browser("workflow")
 
-    def action_switch_documents(self) -> None:
+    async def action_switch_documents(self) -> None:
         """Switch to document browser."""
         if hasattr(self.app, "switch_browser"):
-            self.app.call_later(lambda: self.app.switch_browser("document"))
+            await self.app.switch_browser("document")
 
     def action_show_help(self) -> None:
         """Show help."""
@@ -96,6 +96,10 @@ class ActivityBrowser(Widget):
     def focus(self, scroll_visible: bool = True) -> None:
         """Focus the activity view."""
         if self.activity_view:
-            table = self.activity_view.query_one("#activity-table")
-            if table:
-                table.focus()
+            try:
+                table = self.activity_view.query_one("#activity-table")
+                if table:
+                    table.focus()
+            except Exception:
+                # Widget not mounted yet, will focus on mount
+                pass
