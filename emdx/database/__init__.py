@@ -31,6 +31,11 @@ class SQLiteDatabase:
 
     def __init__(self, db_path=None):
         self._connection = DatabaseConnection(db_path)
+    
+    @property
+    def db_path(self):
+        """Get database path"""
+        return self._connection.db_path
 
     def get_connection(self):
         """Get database connection - delegates to connection module"""

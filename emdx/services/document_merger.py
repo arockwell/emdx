@@ -3,16 +3,19 @@ Document merging service for EMDX.
 Intelligently merges related documents while preserving important information.
 """
 
-import sqlite3
-from datetime import datetime
-from typing import List, Dict, Any, Tuple, Optional
-from dataclasses import dataclass
 import difflib
-from collections import Counter
+import logging
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..config.settings import get_db_path
-from ..models.documents import get_document, update_document, delete_document
-from ..models.tags import get_document_tags, add_tags_to_document
+from ..database.connection import DatabaseConnection
+from ..models.documents import delete_document, get_document, update_document
+from ..models.tags import add_tags_to_document, get_document_tags
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,45 +46,45 @@ class DocumentMerger:
     
     SIMILARITY_THRESHOLD = 0.7  # Minimum similarity for merge candidates
     
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or get_db_path()
+    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+        self.db_path = Path(db_path) if db_path else get_db_path()
+        self._db = DatabaseConnection(self.db_path)
     
     def find_merge_candidates(
-        self, 
+        self,
         project: Optional[str] = None,
         similarity_threshold: float = None
     ) -> List[MergeCandidate]:
         """
         Find documents that are candidates for merging.
-        
+
         Args:
             project: Filter by specific project
             similarity_threshold: Minimum similarity score (0-1)
-            
+
         Returns:
             List of merge candidates sorted by similarity
         """
         threshold = similarity_threshold or self.SIMILARITY_THRESHOLD
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get all active documents
-        query = """
-            SELECT id, title, content, project, access_count
-            FROM documents
-            WHERE is_deleted = 0
-        """
-        params = []
-        
-        if project:
-            query += " AND project = ?"
-            params.append(project)
-        
-        cursor.execute(query, params)
-        documents = cursor.fetchall()
-        conn.close()
-        
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get all active documents
+            query = """
+                SELECT id, title, content, project, access_count
+                FROM documents
+                WHERE is_deleted = 0
+            """
+            params = []
+
+            if project:
+                query += " AND project = ?"
+                params.append(project)
+
+            cursor.execute(query, params)
+            documents = cursor.fetchall()
+
         candidates = []
         
         # Compare all document pairs
@@ -352,45 +355,43 @@ class DocumentMerger:
             
         except Exception as e:
             # Log error
-            print(f"Merge failed: {e}")
+            logger.error(f"Merge failed: {e}")
             return False
     
     def find_related_documents(
-        self, 
-        doc_id: int, 
+        self,
+        doc_id: int,
         limit: int = 5
     ) -> List[Tuple[int, str, float]]:
         """
         Find documents related to a specific document.
-        
+
         Args:
             doc_id: Document ID to find related docs for
             limit: Maximum number of related docs
-            
+
         Returns:
             List of tuples (doc_id, title, similarity_score)
         """
         doc = get_document(str(doc_id))
         if not doc:
             return []
-        
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get other documents in same project first
-        cursor.execute("""
-            SELECT id, title, content
-            FROM documents
-            WHERE is_deleted = 0 
-            AND id != ?
-            AND project = ?
-            LIMIT 50
-        """, (doc_id, doc['project']))
-        
-        candidates = cursor.fetchall()
-        conn.close()
-        
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get other documents in same project first
+            cursor.execute("""
+                SELECT id, title, content
+                FROM documents
+                WHERE is_deleted = 0
+                AND id != ?
+                AND project = ?
+                LIMIT 50
+            """, (doc_id, doc['project']))
+
+            candidates = cursor.fetchall()
+
         # Calculate similarities
         related = []
         for candidate in candidates:

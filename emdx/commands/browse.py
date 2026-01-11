@@ -2,7 +2,8 @@
 Browse and analytics commands for emdx
 """
 
-from typing import Optional
+from datetime import datetime
+from typing import Optional, Union
 
 import typer
 from rich.console import Console
@@ -10,9 +11,32 @@ from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_recent_documents, get_stats, list_documents
+from emdx.utils.text_formatting import truncate_description, truncate_title
 
 app = typer.Typer()
 console = Console()
+
+
+def _format_datetime(dt: Union[str, datetime, None], format_str: str = "%Y-%m-%d %H:%M") -> str:
+    """Format a datetime value (string or datetime object) to a string."""
+    if dt is None:
+        return "N/A"
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt)
+    return dt.strftime(format_str)
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format byte size to human-readable string (B, KB, or MB)."""
+    if size_bytes is None:
+        size_bytes = 0
+    size_mb = size_bytes / (1024 * 1024)
+    if size_mb >= 1:
+        return f"{size_mb:.1f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes} B"
 
 
 @app.command()
@@ -52,7 +76,7 @@ def list(
             for doc in docs:
                 table.add_row(
                     str(doc["id"]),
-                    doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
+                    truncate_title(doc["title"]),
                     doc["project"] or "None",
                     doc["created_at"].strftime("%Y-%m-%d"),
                     str(doc["access_count"]),
@@ -115,7 +139,7 @@ def recent(
 
             table.add_row(
                 str(doc["id"]),
-                doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
+                truncate_title(doc["title"]),
                 doc["project"] or "None",
                 accessed_str,
                 str(doc["access_count"]),
@@ -171,15 +195,8 @@ def stats(
             console.print("[blue]Most Viewed:[/blue] N/A")
 
         # Most recent document
-        if stats_data.get("newest_doc"):
-            newest_date = stats_data["newest_doc"]
-            if isinstance(newest_date, str):
-                from datetime import datetime
-
-                newest_date = datetime.fromisoformat(newest_date)
-            console.print(f"[blue]Most Recent:[/blue] {newest_date.strftime('%Y-%m-%d %H:%M')}")
-        else:
-            console.print("[blue]Most Recent:[/blue] N/A")
+        newest_date = stats_data.get("newest_doc")
+        console.print(f"[blue]Most Recent:[/blue] {_format_datetime(newest_date)}")
 
         if detailed:
             console.print("\n[bold]Detailed Statistics[/bold]")
@@ -214,17 +231,11 @@ def stats(
                         total_views = row[2] or 0
                         last_updated = row[3]
 
-                        if last_updated:
-                            if isinstance(last_updated, str):
-                                from datetime import datetime
-
-                                last_updated = datetime.fromisoformat(last_updated)
-                            last_updated_str = last_updated.strftime("%Y-%m-%d")
-                        else:
-                            last_updated_str = "N/A"
-
                         project_table.add_row(
-                            project_name, str(doc_count), str(total_views), last_updated_str
+                            project_name,
+                            str(doc_count),
+                            str(total_views),
+                            _format_datetime(last_updated, "%Y-%m-%d"),
                         )
 
                     console.print(project_table)
@@ -262,169 +273,134 @@ def stats(
         raise typer.Exit(1) from e
 
 
+def _display_single_project_stats(project: str) -> None:
+    """Display detailed statistics for a single project."""
+    console.print(f"[bold]Statistics for project: {project}[/bold]")
+    console.print("=" * 50)
+
+    stats_data = get_stats(project=project)
+
+    # Display basic project stats
+    console.print(f"[blue]Documents:[/blue] {stats_data.get('total_documents', 0)}")
+    console.print(f"[blue]Total Views:[/blue] {stats_data.get('total_views', 0)}")
+    console.print(f"[blue]Average Views:[/blue] {stats_data.get('avg_views', 0):.1f}")
+
+    if stats_data.get("most_viewed"):
+        most_viewed = stats_data["most_viewed"]
+        console.print(
+            f"[blue]Most Viewed Document:[/blue] \"{most_viewed['title']}\" "
+            f"({most_viewed['access_count']} views)"
+        )
+
+    newest_doc = stats_data.get("newest_doc")
+    if newest_doc:
+        console.print(f"[blue]Newest Document:[/blue] {_format_datetime(newest_doc)}")
+
+    last_accessed = stats_data.get("last_accessed")
+    if last_accessed:
+        console.print(f"[blue]Last Accessed:[/blue] {_format_datetime(last_accessed)}")
+
+    # Show recent documents for this project
+    console.print(f"\n[bold]Recent Documents in {project}[/bold]")
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, title, accessed_at, access_count
+            FROM documents
+            WHERE project = ? AND is_deleted = FALSE
+            ORDER BY accessed_at DESC
+            LIMIT 10
+            """,
+            (project,),
+        )
+
+        doc_table = Table()
+        doc_table.add_column("ID", style="cyan", no_wrap=True)
+        doc_table.add_column("Title", style="magenta")
+        doc_table.add_column("Last Accessed", style="yellow")
+        doc_table.add_column("Views", justify="right", style="blue")
+
+        for row in cursor.fetchall():
+            doc_id, title, accessed_at, access_count = row
+            accessed_str = _format_datetime(accessed_at) if accessed_at else "Never"
+
+            doc_table.add_row(
+                str(doc_id),
+                truncate_description(title),
+                accessed_str,
+                str(access_count),
+            )
+
+        console.print(doc_table)
+
+
+def _display_all_projects_stats() -> None:
+    """Display statistics for all projects."""
+    console.print("[bold]Statistics by Project[/bold]")
+    console.print("=" * 50)
+
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                project,
+                COUNT(*) as doc_count,
+                SUM(access_count) as total_views,
+                AVG(access_count) as avg_views,
+                MAX(created_at) as last_updated,
+                SUM(LENGTH(content)) as total_content_size
+            FROM documents
+            WHERE is_deleted = FALSE
+            GROUP BY project
+            ORDER BY doc_count DESC
+            """
+        )
+
+        table = Table()
+        table.add_column("Project", style="green")
+        table.add_column("Documents", justify="right", style="cyan")
+        table.add_column("Total Views", justify="right", style="blue")
+        table.add_column("Avg Views", justify="right", style="blue")
+        table.add_column("Last Updated", style="yellow")
+        table.add_column("Content Size", justify="right")
+
+        rows = cursor.fetchall()
+        for row in rows:
+            project_name = row[0] or "None"
+            doc_count = row[1]
+            total_views = row[2] or 0
+            avg_views = row[3] or 0
+            last_updated = row[4]
+            content_size = row[5] or 0
+
+            table.add_row(
+                project_name,
+                str(doc_count),
+                str(total_views),
+                f"{avg_views:.1f}",
+                _format_datetime(last_updated, "%Y-%m-%d"),
+                _format_size(content_size),
+            )
+
+        console.print(table)
+
+        # Show summary if no documents
+        if not rows:
+            console.print("\n[yellow]No documents found in the knowledge base[/yellow]")
+
+
 @app.command(name="project-stats")
 def project_stats(
     project: Optional[str] = typer.Argument(None, help="Project name (show all if omitted)"),
 ):
     """Show detailed project statistics"""
     try:
-        # Ensure database schema exists
         db.ensure_schema()
 
         if project:
-            console.print(f"[bold]Statistics for project: {project}[/bold]")
-            console.print("=" * 50)
-
-            # Get project-specific stats
-            stats_data = get_stats(project=project)
-
-            # Display basic project stats
-            console.print(f"[blue]Documents:[/blue] {stats_data.get('total_documents', 0)}")
-            console.print(f"[blue]Total Views:[/blue] {stats_data.get('total_views', 0)}")
-            console.print(f"[blue]Average Views:[/blue] {stats_data.get('avg_views', 0):.1f}")
-
-            if stats_data.get("most_viewed"):
-                most_viewed = stats_data["most_viewed"]
-                console.print(
-                    f"[blue]Most Viewed Document:[/blue] \"{most_viewed['title']}\" "
-                    f"({most_viewed['access_count']} views)"
-                )
-
-            if stats_data.get("newest_doc"):
-                newest_date = stats_data["newest_doc"]
-                if isinstance(newest_date, str):
-                    from datetime import datetime
-
-                    newest_date = datetime.fromisoformat(newest_date)
-                console.print(
-                    f"[blue]Newest Document:[/blue] {newest_date.strftime('%Y-%m-%d %H:%M')}"
-                )
-
-            if stats_data.get("last_accessed"):
-                last_accessed = stats_data["last_accessed"]
-                if isinstance(last_accessed, str):
-                    from datetime import datetime
-
-                    last_accessed = datetime.fromisoformat(last_accessed)
-                console.print(
-                    f"[blue]Last Accessed:[/blue] {last_accessed.strftime('%Y-%m-%d %H:%M')}"
-                )
-
-            # Show recent documents for this project
-            console.print(f"\n[bold]Recent Documents in {project}[/bold]")
-            with db.get_connection() as conn:
-                cursor = conn.execute(
-                    """
-                    SELECT id, title, accessed_at, access_count
-                    FROM documents
-                    WHERE project = ? AND is_deleted = FALSE
-                    ORDER BY accessed_at DESC
-                    LIMIT 10
-                    """,
-                    (project,),
-                )
-
-                doc_table = Table()
-                doc_table.add_column("ID", style="cyan", no_wrap=True)
-                doc_table.add_column("Title", style="magenta")
-                doc_table.add_column("Last Accessed", style="yellow")
-                doc_table.add_column("Views", justify="right", style="blue")
-
-                for row in cursor.fetchall():
-                    doc_id, title, accessed_at, access_count = row
-
-                    # Format accessed_at
-                    if accessed_at:
-                        if isinstance(accessed_at, str):
-                            from datetime import datetime
-
-                            accessed_at = datetime.fromisoformat(accessed_at)
-                        accessed_str = accessed_at.strftime("%Y-%m-%d %H:%M")
-                    else:
-                        accessed_str = "Never"
-
-                    doc_table.add_row(
-                        str(doc_id),
-                        title[:40] + "..." if len(title) > 40 else title,
-                        accessed_str,
-                        str(access_count),
-                    )
-
-                console.print(doc_table)
-
+            _display_single_project_stats(project)
         else:
-            console.print("[bold]Statistics by Project[/bold]")
-            console.print("=" * 50)
-
-            # Query database for project-specific stats
-            with db.get_connection() as conn:
-                cursor = conn.execute(
-                    """
-                    SELECT
-                        project,
-                        COUNT(*) as doc_count,
-                        SUM(access_count) as total_views,
-                        AVG(access_count) as avg_views,
-                        MAX(created_at) as last_updated,
-                        SUM(LENGTH(content)) as total_content_size
-                    FROM documents
-                    WHERE is_deleted = FALSE
-                    GROUP BY project
-                    ORDER BY doc_count DESC
-                    """
-                )
-
-                table = Table()
-                table.add_column("Project", style="green")
-                table.add_column("Documents", justify="right", style="cyan")
-                table.add_column("Total Views", justify="right", style="blue")
-                table.add_column("Avg Views", justify="right", style="blue")
-                table.add_column("Last Updated", style="yellow")
-                table.add_column("Content Size", justify="right")
-
-                # Add rows from database
-                for row in cursor.fetchall():
-                    project_name = row[0] or "None"
-                    doc_count = row[1]
-                    total_views = row[2] or 0
-                    avg_views = row[3] or 0
-                    last_updated = row[4]
-                    content_size = row[5] or 0
-
-                    # Format last_updated
-                    if last_updated:
-                        if isinstance(last_updated, str):
-                            from datetime import datetime
-
-                            last_updated = datetime.fromisoformat(last_updated)
-                        last_updated_str = last_updated.strftime("%Y-%m-%d")
-                    else:
-                        last_updated_str = "N/A"
-
-                    # Format content size
-                    size_mb = content_size / (1024 * 1024)
-                    if size_mb >= 1:
-                        size_str = f"{size_mb:.1f} MB"
-                    elif content_size >= 1024:
-                        size_str = f"{content_size / 1024:.1f} KB"
-                    else:
-                        size_str = f"{content_size} B"
-
-                    table.add_row(
-                        project_name,
-                        str(doc_count),
-                        str(total_views),
-                        f"{avg_views:.1f}",
-                        last_updated_str,
-                        size_str,
-                    )
-
-                console.print(table)
-
-                # Show summary
-                total_docs = sum(row[1] for row in cursor.fetchall())
-                if total_docs == 0:
-                    console.print("\n[yellow]No documents found in the knowledge base[/yellow]")
+            _display_all_projects_stats()
 
     except Exception as e:
         console.print(f"[red]Error getting project statistics: {e}[/red]")

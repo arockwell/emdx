@@ -3,21 +3,21 @@ Duplicate detection service for EMDX.
 Finds exact and near-duplicate documents based on content and metadata.
 """
 
-import sqlite3
 import hashlib
 from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Any, Tuple, Optional
-from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from ..config.settings import get_db_path
+from ..database import db
 
 
 class DuplicateDetector:
     """Service for detecting and managing duplicate documents."""
-    
+
     def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or get_db_path()
+        # db_path parameter kept for backwards compatibility but is unused
+        # All connections now go through the db module
+        pass
     
     def _get_content_hash(self, content: Optional[str]) -> str:
         """Generate hash of content for duplicate detection."""
@@ -28,96 +28,92 @@ class DuplicateDetector:
     def find_duplicates(self) -> List[List[Dict[str, Any]]]:
         """
         Find all duplicate documents based on content hash.
-        
+
         Returns:
             List of duplicate groups, each group is a list of documents
             with identical content.
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get all active documents
-        cursor.execute("""
-            SELECT 
-                d.id, 
-                d.title, 
-                d.content, 
-                d.project, 
-                d.access_count,
-                d.created_at,
-                d.updated_at,
-                LENGTH(d.content) as content_length,
-                GROUP_CONCAT(t.name) as tags
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            LEFT JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0
-            GROUP BY d.id
-        """)
-        
-        documents = cursor.fetchall()
-        conn.close()
-        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get all active documents
+            cursor.execute("""
+                SELECT
+                    d.id,
+                    d.title,
+                    d.content,
+                    d.project,
+                    d.access_count,
+                    d.created_at,
+                    d.updated_at,
+                    LENGTH(d.content) as content_length,
+                    GROUP_CONCAT(t.name) as tags
+                FROM documents d
+                LEFT JOIN document_tags dt ON d.id = dt.document_id
+                LEFT JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0
+                GROUP BY d.id
+            """)
+
+            documents = cursor.fetchall()
+
         # Group by content hash
         hash_groups = defaultdict(list)
         for doc in documents:
             content_hash = self._get_content_hash(doc['content'])
             doc_dict = dict(doc)
             hash_groups[content_hash].append(doc_dict)
-        
+
         # Filter to only groups with duplicates
         duplicate_groups = [
-            group for group in hash_groups.values() 
+            group for group in hash_groups.values()
             if len(group) > 1
         ]
-        
+
         # Sort groups by total views (most important first)
         duplicate_groups.sort(
             key=lambda group: sum(doc['access_count'] for doc in group),
             reverse=True
         )
-        
+
         return duplicate_groups
     
     def find_near_duplicates(self, threshold: float = 0.85) -> List[Tuple[Dict, Dict, float]]:
         """
         Find near-duplicate documents based on content similarity.
-        
+
         Args:
             threshold: Minimum similarity ratio (0.0 to 1.0)
-            
+
         Returns:
             List of tuples (doc1, doc2, similarity_score)
         """
         import difflib
-        
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get all active documents
-        cursor.execute("""
-            SELECT 
-                d.id, 
-                d.title, 
-                d.content, 
-                d.project, 
-                d.access_count,
-                d.created_at,
-                LENGTH(d.content) as content_length
-            FROM documents d
-            WHERE d.is_deleted = 0
-            AND LENGTH(d.content) > 50  -- Skip very short docs
-            ORDER BY LENGTH(d.content) DESC
-            LIMIT 200  -- Limit for performance
-        """)
-        
-        documents = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
+
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get all active documents
+            cursor.execute("""
+                SELECT
+                    d.id,
+                    d.title,
+                    d.content,
+                    d.project,
+                    d.access_count,
+                    d.created_at,
+                    LENGTH(d.content) as content_length
+                FROM documents d
+                WHERE d.is_deleted = 0
+                AND LENGTH(d.content) > 50  -- Skip very short docs
+                ORDER BY LENGTH(d.content) DESC
+                LIMIT 200  -- Limit for performance
+            """)
+
+            documents = [dict(row) for row in cursor.fetchall()]
+
         near_duplicates = []
-        
+
         # Compare each document pair
         for i, doc1 in enumerate(documents):
             # Only compare with subsequent docs to avoid duplicates
@@ -127,17 +123,17 @@ class DuplicateDetector:
                 len2 = doc2['content_length']
                 if min(len1, len2) / max(len1, len2) < 0.5:
                     continue
-                
+
                 # Calculate similarity
                 similarity = difflib.SequenceMatcher(
-                    None, 
-                    doc1['content'], 
+                    None,
+                    doc1['content'],
                     doc2['content']
                 ).ratio()
-                
+
                 if similarity >= threshold:
                     near_duplicates.append((doc1, doc2, similarity))
-        
+
         # Sort by similarity
         near_duplicates.sort(key=lambda x: x[2], reverse=True)
         return near_duplicates
@@ -193,40 +189,39 @@ class DuplicateDetector:
     def delete_documents(self, doc_ids: List[int]) -> int:
         """
         Soft delete the specified documents.
-        
+
         Args:
             doc_ids: List of document IDs to delete
-            
+
         Returns:
             Number of documents deleted
         """
         if not doc_ids:
             return 0
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Perform soft delete in batches
-        deleted_count = 0
-        batch_size = 100
-        timestamp = datetime.now().isoformat()
-        
-        for i in range(0, len(doc_ids), batch_size):
-            batch = doc_ids[i:i + batch_size]
-            placeholders = ','.join('?' * len(batch))
-            
-            cursor.execute(f"""
-                UPDATE documents 
-                SET is_deleted = 1, deleted_at = ?
-                WHERE id IN ({placeholders})
-                AND is_deleted = 0
-            """, [timestamp] + batch)
-            
-            deleted_count += cursor.rowcount
-        
-        conn.commit()
-        conn.close()
-        
+
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Perform soft delete in batches
+            deleted_count = 0
+            batch_size = 100
+            timestamp = datetime.now().isoformat()
+
+            for i in range(0, len(doc_ids), batch_size):
+                batch = doc_ids[i:i + batch_size]
+                placeholders = ','.join('?' * len(batch))
+
+                cursor.execute(f"""
+                    UPDATE documents
+                    SET is_deleted = 1, deleted_at = ?
+                    WHERE id IN ({placeholders})
+                    AND is_deleted = 0
+                """, [timestamp] + batch)
+
+                deleted_count += cursor.rowcount
+
+            conn.commit()
+
         return deleted_count
     
     def get_duplicate_stats(self) -> Dict[str, Any]:
@@ -264,36 +259,34 @@ class DuplicateDetector:
     def find_similar_titles(self) -> List[List[Dict[str, Any]]]:
         """
         Find documents with identical titles but different content.
-        
+
         Returns:
             List of title groups with different content
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get all active documents
-        cursor.execute("""
-            SELECT 
-                d.id, 
-                d.title, 
-                d.content,
-                d.project,
-                d.access_count,
-                LENGTH(d.content) as content_length
-            FROM documents d
-            WHERE d.is_deleted = 0
-            ORDER BY d.title, d.id
-        """)
-        
-        documents = cursor.fetchall()
-        conn.close()
-        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get all active documents
+            cursor.execute("""
+                SELECT
+                    d.id,
+                    d.title,
+                    d.content,
+                    d.project,
+                    d.access_count,
+                    LENGTH(d.content) as content_length
+                FROM documents d
+                WHERE d.is_deleted = 0
+                ORDER BY d.title, d.id
+            """)
+
+            documents = cursor.fetchall()
+
         # Group by title
         title_groups = defaultdict(list)
         for doc in documents:
             title_groups[doc['title'].strip()].append(dict(doc))
-        
+
         # Filter to groups with multiple documents and different content
         similar_title_groups = []
         for title, group in title_groups.items():
@@ -302,5 +295,5 @@ class DuplicateDetector:
                 hashes = set(self._get_content_hash(doc['content']) for doc in group)
                 if len(hashes) > 1:  # Different content
                     similar_title_groups.append(group)
-        
+
         return similar_title_groups
