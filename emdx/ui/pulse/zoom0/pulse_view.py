@@ -475,12 +475,22 @@ class PulseView(Widget):
         agent_log.clear()
         exec_id = selected.get('agent_execution_id')
 
-        if exec_id and wf_db:
+        if not exec_id:
+            agent_log.write(f"[dim]No exec_id for agent #{selected.get('run_number', '?')}[/dim]")
+        elif not wf_db:
+            agent_log.write(f"[dim]wf_db not available[/dim]")
+        else:
             try:
                 execution = wf_db.get_agent_execution(exec_id)
-                if execution and execution.get('log_file'):
+                if not execution:
+                    agent_log.write(f"[dim]exec_id={exec_id} not found[/dim]")
+                elif not execution.get('log_file'):
+                    agent_log.write(f"[dim]No log_file for exec {exec_id}[/dim]")
+                else:
                     log_path = Path(execution['log_file'])
-                    if log_path.exists():
+                    if not log_path.exists():
+                        agent_log.write(f"[dim]Log file missing: {log_path.name}[/dim]")
+                    else:
                         content = log_path.read_text()
                         lines = content.strip().split('\n')
                         for line in lines[-40:]:
@@ -488,7 +498,8 @@ class PulseView(Widget):
                         status_bar.update(f"Agent #{selected.get('run_number', '?')} log | {len(lines)} lines")
                         return
             except Exception as e:
-                logger.error(f"Error reading agent log: {e}")
+                logger.error(f"Error reading agent log: {e}", exc_info=True)
+                agent_log.write(f"[red]Error: {e}[/red]")
 
         # Fallback - show what info we have
         agent_log.write(f"[bold]Agent #{selected.get('run_number', '?')}[/bold]")
@@ -521,33 +532,48 @@ class PulseView(Widget):
 
         try:
             execution = wf_db.get_agent_execution(exec_id)
-            if execution and execution.get('log_file'):
-                log_path = Path(execution['log_file'])
-                if log_path.exists():
-                    self._stop_agent_stream()
+            if not execution:
+                agent_log.write(f"[yellow]Agent #{ind_run.get('run_number', '?')} starting...[/yellow]")
+                agent_log.write(f"[dim]exec_id={exec_id} not found yet[/dim]")
+                status_bar.update("[yellow]Starting...[/yellow]")
+                return
 
-                    agent_log.write(f"[green]● LIVE[/green] Agent #{ind_run.get('run_number', '?')}")
-                    agent_log.write("")
+            log_file = execution.get('log_file')
+            if not log_file:
+                agent_log.write(f"[yellow]Agent #{ind_run.get('run_number', '?')} starting...[/yellow]")
+                agent_log.write("[dim]No log file assigned yet[/dim]")
+                status_bar.update("[yellow]Initializing...[/yellow]")
+                return
 
-                    self.agent_stream = LogStream(log_path)
-                    self.streaming_agent_run_id = ind_run.get('id')
+            log_path = Path(log_file)
+            if not log_path.exists():
+                agent_log.write(f"[yellow]Agent #{ind_run.get('run_number', '?')} starting...[/yellow]")
+                agent_log.write(f"[dim]Waiting for: {log_path.name}[/dim]")
+                status_bar.update("[yellow]Log pending...[/yellow]")
+                return
 
-                    # Get initial content
-                    initial = self.agent_stream.get_initial_content()
-                    if initial:
-                        lines = initial.strip().split('\n')
-                        for line in lines[-30:]:
-                            agent_log.write(line)
-                        agent_log.scroll_end(animate=False)
+            self._stop_agent_stream()
 
-                    self.agent_stream.subscribe(self.agent_stream_subscriber)
-                    status_bar.update(f"[green]● LIVE[/green] Agent #{ind_run.get('run_number', '?')}")
-                    return
+            agent_log.write(f"[green]● LIVE[/green] Agent #{ind_run.get('run_number', '?')}")
+            agent_log.write("")
+
+            self.agent_stream = LogStream(log_path)
+            self.streaming_agent_run_id = ind_run.get('id')
+
+            # Get initial content
+            initial = self.agent_stream.get_initial_content()
+            if initial:
+                lines = initial.strip().split('\n')
+                for line in lines[-30:]:
+                    agent_log.write(line)
+                agent_log.scroll_end(animate=False)
+
+            self.agent_stream.subscribe(self.agent_stream_subscriber)
+            status_bar.update(f"[green]● LIVE[/green] Agent #{ind_run.get('run_number', '?')}")
         except Exception as e:
-            logger.error(f"Error setting up agent stream: {e}")
-
-        agent_log.write(f"[yellow]Agent #{ind_run.get('run_number', '?')} running...[/yellow]")
-        status_bar.update("[yellow]Waiting for log...[/yellow]")
+            logger.error(f"Error setting up agent stream: {e}", exc_info=True)
+            agent_log.write(f"[red]Error loading log: {e}[/red]")
+            status_bar.update("[red]Error[/red]")
 
     async def _setup_workflow_stream(self, run: Dict[str, Any], agent_log: RichLog, status_bar: Static) -> None:
         """Setup streaming for workflow-level log (for single-run workflows)."""
