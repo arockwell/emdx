@@ -3,7 +3,7 @@
     {
       "name": "merge_main",
       "mode": "dynamic",
-      "discovery_command": "git fetch --all --prune && git branch -r | grep -v 'HEAD\\|main\\|master' | sed 's|origin/||' | sort -u",
+      "discovery_command": "gh pr list --state open --json headRefName --jq '.[].headRefName'",
       "item_variable": "branch_name",
       "max_concurrent": 3,
       "continue_on_failure": true,
