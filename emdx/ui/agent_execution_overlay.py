@@ -2,9 +2,11 @@
 """
 Agent execution overlay - multi-stage agent execution interface.
 
-This module provides the UI orchestration for multi-stage agent execution.
-Data management is delegated to ExecutionDataManager for cleaner separation
-of concerns.
+This module provides the main overlay UI for agent execution, with
+execution control and state management delegated to separate components:
+- SelectionState: Manages selection data across stages
+- ExecutionController: Handles navigation and execution flow
+- StageProgressDisplay: Displays stage progress
 """
 
 from typing import Optional, Dict, Any, Callable
@@ -23,7 +25,8 @@ from .stages.agent_selection import AgentSelectionStage
 from .stages.project_selection import ProjectSelectionStage
 from .stages.worktree_selection import WorktreeSelectionStage
 from .stages.config_selection import ConfigSelectionStage
-from .execution_data_manager import ExecutionDataManager, StageType
+from .execution import SelectionState, ExecutionController, StageProgressDisplay
+from .execution.execution_controller import StageType
 
 # Re-export StageType for backward compatibility
 __all__ = ['AgentExecutionOverlay', 'StageType']
@@ -35,9 +38,8 @@ class AgentExecutionOverlay(ModalScreen):
     """
     Multi-stage agent execution overlay.
 
-    This class handles the UI orchestration for the agent execution workflow.
-    Data management (selections, stage completion) is delegated to
-    ExecutionDataManager for cleaner separation of concerns.
+    This class provides the UI layer for agent execution, delegating
+    state management and execution control to specialized components.
     """
 
     BINDINGS = [
@@ -71,11 +73,6 @@ class AgentExecutionOverlay(ModalScreen):
         text-style: bold;
         color: $warning;
         text-align: left;
-    }
-
-    #stage-progress {
-        text-align: right;
-        color: $text-muted;
     }
 
     #stage-content {
@@ -143,42 +140,90 @@ class AgentExecutionOverlay(ModalScreen):
     ):
         super().__init__()
 
-        # Initialize data manager for selection state
-        self._data_manager = ExecutionDataManager(initial_document_id)
+        # Initialize selection state
+        self._selection_state = SelectionState(document_id=initial_document_id)
 
-        # UI state
-        self.current_stage_index = 0
+        # Determine initial stage
+        initial_stage_index = 0
+        if start_stage and start_stage in list(StageType):
+            initial_stage_index = list(StageType).index(start_stage)
+
+        # If we have an initial document, start at agent stage
+        if initial_document_id:
+            self._load_initial_document(initial_document_id)
+            if start_stage is None:
+                initial_stage_index = list(StageType).index(StageType.AGENT)
+
+        # Initialize execution controller
+        self._controller = ExecutionController(
+            selection_state=self._selection_state,
+            initial_stage_index=initial_stage_index,
+            on_stage_change=self._on_stage_change,
+            on_execute=self._on_execute,
+        )
+
+        # Mark document stage as completed if document is pre-selected
+        if initial_document_id:
+            self._controller.mark_stage_completed(StageType.DOCUMENT)
+
+        # Store callback and stage widgets
         self.callback = callback
         self.stage_widgets: Dict[StageType, Any] = {}
 
-        # Set starting stage
-        if start_stage and start_stage in self._data_manager.stages:
-            self.current_stage_index = self._data_manager.stages.index(start_stage)
-
-        # If we have an initial document, start at agent stage
-        if initial_document_id and start_stage is None:
-            self.current_stage_index = self._data_manager.stages.index(StageType.AGENT)
+        # Backward compatibility: expose data dict
+        # This property provides dict-like access to selection state
+        self._data_proxy = _SelectionStateProxy(self._selection_state)
 
         logger.info(
             f"AgentExecutionOverlay initialized: start_stage={start_stage}, "
-            f"initial_doc={initial_document_id}, current_stage_index={self.current_stage_index}"
+            f"initial_doc={initial_document_id}, "
+            f"current_stage_index={self._controller.current_stage_index}"
         )
 
-    # Property to expose data for backward compatibility with stages
+    def _load_initial_document(self, document_id: int) -> None:
+        """Load initial document data."""
+        try:
+            from ..models.documents import get_document
+            doc = get_document(str(document_id))
+            if doc:
+                self._selection_state.set_document(
+                    document_id,
+                    {
+                        'document_id': doc['id'],
+                        'document_title': doc.get('title', 'Untitled'),
+                        'document_project': doc.get('project', 'Default')
+                    }
+                )
+                logger.info(f"Pre-selected document data: {self._selection_state.document_data}")
+            else:
+                logger.warning(f"Could not fetch document {document_id}")
+        except Exception as e:
+            logger.error(f"Failed to fetch pre-selected document data: {e}", exc_info=True)
+
     @property
-    def data(self) -> ExecutionDataManager:
-        """Expose data manager for stage access."""
-        return self._data_manager
+    def data(self) -> "_SelectionStateProxy":
+        """Backward compatibility: access selection state as dict-like object."""
+        return self._data_proxy
 
     @property
     def stages(self) -> list:
-        """Expose stages list for backward compatibility."""
-        return self._data_manager.stages
+        """Get list of stages."""
+        return self._controller.stages
+
+    @property
+    def current_stage_index(self) -> int:
+        """Get current stage index."""
+        return self._controller.current_stage_index
+
+    @current_stage_index.setter
+    def current_stage_index(self, value: int) -> None:
+        """Set current stage index."""
+        self._controller.current_stage_index = value
 
     @property
     def stage_completed(self) -> Dict[StageType, bool]:
-        """Expose stage completion for backward compatibility."""
-        return self._data_manager.stage_completed
+        """Get stage completion status."""
+        return self._controller.stage_completed
 
     def compose(self) -> ComposeResult:
         """Create the overlay UI."""
@@ -186,7 +231,11 @@ class AgentExecutionOverlay(ModalScreen):
             # Header with title and progress
             with Horizontal(id="overlay-header"):
                 yield Label("🤖 Agent Execution", id="overlay-title")
-                yield Label("", id="stage-progress")
+                yield StageProgressDisplay(
+                    stages=self._controller.stages,
+                    current_index=self._controller.current_stage_index,
+                    id="stage-progress"
+                )
 
             # Main content area for stages
             with Vertical(id="stage-content"):
@@ -213,14 +262,12 @@ class AgentExecutionOverlay(ModalScreen):
         """Mount all stage widgets once - they will be shown/hidden with CSS."""
         container = self.query_one("#stage-content", Vertical)
 
-        # Create and mount all stages
         self.stage_widgets[StageType.DOCUMENT] = DocumentSelectionStage(self)
         self.stage_widgets[StageType.AGENT] = AgentSelectionStage(self)
         self.stage_widgets[StageType.PROJECT] = ProjectSelectionStage(self)
         self.stage_widgets[StageType.WORKTREE] = WorktreeSelectionStage(self)
         self.stage_widgets[StageType.CONFIG] = ConfigSelectionStage(self)
 
-        # Mount all stages (they'll start hidden)
         for stage_type, stage in self.stage_widgets.items():
             await container.mount(stage)
             stage.add_class("stage-hidden")
@@ -229,87 +276,84 @@ class AgentExecutionOverlay(ModalScreen):
 
     def get_current_stage(self) -> StageType:
         """Get the current stage."""
-        return self._data_manager.stages[self.current_stage_index]
+        return self._controller.get_current_stage()
 
     async def _update_stage_progress(self) -> None:
         """Update the stage progress indicator."""
-        progress = self.query_one("#stage-progress", Label)
+        progress = self.query_one("#stage-progress", StageProgressDisplay)
+        progress.update_progress(self._controller.current_stage_index)
 
-        # Build progress indicator
-        stage_indicators = []
-        for i, stage in enumerate(self._data_manager.stages):
-            stage_name = stage.value.title()
-
-            if i < self.current_stage_index:
-                stage_indicators.append(f"[green]✓ {stage_name}[/green]")
-            elif i == self.current_stage_index:
-                stage_indicators.append(f"[yellow]→ {stage_name}[/yellow]")
-            else:
-                stage_indicators.append(f"[dim]{stage_name}[/dim]")
-
-        progress_text = f"Stage {self.current_stage_index + 1}/4: " + " | ".join(stage_indicators)
-        progress.update(progress_text)
+    # Backward compatibility alias
+    async def update_stage_progress(self) -> None:
+        """Update the stage progress indicator (backward compatibility)."""
+        await self._update_stage_progress()
 
     async def _show_current_stage(self) -> None:
-        """Display the current stage by hiding others and showing the current one."""
+        """Display the current stage content."""
         current_stage = self.get_current_stage()
         logger.info(f"Showing stage: {current_stage}")
 
-        # Hide all stages first
         for stage_type, stage in self.stage_widgets.items():
             if stage_type != current_stage:
                 stage.add_class("stage-hidden")
 
-        # Show current stage
         current_widget = self.stage_widgets[current_stage]
         current_widget.remove_class("stage-hidden")
-
-        # Lazy load stage data only when it's shown
         await current_widget.ensure_loaded()
 
-        # Update navigation state
         await self._update_navigation_state()
+        self.post_message(self.StageChanged(current_stage, self._controller.current_stage_index))
 
-        # Post stage change message
-        self.post_message(self.StageChanged(current_stage, self.current_stage_index))
+    # Backward compatibility alias
+    async def show_current_stage(self) -> None:
+        """Display the current stage content (backward compatibility)."""
+        await self._show_current_stage()
 
     async def _update_navigation_state(self) -> None:
         """Update navigation button states."""
         execute_btn = self.query_one("#execute-btn", Button)
+        can_execute = self._controller.can_execute()
+        execute_btn.disabled = not can_execute
 
-        # Delegate execution check to data manager
-        execute_btn.disabled = not self._data_manager.can_execute()
-
-        # Update execute button text based on stage
         if self.get_current_stage() == StageType.CONFIG:
             execute_btn.label = "Execute Now"
         else:
             execute_btn.label = "Quick Execute"
 
-    # Navigation actions
+    # Backward compatibility alias
+    async def update_navigation_state(self) -> None:
+        """Update navigation button states (backward compatibility)."""
+        await self._update_navigation_state()
+
+    # Backward compatibility alias
+    async def initialize_all_stages(self) -> None:
+        """Mount all stage widgets (backward compatibility)."""
+        await self._initialize_all_stages()
+
+    def _on_stage_change(self, stage: StageType, stage_index: int) -> None:
+        """Callback when stage changes via controller."""
+        self.run_worker(self._update_stage_progress(), exclusive=True, group="stage_update")
+        self.run_worker(self._show_current_stage(), exclusive=True, group="stage_display")
+
+    def _on_execute(self, execution_data: Dict[str, Any]) -> None:
+        """Callback when execution is triggered via controller."""
+        self.post_message(self.ExecutionRequested(execution_data))
+        self.dismiss(execution_data)
 
     def action_next_stage(self) -> None:
         """Navigate to next stage."""
-        if self.current_stage_index < len(self._data_manager.stages) - 1:
-            self.current_stage_index += 1
-            self.run_worker(self._update_stage_progress(), exclusive=True, group="stage_update")
-            self.run_worker(self._show_current_stage(), exclusive=True, group="stage_display")
-            logger.info(f"Advanced to stage {self.current_stage_index}: {self.get_current_stage()}")
+        if self._controller.go_next():
+            logger.info(f"Advanced to stage {self._controller.current_stage_index}: {self.get_current_stage()}")
 
     def action_prev_stage(self) -> None:
         """Navigate to previous stage."""
-        if self.current_stage_index > 0:
-            self.current_stage_index -= 1
-            self.run_worker(self._update_stage_progress(), exclusive=True, group="stage_update")
-            self.run_worker(self._show_current_stage(), exclusive=True, group="stage_display")
-            logger.info(f"Returned to stage {self.current_stage_index}: {self.get_current_stage()}")
+        if self._controller.go_prev():
+            logger.info(f"Returned to stage {self._controller.current_stage_index}: {self.get_current_stage()}")
 
     def action_proceed(self) -> None:
         """Proceed to next stage or execute if on last stage."""
         current_stage = self.get_current_stage()
-
-        # Mark current stage as completed
-        self._data_manager.stage_completed[current_stage] = True
+        self._controller.mark_stage_completed(current_stage)
 
         if current_stage == StageType.CONFIG:
             self.action_execute()
@@ -318,11 +362,11 @@ class AgentExecutionOverlay(ModalScreen):
 
     def action_execute(self) -> None:
         """Execute with current selections."""
-        if not self._data_manager.can_execute():
+        if not self._controller.can_execute():
             logger.warning("Cannot execute: missing required selections")
             return
 
-        execution_data = self._data_manager.get_execution_data()
+        execution_data = self._selection_state.to_execution_data()
         logger.info(f"Executing with data: {execution_data}")
 
         self.post_message(self.ExecutionRequested(execution_data))
@@ -333,8 +377,6 @@ class AgentExecutionOverlay(ModalScreen):
         logger.info("AgentExecutionOverlay cancelled")
         self.dismiss(None)
 
-    # Event handlers
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         if event.button.id == "execute-btn":
@@ -342,15 +384,32 @@ class AgentExecutionOverlay(ModalScreen):
         elif event.button.id == "cancel-btn":
             self.action_cancel()
 
+    # Message handlers for stage events
     def on_overlay_stage_selection_changed(self, message: OverlayStage.SelectionChanged) -> None:
         """Handle stage selection changes."""
         logger.info(f"Stage {message.stage_name} selection changed: {message.selection_data}")
-        self._data_manager.update_stage_data(message.stage_name, message.selection_data)
+        if message.stage_name == "document":
+            self._selection_state.document_data = message.selection_data
+        elif message.stage_name == "agent":
+            self._selection_state.agent_data = message.selection_data
+        elif message.stage_name == "project":
+            self._selection_state.project_data = message.selection_data
+        elif message.stage_name == "worktree":
+            self._selection_state.worktree_data = message.selection_data
+        elif message.stage_name == "config":
+            self._selection_state.update_config(message.selection_data)
 
     def on_overlay_stage_stage_completed(self, message: OverlayStage.StageCompleted) -> None:
         """Handle stage completion."""
         logger.info(f"Stage {message.stage_name} completed")
-        self._data_manager.mark_stage_completed(message.stage_name)
+        stage_map = {
+            "document": StageType.DOCUMENT,
+            "agent": StageType.AGENT,
+            "worktree": StageType.WORKTREE,
+            "config": StageType.CONFIG,
+        }
+        if message.stage_name in stage_map:
+            self._controller.mark_stage_completed(stage_map[message.stage_name])
         self.call_after_refresh(self._update_navigation_state)
 
     def on_overlay_stage_navigation_requested(self, message: OverlayStage.NavigationRequested) -> None:
@@ -382,16 +441,19 @@ class AgentExecutionOverlay(ModalScreen):
         logger.info(f"Config completed via stage: {message.config}")
         self.call_after_refresh(self._update_stage_progress)
 
-    # Public API for stages to set selections
-
+    # Selection setter methods (backward compatibility)
     def set_document_selection(self, document_id: int) -> None:
         """Set selected document ID."""
-        self._data_manager.set_document_selection(document_id)
+        self._selection_state.set_document(document_id)
+        self._controller.mark_stage_completed(StageType.DOCUMENT)
+        logger.info(f"Document selected: {document_id}")
         self.call_after_refresh(self._update_navigation_state)
 
     def set_agent_selection(self, agent_id: int) -> None:
         """Set selected agent ID."""
-        self._data_manager.set_agent_selection(agent_id)
+        self._selection_state.set_agent(agent_id)
+        self._controller.mark_stage_completed(StageType.AGENT)
+        logger.info(f"Agent selected: {agent_id}")
         self.call_after_refresh(self._update_navigation_state)
 
     def set_project_selection(
@@ -401,22 +463,105 @@ class AgentExecutionOverlay(ModalScreen):
         worktrees: list = None
     ) -> None:
         """Set selected project and its worktrees."""
-        self._data_manager.set_project_selection(project_index, project_path, worktrees)
+        self._selection_state.set_project(project_index, project_path, worktrees)
+        self._controller.mark_stage_completed(StageType.PROJECT)
+        logger.info(f"Project selected: index={project_index}, path={project_path}, worktrees={len(worktrees or [])}")
         self.call_after_refresh(self._update_navigation_state)
 
     def set_worktree_selection(self, worktree_index: int) -> None:
         """Set selected worktree index."""
-        self._data_manager.set_worktree_selection(worktree_index)
+        self._selection_state.set_worktree(worktree_index)
+        self._controller.mark_stage_completed(StageType.WORKTREE)
+        logger.info(f"Worktree selected: {worktree_index}")
         self.call_after_refresh(self._update_navigation_state)
 
     def set_execution_config(self, config: Dict[str, Any]) -> None:
         """Set execution configuration."""
-        self._data_manager.set_execution_config(config)
+        self._selection_state.update_config(config)
+        self._controller.mark_stage_completed(StageType.CONFIG)
+        logger.info(f"Config updated: {config}")
         self.call_after_refresh(self._update_navigation_state)
 
     def get_selection_summary(self) -> Dict[str, Any]:
-        """Get summary of current selections - flatten all nested data."""
-        return self._data_manager.get_selection_summary(
-            self.get_current_stage(),
-            self.current_stage_index
+        """Get summary of current selections."""
+        return self._selection_state.get_summary(
+            current_stage=self.get_current_stage().value,
+            stage_index=self._controller.current_stage_index,
+            completed_stages=self._controller.get_completed_stages()
         )
+
+
+class _SelectionStateProxy:
+    """
+    Proxy class to provide dict-like access to SelectionState.
+
+    This maintains backward compatibility with code that accesses
+    self.data['document_id'] directly.
+    """
+
+    def __init__(self, state: SelectionState):
+        self._state = state
+
+    def __getitem__(self, key: str) -> Any:
+        if key == 'document_id':
+            return self._state.document_id
+        elif key == 'agent_id':
+            return self._state.agent_id
+        elif key == 'project_index':
+            return self._state.project_index
+        elif key == 'project_path':
+            return self._state.project_path
+        elif key == 'project_worktrees':
+            return self._state.project_worktrees
+        elif key == 'worktree_index':
+            return self._state.worktree_index
+        elif key == 'config':
+            return self._state.config
+        elif key == 'document_data':
+            return self._state.document_data
+        elif key == 'agent_data':
+            return self._state.agent_data
+        elif key == 'project_data':
+            return self._state.project_data
+        elif key == 'worktree_data':
+            return self._state.worktree_data
+        raise KeyError(key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if key == 'document_id':
+            self._state.document_id = value
+        elif key == 'agent_id':
+            self._state.agent_id = value
+        elif key == 'project_index':
+            self._state.project_index = value
+        elif key == 'project_path':
+            self._state.project_path = value
+        elif key == 'project_worktrees':
+            self._state.project_worktrees = value
+        elif key == 'worktree_index':
+            self._state.worktree_index = value
+        elif key == 'config':
+            self._state.config = value
+        elif key == 'document_data':
+            self._state.document_data = value
+        elif key == 'agent_data':
+            self._state.agent_data = value
+        elif key == 'project_data':
+            self._state.project_data = value
+        elif key == 'worktree_data':
+            self._state.worktree_data = value
+        else:
+            raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def update(self, data: Dict[str, Any]) -> None:
+        for key, value in data.items():
+            try:
+                self[key] = value
+            except KeyError:
+                pass
