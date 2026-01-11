@@ -44,7 +44,7 @@ class TextAreaHost(Protocol):
 
 class DocumentBrowser(Widget):
     """Document browser widget that can host text areas."""
-    
+
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
         Binding("k", "cursor_up", "Up"),
@@ -59,131 +59,8 @@ class DocumentBrowser(Widget):
         Binding("x", "execute_document", "Run Agent"),
         Binding("r", "refresh", "Refresh"),
     ]
-    
-    DEFAULT_CSS = """
-    DocumentBrowser {
-        layout: vertical;
-        height: 100%;
-        layers: base overlay;
-        padding: 0;
-        margin: 0;
-    }
 
-    #search-input, #tag-input {
-        layer: overlay;
-        display: none;
-        height: 3;
-        margin: 1;
-        border: solid $primary;
-        offset: 0 0;
-    }
-    
-    #search-input.visible, #tag-input.visible {
-        display: block;
-    }
-    
-    .browser-status {
-        height: 1;
-        background: $boost;
-        color: $text;
-        padding: 0 1;
-        text-align: center;
-        layer: base;
-    }
-    
-    #tag-selector {
-        layer: overlay;
-        display: none;
-        height: 1;
-        margin: 0 1;
-        offset: 0 0;
-    }
-    
-    Horizontal {
-        height: 1fr;
-        layer: base;
-    }
-    
-    #sidebar {
-        width: 1fr;
-        min-width: 40;
-        height: 100%;
-        layout: vertical;
-        padding: 0;
-        margin: 0;
-    }
-    
-    #table-container {
-        height: 2fr;
-        min-height: 15;
-    }
-    
-    #details-container {
-        height: 1fr;
-        min-height: 10;
-    }
-    
-    #doc-table {
-        height: 100%;
-    }
-    
-    #details-panel {
-        height: 100%;
-        padding: 1;
-    }
-    
-    .details-richlog {
-    }
-    
-    #preview-container {
-        width: 1fr;
-        min-width: 40;
-        padding: 0;
-        margin: 0;
-    }
-    
-    #vim-mode-indicator {
-        layer: overlay;
-        display: none;
-        height: 1;
-        background: $boost;
-        text-align: center;
-        offset: 0 0;
-    }
-    
-    #vim-mode-indicator.active {
-        display: block;
-    }
-    
-    #preview {
-        height: 1fr;
-    }
-    
-    #preview-content {
-        height: 1fr;
-        padding: 1;
-    }
-    
-    #edit-container {
-        height: 100%;
-        layout: vertical;
-    }
-    
-    #title-input {
-        height: 3;
-        margin: 1;
-        border: solid $primary;
-    }
-    
-    #edit-area, #vim-editor-container {
-        height: 1fr;
-        width: 100%;
-    }
-    
-    #doc-table {
-        height: 1fr;
-    }
-    """
+    CSS_PATH = "document_browser.tcss"
     
     # Reactive properties
     mode = reactive("NORMAL")
