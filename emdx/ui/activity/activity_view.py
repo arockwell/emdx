@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from rich.markup import escape as escape_markup
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, ScrollableContainer
 from textual.message import Message
@@ -759,7 +760,7 @@ class ActivityView(Widget):
             initial = self.log_stream.get_initial_content()
             if initial:
                 for line in initial.strip().split("\n")[-50:]:
-                    preview_log.write(line)
+                    preview_log.write(escape_markup(line))
                 preview_log.scroll_end(animate=False)
 
             self.log_stream.subscribe(self.log_subscriber)
@@ -773,7 +774,7 @@ class ActivityView(Widget):
         try:
             preview_log = self.query_one("#preview-log", RichLog)
             for line in content.splitlines():
-                preview_log.write(line)
+                preview_log.write(escape_markup(line))
             preview_log.scroll_end(animate=False)
         except Exception as e:
             logger.error(f"Error handling log content: {e}")
