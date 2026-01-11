@@ -1,74 +1,83 @@
-"""Strategy registry for mapping execution modes to strategies."""
+"""Registry for execution strategies."""
 
-from typing import TYPE_CHECKING
+from typing import Dict, Optional, Type
 
-from ..base import ExecutionMode
 from .base import ExecutionStrategy
-from .single import SingleStrategy
-from .parallel import ParallelStrategy
-from .iterative import IterativeStrategy
-from .adversarial import AdversarialStrategy
-from .dynamic import DynamicStrategy
-
-if TYPE_CHECKING:
-    from .base import WorkflowExecutorProtocol
+from .single import SingleExecutionStrategy
+from .parallel import ParallelExecutionStrategy
+from .iterative import IterativeExecutionStrategy
+from .adversarial import AdversarialExecutionStrategy
+from .dynamic import DynamicExecutionStrategy
+from ..base import ExecutionMode
 
 
 class StrategyRegistry:
-    """Registry mapping execution modes to their strategy implementations."""
+    """Registry mapping execution modes to strategy classes."""
 
-    _strategies = {
-        ExecutionMode.SINGLE: SingleStrategy,
-        ExecutionMode.PARALLEL: ParallelStrategy,
-        ExecutionMode.ITERATIVE: IterativeStrategy,
-        ExecutionMode.ADVERSARIAL: AdversarialStrategy,
-        ExecutionMode.DYNAMIC: DynamicStrategy,
-    }
+    def __init__(self):
+        self._strategies: Dict[ExecutionMode, Type[ExecutionStrategy]] = {
+            ExecutionMode.SINGLE: SingleExecutionStrategy,
+            ExecutionMode.PARALLEL: ParallelExecutionStrategy,
+            ExecutionMode.ITERATIVE: IterativeExecutionStrategy,
+            ExecutionMode.ADVERSARIAL: AdversarialExecutionStrategy,
+            ExecutionMode.DYNAMIC: DynamicExecutionStrategy,
+        }
+        self._instances: Dict[ExecutionMode, ExecutionStrategy] = {}
 
-    @classmethod
     def get_strategy(
-        cls, mode: ExecutionMode, executor: "WorkflowExecutorProtocol"
+        self,
+        mode: ExecutionMode,
+        max_concurrent: int = 10,
     ) -> ExecutionStrategy:
-        """Get the strategy instance for the given execution mode.
+        """Get strategy instance for the given execution mode.
 
         Args:
-            mode: The execution mode
-            executor: The parent workflow executor
+            mode: Execution mode
+            max_concurrent: Maximum concurrent runs (for parallel/dynamic modes)
 
         Returns:
-            An ExecutionStrategy instance
-
-        Raises:
-            ValueError: If the mode is not supported
+            ExecutionStrategy instance
         """
-        strategy_class = cls._strategies.get(mode)
-        if not strategy_class:
+        if mode not in self._strategies:
             raise ValueError(f"Unknown execution mode: {mode}")
-        return strategy_class(executor)
 
-    @classmethod
-    def register(
-        cls, mode: ExecutionMode, strategy_class: type[ExecutionStrategy]
-    ) -> None:
-        """Register a new strategy for an execution mode.
+        strategy_class = self._strategies[mode]
+
+        # For parallel mode, create new instance with specific concurrency limit
+        if mode == ExecutionMode.PARALLEL:
+            return ParallelExecutionStrategy(max_concurrent=max_concurrent)
+
+        # For other modes, reuse cached instance
+        if mode not in self._instances:
+            self._instances[mode] = strategy_class()
+
+        return self._instances[mode]
+
+    def register(self, mode: ExecutionMode, strategy_class: Type[ExecutionStrategy]) -> None:
+        """Register a custom strategy for an execution mode.
 
         Args:
-            mode: The execution mode
-            strategy_class: The strategy class to register
+            mode: Execution mode
+            strategy_class: Strategy class to use
         """
-        cls._strategies[mode] = strategy_class
+        self._strategies[mode] = strategy_class
+        # Clear cached instance if exists
+        if mode in self._instances:
+            del self._instances[mode]
 
 
-def get_strategy(
-    mode: ExecutionMode, executor: "WorkflowExecutorProtocol"
-) -> ExecutionStrategy:
-    """Convenience function to get a strategy for the given mode.
+# Global registry instance
+strategy_registry = StrategyRegistry()
+
+
+def get_strategy(mode: ExecutionMode, max_concurrent: int = 10) -> ExecutionStrategy:
+    """Get strategy instance for the given execution mode.
 
     Args:
-        mode: The execution mode
-        executor: The parent workflow executor
+        mode: Execution mode
+        max_concurrent: Maximum concurrent runs (for parallel/dynamic modes)
 
     Returns:
-        An ExecutionStrategy instance
+        ExecutionStrategy instance
     """
-    return StrategyRegistry.get_strategy(mode, executor)
+    return strategy_registry.get_strategy(mode, max_concurrent)

@@ -1,25 +1,26 @@
 """Adversarial execution strategy - Advocate -> Critic -> Synthesizer pattern."""
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 from .base import ExecutionStrategy, StageResult
+from ..base import StageConfig
+from ..services import document_service
+from ..registry import workflow_registry
+from .. import database as wf_db
 
-if TYPE_CHECKING:
-    from ..base import StageConfig
 
-
-class AdversarialStrategy(ExecutionStrategy):
+class AdversarialExecutionStrategy(ExecutionStrategy):
     """Execute adversarial pattern: Advocate -> Critic -> Synthesizer.
 
     This mode runs a structured debate pattern where:
-    1. An advocate argues FOR the approach
-    2. A critic argues AGAINST
-    3. A synthesizer provides balanced assessment
+    1. Advocate argues FOR a position
+    2. Critic argues AGAINST
+    3. Synthesizer provides balanced assessment
 
-    Useful for getting multiple perspectives on a problem.
+    Can be extended with more rounds of advocacy/criticism.
     """
 
-    # Default prompts for the adversarial pattern
+    # Default adversarial prompts if no strategy provided
     DEFAULT_PROMPTS = [
         "ADVOCATE: Argue FOR this approach: {{input}}\n\nWhat are its strengths?",
         "CRITIC: Given this advocacy: {{prev}}\n\nArgue AGAINST. What are the weaknesses?",
@@ -29,7 +30,7 @@ class AdversarialStrategy(ExecutionStrategy):
     async def execute(
         self,
         stage_run_id: int,
-        stage: "StageConfig",
+        stage: StageConfig,
         context: Dict[str, Any],
         stage_input: Optional[str],
     ) -> StageResult:
@@ -47,7 +48,7 @@ class AdversarialStrategy(ExecutionStrategy):
         # Load iteration strategy (adversarial uses same mechanism)
         strategy = None
         if stage.iteration_strategy:
-            strategy = self._get_iteration_strategy(stage.iteration_strategy)
+            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
 
         outputs: List[str] = []
         output_doc_ids: List[int] = []
@@ -65,35 +66,33 @@ class AdversarialStrategy(ExecutionStrategy):
             elif stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
             else:
-                prompt_template = self.DEFAULT_PROMPTS[
-                    min(i, len(self.DEFAULT_PROMPTS) - 1)
-                ]
+                prompt_template = self.DEFAULT_PROMPTS[min(i, len(self.DEFAULT_PROMPTS) - 1)]
 
             # Build context
             iter_context = dict(context)
-            iter_context["input"] = stage_input or context.get("input", "")
-            iter_context["prev"] = outputs[-1] if outputs else ""
-            iter_context["all_prev"] = outputs  # Keep as list for indexed access
+            iter_context['input'] = stage_input or context.get('input', '')
+            iter_context['prev'] = outputs[-1] if outputs else ''
+            iter_context['all_prev'] = outputs  # Keep as list for indexed access
 
-            prompt = self._resolve_template(prompt_template, iter_context)
+            prompt = self.resolve_template(prompt_template, iter_context)
 
             # Create individual run record
-            individual_run_id = self._create_individual_run(
+            individual_run_id = wf_db.create_individual_run(
                 stage_run_id=stage_run_id,
                 run_number=run_number,
                 prompt_used=prompt,
-                input_context=iter_context.get("prev", ""),
+                input_context=iter_context.get('prev', ''),
             )
 
             # Execute
-            result = await self._run_agent(
+            result = await self.run_agent(
                 individual_run_id=individual_run_id,
                 agent_id=stage.agent_id,
                 prompt=prompt,
                 context=iter_context,
             )
 
-            if not result.get("success"):
+            if not result.get('success'):
                 return StageResult(
                     success=False,
                     error_message=f"Adversarial run {run_number} failed: {result.get('error_message')}",
@@ -101,15 +100,15 @@ class AdversarialStrategy(ExecutionStrategy):
                 )
 
             # Collect output
-            if result.get("output_doc_id"):
-                doc = self._get_document(result["output_doc_id"])
+            if result.get('output_doc_id'):
+                doc = document_service.get_document(result['output_doc_id'])
                 if doc:
-                    outputs.append(doc.get("content", ""))
-                    output_doc_ids.append(result["output_doc_id"])
-                    last_output_id = result["output_doc_id"]
+                    outputs.append(doc.get('content', ''))
+                    output_doc_ids.append(result['output_doc_id'])
+                    last_output_id = result['output_doc_id']
 
-            total_tokens += result.get("tokens_used", 0)
-            self._update_stage_run(stage_run_id, runs_completed=run_number)
+            total_tokens += result.get('tokens_used', 0)
+            wf_db.update_stage_run(stage_run_id, runs_completed=run_number)
 
         return StageResult(
             success=True,

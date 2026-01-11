@@ -1,25 +1,21 @@
-"""Execution strategies for workflow stages.
-
-This module provides the Strategy pattern implementation for different
-execution modes in the workflow system.
-"""
+"""Execution strategies for workflow stages."""
 
 from .base import ExecutionStrategy, StageResult
-from .single import SingleStrategy
-from .parallel import ParallelStrategy
-from .iterative import IterativeStrategy
-from .adversarial import AdversarialStrategy
-from .dynamic import DynamicStrategy
-from .registry import StrategyRegistry, get_strategy
+from .single import SingleExecutionStrategy
+from .parallel import ParallelExecutionStrategy
+from .iterative import IterativeExecutionStrategy
+from .adversarial import AdversarialExecutionStrategy
+from .dynamic import DynamicExecutionStrategy
+from .registry import strategy_registry, get_strategy
 
 __all__ = [
     "ExecutionStrategy",
     "StageResult",
-    "SingleStrategy",
-    "ParallelStrategy",
-    "IterativeStrategy",
-    "AdversarialStrategy",
-    "DynamicStrategy",
-    "StrategyRegistry",
+    "SingleExecutionStrategy",
+    "ParallelExecutionStrategy",
+    "IterativeExecutionStrategy",
+    "AdversarialExecutionStrategy",
+    "DynamicExecutionStrategy",
+    "strategy_registry",
     "get_strategy",
 ]

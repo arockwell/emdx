@@ -1,16 +1,16 @@
-"""Dynamic execution strategy - discover items at runtime and process in parallel."""
+"""Dynamic execution strategy - discovers items at runtime and processes each in parallel."""
 
 import asyncio
 import subprocess
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 from .base import ExecutionStrategy, StageResult
+from ..base import StageConfig
+from ..worktree_pool import WorktreePool
+from .. import database as wf_db
 
-if TYPE_CHECKING:
-    from ..base import StageConfig
 
-
-class DynamicStrategy(ExecutionStrategy):
+class DynamicExecutionStrategy(ExecutionStrategy):
     """Execute dynamic mode: discover items and process each in parallel.
 
     Dynamic mode:
@@ -18,14 +18,12 @@ class DynamicStrategy(ExecutionStrategy):
     2. Creates a worktree for each item (up to max_concurrent)
     3. Processes items in parallel, respecting concurrency limits
     4. Optionally synthesizes results at the end
-
-    Useful for batch processing discovered files, branches, etc.
     """
 
     async def execute(
         self,
         stage_run_id: int,
-        stage: "StageConfig",
+        stage: StageConfig,
         context: Dict[str, Any],
         stage_input: Optional[str],
     ) -> StageResult:
@@ -40,38 +38,43 @@ class DynamicStrategy(ExecutionStrategy):
         Returns:
             StageResult with all outputs
         """
-        from ..worktree_pool import WorktreePool
-
         # Get discovery command (CLI override takes precedence)
-        discovery_command = context.get("_discovery_override") or stage.discovery_command
+        discovery_command = context.get('_discovery_override') or stage.discovery_command
 
         # Validate configuration
         if not discovery_command:
             return StageResult(
-                success=False, error_message="Dynamic mode requires discovery_command"
+                success=False,
+                error_message="Dynamic mode requires discovery_command"
             )
 
         # Get max_concurrent (CLI override takes precedence)
-        max_concurrent = context.get("_max_concurrent_override") or stage.max_concurrent
+        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent
 
         # Step 1: Run discovery
         try:
             items = await self._run_discovery(discovery_command, context)
         except Exception as e:
-            return StageResult(success=False, error_message=f"Discovery failed: {e}")
+            return StageResult(
+                success=False,
+                error_message=f"Discovery failed: {e}"
+            )
 
         if not items:
-            return StageResult(success=True, error_message="No items discovered")
+            return StageResult(
+                success=True,
+                error_message="No items discovered"
+            )
 
         # Update target_runs to reflect discovered item count
-        self._update_stage_run(stage_run_id, target_runs=len(items))
+        wf_db.update_stage_run(stage_run_id, target_runs=len(items))
 
         # Step 2: Set up worktree pool
-        base_branch = context.get("base_branch", "main")
+        base_branch = context.get('base_branch', 'main')
         pool = WorktreePool(
             max_size=max_concurrent,
             base_branch=base_branch,
-            repo_root=context.get("_working_dir"),
+            repo_root=context.get('_working_dir'),
         )
 
         output_doc_ids: List[int] = []
@@ -86,19 +89,15 @@ class DynamicStrategy(ExecutionStrategy):
                     # Build item-specific context
                     item_context = dict(context)
                     item_context[stage.item_variable] = item
-                    item_context["_working_dir"] = worktree.path
-                    item_context["item_index"] = item_index
-                    item_context["total_items"] = len(items)
+                    item_context['_working_dir'] = worktree.path
+                    item_context['item_index'] = item_index
+                    item_context['total_items'] = len(items)
 
                     # Resolve prompt with item context
-                    prompt = (
-                        self._resolve_template(stage.prompt, item_context)
-                        if stage.prompt
-                        else item
-                    )
+                    prompt = self.resolve_template(stage.prompt, item_context) if stage.prompt else item
 
                     # Create individual run record
-                    individual_run_id = self._create_individual_run(
+                    individual_run_id = wf_db.create_individual_run(
                         stage_run_id=stage_run_id,
                         run_number=item_index + 1,
                         prompt_used=prompt,
@@ -106,14 +105,18 @@ class DynamicStrategy(ExecutionStrategy):
                     )
 
                     # Execute agent
-                    result = await self._run_agent(
+                    result = await self.run_agent(
                         individual_run_id=individual_run_id,
                         agent_id=stage.agent_id,
                         prompt=prompt,
                         context=item_context,
                     )
 
-                    return {"item": item, "index": item_index, **result}
+                    return {
+                        'item': item,
+                        'index': item_index,
+                        **result
+                    }
 
         try:
             # Step 3: Process all items in parallel
@@ -127,11 +130,11 @@ class DynamicStrategy(ExecutionStrategy):
                     errors.append(str(result))
                     if not stage.continue_on_failure:
                         break
-                elif result.get("success"):
+                elif result.get('success'):
                     successful_items += 1
-                    if result.get("output_doc_id"):
-                        output_doc_ids.append(result["output_doc_id"])
-                    total_tokens += result.get("tokens_used", 0)
+                    if result.get('output_doc_id'):
+                        output_doc_ids.append(result['output_doc_id'])
+                    total_tokens += result.get('tokens_used', 0)
                 else:
                     error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
                     errors.append(error_msg)
@@ -139,19 +142,19 @@ class DynamicStrategy(ExecutionStrategy):
                         break
 
             # Update stage progress
-            self._update_stage_run(stage_run_id, runs_completed=successful_items)
+            wf_db.update_stage_run(stage_run_id, runs_completed=successful_items)
 
             # Step 4: Optional synthesis
             synthesis_doc_id = None
             if output_doc_ids and stage.synthesis_prompt:
-                synthesis_result = await self._synthesize_outputs(
+                synthesis_result = await self.synthesize_outputs(
                     stage_run_id=stage_run_id,
                     output_doc_ids=output_doc_ids,
                     synthesis_prompt=stage.synthesis_prompt,
                     context=context,
                 )
-                synthesis_doc_id = synthesis_result.get("output_doc_id")
-                total_tokens += synthesis_result.get("tokens_used", 0)
+                synthesis_doc_id = synthesis_result.get('output_doc_id')
+                total_tokens += synthesis_result.get('tokens_used', 0)
 
             # Determine overall success
             if not stage.continue_on_failure and errors:
@@ -167,17 +170,11 @@ class DynamicStrategy(ExecutionStrategy):
 
             return StageResult(
                 success=success,
-                output_doc_id=(
-                    synthesis_doc_id or (output_doc_ids[-1] if output_doc_ids else None)
-                ),
+                output_doc_id=synthesis_doc_id or (output_doc_ids[-1] if output_doc_ids else None),
                 synthesis_doc_id=synthesis_doc_id,
                 individual_outputs=output_doc_ids,
                 tokens_used=total_tokens,
-                error_message=(
-                    f"Processed {successful_items}/{len(items)} items. Errors: {'; '.join(errors)}"
-                    if errors
-                    else None
-                ),
+                error_message=f"Processed {successful_items}/{len(items)} items. Errors: {'; '.join(errors)}" if errors else None,
             )
 
         finally:
@@ -199,7 +196,7 @@ class DynamicStrategy(ExecutionStrategy):
             List of discovered items (strings)
         """
         # Resolve any templates in the command
-        resolved_command = self._resolve_template(command, context)
+        resolved_command = self.resolve_template(command, context)
 
         # Run command
         result = await asyncio.to_thread(
@@ -208,14 +205,12 @@ class DynamicStrategy(ExecutionStrategy):
             shell=True,
             capture_output=True,
             text=True,
-            cwd=context.get("_working_dir"),
+            cwd=context.get('_working_dir'),
         )
 
         if result.returncode != 0:
             raise ValueError(f"Discovery command failed: {result.stderr}")
 
         # Parse output - one item per line, strip whitespace
-        items = [
-            line.strip() for line in result.stdout.strip().split("\n") if line.strip()
-        ]
+        items = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
         return items

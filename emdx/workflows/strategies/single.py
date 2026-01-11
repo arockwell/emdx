@@ -1,24 +1,23 @@
-"""Single execution strategy - run agent once."""
+"""Single execution strategy - runs agent once."""
 
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
 
 from .base import ExecutionStrategy, StageResult
+from ..base import StageConfig
+from .. import database as wf_db
 
-if TYPE_CHECKING:
-    from ..base import StageConfig
 
-
-class SingleStrategy(ExecutionStrategy):
+class SingleExecutionStrategy(ExecutionStrategy):
     """Execute a single agent run.
 
-    This is the simplest execution mode - just run the agent once
-    with the provided prompt and return the result.
+    This is the simplest execution mode - runs the agent once with
+    the given prompt and returns the result.
     """
 
     async def execute(
         self,
         stage_run_id: int,
-        stage: "StageConfig",
+        stage: StageConfig,
         context: Dict[str, Any],
         stage_input: Optional[str],
     ) -> StageResult:
@@ -34,8 +33,8 @@ class SingleStrategy(ExecutionStrategy):
             StageResult
         """
         # Create individual run record
-        prompt = self._resolve_template(stage.prompt, context) if stage.prompt else None
-        individual_run_id = self._create_individual_run(
+        prompt = self.resolve_template(stage.prompt, context) if stage.prompt else None
+        individual_run_id = wf_db.create_individual_run(
             stage_run_id=stage_run_id,
             run_number=1,
             prompt_used=prompt,
@@ -43,7 +42,7 @@ class SingleStrategy(ExecutionStrategy):
         )
 
         # Execute agent
-        result = await self._run_agent(
+        result = await self.run_agent(
             individual_run_id=individual_run_id,
             agent_id=stage.agent_id,
             prompt=prompt or stage_input or "",
@@ -51,11 +50,9 @@ class SingleStrategy(ExecutionStrategy):
         )
 
         return StageResult(
-            success=result.get("success", False),
-            output_doc_id=result.get("output_doc_id"),
-            individual_outputs=(
-                [result.get("output_doc_id")] if result.get("output_doc_id") else []
-            ),
-            tokens_used=result.get("tokens_used", 0),
-            error_message=result.get("error_message"),
+            success=result.get('success', False),
+            output_doc_id=result.get('output_doc_id'),
+            individual_outputs=[result.get('output_doc_id')] if result.get('output_doc_id') else [],
+            tokens_used=result.get('tokens_used', 0),
+            error_message=result.get('error_message'),
         )
