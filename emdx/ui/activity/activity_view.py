@@ -615,10 +615,14 @@ class ActivityView(Widget):
 
     async def _update_preview(self) -> None:
         """Update the preview pane with selected item."""
-        preview = self.query_one("#preview-content", RichLog)
-        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-        preview_log = self.query_one("#preview-log", RichLog)
-        header = self.query_one("#preview-header", Static)
+        try:
+            preview = self.query_one("#preview-content", RichLog)
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_log = self.query_one("#preview-log", RichLog)
+            header = self.query_one("#preview-header", Static)
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready: {e}")
+            return
 
         # Stop any existing stream
         self._stop_stream()
@@ -671,9 +675,13 @@ class ActivityView(Widget):
 
     async def _show_workflow_summary(self, item: ActivityItem) -> None:
         """Show workflow summary in preview."""
-        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-        preview_log = self.query_one("#preview-log", RichLog)
-        header = self.query_one("#preview-header", Static)
+        try:
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_log = self.query_one("#preview-log", RichLog)
+            header = self.query_one("#preview-header", Static)
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready for summary: {e}")
+            return
 
         run = item.workflow_run
         if not run:
@@ -709,9 +717,13 @@ class ActivityView(Widget):
 
     async def _show_live_log(self, item: ActivityItem) -> None:
         """Show live log for running workflow."""
-        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-        preview_log = self.query_one("#preview-log", RichLog)
-        header = self.query_one("#preview-header", Static)
+        try:
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_log = self.query_one("#preview-log", RichLog)
+            header = self.query_one("#preview-header", Static)
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready for live log: {e}")
+            return
 
         preview_scroll.display = False
         preview_log.display = True
