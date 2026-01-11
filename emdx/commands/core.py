@@ -2,6 +2,7 @@
 Core CRUD operations for emdx
 """
 
+import json
 import os
 import subprocess
 import tempfile
@@ -26,10 +27,16 @@ from emdx.models.documents import (
     search_documents,
     update_document,
 )
-from emdx.models.tags import add_tags_to_document, get_document_tags, search_by_tags
+from emdx.models.tags import (
+    add_tags_to_document,
+    get_document_tags,
+    get_tags_for_documents,
+    search_by_tags,
+)
+from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.git import get_git_project
 from emdx.utils.emoji_aliases import expand_alias_string
+from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
 # Force color output even when not connected to a terminal
@@ -105,7 +112,7 @@ def generate_title(input_content: InputContent, provided_title: Optional[str]) -
         # Create title from first line or truncated content
         first_line = input_content.content.split("\n")[0].strip()
         if first_line:
-            return first_line[:50] + "..." if len(first_line) > 50 else first_line
+            return truncate_title(first_line)
         else:
             return f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
@@ -114,6 +121,9 @@ def detect_project(input_content: InputContent, provided_project: Optional[str])
     """Detect project from git repository"""
     if provided_project:
         return provided_project
+
+    # Lazy import - GitPython is slow to import (~135ms)
+    from emdx.utils.git import get_git_project
 
     # Try to detect from file path if it's a file
     if input_content.source_type == "file" and input_content.source_path:
@@ -176,6 +186,8 @@ def save(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
+    auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
+    suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
@@ -196,8 +208,26 @@ def save(
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
-    # Step 7: Display result
+    # Step 7: Auto-tagging if requested
+    if auto_tag:
+        tagger = AutoTagger()
+        auto_applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
+        if auto_applied:
+            applied_tags.extend(auto_applied)
+            console.print(f"   [dim]Auto-tagged:[/dim] {format_tags(auto_applied)}")
+
+    # Step 8: Display result
     display_save_result(doc_id, metadata, applied_tags)
+
+    # Step 9: Show tag suggestions if requested
+    if suggest_tags and not auto_tag:
+        tagger = AutoTagger()
+        suggestions = tagger.suggest_tags(doc_id, max_suggestions=3)
+        if suggestions:
+            console.print("\n[dim]Suggested tags:[/dim]")
+            for tag, confidence in suggestions:
+                console.print(f"   • {tag} [dim]({confidence:.0%})[/dim]")
+            console.print(f"\n[dim]Apply with: emdx tag {doc_id} <tags>[/dim]")
 
 
 @app.command()
@@ -213,6 +243,13 @@ def find(
         None, "--tags", "-t", help="Filter by tags (comma-separated)"
     ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
+    no_tags: Optional[str] = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
+    ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
+    created_after: Optional[str] = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),
+    created_before: Optional[str] = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),
+    modified_after: Optional[str] = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),
+    modified_before: Optional[str] = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),
 ) -> None:
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query) if query else ""
@@ -222,8 +259,9 @@ def find(
         db.ensure_schema()
 
         # Validate that we have something to search for
-        if not search_query and not tags:
-            console.print("[red]Error: Provide search terms or use --tags option[/red]")
+        has_date_filters = any([created_after, created_before, modified_after, modified_before])
+        if not search_query and not tags and not has_date_filters:
+            console.print("[red]Error: Provide search terms, tags, or date filters[/red]")
             raise typer.Exit(1)
 
         # Handle tag-based search
@@ -241,7 +279,9 @@ def find(
 
                 # Get documents matching search query
                 search_results = search_documents(
-                    search_query, project=project, limit=limit * 2, fuzzy=fuzzy
+                    search_query, project=project, limit=limit * 2, fuzzy=fuzzy,
+                    created_after=created_after, created_before=created_before,
+                    modified_after=modified_after, modified_before=modified_before
                 )
 
                 # Combine: only show documents that match both criteria
@@ -265,18 +305,116 @@ def find(
                     return
                 search_query = f"tags: {', '.join(tag_list)}"
         else:
-            # Regular search without tags
-            results = search_documents(search_query, project=project, limit=limit, fuzzy=fuzzy)
+            # Regular search without tags (but might have date filters)
+            # If we have no search query but have date filters, use a wildcard
+            effective_query = search_query if search_query else "*"
+            
+            results = search_documents(
+                effective_query, project=project, limit=limit, fuzzy=fuzzy,
+                created_after=created_after, created_before=created_before,
+                modified_after=modified_after, modified_before=modified_before
+            )
 
             if not results:
-                console.print(
-                    f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
-                )
+                if search_query:
+                    console.print(
+                        f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
+                    )
+                else:
+                    console.print("[yellow]No results found matching the date filters[/yellow]")
                 return
+        
+        # Batch fetch tags for all results to avoid N+1 queries
+        doc_ids = [result["id"] for result in results]
+        all_tags_map = get_tags_for_documents(doc_ids)
 
-        # Display results
+        # Filter out documents with excluded tags if --no-tags is specified
+        if no_tags:
+            expanded_no_tags = expand_alias_string(no_tags)
+            no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
+
+            if no_tag_list:
+                # Filter results to exclude documents with any of the no_tags
+                filtered_results = []
+                for result in results:
+                    doc_tags = all_tags_map.get(result["id"], [])
+                    # Check if document has any excluded tags
+                    has_excluded_tag = any(tag in doc_tags for tag in no_tag_list)
+                    if not has_excluded_tag:
+                        filtered_results.append(result)
+
+                results = filtered_results
+
+                if not results:
+                    console.print(
+                        f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"
+                    )
+                    return
+
+        # Handle different output formats
+        if ids_only:
+            # Output only IDs, one per line
+            for result in results:
+                print(result['id'])
+            return
+        
+        if json_output:
+            # Output as JSON with all metadata
+            output_results = []
+            for result in results:
+                # Use batch-fetched tags
+                doc_tags = all_tags_map.get(result["id"], [])
+
+                # Build clean result object
+                output_result = {
+                    "id": result["id"],
+                    "title": result["title"],
+                    "project": result.get("project"),
+                    "created_at": result["created_at"].isoformat(),
+                    "updated_at": result.get("updated_at", result["created_at"]).isoformat(),
+                    "tags": doc_tags,
+                    "access_count": result.get("access_count", 0),
+                }
+                
+                # Add search-specific metadata if available
+                if "rank" in result:
+                    output_result["relevance"] = result["rank"]
+                elif "score" in result:
+                    output_result["similarity"] = result["score"]
+                
+                if snippets and "snippet" in result:
+                    # Clean snippet of HTML tags
+                    output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
+                
+                output_results.append(output_result)
+            
+            # Output as JSON
+            print(json.dumps(output_results, indent=2))
+            return
+
+        # Display results (default human-readable format)
+        # Build search description
+        search_desc = []
+        if search_query:
+            search_desc.append(f"'[cyan]{search_query}[/cyan]'")
+        if created_after or created_before:
+            date_range = []
+            if created_after:
+                date_range.append(f"after {created_after}")
+            if created_before:
+                date_range.append(f"before {created_before}")
+            search_desc.append(f"created {' and '.join(date_range)}")
+        if modified_after or modified_before:
+            date_range = []
+            if modified_after:
+                date_range.append(f"after {modified_after}")
+            if modified_before:
+                date_range.append(f"before {modified_before}")
+            search_desc.append(f"modified {' and '.join(date_range)}")
+        
+        search_description = " ".join(search_desc) if search_desc else "all documents"
         console.print(
-            f"\n[bold]🔍 Found {len(results)} results for '[cyan]{search_query}[/cyan]'[/bold]\n"
+            f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n"
         )
 
         for i, result in enumerate(results, 1):
@@ -296,8 +434,8 @@ def find(
 
             console.print(" • ".join(metadata))
 
-            # Display tags
-            doc_tags = get_document_tags(result["id"])
+            # Display tags (using batch-fetched tags)
+            doc_tags = all_tags_map.get(result["id"], [])
             if doc_tags:
                 console.print(f"[dim]Tags: {format_tags(doc_tags)}[/dim]")
 
@@ -802,5 +940,25 @@ def purge(
     except Exception as e:
         console.print(f"[red]Error purging documents: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@app.command(name="exec")
+def exec_document(
+    doc_id: str = typer.Argument(..., help="Document ID to execute"),
+    background: bool = typer.Option(True, "--background/--foreground",
+                                  help="Run in background (default) or foreground"),
+    tools: Optional[str] = typer.Option(None, "--tools", "-t",
+                                       help="Comma-separated list of allowed tools"),
+) -> None:
+    """Execute a document with Claude (shortcut for 'claude execute')."""
+    from . import claude_execute
+    
+    # Call the actual execute function
+    claude_execute.execute(
+        doc_id=doc_id,
+        background=background,
+        tools=tools,
+        smart=True  # Always use smart mode
+    )
 
 

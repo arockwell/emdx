@@ -31,6 +31,11 @@ class SQLiteDatabase:
 
     def __init__(self, db_path=None):
         self._connection = DatabaseConnection(db_path)
+    
+    @property
+    def db_path(self):
+        """Get database path"""
+        return self._connection.db_path
 
     def get_connection(self):
         """Get database connection - delegates to connection module"""
@@ -72,8 +77,12 @@ class SQLiteDatabase:
         return purge_deleted_documents(older_than_days)
 
     # Search operations - delegate to search module
-    def search_documents(self, query, project=None, limit=10, fuzzy=False):
-        return search_documents(query, project, limit, fuzzy)
+    def search_documents(self, query, project=None, limit=10, fuzzy=False,
+                        created_after=None, created_before=None,
+                        modified_after=None, modified_before=None):
+        return search_documents(query, project, limit, fuzzy,
+                              created_after, created_before,
+                              modified_after, modified_before)
 
 
 # Create global instance for backward compatibility

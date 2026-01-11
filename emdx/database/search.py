@@ -9,7 +9,14 @@ from .connection import db_connection
 
 
 def search_documents(
-    query: str, project: Optional[str] = None, limit: int = 10, fuzzy: bool = False
+    query: str, 
+    project: Optional[str] = None, 
+    limit: int = 10, 
+    fuzzy: bool = False,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    modified_after: Optional[str] = None,
+    modified_before: Optional[str] = None
 ) -> list[dict[str, Any]]:
     """Search documents using FTS5
 
@@ -23,39 +30,66 @@ def search_documents(
         List of document dictionaries with search results including snippets and ranking
     """
     with db_connection.get_connection() as conn:
-        # For now, fuzzy search just uses regular FTS5
-        # Could add rapidfuzz later for title matching
-
-        if project:
-            cursor = conn.execute(
-                """
+        # Build dynamic query with date filters
+        # Handle special case where we only have date filters (no text search)
+        if query == "*":
+            base_query = """
                 SELECT
-                    d.id, d.title, d.project, d.created_at,
-                    snippet(documents_fts, 1, '<b>', '</b>', '...', 30) as snippet,
-                    rank as rank
+                    d.id, d.title, d.project, d.created_at, d.updated_at,
+                    NULL as snippet,
+                    0 as rank
                 FROM documents d
-                JOIN documents_fts ON d.id = documents_fts.rowid
-                WHERE documents_fts MATCH ? AND d.project = ? AND d.deleted_at IS NULL
-                ORDER BY rank
-                LIMIT ?
-            """,
-                (query, project, limit),
-            )
+                WHERE d.deleted_at IS NULL
+            """
+            params = []
         else:
-            cursor = conn.execute(
-                """
+            base_query = """
                 SELECT
-                    d.id, d.title, d.project, d.created_at,
+                    d.id, d.title, d.project, d.created_at, d.updated_at,
                     snippet(documents_fts, 1, '<b>', '</b>', '...', 30) as snippet,
                     rank as rank
                 FROM documents d
                 JOIN documents_fts ON d.id = documents_fts.rowid
                 WHERE documents_fts MATCH ? AND d.deleted_at IS NULL
-                ORDER BY rank
-                LIMIT ?
-            """,
-                (query, limit),
-            )
+            """
+            params = [query]
+        
+        conditions = []
+        
+        # Add project filter
+        if project:
+            conditions.append("d.project = ?")
+            params.append(project)
+        
+        # Add date filters
+        if created_after:
+            conditions.append("d.created_at >= ?")
+            params.append(created_after)
+        
+        if created_before:
+            conditions.append("d.created_at <= ?")
+            params.append(created_before)
+        
+        if modified_after:
+            conditions.append("d.updated_at >= ?")
+            params.append(modified_after)
+        
+        if modified_before:
+            conditions.append("d.updated_at <= ?")
+            params.append(modified_before)
+        
+        # Combine conditions
+        if conditions:
+            base_query += " AND " + " AND ".join(conditions)
+        
+        # Order by rank for text searches, by id for date-only searches
+        if query == "*":
+            base_query += " ORDER BY d.id DESC LIMIT ?"
+        else:
+            base_query += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+        
+        cursor = conn.execute(base_query, params)
 
         # Convert rows and parse datetime strings
         docs = []

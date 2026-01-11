@@ -2,6 +2,7 @@
 
 from typing import Any, Optional
 
+from emdx.config.constants import DEFAULT_BROWSE_LIMIT, DEFAULT_LIST_LIMIT
 from emdx.database import db
 
 
@@ -15,16 +16,25 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
     return db.get_document(identifier)
 
 
-def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_documents(project: Optional[str] = None, limit: int = DEFAULT_BROWSE_LIMIT) -> list[dict[str, Any]]:
     """List documents with optional project filter"""
     return db.list_documents(project, limit)
 
 
 def search_documents(
-    query: str, project: Optional[str] = None, limit: int = 10, fuzzy: bool = False
+    query: str,
+    project: Optional[str] = None,
+    limit: int = DEFAULT_LIST_LIMIT, 
+    fuzzy: bool = False,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    modified_after: Optional[str] = None,
+    modified_before: Optional[str] = None
 ) -> list[dict[str, Any]]:
-    """Search documents using FTS5"""
-    return db.search_documents(query, project, limit, fuzzy)
+    """Search documents using FTS5 with optional date filters"""
+    return db.search_documents(query, project, limit, fuzzy, 
+                             created_after, created_before, 
+                             modified_after, modified_before)
 
 
 def update_document(doc_id: int, title: str, content: str) -> bool:
@@ -37,7 +47,7 @@ def delete_document(identifier: str, hard_delete: bool = False) -> bool:
     return db.delete_document(identifier, hard_delete)
 
 
-def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_documents(limit: int = DEFAULT_LIST_LIMIT) -> list[dict[str, Any]]:
     """Get recently accessed documents"""
     return db.get_recent_documents(limit)
 
@@ -47,7 +57,7 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
     return db.get_stats(project)
 
 
-def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_deleted_documents(days: Optional[int] = None, limit: int = DEFAULT_BROWSE_LIMIT) -> list[dict[str, Any]]:
     """List soft-deleted documents"""
     return db.list_deleted_documents(days, limit)
 

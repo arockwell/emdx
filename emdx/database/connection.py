@@ -31,6 +31,9 @@ class DatabaseConnection:
         )
         conn.row_factory = sqlite3.Row  # Enable column access by name
 
+        # Enable foreign key constraints for this connection
+        conn.execute("PRAGMA foreign_keys = ON")
+
         # Register datetime adapter
         sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
         sqlite3.register_converter("timestamp", lambda b: datetime.fromisoformat(b.decode()))
@@ -43,13 +46,21 @@ class DatabaseConnection:
     def ensure_schema(self):
         """Ensure the tables and FTS5 virtual table exist"""
         # Run any pending migrations first
-        migrations.run_migrations()
+        migrations.run_migrations(self.db_path)
 
         with self.get_connection() as conn:
             # Enable foreign keys
             conn.execute("PRAGMA foreign_keys = ON")
 
-            # Create documents table if it doesn't exist
+            # The schema is now primarily handled by migrations, but we keep these
+            # CREATE TABLE IF NOT EXISTS statements as a safety net for edge cases
+            # and backwards compatibility
+            
+            # Note: migration_000 creates the documents table and related schema
+            # Note: migration_001 creates the tags tables
+            
+            # Legacy code for backwards compatibility - these should be no-ops
+            # if migrations have run successfully
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS documents (
@@ -67,45 +78,6 @@ class DatabaseConnection:
             """
             )
 
-            # Add soft delete columns to existing databases (migration)
-            # Check if columns exist first
-            cursor = conn.execute("PRAGMA table_info(documents)")
-            columns = [col[1] for col in cursor.fetchall()]
-
-            if "deleted_at" not in columns:
-                conn.execute("ALTER TABLE documents ADD COLUMN deleted_at TIMESTAMP")
-
-            if "is_deleted" not in columns:
-                conn.execute("ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
-
-            # Create tags table if it doesn't exist
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tags (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    usage_count INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """
-            )
-
-            # Create document_tags table if it doesn't exist
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS document_tags (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    document_id INTEGER NOT NULL,
-                    tag_id INTEGER NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE,
-                    FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
-                    UNIQUE (document_id, tag_id)
-                )
-            """
-            )
-
-            # Create FTS5 virtual table for full-text search
             conn.execute(
                 """
                 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
@@ -141,50 +113,6 @@ class DatabaseConnection:
                     DELETE FROM documents_fts WHERE rowid = old.id;
                 END
             """
-            )
-
-            # Create indexes
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)"
-            )
-
-            # Create index after columns exist
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(
-                    is_deleted, deleted_at
-                )
-            """
-            )
-
-            # Create gists table for tracking document-gist relationships
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS gists (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    document_id INTEGER NOT NULL,
-                    gist_id TEXT NOT NULL,
-                    gist_url TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_public BOOLEAN DEFAULT 0,
-                    FOREIGN KEY (document_id) REFERENCES documents (id)
-                )
-            """
-            )
-
-            # Create indexes for gists table
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)")
-
-            # Create indexes for tags tables
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON document_tags(document_id)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_document_tags_tag_id ON document_tags(tag_id)"
             )
 
             conn.commit()

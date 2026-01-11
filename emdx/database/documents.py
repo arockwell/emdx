@@ -3,7 +3,7 @@ Document CRUD operations for emdx knowledge base
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from .connection import db_connection
 
@@ -30,11 +30,14 @@ def save_document(title: str, content: str, project: Optional[str] = None, tags:
         return doc_id
 
 
-def get_document(identifier: str) -> Optional[dict[str, Any]]:
+def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
     """Get a document by ID or title"""
     with db_connection.get_connection() as conn:
+        # Convert to string for consistent handling
+        identifier_str = str(identifier)
+        
         # Update access tracking
-        if identifier.isdigit():
+        if identifier_str.isdigit():
             conn.execute(
                 """
                 UPDATE documents
@@ -42,14 +45,14 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
                     access_count = access_count + 1
                 WHERE id = ? AND is_deleted = FALSE
             """,
-                (int(identifier),),
+                (int(identifier_str),),
             )
 
             cursor = conn.execute(
                 """
                 SELECT * FROM documents WHERE id = ? AND is_deleted = FALSE
             """,
-                (int(identifier),),
+                (int(identifier_str),),
             )
         else:
             conn.execute(
@@ -59,14 +62,14 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
                     access_count = access_count + 1
                 WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
             """,
-                (identifier,),
+                (identifier_str,),
             )
 
             cursor = conn.execute(
                 """
                 SELECT * FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
             """,
-                (identifier,),
+                (identifier_str,),
             )
 
         conn.commit()
@@ -91,7 +94,7 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
                 SELECT id, title, project, created_at, access_count
                 FROM documents
                 WHERE project = ? AND is_deleted = FALSE
-                ORDER BY created_at DESC
+                ORDER BY id DESC
                 LIMIT ?
             """,
                 (project, limit),
@@ -102,7 +105,7 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
                 SELECT id, title, project, created_at, access_count
                 FROM documents
                 WHERE is_deleted = FALSE
-                ORDER BY created_at DESC
+                ORDER BY id DESC
                 LIMIT ?
             """,
                 (limit,),
@@ -135,35 +138,38 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
         return cursor.rowcount > 0
 
 
-def delete_document(identifier: str, hard_delete: bool = False) -> bool:
+def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> bool:
     """Delete a document by ID or title (soft delete by default)"""
     with db_connection.get_connection() as conn:
+        # Convert to string for consistent handling
+        identifier_str = str(identifier)
+        
         if hard_delete:
             # Permanent deletion
-            if identifier.isdigit():
+            if identifier_str.isdigit():
                 cursor = conn.execute(
                     """
                     DELETE FROM documents WHERE id = ? AND is_deleted = FALSE
                 """,
-                    (int(identifier),),
+                    (int(identifier_str),),
                 )
             else:
                 cursor = conn.execute(
                     """
                     DELETE FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
                 """,
-                    (identifier,),
+                    (identifier_str,),
                 )
         else:
             # Soft delete
-            if identifier.isdigit():
+            if identifier_str.isdigit():
                 cursor = conn.execute(
                     """
                     UPDATE documents
                     SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
                     WHERE id = ? AND is_deleted = FALSE
                 """,
-                    (int(identifier),),
+                    (int(identifier_str),),
                 )
             else:
                 cursor = conn.execute(
@@ -172,7 +178,7 @@ def delete_document(identifier: str, hard_delete: bool = False) -> bool:
                     SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
                     WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
                 """,
-                    (identifier,),
+                    (identifier_str,),
                 )
 
         conn.commit()
@@ -311,10 +317,12 @@ def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[
         return docs
 
 
-def restore_document(identifier: str) -> bool:
+def restore_document(identifier: Union[str, int]) -> bool:
     """Restore a soft-deleted document"""
     with db_connection.get_connection() as conn:
-        if identifier.isdigit():
+        # Convert to string for consistent handling
+        identifier_str = str(identifier)
+        if identifier_str.isdigit():
             cursor = conn.execute(
                 """
                 UPDATE documents
