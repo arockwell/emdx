@@ -1,9 +1,10 @@
 """Simple CLI tests that work without complex mocking."""
 
-from typer.testing import CliRunner
 from unittest.mock import Mock, patch
 
-from emdx.cli import app
+from typer.testing import CliRunner
+
+from emdx.main import app
 
 runner = CliRunner()
 
@@ -43,19 +44,20 @@ class TestCLIBasics:
         result = runner.invoke(app, ["nonexistent-command"])
 
         assert result.exit_code != 0
-        # Typer shows error in stderr or stdout
-        error_output = result.stdout + result.stderr
+        # Typer shows error in stdout when stderr not captured
+        error_output = result.stdout
         assert (
             "no such command" in error_output.lower()
             or "invalid" in error_output.lower()
             or result.exit_code == 2
         )
 
-    @patch("emdx.browse.db")
-    def test_list_command(self, mock_db):
+    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands.browse.list_documents")
+    def test_list_command(self, mock_list_docs, mock_db):
         """Test list command."""
         mock_db.ensure_schema = Mock()
-        mock_db.list_documents.return_value = []
+        mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list"])
         # Should work even with empty database
@@ -67,20 +69,29 @@ class TestCLIBasics:
         # Should work even with empty database
         assert result.exit_code == 0 or "no documents" in result.stdout.lower()
 
-    def test_stats_command(self):
+    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands.browse.get_stats")
+    def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""
+        mock_db.ensure_schema = Mock()
+        mock_get_stats.return_value = {
+            "total": 0,
+            "by_project": {},
+            "recent_activity": []
+        }
+        
         result = runner.invoke(app, ["stats"])
         # Should show some statistics
         assert result.exit_code == 0
 
-    @patch("emdx.tags.db")
+    @patch("emdx.models.tags.db")
     def test_tags_list_command(self, mock_db):
         """Test tags list command."""
         mock_conn = Mock()
         mock_conn.execute.return_value.fetchall.return_value = []
         mock_db.get_connection.return_value.__enter__.return_value = mock_conn
 
-        result = runner.invoke(app, ["tags", "list"])
+        result = runner.invoke(app, ["tags"])
         # Should work even with no tags
         assert result.exit_code == 0
 

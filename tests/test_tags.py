@@ -1,7 +1,7 @@
 """Tests for tag operations."""
 
 
-from test_fixtures import TestDatabase
+from test_fixtures import DatabaseForTesting
 
 
 class TestTagOperations:
@@ -9,7 +9,7 @@ class TestTagOperations:
 
     def test_add_tags_to_document(self):
         """Test adding tags to a document."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Create a document
         doc_id = db.save_document("Test Doc", "Content", "project")
@@ -50,7 +50,7 @@ class TestTagOperations:
 
     def test_get_or_create_tag(self):
         """Test getting or creating a tag."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
         conn = db.get_connection()
 
         # Create new tag
@@ -70,7 +70,7 @@ class TestTagOperations:
 
     def test_search_by_tags(self):
         """Test searching documents by tags."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         # Create documents with tags
         doc1 = db.save_document("Python Guide", "Learn Python", "project1")
@@ -119,7 +119,7 @@ class TestTagOperations:
 
     def test_remove_tag_from_document(self):
         """Test removing a tag from a document."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
 
         doc_id = db.save_document("Tagged Doc", "Content", "project")
         conn = db.get_connection()
@@ -166,7 +166,7 @@ class TestTagOperations:
 
     def test_tag_usage_count(self):
         """Test tag usage counting."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
         conn = db.get_connection()
 
         # Create tag with usage count
@@ -190,7 +190,7 @@ class TestTagOperations:
 
     def test_list_all_tags(self):
         """Test listing all tags in the system."""
-        db = TestDatabase(":memory:")
+        db = DatabaseForTesting(":memory:")
         conn = db.get_connection()
 
         # Create multiple tags with different usage counts
