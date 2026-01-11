@@ -51,7 +51,7 @@ class ExecutionService:
 
     @staticmethod
     def create_execution(
-        doc_id: int,
+        doc_id: Optional[int],
         doc_title: str,
         log_file: str,
         working_dir: Optional[str] = None,
@@ -59,7 +59,7 @@ class ExecutionService:
         """Create a new execution record.
 
         Args:
-            doc_id: Document ID being executed
+            doc_id: Document ID being executed (can be None for workflow agents)
             doc_title: Document title
             log_file: Path to log file
             working_dir: Working directory for execution

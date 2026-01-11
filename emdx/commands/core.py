@@ -945,7 +945,7 @@ def purge(
 @app.command(name="exec")
 def exec_document(
     doc_id: str = typer.Argument(..., help="Document ID to execute"),
-    background: bool = typer.Option(True, "--background/--foreground", "-b/-f", 
+    background: bool = typer.Option(True, "--background/--foreground",
                                   help="Run in background (default) or foreground"),
     tools: Optional[str] = typer.Option(None, "--tools", "-t",
                                        help="Comma-separated list of allowed tools"),
