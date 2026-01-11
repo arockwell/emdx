@@ -189,19 +189,26 @@ Report the document ID that was created."""
                         tags=['workflow-output'],
                     )
 
+                # Extract token usage from log
+                token_usage = self._extract_token_usage(log_file)
+
                 wf_db.update_individual_run(
                     individual_run_id,
                     status='completed',
                     output_doc_id=output_doc_id,
                     agent_execution_id=exec_id,
-                    tokens_used=0,  # Note: Token usage tracking not yet implemented
+                    tokens_used=token_usage['tokens_used'],
+                    input_tokens=token_usage['input_tokens'],
+                    output_tokens=token_usage['output_tokens'],
                     completed_at=datetime.now(),
                 )
 
                 return {
                     'success': True,
                     'output_doc_id': output_doc_id,
-                    'tokens_used': 0,
+                    'tokens_used': token_usage['tokens_used'],
+                    'input_tokens': token_usage['input_tokens'],
+                    'output_tokens': token_usage['output_tokens'],
                     'execution_id': exec_id,
                 }
             else:
@@ -287,6 +294,56 @@ Report the document ID that was created."""
             logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
+
+    def _extract_token_usage(self, log_file: Path) -> Dict[str, int]:
+        """Extract token usage from execution log.
+
+        Parses the __RAW_RESULT_JSON__ line to get token counts from Claude CLI output.
+
+        Args:
+            log_file: Path to the execution log
+
+        Returns:
+            Dict with input_tokens, output_tokens, and tokens_used (total)
+        """
+        import json
+
+        result = {'input_tokens': 0, 'output_tokens': 0, 'tokens_used': 0}
+
+        if not log_file.exists():
+            return result
+
+        try:
+            content = log_file.read_text()
+
+            # Look for __RAW_RESULT_JSON__ line
+            for line in content.split('\n'):
+                if '__RAW_RESULT_JSON__:' in line:
+                    json_str = line.split('__RAW_RESULT_JSON__:', 1)[1].strip()
+                    try:
+                        data = json.loads(json_str)
+                        usage = data.get('usage', {})
+
+                        # Input tokens = direct input + cache reads + cache creation
+                        input_tokens = (
+                            usage.get('input_tokens', 0) +
+                            usage.get('cache_read_input_tokens', 0) +
+                            usage.get('cache_creation_input_tokens', 0)
+                        )
+                        output_tokens = usage.get('output_tokens', 0)
+
+                        result['input_tokens'] = input_tokens
+                        result['output_tokens'] = output_tokens
+                        result['tokens_used'] = input_tokens + output_tokens
+                        break
+                    except json.JSONDecodeError:
+                        continue
+
+            return result
+        except (OSError, IOError):
+            return result
+        except Exception:
+            return result
 
     async def synthesize_outputs(
         self,

@@ -885,8 +885,11 @@ Report the document ID that was created."""
             status = 'completed' if exit_code == 0 else 'failed'
             execution_service.update_execution_status(exec_id, status, exit_code)
 
-            # Extract token usage from the log file
-            tokens_used = self._extract_token_usage(log_file)
+            # Extract token usage from the log file (detailed version with in/out)
+            token_usage = self._extract_token_usage_detailed(log_file)
+            tokens_used = token_usage.get('total', 0)
+            input_tokens = token_usage.get('input', 0) + token_usage.get('cache_in', 0) + token_usage.get('cache_create', 0)
+            output_tokens = token_usage.get('output', 0)
 
             if exit_code == 0:
                 # Try to extract output document ID from log
@@ -907,6 +910,8 @@ Report the document ID that was created."""
                     output_doc_id=output_doc_id,
                     agent_execution_id=exec_id,
                     tokens_used=tokens_used,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                     execution_time_ms=execution_time_ms,
                     completed_at=exec_end_time,
                 )
@@ -915,6 +920,8 @@ Report the document ID that was created."""
                     'success': True,
                     'output_doc_id': output_doc_id,
                     'tokens_used': tokens_used,
+                    'input_tokens': input_tokens,
+                    'output_tokens': output_tokens,
                     'execution_time_ms': execution_time_ms,
                     'execution_id': exec_id,
                 }

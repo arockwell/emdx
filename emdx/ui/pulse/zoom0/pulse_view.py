@@ -190,8 +190,9 @@ class PulseView(Widget):
         agents_table.add_column("", width=2)  # Status
         agents_table.add_column("#", width=3)  # Run number
         agents_table.add_column("Time", width=6)
-        agents_table.add_column("Tokens", width=7)
-        agents_table.add_column("Output", width=16)
+        agents_table.add_column("In", width=6)  # Input tokens
+        agents_table.add_column("Out", width=6)  # Output tokens
+        agents_table.add_column("Output", width=12)
 
         # Hide doc widget initially (we'll show it when needed)
         self.query_one("#agent-doc").display = False
@@ -416,7 +417,7 @@ class PulseView(Widget):
                     except (ValueError, TypeError):
                         pass
 
-                agents_table.add_row(icon, "1", time_str, format_tokens(run.get('total_tokens_used')), "")
+                agents_table.add_row(icon, "1", time_str, "—", "—", "")
                 await self._update_agent_log()
                 return
 
@@ -462,16 +463,25 @@ class PulseView(Widget):
                 if ir.get('output_doc_id'):
                     output = f"Doc #{ir['output_doc_id']}"
                 elif status == 'running':
-                    output = "[green]● LIVE[/green]"
+                    output = "● LIVE"
                 elif ir.get('error_message'):
-                    output = f"[red]{ir['error_message'][:12]}…[/red]"
+                    output = ir['error_message'][:12] + "…"
+
+                # Token display - show "..." for running agents
+                if status == 'running':
+                    in_str = "..."
+                    out_str = "..."
+                else:
+                    in_str = format_tokens(ir.get('input_tokens'))
+                    out_str = format_tokens(ir.get('output_tokens'))
 
                 agents_table.add_row(
                     icon,
                     str(ir.get('run_number', '?')),
                     time_str,
-                    format_tokens(ir.get('tokens_used')),
-                    output[:14]
+                    in_str,
+                    out_str,
+                    output[:12]
                 )
 
             # Select first row
@@ -573,10 +583,11 @@ class PulseView(Widget):
                     # Build document display with markdown header
                     agent_num = selected.get('run_number', '?')
                     time_str = f"{selected['execution_time_ms']/1000:.0f}s" if selected.get('execution_time_ms') else "—"
-                    tokens_str = format_tokens(selected.get('tokens_used'))
+                    in_tokens = format_tokens(selected.get('input_tokens'))
+                    out_tokens = format_tokens(selected.get('output_tokens'))
 
                     header = f"## ✓ Agent #{agent_num}\n"
-                    header += f"*Time: {time_str} | Tokens: {tokens_str}*\n\n"
+                    header += f"*Time: {time_str} | In: {in_tokens} | Out: {out_tokens}*\n\n"
                     header += f"### 📄 {doc.get('title', 'Untitled')}\n\n"
 
                     content = doc.get('content', '')
@@ -598,7 +609,8 @@ class PulseView(Widget):
 
         agent_num = selected.get('run_number', '?')
         time_str = f"{selected['execution_time_ms']/1000:.0f}s" if selected.get('execution_time_ms') else "—"
-        tokens_str = format_tokens(selected.get('tokens_used'))
+        in_tokens = format_tokens(selected.get('input_tokens'))
+        out_tokens = format_tokens(selected.get('output_tokens'))
 
         if agent_status == 'completed':
             agent_log.write(f"[bold green]━━━ Agent #{agent_num} ✓ ━━━[/bold green]")
@@ -609,7 +621,7 @@ class PulseView(Widget):
         else:
             agent_log.write(f"[bold]━━━ Agent #{agent_num} ━━━[/bold]")
 
-        agent_log.write(f"[dim]Time: {time_str} | Tokens: {tokens_str}[/dim]")
+        agent_log.write(f"[dim]Time: {time_str} | In: {in_tokens} | Out: {out_tokens}[/dim]")
         agent_log.write("")
 
         # Show error if present
