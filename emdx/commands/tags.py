@@ -1,12 +1,12 @@
 """Tag management commands for emdx."""
 
 
+from typing import Optional
+
 import typer
 from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from typing import List, Optional
+from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -18,9 +18,10 @@ from emdx.models.tags import (
     remove_tags_from_document,
     rename_tag,
 )
-from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import expand_aliases, generate_legend
 from emdx.services.auto_tagger import AutoTagger
+from emdx.ui.formatting import format_tags
+from emdx.utils.emoji_aliases import generate_legend
+from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
 console = Console()
@@ -366,7 +367,7 @@ def batch(
             for doc_id, tags in eligible_docs[:sample_size]:
                 # Get document title
                 doc = get_document(str(doc_id))
-                title = doc['title'][:50] + "..." if len(doc['title']) > 50 else doc['title']
+                title = truncate_title(doc['title'])
                 
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")
                 for tag, conf in tags:
