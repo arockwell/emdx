@@ -42,9 +42,6 @@ class LogView(Widget):
         Binding("g", "scroll_home", "Top"),
         Binding("G", "scroll_end", "Bottom"),
         Binding("l", "toggle_live", "Toggle Live"),
-        Binding("slash", "search", "Search"),
-        Binding("n", "next_match", "Next Match"),
-        Binding("N", "prev_match", "Prev Match"),
     ]
 
     DEFAULT_CSS = """
@@ -73,7 +70,6 @@ class LogView(Widget):
     """
 
     is_live = reactive(True)
-    search_query = reactive("")
 
     def __init__(self):
         super().__init__()
@@ -244,7 +240,7 @@ class LogView(Widget):
             parts.append("[yellow]⏸ PAUSED[/yellow]")
 
         # Shortcuts
-        parts.append("l=toggle live | g/G=top/bottom | /=search")
+        parts.append("l=toggle live | g/G=top/bottom | j/k=scroll")
 
         status.update(" | ".join(parts))
 
@@ -279,19 +275,6 @@ class LogView(Widget):
                 self.current_stream.unsubscribe(self.subscriber)
 
         self._update_status()
-
-    def action_search(self) -> None:
-        """Start search (placeholder)."""
-        # TODO: Implement search input
-        pass
-
-    def action_next_match(self) -> None:
-        """Go to next search match (placeholder)."""
-        pass
-
-    def action_prev_match(self) -> None:
-        """Go to previous search match (placeholder)."""
-        pass
 
     def watch_is_live(self, old: bool, new: bool) -> None:
         """React to live mode changes."""

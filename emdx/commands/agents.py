@@ -416,8 +416,10 @@ def edit_agent(
         help="Update timeout in seconds"),
     output_tags: Optional[List[str]] = typer.Option(None, "--tag",
         help="Update output tags"),
-    requires_confirmation: Optional[bool] = typer.Option(None, "--confirm/--no-confirm",
-        help="Update confirmation requirement")
+    confirm: bool = typer.Option(False, "--confirm",
+        help="Set to require confirmation before running"),
+    no_confirm: bool = typer.Option(False, "--no-confirm",
+        help="Set to not require confirmation before running")
 ):
     """Edit an existing agent."""
     try:
@@ -481,8 +483,14 @@ def edit_agent(
                     emoji_tags.append(tag)
             updates['output_tags'] = emoji_tags
         
-        if requires_confirmation is not None:
-            updates['requires_confirmation'] = requires_confirmation
+        # Handle confirm/no-confirm flags
+        if confirm and no_confirm:
+            console.print("[red]Cannot specify both --confirm and --no-confirm[/red]")
+            raise typer.Exit(1)
+        if confirm:
+            updates['requires_confirmation'] = True
+        elif no_confirm:
+            updates['requires_confirmation'] = False
         
         if not updates:
             console.print("[yellow]No updates specified[/yellow]")

@@ -2,36 +2,12 @@
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from ..database.connection import db_connection
-
-
-def parse_timestamp(ts) -> datetime:
-    """Parse a timestamp from the database, ensuring it has timezone info."""
-    if isinstance(ts, str):
-        # SQLite returns timestamps as strings
-        # First try parsing with timezone
-        try:
-            dt = datetime.fromisoformat(ts.replace(' ', 'T'))
-        except ValueError:
-            # If that fails, parse as naive and assume UTC
-            dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
-        
-        # Ensure timezone awareness
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    elif isinstance(ts, datetime):
-        # Already a datetime object
-        if ts.tzinfo is None:
-            return ts.replace(tzinfo=timezone.utc)
-        return ts
-    else:
-        # Fallback
-        return datetime.now(timezone.utc)
+from ..utils.datetime import parse_timestamp
 
 
 @dataclass
@@ -120,16 +96,11 @@ def get_execution(exec_id: int) -> Optional[Execution]:
         row = cursor.fetchone()
         if not row:
             return None
-            
-        # Handle datetime parsing more robustly
-        try:
-            started_at = datetime.fromisoformat(row[4]) if isinstance(row[4], str) else row[4]
-            completed_at = datetime.fromisoformat(row[5]) if row[5] and isinstance(row[5], str) else row[5]
-        except (ValueError, TypeError):
-            # Fallback for any datetime parsing issues
-            started_at = datetime.now()
-            completed_at = None
-            
+
+        # Parse timestamps with centralized datetime utility
+        started_at = parse_timestamp(row[4])
+        completed_at = parse_timestamp(row[5]) if row[5] else None
+
         return Execution(
             id=row[0],
             doc_id=row[1],

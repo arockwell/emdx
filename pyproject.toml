@@ -23,7 +23,8 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.13"
-typer = {extras = ["all"], version = "^0.9.0"}
+typer = {extras = ["all"], version = "^0.15.0"}
+click = ">=8.0.0,<8.3.0"  # Pin click to avoid breaking changes in 8.3.x
 rich = "^13.0.0"
 python-dotenv = "^1.0.0"
 gitpython = "^3.1.0"
@@ -33,6 +34,7 @@ psutil = "^7.0.0"
 google-api-python-client = "^2.100.0"
 google-auth-httplib2 = "^0.2.0"
 google-auth-oauthlib = "^1.2.0"
+scikit-learn = "^1.6.0"  # TF-IDF similarity
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"

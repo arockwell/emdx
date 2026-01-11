@@ -2,10 +2,20 @@
 Document CRUD operations for emdx knowledge base
 """
 
-from datetime import datetime
 from typing import Any, Optional, Union
 
+from ..utils.datetime import parse_datetime
 from .connection import db_connection
+
+
+def _parse_doc_datetimes(doc: dict[str, Any], fields: list[str] | None = None) -> dict[str, Any]:
+    """Parse datetime fields in a document dictionary."""
+    if fields is None:
+        fields = ["created_at", "updated_at", "accessed_at", "deleted_at"]
+    for field in fields:
+        if field in doc and isinstance(doc[field], str):
+            doc[field] = parse_datetime(doc[field])
+    return doc
 
 
 def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
@@ -78,10 +88,7 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
         if row:
             # Convert Row to dict and parse datetime strings
             doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            return doc
+            return _parse_doc_datetimes(doc)
         return None
 
 
@@ -115,10 +122,7 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
         docs = []
         for row in cursor.fetchall():
             doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            docs.append(doc)
+            docs.append(_parse_doc_datetimes(doc))
         return docs
 
 
@@ -203,10 +207,7 @@ def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
         docs = []
         for row in cursor.fetchall():
             doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            docs.append(doc)
+            docs.append(_parse_doc_datetimes(doc))
         return docs
 
 
@@ -310,10 +311,7 @@ def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[
         docs = []
         for row in cursor.fetchall():
             doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at", "deleted_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            docs.append(doc)
+            docs.append(_parse_doc_datetimes(doc))
         return docs
 
 
