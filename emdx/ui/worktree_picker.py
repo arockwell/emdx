@@ -3,12 +3,15 @@
 Worktree picker modal for EMDX TUI.
 """
 
+from pathlib import Path
+from typing import Callable, List
+import os
+
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, Static
-from typing import List, Optional, Callable
 
 from emdx.utils.git_ops import GitWorktree
 
@@ -115,7 +118,21 @@ class WorktreePickerScreen(ModalScreen):
             # Truncate long names for display
             name = worktree.name[:25]
             branch_name = worktree.branch.replace("refs/heads/", "")[:30]
-            path_display = worktree.path.replace("/Users/alexrockwell/dev/worktrees/", "")[:40]
+            # Try to make path relative to common worktree directory or use basename
+            path_display = worktree.path
+            if len(self.filtered_worktrees) > 1:
+                try:
+                    common_parent = os.path.dirname(os.path.commonpath([w.path for w in self.filtered_worktrees]))
+                    if common_parent and len(common_parent) > 10:  # Only if common path is meaningful
+                        path_display = os.path.relpath(worktree.path, common_parent)
+                    else:
+                        path_display = os.path.basename(worktree.path)
+                except (ValueError, OSError):
+                    # Fall back to basename if path operations fail
+                    path_display = os.path.basename(worktree.path)
+            else:
+                path_display = os.path.basename(worktree.path)
+            path_display = path_display[:40]
             
             table.add_row(
                 str(i + 1),

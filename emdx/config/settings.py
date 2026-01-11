@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+# Re-export constants for backward compatibility
+from .constants import DEFAULT_CLAUDE_MODEL
+
 
 def get_db_path() -> Path:
     """Get the database path."""

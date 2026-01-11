@@ -3,16 +3,14 @@ Health monitoring service for EMDX knowledge base.
 Analyzes knowledge base health and provides actionable recommendations.
 """
 
-import sqlite3
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass
-from collections import defaultdict
-import statistics
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..config.settings import get_db_path
+from ..database.connection import DatabaseConnection
 from ..services.duplicate_detector import DuplicateDetector
-from ..services.auto_tagger import AutoTagger
 
 
 @dataclass
@@ -55,8 +53,9 @@ class HealthMonitor:
         'growth': 0.10
     }
     
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or get_db_path()
+    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+        self.db_path = Path(db_path) if db_path else get_db_path()
+        self._db = DatabaseConnection(self.db_path)
     
     def calculate_overall_health(self) -> Dict[str, Any]:
         """
@@ -99,27 +98,25 @@ class HealthMonitor:
     
     def _get_basic_stats(self) -> Dict[str, Any]:
         """Get basic statistics about the knowledge base."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Total documents
-        cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
-        total_docs = cursor.fetchone()[0]
-        
-        # Total projects
-        cursor.execute("SELECT COUNT(DISTINCT project) FROM documents WHERE is_deleted = 0 AND project IS NOT NULL")
-        total_projects = cursor.fetchone()[0]
-        
-        # Total tags
-        cursor.execute("SELECT COUNT(DISTINCT tag_id) FROM document_tags")
-        total_tags = cursor.fetchone()[0]
-        
-        # Database size
-        cursor.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
-        db_size = cursor.fetchone()[0]
-        
-        conn.close()
-        
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Total documents
+            cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
+            total_docs = cursor.fetchone()[0]
+
+            # Total projects
+            cursor.execute("SELECT COUNT(DISTINCT project) FROM documents WHERE is_deleted = 0 AND project IS NOT NULL")
+            total_projects = cursor.fetchone()[0]
+
+            # Total tags
+            cursor.execute("SELECT COUNT(DISTINCT tag_id) FROM document_tags")
+            total_tags = cursor.fetchone()[0]
+
+            # Database size
+            cursor.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+            db_size = cursor.fetchone()[0]
+
         return {
             'total_documents': total_docs,
             'total_projects': total_projects,
@@ -130,25 +127,23 @@ class HealthMonitor:
     
     def _calculate_tag_coverage(self) -> HealthMetric:
         """Calculate tag coverage health metric."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Get tagged vs untagged counts
-        cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT d.id) as total,
-                COUNT(DISTINCT dt.document_id) as tagged
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            WHERE d.is_deleted = 0
-        """)
-        
-        result = cursor.fetchone()
-        total = result[0]
-        tagged = result[1]
-        
-        conn.close()
-        
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get tagged vs untagged counts
+            cursor.execute("""
+                SELECT
+                    COUNT(DISTINCT d.id) as total,
+                    COUNT(DISTINCT dt.document_id) as tagged
+                FROM documents d
+                LEFT JOIN document_tags dt ON d.id = dt.document_id
+                WHERE d.is_deleted = 0
+            """)
+
+            result = cursor.fetchone()
+            total = result[0]
+            tagged = result[1]
+
         if total == 0:
             coverage = 1.0
         else:
@@ -182,13 +177,12 @@ class HealthMonitor:
         """Calculate duplicate document health metric."""
         detector = DuplicateDetector(self.db_path)
         stats = detector.get_duplicate_stats()
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
-        total = cursor.fetchone()[0]
-        conn.close()
-        
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
+            total = cursor.fetchone()[0]
+
         if total == 0:
             duplicate_ratio = 0.0
         else:
@@ -224,33 +218,31 @@ class HealthMonitor:
     
     def _calculate_organization_health(self) -> HealthMetric:
         """Calculate organization health based on project distribution."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Get project distribution
-        cursor.execute("""
-            SELECT 
-                COUNT(CASE WHEN project IS NOT NULL THEN 1 END) as with_project,
-                COUNT(CASE WHEN project IS NULL THEN 1 END) as without_project,
-                COUNT(DISTINCT project) as project_count
-            FROM documents
-            WHERE is_deleted = 0
-        """)
-        
-        result = cursor.fetchone()
-        with_project = result[0]
-        without_project = result[1]
-        project_count = result[2]
-        total = with_project + without_project
-        
-        # Get average docs per project
-        if project_count > 0:
-            avg_per_project = with_project / project_count
-        else:
-            avg_per_project = 0
-        
-        conn.close()
-        
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get project distribution
+            cursor.execute("""
+                SELECT
+                    COUNT(CASE WHEN project IS NOT NULL THEN 1 END) as with_project,
+                    COUNT(CASE WHEN project IS NULL THEN 1 END) as without_project,
+                    COUNT(DISTINCT project) as project_count
+                FROM documents
+                WHERE is_deleted = 0
+            """)
+
+            result = cursor.fetchone()
+            with_project = result[0]
+            without_project = result[1]
+            project_count = result[2]
+            total = with_project + without_project
+
+            # Get average docs per project
+            if project_count > 0:
+                avg_per_project = with_project / project_count
+            else:
+                avg_per_project = 0
+
         # Calculate organization score
         if total == 0:
             org_score = 1.0
@@ -298,44 +290,42 @@ class HealthMonitor:
     
     def _calculate_activity_health(self) -> HealthMetric:
         """Calculate activity health based on recent usage."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
         # Define time periods
         now = datetime.now()
         last_week = now - timedelta(days=7)
         last_month = now - timedelta(days=30)
         last_quarter = now - timedelta(days=90)
-        
-        # Get activity counts
-        cursor.execute("""
-            SELECT 
-                COUNT(CASE WHEN datetime(accessed_at) > ? THEN 1 END) as week_active,
-                COUNT(CASE WHEN datetime(accessed_at) > ? THEN 1 END) as month_active,
-                COUNT(CASE WHEN datetime(accessed_at) > ? THEN 1 END) as quarter_active,
-                COUNT(*) as total
-            FROM documents
-            WHERE is_deleted = 0
-        """, (last_week.isoformat(), last_month.isoformat(), last_quarter.isoformat()))
-        
-        result = cursor.fetchone()
-        week_active = result[0]
-        month_active = result[1]
-        quarter_active = result[2]
-        total = result[3]
-        
-        # Get creation trend
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM documents 
-            WHERE is_deleted = 0 
-            AND datetime(created_at) > ?
-        """, (last_month.isoformat(),))
-        
-        new_last_month = cursor.fetchone()[0]
-        
-        conn.close()
-        
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get activity counts
+            cursor.execute("""
+                SELECT
+                    COUNT(CASE WHEN datetime(accessed_at) > ? THEN 1 END) as week_active,
+                    COUNT(CASE WHEN datetime(accessed_at) > ? THEN 1 END) as month_active,
+                    COUNT(CASE WHEN datetime(accessed_at) > ? THEN 1 END) as quarter_active,
+                    COUNT(*) as total
+                FROM documents
+                WHERE is_deleted = 0
+            """, (last_week.isoformat(), last_month.isoformat(), last_quarter.isoformat()))
+
+            result = cursor.fetchone()
+            week_active = result[0]
+            month_active = result[1]
+            quarter_active = result[2]
+            total = result[3]
+
+            # Get creation trend
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM documents
+                WHERE is_deleted = 0
+                AND datetime(created_at) > ?
+            """, (last_month.isoformat(),))
+
+            new_last_month = cursor.fetchone()[0]
+
         # Calculate activity score
         if total == 0:
             activity_score = 0.5
@@ -385,30 +375,28 @@ class HealthMonitor:
     
     def _calculate_quality_health(self) -> HealthMetric:
         """Calculate content quality health metric."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Get quality indicators
-        cursor.execute("""
-            SELECT 
-                COUNT(CASE WHEN LENGTH(content) < 50 THEN 1 END) as very_short,
-                COUNT(CASE WHEN LENGTH(content) < 200 THEN 1 END) as short,
-                COUNT(CASE WHEN LENGTH(title) < 10 THEN 1 END) as poor_titles,
-                COUNT(*) as total,
-                AVG(LENGTH(content)) as avg_length
-            FROM documents
-            WHERE is_deleted = 0
-        """)
-        
-        result = cursor.fetchone()
-        very_short = result[0]
-        short = result[1]
-        poor_titles = result[2]
-        total = result[3]
-        avg_length = result[4] or 0
-        
-        conn.close()
-        
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get quality indicators
+            cursor.execute("""
+                SELECT
+                    COUNT(CASE WHEN LENGTH(content) < 50 THEN 1 END) as very_short,
+                    COUNT(CASE WHEN LENGTH(content) < 200 THEN 1 END) as short,
+                    COUNT(CASE WHEN LENGTH(title) < 10 THEN 1 END) as poor_titles,
+                    COUNT(*) as total,
+                    AVG(LENGTH(content)) as avg_length
+                FROM documents
+                WHERE is_deleted = 0
+            """)
+
+            result = cursor.fetchone()
+            very_short = result[0]
+            short = result[1]
+            poor_titles = result[2]
+            total = result[3]
+            avg_length = result[4] or 0
+
         if total == 0:
             quality_score = 1.0
         else:
@@ -454,9 +442,6 @@ class HealthMonitor:
     
     def _calculate_growth_health(self) -> HealthMetric:
         """Calculate growth trend health metric."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
         # Get growth over different periods
         now = datetime.now()
         periods = [
@@ -465,24 +450,25 @@ class HealthMonitor:
             ('quarter', 90),
             ('year', 365)
         ]
-        
-        growth_data = {}
-        for period_name, days in periods:
-            cutoff = now - timedelta(days=days)
-            cursor.execute("""
-                SELECT COUNT(*) 
-                FROM documents 
-                WHERE is_deleted = 0 
-                AND datetime(created_at) > ?
-            """, (cutoff.isoformat(),))
-            growth_data[period_name] = cursor.fetchone()[0]
-        
-        # Get total for context
-        cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
-        total = cursor.fetchone()[0]
-        
-        conn.close()
-        
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            growth_data = {}
+            for period_name, days in periods:
+                cutoff = now - timedelta(days=days)
+                cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM documents
+                    WHERE is_deleted = 0
+                    AND datetime(created_at) > ?
+                """, (cutoff.isoformat(),))
+                growth_data[period_name] = cursor.fetchone()[0]
+
+            # Get total for context
+            cursor.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = 0")
+            total = cursor.fetchone()[0]
+
         # Calculate growth score
         if total == 0:
             growth_score = 0.5
@@ -527,73 +513,71 @@ class HealthMonitor:
     def get_project_health(self, limit: Optional[int] = None) -> List[ProjectHealth]:
         """
         Get health metrics for each project.
-        
+
         Args:
             limit: Maximum number of projects to return
-            
+
         Returns:
             List of ProjectHealth objects sorted by overall score
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Get all projects with basic stats
-        cursor.execute("""
-            SELECT 
-                d.project,
-                COUNT(*) as doc_count,
-                COUNT(DISTINCT dt.document_id) as tagged_count,
-                AVG(julianday('now') - julianday(d.created_at)) as avg_age,
-                SUM(CASE WHEN julianday('now') - julianday(d.accessed_at) < 30 THEN 1 ELSE 0 END) as recent_access
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            WHERE d.is_deleted = 0 AND d.project IS NOT NULL
-            GROUP BY d.project
-            ORDER BY doc_count DESC
-        """)
-        
-        projects = []
-        for row in cursor.fetchall():
-            project = row[0]
-            doc_count = row[1]
-            tagged_count = row[2]
-            avg_age = row[3] or 0
-            recent_access = row[4]
-            
-            # Calculate metrics
-            tag_coverage = tagged_count / doc_count if doc_count > 0 else 0
-            activity_score = recent_access / doc_count if doc_count > 0 else 0
-            
-            # Simple organization score based on doc count
-            if doc_count < 5:
-                org_score = 0.5  # Too small
-            elif doc_count > 100:
-                org_score = 0.7  # Too large
-            else:
-                org_score = 1.0
-            
-            # Overall project score
-            overall = (
-                tag_coverage * 0.4 +
-                activity_score * 0.3 +
-                org_score * 0.3
-            )
-            
-            projects.append(ProjectHealth(
-                project=project,
-                document_count=doc_count,
-                tag_coverage=tag_coverage,
-                avg_document_age=int(avg_age),
-                activity_score=activity_score,
-                organization_score=org_score,
-                overall_score=overall
-            ))
-        
-        conn.close()
-        
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get all projects with basic stats
+            cursor.execute("""
+                SELECT
+                    d.project,
+                    COUNT(*) as doc_count,
+                    COUNT(DISTINCT dt.document_id) as tagged_count,
+                    AVG(julianday('now') - julianday(d.created_at)) as avg_age,
+                    SUM(CASE WHEN julianday('now') - julianday(d.accessed_at) < 30 THEN 1 ELSE 0 END) as recent_access
+                FROM documents d
+                LEFT JOIN document_tags dt ON d.id = dt.document_id
+                WHERE d.is_deleted = 0 AND d.project IS NOT NULL
+                GROUP BY d.project
+                ORDER BY doc_count DESC
+            """)
+
+            projects = []
+            for row in cursor.fetchall():
+                project = row[0]
+                doc_count = row[1]
+                tagged_count = row[2]
+                avg_age = row[3] or 0
+                recent_access = row[4]
+
+                # Calculate metrics
+                tag_coverage = tagged_count / doc_count if doc_count > 0 else 0
+                activity_score = recent_access / doc_count if doc_count > 0 else 0
+
+                # Simple organization score based on doc count
+                if doc_count < 5:
+                    org_score = 0.5  # Too small
+                elif doc_count > 100:
+                    org_score = 0.7  # Too large
+                else:
+                    org_score = 1.0
+
+                # Overall project score
+                overall = (
+                    tag_coverage * 0.4 +
+                    activity_score * 0.3 +
+                    org_score * 0.3
+                )
+
+                projects.append(ProjectHealth(
+                    project=project,
+                    document_count=doc_count,
+                    tag_coverage=tag_coverage,
+                    avg_document_age=int(avg_age),
+                    activity_score=activity_score,
+                    organization_score=org_score,
+                    overall_score=overall
+                ))
+
         # Sort by overall score
         projects.sort(key=lambda p: p.overall_score, reverse=True)
-        
+
         if limit:
             return projects[:limit]
         return projects
