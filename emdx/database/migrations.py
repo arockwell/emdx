@@ -1073,6 +1073,20 @@ def migration_016_add_input_output_tokens(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_017_add_cost_usd(conn: sqlite3.Connection):
+    """Add cost_usd column to workflow_individual_runs.
+
+    Stores the actual cost from Claude API for accurate billing tracking.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        ALTER TABLE workflow_individual_runs ADD COLUMN cost_usd REAL DEFAULT 0.0
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1092,6 +1106,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (14, "Fix individual_runs FK to executions", migration_014_fix_individual_runs_fk),
     (15, "Add export profiles", migration_015_add_export_profiles),
     (16, "Add input/output tokens to individual runs", migration_016_add_input_output_tokens),
+    (17, "Add cost_usd to individual runs", migration_017_add_cost_usd),
 ]
 
 
