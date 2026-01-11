@@ -15,7 +15,7 @@ from rich.progress import track
 from rich.table import Table
 from rich.tree import Tree
 
-from ..models.documents import get_document
+from ..database.documents import get_document
 from ..services.lifecycle_tracker import LifecycleTracker
 from ..utils.text_formatting import truncate_description
 

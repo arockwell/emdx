@@ -15,7 +15,7 @@ from textual.message import Message
 from textual.binding import Binding
 
 from ...utils.logging import get_logger
-from ...models.documents import get_recent_documents, search_documents
+from ...database.documents import get_recent_documents, search_documents
 from .base import OverlayStage
 
 logger = get_logger(__name__)

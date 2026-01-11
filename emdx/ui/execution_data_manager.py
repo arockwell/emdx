@@ -94,7 +94,7 @@ class ExecutionDataManager:
     def _load_initial_document(self, document_id: int) -> None:
         """Load document data for pre-selected document."""
         try:
-            from ..models.documents import get_document
+            from ..database.documents import get_document
             doc = get_document(str(document_id))
             if doc:
                 self.data.document_data = {

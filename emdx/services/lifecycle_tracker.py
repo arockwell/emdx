@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
-from ..models.documents import get_document, update_document
+from ..database.documents import get_document, update_document
 from ..models.tags import (
     add_tags_to_document,
     get_document_tags,

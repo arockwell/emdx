@@ -10,7 +10,7 @@ from textual.widgets import Button, Input, Label, Static, TextArea
 from textual.binding import Binding
 
 from ..agents.registry import agent_registry
-from ..models.documents import get_recent_documents
+from ..database.documents import get_recent_documents
 
 
 class RunAgentModal(ModalScreen):

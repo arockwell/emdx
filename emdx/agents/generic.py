@@ -11,7 +11,7 @@ from datetime import datetime
 
 from .base import Agent, AgentContext, AgentResult
 from ..config.settings import DEFAULT_CLAUDE_MODEL
-from ..models.documents import get_document, save_document
+from ..database.documents import get_document, save_document
 from ..utils.logging import get_logger
 from ..utils.structured_logger import StructuredLogger, ProcessType
 from ..commands.claude_execute import format_claude_output, format_timestamp

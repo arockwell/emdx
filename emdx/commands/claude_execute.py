@@ -16,7 +16,7 @@ from typing import Any, List, Optional
 import typer
 from rich.console import Console
 
-from ..models.documents import get_document
+from ..database.documents import get_document
 from ..models.executions import (
     Execution,
     create_execution,

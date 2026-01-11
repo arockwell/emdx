@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from ..config.settings import DEFAULT_CLAUDE_MODEL
-from ..models.documents import get_document
+from ..database.documents import get_document
 from ..models.executions import (
     create_execution,
     update_execution_pid,
