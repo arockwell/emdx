@@ -5,8 +5,6 @@ Minimal textual browser that signals for external nvim handling.
 This file now serves as a compatibility layer that imports components from their new locations.
 """
 
-import sys
-
 from textual.widgets import Static
 
 from .document_viewer import FullScreenView
@@ -15,20 +13,6 @@ from .modals import DeleteConfirmScreen
 
 # Import extracted components
 from .text_areas import EditTextArea, SelectionTextArea, VimEditTextArea
-from ..utils.logging import get_logger
-
-# DEPRECATED: These functions have been removed (main_browser.py was deleted)
-def MinimalDocumentBrowser(*args, **kwargs):
-    """Deprecated stub - raises RuntimeError."""
-    raise RuntimeError("MinimalDocumentBrowser has been removed. Use 'emdx gui' for the modern interface.")
-
-
-def run_minimal():
-    """Deprecated stub - raises RuntimeError."""
-    raise RuntimeError("run_minimal() has been removed. Use 'emdx gui' for the modern interface.")
-
-# Import the VimLineNumbers class that was missed in the initial extraction
-from textual.widgets import Static
 
 # Set up logging using shared utility
 from ..utils.logging import setup_tui_logging
@@ -85,10 +69,4 @@ __all__ = [
     'VimLineNumbers',
     'FullScreenView',
     'DeleteConfirmScreen',
-    'MinimalDocumentBrowser',
-    'run_minimal'
 ]
-
-
-if __name__ == "__main__":
-    sys.exit(run_minimal())

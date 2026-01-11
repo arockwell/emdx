@@ -190,16 +190,16 @@ class VimEditTextArea(TextArea):
             # Try to continue without crashing the app
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except (AttributeError, RuntimeError):
-                pass
+            except (AttributeError, RuntimeError) as e2:
+                logger.debug("Could not update vim status: %s", e2)
         except Exception as e:
             key_logger.error(f"Unexpected error in VimEditTextArea.on_key: {type(e).__name__}: {e}")
             logger.error(f"Unexpected error in VimEditTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
             # Try to continue without crashing the app
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except (AttributeError, RuntimeError):
-                pass
+            except (AttributeError, RuntimeError) as e2:
+                logger.debug("Could not update vim status: %s", e2)
     
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""
@@ -678,9 +678,9 @@ class VimEditTextArea(TextArea):
         """Delete character to the right, safely handling boundaries."""
         try:
             self.action_delete_right()
-        except Exception:
+        except Exception as e:
             # Ignore if at end of document
-            pass
+            logger.debug("Could not delete right (at boundary): %s", e)
     
     def _clear_title_selection(self, title_input) -> None:
         """Clear selection in title input."""
@@ -689,8 +689,8 @@ class VimEditTextArea(TextArea):
             title_input.cursor_position = len(title_input.value)
             if hasattr(title_input, 'selection'):
                 title_input.selection = (title_input.cursor_position, title_input.cursor_position)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not clear title selection: %s", e)
 
 
 # For backward compatibility, alias the old name

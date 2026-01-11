@@ -7,7 +7,22 @@ break bidirectional dependencies and improves testability.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
+
+
+class ExecutionResult(TypedDict):
+    """Type definition for execution records returned from database."""
+
+    id: int
+    doc_id: Optional[int]
+    doc_title: str
+    status: str
+    started_at: str
+    completed_at: Optional[str]
+    log_file: str
+    exit_code: Optional[int]
+    working_dir: Optional[str]
+    pid: Optional[int]
 
 
 class DocumentService:
@@ -76,7 +91,7 @@ class ExecutionService:
         )
 
     @staticmethod
-    def get_execution(exec_id: int) -> Optional[Any]:
+    def get_execution(exec_id: int) -> Optional[ExecutionResult]:
         """Get an execution by ID.
 
         Args:

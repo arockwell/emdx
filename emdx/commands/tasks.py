@@ -3,13 +3,12 @@
 from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from emdx.models import tasks
+from emdx.utils.output import console
 
 app = typer.Typer(help="Task management")
-console = Console()
 
 ICONS = {'open': '○', 'active': '●', 'blocked': '⚠', 'done': '✓', 'failed': '✗'}
 

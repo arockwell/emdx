@@ -7,9 +7,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from rich.console import Console
-
-console = Console()
+from emdx.utils.output import console
 
 
 class EnvironmentValidator:

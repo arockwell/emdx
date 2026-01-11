@@ -1,0 +1,9 @@
+{
+  "stages": [
+    {
+      "name": "tech_discovery",
+      "mode": "single",
+      "prompt": "You are a senior software engineer performing a tech debt audit of the emdx codebase.\n\n## Goal\nFind NEW tech debt issues that haven't been identified yet. Focus on areas not already covered by existing tasks.\n\n## First, check existing tasks to avoid duplicates:\n```bash\njust run task list --status all 2>/dev/null\n```\n\n## Areas to Audit (pick 2-3 to focus on):\n1. **Error handling** - inconsistent patterns, missing error handling\n2. **Type safety** - missing type hints, Any types, unsafe casts\n3. **Test coverage** - untested code paths, missing edge cases\n4. **Code duplication** - repeated patterns that should be abstracted\n5. **Performance** - N+1 queries, unnecessary iterations, missing caching\n6. **Security** - input validation, SQL injection risks, path traversal\n7. **Documentation** - missing docstrings, outdated comments\n8. **Dead code** - unused imports, unreachable code, deprecated features\n\n## Instructions:\n1. Pick 2-3 areas to focus on\n2. Search the codebase systematically using grep/rg\n3. For each issue found, create a task:\n   ```bash\n   just run task create --title \"<issue>\" --priority <1-4> --body \"<details>\"\n   ```\n4. Prioritize:\n   - P1: Critical/blocking issues\n   - P2: Important architectural improvements\n   - P3: Nice-to-have improvements\n   - P4: Low priority cleanup\n\n## Output:\nSave a summary of findings as an emdx doc with tags: analysis, tech-debt"
+    }
+  ]
+}

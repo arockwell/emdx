@@ -20,16 +20,15 @@ import typer
 if TYPE_CHECKING:
     import psutil
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
 from ..applications import MaintenanceApplication
 from ..config.settings import get_db_path
+from ..utils.output import console
 
 logger = logging.getLogger(__name__)
-console = Console()
 
 
 def maintain(
@@ -624,9 +623,9 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                 if pid not in known_pids and 'claude' in cmdline_str:
                     orphaned_procs.append((proc, f'orphaned, {runtime_hours:.1f}h old'))
                     
-            except Exception:
-                pass
-                
+            except Exception as e:
+                logger.debug("Could not get process runtime: %s", e)
+
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     
@@ -701,7 +700,8 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
             except psutil.NoSuchProcess:
                 # Process already gone
                 terminated += 1
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to terminate process: %s", e)
                 failed += 1
             
             progress.update(task, advance=1)

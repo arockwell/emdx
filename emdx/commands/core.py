@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
@@ -37,10 +36,9 @@ from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.utils.text_formatting import truncate_title
+from emdx.utils.output import console
 
 app = typer.Typer()
-# Force color output even when not connected to a terminal
-console = Console(force_terminal=True, color_system="auto")
 
 
 @dataclass

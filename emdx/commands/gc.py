@@ -10,16 +10,15 @@ from typing import Any, Dict, Optional, Union
 
 import typer
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
+from ..utils.output import console
 
 app = typer.Typer()
-console = Console()
 
 
 class GarbageCollector:

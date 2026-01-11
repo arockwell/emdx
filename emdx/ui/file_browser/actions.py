@@ -43,7 +43,6 @@ class FileBrowserVimApp:
         except AttributeError as e:
             # Fallback if file_browser not accessible
             logger.error(f"FileBrowserVimApp: Cannot access file_browser._exit_edit_mode: {e}")
-            pass
 
     def action_cancel_edit(self):
         try:

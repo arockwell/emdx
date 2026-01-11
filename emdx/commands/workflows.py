@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
@@ -18,9 +17,9 @@ from ..workflows.base import ExecutionMode, WorkflowConfig, WorkflowRun
 from ..workflows.executor import workflow_executor
 from ..workflows.registry import workflow_registry
 from ..utils.text_formatting import truncate_title, truncate_description
+from ..utils.output import console
 
 app = typer.Typer(help="Manage and run EMDX workflows")
-console = Console()
 
 
 def create_worktree_for_workflow(base_branch: str = "main") -> tuple[str, str]:

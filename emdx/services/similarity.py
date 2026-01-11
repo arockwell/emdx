@@ -5,11 +5,14 @@ Uses scikit-learn's TfidfVectorizer to compute document similarity
 with hybrid scoring that combines content similarity and tag similarity.
 """
 
+import logging
 import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -90,7 +93,8 @@ class SimilarityService:
             self._doc_tags = cache_data['doc_tags']
             self._last_built = cache_data.get('last_built')
             return True
-        except Exception:
+        except (OSError, pickle.UnpicklingError, KeyError) as e:
+            logger.debug("Failed to load similarity cache: %s", e)
             return False
 
     def _save_cache(self) -> None:

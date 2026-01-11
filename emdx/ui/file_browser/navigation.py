@@ -26,8 +26,8 @@ class FileBrowserNavigation:
             file_list = self.query_one("#file-list", FileList)
             if self.selected_index < len(file_list.files) - 1:
                 self.selected_index += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to move selection down: %s", e)
 
     def action_move_up(self: "FileBrowserView") -> None:
         """Move selection up."""
@@ -68,8 +68,8 @@ class FileBrowserNavigation:
                 else:
                     # For files, default action is save
                     self.action_save_file()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to enter directory: %s", e)
 
     def action_parent_dir(self: "FileBrowserView") -> None:
         """Go to parent directory."""

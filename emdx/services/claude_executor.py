@@ -8,12 +8,15 @@ It is used by both:
 This separation breaks the bidirectional dependency between commands and services.
 """
 
+import logging
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
@@ -47,7 +50,8 @@ def parse_task_content(task: str) -> str:
             try:
                 content = filepath.read_text()
                 return f"\n\nHere is the content of {filename}:\n\n```\n{content}\n```"
-            except Exception:
+            except (OSError, UnicodeDecodeError) as e:
+                logger.debug("Failed to read file %s: %s", filename, e)
                 return f"[File not found: {filename}]"
         else:
             return f"[File not found: {filename}]"
