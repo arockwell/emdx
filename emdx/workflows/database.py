@@ -458,6 +458,8 @@ def update_individual_run(
     output_doc_id: Optional[int] = None,
     error_message: Optional[str] = None,
     tokens_used: Optional[int] = None,
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
     execution_time_ms: Optional[int] = None,
     started_at: Optional[datetime] = None,
     completed_at: Optional[datetime] = None,
@@ -482,6 +484,12 @@ def update_individual_run(
         if tokens_used is not None:
             updates.append("tokens_used = ?")
             params.append(tokens_used)
+        if input_tokens is not None:
+            updates.append("input_tokens = ?")
+            params.append(input_tokens)
+        if output_tokens is not None:
+            updates.append("output_tokens = ?")
+            params.append(output_tokens)
         if execution_time_ms is not None:
             updates.append("execution_time_ms = ?")
             params.append(execution_time_ms)

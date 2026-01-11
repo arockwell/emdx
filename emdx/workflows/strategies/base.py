@@ -189,19 +189,26 @@ Report the document ID that was created."""
                         tags=['workflow-output'],
                     )
 
+                # Extract token usage from log
+                token_usage = self._extract_token_usage(log_file)
+
                 wf_db.update_individual_run(
                     individual_run_id,
                     status='completed',
                     output_doc_id=output_doc_id,
                     agent_execution_id=exec_id,
-                    tokens_used=0,  # Note: Token usage tracking not yet implemented
+                    tokens_used=token_usage['tokens_used'],
+                    input_tokens=token_usage['input_tokens'],
+                    output_tokens=token_usage['output_tokens'],
                     completed_at=datetime.now(),
                 )
 
                 return {
                     'success': True,
                     'output_doc_id': output_doc_id,
-                    'tokens_used': 0,
+                    'tokens_used': token_usage['tokens_used'],
+                    'input_tokens': token_usage['input_tokens'],
+                    'output_tokens': token_usage['output_tokens'],
                     'execution_id': exec_id,
                 }
             else:
@@ -234,8 +241,8 @@ Report the document ID that was created."""
     def _extract_output_doc_id(self, log_file: Path) -> Optional[int]:
         """Extract output document ID from execution log.
 
-        Looks for patterns like "Created document #123" or "Saved as #123"
-        in the log file.
+        Looks for the emdx save output pattern "Saved as #123" in the log file.
+        Handles ANSI escape codes that may be present in the log.
 
         Args:
             log_file: Path to the execution log
@@ -248,19 +255,31 @@ Report the document ID that was created."""
 
         try:
             content = log_file.read_text()
-            # Look for document creation patterns
+
+            # Strip ANSI escape codes for reliable pattern matching
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            clean_content = ansi_escape.sub('', content)
+
+            # Look for document creation patterns (most specific first)
+            # The emdx save command outputs: "✅ Saved as #123: Title"
             patterns = [
-                r'Created document #(\d+)',
-                r'Saved as #(\d+)',
-                r'document ID[:\s]+(\d+)',
-                r'doc_id[:\s]+(\d+)',
-                r'#(\d+)\s*\[green\]',  # Rich output format
+                r'Saved as #(\d+)',           # Primary: emdx save output
+                r'saved as ID #(\d+)',        # Alternative text mention
+                r'Created document #(\d+)',   # Alternative format
+                r'Document saved.*#(\d+)',    # Another variation
             ]
 
+            found_ids = []
             for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE)
-                if match:
-                    return int(match.group(1))
+                matches = re.findall(pattern, clean_content, re.IGNORECASE)
+                for match in matches:
+                    doc_id = int(match)
+                    if doc_id > 0:  # Skip doc #0 references
+                        found_ids.append(doc_id)
+
+            # Return the last valid doc ID found (most recent save)
+            if found_ids:
+                return found_ids[-1]
 
             return None
         except (OSError, IOError) as e:
@@ -275,6 +294,56 @@ Report the document ID that was created."""
             logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
+
+    def _extract_token_usage(self, log_file: Path) -> Dict[str, int]:
+        """Extract token usage from execution log.
+
+        Parses the __RAW_RESULT_JSON__ line to get token counts from Claude CLI output.
+
+        Args:
+            log_file: Path to the execution log
+
+        Returns:
+            Dict with input_tokens, output_tokens, and tokens_used (total)
+        """
+        import json
+
+        result = {'input_tokens': 0, 'output_tokens': 0, 'tokens_used': 0}
+
+        if not log_file.exists():
+            return result
+
+        try:
+            content = log_file.read_text()
+
+            # Look for __RAW_RESULT_JSON__ line
+            for line in content.split('\n'):
+                if '__RAW_RESULT_JSON__:' in line:
+                    json_str = line.split('__RAW_RESULT_JSON__:', 1)[1].strip()
+                    try:
+                        data = json.loads(json_str)
+                        usage = data.get('usage', {})
+
+                        # Input tokens = direct input + cache reads + cache creation
+                        input_tokens = (
+                            usage.get('input_tokens', 0) +
+                            usage.get('cache_read_input_tokens', 0) +
+                            usage.get('cache_creation_input_tokens', 0)
+                        )
+                        output_tokens = usage.get('output_tokens', 0)
+
+                        result['input_tokens'] = input_tokens
+                        result['output_tokens'] = output_tokens
+                        result['tokens_used'] = input_tokens + output_tokens
+                        break
+                    except json.JSONDecodeError:
+                        continue
+
+            return result
+        except (OSError, IOError):
+            return result
+        except Exception:
+            return result
 
     async def synthesize_outputs(
         self,

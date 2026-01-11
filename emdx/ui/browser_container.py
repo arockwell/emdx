@@ -202,6 +202,23 @@ class BrowserContainer(App):
         logger.info("action_quit called - exiting app")
         self.exit()
 
+    async def on_pulse_view_view_document(self, event) -> None:
+        """Handle ViewDocument message from PulseView - switch to document browser."""
+        doc_id = event.doc_id
+        logger.info(f"Switching to document browser to view doc #{doc_id}")
+
+        # Switch to document browser
+        await self.switch_browser("document")
+
+        # Try to select the document in the browser
+        doc_browser = self.browsers.get("document")
+        if doc_browser and hasattr(doc_browser, 'select_document_by_id'):
+            await doc_browser.select_document_by_id(doc_id)
+        elif doc_browser:
+            # Fallback: search for the document
+            if hasattr(doc_browser, 'search'):
+                await doc_browser.search(f"#{doc_id}")
+
     async def on_key(self, event) -> None:
         """Global key routing - only handle browser switching keys."""
         key = event.key

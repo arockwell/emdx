@@ -283,7 +283,35 @@ class DocumentBrowser(Widget):
                 table.cursor_coordinate = state["cursor_position"]
             except Exception:
                 pass
-                
+
+    async def select_document_by_id(self, doc_id: int) -> bool:
+        """Select a document by its ID in the table.
+
+        Args:
+            doc_id: The document ID to select
+
+        Returns:
+            True if document was found and selected, False otherwise
+        """
+        if not self._current_vm:
+            return False
+
+        # Find the document index in the filtered list
+        for idx, doc in enumerate(self._current_vm.filtered_documents):
+            if doc.id == doc_id:
+                try:
+                    table = self.query_one("#doc-table", DataTable)
+                    table.move_cursor(row=idx)
+                    return True
+                except Exception as e:
+                    logger.error(f"Error selecting document: {e}")
+                    return False
+
+        # Document not in current list - try searching for it
+        logger.info(f"Document #{doc_id} not in current list, searching...")
+        await self.presenter.search(f"#{doc_id}")
+        return False
+
     async def on_key(self, event) -> None:
         """Handle key events."""
         key = event.key
