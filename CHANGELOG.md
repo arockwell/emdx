@@ -5,6 +5,123 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-07-28
+
+### 🔥 Major Features Added
+
+#### Execution System Overhaul
+- **Event-driven Log Streaming** - Real-time log updates without polling overhead
+- **Comprehensive Process Management** - Heartbeat tracking, PID management, and lifecycle monitoring
+- **Database Cleanup Tools** - New `emdx maintain cleanup` commands for branches, processes, and executions
+- **Enhanced Execution Environment** - Comprehensive validation and better error handling
+- **Unique Execution ID Generation** - Better collision detection with UUID components and microsecond precision
+
+#### Test Suite Achievement
+- **100% Test Passing Rate** - Complete test suite restoration from broken state
+- **Comprehensive Test Coverage** - 172 tests now passing, up from ~50% pass rate
+- **Robust Testing Framework** - Fixed auto-tagger, browse, migration, and smart execution tests
+
+### 🏗️ Architecture Improvements
+
+#### Process & Execution Management
+- **Heartbeat Mechanism** - 30-second heartbeat updates for execution tracking
+- **ExecutionMonitor Service** - Real-time process monitoring and health checks
+- **Cleanup Commands** - Automated cleanup of zombie processes, stuck executions, and old branches
+- **Enhanced Branch Management** - Better collision detection and unique branch naming
+
+#### Database Enhancements
+- **State Consistency** - Fixed 94 stuck 'running' executions in database
+- **Execution Lifecycle** - Proper status tracking with timeout handling
+- **Directory Management** - Improved temp directory cleanup and collision avoidance
+
+### 🐛 Critical Bug Fixes
+
+#### TUI Stability
+- **Delete Key Crash** - Fixed parameter mismatch in DeleteConfirmScreen constructor
+- **Git Branch Conflicts** - Resolved branch creation collisions and cleanup issues
+- **Process Zombies** - Fixed zombie process accumulation and resource leaks
+- **Database Corruption** - Cleaned up inconsistent execution states
+
+#### Log System Improvements
+- **Timestamp Preservation** - Maintain original timestamps during real-time streaming
+- **Log Browser Performance** - Eliminated polling overhead with event-driven updates
+- **Wrapper Coordination** - Fixed log coordination issues by making wrapper sole writer
+
+### 🎨 User Experience Improvements
+
+#### Enhanced Delete Behavior
+- **Immediate Deletion** - Removed confirmation modal for faster workflow
+- **Cursor Preservation** - Maintain cursor position after document deletion
+- **Smart Positioning** - Intelligent cursor adjustment when deleting final document
+
+#### Interface Improvements
+- **Better Status Messages** - Clearer feedback for operations and errors
+- **Header Visibility** - Restored and improved document browser headers
+- **Tab Navigation** - Enhanced Tab navigation in edit mode between title and content
+- **Refresh Command** - Restored 'r' key refresh functionality
+
+#### Editor Enhancements
+- **Markdown Headers** - Use clean markdown headers instead of unicode boxes
+- **Document Creation** - Improved new document experience with better UI flow
+- **Edit Mode Stability** - Fixed mounting errors and improved editor lifecycle
+
+### 🔧 Technical Improvements
+
+#### Environment & Tooling
+- **Sonnet 4 Upgrade** - Default to claude-sonnet-4-20250514 model
+- **Tool Display** - Improved visualization of allowed tools during execution
+- **Python Environment** - Better detection and handling of pipx/venv environments
+- **Error Recovery** - Enhanced error handling throughout the system
+
+#### Documentation
+- **Comprehensive Guides** - Updated testing guide and development documentation
+- **Architecture Documentation** - Clean documentation structure in docs/ folder
+- **Installation Instructions** - Fixed dependency management and setup process
+
+### 💥 Breaking Changes
+- **Delete Behavior** - 'd' key now immediately deletes without confirmation
+- **Git Browser** - Moved to 'g' key (from 'd' key which now deletes)
+- **Python Requirement** - Requires Python 3.13+ (was 3.9+)
+
+### 🎯 Success Metrics
+- **Test Success Rate**: 172/172 tests passing (100%)
+- **Performance**: Event-driven log streaming eliminates polling overhead
+- **Reliability**: Zero zombie processes and stuck executions after cleanup
+- **User Experience**: Immediate delete response with cursor preservation
+
+## [0.6.1] - 2025-07-27
+
+### 🚨 Critical Documentation Fixes
+
+#### Version Consistency
+- **Fixed version badge** - Updated README.md badge from 0.6.0 to 0.6.1
+- **Fixed Python requirement** - Updated from 3.9+ to 3.13+ (matches pyproject.toml)
+- **Updated Black config** - Target version updated from py39 to py313
+- **Updated MyPy config** - Python version updated from 3.9 to 3.13
+
+#### Missing Command Documentation
+- **Added missing command documentation** for new commands:
+  - `emdx exec` - Execution management subcommands
+  - `emdx claude` - Claude execution subcommands  
+  - `emdx lifecycle` - Document lifecycle tracking
+  - `emdx analyze` - Document analysis command
+  - `emdx maintain` - Database maintenance command
+
+#### Installation Process
+- **Updated development setup** - Reflects Poetry + Just workflow
+- **Added Just installation instructions** - Comprehensive setup guide
+- **Fixed dependency installation** - Clarified Poetry vs pip usage
+
+#### Architecture Documentation
+- **Updated project structure** - Reflects new modular architecture with 27 UI files
+- **Added UI component descriptions** - Complete documentation of modular UI system
+- **Updated command module structure** - Documents all 11 command modules
+
+### 🎯 Documentation Accuracy
+- **Critical fix**: Documentation now accurately reflects actual codebase
+- **User experience**: Installation instructions now work correctly
+- **Contributor onboarding**: Development setup properly documented
+
 ## [0.6.0] - 2025-07-14
 
 ### 🔥 Major Features Added

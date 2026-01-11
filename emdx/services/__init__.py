@@ -1,6 +1,6 @@
 """Service modules for EMDX."""
 
-from .duplicate_detector import DuplicateDetector
 from .auto_tagger import AutoTagger
+from .duplicate_detector import DuplicateDetector
 
 __all__ = ['DuplicateDetector', 'AutoTagger']

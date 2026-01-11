@@ -3,12 +3,16 @@ Tagging rules and configuration for EMDX auto-tagger.
 Allows users to define custom patterns for auto-tagging.
 """
 
-import yaml
-import json
+import logging
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
-import os
+from typing import Any, Dict, List, Optional
+
+import yaml
+
+from .constants import DEFAULT_TAGGING_CONFIDENCE
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -18,7 +22,7 @@ class TaggingRule:
     title_patterns: List[str]
     content_patterns: List[str]
     tags: List[str]
-    confidence: float = 0.75
+    confidence: float = DEFAULT_TAGGING_CONFIDENCE
     enabled: bool = True
     
     def to_dict(self) -> Dict[str, Any]:
@@ -56,7 +60,7 @@ class TaggingConfig:
                     })
             except Exception as e:
                 # If config is invalid, start fresh but log the error
-                print(f"Warning: Could not load tagging config: {e}")
+                logger.warning(f"Could not load tagging config: {e}")
                 self.rules = {}
         else:
             # Create default config
@@ -175,7 +179,7 @@ class TaggingConfig:
                 title_patterns=rule_data.get('title_patterns', []),
                 content_patterns=rule_data.get('content_patterns', []),
                 tags=rule_data.get('tags', []),
-                confidence=rule_data.get('confidence', 0.75),
+                confidence=rule_data.get('confidence', DEFAULT_TAGGING_CONFIDENCE),
                 enabled=rule_data.get('enabled', True)
             )
         self.save_config()

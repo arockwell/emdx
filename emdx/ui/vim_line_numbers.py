@@ -5,6 +5,7 @@ Extracted from main_browser.py to reduce technical debt.
 """
 
 import logging
+
 from textual.widgets import Static
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,20 @@ logger = logging.getLogger(__name__)
 class SimpleVimLineNumbers(Static):
     """Dead simple vim-style line numbers widget."""
 
+    DEFAULT_CSS = """
+        SimpleVimLineNumbers {
+            background: $background;
+            color: $text-muted;
+            text-align: right;
+            padding-right: 1;
+            margin-top: 1;
+            border: none;
+            overflow-y: hidden;
+            scrollbar-size: 0 0;
+            text-wrap: nowrap
+        }
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_class("vim-line-numbers")
@@ -20,7 +35,6 @@ class SimpleVimLineNumbers(Static):
 
     def set_line_numbers(self, current_line, total_lines, text_area=None):
         """Set line numbers given current line (0-based) and total lines."""
-        logger.debug(f"🔢 set_line_numbers called: current={current_line}, total={total_lines}")
         
         # Store text area reference if provided
         if text_area:
@@ -30,7 +44,6 @@ class SimpleVimLineNumbers(Static):
         
         # Check if text area has focus - only highlight current line if it does
         has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
-        logger.debug(f"🔢 Text area has focus: {has_focus}")
         
         lines = []
         for i in range(total_lines):
@@ -53,10 +66,7 @@ class SimpleVimLineNumbers(Static):
         
         # Join with Rich Text newlines
         result = Text("\n").join(lines)
-        logger.debug(f"🔢 Rich Text result created with {len(lines)} lines")
-        logger.debug(f"🔢 Widget content BEFORE update: {repr(self.renderable)}")
         
         # Update widget content with Rich Text
         self.update(result)
         
-        logger.debug(f"🔢 Widget content AFTER update: {repr(self.renderable)}")

@@ -1,15 +1,12 @@
 """Tests for the AutoTagger service."""
 
-import pytest
 import sqlite3
-from pathlib import Path
 import tempfile
-from unittest.mock import Mock, patch
+from pathlib import Path
+
+import pytest
 
 from emdx.services.auto_tagger import AutoTagger
-from emdx.models.documents import save_document
-from emdx.models.tags import get_document_tags, get_or_create_tag
-from emdx.database import db
 
 
 @pytest.fixture
