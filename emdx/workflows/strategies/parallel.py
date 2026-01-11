@@ -45,7 +45,13 @@ class ParallelExecutionStrategy(ExecutionStrategy):
         # Create individual run records
         individual_runs: List[tuple[int, Optional[str]]] = []
         for i in range(stage.runs):
-            prompt = self.resolve_template(stage.prompt, context) if stage.prompt else None
+            # Support per-run prompts (stage.prompts) or single prompt (stage.prompt)
+            if stage.prompts and i < len(stage.prompts):
+                prompt_template = stage.prompts[i]
+            else:
+                prompt_template = stage.prompt
+
+            prompt = self.resolve_template(prompt_template, context) if prompt_template else None
             individual_run_id = wf_db.create_individual_run(
                 stage_run_id=stage_run_id,
                 run_number=i + 1,
