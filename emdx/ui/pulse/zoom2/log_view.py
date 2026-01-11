@@ -1,8 +1,6 @@
 """Log view - Zoom 2 full-screen log viewer with streaming."""
 
-import json
 import logging
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from textual.app import ComposeResult
@@ -14,15 +12,10 @@ from textual.widgets import Static, RichLog
 from emdx.models.executions import Execution, get_execution, get_recent_executions
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
-logger = logging.getLogger(__name__)
+from .log_content_writer import LogContentWriter
+from .workflow_log_loader import WorkflowLogLoader
 
-# Import workflow components
-try:
-    from emdx.workflows import database as wf_db
-    HAS_WORKFLOWS = True
-except ImportError:
-    wf_db = None
-    HAS_WORKFLOWS = False
+logger = logging.getLogger(__name__)
 
 
 class LogViewSubscriber(LogStreamSubscriber):
@@ -87,12 +80,28 @@ class LogView(Widget):
         self.current_execution: Optional[Execution] = None
         self.current_stream: Optional[LogStream] = None
         self.subscriber = LogViewSubscriber(self)
-        self.line_count = 0
+        self._writer: Optional[LogContentWriter] = None
+        self._workflow_loader: Optional[WorkflowLogLoader] = None
 
     def compose(self) -> ComposeResult:
         yield Static("📜 LOG VIEWER", id="log-header")
         yield RichLog(id="log-output", highlight=True, markup=True, wrap=True)
         yield Static("", id="log-status")
+
+    @property
+    def writer(self) -> LogContentWriter:
+        """Get the content writer, creating it if needed."""
+        if self._writer is None:
+            log_output = self.query_one("#log-output", RichLog)
+            self._writer = LogContentWriter(log_output)
+        return self._writer
+
+    @property
+    def workflow_loader(self) -> WorkflowLogLoader:
+        """Get the workflow loader, creating it if needed."""
+        if self._workflow_loader is None:
+            self._workflow_loader = WorkflowLogLoader(self.writer)
+        return self._workflow_loader
 
     async def on_mount(self) -> None:
         """Initialize the log viewer."""
@@ -101,7 +110,7 @@ class LogView(Widget):
     async def load_execution(self, exec_id: int) -> None:
         """Load logs for a specific execution."""
         try:
-            execution = get_execution(str(exec_id))
+            execution = get_execution(exec_id)
             if not execution:
                 self._show_error(f"Execution #{exec_id} not found")
                 return
@@ -124,174 +133,34 @@ class LogView(Widget):
             logger.error(f"Error loading latest execution: {e}", exc_info=True)
             self._show_error(str(e))
 
-    async def load_workflow_run(self, run: Dict[str, Any], stage_name: Optional[str] = None) -> None:
+    async def load_workflow_run(
+        self, run: Dict[str, Any], stage_name: Optional[str] = None
+    ) -> None:
         """Load logs from a workflow run's context or individual execution logs."""
         # Stop current stream if any
-        if self.current_stream:
-            self.current_stream.unsubscribe(self.subscriber)
-            self.current_stream = None
-
+        self._stop_stream()
         self.current_execution = None
-        self.line_count = 0
 
         # Update header
         header = self.query_one("#log-header", Static)
         status = run.get('status', 'unknown')
-        status_icon = "🔄" if status == 'running' else ("✅" if status == 'completed' else "❌")
+        status_icon = WorkflowLogLoader._get_status_icon(status)
         header.update(f"📜 {status_icon} Run #{run['id']} - {stage_name or 'All Stages'}")
 
-        # Clear log output
-        log_output = self.query_one("#log-output", RichLog)
-        log_output.clear()
-
-        try:
-            # Try to load individual run execution logs (for dynamic mode)
-            if HAS_WORKFLOWS and wf_db:
-                await self._load_individual_run_logs(run, stage_name, log_output)
-                if self.line_count > 0:
-                    self._update_status()
-                    return
-
-            # Fallback: Get context from run
-            context = run.get('context_json')
-            if isinstance(context, str):
-                context = json.loads(context)
-
-            if not context:
-                self._show_message("No log data in this run")
-                return
-
-            # Find stage outputs in context
-            output_keys = [k for k in context.keys() if k.endswith('.output')]
-
-            if stage_name:
-                # Show specific stage
-                output_key = f"{stage_name}.output"
-                if output_key in context:
-                    self._write_content(context[output_key])
-                else:
-                    self._show_message(f"No output for stage '{stage_name}'")
-            else:
-                # Show all stage outputs
-                if not output_keys:
-                    self._show_message("No stage outputs found in context")
-                    return
-
-                for key in sorted(output_keys):
-                    stage = key.replace('.output', '')
-                    log_output.write(f"\n[bold cyan]═══ STAGE: {stage} ═══[/bold cyan]\n")
-                    self.line_count += 2
-                    output = context[key]
-                    if isinstance(output, str):
-                        self._write_content(output)
-                    else:
-                        self._write_content(str(output))
-
-            self._update_status()
-
-        except Exception as e:
-            logger.error(f"Error loading workflow run logs: {e}", exc_info=True)
-            self._show_error(str(e))
-
-    async def _load_individual_run_logs(
-        self,
-        run: Dict[str, Any],
-        stage_name: Optional[str],
-        log_output: RichLog
-    ) -> None:
-        """Load logs from individual run execution files (for dynamic mode).
-
-        Shows a summary first, then loads full logs asynchronously to avoid blocking.
-        """
-        import asyncio
-
-        # Get stage runs for this workflow run
-        stage_runs = wf_db.list_stage_runs(run['id'])
-
-        # Collect all log files to load
-        logs_to_load = []
-
-        for stage_run in stage_runs:
-            # Skip if filtering by stage name and this isn't the one
-            if stage_name and stage_run.get('stage_name') != stage_name:
-                continue
-
-            # Get individual runs for this stage
-            individual_runs = wf_db.list_individual_runs(stage_run['id'])
-
-            if not individual_runs:
-                continue
-
-            for ind_run in individual_runs:
-                exec_id = ind_run.get('agent_execution_id')
-                if not exec_id:
-                    continue
-
-                # Get the execution to find the log file
-                execution = get_execution(str(exec_id))
-                if not execution:
-                    continue
-
-                log_path = execution.log_path
-                if not log_path.exists():
-                    continue
-
-                branch_name = ind_run.get('input_context', f"Run #{ind_run.get('run_number', '?')}")
-                status = ind_run.get('status', 'unknown')
-                logs_to_load.append((branch_name, status, log_path))
-
-        if not logs_to_load:
-            return
-
-        # Show summary header
-        log_output.write(f"[bold]Loading {len(logs_to_load)} execution logs...[/bold]\n")
-        self.line_count += 1
-
-        # Load logs one at a time with yields to keep UI responsive
-        for branch_name, status, log_path in logs_to_load:
-            status_icon = "✅" if status == 'completed' else (
-                "🔄" if status == 'running' else "❌"
-            )
-            log_output.write(f"\n[bold cyan]═══ {status_icon} {branch_name} ═══[/bold cyan]\n")
-            self.line_count += 2
-
-            # Read file in a thread to avoid blocking
-            try:
-                content = await asyncio.to_thread(log_path.read_text)
-                # Only show last 100 lines per log to avoid overwhelming the UI
-                lines = content.strip().split('\n')
-                if len(lines) > 100:
-                    log_output.write(f"[dim]... ({len(lines) - 100} lines omitted) ...[/dim]")
-                    self.line_count += 1
-                    lines = lines[-100:]
-                for line in lines:
-                    log_output.write(line)
-                    self.line_count += 1
-            except Exception as e:
-                log_output.write(f"[red]Error reading log: {e}[/red]")
-                self.line_count += 1
-
-            # Yield to let UI update
-            await asyncio.sleep(0)
+        # Load via workflow loader
+        await self.workflow_loader.load_workflow_run(run, stage_name)
+        self._update_status()
 
     async def _load_execution_logs(self, execution: Execution) -> None:
         """Load logs from an execution."""
         # Stop current stream if any
-        if self.current_stream:
-            self.current_stream.unsubscribe(self.subscriber)
-            self.current_stream = None
+        self._stop_stream()
 
         self.current_execution = execution
-        self.line_count = 0
+        self.writer.clear()
 
         # Update header
-        header = self.query_one("#log-header", Static)
-        status_icon = "🔄" if execution.is_running else ("✅" if execution.status == 'completed' else "❌")
-        header.update(f"📜 {status_icon} {execution.doc_title} (#{execution.id})")
-
-        # Clear log output
-        log_output = self.query_one("#log-output", RichLog)
-        log_output.clear()
+        self._update_header_for_execution(execution)
 
         # Check if log file exists
         log_path = execution.log_path
@@ -304,7 +173,7 @@ class LogView(Widget):
         initial_content = self.current_stream.get_initial_content()
 
         if initial_content:
-            self._write_content(initial_content)
+            self.writer.write_content(initial_content)
 
         # Subscribe for live updates if in live mode and execution is running
         if self.is_live and execution.is_running:
@@ -312,44 +181,46 @@ class LogView(Widget):
 
         self._update_status()
 
-    def _write_content(self, content: str) -> None:
-        """Write content to the log output."""
-        log_output = self.query_one("#log-output", RichLog)
+    def _stop_stream(self) -> None:
+        """Stop and clean up the current stream."""
+        if self.current_stream:
+            self.current_stream.unsubscribe(self.subscriber)
+            self.current_stream = None
 
-        for line in content.splitlines():
-            self.line_count += 1
-            # Add line numbers
-            log_output.write(f"[dim]{self.line_count:5}[/dim] {line}")
+    def _update_header_for_execution(self, execution: Execution) -> None:
+        """Update header for an execution."""
+        header = self.query_one("#log-header", Static)
+        status_icon = (
+            "🔄" if execution.is_running
+            else ("✅" if execution.status == 'completed' else "❌")
+        )
+        header.update(f"📜 {status_icon} {execution.doc_title} (#{execution.id})")
 
     def _handle_new_content(self, new_content: str) -> None:
         """Handle new content from the log stream."""
         if new_content:
-            self._write_content(new_content)
+            self.writer.write_content(new_content)
             self._update_status()
 
             # Auto-scroll to bottom if in live mode
             if self.is_live:
-                log_output = self.query_one("#log-output", RichLog)
-                log_output.scroll_end(animate=False)
+                self.writer.scroll_end(animate=False)
 
     def _handle_error(self, error: Exception) -> None:
         """Handle an error from the log stream."""
         logger.error(f"Log stream error: {error}")
-        log_output = self.query_one("#log-output", RichLog)
-        log_output.write(f"[red]Error: {error}[/red]")
+        self.writer.write_error(str(error))
 
     def _show_error(self, message: str) -> None:
         """Show an error message."""
-        log_output = self.query_one("#log-output", RichLog)
-        log_output.clear()
-        log_output.write(f"[red]Error: {message}[/red]")
+        self.writer.clear()
+        self.writer.write_error(message)
         self._update_status()
 
     def _show_message(self, message: str) -> None:
         """Show an info message."""
-        log_output = self.query_one("#log-output", RichLog)
-        log_output.clear()
-        log_output.write(f"[dim]{message}[/dim]")
+        self.writer.clear()
+        self.writer.write_info(message)
         self._update_status()
 
     def _update_status(self) -> None:
@@ -364,7 +235,7 @@ class LogView(Widget):
             parts.append(self.current_execution.status)
 
         # Line count
-        parts.append(f"{self.line_count} lines")
+        parts.append(f"{self.writer.line_count} lines")
 
         # Live mode indicator
         if self.is_live:
@@ -428,15 +299,9 @@ class LogView(Widget):
 
     def clear(self) -> None:
         """Clear the log viewer."""
-        if self.current_stream:
-            self.current_stream.unsubscribe(self.subscriber)
-            self.current_stream = None
-
+        self._stop_stream()
         self.current_execution = None
-        self.line_count = 0
-
-        log_output = self.query_one("#log-output", RichLog)
-        log_output.clear()
+        self.writer.clear()
 
         header = self.query_one("#log-header", Static)
         header.update("📜 LOG VIEWER")
@@ -445,5 +310,4 @@ class LogView(Widget):
 
     def on_unmount(self) -> None:
         """Clean up when unmounting."""
-        if self.current_stream:
-            self.current_stream.unsubscribe(self.subscriber)
+        self._stop_stream()

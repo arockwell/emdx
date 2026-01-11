@@ -264,8 +264,10 @@ class AgentExecutor:
                 # For now, just include the input document itself
                 context_docs = [input_doc_id]
         
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning(f"Failed to load context documents: {type(e).__name__}: {e}")
         except Exception as e:
-            logger.warning(f"Failed to load context documents: {e}")
+            logger.error(f"Unexpected error loading context documents: {type(e).__name__}: {e}", exc_info=True)
         
         return context_docs
     
@@ -341,8 +343,10 @@ class AgentExecutor:
                 doc = get_document(context.input_doc_id)
                 if doc:
                     prompt = agent.format_prompt(content=doc.content, **context.variables)
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to load input document {context.input_doc_id}: {type(e).__name__}: {e}")
             except Exception as e:
-                logger.warning(f"Failed to load input document {context.input_doc_id}: {e}")
+                logger.error(f"Unexpected error loading input document {context.input_doc_id}: {type(e).__name__}: {e}", exc_info=True)
         elif context.input_type == 'query' and context.input_query:
             prompt = agent.format_prompt(query=context.input_query, **context.variables)
         return prompt

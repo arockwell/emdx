@@ -1,7 +1,6 @@
 """Tests for log browser timestamp functionality."""
 
 import tempfile
-import time
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -99,11 +98,11 @@ class TestLogBrowserTimestamps:
         assert any("[14:00:05]" in line for line in timestamp_lines)
         assert any("[14:00:30]" in line for line in timestamp_lines)
 
-        # Verify that current time is NOT used
-        current_time = datetime.now().strftime("[%H:%M:")
-        # Only check if not 14:00 (unlikely but possible in tests)
-        if not current_time.startswith("[14:00:"):
-            assert not any(current_time in line for line in timestamp_lines)
+        # Verify that ONLY original timestamps are present (no current time injection)
+        # All timestamp lines should match the expected [14:00:XX] format from test data
+        for line in timestamp_lines:
+            # Extract the timestamp portion [HH:MM:SS] and verify it matches expected range
+            assert "[14:00:" in line, f"Unexpected timestamp in line: {line}"
 
     @pytest.mark.asyncio
     async def test_log_browser_handles_missing_timestamps(self, mock_execution):
@@ -161,12 +160,14 @@ class TestLogBrowserTimestamps:
 
         last_timestamp = None
         processed_timestamps = []
+        # Use a fixed fallback timestamp to avoid time-dependent test behavior
+        default_timestamp = 1702648800.0  # Fixed timestamp: 2023-12-15 14:00:00 UTC
 
         for line in lines:
             parsed = parse_log_timestamp(line)
             if parsed:
                 last_timestamp = parsed
-            timestamp_to_use = parsed or last_timestamp or time.time()
+            timestamp_to_use = parsed or last_timestamp or default_timestamp
             processed_timestamps.append(timestamp_to_use)
 
         # Verify timestamps are maintained

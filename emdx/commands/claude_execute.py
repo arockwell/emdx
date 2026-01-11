@@ -19,30 +19,46 @@ from ..models.executions import (
     Execution,
     update_execution_status,
 )
-from ..utils.environment import validate_execution_environment
+from ..models.tags import add_tags_to_document
+from ..prompts import build_prompt
+from ..config.settings import DEFAULT_CLAUDE_MODEL
+from ..utils.environment import ensure_claude_in_path, validate_execution_environment
+from ..utils.structured_logger import ProcessType, StructuredLogger
+from ..services.claude_executor import execute_claude_detached as _execute_claude_detached
 
-# Re-export from services for backward compatibility
-from ..services.claude_executor import (
+# Import from document_executor for backward compatibility
+from ..services.document_executor import (
     ExecutionType,
     DEFAULT_ALLOWED_TOOLS,
     STAGE_TOOLS,
-    TOOL_EMOJIS,
-    EXECUTION_TYPE_EMOJIS,
-    generate_unique_execution_id,
     get_execution_context,
-    parse_task_content,
-    format_timestamp,
-    parse_log_timestamp,
-    format_claude_output,
-    validate_environment,
-    execute_with_claude_detached,
-    execute_with_claude,
+    generate_unique_execution_id,
     create_execution_worktree,
-    execute_document_smart_background,
-    execute_document_smart,
-    monitor_execution_detached,
-    monitor_execution,
+    execute_document_background,
 )
+
+# Re-export TOOL_EMOJIS and EXECUTION_TYPE_EMOJIS for backward compatibility
+TOOL_EMOJIS = {
+    "Read": "📖",
+    "Write": "📝",
+    "Edit": "✏️",
+    "MultiEdit": "✏️",
+    "Bash": "💻",
+    "Glob": "🔍",
+    "Grep": "🔍",
+    "LS": "📁",
+    "Task": "📋",
+    "TodoWrite": "📋",
+    "WebSearch": "🌐",
+    "WebFetch": "🌐",
+}
+
+EXECUTION_TYPE_EMOJIS = {
+    ExecutionType.NOTE: "📝",
+    ExecutionType.ANALYSIS: "🔍",
+    ExecutionType.GAMEPLAN: "🎯",
+    ExecutionType.GENERIC: "⚡"
+}
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
 console = Console()
@@ -144,28 +160,26 @@ def execute(
         log_dir = Path.home() / ".config" / "emdx" / "logs"
         log_file = log_dir / f"{execution_id}.log"
 
-
-
     if smart:
         # Get document tags
         from ..models.tags import get_document_tags
         doc_tags = get_document_tags(doc_id)
 
-        # Use smart execution
+        # Get execution context to show what will happen
+        context = get_execution_context(doc_tags)
+        exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
+        exec_type = context['type'].value.upper()
+
+        console.print(f"[bold cyan]{exec_emoji} {exec_type} EXECUTION[/bold cyan]")
+        console.print(f"[cyan]📋 {context['description']}[/cyan]")
+
         if background:
             console.print("[green]Starting smart execution in background...[/green]")
             console.print(f"Execution ID: [cyan]{execution_id}[/cyan]")
             console.print(f"Log file: [dim]{log_file}[/dim]")
 
-            # Get execution context to show what will happen
-            context = get_execution_context(doc_tags)
-            exec_emoji = EXECUTION_TYPE_EMOJIS.get(context['type'], "⚡")
-            exec_type = context['type'].value.upper()
-            console.print(f"[bold cyan]{exec_emoji} {exec_type} EXECUTION[/bold cyan]")
-            console.print(f"[cyan]📋 {context['description']}[/cyan]")
-
-            # Execute in background without blocking
-            execute_document_smart_background(
+            # Execute in background using the service layer
+            result = execute_document_background(
                 doc_id=int(doc_id),
                 execution_id=execution_id,
                 log_file=log_file,
@@ -174,79 +188,44 @@ def execute(
                 db_exec_id=exec_id
             )
 
-            console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
+            if result['success']:
+                console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
+            else:
+                console.print(f"[red]Failed to start execution: {result.get('error', 'Unknown error')}[/red]")
+                raise typer.Exit(1)
         else:
-            # Run smart execution in foreground
-            execute_document_smart(
-                doc_id=int(doc_id),
-                execution_id=execution_id,
-                log_file=log_file,
-                allowed_tools=allowed_tools,
-                verbose=True,
-                background=False
-            )
+            # Run in foreground - not yet implemented in service layer
+            console.print("[yellow]Foreground execution not yet migrated to service layer[/yellow]")
+            raise typer.Exit(1)
     else:
         # Legacy execution mode - use default tools if none specified
         if allowed_tools is None:
             allowed_tools = DEFAULT_ALLOWED_TOOLS
 
+        console.print("[yellow]Legacy (non-smart) execution mode[/yellow]")
+        console.print(f"[green]Executing document #{doc_id}: {doc['title']}[/green]")
+        console.print(f"Execution ID: [cyan]{execution_id}[/cyan]")
+        console.print(f"Log file: [dim]{log_file}[/dim]")
+
         if background:
-            # Run in background thread
-            console.print("[green]Starting execution in background...[/green]")
-            console.print(f"Execution ID: [cyan]{execution_id}[/cyan]")
-            console.print(f"Log file: [dim]{log_file}[/dim]")
-
-            # Execute in background without blocking
-            monitor_execution_detached(
-                execution_id=execution_id,
-                task=doc['content'],
-                doc_id=str(doc['id']),
-                doc_title=doc['title'],
-                log_file=log_file,
-                allowed_tools=allowed_tools
-            )
-
-            console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
-        else:
-            # Run in foreground
-            console.print(f"[green]Executing document #{doc_id}: {doc['title']}[/green]")
-            console.print(f"Execution ID: [cyan]{execution_id}[/cyan]")
-            console.print(f"Log file: [dim]{log_file}[/dim]")
-            console.print()
-
-            # Create worktree for execution
-            worktree_path = create_execution_worktree(execution_id, doc['title'])
-            working_dir = str(worktree_path) if worktree_path else os.getcwd()
-
-            # Create execution record
-            execution = Execution(
-                id=execution_id,
+            # Use the service layer for background execution
+            result = execute_document_background(
                 doc_id=int(doc_id),
-                doc_title=doc['title'],
-                status="running",
-                started_at=datetime.now(timezone.utc),
-                log_file=str(log_file),
-                working_dir=working_dir
-            )
-
-            # Execute in worktree
-            exit_code = execute_with_claude(
-                task=doc['content'],
                 execution_id=execution_id,
                 log_file=log_file,
                 allowed_tools=allowed_tools,
-                verbose=True,
-                working_dir=working_dir,
-                doc_id=doc_id,
-                context=None  # Direct execution - no context analysis
+                use_stage_tools=False,
+                db_exec_id=exec_id
             )
 
-            # Update status
-            status = "completed" if exit_code == 0 else "failed"
-            update_execution_status(execution_id, status, exit_code)
-
-            if exit_code != 0:
-                raise typer.Exit(exit_code)
+            if result['success']:
+                console.print(f"\n[dim]Monitor with:[/dim] [cyan]emdx exec show {execution_id}[/cyan]")
+            else:
+                console.print(f"[red]Failed to start execution: {result.get('error', 'Unknown error')}[/red]")
+                raise typer.Exit(1)
+        else:
+            console.print("[yellow]Foreground execution not yet migrated to service layer[/yellow]")
+            raise typer.Exit(1)
 
 
 if __name__ == "__main__":

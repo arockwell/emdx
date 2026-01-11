@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Document browser - extracted from the monolith.
+
+Uses the Presenter pattern to separate business logic from UI rendering.
+The DocumentBrowserPresenter handles data loading, filtering, and CRUD
+operations while this widget focuses on display and user interaction.
 """
 
 import logging
@@ -13,16 +17,10 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, Label, RichLog, Static
 
-from emdx.database import db
-from emdx.models.documents import get_document, delete_document
-from emdx.models.tags import (
-    add_tags_to_document,
-    get_document_tags,
-    get_tags_for_documents,
-    remove_tags_from_document,
-)
-from emdx.ui.formatting import format_tags, truncate_emoji_safe
+from emdx.models.tags import get_document_tags
 
+from .presenters import DocumentBrowserPresenter
+from .viewmodels import DocumentDetailVM, DocumentListVM
 from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
@@ -192,25 +190,33 @@ class DocumentBrowser(Widget):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.documents: List[Dict[str, Any]] = []
-        self.filtered_docs: List[Dict[str, Any]] = []
-        self.current_search: str = ""
+        # UI state
         self.edit_mode: bool = False
         self.editing_doc_id: Optional[int] = None
         self.tag_action: Optional[str] = None
-        # Pagination state
-        self.total_doc_count: int = 0
-        self.current_offset: int = 0
-        self.has_more: bool = False
-        self._loading_more: bool = False
-        # Cache for tags (loaded in batch with documents)
-        self._tags_cache: Dict[int, List[str]] = {}
-        # LRU cache for full document content (preview)
-        self._doc_cache: Dict[int, Dict[str, Any]] = {}
-        self._doc_cache_max = 50  # Keep last 50 documents in memory
+
         # Debounce preview updates
         self._pending_preview_doc_id: Optional[int] = None
         self._preview_timer = None
+
+        # Current ViewModel (updated by presenter callbacks)
+        self._current_vm: Optional[DocumentListVM] = None
+
+        # Initialize presenter with update callbacks
+        self.presenter = DocumentBrowserPresenter(
+            on_list_update=self._on_list_update,
+            on_detail_update=self._on_detail_update,
+        )
+
+    async def _on_list_update(self, vm: DocumentListVM) -> None:
+        """Handle ViewModel updates from presenter."""
+        self._current_vm = vm
+        await self._render_document_list()
+
+    async def _on_detail_update(self, vm: DocumentDetailVM) -> None:
+        """Handle detail ViewModel updates from presenter."""
+        # This callback can be used for detail panel updates in the future
+        pass
         
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
@@ -290,8 +296,10 @@ class DocumentBrowser(Widget):
             details_panel.write("📋 **Document Details**")
             details_panel.write("")
             details_panel.write("[dim]Select a document to view details[/dim]")
+        except (LookupError, AttributeError) as e:
+            logger.error(f"Error setting up details panel: {type(e).__name__}: {e}")
         except Exception as e:
-            logger.error(f"Error setting up details panel: {e}")
+            logger.error(f"Unexpected error setting up details panel: {type(e).__name__}: {e}")
             import traceback
             logger.error(traceback.format_exc())
         
@@ -307,97 +315,52 @@ class DocumentBrowser(Widget):
         # Set focus to table so keys work immediately
         table.focus()
         
-        # Load documents
-        await self.load_documents()
-        
-    async def load_documents(self, limit: int = 100, offset: int = 0, append: bool = False) -> None:
+        # Load documents via presenter
+        await self.presenter.load_documents()
+
+    async def load_documents(
+        self, limit: int = 100, offset: int = 0, append: bool = False
+    ) -> None:
         """Load documents from database with pagination.
+
+        Delegates to presenter for data loading.
 
         Args:
             limit: Number of documents to fetch
             offset: Starting offset for pagination
             append: If True, append to existing docs instead of replacing
         """
-        try:
-            with db.get_connection() as conn:
-                # Get total count for status display
-                if not append:
-                    cursor = conn.execute("""
-                        SELECT COUNT(*) FROM documents WHERE is_deleted = 0
-                    """)
-                    self.total_doc_count = cursor.fetchone()[0]
-
-                # Fetch paginated documents
-                cursor = conn.execute("""
-                    SELECT id, title, project, created_at, accessed_at, access_count
-                    FROM documents
-                    WHERE is_deleted = 0
-                    ORDER BY id DESC
-                    LIMIT ? OFFSET ?
-                """, (limit, offset))
-
-                new_docs = cursor.fetchall()
-
-                if append:
-                    self.documents = self.documents + new_docs
-                else:
-                    self.documents = new_docs
-
-                self.filtered_docs = self.documents
-                self.current_offset = offset + len(new_docs)
-                self.has_more = len(new_docs) == limit
-
-                logger.info(f"Loaded {len(new_docs)} documents (total loaded: {len(self.documents)}, total available: {self.total_doc_count})")
-                await self.update_table()
-        except Exception as e:
-            logger.error(f"Error loading documents: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        await self.presenter.load_documents(limit=limit, offset=offset, append=append)
 
     async def load_more_documents(self) -> None:
         """Load more documents when user scrolls near the end."""
-        if self.has_more and not self._loading_more:
-            self._loading_more = True
-            try:
-                await self.load_documents(limit=100, offset=self.current_offset, append=True)
-            finally:
-                self._loading_more = False
+        await self.presenter.load_more_documents()
             
-    async def update_table(self) -> None:
-        """Update the table with filtered documents."""
+    async def _render_document_list(self) -> None:
+        """Render the document list from current ViewModel.
+
+        This method is called by the presenter callback when data changes.
+        It renders the ViewModel data to the UI without any data fetching.
+        """
+        if not self._current_vm:
+            return
+
+        vm = self._current_vm
         table = self.query_one("#doc-table", DataTable)
         table.clear()
 
-        # Batch load all tags in one query to avoid N+1
-        doc_ids = [doc["id"] for doc in self.filtered_docs]
-        all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-        # Update cache
-        self._tags_cache.update(all_tags)
-
-        for doc in self.filtered_docs:
-            # Format row data - ID, Tags, and Title
-            title, was_truncated = truncate_emoji_safe(doc["title"], 74)
-            if was_truncated:
-                title += "..."
-
-            # Get first 3 tags as emojis with spaces between, pad to 5 chars
-            doc_tags = all_tags.get(doc["id"], [])
-            tags_display = " ".join(doc_tags[:3]).ljust(8)  # Pad to exactly 8 chars
-
+        # Render documents from ViewModel (data is already formatted)
+        for doc in vm.filtered_documents:
             table.add_row(
-                str(doc["id"]),
-                tags_display,
+                str(doc.id),
+                doc.tags_display,
                 "",  # Empty padding column
-                title,
+                doc.title,
             )
 
-        # Update status using our own status bar
+        # Update status using ViewModel status text
         try:
-            # Show loaded/total count
-            if self.has_more:
-                status_text = f"{len(self.filtered_docs)}/{self.total_doc_count} docs (scroll for more)"
-            else:
-                status_text = f"{len(self.filtered_docs)}/{self.total_doc_count} docs"
+            status_text = vm.status_text
             if self.mode == "NORMAL":
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
             elif self.mode == "SEARCH":
@@ -407,14 +370,21 @@ class DocumentBrowser(Widget):
             logger.error(f"Status update failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
+
+    async def update_table(self) -> None:
+        """Update the table with filtered documents.
+
+        Kept for backward compatibility - delegates to _render_document_list.
+        """
+        await self._render_document_list()
             
     def save_state(self) -> Dict[str, Any]:
         """Save current state for restoration."""
         state: Dict[str, Any] = {
             "mode": self.mode,
-            "current_search": self.current_search,
+            "current_search": self._current_vm.search_query if self._current_vm else "",
         }
-        
+
         # Save cursor position
         try:
             table = self.query_one("#doc-table", DataTable)
@@ -427,7 +397,7 @@ class DocumentBrowser(Widget):
     def restore_state(self, state: Dict[str, Any]) -> None:
         """Restore saved state."""
         self.mode = state.get("mode", "NORMAL")
-        self.current_search = state.get("current_search", "")
+        # Search query will be applied when load_documents is called
 
         # Restore cursor position
         if "cursor_position" in state:
@@ -469,28 +439,24 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.cursor_row is None:
             return
-            
+
         row_idx = table.cursor_row
-        if row_idx >= len(self.filtered_docs):
+        doc = self.presenter.get_document_at_index(row_idx)
+        if not doc:
             return
-            
-        doc = self.filtered_docs[row_idx]
-        
-        try:
-            delete_document(str(doc["id"]), hard_delete=False)  # Soft delete by default
-            # Refresh the document list
-            await self.load_documents()
-            
+
+        success = await self.presenter.delete_document(doc.id, hard_delete=False)
+
+        if success:
             # Restore cursor position, adjusting if needed
-            if len(self.filtered_docs) > 0:
+            if self.presenter.filtered_count > 0:
                 # If we deleted the last item, move cursor to the new last item
-                new_cursor_row = min(row_idx, len(self.filtered_docs) - 1)
+                new_cursor_row = min(row_idx, self.presenter.filtered_count - 1)
                 table.cursor_coordinate = (new_cursor_row, 0)
-            
-            self.update_status(f"Document '{doc['title']}' deleted")
-        except Exception as e:
-            logger.error(f"Error deleting document: {e}")
-            self.update_status(f"Error deleting document: {e}")
+
+            self.update_status(f"Document '{doc.title}' deleted")
+        else:
+            self.update_status("Error deleting document")
                 
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
@@ -499,16 +465,17 @@ class DocumentBrowser(Widget):
             return
 
         row_idx = table.cursor_row
-        if row_idx >= len(self.filtered_docs):
+        doc_item = self.presenter.get_document_at_index(row_idx)
+        if not doc_item:
             return
 
-        doc = self.filtered_docs[row_idx]
-        self.editing_doc_id = doc["id"]
+        self.editing_doc_id = doc_item.id
 
-        # Load full document
-        full_doc = get_document(str(doc["id"]))
-        if not full_doc:
+        # Load full document via presenter
+        detail_vm = self.presenter.get_document_detail(doc_item.id)
+        if not detail_vm:
             return
+        full_doc = {"id": detail_vm.id, "title": detail_vm.title, "content": detail_vm.content}
 
         # Store original preview for restoration
         self.original_preview_content = full_doc["content"]
@@ -561,72 +528,42 @@ class DocumentBrowser(Widget):
         """Save the document and exit edit mode."""
         if not self.edit_mode:
             return
-            
+
         try:
-            if getattr(self, 'new_document_mode', False):
-                # Save new document
-                try:
-                    title_input = self.query_one("#title-input", Input)
-                    vim_editor = self.query_one("#vim-editor-container", VimEditor)
-                    
-                    title = title_input.value.strip()
-                    content = vim_editor.text_area.text
-                    
-                    if not title:
-                        # Update status to show error
-                        self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
-                        return
-                    
-                    # Save the new document
-                    from emdx.models.documents import save_document
-                    from emdx.utils.git import get_git_project
-                    
-                    # Add unicode box to content when saving
-                    formatted_content = self._format_content_with_title_box(title, content)
-                    
-                    project = get_git_project() or "default"
-                    doc_id = save_document(title=title, content=formatted_content, project=project)
-                    
+            title_input = self.query_one("#title-input", Input)
+            vim_editor = self.query_one("#vim-editor-container", VimEditor)
+
+            title = title_input.value.strip()
+            content = vim_editor.text_area.text
+
+            if not title:
+                self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
+                return
+
+            if getattr(self, "new_document_mode", False):
+                # Save new document via presenter
+                doc_id = await self.presenter.save_new_document(title, content)
+                if doc_id:
                     logger.info(f"Created new document with ID: {doc_id}")
-                    
-                    # Clean up new document mode flag
                     self.new_document_mode = False
-                    
-                except Exception as e:
-                    logger.error(f"Error saving new document: {e}")
-                    self._update_vim_status(f"ERROR: {str(e)}")
+                else:
+                    self._update_vim_status("ERROR: Failed to save document")
                     return
             else:
-                # Update existing document
+                # Update existing document via presenter
                 if self.editing_doc_id:
-                    try:
-                        title_input = self.query_one("#title-input", Input)
-                        vim_editor = self.query_one("#vim-editor-container", VimEditor)
-                        
-                        title = title_input.value.strip()
-                        content = vim_editor.text_area.text
-                        
-                        if not title:
-                            # Update status to show error
-                            self._update_vim_status("ERROR: Title required | Enter title and press Ctrl+S")
-                            return
-                        
-                        # Add unicode box to content when saving
-                        formatted_content = self._format_content_with_title_box(title, content)
-                        
-                        from emdx.models.documents import update_document
-                        update_document(str(self.editing_doc_id), title=title, content=formatted_content)
-                        
-                        logger.info(f"Updated document ID: {self.editing_doc_id}")
-                    except Exception as e:
-                        logger.error(f"Error updating document: {e}")
-                        self._update_vim_status(f"ERROR: {str(e)}")
+                    success = await self.presenter.update_existing_document(
+                        self.editing_doc_id, title, content
+                    )
+                    if not success:
+                        self._update_vim_status("ERROR: Failed to update document")
                         return
-            
+                    logger.info(f"Updated document ID: {self.editing_doc_id}")
+
             # Exit edit mode and reload documents
             await self.exit_edit_mode()
             await self.load_documents()
-            
+
         except Exception as e:
             logger.error(f"Error in save_and_exit_edit_mode: {e}")
             import traceback
@@ -695,8 +632,8 @@ class DocumentBrowser(Widget):
                     app.update_status(f"Edit Mode | {message}")
                 else:
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(f"Could not update vim status: {type(e).__name__}: {e}")
             
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (called by SelectionTextArea)."""
@@ -704,8 +641,8 @@ class DocumentBrowser(Widget):
             # Exit selection mode
             try:
                 self.call_after_refresh(self._async_exit_selection_mode)
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError) as e:
+                logger.debug(f"Could not exit selection mode: {type(e).__name__}: {e}")
         
     def _async_exit_selection_mode(self) -> None:
         """Async wrapper for exit_selection_mode."""
@@ -733,18 +670,19 @@ class DocumentBrowser(Widget):
         # Get current document content for preview
         content = ""
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
-            doc = self.filtered_docs[table.cursor_row]
-            full_doc = get_document(str(doc["id"]))
-            if full_doc:
-                content = full_doc["content"]
+        if table.cursor_row is not None:
+            doc_item = self.presenter.get_document_at_index(table.cursor_row)
+            if doc_item:
+                detail_vm = self.presenter.get_document_detail(doc_item.id)
+                if detail_vm:
+                    content = detail_vm.content
 
         # Switch to viewing mode via manager
         await self.preview_manager.switch_to_viewing(content)
 
         # Return focus to table
         table.focus()
-        
+
     async def enter_new_document_mode(self) -> None:
         """Enter mode to create a new document."""
         # Store that we're creating a new document
@@ -784,7 +722,7 @@ class DocumentBrowser(Widget):
     async def action_cursor_bottom(self) -> None:
         """Move cursor to bottom - loads all remaining documents first."""
         # Load all remaining documents before going to bottom
-        while self.has_more:
+        while self.presenter.has_more:
             await self.load_more_documents()
 
         table = self.query_one("#doc-table", DataTable)
@@ -813,13 +751,13 @@ class DocumentBrowser(Widget):
     def action_execute_document(self) -> None:
         """Open multi-stage agent execution overlay for the current document."""
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row >= len(self.filtered_docs):
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
             self.update_status("No document selected for agent execution")
             return
-            
-        doc = self.filtered_docs[table.cursor_row]
-        doc_id = int(doc["id"])
-        doc_title = doc["title"]
+
+        doc_id = doc_item.id
+        doc_title = doc_item.title
 
         # Import the new agent execution overlay
         from .agent_execution_overlay import AgentExecutionOverlay
@@ -897,37 +835,40 @@ class DocumentBrowser(Widget):
         self.tag_action = "remove"
         # Show tag selector with existing tags
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row >= len(self.filtered_docs):
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
             return
-        doc = self.filtered_docs[table.cursor_row]
-        tags = get_document_tags(doc["id"])
-        
+
+        tags = get_document_tags(doc_item.id)
+
         if not tags:
             return  # No tags to remove
-            
+
         # For now, just use input - proper selector later
         tag_input = self.query_one("#tag-input", Input)
         tag_input.placeholder = f"Remove tags: {', '.join(tags)}"
         tag_input.display = True
         tag_input.can_focus = True
         tag_input.focus()
-        
+
     async def action_selection_mode(self) -> None:
         """Enter selection mode for document content."""
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row is None or table.cursor_row >= len(self.filtered_docs):
+        if table.cursor_row is None:
             return
 
-        doc = self.filtered_docs[table.cursor_row]
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
+            return
 
-        # Load full document for selection
-        full_doc = get_document(str(doc["id"]))
-        if not full_doc:
+        # Load full document for selection via presenter
+        detail_vm = self.presenter.get_document_detail(doc_item.id)
+        if not detail_vm:
             return
 
         # Switch to selecting mode via manager
         selection_area = await self.preview_manager.switch_to_selecting(
-            host=self, content=full_doc["content"]
+            host=self, content=detail_vm.content
         )
         selection_area.focus()
 
@@ -952,11 +893,12 @@ class DocumentBrowser(Widget):
         # Get current document content for preview
         content = ""
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row is not None and table.cursor_row < len(self.filtered_docs):
-            doc = self.filtered_docs[table.cursor_row]
-            full_doc = get_document(str(doc["id"]))
-            if full_doc:
-                content = full_doc["content"]
+        if table.cursor_row is not None:
+            doc_item = self.presenter.get_document_at_index(table.cursor_row)
+            if doc_item:
+                detail_vm = self.presenter.get_document_detail(doc_item.id)
+                if detail_vm:
+                    content = detail_vm.content
 
         # Switch to viewing mode via manager
         await self.preview_manager.switch_to_viewing(content)
@@ -968,11 +910,17 @@ class DocumentBrowser(Widget):
         try:
             app = self.app
             if hasattr(app, "update_status"):
-                status_text = f"{len(self.filtered_docs)}/{len(self.documents)} docs"
+                vm = self._current_vm
+                if vm:
+                    status_text = f"{vm.filtered_count}/{vm.total_count} docs"
+                else:
+                    status_text = "0/0 docs"
                 status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
                 app.update_status(status_text)
-        except Exception:
-            pass
+        except (LookupError, AttributeError) as e:
+            logger.debug(
+                f"Could not update status after exiting selection mode: {type(e).__name__}: {e}"
+            )
     
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview and details panel when row is highlighted."""
@@ -982,37 +930,27 @@ class DocumentBrowser(Widget):
         row_idx = event.cursor_row
 
         # Load more documents when near the end (within 20 rows)
-        if self.has_more and row_idx >= len(self.filtered_docs) - 20:
+        if self.presenter.should_load_more(row_idx):
             await self.load_more_documents()
 
-        if row_idx >= len(self.filtered_docs):
+        doc_item = self.presenter.get_document_at_index(row_idx)
+        if not doc_item:
             return
-            
-        doc = self.filtered_docs[row_idx]
-        doc_id = doc["id"]
 
-        # Load full document for preview (with caching)
-        if doc_id in self._doc_cache:
-            full_doc = self._doc_cache[doc_id]
-        else:
-            full_doc = get_document(str(doc_id))
-            if full_doc:
-                # Add to cache, evict oldest if needed
-                if len(self._doc_cache) >= self._doc_cache_max:
-                    # Remove first (oldest) item
-                    oldest_key = next(iter(self._doc_cache))
-                    del self._doc_cache[oldest_key]
-                self._doc_cache[doc_id] = full_doc
-            
-        if full_doc and not self.edit_mode:
+        # Get document detail via presenter (includes caching)
+        detail_vm = self.presenter.get_document_detail(doc_item.id)
+
+        if detail_vm and not self.edit_mode:
             # Schedule preview update with debouncing (50ms delay)
-            self._pending_preview_doc_id = doc_id
+            self._pending_preview_doc_id = doc_item.id
             if self._preview_timer:
                 self._preview_timer.stop()
-            self._preview_timer = self.set_timer(0.05, lambda: self._do_preview_update(full_doc))
+            self._preview_timer = self.set_timer(
+                0.05, lambda: self._do_preview_update_from_vm(detail_vm)
+            )
 
-    def _do_preview_update(self, full_doc: Dict[str, Any]) -> None:
-        """Actually update the preview (called after debounce delay)."""
+    def _do_preview_update_from_vm(self, detail_vm: DocumentDetailVM) -> None:
+        """Update the preview from a DocumentDetailVM."""
         if self.edit_mode:
             return
 
@@ -1023,8 +961,9 @@ class DocumentBrowser(Widget):
 
             # Render content as markdown (limit size for performance)
             from rich.markdown import Markdown
+
             try:
-                content = full_doc["content"]
+                content = detail_vm.content
                 # Limit preview to first 5000 chars for performance
                 if len(content) > 5000:
                     content = content[:5000] + "\n\n[dim]... (truncated for preview)[/dim]"
@@ -1035,97 +974,87 @@ class DocumentBrowser(Widget):
                     preview.write("[dim]Empty document[/dim]")
             except Exception:
                 # Fallback to plain text if markdown fails
-                preview.write(full_doc["content"][:5000])
+                preview.write(detail_vm.content[:5000])
         except Exception:
             # Preview widget not found or not ready - ignore
             pass
 
-        # Update details panel (sync, it's fast now with caching)
-        self.call_later(lambda: self._update_details_sync(full_doc))
+        # Update details panel
+        self.call_later(lambda: self._update_details_from_vm(detail_vm))
 
-    def _update_details_sync(self, full_doc: Dict[str, Any]) -> None:
-        """Update details panel synchronously."""
+    def _update_details_from_vm(self, detail_vm: DocumentDetailVM) -> None:
+        """Update details panel from DocumentDetailVM."""
         import asyncio
-        asyncio.create_task(self.update_details_panel(full_doc))
-    
-    async def update_details_panel(self, doc: dict) -> None:
-        """Update the details panel with rich document information."""
+
+        asyncio.create_task(self._render_details_panel(detail_vm))
+
+    async def _render_details_panel(self, detail_vm: DocumentDetailVM) -> None:
+        """Render the details panel from a DocumentDetailVM."""
         try:
             details_panel = self.query_one("#details-panel", RichLog)
             details_panel.clear()
 
-            # Get tags from cache (already loaded in batch)
-            tags = self._tags_cache.get(doc["id"], [])
-            
             # Format details with emoji and rich formatting
-            
-            # Document metadata
             details = []
-            
+
             # ID and basic info
-            details.append(f"📄 **ID:** {doc['id']}")
-            details.append(f"📂 **Project:** {doc.get('project', 'default')}")
-            
+            details.append(f"📄 **ID:** {detail_vm.id}")
+            details.append(f"📂 **Project:** {detail_vm.project}")
+
             # Tags with emoji formatting
-            if tags:
-                tags_formatted = format_tags(tags)
-                details.append(f"🏷️  **Tags:** {tags_formatted}")
+            if detail_vm.tags:
+                details.append(f"🏷️  **Tags:** {detail_vm.tags_formatted}")
             else:
                 details.append("🏷️  **Tags:** [dim]None[/dim]")
-            
+
             # Dates
-            if doc.get('created_at'):
-                created = doc['created_at']
+            if detail_vm.created_at:
+                created = detail_vm.created_at
                 if isinstance(created, str):
-                    created = created[:16]  # Truncate to YYYY-MM-DD HH:MM
+                    created = created[:16]
                 details.append(f"📅 **Created:** {created}")
-            
-            if doc.get('updated_at'):
-                updated = doc['updated_at']
+
+            if detail_vm.updated_at:
+                updated = detail_vm.updated_at
                 if isinstance(updated, str):
-                    updated = updated[:16]  # Truncate to YYYY-MM-DD HH:MM
+                    updated = updated[:16]
                 details.append(f"✏️  **Updated:** {updated}")
-            
-            if doc.get('accessed_at'):
-                accessed = doc['accessed_at']
+
+            if detail_vm.accessed_at:
+                accessed = detail_vm.accessed_at
                 if isinstance(accessed, str):
-                    accessed = accessed[:16]  # Truncate to YYYY-MM-DD HH:MM
+                    accessed = accessed[:16]
                 details.append(f"👁️  **Accessed:** {accessed}")
-            
-            # Access count
-            access_count = doc.get('access_count', 0)
-            details.append(f"📊 **Views:** {access_count}")
-            
-            # Content stats
-            content = doc.get('content', '')
-            word_count = len(content.split()) if content else 0
-            char_count = len(content) if content else 0
-            line_count = content.count('\n') + 1 if content else 0
-            
-            details.append(f"📝 **Words:** {word_count} | **Chars:** {char_count} | **Lines:** {line_count}")
-            
+
+            # Access count and content stats
+            details.append(f"📊 **Views:** {detail_vm.access_count}")
+            details.append(
+                f"📝 **Words:** {detail_vm.word_count} | "
+                f"**Chars:** {detail_vm.char_count} | "
+                f"**Lines:** {detail_vm.line_count}"
+            )
+
             # Write each detail on a separate line
             for detail in details:
                 details_panel.write(detail)
-                
+
         except Exception as e:
-            logger.error(f"Error updating details panel: {e}")
+            logger.error(f"Error rendering details panel: {e}")
             # Fallback - just show basic info
             try:
                 details_panel = self.query_one("#details-panel", RichLog)
                 details_panel.clear()
-                details_panel.write(f"📄 Document {doc['id']}: {doc['title']}")
+                details_panel.write(f"📄 Document {detail_vm.id}: {detail_vm.title}")
             except Exception:
                 pass
+
                 
     async def on_input_submitted(self, event) -> None:
         """Handle input submission."""
         if event.input.id == "search-input":
-            # Handle search
+            # Handle search via presenter
             query = event.input.value.strip()
-            if query:
-                self.current_search = query
-                await self.apply_search()
+            await self.apply_search(query)
             self.exit_search_mode()
             
         elif event.input.id == "tag-input":
@@ -1157,38 +1086,33 @@ class DocumentBrowser(Widget):
         table = self.query_one("#doc-table", DataTable)
         table.focus()
         
-    async def apply_search(self) -> None:
-        """Apply current search filter."""
-        if not self.current_search:
-            self.filtered_docs = self.documents
-        else:
-            # Simple title search for now
-            self.filtered_docs = [
-                doc for doc in self.documents
-                if self.current_search.lower() in doc["title"].lower()
-            ]
-        await self.update_table()
-        
+    async def apply_search(self, query: Optional[str] = None) -> None:
+        """Apply current search filter via presenter.
+
+        Args:
+            query: Search query. If None, uses internal search state.
+        """
+        search_query = query if query is not None else ""
+        await self.presenter.apply_search(search_query)
+
     async def add_tags_to_current_doc(self, tag_text: str) -> None:
         """Add tags to current document."""
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row >= len(self.filtered_docs):
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
             return
-        doc = self.filtered_docs[table.cursor_row]
-        
+
         tags = [tag.strip() for tag in tag_text.split() if tag.strip()]
         if tags:
-            add_tags_to_document(doc["id"], tags)
-            await self.update_table()
-            
+            await self.presenter.add_tags(doc_item.id, tags)
+
     async def remove_tags_from_current_doc(self, tag_text: str) -> None:
         """Remove tags from current document."""
         table = self.query_one("#doc-table", DataTable)
-        if table.cursor_row >= len(self.filtered_docs):
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
             return
-        doc = self.filtered_docs[table.cursor_row]
-        
+
         tags = [tag.strip() for tag in tag_text.split() if tag.strip()]
         if tags:
-            remove_tags_from_document(doc["id"], tags)
-            await self.update_table()
+            await self.presenter.remove_tags(doc_item.id, tags)
