@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 from .base import Agent, AgentContext, AgentResult
+from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..models.documents import get_document, save_document
 from ..utils.logging import get_logger
 from ..utils.structured_logger import StructuredLogger, ProcessType
@@ -36,8 +37,6 @@ class GenericAgent(Agent):
                 f.write(full_prompt)
             
             # Prepare Claude command using same format as claude_execute.py
-            from emdx.utils.constants import DEFAULT_CLAUDE_MODEL
-
             cmd = [
                 "claude",
                 "--print", full_prompt,
@@ -226,7 +225,8 @@ class GenericAgent(Agent):
                 try:
                     input_doc = get_document(context.input_doc_id)
                     base_title = f"{self.config.display_name}: {input_doc.title}"
-                except Exception:
+                except (KeyError, ValueError) as e:
+                    logger.debug(f"Could not fetch document {context.input_doc_id} for title: {e}")
                     base_title = f"{self.config.display_name} Output"
             elif context.input_type == 'query' and context.input_query:
                 query_preview = truncate_title(context.input_query)

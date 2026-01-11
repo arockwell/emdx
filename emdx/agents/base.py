@@ -1,10 +1,16 @@
 """Base classes for EMDX agent system."""
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 from datetime import datetime
-import json
+from typing import Any, Dict, List, Optional
+
+from emdx.config.constants import (
+    DEFAULT_MAX_AGENT_ITERATIONS,
+    DEFAULT_MAX_CONTEXT_DOCS,
+    EXECUTION_TIMEOUT_SECONDS,
+)
 
 
 @dataclass
@@ -19,10 +25,10 @@ class AgentConfig:
     user_prompt_template: str
     allowed_tools: List[str]
     tool_restrictions: Optional[Dict[str, Any]] = None
-    max_iterations: int = 10
-    timeout_seconds: int = 3600
+    max_iterations: int = DEFAULT_MAX_AGENT_ITERATIONS
+    timeout_seconds: int = EXECUTION_TIMEOUT_SECONDS
     requires_confirmation: bool = False
-    max_context_docs: int = 5
+    max_context_docs: int = DEFAULT_MAX_CONTEXT_DOCS
     context_search_query: Optional[str] = None
     include_doc_content: bool = True
     output_format: str = 'markdown'
@@ -57,10 +63,10 @@ class AgentConfig:
             user_prompt_template=row['user_prompt_template'],
             allowed_tools=allowed_tools,
             tool_restrictions=tool_restrictions,
-            max_iterations=row.get('max_iterations', 10),
-            timeout_seconds=row.get('timeout_seconds', 3600),
+            max_iterations=row.get('max_iterations', DEFAULT_MAX_AGENT_ITERATIONS),
+            timeout_seconds=row.get('timeout_seconds', EXECUTION_TIMEOUT_SECONDS),
             requires_confirmation=bool(row.get('requires_confirmation', False)),
-            max_context_docs=row.get('max_context_docs', 5),
+            max_context_docs=row.get('max_context_docs', DEFAULT_MAX_CONTEXT_DOCS),
             context_search_query=row.get('context_search_query'),
             include_doc_content=bool(row.get('include_doc_content', True)),
             output_format=row.get('output_format', 'markdown'),

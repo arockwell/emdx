@@ -9,10 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from emdx.database import db_connection
-from emdx.models.documents import save_document, get_document
-from emdx.models.executions import create_execution, get_execution, update_execution_status
-
+from .services import document_service, execution_service, claude_service
 from .base import (
     ExecutionMode,
     IterationStrategy,
@@ -111,7 +108,7 @@ class WorkflowExecutor:
         try:
             # Load input document content if provided
             if input_doc_id:
-                doc = get_document(input_doc_id)
+                doc = document_service.get_document(input_doc_id)
                 if doc:
                     context['input'] = doc.get('content', '')
                     context['input_title'] = doc.get('title', '')
@@ -151,13 +148,13 @@ class WorkflowExecutor:
 
                 # Store stage output in context for later stages
                 if result.output_doc_id:
-                    doc = get_document(result.output_doc_id)
+                    doc = document_service.get_document(result.output_doc_id)
                     if doc:
                         context[f"{stage.name}.output"] = doc.get('content', '')
                         context[f"{stage.name}.output_id"] = result.output_doc_id
 
                 if result.synthesis_doc_id:
-                    doc = get_document(result.synthesis_doc_id)
+                    doc = document_service.get_document(result.synthesis_doc_id)
                     if doc:
                         context[f"{stage.name}.synthesis"] = doc.get('content', '')
                         context[f"{stage.name}.synthesis_id"] = result.synthesis_doc_id
@@ -166,7 +163,7 @@ class WorkflowExecutor:
                 if result.individual_outputs:
                     outputs_content = []
                     for doc_id in result.individual_outputs:
-                        doc = get_document(doc_id)
+                        doc = document_service.get_document(doc_id)
                         if doc:
                             outputs_content.append(doc.get('content', ''))
                     context[f"{stage.name}.outputs"] = outputs_content
@@ -250,6 +247,8 @@ class WorkflowExecutor:
                 result = await self._execute_iterative(stage_run_id, stage, context, stage_input)
             elif stage.mode == ExecutionMode.ADVERSARIAL:
                 result = await self._execute_adversarial(stage_run_id, stage, context, stage_input)
+            elif stage.mode == ExecutionMode.DYNAMIC:
+                result = await self._execute_dynamic(stage_run_id, stage, context, stage_input)
             else:
                 raise ValueError(f"Unknown execution mode: {stage.mode}")
 
@@ -476,7 +475,7 @@ class WorkflowExecutor:
 
             # Collect output for next iteration
             if result.get('output_doc_id'):
-                doc = get_document(result['output_doc_id'])
+                doc = document_service.get_document(result['output_doc_id'])
                 if doc:
                     previous_outputs.append(doc.get('content', ''))
                     output_doc_ids.append(result['output_doc_id'])
@@ -575,7 +574,7 @@ class WorkflowExecutor:
 
             # Collect output
             if result.get('output_doc_id'):
-                doc = get_document(result['output_doc_id'])
+                doc = document_service.get_document(result['output_doc_id'])
                 if doc:
                     outputs.append(doc.get('content', ''))
                     output_doc_ids.append(result['output_doc_id'])
@@ -591,6 +590,211 @@ class WorkflowExecutor:
             individual_outputs=output_doc_ids,
             tokens_used=total_tokens,
         )
+
+    async def _run_discovery(
+        self,
+        command: str,
+        context: Dict[str, Any],
+    ) -> List[str]:
+        """Run discovery command and return list of items.
+
+        Args:
+            command: Shell command that outputs items (one per line)
+            context: Execution context for template resolution
+
+        Returns:
+            List of discovered items (strings)
+        """
+        import subprocess
+
+        # Resolve any templates in the command
+        resolved_command = self._resolve_template(command, context)
+
+        # Run command
+        result = await asyncio.to_thread(
+            subprocess.run,
+            resolved_command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=context.get('_working_dir'),
+        )
+
+        if result.returncode != 0:
+            raise ValueError(f"Discovery command failed: {result.stderr}")
+
+        # Parse output - one item per line, strip whitespace
+        items = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+        return items
+
+    async def _execute_dynamic(
+        self,
+        stage_run_id: int,
+        stage: StageConfig,
+        context: Dict[str, Any],
+        stage_input: Optional[str],
+    ) -> StageResult:
+        """Execute dynamic mode: discover items and process each in parallel.
+
+        Dynamic mode:
+        1. Runs discovery_command to get a list of items
+        2. Creates a worktree for each item (up to max_concurrent)
+        3. Processes items in parallel, respecting concurrency limits
+        4. Optionally synthesizes results at the end
+
+        Args:
+            stage_run_id: Stage run ID
+            stage: Stage configuration
+            context: Execution context
+            stage_input: Resolved input for this stage
+
+        Returns:
+            StageResult with all outputs
+        """
+        from .worktree_pool import WorktreePool
+
+        # Get discovery command (CLI override takes precedence)
+        discovery_command = context.get('_discovery_override') or stage.discovery_command
+
+        # Validate configuration
+        if not discovery_command:
+            return StageResult(
+                success=False,
+                error_message="Dynamic mode requires discovery_command"
+            )
+
+        # Get max_concurrent (CLI override takes precedence)
+        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent
+
+        # Step 1: Run discovery
+        try:
+            items = await self._run_discovery(discovery_command, context)
+        except Exception as e:
+            return StageResult(
+                success=False,
+                error_message=f"Discovery failed: {e}"
+            )
+
+        if not items:
+            return StageResult(
+                success=True,
+                error_message="No items discovered"
+            )
+
+        # Update target_runs to reflect discovered item count
+        wf_db.update_stage_run(stage_run_id, target_runs=len(items))
+
+        # Step 2: Set up worktree pool
+        base_branch = context.get('base_branch', 'main')
+        pool = WorktreePool(
+            max_size=max_concurrent,
+            base_branch=base_branch,
+            repo_root=context.get('_working_dir'),
+        )
+
+        output_doc_ids: List[int] = []
+        total_tokens = 0
+        errors: List[str] = []
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def process_item(item_index: int, item: str) -> Dict[str, Any]:
+            """Process a single discovered item."""
+            async with semaphore:
+                async with pool.acquire(target_branch=item) as worktree:
+                    # Build item-specific context
+                    item_context = dict(context)
+                    item_context[stage.item_variable] = item
+                    item_context['_working_dir'] = worktree.path
+                    item_context['item_index'] = item_index
+                    item_context['total_items'] = len(items)
+
+                    # Resolve prompt with item context
+                    prompt = self._resolve_template(stage.prompt, item_context) if stage.prompt else item
+
+                    # Create individual run record
+                    individual_run_id = wf_db.create_individual_run(
+                        stage_run_id=stage_run_id,
+                        run_number=item_index + 1,
+                        prompt_used=prompt,
+                        input_context=item,
+                    )
+
+                    # Execute agent
+                    result = await self._run_agent(
+                        individual_run_id=individual_run_id,
+                        agent_id=stage.agent_id,
+                        prompt=prompt,
+                        context=item_context,
+                    )
+
+                    return {
+                        'item': item,
+                        'index': item_index,
+                        **result
+                    }
+
+        try:
+            # Step 3: Process all items in parallel
+            tasks = [process_item(i, item) for i, item in enumerate(items)]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Collect results
+            successful_items = 0
+            for result in results:
+                if isinstance(result, Exception):
+                    errors.append(str(result))
+                    if not stage.continue_on_failure:
+                        break
+                elif result.get('success'):
+                    successful_items += 1
+                    if result.get('output_doc_id'):
+                        output_doc_ids.append(result['output_doc_id'])
+                    total_tokens += result.get('tokens_used', 0)
+                else:
+                    error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
+                    errors.append(error_msg)
+                    if not stage.continue_on_failure:
+                        break
+
+            # Update stage progress
+            wf_db.update_stage_run(stage_run_id, runs_completed=successful_items)
+
+            # Step 4: Optional synthesis
+            synthesis_doc_id = None
+            if output_doc_ids and stage.synthesis_prompt:
+                synthesis_result = await self._synthesize_outputs(
+                    stage_run_id=stage_run_id,
+                    output_doc_ids=output_doc_ids,
+                    synthesis_prompt=stage.synthesis_prompt,
+                    context=context,
+                )
+                synthesis_doc_id = synthesis_result.get('output_doc_id')
+                total_tokens += synthesis_result.get('tokens_used', 0)
+
+            # Determine overall success
+            if not stage.continue_on_failure and errors:
+                return StageResult(
+                    success=False,
+                    error_message=f"Dynamic execution failed: {'; '.join(errors)}",
+                    individual_outputs=output_doc_ids,
+                    tokens_used=total_tokens,
+                )
+
+            # Success if at least one item succeeded
+            success = successful_items > 0
+
+            return StageResult(
+                success=success,
+                output_doc_id=synthesis_doc_id or (output_doc_ids[-1] if output_doc_ids else None),
+                synthesis_doc_id=synthesis_doc_id,
+                individual_outputs=output_doc_ids,
+                tokens_used=total_tokens,
+                error_message=f"Processed {successful_items}/{len(items)} items. Errors: {'; '.join(errors)}" if errors else None,
+            )
+
+        finally:
+            # Clean up worktree pool
+            await pool.cleanup()
 
     async def _run_agent(
         self,
@@ -613,8 +817,6 @@ class WorkflowExecutor:
         Returns:
             Dict with success, output_doc_id, tokens_used, error_message
         """
-        from emdx.commands.claude_execute import execute_with_claude
-
         wf_db.update_individual_run(
             individual_run_id,
             status='running',
@@ -632,11 +834,18 @@ class WorkflowExecutor:
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
-            exec_id = create_execution(
-                doc_id=context.get('input_doc_id', 0),
+            # Use None for doc_id if no input document (workflow agents don't always have one)
+            exec_id = execution_service.create_execution(
+                doc_id=context.get('input_doc_id'),
                 doc_title=f"Workflow Agent Run #{individual_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,
+            )
+
+            # Link execution to individual run immediately so TUI can show logs
+            wf_db.update_individual_run(
+                individual_run_id,
+                agent_execution_id=exec_id,
             )
 
             # Build the full prompt with instructions to save output
@@ -653,7 +862,7 @@ Report the document ID that was created."""
             loop = asyncio.get_event_loop()
             exit_code = await loop.run_in_executor(
                 None,
-                lambda: execute_with_claude(
+                lambda: claude_service.execute_with_claude(
                     task=full_prompt,
                     execution_id=exec_id,
                     log_file=log_file,
@@ -667,7 +876,7 @@ Report the document ID that was created."""
 
             # Update execution status
             status = 'completed' if exit_code == 0 else 'failed'
-            update_execution_status(exec_id, status, exit_code)
+            execution_service.update_execution_status(exec_id, status, exit_code)
 
             if exit_code == 0:
                 # Try to extract output document ID from log
@@ -676,7 +885,7 @@ Report the document ID that was created."""
                 if not output_doc_id:
                     # If no document was created, save the log content as output
                     log_content = log_file.read_text() if log_file.exists() else "No output captured"
-                    output_doc_id = save_document(
+                    output_doc_id = document_service.save_document(
                         title=f"Workflow Agent Output - {datetime.now().isoformat()}",
                         content=f"# Agent Execution Log\n\n{log_content}",
                         tags=['workflow-output'],
@@ -756,7 +965,17 @@ Report the document ID that was created."""
                     return int(match.group(1))
 
             return None
-        except Exception:
+        except (OSError, IOError) as e:
+            # Log file read errors
+            from emdx.utils.logging import get_logger
+            logger = get_logger(__name__)
+            logger.debug(f"Could not read log file {log_file} for output doc ID extraction: {type(e).__name__}: {e}")
+            return None
+        except Exception as e:
+            # Log unexpected errors during parsing
+            from emdx.utils.logging import get_logger
+            logger = get_logger(__name__)
+            logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
     async def _synthesize_outputs(
@@ -777,12 +996,10 @@ Report the document ID that was created."""
         Returns:
             Dict with output_doc_id and tokens_used
         """
-        from emdx.commands.claude_execute import execute_with_claude
-
         # Gather all outputs
         outputs = []
         for doc_id in output_doc_ids:
-            doc = get_document(doc_id)
+            doc = document_service.get_document(doc_id)
             if doc:
                 outputs.append(doc.get('content', ''))
 
@@ -815,7 +1032,7 @@ Report the document ID that was created."""
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
-            exec_id = create_execution(
+            exec_id = execution_service.create_execution(
                 doc_id=context.get('input_doc_id', 0),
                 doc_title=f"Workflow Synthesis #{stage_run_id}",
                 log_file=str(log_file),
@@ -826,7 +1043,7 @@ Report the document ID that was created."""
             loop = asyncio.get_event_loop()
             exit_code = await loop.run_in_executor(
                 None,
-                lambda: execute_with_claude(
+                lambda: claude_service.execute_with_claude(
                     task=full_prompt,
                     execution_id=exec_id,
                     log_file=log_file,
@@ -838,7 +1055,7 @@ Report the document ID that was created."""
                 )
             )
 
-            update_execution_status(exec_id, 'completed' if exit_code == 0 else 'failed', exit_code)
+            execution_service.update_execution_status(exec_id, 'completed' if exit_code == 0 else 'failed', exit_code)
 
             if exit_code == 0:
                 # Try to extract output document ID
@@ -847,7 +1064,7 @@ Report the document ID that was created."""
                 if not output_doc_id:
                     # Fallback: save log content
                     log_content = log_file.read_text() if log_file.exists() else "No synthesis output"
-                    output_doc_id = save_document(
+                    output_doc_id = document_service.save_document(
                         title=f"Synthesis - {datetime.now().isoformat()}",
                         content=f"# Synthesis Log\n\n{log_content}",
                         tags=['workflow-synthesis'],
@@ -864,7 +1081,7 @@ Report the document ID that was created."""
                 for i, output in enumerate(outputs, 1):
                     combined += f"## Output {i}\n{output}\n\n"
 
-                doc_id = save_document(
+                doc_id = document_service.save_document(
                     title=f"Synthesis (fallback) - {datetime.now().isoformat()}",
                     content=combined,
                     tags=['workflow-synthesis'],
@@ -881,7 +1098,7 @@ Report the document ID that was created."""
             for i, output in enumerate(outputs, 1):
                 combined += f"## Output {i}\n{output}\n\n"
 
-            doc_id = save_document(
+            doc_id = document_service.save_document(
                 title=f"Synthesis (error) - {datetime.now().isoformat()}",
                 content=combined,
                 tags=['workflow-synthesis'],

@@ -298,11 +298,21 @@ class OutcomesView(Widget):
                 icon = "⚪"
 
             # Mode
-            mode = sr.get('mode', 'single')[:6]
+            mode = sr.get('mode', 'single')
+            mode_display = mode[:6]
 
-            # Runs completed / target
-            runs_done = sr.get('runs_completed', 0)
-            target = sr.get('target_runs', 1)
+            # Runs completed / target - for dynamic mode, query actual counts
+            if mode == 'dynamic' and sr.get('id'):
+                try:
+                    counts = wf_db.count_individual_runs(sr['id'])
+                    runs_done = counts.get('completed', 0)
+                    target = counts.get('total', 0) or sr.get('target_runs', 1)
+                except Exception:
+                    runs_done = sr.get('runs_completed', 0)
+                    target = sr.get('target_runs', 1)
+            else:
+                runs_done = sr.get('runs_completed', 0)
+                target = sr.get('target_runs', 1)
             runs_str = f"{runs_done}/{target}"
 
             # Time
@@ -317,7 +327,7 @@ class OutcomesView(Widget):
             table.add_row(
                 icon,
                 sr.get('stage_name', '?')[:10],
-                mode,
+                mode_display,
                 runs_str,
                 time_str
             )

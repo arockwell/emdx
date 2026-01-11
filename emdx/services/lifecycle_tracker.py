@@ -3,15 +3,24 @@ Lifecycle tracking service for EMDX.
 Tracks document lifecycle, especially for gameplans and projects.
 """
 
+import logging
 import sqlite3
-import sys
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..config.settings import get_db_path
+from ..database.connection import DatabaseConnection
 from ..models.documents import get_document, update_document
-from ..models.tags import add_tags_to_document, get_document_tags, remove_tags_from_document
+from ..models.tags import (
+    add_tags_to_document,
+    get_document_tags,
+    get_tags_for_documents,
+    remove_tags_from_document,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class LifecycleTracker:
@@ -39,66 +48,86 @@ class LifecycleTracker:
         'archived': []  # Terminal state
     }
     
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or get_db_path()
+    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+        self.db_path = Path(db_path) if db_path else get_db_path()
+        self._db = DatabaseConnection(self.db_path)
     
     def get_document_stage(self, doc_id: int) -> Optional[str]:
         """
         Determine the current lifecycle stage of a document.
-        
+
         Args:
             doc_id: Document ID
-            
+
         Returns:
             Current stage name or None
         """
         tags = set(get_document_tags(doc_id))
-        
+        return self._get_stage_from_tags(tags)
+
+    def _get_stage_from_tags(self, tags: set) -> Optional[str]:
+        """
+        Determine lifecycle stage from a set of tags.
+
+        Args:
+            tags: Set of tag names
+
+        Returns:
+            Stage name or None
+        """
         # Check stages in reverse order (later stages take precedence)
         for stage in reversed(list(self.STAGES.keys())):
             if any(tag in tags for tag in self.STAGES[stage]):
                 return stage
-        
+
         return None
     
     def get_gameplans(self, stage: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get all gameplans, optionally filtered by stage.
-        
+
         Args:
             stage: Filter by specific lifecycle stage
-            
+
         Returns:
             List of gameplan documents with stage info
         """
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Find all documents with gameplan tag
-        cursor.execute("""
-            SELECT DISTINCT d.id, d.title, d.project, d.created_at, d.updated_at, d.access_count
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0 AND t.name = '🎯'
-            ORDER BY d.updated_at DESC
-        """)
-        
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Find all documents with gameplan tag
+            cursor.execute("""
+                SELECT DISTINCT d.id, d.title, d.project, d.created_at, d.updated_at, d.access_count
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0 AND t.name = '🎯'
+                ORDER BY d.updated_at DESC
+            """)
+
+            rows = cursor.fetchall()
+
+        if not rows:
+            return []
+
+        # Batch load all tags for gameplans (fix N+1 query)
+        doc_ids = [row['id'] for row in rows]
+        all_tags = get_tags_for_documents(doc_ids)
+
         gameplans = []
-        for row in cursor.fetchall():
+        for row in rows:
             doc = dict(row)
-            doc['stage'] = self.get_document_stage(doc['id'])
-            doc['tags'] = get_document_tags(doc['id'])
-            
+            doc_tags = all_tags.get(doc['id'], [])
+            doc['tags'] = doc_tags
+            doc['stage'] = self._get_stage_from_tags(set(doc_tags))
+
             # Calculate age
             created = datetime.fromisoformat(doc['created_at'])
             doc['age_days'] = (datetime.now() - created).days
-            
+
             if stage is None or doc['stage'] == stage:
                 gameplans.append(doc)
-        
-        conn.close()
+
         return gameplans
     
     def analyze_lifecycle_patterns(self) -> Dict[str, Any]:
@@ -228,10 +257,8 @@ class LifecycleTracker:
             for tag in self.STAGES[current_stage]:
                 try:
                     remove_tags_from_document(doc_id, [tag])
-                except Exception as e:
-                    # Tag removal might fail if tag doesn't exist or DB is locked
-                    # This is non-critical for stage transitions
-                    print(f"Warning: Could not remove tag '{tag}': {e}", file=sys.stderr)
+                except (sqlite3.Error, ValueError) as e:
+                    logger.warning(f"Failed to remove tag {tag} from document {doc_id}: {e}")
         
         # Add new stage tags
         if new_stage in self.STAGES:
@@ -254,71 +281,69 @@ class LifecycleTracker:
     def auto_detect_transitions(self) -> List[Dict[str, Any]]:
         """
         Automatically detect documents that should transition stages.
-        
+
         Returns:
             List of suggested transitions
         """
         suggestions = []
-        
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Find active gameplans not updated in 30+ days
-        cursor.execute("""
-            SELECT DISTINCT d.id, d.title, d.updated_at
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0 
-            AND t.name = '🚀'
-            AND julianday('now') - julianday(d.updated_at) > 30
-        """)
-        
-        for row in cursor.fetchall():
-            suggestions.append({
-                'doc_id': row['id'],
-                'title': row['title'],
-                'current_stage': 'active',
-                'suggested_stage': 'blocked',
-                'reason': 'No updates in 30+ days'
-            })
-        
-        # Find completed docs without outcome
-        cursor.execute("""
-            SELECT DISTINCT d.id, d.title, d.content
-            FROM documents d
-            JOIN document_tags dt ON d.id = dt.document_id
-            JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = 0 
-            AND t.name = '✅'
-            AND NOT EXISTS (
-                SELECT 1 FROM document_tags dt2
-                JOIN tags t2 ON dt2.tag_id = t2.id
-                WHERE dt2.document_id = d.id
-                AND t2.name IN ('🎉', '❌')
-            )
-        """)
-        
-        for row in cursor.fetchall():
-            # Try to detect success/failure from content
-            content = (row['content'] or '').lower()
-            if any(word in content for word in ['success', 'achieved', 'completed successfully']):
-                suggested = 'success'
-            elif any(word in content for word in ['failed', 'abandoned', 'cancelled']):
-                suggested = 'failed'
-            else:
-                suggested = 'success'  # Default to success
-            
-            suggestions.append({
-                'doc_id': row['id'],
-                'title': row['title'],
-                'current_stage': 'completed',
-                'suggested_stage': suggested,
-                'reason': 'Completed without outcome specified'
-            })
-        
-        conn.close()
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Find active gameplans not updated in 30+ days
+            cursor.execute("""
+                SELECT DISTINCT d.id, d.title, d.updated_at
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0
+                AND t.name = '🚀'
+                AND julianday('now') - julianday(d.updated_at) > 30
+            """)
+
+            for row in cursor.fetchall():
+                suggestions.append({
+                    'doc_id': row['id'],
+                    'title': row['title'],
+                    'current_stage': 'active',
+                    'suggested_stage': 'blocked',
+                    'reason': 'No updates in 30+ days'
+                })
+
+            # Find completed docs without outcome
+            cursor.execute("""
+                SELECT DISTINCT d.id, d.title, d.content
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = 0
+                AND t.name = '✅'
+                AND NOT EXISTS (
+                    SELECT 1 FROM document_tags dt2
+                    JOIN tags t2 ON dt2.tag_id = t2.id
+                    WHERE dt2.document_id = d.id
+                    AND t2.name IN ('🎉', '❌')
+                )
+            """)
+
+            for row in cursor.fetchall():
+                # Try to detect success/failure from content
+                content = (row['content'] or '').lower()
+                if any(word in content for word in ['success', 'achieved', 'completed successfully']):
+                    suggested = 'success'
+                elif any(word in content for word in ['failed', 'abandoned', 'cancelled']):
+                    suggested = 'failed'
+                else:
+                    suggested = 'success'  # Default to success
+
+                suggestions.append({
+                    'doc_id': row['id'],
+                    'title': row['title'],
+                    'current_stage': 'completed',
+                    'suggested_stage': suggested,
+                    'reason': 'Completed without outcome specified'
+                })
+
         return suggestions
     
     def get_stage_duration_stats(self) -> Dict[str, Dict[str, float]]:

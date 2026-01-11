@@ -1,10 +1,17 @@
 """Base classes for EMDX workflow orchestration system."""
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
-import json
+
+from emdx.config.constants import (
+    DEFAULT_MAX_CONCURRENT_STAGES,
+    DEFAULT_STAGE_RUNS,
+    EXECUTION_TIMEOUT_SECONDS,
+    RECOMMENDED_WORKFLOW_RUNS,
+)
 
 
 class ExecutionMode(Enum):
@@ -13,6 +20,7 @@ class ExecutionMode(Enum):
     PARALLEL = "parallel"       # Run N times simultaneously, synthesize
     ITERATIVE = "iterative"     # Run N times sequentially, building on previous
     ADVERSARIAL = "adversarial" # Advocate -> Critic -> Synthesizer
+    DYNAMIC = "dynamic"         # Discover items at runtime, process each in parallel
 
 
 @dataclass
@@ -20,14 +28,19 @@ class StageConfig:
     """Configuration for a single workflow stage."""
     name: str
     mode: ExecutionMode
-    runs: int = 1
+    runs: int = DEFAULT_STAGE_RUNS
     agent_id: Optional[int] = None
     prompt: Optional[str] = None  # Custom prompt for this stage
     prompts: Optional[List[str]] = None  # For iterative/adversarial: per-run prompts
     iteration_strategy: Optional[str] = None  # Name of builtin strategy to use
-    synthesis_prompt: Optional[str] = None  # For parallel mode
+    synthesis_prompt: Optional[str] = None  # For parallel/dynamic mode
     input: Optional[str] = None  # Template reference like "{{prev_stage.output}}"
-    timeout_seconds: int = 3600
+    timeout_seconds: int = EXECUTION_TIMEOUT_SECONDS
+    # Dynamic mode fields
+    discovery_command: Optional[str] = None  # Shell command that outputs items (one per line)
+    item_variable: str = "item"  # Variable name for each discovered item in prompt
+    max_concurrent: int = DEFAULT_MAX_CONCURRENT_STAGES  # Max parallel executions for dynamic mode
+    continue_on_failure: bool = True  # Continue processing other items if one fails
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'StageConfig':
@@ -36,14 +49,18 @@ class StageConfig:
         return cls(
             name=data['name'],
             mode=mode,
-            runs=data.get('runs', 1),
+            runs=data.get('runs', DEFAULT_STAGE_RUNS),
             agent_id=data.get('agent_id'),
             prompt=data.get('prompt'),
             prompts=data.get('prompts'),
             iteration_strategy=data.get('iteration_strategy'),
             synthesis_prompt=data.get('synthesis_prompt'),
             input=data.get('input'),
-            timeout_seconds=data.get('timeout_seconds', 3600),
+            timeout_seconds=data.get('timeout_seconds', EXECUTION_TIMEOUT_SECONDS),
+            discovery_command=data.get('discovery_command'),
+            item_variable=data.get('item_variable', 'item'),
+            max_concurrent=data.get('max_concurrent', DEFAULT_MAX_CONCURRENT_STAGES),
+            continue_on_failure=data.get('continue_on_failure', True),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -59,6 +76,10 @@ class StageConfig:
             'synthesis_prompt': self.synthesis_prompt,
             'input': self.input,
             'timeout_seconds': self.timeout_seconds,
+            'discovery_command': self.discovery_command,
+            'item_variable': self.item_variable,
+            'max_concurrent': self.max_concurrent,
+            'continue_on_failure': self.continue_on_failure,
         }
 
 
@@ -250,7 +271,7 @@ class IterationStrategy:
     display_name: str
     description: Optional[str]
     prompts: List[str]  # Prompts for each iteration
-    recommended_runs: int = 5
+    recommended_runs: int = RECOMMENDED_WORKFLOW_RUNS
     category: str = 'general'
     is_builtin: bool = False
     created_at: Optional[datetime] = None
@@ -266,7 +287,7 @@ class IterationStrategy:
             display_name=row['display_name'],
             description=row.get('description'),
             prompts=prompts,
-            recommended_runs=row.get('recommended_runs', 5),
+            recommended_runs=row.get('recommended_runs', RECOMMENDED_WORKFLOW_RUNS),
             category=row.get('category', 'general'),
             is_builtin=bool(row.get('is_builtin', False)),
             created_at=row.get('created_at'),
