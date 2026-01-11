@@ -1,14 +1,13 @@
 """Tests for get_input_content function bug fix."""
 
 import io
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from emdx.commands.core import get_input_content, InputContent
+from emdx.commands.core import get_input_content
 
 
 class TestGetInputContent:

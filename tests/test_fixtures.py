@@ -3,7 +3,7 @@
 import sqlite3
 
 
-class TestDatabase:
+class DatabaseForTesting:
     """Test database wrapper that handles in-memory databases correctly."""
 
     def __init__(self, db_path=":memory:"):

@@ -1,6 +1,5 @@
 """Modal dialogs for file browser operations."""
 
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -10,14 +9,13 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, RichLog, Static
 
+from emdx.services.document_executor import (
+    execute_document_background,
+    generate_unique_execution_id,
+)
 from emdx.models.documents import save_document
 from emdx.models.tags import add_tags_to_document
 from emdx.utils.emoji_aliases import expand_aliases
-from emdx.commands.claude_execute import (
-    execute_document_smart_background,
-    ExecutionType,
-    STAGE_TOOLS
-)
 
 
 class SaveFileModal(ModalScreen[Optional[dict]]):
@@ -253,25 +251,30 @@ class ExecuteFileModal(ModalScreen[Optional[dict]]):
     def action_execute(self) -> None:
         """Execute the file."""
         if self.doc_id:
-            # Use smart execution for saved documents
-            timestamp = int(time.time())
-            execution_id = f"claude-{self.doc_id}-{timestamp}"
+            # Use service layer for document execution
+            execution_id = generate_unique_execution_id(str(self.doc_id))
             log_dir = Path.home() / ".config" / "emdx" / "logs"
             log_file = log_dir / f"{execution_id}.log"
-            
+
             try:
-                execute_document_smart_background(
+                result = execute_document_background(
                     doc_id=self.doc_id,
                     execution_id=execution_id,
                     log_file=log_file,
                     use_stage_tools=True
                 )
-                
-                self.dismiss({
-                    'success': True,
-                    'execution_id': execution_id,
-                    'log_file': str(log_file)
-                })
+
+                if result['success']:
+                    self.dismiss({
+                        'success': True,
+                        'execution_id': execution_id,
+                        'log_file': result['log_file']
+                    })
+                else:
+                    self.dismiss({
+                        'success': False,
+                        'error': result.get('error', 'Unknown error')
+                    })
             except Exception as e:
                 self.dismiss({
                     'success': False,
