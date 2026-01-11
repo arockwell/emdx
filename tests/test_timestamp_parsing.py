@@ -42,7 +42,7 @@ def test_parse_log_timestamp_midnight_rollover():
     """Test timestamp parsing handles midnight rollover correctly."""
     # Create a timestamp from just before midnight
     now = datetime.now()
-    late_night = now.replace(hour=23, minute=59, second=30)
+    _ = now.replace(hour=23, minute=59, second=30)  # Used for calculation logic
 
     # If current time is early morning, a late night timestamp should be from yesterday
     if now.hour < 12:
@@ -77,7 +77,7 @@ def test_format_timestamp_without_value():
 
     hour = int(match.group(1))
     minute = int(match.group(2))
-    second = int(match.group(3))
+    _ = int(match.group(3))  # second - used in time range validation
 
     # Should be between before and after times
     assert before.hour <= hour <= after.hour

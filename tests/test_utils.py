@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import git
 
-from emdx.utils import get_git_project
+from emdx.utils.git import get_git_project
 
 
 def test_get_git_project_with_origin_https():

@@ -5,23 +5,21 @@ Standalone git browser - extracted from the mixin.
 
 import logging
 import os
-from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
-from textual.reactive import reactive
-from textual.widgets import DataTable, Label, RichLog
 from textual.widget import Widget
+from textual.widgets import DataTable, RichLog
 
 from emdx.utils.git_ops import (
-    get_git_status,
     get_comprehensive_git_diff,
     get_current_branch,
+    get_git_status,
     get_worktrees,
-    git_stage_file,
-    git_unstage_file,
     git_commit,
     git_discard_changes,
+    git_stage_file,
+    git_unstage_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,7 +111,7 @@ class GitBrowser(Widget):
                     status_text = f"Git: {current_branch} | {len(self.git_files)} changes"
                     status_text += " | a=stage | u=unstage | c=commit | q=back"
                     app.update_status(status_text)
-            except:
+            except Exception:
                 pass  # Status update failed, continue
                 
         except Exception as e:
@@ -142,7 +140,7 @@ class GitBrowser(Widget):
         try:
             table = self.query_one("#git-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except:
+        except Exception:
             pass
             
         return state
@@ -156,7 +154,7 @@ class GitBrowser(Widget):
             try:
                 table = self.query_one("#git-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except:
+            except Exception:
                 pass
                 
     async def on_key(self, event) -> None:

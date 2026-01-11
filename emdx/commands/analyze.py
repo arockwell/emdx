@@ -4,26 +4,26 @@ Consolidates all read-only analysis and inspection operations.
 """
 
 import json
+
+# Removed CommandDefinition import - using standard typer pattern
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 import typer
-from typing import Optional, Dict, Any, List
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
-from datetime import datetime, timedelta
 
+from ..database.connection import db_connection
+from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
-from ..services.document_merger import DocumentMerger
-from ..config.settings import get_db_path
-import sqlite3
 
-app = typer.Typer()
 console = Console()
 
 
-@app.command()
 def analyze(
     health: bool = typer.Option(False, "--health", "-h", help="Show detailed health metrics"),
     duplicates: bool = typer.Option(False, "--duplicates", "-d", help="Find duplicate documents"),
@@ -282,20 +282,18 @@ def _analyze_similar():
 
 def _analyze_empty():
     """Find empty documents."""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT id, title, LENGTH(content) as length, project, access_count
-        FROM documents
-        WHERE is_deleted = 0
-        AND LENGTH(content) < 10
-        ORDER BY length, id
-    """)
-    
-    empty_docs = cursor.fetchall()
-    conn.close()
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, title, LENGTH(content) as length, project, access_count
+            FROM documents
+            WHERE is_deleted = 0
+            AND LENGTH(content) < 10
+            ORDER BY length, id
+        """)
+
+        empty_docs = cursor.fetchall()
     
     console.print("[bold]Empty Documents Analysis:[/bold]")
     
@@ -318,96 +316,93 @@ def _analyze_empty():
 
 def _analyze_tags(project: Optional[str] = None):
     """Analyze tag coverage and patterns."""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    # Overall tag statistics
-    if project:
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Overall tag statistics
+        if project:
+            cursor.execute("""
+                SELECT
+                    COUNT(DISTINCT d.id) as total_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT t.id) as unique_tags,
+                    AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+                FROM documents d
+                LEFT JOIN (
+                    SELECT document_id, COUNT(*) as tag_count
+                    FROM document_tags
+                    GROUP BY document_id
+                ) dt ON d.id = dt.document_id
+                LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+                LEFT JOIN tags t ON dt2.tag_id = t.id
+                WHERE d.is_deleted = 0 AND d.project = ?
+            """, (project,))
+        else:
+            cursor.execute("""
+                SELECT
+                    COUNT(DISTINCT d.id) as total_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT t.id) as unique_tags,
+                    AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+                FROM documents d
+                LEFT JOIN (
+                    SELECT document_id, COUNT(*) as tag_count
+                    FROM document_tags
+                    GROUP BY document_id
+                ) dt ON d.id = dt.document_id
+                LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+                LEFT JOIN tags t ON dt2.tag_id = t.id
+                WHERE d.is_deleted = 0
+            """)
+
+        stats = cursor.fetchone()
+
+        console.print("[bold]Tag Analysis:[/bold]")
+
+        if project:
+            console.print(f"  [dim]Project: {project}[/dim]")
+
+        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+
+        console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")
+        console.print(f"  Total Documents: {stats['total_docs']:,}")
+        console.print(f"  Tagged Documents: {stats['tagged_docs']:,}")
+        console.print(f"  Unique Tags: {stats['unique_tags']}")
+        console.print(f"  Avg Tags per Doc: {stats['avg_tags']:.1f}")
+
+        # Most used tags
         cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT d.id) as total_docs,
-                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
-                COUNT(DISTINCT t.id) as unique_tags,
-                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
-            FROM documents d
-            LEFT JOIN (
-                SELECT document_id, COUNT(*) as tag_count
-                FROM document_tags
-                GROUP BY document_id
-            ) dt ON d.id = dt.document_id
-            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
-            LEFT JOIN tags t ON dt2.tag_id = t.id
-            WHERE d.is_deleted = 0 AND d.project = ?
-        """, (project,))
-    else:
-        cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT d.id) as total_docs,
-                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
-                COUNT(DISTINCT t.id) as unique_tags,
-                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
-            FROM documents d
-            LEFT JOIN (
-                SELECT document_id, COUNT(*) as tag_count
-                FROM document_tags
-                GROUP BY document_id
-            ) dt ON d.id = dt.document_id
-            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
-            LEFT JOIN tags t ON dt2.tag_id = t.id
+            SELECT t.name, COUNT(dt.document_id) as usage_count
+            FROM tags t
+            JOIN document_tags dt ON t.id = dt.tag_id
+            JOIN documents d ON dt.document_id = d.id
             WHERE d.is_deleted = 0
+            GROUP BY t.id, t.name
+            ORDER BY usage_count DESC
+            LIMIT 10
         """)
-    
-    stats = cursor.fetchone()
-    
-    console.print("[bold]Tag Analysis:[/bold]")
-    
-    if project:
-        console.print(f"  [dim]Project: {project}[/dim]")
-    
-    coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
-    
-    console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")
-    console.print(f"  Total Documents: {stats['total_docs']:,}")
-    console.print(f"  Tagged Documents: {stats['tagged_docs']:,}")
-    console.print(f"  Unique Tags: {stats['unique_tags']}")
-    console.print(f"  Avg Tags per Doc: {stats['avg_tags']:.1f}")
-    
-    # Most used tags
-    cursor.execute("""
-        SELECT t.name, COUNT(dt.document_id) as usage_count
-        FROM tags t
-        JOIN document_tags dt ON t.id = dt.tag_id
-        JOIN documents d ON dt.document_id = d.id
-        WHERE d.is_deleted = 0
-        GROUP BY t.id, t.name
-        ORDER BY usage_count DESC
-        LIMIT 10
-    """)
-    
-    top_tags = cursor.fetchall()
-    if top_tags:
-        console.print("\n  [bold]Most Used Tags:[/bold]")
-        for tag in top_tags[:5]:
-            console.print(f"    • {tag['name']} ({tag['usage_count']} docs)")
-    
-    # Untagged documents
-    cursor.execute("""
-        SELECT COUNT(*) as untagged
-        FROM documents d
-        WHERE d.is_deleted = 0
-        AND NOT EXISTS (
-            SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
-        )
-    """ + (" AND d.project = ?" if project else ""), 
-    (project,) if project else ())
-    
-    untagged = cursor.fetchone()['untagged']
-    if untagged > 0:
-        console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
-        console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
-    
-    conn.close()
+
+        top_tags = cursor.fetchall()
+        if top_tags:
+            console.print("\n  [bold]Most Used Tags:[/bold]")
+            for tag in top_tags[:5]:
+                console.print(f"    • {tag['name']} ({tag['usage_count']} docs)")
+
+        # Untagged documents
+        cursor.execute("""
+            SELECT COUNT(*) as untagged
+            FROM documents d
+            WHERE d.is_deleted = 0
+            AND NOT EXISTS (
+                SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
+            )
+        """ + (" AND d.project = ?" if project else ""),
+        (project,) if project else ())
+
+        untagged = cursor.fetchone()['untagged']
+        if untagged > 0:
+            console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
+            console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
 
 
 def _analyze_lifecycle():
@@ -424,7 +419,10 @@ def _analyze_lifecycle():
         return
     
     console.print(f"\n  Total Gameplans: {analysis['total_gameplans']}")
-    console.print(f"  Success Rate: [{_get_success_color(analysis['success_rate'])}]{analysis['success_rate']:.0f}%[/{_get_success_color(analysis['success_rate'])}]")
+    # Format success rate with appropriate color coding
+    success_rate = analysis['success_rate']
+    color = _get_success_color(success_rate)
+    console.print(f"  Success Rate: [{color}]{success_rate:.0f}%[/{color}]")
     console.print(f"  Average Duration: {analysis['average_duration']:.0f} days")
     
     # Stage distribution
@@ -446,28 +444,26 @@ def _analyze_lifecycle():
 
 def _analyze_projects():
     """Show project-level analysis."""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT 
-            p.project,
-            COUNT(*) as doc_count,
-            AVG(LENGTH(p.content)) as avg_length,
-            SUM(p.access_count) as total_views,
-            COUNT(DISTINCT dt.tag_id) as unique_tags,
-            MAX(p.updated_at) as last_updated
-        FROM documents p
-        LEFT JOIN document_tags dt ON p.id = dt.document_id
-        WHERE p.is_deleted = 0
-        GROUP BY p.project
-        ORDER BY doc_count DESC
-    """)
-    
-    projects = cursor.fetchall()
-    conn.close()
-    
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                p.project,
+                COUNT(*) as doc_count,
+                AVG(LENGTH(p.content)) as avg_length,
+                SUM(p.access_count) as total_views,
+                COUNT(DISTINCT dt.tag_id) as unique_tags,
+                MAX(p.updated_at) as last_updated
+            FROM documents p
+            LEFT JOIN document_tags dt ON p.id = dt.document_id
+            WHERE p.is_deleted = 0
+            GROUP BY p.project
+            ORDER BY doc_count DESC
+        """)
+
+        projects = cursor.fetchall()
+
     console.print("[bold]Project Analysis:[/bold]\n")
     
     table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
@@ -614,26 +610,24 @@ def _collect_similar_data() -> Dict[str, Any]:
 
 def _collect_empty_data() -> Dict[str, Any]:
     """Collect empty documents data."""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT id, title, LENGTH(content) as length, project, access_count
-        FROM documents
-        WHERE is_deleted = 0
-        AND LENGTH(content) < 10
-        ORDER BY length, id
-    """)
-    
-    empty_docs = cursor.fetchall()
-    conn.close()
-    
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, title, LENGTH(content) as length, project, access_count
+            FROM documents
+            WHERE is_deleted = 0
+            AND LENGTH(content) < 10
+            ORDER BY length, id
+        """)
+
+        empty_docs = cursor.fetchall()
+
     result = {
         "count": len(empty_docs),
         "documents": []
     }
-    
+
     for doc in empty_docs:
         result["documents"].append({
             "id": doc['id'],
@@ -642,97 +636,95 @@ def _collect_empty_data() -> Dict[str, Any]:
             "project": doc['project'],
             "access_count": doc['access_count']
         })
-    
+
     return result
 
 
 def _collect_tags_data(project: Optional[str] = None) -> Dict[str, Any]:
     """Collect tag analysis data."""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    # Overall tag statistics
-    if project:
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Overall tag statistics
+        if project:
+            cursor.execute("""
+                SELECT
+                    COUNT(DISTINCT d.id) as total_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT t.id) as unique_tags,
+                    AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+                FROM documents d
+                LEFT JOIN (
+                    SELECT document_id, COUNT(*) as tag_count
+                    FROM document_tags
+                    GROUP BY document_id
+                ) dt ON d.id = dt.document_id
+                LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+                LEFT JOIN tags t ON dt2.tag_id = t.id
+                WHERE d.is_deleted = 0 AND d.project = ?
+            """, (project,))
+        else:
+            cursor.execute("""
+                SELECT
+                    COUNT(DISTINCT d.id) as total_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT t.id) as unique_tags,
+                    AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+                FROM documents d
+                LEFT JOIN (
+                    SELECT document_id, COUNT(*) as tag_count
+                    FROM document_tags
+                    GROUP BY document_id
+                ) dt ON d.id = dt.document_id
+                LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
+                LEFT JOIN tags t ON dt2.tag_id = t.id
+                WHERE d.is_deleted = 0
+            """)
+
+        stats = cursor.fetchone()
+        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+
+        result = {
+            "project": project,
+            "coverage": coverage,
+            "total_documents": stats['total_docs'],
+            "tagged_documents": stats['tagged_docs'],
+            "unique_tags": stats['unique_tags'],
+            "avg_tags_per_doc": float(stats['avg_tags'] or 0),
+            "top_tags": []
+        }
+
+        # Most used tags
         cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT d.id) as total_docs,
-                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
-                COUNT(DISTINCT t.id) as unique_tags,
-                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
-            FROM documents d
-            LEFT JOIN (
-                SELECT document_id, COUNT(*) as tag_count
-                FROM document_tags
-                GROUP BY document_id
-            ) dt ON d.id = dt.document_id
-            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
-            LEFT JOIN tags t ON dt2.tag_id = t.id
-            WHERE d.is_deleted = 0 AND d.project = ?
-        """, (project,))
-    else:
-        cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT d.id) as total_docs,
-                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
-                COUNT(DISTINCT t.id) as unique_tags,
-                AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
-            FROM documents d
-            LEFT JOIN (
-                SELECT document_id, COUNT(*) as tag_count
-                FROM document_tags
-                GROUP BY document_id
-            ) dt ON d.id = dt.document_id
-            LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
-            LEFT JOIN tags t ON dt2.tag_id = t.id
+            SELECT t.name, COUNT(dt.document_id) as usage_count
+            FROM tags t
+            JOIN document_tags dt ON t.id = dt.tag_id
+            JOIN documents d ON dt.document_id = d.id
             WHERE d.is_deleted = 0
+            GROUP BY t.id, t.name
+            ORDER BY usage_count DESC
+            LIMIT 20
         """)
-    
-    stats = cursor.fetchone()
-    coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
-    
-    result = {
-        "project": project,
-        "coverage": coverage,
-        "total_documents": stats['total_docs'],
-        "tagged_documents": stats['tagged_docs'],
-        "unique_tags": stats['unique_tags'],
-        "avg_tags_per_doc": float(stats['avg_tags'] or 0),
-        "top_tags": []
-    }
-    
-    # Most used tags
-    cursor.execute("""
-        SELECT t.name, COUNT(dt.document_id) as usage_count
-        FROM tags t
-        JOIN document_tags dt ON t.id = dt.tag_id
-        JOIN documents d ON dt.document_id = d.id
-        WHERE d.is_deleted = 0
-        GROUP BY t.id, t.name
-        ORDER BY usage_count DESC
-        LIMIT 20
-    """)
-    
-    for tag in cursor.fetchall():
-        result["top_tags"].append({
-            "name": tag['name'],
-            "count": tag['usage_count']
-        })
-    
-    # Untagged count
-    cursor.execute("""
-        SELECT COUNT(*) as untagged
-        FROM documents d
-        WHERE d.is_deleted = 0
-        AND NOT EXISTS (
-            SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
-        )
-    """ + (" AND d.project = ?" if project else ""), 
-    (project,) if project else ())
-    
-    result["untagged_count"] = cursor.fetchone()['untagged']
-    conn.close()
-    
+
+        for tag in cursor.fetchall():
+            result["top_tags"].append({
+                "name": tag['name'],
+                "count": tag['usage_count']
+            })
+
+        # Untagged count
+        cursor.execute("""
+            SELECT COUNT(*) as untagged
+            FROM documents d
+            WHERE d.is_deleted = 0
+            AND NOT EXISTS (
+                SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
+            )
+        """ + (" AND d.project = ?" if project else ""),
+        (project,) if project else ())
+
+        result["untagged_count"] = cursor.fetchone()['untagged']
+
     return result
 
 
@@ -753,37 +745,35 @@ def _collect_lifecycle_data() -> Dict[str, Any]:
 
 def _collect_projects_data() -> Dict[str, Any]:
     """Collect project analysis data."""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT 
-            p.project,
-            COUNT(*) as doc_count,
-            AVG(LENGTH(p.content)) as avg_length,
-            SUM(p.access_count) as total_views,
-            COUNT(DISTINCT dt.tag_id) as unique_tags,
-            MAX(p.updated_at) as last_updated
-        FROM documents p
-        LEFT JOIN document_tags dt ON p.id = dt.document_id
-        WHERE p.is_deleted = 0
-        GROUP BY p.project
-        ORDER BY doc_count DESC
-    """)
-    
-    projects = cursor.fetchall()
-    conn.close()
-    
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                p.project,
+                COUNT(*) as doc_count,
+                AVG(LENGTH(p.content)) as avg_length,
+                SUM(p.access_count) as total_views,
+                COUNT(DISTINCT dt.tag_id) as unique_tags,
+                MAX(p.updated_at) as last_updated
+            FROM documents p
+            LEFT JOIN document_tags dt ON p.id = dt.document_id
+            WHERE p.is_deleted = 0
+            GROUP BY p.project
+            ORDER BY doc_count DESC
+        """)
+
+        projects = cursor.fetchall()
+
     result = {
         "count": len(projects),
         "projects": []
     }
-    
+
     for proj in projects:
         last_updated = datetime.fromisoformat(proj['last_updated'])
         days_ago = (datetime.now() - last_updated).days
-        
+
         result["projects"].append({
             "name": proj['project'] or "[No Project]",
             "doc_count": proj['doc_count'],
@@ -793,8 +783,13 @@ def _collect_projects_data() -> Dict[str, Any]:
             "last_updated": proj['last_updated'],
             "days_since_update": days_ago
         })
-    
+
     return result
+
+
+# Create typer app for this module
+app = typer.Typer()
+app.command()(analyze)
 
 
 if __name__ == "__main__":

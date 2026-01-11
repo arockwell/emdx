@@ -3,13 +3,12 @@
 Full-screen document viewer for EMDX TUI.
 """
 
-import subprocess
+from rich.markdown import Markdown
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import Label, RichLog
-from rich.markdown import Markdown
 
 from emdx.models.documents import get_document
 
