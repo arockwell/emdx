@@ -4,18 +4,17 @@
 [![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**A terminal-native knowledge base with full-text search, emoji tags, and AI agent integration.**
+**A terminal-native knowledge base with full-text search, emoji tags, and AI workflow orchestration.**
 
-Stop losing notes in scattered markdown files. EMDX gives you instant search across all your documents, smart tagging with emoji aliases, and deep integration with Claude Code for AI-powered workflows.
+Stop losing notes in scattered markdown files. EMDX gives you instant search across all your documents, smart tagging with emoji aliases, and powerful multi-stage AI workflows that run agents in parallel, iteratively, or adversarially.
 
 ## Key Features
 
 - **Instant Search** - SQLite FTS5 full-text search with ranking
 - **Emoji Tags** - Type `gameplan` and get 🎯, type `active` and get 🚀
+- **AI Workflows** - Multi-stage orchestration: parallel, iterative, and adversarial execution modes
 - **Rich TUI** - Vim-style navigation across documents, files, git diffs, and logs
-- **AI Agents** - Create custom agents for code review, research, and automation
-- **Claude Integration** - Execute documents directly with Claude Code
-- **Git Aware** - Auto-detects projects, visual diff browser, worktree switching
+- **Git Worktrees** - Run parallel workflows in isolated worktrees automatically
 - **Zero Config** - SQLite backend, no server required
 
 ## Quick Start
@@ -35,6 +34,78 @@ emdx find --tags "active"
 # Browse in TUI
 emdx gui
 ```
+
+## AI Workflows
+
+The workflow system is EMDX's most powerful feature. Chain multiple AI agent runs with different execution strategies.
+
+### Execution Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **single** | Run once | Simple tasks |
+| **parallel** | Run N times simultaneously, synthesize results | Get diverse perspectives, then combine |
+| **iterative** | Run N times sequentially, each building on previous | Refine and improve progressively |
+| **adversarial** | Advocate → Critic → Synthesizer | Challenge assumptions, find weaknesses |
+| **dynamic** | Discover items at runtime, process each in parallel | Process all files matching a pattern |
+
+### Example: Deep Analysis Workflow
+
+```bash
+# Run a multi-stage analysis workflow
+emdx workflow run deep_analysis --doc 123
+
+# Run in isolated git worktree (for parallel safety)
+emdx workflow run deep_analysis --doc 123 --worktree
+
+# Pass variables to customize behavior
+emdx workflow run deep_analysis --doc 123 --var focus=security --var depth=thorough
+```
+
+### Workflow Commands
+
+```bash
+emdx workflow list                    # List all workflows
+emdx workflow show <name>             # Show workflow stages and stats
+emdx workflow run <name> --doc <id>   # Run workflow on a document
+emdx workflow runs                    # List recent workflow runs
+emdx workflow status <run_id>         # Check run progress
+emdx workflow strategies              # List iteration strategies
+```
+
+### Creating Custom Workflows
+
+Create a workflow definition file:
+
+```json
+{
+  "stages": [
+    {
+      "name": "research",
+      "mode": "parallel",
+      "runs": 3,
+      "prompt": "Research {{input}} from different angles",
+      "synthesis_prompt": "Combine these research findings into a coherent summary"
+    },
+    {
+      "name": "critique",
+      "mode": "adversarial",
+      "prompt": "Analyze: {{research.synthesis}}"
+    },
+    {
+      "name": "final",
+      "mode": "single",
+      "prompt": "Create final report from {{critique.output}}"
+    }
+  ]
+}
+```
+
+```bash
+emdx workflow create my-workflow --display-name "My Workflow" --file workflow.json
+```
+
+See [Workflows Guide](docs/workflows.md) for full documentation.
 
 ## Core Concepts
 
@@ -68,23 +139,16 @@ Tags use emoji for visual density. Type text aliases instead of hunting for emoj
 | `refactor` | 🔧 | Code improvements |
 
 ```bash
-# Add tags when saving
 emdx save plan.md --tags "gameplan,active"
-
-# Add tags to existing document
 emdx tag 42 analysis done success
-
-# Search by tags
 emdx find --tags "active"
-emdx find --tags "gameplan,done"
 ```
 
 ## Essential Commands
 
 ```bash
 # Save content
-emdx save file.md                         # Save file (title from filename)
-emdx save file.md --title "Custom Title"  # Save with custom title
+emdx save file.md                         # Save file
 echo "text" | emdx save --title "Title"   # Save from stdin (CORRECT)
 
 # Search
@@ -99,9 +163,16 @@ emdx edit <id>                            # Edit in $EDITOR
 
 # Tags
 emdx tag <id> tag1 tag2                   # Add tags
-emdx untag <id> tag1                      # Remove tag
-emdx tags                                 # List all tags with counts
+emdx tags                                 # List all tags
 emdx legend                               # Show emoji alias reference
+
+# Agents
+emdx agent list                           # List agents
+emdx agent run <name> --doc <id>          # Run agent on document
+
+# Workflows
+emdx workflow list                        # List workflows
+emdx workflow run <name> --doc <id>       # Run workflow
 
 # TUI
 emdx gui                                  # Launch interactive browser
@@ -109,7 +180,7 @@ emdx gui                                  # Launch interactive browser
 
 ## AI Integration
 
-EMDX is designed to work with Claude Code and other AI assistants.
+EMDX is designed for Claude Code and AI assistants.
 
 ### For AI Agents: Critical Syntax
 
@@ -121,27 +192,24 @@ echo "My content here" | emdx save --title "Title"
 emdx save "My content here"
 ```
 
-### Using with Claude Code
+### Agents vs Workflows
 
-Documents can be executed directly with Claude:
+| Feature | Agents | Workflows |
+|---------|--------|-----------|
+| Complexity | Single task | Multi-stage pipelines |
+| Execution | One run | Multiple runs with different modes |
+| Output | Single result | Synthesized from multiple runs |
+| Use case | Quick tasks | Deep analysis, code review |
 
 ```bash
-# In TUI: press 'x' on any document to execute with Claude
-# Or run agents on documents:
+# Simple: run an agent
 emdx agent run code-reviewer --doc 123
+
+# Powerful: run a multi-stage workflow
+emdx workflow run deep_analysis --doc 123 --worktree
 ```
 
-### Custom Agents
-
-Create AI agents for repeatable tasks:
-
-```bash
-emdx agent list                           # List available agents
-emdx agent run <name> --doc <id>          # Run agent on document
-emdx agent run <name> --query "text"      # Run agent with query
-```
-
-See [AI Agents Guide](docs/ai-agents.md) for creating custom agents.
+See [AI Agents Guide](docs/ai-agents.md) for agent details.
 
 ## TUI Browser
 
@@ -178,17 +246,16 @@ Launch with `emdx gui`. Vim-style keybindings:
 
 ## Documentation
 
+- [Workflows Guide](docs/workflows.md) - Multi-stage AI workflow orchestration
 - [AI Agents Guide](docs/ai-agents.md) - Create and run custom AI agents
 - [CLI Reference](docs/cli-api.md) - Complete command documentation
 - [Architecture](docs/architecture.md) - System design and code structure
 - [UI Guide](docs/ui-architecture.md) - TUI components and theming
 - [Development Setup](docs/development-setup.md) - Contributing guide
-- [Database Design](docs/database-design.md) - Schema and migrations
 
 ## Contributing
 
 ```bash
-# Development install
 git clone https://github.com/arockwell/emdx.git
 cd emdx
 poetry install
