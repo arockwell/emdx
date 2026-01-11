@@ -368,6 +368,13 @@ class ActivityView(Widget):
                 if not started:
                     started = datetime.now()
 
+                # Skip zombie running workflows (running for > 2 hours)
+                # These are likely orphaned processes that didn't clean up
+                if run.get("status") == "running":
+                    age_hours = (datetime.now() - started).total_seconds() / 3600
+                    if age_hours > 2:
+                        continue
+
                 # Get workflow name
                 wf_name = "Workflow"
                 if workflow_registry:
@@ -420,6 +427,23 @@ class ActivityView(Widget):
                     cost=cost,
                     workflow_run=run,
                 )
+
+                # Check if workflow has any outputs (for expand indicator)
+                try:
+                    stage_runs = wf_db.list_stage_runs(run["id"])
+                    has_outputs = False
+                    for sr in stage_runs:
+                        if sr.get("synthesis_doc_id"):
+                            has_outputs = True
+                            break
+                        ind_runs = wf_db.list_individual_runs(sr["id"])
+                        if any(ir.get("output_doc_id") for ir in ind_runs):
+                            has_outputs = True
+                            break
+                    if has_outputs:
+                        item._has_workflow_outputs = True
+                except Exception:
+                    pass
 
                 # Track for notifications
                 old_status = self._last_workflow_states.get(run["id"])
@@ -505,11 +529,13 @@ class ActivityView(Widget):
             indent = "  " * item.depth
 
             # Expand indicator for items that can have children
-            # Workflows, synthesis items, and documents with children can be expanded
             has_doc_children = getattr(item, '_has_doc_children', False)
+            has_workflow_outputs = getattr(item, '_has_workflow_outputs', False)
             if item.expanded and item.children:
                 expand = "▼ "
-            elif item.item_type == "workflow" or (item.item_type == "synthesis" and item.children) or has_doc_children:
+            elif (item.item_type == "workflow" and has_workflow_outputs) or \
+                 (item.item_type == "synthesis" and item.children) or \
+                 has_doc_children:
                 expand = "▶ "
             else:
                 expand = "  "
