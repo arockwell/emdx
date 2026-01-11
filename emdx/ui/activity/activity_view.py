@@ -833,21 +833,40 @@ class ActivityView(Widget):
 
     async def _refresh_data(self) -> None:
         """Periodic refresh of data."""
-        # Remember selection
+        # Remember selection and expanded state
         selected_id = None
         if self.flat_items and self.selected_idx < len(self.flat_items):
             item = self.flat_items[self.selected_idx]
             selected_id = (item.item_type, item.item_id)
 
+        # Remember which items were expanded
+        expanded_ids = set()
+        for item in self.activity_items:
+            if item.expanded:
+                expanded_ids.add((item.item_type, item.item_id))
+
         await self.load_data()
+
+        # Restore expanded state
+        if expanded_ids:
+            for item in self.activity_items:
+                if (item.item_type, item.item_id) in expanded_ids:
+                    # Re-expand this item
+                    if item.item_type == "workflow" and not item.expanded:
+                        await self._expand_workflow(item)
+                    elif item.item_type == "document" and not item.expanded:
+                        await self._expand_document(item)
 
         # Restore selection if possible
         if selected_id:
             for idx, item in enumerate(self.flat_items):
                 if (item.item_type, item.item_id) == selected_id:
                     self.selected_idx = idx
-                    table = self.query_one("#activity-table", DataTable)
-                    table.move_cursor(row=idx)
+                    try:
+                        table = self.query_one("#activity-table", DataTable)
+                        table.move_cursor(row=idx)
+                    except Exception:
+                        pass
                     break
 
     async def _expand_workflow(self, item: ActivityItem) -> None:
