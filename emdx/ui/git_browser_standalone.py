@@ -111,8 +111,8 @@ class GitBrowser(Widget):
                     status_text = f"Git: {current_branch} | {len(self.git_files)} changes"
                     status_text += " | a=stage | u=unstage | c=commit | q=back"
                     app.update_status(status_text)
-            except Exception:
-                pass  # Status update failed, continue
+            except Exception as e:
+                logger.debug("Status update failed: %s", e)
                 
         except Exception as e:
             logger.error(f"Error refreshing git status: {e}")
@@ -140,9 +140,9 @@ class GitBrowser(Widget):
         try:
             table = self.query_one("#git-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except Exception:
-            pass
-            
+        except Exception as e:
+            logger.debug("Could not save cursor position: %s", e)
+
         return state
         
     def restore_state(self, state: dict) -> None:
@@ -154,8 +154,8 @@ class GitBrowser(Widget):
             try:
                 table = self.query_one("#git-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Could not restore cursor position: %s", e)
                 
     async def on_key(self, event) -> None:
         """Handle key events."""

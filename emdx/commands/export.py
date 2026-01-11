@@ -7,7 +7,6 @@ documents using export profiles.
 from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
@@ -20,9 +19,9 @@ from emdx.services.export_destinations import (
     execute_post_actions,
     ExportResult,
 )
+from emdx.utils.output import console
 
 app = typer.Typer(help="Export documents using profiles")
-console = Console()
 
 
 @app.command("export")

@@ -175,7 +175,7 @@ class HealthMonitor:
     
     def _calculate_duplicate_health(self) -> HealthMetric:
         """Calculate duplicate document health metric."""
-        detector = DuplicateDetector(self.db_path)
+        detector = DuplicateDetector()
         stats = detector.get_duplicate_stats()
 
         with self._db.get_connection() as conn:

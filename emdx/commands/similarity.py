@@ -9,12 +9,10 @@ from typing import Optional
 
 import typer
 from rich import box
-from rich.console import Console
 from rich.table import Table
 
 from ..services.similarity import SimilarityService
-
-console = Console()
+from ..utils.output import console
 
 # Create typer app for this module
 app = typer.Typer(help="Document similarity commands")

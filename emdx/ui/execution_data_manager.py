@@ -6,8 +6,18 @@ Extracted from AgentExecutionOverlay to separate state management from UI logic.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TypedDict
 from enum import Enum
+
+
+class GitWorktree(TypedDict):
+    """Type definition for git worktree information."""
+
+    path: str
+    branch: str
+    commit: str
+    is_bare: bool
+    is_current: bool
 
 from ..utils.logging import get_logger
 
@@ -35,7 +45,7 @@ class ExecutionData:
     worktree_index: Optional[int] = None
 
     # Additional data from stages
-    project_worktrees: List[Any] = field(default_factory=list)
+    project_worktrees: List[GitWorktree] = field(default_factory=list)
     config: Dict[str, Any] = field(default_factory=dict)
     document_data: Dict[str, Any] = field(default_factory=dict)
     agent_data: Dict[str, Any] = field(default_factory=dict)
@@ -124,7 +134,7 @@ class ExecutionDataManager:
         self,
         project_index: int,
         project_path: str,
-        worktrees: Optional[List[Any]] = None
+        worktrees: Optional[List[GitWorktree]] = None
     ) -> None:
         """Set selected project and its worktrees."""
         self.data.project_index = project_index

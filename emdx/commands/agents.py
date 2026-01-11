@@ -6,7 +6,6 @@ import json
 import os
 from typing import Optional, List
 from pathlib import Path
-from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
@@ -18,9 +17,9 @@ from ..database.connection import db_connection
 from ..utils.emoji_aliases import EMOJI_ALIASES
 from ..utils.logging import get_logger
 from ..utils.text_formatting import truncate_title
+from ..utils.output import console
 
 app = typer.Typer(help="Manage and run EMDX agents")
-console = Console()
 logger = get_logger(__name__)
 
 

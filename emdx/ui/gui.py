@@ -3,10 +3,10 @@ GUI interface for emdx - seamless textual browser with nvim integration
 """
 
 import typer
-from rich.console import Console
+
+from emdx.utils.output import console
 
 app = typer.Typer()
-console = Console()
 
 
 @app.command()

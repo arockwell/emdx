@@ -2,25 +2,27 @@
 Google Docs integration for emdx - export documents to Google Docs.
 """
 
+import logging
 import os
 import re
 import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+logger = logging.getLogger(__name__)
+
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
+from emdx.utils.output import console
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import Resource
 
 app = typer.Typer()
-console = Console()
 
 # OAuth 2.0 configuration
 SCOPES = [
@@ -51,7 +53,8 @@ def get_credentials() -> Optional["Credentials"]:
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to refresh Google credentials: %s", e)
                 creds = None
 
         if not creds:

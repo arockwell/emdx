@@ -8,14 +8,18 @@ The logic is adapted from commands/claude_execute.py but structured
 for programmatic use rather than CLI invocation.
 """
 
+import logging
 import os
 import re
+import tempfile
 import time
 import uuid
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..models.documents import get_document
@@ -140,7 +144,6 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
 
         unique_suffix = execution_id.split('-', 2)[-1][-12:]
 
-        import tempfile
         temp_base = Path(tempfile.gettempdir())
         dir_name = f"emdx-exec-{doc_id}-{safe_title}-{unique_suffix}"
         worktree_path = temp_base / dir_name
@@ -157,12 +160,13 @@ def create_execution_worktree(execution_id: str, doc_title: str) -> Optional[Pat
         final_path.mkdir(parents=True, exist_ok=True)
         return final_path
 
-    except Exception:
-        import tempfile
+    except OSError as e:
+        logger.warning("Failed to create worktree directory, using fallback: %s", e)
         try:
             fallback_dir = tempfile.mkdtemp(prefix="emdx-exec-")
             return Path(fallback_dir)
-        except Exception:
+        except OSError as e:
+            logger.warning("Failed to create fallback temp directory: %s", e)
             return None
 
 

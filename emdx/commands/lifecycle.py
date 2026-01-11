@@ -9,7 +9,6 @@ from typing import Optional
 
 import typer
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.progress import track
 from rich.table import Table
@@ -18,10 +17,10 @@ from rich.tree import Tree
 from ..models.documents import get_document
 from ..services.lifecycle_tracker import LifecycleTracker
 from ..utils.text_formatting import truncate_description
+from ..utils.output import console
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
-console = Console()
 
 
 def _get_stage_emoji(stage: str) -> str:

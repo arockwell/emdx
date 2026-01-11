@@ -7,6 +7,7 @@ This module provides destination handlers for different export targets:
 - Gist: Export to GitHub Gist (wraps existing gist integration)
 """
 
+import logging
 import os
 import subprocess
 import webbrowser
@@ -15,6 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -63,8 +66,8 @@ class ClipboardDestination:
                     dest_url=None,
                     message="Content copied to clipboard",
                 )
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                pass
+            except (FileNotFoundError, subprocess.CalledProcessError) as e:
+                logger.debug("pbcopy not available: %s", e)
 
             # Try Linux xclip
             try:
@@ -79,8 +82,8 @@ class ClipboardDestination:
                     dest_url=None,
                     message="Content copied to clipboard",
                 )
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                pass
+            except (FileNotFoundError, subprocess.CalledProcessError) as e:
+                logger.debug("xclip not available: %s", e)
 
             # Try Linux xsel
             try:
@@ -95,8 +98,8 @@ class ClipboardDestination:
                     dest_url=None,
                     message="Content copied to clipboard",
                 )
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                pass
+            except (FileNotFoundError, subprocess.CalledProcessError) as e:
+                logger.debug("xsel not available: %s", e)
 
             # Try pyperclip as fallback
             try:
@@ -108,8 +111,8 @@ class ClipboardDestination:
                     dest_url=None,
                     message="Content copied to clipboard",
                 )
-            except ImportError:
-                pass
+            except ImportError as e:
+                logger.debug("pyperclip not available: %s", e)
 
             return ExportResult(
                 success=False,
@@ -307,9 +310,9 @@ class GDocDestination:
                 fields="id, parents",
             ).execute()
 
-        except Exception:
+        except Exception as e:
             # Don't fail the export if folder move fails
-            pass
+            logger.warning("Failed to move file to folder '%s': %s", folder_name, e)
 
 
 class GistDestination:

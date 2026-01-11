@@ -8,7 +8,6 @@ from typing import Optional
 
 import typer
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
@@ -20,9 +19,9 @@ from ..models.executions import (
     update_execution_status,
 )
 from ..utils.text_formatting import truncate_description
+from ..utils.output import console
 
 app = typer.Typer()
-console = Console()
 
 
 def tail_log_subprocess(log_path: Path, follow: bool = False, lines: int = 50) -> None:

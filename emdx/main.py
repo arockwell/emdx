@@ -8,8 +8,6 @@ import logging
 import os
 
 import typer
-from rich.console import Console
-
 from emdx import __build_id__, __version__
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.browse import app as browse_app
@@ -28,8 +26,7 @@ from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.workflows import app as workflows_app
 from emdx.ui.gui import gui
-
-console = Console()
+from emdx.utils.output import console
 
 # Create main app
 app = typer.Typer(

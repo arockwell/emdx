@@ -14,9 +14,8 @@ from ..database import db
 class DuplicateDetector:
     """Service for detecting and managing duplicate documents."""
 
-    def __init__(self, db_path: Optional[str] = None):
-        # db_path parameter kept for backwards compatibility but is unused
-        # All connections now go through the db module
+    def __init__(self):
+        """Initialize the duplicate detector. Uses the shared db module for connections."""
         pass
     
     def _get_content_hash(self, content: Optional[str]) -> str:

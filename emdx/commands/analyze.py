@@ -11,7 +11,6 @@ from typing import Any, Dict, Optional
 
 import typer
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
@@ -21,8 +20,7 @@ from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
 from ..utils.datetime import parse_datetime
-
-console = Console()
+from ..utils.output import console
 
 
 def analyze(
