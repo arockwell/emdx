@@ -28,8 +28,6 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
     expanded_tags = expand_aliases(tag_names)
     
     with db.get_connection() as conn:
-        conn.execute("PRAGMA foreign_keys = ON")
-
         added_tags = []
         for tag_name in expanded_tags:
             tag_name = tag_name.lower().strip()
@@ -327,8 +325,6 @@ def rename_tag(old_name: str, new_name: str) -> bool:
 def merge_tags(source_tags: list[str], target_tag: str) -> int:
     """Merge multiple tags into one target tag."""
     with db.get_connection() as conn:
-        conn.execute("PRAGMA foreign_keys = ON")
-
         target_tag = target_tag.lower().strip()
         source_tags = [tag.lower().strip() for tag in source_tags]
 

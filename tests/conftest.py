@@ -6,10 +6,8 @@ from pathlib import Path
 import pytest
 from test_fixtures import DatabaseForTesting
 
-from emdx.models.tags import add_tags_to_document
 
-
-@pytest.fixture
+@pytest.fixture(scope="function")
 def temp_db():
     """Create a temporary in-memory SQLite database for testing."""
     db = DatabaseForTesting(":memory:")
@@ -17,7 +15,7 @@ def temp_db():
     db.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def temp_db_file():
     """Create a temporary SQLite database file for testing."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -30,9 +28,13 @@ def temp_db_file():
     db_path.unlink(missing_ok=True)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def sample_documents(temp_db):
-    """Add some sample documents to the database."""
+    """Add some sample documents to the database with tags.
+
+    Tags are added directly via SQL to avoid global state contamination
+    from the emdx.models.tags module which uses the global database connection.
+    """
     docs = [
         {
             "title": "Python Testing Guide",
@@ -55,16 +57,38 @@ def sample_documents(temp_db):
     ]
 
     doc_ids = []
+    conn = temp_db.get_connection()
+
     for doc in docs:
         doc_id = temp_db.save_document(
             title=doc["title"], content=doc["content"], project=doc["project"]
         )
-        import emdx.tags
-
-        original_db = emdx.tags.db
-        emdx.tags.db = temp_db
-        add_tags_to_document(doc_id, doc["tags"])
-        emdx.tags.db = original_db
         doc_ids.append(doc_id)
 
+        # Add tags directly via SQL to avoid global state contamination
+        for tag_name in doc["tags"]:
+            tag_name = tag_name.lower().strip()
+            # Get or create tag
+            cursor = conn.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
+            result = cursor.fetchone()
+            if result:
+                tag_id = result[0]
+            else:
+                cursor = conn.execute(
+                    "INSERT INTO tags (name, usage_count) VALUES (?, 0)", (tag_name,)
+                )
+                tag_id = cursor.lastrowid
+
+            # Link tag to document
+            conn.execute(
+                "INSERT OR IGNORE INTO document_tags (document_id, tag_id) VALUES (?, ?)",
+                (doc_id, tag_id),
+            )
+            # Update usage count
+            conn.execute(
+                "UPDATE tags SET usage_count = usage_count + 1 WHERE id = ?",
+                (tag_id,),
+            )
+
+    conn.commit()
     return doc_ids

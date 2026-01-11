@@ -28,6 +28,9 @@ from .stages.config_selection import ConfigSelectionStage
 from .execution import SelectionState, ExecutionController, StageProgressDisplay
 from .execution.execution_controller import StageType
 
+# Re-export StageType for backward compatibility
+__all__ = ['AgentExecutionOverlay', 'StageType']
+
 logger = get_logger(__name__)
 
 
@@ -453,7 +456,12 @@ class AgentExecutionOverlay(ModalScreen):
         logger.info(f"Agent selected: {agent_id}")
         self.call_after_refresh(self._update_navigation_state)
 
-    def set_project_selection(self, project_index: int, project_path: str, worktrees: list = None) -> None:
+    def set_project_selection(
+        self,
+        project_index: int,
+        project_path: str,
+        worktrees: list = None
+    ) -> None:
         """Set selected project and its worktrees."""
         self._selection_state.set_project(project_index, project_path, worktrees)
         self._controller.mark_stage_completed(StageType.PROJECT)

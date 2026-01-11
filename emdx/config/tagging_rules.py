@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from .constants import DEFAULT_TAGGING_CONFIDENCE
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +22,7 @@ class TaggingRule:
     title_patterns: List[str]
     content_patterns: List[str]
     tags: List[str]
-    confidence: float = 0.75
+    confidence: float = DEFAULT_TAGGING_CONFIDENCE
     enabled: bool = True
     
     def to_dict(self) -> Dict[str, Any]:
@@ -177,7 +179,7 @@ class TaggingConfig:
                 title_patterns=rule_data.get('title_patterns', []),
                 content_patterns=rule_data.get('content_patterns', []),
                 tags=rule_data.get('tags', []),
-                confidence=rule_data.get('confidence', 0.75),
+                confidence=rule_data.get('confidence', DEFAULT_TAGGING_CONFIDENCE),
                 enabled=rule_data.get('enabled', True)
             )
         self.save_config()

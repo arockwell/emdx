@@ -16,6 +16,7 @@ from emdx.commands.browse import app as browse_app
 from emdx.commands.claude_execute import app as claude_app
 from emdx.commands.core import app as core_app
 from emdx.commands.executions import app as executions_app
+from emdx.commands.gdoc import app as gdoc_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
@@ -46,6 +47,10 @@ for command in browse_app.registered_commands:
 
 # Gist commands are added directly to the main app
 for command in gist_app.registered_commands:
+    app.registered_commands.append(command)
+
+# Google Docs commands are added directly to the main app
+for command in gdoc_app.registered_commands:
     app.registered_commands.append(command)
 
 # Tag commands are added directly to the main app
@@ -146,6 +151,7 @@ def safe_register_commands(target_app, source_app, prefix=""):
 safe_register_commands(app, core_app, "core")
 safe_register_commands(app, browse_app, "browse")
 safe_register_commands(app, gist_app, "gist")
+safe_register_commands(app, gdoc_app, "gdoc")
 safe_register_commands(app, tag_app, "tags")
 safe_register_commands(app, analyze_app, "analyze")
 safe_register_commands(app, maintain_app, "maintain")
