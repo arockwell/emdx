@@ -140,6 +140,12 @@ class ExecutionStrategy(ABC):
                 working_dir=working_dir,
             )
 
+            # Link execution to individual run immediately so TUI can track it
+            wf_db.update_individual_run(
+                individual_run_id,
+                agent_execution_id=exec_id,
+            )
+
             # Build the full prompt with instructions to save output
             output_instruction = """
 
