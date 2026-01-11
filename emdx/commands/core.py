@@ -16,6 +16,13 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from emdx.database import db
+from emdx.database.documents import (
+    archive_descendants,
+    archive_document,
+    find_supersede_candidate,
+    set_parent,
+    unarchive_document,
+)
 from emdx.models.documents import (
     delete_document,
     get_document,
@@ -165,9 +172,16 @@ def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
     return []
 
 
-def display_save_result(doc_id: int, metadata: DocumentMetadata, applied_tags: list[str]) -> None:
+def display_save_result(
+    doc_id: int,
+    metadata: DocumentMetadata,
+    applied_tags: list[str],
+    supersede_target: Optional[dict] = None,
+) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
+    if supersede_target:
+        console.print(f"   [dim]↳ Superseded #{supersede_target['id']}[/dim]")
     if metadata.project:
         console.print(f"   [dim]Project:[/dim] {metadata.project}")
     if applied_tags:
@@ -186,6 +200,9 @@ def save(
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
     suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
+    no_supersede: bool = typer.Option(
+        False, "--no-supersede", help="Don't auto-supersede existing docs with same title"
+    ),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
@@ -200,8 +217,21 @@ def save(
     # Step 4: Create metadata object
     metadata = DocumentMetadata(title=final_title, project=final_project)
 
+    # Step 4.5: Check for supersede candidate (before creating new doc)
+    supersede_target = None
+    if not no_supersede:
+        supersede_target = find_supersede_candidate(
+            title=metadata.title,
+            project=metadata.project,
+            content=input_content.content,
+        )
+
     # Step 5: Create document in database
     doc_id = create_document(metadata.title, input_content.content, metadata.project)
+
+    # Step 5.5: If superseding, link the old doc as a child of the new doc
+    if supersede_target:
+        set_parent(supersede_target["id"], doc_id, relationship="supersedes")
 
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
@@ -215,7 +245,7 @@ def save(
             console.print(f"   [dim]Auto-tagged:[/dim] {format_tags(auto_applied)}")
 
     # Step 8: Display result
-    display_save_result(doc_id, metadata, applied_tags)
+    display_save_result(doc_id, metadata, applied_tags, supersede_target)
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
@@ -950,7 +980,7 @@ def exec_document(
 ) -> None:
     """Execute a document with Claude (shortcut for 'claude execute')."""
     from . import claude_execute
-    
+
     # Call the actual execute function
     claude_execute.execute(
         doc_id=doc_id,
@@ -960,3 +990,93 @@ def exec_document(
     )
 
 
+@app.command()
+def archive(
+    doc_id: int = typer.Argument(..., help="Document ID to archive"),
+    descendants: bool = typer.Option(
+        False, "--descendants", "-d", help="Also archive all child documents"
+    ),
+) -> None:
+    """Archive a document (hide from default views)."""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+
+        # Check if document exists
+        doc = get_document(str(doc_id))
+        if not doc:
+            console.print(f"[red]Error: Document #{doc_id} not found[/red]")
+            raise typer.Exit(1)
+
+        # Check if already archived
+        if doc.get("archived_at"):
+            console.print(f"[yellow]Document #{doc_id} is already archived[/yellow]")
+            return
+
+        # Archive the document
+        success = archive_document(doc_id)
+        if not success:
+            console.print(f"[red]Error: Failed to archive document #{doc_id}[/red]")
+            raise typer.Exit(1)
+
+        console.print(f"[green]Archived #{doc_id}:[/green] [cyan]{doc['title']}[/cyan]")
+
+        # Archive descendants if requested
+        if descendants:
+            archived_count = archive_descendants(doc_id)
+            if archived_count > 0:
+                console.print(f"   [dim](also archived {archived_count} descendants)[/dim]")
+
+    except Exception as e:
+        if not isinstance(e, typer.Exit):
+            console.print(f"[red]Error archiving document: {e}[/red]")
+            raise typer.Exit(1) from e
+        raise
+
+
+@app.command()
+def unarchive(
+    doc_id: int = typer.Argument(..., help="Document ID to unarchive"),
+) -> None:
+    """Unarchive a document (make visible again)."""
+    try:
+        # Ensure database schema exists
+        db.ensure_schema()
+
+        # Get the document (need to query directly since get_document may not return archived docs)
+        from emdx.database.connection import db_connection
+
+        with db_connection.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, title, archived_at FROM documents
+                WHERE id = ? AND is_deleted = FALSE
+                """,
+                (doc_id,),
+            )
+            row = cursor.fetchone()
+
+        if not row:
+            console.print(f"[red]Error: Document #{doc_id} not found[/red]")
+            raise typer.Exit(1)
+
+        doc = dict(row)
+
+        # Check if document is archived
+        if not doc.get("archived_at"):
+            console.print(f"[yellow]Document #{doc_id} is not archived[/yellow]")
+            return
+
+        # Unarchive the document
+        success = unarchive_document(doc_id)
+        if not success:
+            console.print(f"[red]Error: Failed to unarchive document #{doc_id}[/red]")
+            raise typer.Exit(1)
+
+        console.print(f"[green]Unarchived #{doc_id}:[/green] [cyan]{doc['title']}[/cyan]")
+
+    except Exception as e:
+        if not isinstance(e, typer.Exit):
+            console.print(f"[red]Error unarchiving document: {e}[/red]")
+            raise typer.Exit(1) from e
+        raise

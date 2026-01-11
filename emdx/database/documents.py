@@ -18,7 +18,13 @@ def _parse_doc_datetimes(doc: dict[str, Any], fields: list[str] | None = None) -
     return doc
 
 
-def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
+def save_document(
+    title: str,
+    content: str,
+    project: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    parent_id: Optional[int] = None,
+) -> int:
     """Save a document to the knowledge base"""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
@@ -92,38 +98,181 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
         return None
 
 
-def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
-    """List documents with optional project filter"""
+def list_documents(
+    project: Optional[str] = None,
+    limit: int = 50,
+    include_archived: bool = False,
+    parent_id: Optional[int] = None,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """List documents with optional project and hierarchy filters.
+
+    Args:
+        project: Filter by project name (None = all projects)
+        limit: Maximum number of documents to return
+        include_archived: Whether to include archived documents
+        parent_id: Filter by parent document:
+            - None: Only top-level documents (parent_id IS NULL)
+            - -1: All documents regardless of parent
+            - int > 0: Only children of specific parent
+        offset: Starting offset for pagination
+
+    Returns:
+        List of document dictionaries
+    """
     with db_connection.get_connection() as conn:
+        # Build query with filters
+        conditions = ["is_deleted = FALSE"]
+        params: list[Any] = []
+
+        # Parent filter
+        if parent_id is None:
+            conditions.append("parent_id IS NULL")
+        elif parent_id > 0:
+            conditions.append("parent_id = ?")
+            params.append(parent_id)
+        # If parent_id == -1, no parent filter (show all)
+
+        # Archive filter
+        if not include_archived:
+            conditions.append("archived_at IS NULL")
+
+        # Project filter
         if project:
-            cursor = conn.execute(
-                """
-                SELECT id, title, project, created_at, access_count
-                FROM documents
-                WHERE project = ? AND is_deleted = FALSE
-                ORDER BY id DESC
-                LIMIT ?
+            conditions.append("project = ?")
+            params.append(project)
+
+        where_clause = " AND ".join(conditions)
+        params.extend([limit, offset])
+
+        cursor = conn.execute(
+            f"""
+            SELECT id, title, project, created_at, access_count,
+                   parent_id, relationship, archived_at, accessed_at
+            FROM documents
+            WHERE {where_clause}
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
             """,
-                (project, limit),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                SELECT id, title, project, created_at, access_count
-                FROM documents
-                WHERE is_deleted = FALSE
-                ORDER BY id DESC
-                LIMIT ?
-            """,
-                (limit,),
-            )
+            params,
+        )
 
         # Convert rows and parse datetime strings
         docs = []
         for row in cursor.fetchall():
             doc = dict(row)
-            docs.append(_parse_doc_datetimes(doc))
+            docs.append(
+                _parse_doc_datetimes(doc, ["created_at", "accessed_at", "archived_at"])
+            )
         return docs
+
+
+def count_documents(
+    project: Optional[str] = None,
+    include_archived: bool = False,
+    parent_id: Optional[int] = None,
+) -> int:
+    """Count documents with optional project and hierarchy filters.
+
+    Args:
+        project: Filter by project name (None = all projects)
+        include_archived: Whether to include archived documents
+        parent_id: Filter by parent document (see list_documents for details)
+
+    Returns:
+        Count of matching documents
+    """
+    with db_connection.get_connection() as conn:
+        conditions = ["is_deleted = FALSE"]
+        params: list[Any] = []
+
+        if parent_id is None:
+            conditions.append("parent_id IS NULL")
+        elif parent_id > 0:
+            conditions.append("parent_id = ?")
+            params.append(parent_id)
+
+        if not include_archived:
+            conditions.append("archived_at IS NULL")
+
+        if project:
+            conditions.append("project = ?")
+            params.append(project)
+
+        where_clause = " AND ".join(conditions)
+
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM documents WHERE {where_clause}",
+            params,
+        )
+        return cursor.fetchone()[0]
+
+
+def has_children(doc_id: int, include_archived: bool = False) -> bool:
+    """Check if a document has children.
+
+    Args:
+        doc_id: Parent document ID
+        include_archived: Whether to count archived children
+
+    Returns:
+        True if the document has at least one child
+    """
+    with db_connection.get_connection() as conn:
+        conditions = ["is_deleted = FALSE", "parent_id = ?"]
+        params: list[Any] = [doc_id]
+
+        if not include_archived:
+            conditions.append("archived_at IS NULL")
+
+        where_clause = " AND ".join(conditions)
+
+        cursor = conn.execute(
+            f"SELECT 1 FROM documents WHERE {where_clause} LIMIT 1",
+            params,
+        )
+        return cursor.fetchone() is not None
+
+
+def get_children_count(
+    doc_ids: list[int], include_archived: bool = False
+) -> dict[int, int]:
+    """Get child counts for multiple documents efficiently.
+
+    Args:
+        doc_ids: List of parent document IDs
+        include_archived: Whether to count archived children
+
+    Returns:
+        Dictionary mapping doc_id to child count
+    """
+    if not doc_ids:
+        return {}
+
+    with db_connection.get_connection() as conn:
+        placeholders = ",".join("?" * len(doc_ids))
+        conditions = ["is_deleted = FALSE", f"parent_id IN ({placeholders})"]
+        params: list[Any] = list(doc_ids)
+
+        if not include_archived:
+            conditions.append("archived_at IS NULL")
+
+        where_clause = " AND ".join(conditions)
+
+        cursor = conn.execute(
+            f"""
+            SELECT parent_id, COUNT(*) as child_count
+            FROM documents
+            WHERE {where_clause}
+            GROUP BY parent_id
+            """,
+            params,
+        )
+
+        result = {doc_id: 0 for doc_id in doc_ids}
+        for row in cursor.fetchall():
+            result[row["parent_id"]] = row["child_count"]
+        return result
 
 
 def update_document(doc_id: int, title: str, content: str) -> bool:
@@ -365,3 +514,246 @@ def purge_deleted_documents(older_than_days: Optional[int] = None) -> int:
 
         conn.commit()
         return cursor.rowcount
+
+
+def find_supersede_candidate(
+    title: str,
+    project: Optional[str] = None,
+    title_threshold: float = 0.85,
+    content: Optional[str] = None,
+    content_threshold: float = 0.5,
+) -> Optional[dict[str, Any]]:
+    """Find a document that should be superseded by a new document with the given title.
+
+    Uses title normalization and optional content similarity to find the best candidate.
+
+    Args:
+        title: Title of the new document
+        project: Project to search within (if None, searches all)
+        title_threshold: Minimum title similarity (0.0-1.0) for fuzzy matching
+        content: Content of new document (for content similarity check)
+        content_threshold: Minimum content similarity required when title_threshold < 1.0
+
+    Returns:
+        The most recent document that should be superseded, or None
+    """
+    from ..utils.title_normalization import normalize_title, title_similarity
+
+    normalized_new = normalize_title(title)
+    if not normalized_new:
+        return None
+
+    with db_connection.get_connection() as conn:
+        # Find docs that could be superseded
+        # Only consider docs without a parent (docs with parent_id are already
+        # linked via workflow or previous supersede, and that takes precedence)
+        if project:
+            cursor = conn.execute(
+                """
+                SELECT id, title, content, project, created_at, parent_id
+                FROM documents
+                WHERE project = ? AND is_deleted = FALSE AND archived_at IS NULL
+                AND parent_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+                (project,),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT id, title, content, project, created_at, parent_id
+                FROM documents
+                WHERE is_deleted = FALSE AND archived_at IS NULL
+                AND parent_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+            )
+
+        candidates = []
+        for row in cursor.fetchall():
+            doc = dict(row)
+            normalized_existing = normalize_title(doc["title"])
+
+            # Exact normalized match - always a candidate
+            if normalized_existing == normalized_new:
+                candidates.append((doc, 1.0, "exact"))
+                continue
+
+            # Fuzzy title match - needs content check
+            sim = title_similarity(title, doc["title"])
+            if sim >= title_threshold:
+                candidates.append((doc, sim, "fuzzy"))
+
+        if not candidates:
+            return None
+
+        # For exact matches, return the most recent one
+        exact_matches = [c for c in candidates if c[2] == "exact"]
+        if exact_matches:
+            # Return most recent exact match
+            return _parse_doc_datetimes(exact_matches[0][0])
+
+        # For fuzzy matches, we need content similarity check
+        if content and candidates:
+            from ..services.similarity import compute_content_similarity
+
+            for doc, title_sim, match_type in candidates:
+                content_sim = compute_content_similarity(content, doc["content"])
+                if content_sim >= content_threshold:
+                    return _parse_doc_datetimes(doc)
+
+        return None
+
+
+def set_parent(doc_id: int, parent_id: int, relationship: str = "supersedes") -> bool:
+    """Set the parent of a document.
+
+    Args:
+        doc_id: ID of the child document
+        parent_id: ID of the parent document
+        relationship: Type of relationship ('supersedes', 'exploration', 'variant')
+
+    Returns:
+        True if update was successful
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE documents
+            SET parent_id = ?, relationship = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_deleted = FALSE
+            """,
+            (parent_id, relationship, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def archive_document(doc_id: int) -> bool:
+    """Archive a document (set archived_at timestamp).
+
+    Args:
+        doc_id: ID of document to archive
+
+    Returns:
+        True if archive was successful
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE documents
+            SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_deleted = FALSE AND archived_at IS NULL
+            """,
+            (doc_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def unarchive_document(doc_id: int) -> bool:
+    """Unarchive a document (clear archived_at timestamp).
+
+    Args:
+        doc_id: ID of document to unarchive
+
+    Returns:
+        True if unarchive was successful
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE documents
+            SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_deleted = FALSE AND archived_at IS NOT NULL
+            """,
+            (doc_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_children(doc_id: int, include_archived: bool = False) -> list[dict[str, Any]]:
+    """Get all child documents of a parent.
+
+    Args:
+        doc_id: ID of parent document
+        include_archived: Whether to include archived children
+
+    Returns:
+        List of child documents
+    """
+    with db_connection.get_connection() as conn:
+        if include_archived:
+            cursor = conn.execute(
+                """
+                SELECT id, title, project, created_at, parent_id, relationship, archived_at
+                FROM documents
+                WHERE parent_id = ? AND is_deleted = FALSE
+                ORDER BY created_at DESC
+                """,
+                (doc_id,),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT id, title, project, created_at, parent_id, relationship, archived_at
+                FROM documents
+                WHERE parent_id = ? AND is_deleted = FALSE AND archived_at IS NULL
+                ORDER BY created_at DESC
+                """,
+                (doc_id,),
+            )
+
+        docs = []
+        for row in cursor.fetchall():
+            doc = dict(row)
+            docs.append(_parse_doc_datetimes(doc))
+        return docs
+
+
+def get_descendants(doc_id: int) -> list[dict[str, Any]]:
+    """Get all descendants of a document (children, grandchildren, etc).
+
+    Args:
+        doc_id: ID of root document
+
+    Returns:
+        List of all descendant documents
+    """
+    descendants = []
+    to_visit = [doc_id]
+    visited = set()
+
+    while to_visit:
+        current_id = to_visit.pop(0)
+        if current_id in visited:
+            continue
+        visited.add(current_id)
+
+        children = get_children(current_id, include_archived=True)
+        for child in children:
+            descendants.append(child)
+            to_visit.append(child["id"])
+
+    return descendants
+
+
+def archive_descendants(doc_id: int) -> int:
+    """Archive all descendants of a document.
+
+    Args:
+        doc_id: ID of root document (not archived, only descendants)
+
+    Returns:
+        Number of documents archived
+    """
+    descendants = get_descendants(doc_id)
+    count = 0
+    for desc in descendants:
+        if desc.get("archived_at") is None:
+            if archive_document(desc["id"]):
+                count += 1
+    return count
