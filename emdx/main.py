@@ -21,6 +21,7 @@ from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.agents import app as agents_app
+from emdx.commands.similarity import app as similarity_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.workflows import app as workflows_app
@@ -155,6 +156,7 @@ safe_register_commands(app, gdoc_app, "gdoc")
 safe_register_commands(app, tag_app, "tags")
 safe_register_commands(app, analyze_app, "analyze")
 safe_register_commands(app, maintain_app, "maintain")
+safe_register_commands(app, similarity_app, "similarity")
 
 # Register subcommand groups
 app.add_typer(executions_app, name="exec", help="Manage Claude executions")
