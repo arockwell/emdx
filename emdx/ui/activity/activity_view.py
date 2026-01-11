@@ -9,6 +9,7 @@ The primary interface for monitoring Claude Code's work:
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -327,8 +328,16 @@ class ActivityView(Widget):
         if HAS_DOCS and doc_db:
             await self._load_direct_saves()
 
-        # Sort by timestamp descending
-        self.activity_items.sort(key=lambda x: x.timestamp, reverse=True)
+        # Sort: running workflows first (pinned), then by timestamp descending
+        # Running workflows should always be at the top for visibility
+        def sort_key(item):
+            is_running = item.item_type == "workflow" and item.status == "running"
+            # Running items get priority 0 (will be first after sort)
+            # Non-running items get priority 1
+            # Within each group, sort by timestamp descending (negate for descending)
+            return (0 if is_running else 1, -item.timestamp.timestamp() if item.timestamp else 0)
+
+        self.activity_items.sort(key=sort_key)
 
         # Flatten for display
         self._flatten_items()
@@ -375,8 +384,25 @@ class ActivityView(Widget):
 
                 title = task_title or wf_name
 
-                # Calculate cost
+                # Calculate cost - check both top-level and context_json
                 cost = run.get("total_cost_usd", 0) or 0
+                if not cost:
+                    # Try to extract from context_json (contains agent execution results)
+                    try:
+                        ctx = run.get("context_json")
+                        if isinstance(ctx, str):
+                            ctx = json.loads(ctx)
+                        if ctx:
+                            # Look for cost in stage outputs (e.g., analyze.output)
+                            for key, value in ctx.items():
+                                if isinstance(value, str) and "total_cost_usd" in value:
+                                    # Parse the __RAW_RESULT_JSON__ from execution logs
+                                    match = re.search(r'"total_cost_usd":([0-9.]+)', value)
+                                    if match:
+                                        cost = float(match.group(1))
+                                        break
+                    except Exception:
+                        pass
 
                 item = ActivityItem(
                     item_type="workflow",
@@ -1036,16 +1062,16 @@ class ActivityView(Widget):
         """Focus previous pane."""
         pass
 
-    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+    async def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row selection change."""
         if event.cursor_row is not None:
             self.selected_idx = event.cursor_row
-            self.call_later(self._update_preview)
+            await self._update_preview()
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+    async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Handle row selection (Enter key on DataTable)."""
         # This is triggered when user presses Enter on a row
-        self.call_later(self.action_select)
+        await self.action_select()
 
     def on_unmount(self) -> None:
         """Cleanup on unmount."""
