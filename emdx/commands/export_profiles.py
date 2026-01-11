@@ -11,22 +11,24 @@ This module provides CLI commands for managing export profiles:
 """
 
 import json
+import logging
 import os
 import subprocess
 import tempfile
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 
 from emdx.database import db
 from emdx.models import export_profiles
+from emdx.utils.output import console
 
 app = typer.Typer(help="Manage export profiles")
-console = Console()
 
 
 @app.command("create")
@@ -342,8 +344,8 @@ def edit_profile(
         # Clean up temp file
         try:
             os.unlink(temp_path)
-        except Exception:
-            pass
+        except OSError as e:
+            logger.debug("Failed to clean up temp file %s: %s", temp_path, e)
 
 
 @app.command("delete")

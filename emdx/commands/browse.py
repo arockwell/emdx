@@ -5,16 +5,15 @@ Browse and analytics commands for emdx
 from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_recent_documents, get_stats, list_documents
 from emdx.utils.datetime import format_datetime as _format_datetime
 from emdx.utils.text_formatting import truncate_description, truncate_title
+from emdx.utils.output import console
 
 app = typer.Typer()
-console = Console()
 
 
 def _format_size(size_bytes: int) -> str:
@@ -80,15 +79,16 @@ def list(
             # Convert datetime objects to strings
             for doc in docs:
                 doc["created_at"] = doc["created_at"].isoformat()
-            console.print(json.dumps(docs, indent=2))
+            # Use plain print for machine-parseable output
+            print(json.dumps(docs, indent=2))
 
         elif format == "csv":
-            # Output CSV
-            console.print("id,title,project,created,views")
+            # Output CSV - use plain print for machine-parseable output
+            print("id,title,project,created,views")
             for doc in docs:
                 # Escape commas in title
                 title = doc["title"].replace(",", "\\,")
-                console.print(
+                print(
                     f"{doc['id']},{title},{doc['project'] or ''}"
                     f",{doc['created_at'].strftime('%Y-%m-%d')},{doc['access_count']}"
                 )

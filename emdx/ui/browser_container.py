@@ -273,8 +273,8 @@ class BrowserContainer(App):
                 try:
                     computed_padding = widget.styles.get_rule('padding')
                     logger.info(f"{prefix}  computed padding: {computed_padding}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Could not get computed padding for widget: %s", e)
 
             for child in widget.children:
                 dump_widget(child, indent + 1)

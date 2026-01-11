@@ -1,13 +1,14 @@
 """Log view - Zoom 2 full-screen log viewer with streaming."""
 
 import logging
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import Static, RichLog
+from textual.widgets import Static, RichLog, Input
 
 from emdx.models.executions import Execution, get_execution, get_recent_executions
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
@@ -42,6 +43,10 @@ class LogView(Widget):
         Binding("g", "scroll_home", "Top"),
         Binding("G", "scroll_end", "Bottom"),
         Binding("l", "toggle_live", "Toggle Live"),
+        Binding("/", "search", "Search"),
+        Binding("n", "next_match", "Next Match"),
+        Binding("N", "prev_match", "Prev Match"),
+        Binding("escape", "clear_search", "Clear Search"),
     ]
 
     DEFAULT_CSS = """
@@ -62,6 +67,16 @@ class LogView(Widget):
         scrollbar-gutter: stable;
     }
 
+    #log-search {
+        height: 1;
+        background: $primary;
+        display: none;
+    }
+
+    #log-search.visible {
+        display: block;
+    }
+
     #log-status {
         height: 1;
         background: $surface;
@@ -78,10 +93,15 @@ class LogView(Widget):
         self.subscriber = LogViewSubscriber(self)
         self._writer: Optional[LogContentWriter] = None
         self._workflow_loader: Optional[WorkflowLogLoader] = None
+        self._search_query: str = ""
+        self._search_matches: List[int] = []  # Line numbers with matches
+        self._current_match_idx: int = -1
+        self._log_lines: List[str] = []  # Cache of log lines for search
 
     def compose(self) -> ComposeResult:
         yield Static("📜 LOG VIEWER", id="log-header")
         yield RichLog(id="log-output", highlight=True, markup=True, wrap=True)
+        yield Input(placeholder="Search...", id="log-search")
         yield Static("", id="log-status")
 
     @property
@@ -195,6 +215,8 @@ class LogView(Widget):
     def _handle_new_content(self, new_content: str) -> None:
         """Handle new content from the log stream."""
         if new_content:
+            # Cache lines for search
+            self._log_lines.extend(new_content.splitlines())
             self.writer.write_content(new_content)
             self._update_status()
 
@@ -233,6 +255,11 @@ class LogView(Widget):
         # Line count
         parts.append(f"{self.writer.line_count} lines")
 
+        # Search status
+        if self._search_query:
+            match_info = f"{self._current_match_idx + 1}/{len(self._search_matches)}" if self._search_matches else "0/0"
+            parts.append(f"[cyan]/{self._search_query}[/cyan] ({match_info})")
+
         # Live mode indicator
         if self.is_live:
             parts.append("[green]● LIVE[/green]")
@@ -240,7 +267,10 @@ class LogView(Widget):
             parts.append("[yellow]⏸ PAUSED[/yellow]")
 
         # Shortcuts
-        parts.append("l=toggle live | g/G=top/bottom | j/k=scroll")
+        shortcuts = "l=live | g/G=top/bottom | /=search"
+        if self._search_query:
+            shortcuts += " | n/N=next/prev | Esc=clear"
+        parts.append(shortcuts)
 
         status.update(" | ".join(parts))
 
@@ -276,6 +306,78 @@ class LogView(Widget):
 
         self._update_status()
 
+    def action_search(self) -> None:
+        """Show search input."""
+        search_input = self.query_one("#log-search", Input)
+        search_input.add_class("visible")
+        search_input.focus()
+
+    def action_clear_search(self) -> None:
+        """Clear search and hide input."""
+        search_input = self.query_one("#log-search", Input)
+        search_input.remove_class("visible")
+        search_input.value = ""
+        self._search_query = ""
+        self._search_matches = []
+        self._current_match_idx = -1
+        self._update_status()
+
+    def action_next_match(self) -> None:
+        """Jump to next search match."""
+        if not self._search_matches:
+            return
+        self._current_match_idx = (self._current_match_idx + 1) % len(self._search_matches)
+        self._scroll_to_match()
+
+    def action_prev_match(self) -> None:
+        """Jump to previous search match."""
+        if not self._search_matches:
+            return
+        self._current_match_idx = (self._current_match_idx - 1) % len(self._search_matches)
+        self._scroll_to_match()
+
+    def _scroll_to_match(self) -> None:
+        """Scroll to the current match."""
+        if self._current_match_idx < 0 or self._current_match_idx >= len(self._search_matches):
+            return
+        log_output = self.query_one("#log-output", RichLog)
+        # Approximate scroll position based on match line
+        match_line = self._search_matches[self._current_match_idx]
+        total_lines = self.writer.line_count
+        if total_lines > 0:
+            # Scroll to approximate position
+            log_output.scroll_to(y=match_line, animate=True)
+        self._update_status()
+
+    def _perform_search(self, query: str) -> None:
+        """Search through log lines and find matches."""
+        self._search_query = query
+        self._search_matches = []
+        self._current_match_idx = -1
+
+        if not query:
+            self._update_status()
+            return
+
+        try:
+            pattern = re.compile(re.escape(query), re.IGNORECASE)
+            for i, line in enumerate(self._log_lines):
+                if pattern.search(line):
+                    self._search_matches.append(i)
+
+            if self._search_matches:
+                self._current_match_idx = 0
+                self._scroll_to_match()
+        except re.error:
+            pass  # Invalid regex, just skip
+
+        self._update_status()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle search input submission."""
+        if event.input.id == "log-search":
+            self._perform_search(event.value)
+
     def watch_is_live(self, old: bool, new: bool) -> None:
         """React to live mode changes."""
         logger.info(f"Live mode: {old} -> {new}")
@@ -285,6 +387,10 @@ class LogView(Widget):
         self._stop_stream()
         self.current_execution = None
         self.writer.clear()
+        self._log_lines = []
+        self._search_query = ""
+        self._search_matches = []
+        self._current_match_idx = -1
 
         header = self.query_one("#log-header", Static)
         header.update("📜 LOG VIEWER")

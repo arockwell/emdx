@@ -2,24 +2,26 @@
 GitHub Gist integration for emdx
 """
 
+import logging
 import os
 import subprocess
 import webbrowser
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
+logger = logging.getLogger(__name__)
+
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
+from emdx.utils.output import console
 
 if TYPE_CHECKING:
     from github import Github, GithubException
 
 app = typer.Typer()
-console = Console()
 
 
 def get_github_auth() -> Optional[str]:
@@ -46,8 +48,8 @@ def get_github_auth() -> Optional[str]:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.debug("gh auth token not available: %s", e)
 
     # 2. Fall back to environment variable GITHUB_TOKEN
     # Note: Environment variables are less secure than gh auth
@@ -97,15 +99,15 @@ def create_gist_with_gh(
             # Extract gist ID from URL
             gist_id = gist_url.split("/")[-1]
             return {"id": gist_id, "url": gist_url}
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        pass
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        logger.debug("Failed to create gist with gh CLI: %s", e)
     finally:
         # Always clean up temp file
         if temp_path and os.path.exists(temp_path):
             try:
                 os.unlink(temp_path)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("Failed to clean up temp file %s: %s", temp_path, e)
 
     return None
 
@@ -157,15 +159,15 @@ def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         return result.returncode == 0
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        pass
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        logger.debug("Failed to update gist with gh CLI: %s", e)
     finally:
         # Always clean up temp file
         if temp_path and os.path.exists(temp_path):
             try:
                 os.unlink(temp_path)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("Failed to clean up temp file %s: %s", temp_path, e)
 
     return False
 
@@ -198,13 +200,15 @@ def copy_to_clipboard(text: str) -> bool:
         # macOS
         subprocess.run(["pbcopy"], input=text.encode(), check=True)
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        logger.debug("pbcopy not available: %s", e)
         try:
             # Linux (X11)
             subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
             # Windows or fallback - would need pyperclip
+            logger.debug("xclip not available: %s", e)
             return False
 
 

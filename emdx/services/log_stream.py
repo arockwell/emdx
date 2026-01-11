@@ -1,6 +1,8 @@
 """Event-driven log file streaming with file watching."""
 
 import logging
+import threading
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional
@@ -31,6 +33,10 @@ class LogStream:
         self.subscribers: List[LogStreamSubscriber] = []
         self.watcher: Optional['FileWatcher'] = None
         self.is_watching = False
+        self._polling = False
+        self._stopped = False
+        self._poll_thread: Optional[threading.Thread] = None
+        self._poll_interval = 1.0
     
     def subscribe(self, subscriber: LogStreamSubscriber) -> None:
         """Subscribe to log updates."""
@@ -82,6 +88,14 @@ class LogStream:
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
+
+        # Stop polling fallback if active
+        self._polling = False
+        self._stopped = True
+        if self._poll_thread and self._poll_thread.is_alive():
+            self._poll_thread.join(timeout=1.0)
+            self._poll_thread = None
+
         self.is_watching = False
         logger.debug(f"Stopped watching {self.path}")
     
@@ -123,8 +137,28 @@ class LogStream:
     
     def _start_polling_fallback(self) -> None:
         """Fallback to polling if file watching fails."""
-        # Simple polling implementation as backup
         logger.warning("File watching failed, using polling fallback")
-        # For now, we'll implement a basic version
-        # This could be enhanced with a timer-based approach
-        pass
+
+        self._polling = True
+        self.is_watching = True
+
+        def poll_loop():
+            while self._polling and not self._stopped:
+                try:
+                    content = self._read_new_content()
+                    if content:
+                        self._notify_subscribers(content)
+                except Exception as e:
+                    logger.debug(f"Polling error: {e}")
+                time.sleep(self._poll_interval)
+
+        self._poll_thread = threading.Thread(target=poll_loop, daemon=True, name="log-poll")
+        self._poll_thread.start()
+
+    def _notify_subscribers(self, content: str) -> None:
+        """Notify all subscribers of new content."""
+        for subscriber in self.subscribers:
+            try:
+                subscriber.on_log_content(content)
+            except Exception as e:
+                logger.error(f"Error in subscriber callback: {e}")

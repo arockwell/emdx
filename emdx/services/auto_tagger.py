@@ -8,6 +8,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+# Type alias for SQL parameters
+SqlParam = Union[str, int, float, None]
+
 from ..config.constants import (
     DEFAULT_MAX_SUGGESTIONS,
     DEFAULT_MAX_TAGS_PER_DOC,
@@ -302,7 +305,7 @@ class AutoTagger:
                 WHERE d.is_deleted = 0
             """
 
-            params: List[Any] = []
+            params: List[SqlParam] = []
 
             if project:
                 query += " AND d.project = ?"
@@ -459,19 +462,3 @@ class AutoTagger:
         """Remove a custom pattern."""
         if name in self.patterns:
             del self.patterns[name]
-    
-    def get_pattern_stats(self) -> Dict[str, int]:
-        """
-        Get statistics on how often each pattern matches.
-
-        Returns:
-            Dictionary mapping pattern names to match counts
-
-        Raises:
-            NotImplementedError: Pattern usage tracking is not currently implemented.
-                This would require persistent storage of match history.
-        """
-        raise NotImplementedError(
-            "Pattern usage tracking is not implemented. "
-            "This would require a database table to store pattern match history."
-        )

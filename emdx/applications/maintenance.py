@@ -8,10 +8,13 @@ This module extracts the complex orchestration logic from commands/maintain.py
 into a dedicated application service layer.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
+
+logger = logging.getLogger(__name__)
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -429,7 +432,8 @@ class MaintenanceApplication:
 
                     conn.commit()
                 merged_count += 1
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to merge documents %s and %s: %s", keep["id"], remove["id"], e)
                 continue
 
         return MaintenanceResult(

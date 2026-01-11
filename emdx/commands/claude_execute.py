@@ -5,6 +5,7 @@ extracted to services/claude_executor.py to break bidirectional dependencies.
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -13,8 +14,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 import typer
-from rich.console import Console
 
 from ..models.documents import get_document
 from ..models.executions import (
@@ -27,6 +29,7 @@ from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from ..services.claude_executor import execute_claude_detached as _execute_claude_detached
+from ..utils.output import console
 
 # Import from document_executor for backward compatibility
 from ..services.document_executor import (
@@ -223,7 +226,8 @@ def parse_task_content(task: str) -> str:
             try:
                 content = filepath.read_text()
                 return f"\n\nHere is the content of {filename}:\n\n```\n{content}\n```"
-            except Exception:
+            except (OSError, UnicodeDecodeError) as e:
+                logger.debug("Failed to read file %s: %s", filename, e)
                 return f"[File not found: {filename}]"
         else:
             return f"[File not found: {filename}]"
@@ -403,7 +407,6 @@ def execute_with_claude(
 
 
 app = typer.Typer(name="claude", help="Execute documents with Claude")
-console = Console()
 
 
 @app.command(name="check-env")
@@ -432,7 +435,8 @@ def check_environment(
                 console.print(f"  {name}: [green]{result}[/green]")
             else:
                 console.print(f"  {name}: [red]Not found[/red]")
-        except Exception:
+        except Exception as e:
+            logger.debug("Environment check failed for %s: %s", name, e)
             console.print(f"  {name}: [red]Error[/red]")
 
     # Show PATH info if verbose
@@ -540,11 +544,13 @@ def execute(
             console.print("[yellow]Foreground execution not yet migrated to service layer[/yellow]")
             raise typer.Exit(1)
     else:
-        # Legacy execution mode - use default tools if none specified
+        # Non-smart execution mode (--no-smart flag)
+        # Uses fixed tool set without tag-based context detection.
+        # Useful for simpler executions that don't need staged workflows.
         if allowed_tools is None:
             allowed_tools = DEFAULT_ALLOWED_TOOLS
 
-        console.print("[yellow]Legacy (non-smart) execution mode[/yellow]")
+        console.print("[yellow]Non-smart execution mode (use --smart for context-aware execution)[/yellow]")
         console.print(f"[green]Executing document #{doc_id}: {doc['title']}[/green]")
         console.print(f"Execution ID: [cyan]{execution_id}[/cyan]")
         console.print(f"Log file: [dim]{log_file}[/dim]")

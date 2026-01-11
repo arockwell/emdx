@@ -266,8 +266,8 @@ class DocumentBrowser(Widget):
         try:
             table = self.query_one("#doc-table", DataTable)
             state["cursor_position"] = table.cursor_coordinate
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not save cursor position: %s", e)
 
         return state
 
@@ -281,8 +281,8 @@ class DocumentBrowser(Widget):
             try:
                 table = self.query_one("#doc-table", DataTable)
                 table.cursor_coordinate = state["cursor_position"]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Could not restore cursor position: %s", e)
                 
     async def on_key(self, event) -> None:
         """Handle key events."""
@@ -386,8 +386,8 @@ class DocumentBrowser(Widget):
             try:
                 import asyncio
                 asyncio.create_task(self.save_and_exit_edit_mode())
-            except Exception:
-                pass
+            except Exception as e2:
+                logger.debug("Fallback async save also failed: %s", e2)
             
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
@@ -541,8 +541,8 @@ class DocumentBrowser(Widget):
             vim_indicator = self.query_one("#vim-mode-indicator", Label)
             vim_indicator.update("")
             vim_indicator.remove_class("active")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not clear vim mode indicator: %s", e)
 
         # Get current document content for preview
         content = ""
@@ -757,8 +757,8 @@ class DocumentBrowser(Widget):
             app = self.app
             if hasattr(app, "update_status"):
                 app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not update status: %s", e)
             
     async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore preview."""
@@ -922,8 +922,8 @@ class DocumentBrowser(Widget):
                 details_panel = self.query_one("#details-panel", RichLog)
                 details_panel.clear()
                 details_panel.write(f"📄 Document {detail_vm.id}: {detail_vm.title}")
-            except Exception:
-                pass
+            except Exception as e2:
+                logger.debug("Fallback details panel also failed: %s", e2)
 
                 
     async def on_input_submitted(self, event) -> None:
