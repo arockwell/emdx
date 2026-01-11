@@ -1087,6 +1087,34 @@ def migration_017_add_cost_usd(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
+    """Add relationship and archived_at columns for document hierarchy.
+
+    - relationship: describes how a child relates to parent ('supersedes', 'exploration', 'variant')
+    - archived_at: when document was archived (superseded docs auto-archive when parent tagged 'done')
+    """
+    cursor = conn.cursor()
+
+    # Check existing columns to avoid duplicate column errors
+    cursor.execute("PRAGMA table_info(documents)")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+
+    # Add relationship column if not exists
+    if "relationship" not in existing_columns:
+        cursor.execute("ALTER TABLE documents ADD COLUMN relationship TEXT")
+
+    # Add archived_at column if not exists
+    if "archived_at" not in existing_columns:
+        cursor.execute("ALTER TABLE documents ADD COLUMN archived_at TIMESTAMP")
+
+    # Add index for efficient archived queries
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_documents_archived_at ON documents(archived_at)"
+    )
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1107,6 +1135,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (15, "Add export profiles", migration_015_add_export_profiles),
     (16, "Add input/output tokens to individual runs", migration_016_add_input_output_tokens),
     (17, "Add cost_usd to individual runs", migration_017_add_cost_usd),
+    (18, "Add document hierarchy columns", migration_018_add_document_hierarchy),
 ]
 
 

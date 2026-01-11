@@ -21,6 +21,12 @@ class DocumentListItem:
     access_count: int
     created_at: Optional[str] = None
     accessed_at: Optional[str] = None
+    # Hierarchy fields
+    parent_id: Optional[int] = None
+    has_children: bool = False
+    depth: int = 0  # 0 = top level, 1 = child, 2 = grandchild, etc.
+    is_archived: bool = False
+    relationship: Optional[str] = None  # 'supersedes', 'exploration', 'variant'
 
 
 @dataclass

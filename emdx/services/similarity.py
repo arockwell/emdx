@@ -406,3 +406,33 @@ class SimilarityService:
         self._doc_projects = []
         self._doc_tags = []
         self._last_built = None
+
+
+def compute_content_similarity(content1: str, content2: str) -> float:
+    """Compute TF-IDF cosine similarity between two pieces of content.
+
+    This is a standalone function for quick pairwise comparison without
+    building the full index.
+
+    Args:
+        content1: First document content
+        content2: Second document content
+
+    Returns:
+        Cosine similarity between 0.0 and 1.0
+    """
+    if not content1 or not content2:
+        return 0.0
+
+    try:
+        vectorizer = TfidfVectorizer(
+            max_features=1000,
+            stop_words="english",
+            ngram_range=(1, 2),
+        )
+        tfidf_matrix = vectorizer.fit_transform([content1, content2])
+        similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+        return float(similarity)
+    except Exception:
+        # If vectorization fails (e.g., empty vocabulary), return 0
+        return 0.0

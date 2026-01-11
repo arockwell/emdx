@@ -8,6 +8,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from emdx.database import db
+from emdx.database.documents import archive_descendants
 from emdx.models.documents import get_document
 from emdx.models.tags import (
     add_tags_to_document,
@@ -19,11 +20,52 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import generate_legend
-from emdx.utils.text_formatting import truncate_title
+from emdx.utils.emoji_aliases import generate_legend, normalize_tag_to_emoji
 from emdx.utils.output import console
+from emdx.utils.text_formatting import truncate_title
+
+# Tags that indicate completion - when added, auto-archive descendants
+COMPLETION_TAGS = {"done", "complete", "success", "finished", "check"}
 
 app = typer.Typer()
+
+
+def _is_completion_tag(tag: str) -> bool:
+    """Check if a tag indicates completion.
+
+    Handles both text aliases and emoji tags.
+    """
+    tag_lower = tag.lower().strip()
+
+    # Check text aliases
+    if tag_lower in COMPLETION_TAGS:
+        return True
+
+    # Normalize alias and check if it's a completion emoji
+    normalized = normalize_tag_to_emoji(tag_lower)
+    if normalized in ("✅", "🎉"):
+        return True
+
+    # Direct emoji check
+    if tag in ("✅", "🎉"):
+        return True
+
+    return False
+
+
+def _check_and_auto_archive_descendants(doc_id: int, added_tags: list[str]) -> int:
+    """Check if any added tags are completion tags and auto-archive descendants.
+
+    Returns the number of descendants archived.
+    """
+    # Check if any added tag is a completion tag
+    has_completion_tag = any(_is_completion_tag(tag) for tag in added_tags)
+
+    if not has_completion_tag:
+        return 0
+
+    # Auto-archive descendants
+    return archive_descendants(doc_id)
 
 
 @app.command()
@@ -49,10 +91,20 @@ def tag(
             tagger = AutoTagger()
             applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
             if applied:
-                console.print(f"[green]✅ Auto-tagged #{doc_id} with:[/green] [cyan]{format_tags(applied)}[/cyan]")
+                console.print(
+                    f"[green]Auto-tagged #{doc_id} with:[/green] [cyan]{format_tags(applied)}[/cyan]"
+                )
+
+                # Check for completion tags and auto-archive descendants
+                archived_count = _check_and_auto_archive_descendants(doc_id, applied)
+                if archived_count > 0:
+                    console.print(
+                        f"   [dim]Auto-archived {archived_count} superseded document"
+                        f"{'s' if archived_count > 1 else ''}[/dim]"
+                    )
             else:
                 console.print("[yellow]No tags met confidence threshold for auto-tagging[/yellow]")
-            
+
             # Show all tags
             all_tags = get_document_tags(doc_id)
             console.print(f"[dim]All tags:[/dim] {format_tags(all_tags)}")
@@ -102,8 +154,16 @@ def tag(
 
         if added_tags:
             console.print(
-                f"[green]✅ Added tags to #{doc_id}:[/green] [cyan]{format_tags(added_tags)}[/cyan]"
+                f"[green]Added tags to #{doc_id}:[/green] [cyan]{format_tags(added_tags)}[/cyan]"
             )
+
+            # Check for completion tags and auto-archive descendants
+            archived_count = _check_and_auto_archive_descendants(doc_id, added_tags)
+            if archived_count > 0:
+                console.print(
+                    f"   [dim]Auto-archived {archived_count} superseded document"
+                    f"{'s' if archived_count > 1 else ''}[/dim]"
+                )
         else:
             console.print("[yellow]No new tags added (may already exist)[/yellow]")
 

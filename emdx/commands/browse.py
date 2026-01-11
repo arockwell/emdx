@@ -34,6 +34,9 @@ def list(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum documents to show"),
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, csv"),
+    include_archived: bool = typer.Option(
+        False, "--archived", "-a", help="Include archived documents"
+    ),
 ):
     """List all documents in the knowledge base"""
     try:
@@ -43,7 +46,7 @@ def list(
         db.ensure_schema()
 
         # Query database
-        docs = list_documents(project=project, limit=limit)
+        docs = list_documents(project=project, limit=limit, include_archived=include_archived)
 
         if not docs:
             console.print("[yellow]No documents found[/yellow]")
@@ -54,6 +57,8 @@ def list(
             title = "Knowledge Base Documents"
             if project:
                 title += f" - Project: {project}"
+            if include_archived:
+                title += " (including archived)"
 
             table = Table(title=title)
             table.add_column("ID", style="cyan", no_wrap=True)
@@ -61,16 +66,22 @@ def list(
             table.add_column("Project", style="green")
             table.add_column("Created", style="yellow")
             table.add_column("Views", justify="right", style="blue")
+            if include_archived:
+                table.add_column("Status", style="dim")
 
             # Add rows from database
             for doc in docs:
-                table.add_row(
+                row = [
                     str(doc["id"]),
                     truncate_title(doc["title"]),
                     doc["project"] or "None",
                     doc["created_at"].strftime("%Y-%m-%d"),
                     str(doc["access_count"]),
-                )
+                ]
+                if include_archived:
+                    status = "[dim]Archived[/dim]" if doc.get("archived_at") else ""
+                    row.append(status)
+                table.add_row(*row)
 
             console.print(table)
             console.print(f"\n[dim]Showing {len(docs)} of {len(docs)} documents[/dim]")
@@ -79,19 +90,31 @@ def list(
             # Convert datetime objects to strings
             for doc in docs:
                 doc["created_at"] = doc["created_at"].isoformat()
+                if doc.get("archived_at"):
+                    doc["archived_at"] = doc["archived_at"].isoformat()
+                if doc.get("accessed_at"):
+                    doc["accessed_at"] = doc["accessed_at"].isoformat()
             # Use plain print for machine-parseable output
             print(json.dumps(docs, indent=2))
 
         elif format == "csv":
-            # Output CSV - use plain print for machine-parseable output
-            print("id,title,project,created,views")
+            # Output CSV - include archived column when showing archived docs
+            if include_archived:
+                print("id,title,project,created,views,archived")
+            else:
+                print("id,title,project,created,views")
             for doc in docs:
                 # Escape commas in title
                 title = doc["title"].replace(",", "\\,")
-                print(
+                base_row = (
                     f"{doc['id']},{title},{doc['project'] or ''}"
                     f",{doc['created_at'].strftime('%Y-%m-%d')},{doc['access_count']}"
                 )
+                if include_archived:
+                    archived = "yes" if doc.get("archived_at") else ""
+                    print(f"{base_row},{archived}")
+                else:
+                    print(base_row)
 
     except Exception as e:
         console.print(f"[red]Error listing documents: {e}[/red]")

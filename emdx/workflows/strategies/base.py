@@ -345,6 +345,32 @@ Report the document ID that was created."""
         except Exception:
             return result
 
+    def _link_outputs_to_synthesis(
+        self, output_doc_ids: List[int], synthesis_doc_id: int
+    ) -> None:
+        """Link individual output documents as children of a synthesis document.
+
+        This establishes the workflow hierarchy where exploration outputs
+        are children of the synthesis document that summarizes them.
+        This relationship takes precedence over auto-supersede by title.
+
+        Args:
+            output_doc_ids: List of individual output document IDs
+            synthesis_doc_id: ID of the synthesis document (parent)
+        """
+        from emdx.database.documents import set_parent
+
+        for doc_id in output_doc_ids:
+            try:
+                set_parent(doc_id, synthesis_doc_id, relationship="exploration")
+            except Exception as e:
+                # Log but don't fail - hierarchy is nice-to-have
+                from emdx.utils.logging import get_logger
+                logger = get_logger(__name__)
+                logger.debug(
+                    f"Could not link output #{doc_id} to synthesis #{synthesis_doc_id}: {e}"
+                )
+
     async def synthesize_outputs(
         self,
         stage_run_id: int,
@@ -441,6 +467,10 @@ Report the document ID that was created."""
                         tags=['workflow-synthesis'],
                     )
 
+                # Link individual outputs as children of the synthesis doc
+                # This establishes the workflow hierarchy (exploration relationship)
+                self._link_outputs_to_synthesis(output_doc_ids, output_doc_id)
+
                 return {
                     'output_doc_id': output_doc_id,
                     'tokens_used': 0,
@@ -458,6 +488,9 @@ Report the document ID that was created."""
                     tags=['workflow-synthesis'],
                 )
 
+                # Link individual outputs as children even for fallback
+                self._link_outputs_to_synthesis(output_doc_ids, doc_id)
+
                 return {
                     'output_doc_id': doc_id,
                     'tokens_used': 0,
@@ -474,6 +507,9 @@ Report the document ID that was created."""
                 content=combined,
                 tags=['workflow-synthesis'],
             )
+
+            # Link individual outputs as children even for error case
+            self._link_outputs_to_synthesis(output_doc_ids, doc_id)
 
             return {
                 'output_doc_id': doc_id,

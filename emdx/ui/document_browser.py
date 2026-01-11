@@ -58,6 +58,12 @@ class DocumentBrowser(Widget):
         Binding("s", "selection_mode", "Select"),
         Binding("x", "execute_document", "Run Agent"),
         Binding("r", "refresh", "Refresh"),
+        # Hierarchy navigation
+        Binding("l", "expand_children", "Expand", show=False),
+        Binding("right", "expand_children", "Expand", show=False),
+        Binding("h", "collapse_children", "Collapse", show=False),
+        Binding("left", "collapse_children", "Collapse", show=False),
+        Binding("a", "toggle_archived", "Toggle Archived", show=False),
     ]
 
     CSS_PATH = "document_browser.tcss"
@@ -212,7 +218,46 @@ class DocumentBrowser(Widget):
     async def load_more_documents(self) -> None:
         """Load more documents when user scrolls near the end."""
         await self.presenter.load_more_documents()
-            
+
+    def _format_hierarchy_title(self, doc) -> str:
+        """Format document title with hierarchy tree characters.
+
+        Args:
+            doc: DocumentListItem with hierarchy info
+
+        Returns:
+            Formatted title string with tree prefix
+        """
+        if doc.depth == 0:
+            # Top-level document
+            prefix = ""
+            if doc.has_children:
+                if self.presenter.is_expanded(doc.id):
+                    prefix = "▼ "  # Expanded indicator
+                else:
+                    prefix = "▶ "  # Collapsed indicator
+        else:
+            # Child document - add tree structure
+            indent = "  " * (doc.depth - 1)
+            # Use tree characters for visual hierarchy
+            branch = "└─"
+            prefix = f"{indent}{branch}"
+
+        # Add archived indicator
+        archived_suffix = " [archived]" if doc.is_archived else ""
+
+        # Add relationship indicator for children
+        rel_prefix = ""
+        if doc.relationship and doc.depth > 0:
+            rel_map = {
+                "supersedes": "↑",  # Superseded by parent
+                "exploration": "◇",  # Exploration variant
+                "variant": "≈",  # Similar variant
+            }
+            rel_prefix = f"{rel_map.get(doc.relationship, '')} "
+
+        return f"{prefix}{rel_prefix}{doc.title}{archived_suffix}"
+
     async def _render_document_list(self) -> None:
         """Render the document list from current ViewModel.
 
@@ -228,18 +273,21 @@ class DocumentBrowser(Widget):
 
         # Render documents from ViewModel (data is already formatted)
         for doc in vm.filtered_documents:
+            # Format title with hierarchy visualization
+            display_title = self._format_hierarchy_title(doc)
+
             table.add_row(
                 str(doc.id),
                 doc.tags_display,
                 "",  # Empty padding column
-                doc.title,
+                display_title,
             )
 
         # Update status using ViewModel status text
         try:
             status_text = vm.status_text
             if self.mode == "NORMAL":
-                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | l/h=expand/collapse | a=archived | q=quit"
             elif self.mode == "SEARCH":
                 status_text += " | Enter=apply | ESC=cancel"
             self.update_status(status_text)
@@ -641,7 +689,83 @@ class DocumentBrowser(Widget):
     async def action_refresh(self) -> None:
         """Refresh the document list."""
         await self.load_documents()
-        
+
+    async def action_expand_children(self) -> None:
+        """Expand children of the selected document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            return
+
+        # Remember cursor row and doc ID before expansion
+        cursor_row = table.cursor_row
+        doc_item = self.presenter.get_document_at_index(cursor_row)
+        if not doc_item:
+            return
+
+        if not doc_item.has_children:
+            self.update_status(f"Document #{doc_item.id} has no children")
+            return
+
+        if self.presenter.is_expanded(doc_item.id):
+            self.update_status(f"Document #{doc_item.id} is already expanded")
+            return
+
+        doc_id = doc_item.id
+        success = await self.presenter.expand_document(doc_id)
+        if success:
+            # Find the document again and restore cursor position
+            for idx, doc in enumerate(self._current_vm.filtered_documents):
+                if doc.id == doc_id:
+                    table.move_cursor(row=idx)
+                    break
+            self.update_status(f"Expanded #{doc_id}")
+        else:
+            self.update_status(f"Could not expand #{doc_id}")
+
+    async def action_collapse_children(self) -> None:
+        """Collapse children of the selected document or navigate to parent."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            return
+
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
+            return
+
+        doc_id = doc_item.id
+
+        # If this doc is expanded, collapse it
+        if self.presenter.is_expanded(doc_id):
+            await self.presenter.collapse_document(doc_id)
+            # Find the document again and restore cursor position
+            for idx, doc in enumerate(self._current_vm.filtered_documents):
+                if doc.id == doc_id:
+                    table.move_cursor(row=idx)
+                    break
+            self.update_status(f"Collapsed #{doc_id}")
+            return
+
+        # If this is a child, navigate to the parent
+        if doc_item.parent_id is not None:
+            parent = self.presenter.get_parent_document(doc_item)
+            if parent:
+                # Find parent's index and move cursor there
+                for idx, doc in enumerate(self._current_vm.filtered_documents):
+                    if doc.id == parent.id:
+                        table.move_cursor(row=idx)
+                        self.update_status(f"Moved to parent #{parent.id}")
+                        return
+
+        self.update_status("No parent or children to collapse")
+
+    async def action_toggle_archived(self) -> None:
+        """Toggle display of archived documents."""
+        await self.presenter.toggle_archived()
+        if self.presenter.include_archived:
+            self.update_status("Showing archived documents")
+        else:
+            self.update_status("Hiding archived documents")
+
     def update_status(self, message: str) -> None:
         """Update the document browser status bar."""
         try:
