@@ -705,7 +705,18 @@ class ActivityView(Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    self._render_markdown_preview(f"# {title}\n\n{content}")
+                    # Check if content already has a markdown title header (may have leading whitespace)
+                    content_stripped = content.lstrip()
+                    has_title_header = (
+                        content_stripped.startswith(f"# {title}") or
+                        content_stripped.startswith("# ")  # Any h1 header counts
+                    )
+                    if has_title_header:
+                        # Content already has a title header, don't duplicate
+                        self._render_markdown_preview(content)
+                    else:
+                        # Content doesn't have title, add it
+                        self._render_markdown_preview(f"# {title}\n\n{content}")
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return

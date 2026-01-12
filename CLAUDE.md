@@ -79,18 +79,19 @@ emdx save README.md
 
 ## 💡 Essential Commands
 
-### Save Content (CRITICAL: Use stdin for text)
+### Save Content (Multiple Options)
 ```bash
 # Save files
 poetry run emdx save document.md
 poetry run emdx save file.md --title "Custom Title"
 
-# Save text via stdin (CORRECT syntax)
-echo "My document content" | poetry run emdx save --title "Doc"
-echo "Remember to fix the API" | poetry run emdx save --title "API Note"
+# Save text directly (this WORKS - treats non-file args as content)
+poetry run emdx save "My document content" --title "Doc"
+poetry run emdx save "Remember to fix the API" --title "API Note"
 
-# ❌ WRONG: This looks for a file named "text content"
-# poetry run emdx save "text content"
+# Save text via stdin (also works)
+echo "My document content" | poetry run emdx save --title "Doc"
+cat notes.txt | poetry run emdx save --title "Notes"
 ```
 
 ### Search and Browse

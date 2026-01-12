@@ -24,6 +24,7 @@ from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
+from ..services.similarity import SimilarityService
 
 
 @dataclass
@@ -346,7 +347,10 @@ class MaintenanceApplication:
         )
 
     def merge_similar(
-        self, dry_run: bool = True, threshold: float = 0.7
+        self, dry_run: bool = True, threshold: float = 0.7,
+        progress_callback: Optional[callable] = None,
+        use_tfidf: bool = True,
+        exclude_workflow: bool = False
     ) -> MaintenanceResult:
         """
         Merge similar documents.
@@ -354,13 +358,77 @@ class MaintenanceApplication:
         Args:
             dry_run: If True, only report what would be done.
             threshold: Similarity threshold for merging.
+            progress_callback: Optional callback(current, total, found) for progress updates.
+            use_tfidf: If True, use fast TF-IDF similarity (recommended).
+                       If False, use slower pairwise comparison.
+            exclude_workflow: If True, exclude workflow output documents from results.
 
         Returns:
             MaintenanceResult with operation details.
         """
-        # Find merge candidates
+        if use_tfidf:
+            # Use fast TF-IDF based similarity (matrix operations)
+            similarity_service = SimilarityService()
+            pairs = similarity_service.find_all_duplicate_pairs(
+                min_similarity=threshold,
+                progress_callback=progress_callback,
+                exclude_workflow=exclude_workflow
+            )
+
+            if not pairs:
+                return MaintenanceResult(
+                    operation="merge",
+                    success=True,
+                    items_processed=0,
+                    items_affected=0,
+                    message="No similar documents found",
+                )
+
+            if dry_run:
+                preview = []
+                # Fetch document details to show which would be kept
+                with self._db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    for doc1_id, doc2_id, title1, title2, sim in pairs[:5]:
+                        # Get access counts to determine which would be kept
+                        cursor.execute(
+                            "SELECT id, access_count, LENGTH(content) as len FROM documents WHERE id IN (?, ?)",
+                            (doc1_id, doc2_id)
+                        )
+                        docs = {row['id']: row for row in cursor.fetchall()}
+
+                        # Determine which would be kept (higher access count, then longer content)
+                        doc1 = docs.get(doc1_id, {'access_count': 0, 'len': 0})
+                        doc2 = docs.get(doc2_id, {'access_count': 0, 'len': 0})
+
+                        if doc1['access_count'] > doc2['access_count']:
+                            keep_title, merge_title = title1, title2
+                        elif doc2['access_count'] > doc1['access_count']:
+                            keep_title, merge_title = title2, title1
+                        elif (doc1['len'] or 0) >= (doc2['len'] or 0):
+                            keep_title, merge_title = title1, title2
+                        else:
+                            keep_title, merge_title = title2, title1
+
+                        preview.append(f"'{merge_title}' → '{keep_title}' ({sim:.0%})")
+
+                return MaintenanceResult(
+                    operation="merge",
+                    success=True,
+                    items_processed=len(pairs),
+                    items_affected=len(pairs),
+                    message=f"Would merge {len(pairs)} document pairs",
+                    details=preview,
+                )
+
+            # TODO: Actually merge using pairs data
+            # For now, fall through to old method for actual merging
+            pass
+
+        # Fall back to old slow method
         candidates = self.document_merger.find_merge_candidates(
-            similarity_threshold=threshold
+            similarity_threshold=threshold,
+            progress_callback=progress_callback
         )
 
         if not candidates:

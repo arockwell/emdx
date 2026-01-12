@@ -75,8 +75,8 @@ class VimEditor(Vertical):
         # Add subtle right border to line numbers
         self.line_numbers.styles.border_right = ("solid", "#333333")
 
-        # Configure text area to take full space
-        self.text_area.styles.width = "100w"
+        # Configure text area to take remaining space (1fr = fractional unit)
+        self.text_area.styles.width = "1fr"
         self.text_area.styles.padding = (0, 1)  # Add horizontal padding
 
         self.edit_container.mount(self.line_numbers)

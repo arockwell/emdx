@@ -54,7 +54,8 @@ class DocumentMerger:
     def find_merge_candidates(
         self,
         project: Optional[str] = None,
-        similarity_threshold: float = None
+        similarity_threshold: float = None,
+        progress_callback: Optional[callable] = None
     ) -> List[MergeCandidate]:
         """
         Find documents that are candidates for merging.
@@ -62,6 +63,7 @@ class DocumentMerger:
         Args:
             project: Filter by specific project
             similarity_threshold: Minimum similarity score (0-1)
+            progress_callback: Optional callback(current, total, found) for progress updates
 
         Returns:
             List of merge candidates sorted by similarity
@@ -87,9 +89,14 @@ class DocumentMerger:
             documents = cursor.fetchall()
 
         candidates = []
-        
+        total_docs = len(documents)
+
         # Compare all document pairs
         for i, doc1 in enumerate(documents):
+            # Report progress
+            if progress_callback and i % 50 == 0:
+                progress_callback(i, total_docs, len(candidates))
+
             for doc2 in documents[i+1:]:
                 # Skip if both have high access counts (likely both important)
                 if doc1['access_count'] > 50 and doc2['access_count'] > 50:
