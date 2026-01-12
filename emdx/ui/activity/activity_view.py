@@ -1157,6 +1157,7 @@ class ActivityView(Widget):
                                 status=ir_status,
                                 timestamp=item.timestamp,
                                 doc_id=ir.get("output_doc_id"),
+                                cost=ir.get("cost_usd"),
                                 depth=1,
                             )
                             children.append(child_item)
@@ -1206,6 +1207,7 @@ class ActivityView(Widget):
                                         status=ir.get("status", "completed"),
                                         timestamp=item.timestamp,
                                         doc_id=ir["output_doc_id"],
+                                        cost=ir.get("cost_usd"),
                                         depth=1,
                                     )
                                     children.append(out_item)
@@ -1223,6 +1225,7 @@ class ActivityView(Widget):
                                         status=ir.get("status", "completed"),
                                         timestamp=item.timestamp,
                                         doc_id=ir["output_doc_id"],
+                                        cost=ir.get("cost_usd"),
                                         depth=1,
                                     )
                                     children.append(child_item)
