@@ -125,22 +125,80 @@ class GarbageCollector:
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
 
-            # First, delete associated tags
+            # Get the document IDs we're about to delete
             cursor.execute("""
-                DELETE FROM document_tags
-                WHERE document_id IN (
-                    SELECT id FROM documents
-                    WHERE is_deleted = 1
-                    AND deleted_at < ?
-                )
-            """, (cutoff_date,))
-
-            # Then delete the documents
-            cursor.execute("""
-                DELETE FROM documents
+                SELECT id FROM documents
                 WHERE is_deleted = 1
                 AND deleted_at < ?
             """, (cutoff_date,))
+            doc_ids = [row[0] for row in cursor.fetchall()]
+
+            if not doc_ids:
+                return 0
+
+            # Create placeholder string for IN clause
+            placeholders = ','.join('?' * len(doc_ids))
+
+            # Delete from all tables with FK references to documents
+            # 1. document_tags
+            cursor.execute(f"""
+                DELETE FROM document_tags
+                WHERE document_id IN ({placeholders})
+            """, doc_ids)
+
+            # 2. workflow_runs (set to NULL instead of delete to preserve workflow history)
+            cursor.execute(f"""
+                UPDATE workflow_runs
+                SET input_doc_id = NULL
+                WHERE input_doc_id IN ({placeholders})
+            """, doc_ids)
+
+            # 3. tasks (set gameplan_id to NULL to preserve task history)
+            cursor.execute(f"""
+                UPDATE tasks
+                SET gameplan_id = NULL
+                WHERE gameplan_id IN ({placeholders})
+            """, doc_ids)
+
+            # 4. export_history
+            cursor.execute(f"""
+                DELETE FROM export_history
+                WHERE document_id IN ({placeholders})
+            """, doc_ids)
+
+            # 5. executions (set doc_id to NULL to preserve execution history)
+            cursor.execute(f"""
+                UPDATE executions
+                SET doc_id = NULL
+                WHERE doc_id IN ({placeholders})
+            """, doc_ids)
+
+            # 6. workflow_individual_runs (set output_doc_id to NULL to preserve workflow history)
+            cursor.execute(f"""
+                UPDATE workflow_individual_runs
+                SET output_doc_id = NULL
+                WHERE output_doc_id IN ({placeholders})
+            """, doc_ids)
+
+            # 7. agent_executions (set input_doc_id to NULL to preserve execution history)
+            cursor.execute(f"""
+                UPDATE agent_executions
+                SET input_doc_id = NULL
+                WHERE input_doc_id IN ({placeholders})
+            """, doc_ids)
+
+            # 8. workflow_stage_runs (set output_doc_id to NULL to preserve stage history)
+            cursor.execute(f"""
+                UPDATE workflow_stage_runs
+                SET output_doc_id = NULL
+                WHERE output_doc_id IN ({placeholders})
+            """, doc_ids)
+
+            # Now delete the documents
+            cursor.execute(f"""
+                DELETE FROM documents
+                WHERE id IN ({placeholders})
+            """, doc_ids)
 
             deleted = cursor.rowcount
             conn.commit()

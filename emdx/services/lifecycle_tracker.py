@@ -275,9 +275,9 @@ class LifecycleTracker:
                 if notes:
                     transition_note += f"_Note: {notes}_\n"
                 transition_note += f"_Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}_\n"
-                
-                update_document(doc_id, content=new_content + transition_note)
-        
+
+                update_document(doc_id, doc['title'], new_content + transition_note)
+
         return True
     
     def auto_detect_transitions(self) -> List[Dict[str, Any]]:

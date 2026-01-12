@@ -161,34 +161,93 @@ def _interactive_wizard(dry_run: bool):
 
     console.print()
 
-    # Ask what to fix - use dry_run previews from application layer
+    # Ask what to fix - only run cheap checks, defer expensive ones
     actions = []
 
-    # Check for duplicates
+    # Check for duplicates (cheap - based on recommendations)
     if "duplicate" in str(all_recommendations).lower():
         if Confirm.ask("Remove duplicate documents?"):
             actions.append("clean")
 
-    # Check for tagging issues
+    # Check for tagging issues (cheap - based on recommendations)
     if "tag" in str(all_recommendations).lower():
         if Confirm.ask("Auto-tag untagged documents?"):
             actions.append("tags")
 
-    # Check for similar documents using application layer
-    merge_preview = app.merge_similar(dry_run=True)
-    if merge_preview.items_processed > 0:
-        console.print(f"\n[yellow]Found {merge_preview.items_processed} similar document pairs[/yellow]")
-        if Confirm.ask("Merge similar documents?"):
-            actions.append("merge")
+    # Deduplicate similar documents - now fast with TF-IDF!
+    if Confirm.ask("Scan for duplicate documents?"):
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+        from emdx.services.similarity import SimilarityService
 
-    # Check for lifecycle issues using application layer
+        # Ask about workflow exclusion
+        exclude_workflow = Confirm.ask("Exclude workflow outputs?", default=True)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold green]{task.description}"),
+            BarColumn(),
+            TextColumn("[cyan]{task.fields[found]} pairs"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Building index...", total=100, found=0)
+
+            def update_progress(current, total, found):
+                if current < 50:
+                    progress.update(task, description="Building TF-IDF index...", completed=current, found=found)
+                else:
+                    progress.update(task, description="Finding duplicates...", completed=current, found=found)
+
+            # Get all pairs at 70% threshold
+            similarity_service = SimilarityService()
+            all_pairs = similarity_service.find_all_duplicate_pairs(
+                min_similarity=0.7,
+                progress_callback=update_progress,
+                exclude_workflow=exclude_workflow
+            )
+            progress.update(task, completed=100, found=len(all_pairs))
+
+        if not all_pairs:
+            console.print("[green]No duplicate documents found[/green]")
+        else:
+            # Categorize by similarity threshold
+            high_sim = [(p, s) for p in all_pairs if (s := p[4]) >= 0.95]  # >95% - obvious dupes
+            med_sim = [(p, s) for p in all_pairs if 0.70 <= p[4] < 0.95]   # 70-95% - review
+
+            console.print(f"\n[bold]Duplicate Analysis:[/bold]")
+            console.print(f"  [red]• {len(high_sim)} obvious duplicates[/red] (>95% similar) - safe to auto-delete")
+            console.print(f"  [yellow]• {len(med_sim)} similar documents[/yellow] (70-95%) - need review")
+
+            # Handle high similarity (auto-delete)
+            if high_sim:
+                console.print(f"\n[dim]Obvious duplicates (will delete the less-viewed copy):[/dim]")
+                for (id1, id2, t1, t2, sim), _ in high_sim[:5]:
+                    console.print(f"  [dim]• {t1[:40]}... ({sim:.0%})[/dim]")
+                if len(high_sim) > 5:
+                    console.print(f"  [dim]  ...and {len(high_sim) - 5} more[/dim]")
+
+                if Confirm.ask(f"Auto-delete {len(high_sim)} obvious duplicates?"):
+                    actions.append(("dedup_high", [p for p, _ in high_sim]))
+
+            # Handle medium similarity (show and ask)
+            if med_sim:
+                console.print(f"\n[dim]Similar documents (70-95%):[/dim]")
+                for (id1, id2, t1, t2, sim), _ in med_sim[:8]:
+                    console.print(f"  [dim]• '{t1[:30]}' ↔ '{t2[:30]}' ({sim:.0%})[/dim]")
+                if len(med_sim) > 8:
+                    console.print(f"  [dim]  ...and {len(med_sim) - 8} more[/dim]")
+
+                console.print("\n[yellow]These need manual review - skipping for now.[/yellow]")
+                console.print("[dim]Use 'emdx similar <doc_id>' to review individual documents.[/dim]")
+
+    # Lifecycle transitions (cheap check)
     lifecycle_preview = app.transition_lifecycle(dry_run=True)
     if lifecycle_preview.items_processed > 0:
         console.print(f"\n[yellow]Found {lifecycle_preview.items_processed} gameplans needing transitions[/yellow]")
         if Confirm.ask("Auto-transition stale gameplans?"):
             actions.append("lifecycle")
 
-    # Check for garbage collection needs using application layer
+    # Garbage collection (cheap check)
     gc_preview = app.garbage_collect(dry_run=True)
     if gc_preview.items_processed > 0:
         console.print(f"\n[yellow]Database needs cleanup[/yellow]")
@@ -199,20 +258,22 @@ def _interactive_wizard(dry_run: bool):
         console.print("\n[yellow]No actions selected[/yellow]")
         return
 
-    # Execute selected actions
+    # Execute selected actions - always execute (not dry run) after user confirmation
     console.print(f"\n[bold]Executing maintenance...[/bold]\n")
 
     for action in actions:
         if action == "clean":
-            _clean_documents(dry_run)
+            _clean_documents(False)
         elif action == "tags":
-            _auto_tag_documents(dry_run)
+            _auto_tag_documents(False)
         elif action == "merge":
-            _merge_documents(dry_run)
+            _merge_documents(False)
+        elif isinstance(action, tuple) and action[0] == "dedup_high":
+            _deduplicate_pairs(action[1])
         elif action == "lifecycle":
-            _auto_transition_lifecycle(dry_run)
+            _auto_transition_lifecycle(False)
         elif action == "gc":
-            _garbage_collect(dry_run)
+            _garbage_collect(False)
         console.print()
 
 
@@ -280,6 +341,52 @@ def _merge_documents(dry_run: bool, threshold: float = 0.7) -> Optional[str]:
 
     console.print(f"  [green]✓[/green] {result.message}")
     return result.message
+
+
+def _deduplicate_pairs(pairs: list) -> Optional[str]:
+    """Delete duplicate documents from similarity pairs.
+
+    For each pair, keeps the document with more views (or longer content as tiebreaker)
+    and soft-deletes the other.
+    """
+    from ..database import db
+    from ..models.documents import delete_document
+
+    deleted_count = 0
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+
+        for doc1_id, doc2_id, title1, title2, similarity in pairs:
+            # Get access counts to determine which to keep
+            cursor.execute(
+                "SELECT id, access_count, LENGTH(content) as len FROM documents WHERE id IN (?, ?)",
+                (doc1_id, doc2_id)
+            )
+            docs = {row['id']: row for row in cursor.fetchall()}
+
+            if len(docs) < 2:
+                continue  # One already deleted
+
+            doc1 = docs.get(doc1_id, {'access_count': 0, 'len': 0})
+            doc2 = docs.get(doc2_id, {'access_count': 0, 'len': 0})
+
+            # Determine which to delete (keep the one with more views, then longer content)
+            if doc1['access_count'] > doc2['access_count']:
+                delete_id = doc2_id
+            elif doc2['access_count'] > doc1['access_count']:
+                delete_id = doc1_id
+            elif (doc1['len'] or 0) >= (doc2['len'] or 0):
+                delete_id = doc2_id
+            else:
+                delete_id = doc1_id
+
+            # Soft delete the duplicate
+            if delete_document(str(delete_id)):
+                deleted_count += 1
+
+    console.print(f"  [green]✓[/green] Deleted {deleted_count} duplicate documents")
+    return f"Deleted {deleted_count} duplicates"
 
 
 def _garbage_collect(dry_run: bool) -> Optional[str]:
