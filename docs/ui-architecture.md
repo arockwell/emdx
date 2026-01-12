@@ -196,6 +196,10 @@ class FileBrowser(Widget):
 
 ## 🎮 **Key Binding System**
 
+> **Quick Reference:** For a complete, printable keybinding reference, see the [Quick Reference Guide](quick-reference.md#tui-keybindings-emdx-gui).
+>
+> **Authoritative Source:** The definitive keybinding list is maintained in [Architecture Overview](architecture.md#actual-key-bindings-from-real-code) and derived from the actual source code.
+
 ### **Global Bindings (Available in All Modes)**
 ```python
 GLOBAL_BINDINGS = [

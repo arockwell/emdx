@@ -156,6 +156,31 @@ emdx retag "old-word-tag" "gameplan"
 emdx retag "todo" "active"
 ```
 
+## 🤖 **AI Agents**
+
+For comprehensive AI agent documentation, see the [AI Agents Guide](ai-agents.md).
+
+### Quick Reference
+```bash
+# List available agents
+emdx agent list
+
+# Run an agent on a document
+emdx agent run doc-generator --doc 123
+
+# Run in background with monitoring
+emdx agent run code-reviewer --doc 456 --background
+emdx log --live  # Monitor progress
+
+# Create a custom agent
+emdx agent create --name my-analyzer --prompt analyzer.md
+
+# View agent details
+emdx agent info doc-generator
+```
+
+---
+
 ## ⚡ **Execution Management**
 
 ### **emdx exec**

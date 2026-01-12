@@ -153,23 +153,29 @@ The agent system adds four new tables:
 - Integrates with document relationships (parent/child)
 - Compatible with existing log browser
 
-## Coming Soon
+## Planned Features
 
-### Agent Pipelines
+> **Note:** These features are planned but not yet implemented. The database schema includes tables for these features (`agent_pipelines`, `agent_templates`) to support future development.
+
+### Agent Pipelines (Planned)
 Chain multiple agents for complex workflows:
 ```bash
+# Future syntax - not yet available
 emdx agent pipeline create "full-analysis" \
   --step "code-analyzer" \
   --step "test-suggester" \
   --step "doc-generator"
 ```
 
-### Agent Templates
+### Agent Templates (Planned)
 Share and reuse agent configurations:
 ```bash
+# Future syntax - not yet available
 emdx agent template export my-agent > my-agent.json
 emdx agent template import colleague-agent.json
 ```
+
+**Current workaround:** Export agent configurations manually from the database or version control your prompt files.
 
 
 ## Technical Details
