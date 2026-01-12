@@ -320,8 +320,7 @@ class DocumentBrowserPresenter:
 
         try:
             proj = project or get_git_project() or "default"
-            formatted_content = f"# {title}\n\n{content}"
-            doc_id = save_document(title=title, content=formatted_content, project=proj)
+            doc_id = save_document(title=title, content=content, project=proj)
             logger.info(f"Created new document with ID: {doc_id}")
             return doc_id
         except Exception as e:
@@ -345,8 +344,7 @@ class DocumentBrowserPresenter:
             return False
 
         try:
-            formatted_content = f"# {title}\n\n{content}"
-            update_document(str(doc_id), title=title, content=formatted_content)
+            update_document(str(doc_id), title=title, content=content)
             logger.info(f"Updated document ID: {doc_id}")
 
             # Invalidate cache
