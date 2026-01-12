@@ -637,7 +637,14 @@ class ActivityView(Widget):
             status_icon = item.status_icon
             type_icon = item.type_icon
             time_str = format_time_ago(item.timestamp)
-            title = f"{indent}{expand}{item.title}{badge}"
+
+            # Truncate title to fit badge within column width (30 chars)
+            prefix = f"{indent}{expand}"
+            prefix_len = len(prefix)
+            badge_len = len(badge)
+            max_title_len = 30 - prefix_len - badge_len
+            truncated_title = item.title[:max_title_len] if len(item.title) > max_title_len else item.title
+            title = f"{prefix}{truncated_title}{badge}"
             # Show document ID or workflow run ID
             # For workflows, always show workflow run ID (not the output doc ID)
             if item.item_type == "workflow" and item.item_id:
