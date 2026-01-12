@@ -343,7 +343,12 @@ class WorkflowExecutor:
         # Create individual run records
         individual_runs = []
         for i in range(stage.runs):
-            prompt = self._resolve_template(stage.prompt, context) if stage.prompt else None
+            # Support per-run prompts (like iterative mode) or single prompt for all
+            if stage.prompts and i < len(stage.prompts):
+                prompt_template = stage.prompts[i]
+            else:
+                prompt_template = stage.prompt or ""
+            prompt = self._resolve_template(prompt_template, context) if prompt_template else None
             individual_run_id = wf_db.create_individual_run(
                 stage_run_id=stage_run_id,
                 run_number=i + 1,
@@ -963,7 +968,7 @@ Report the document ID that was created."""
         """Extract output document ID from execution log.
 
         Looks for patterns like "Created document #123" or "Saved as #123"
-        in the log file.
+        in the log file. Handles Rich/ANSI formatting codes.
 
         Args:
             log_file: Path to the execution log
@@ -976,19 +981,33 @@ Report the document ID that was created."""
 
         try:
             content = log_file.read_text()
-            # Look for document creation patterns
+
+            # Strip ANSI codes for cleaner matching
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            clean_content = ansi_escape.sub('', content)
+
+            # Also handle Rich markup-style codes like [32m, [0m, [1;32m
+            rich_codes = re.compile(r'\[\d+(?:;\d+)*m')
+            clean_content = rich_codes.sub('', clean_content)
+
+            # Look for document creation patterns (check LAST match to get final save)
             patterns = [
+                r'saved as document #(\d+)',  # Agent natural language
+                r'Saved as #(\d+)',           # CLI output
                 r'Created document #(\d+)',
-                r'Saved as #(\d+)',
-                r'document ID[:\s]+(\d+)',
+                r'document ID[:\s]+#?(\d+)',
                 r'doc_id[:\s]+(\d+)',
-                r'#(\d+)\s*\[green\]',  # Rich output format
+                r'✅ Saved as\s*#(\d+)',      # With emoji
             ]
 
+            # Find ALL matches and return the LAST one (most likely the final output)
+            last_match = None
             for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE)
-                if match:
-                    return int(match.group(1))
+                for match in re.finditer(pattern, clean_content, re.IGNORECASE):
+                    last_match = int(match.group(1))
+
+            if last_match:
+                return last_match
 
             return None
         except (OSError, IOError) as e:
@@ -1126,8 +1145,12 @@ Report the document ID that was created."""
             working_dir = context.get('_working_dir', str(Path.cwd()))
 
             # Create execution record
+            # Use None instead of 0 for doc_id to avoid FK constraint errors
+            input_doc_id = context.get('input_doc_id')
+            if input_doc_id == 0:
+                input_doc_id = None
             exec_id = execution_service.create_execution(
-                doc_id=context.get('input_doc_id', 0),
+                doc_id=input_doc_id,
                 doc_title=f"Workflow Synthesis #{stage_run_id}",
                 log_file=str(log_file),
                 working_dir=working_dir,

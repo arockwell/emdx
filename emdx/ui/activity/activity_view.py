@@ -134,6 +134,10 @@ class ActivityItem:
         self.workflow_run = workflow_run
         self.depth = depth
         self.expanded = False
+        # Progress tracking for running workflows
+        self.progress_completed = 0  # Runs completed
+        self.progress_total = 0  # Total target runs
+        self.progress_stage = ""  # Current stage name
 
     @property
     def status_icon(self) -> str:
@@ -158,6 +162,8 @@ class ActivityItem:
             return "📝"
         elif self.item_type == "exploration":
             return "◇"
+        elif self.item_type == "individual_run":
+            return "🤖"
         elif self.item_type == "document":
             return "📄"
         else:
@@ -294,6 +300,10 @@ class ActivityView(Widget):
         self.streaming_item_id: Optional[int] = None
         self._last_workflow_states: Dict[int, str] = {}  # Track for notifications
         self._fullscreen = False
+        # Cache to prevent flickering during refresh
+        self._last_preview_key: Optional[tuple] = None  # (item_type, item_id, status)
+        # Track recently completed workflows for highlight animation
+        self._recently_completed: set = set()  # workflow_ids that just finished
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -333,8 +343,13 @@ class ActivityView(Widget):
         # Start refresh timer
         self.set_interval(5.0, self._refresh_data)
 
-    async def load_data(self) -> None:
-        """Load activity data."""
+    async def load_data(self, update_preview: bool = True) -> None:
+        """Load activity data.
+
+        Args:
+            update_preview: Whether to update the preview pane. Set to False during
+                           periodic refresh to avoid flickering.
+        """
         self.activity_items = []
 
         # Clean up zombie workflow runs on first load
@@ -371,7 +386,8 @@ class ActivityView(Widget):
         # Update UI
         await self._update_table()
         await self._update_status_bar()
-        await self._update_preview()
+        if update_preview:
+            await self._update_preview(force=True)
 
     async def _load_workflows(self) -> None:
         """Load workflow runs into activity items."""
@@ -417,23 +433,17 @@ class ActivityView(Widget):
 
                 title = task_title or wf_name
 
-                # Calculate cost - check both top-level and context_json
+                # Calculate cost - check top-level, then sum from individual runs
                 cost = run.get("total_cost_usd", 0) or 0
                 if not cost:
-                    # Try to extract from context_json (contains agent execution results)
+                    # Sum cost from individual runs
                     try:
-                        ctx = run.get("context_json")
-                        if isinstance(ctx, str):
-                            ctx = json.loads(ctx)
-                        if ctx:
-                            # Look for cost in stage outputs (e.g., analyze.output)
-                            for key, value in ctx.items():
-                                if isinstance(value, str) and "total_cost_usd" in value:
-                                    # Parse the __RAW_RESULT_JSON__ from execution logs
-                                    match = re.search(r'"total_cost_usd":([0-9.]+)', value)
-                                    if match:
-                                        cost = float(match.group(1))
-                                        break
+                        stage_runs = wf_db.list_stage_runs(run["id"])
+                        for sr in stage_runs:
+                            ind_runs = wf_db.list_individual_runs(sr["id"])
+                            for ir in ind_runs:
+                                ir_cost = ir.get("cost_usd", 0) or 0
+                                cost += ir_cost
                     except Exception:
                         pass
 
@@ -448,21 +458,75 @@ class ActivityView(Widget):
                 )
 
                 # Check if workflow has any outputs (for expand indicator)
+                # Also capture the primary output doc ID for completed workflows
+                # And progress info for running workflows
                 try:
                     stage_runs = wf_db.list_stage_runs(run["id"])
                     has_outputs = False
+                    output_doc_id = None
+                    output_count = 0
+                    # Progress tracking for running workflows
+                    total_target = 0
+                    total_completed = 0
+                    current_stage = ""
+                    # Token tracking (input/output separately)
+                    total_input_tokens = 0
+                    total_output_tokens = 0
                     for sr in stage_runs:
-                        if sr.get("synthesis_doc_id"):
-                            has_outputs = True
-                            break
+                        # Track progress
+                        target = sr.get("target_runs", 1)
+                        completed = sr.get("runs_completed", 0)
+                        total_target += target
+                        total_completed += completed
+                        # Track current running stage
+                        if sr.get("status") == "running":
+                            current_stage = sr.get("stage_name", "")
                         ind_runs = wf_db.list_individual_runs(sr["id"])
-                        if any(ir.get("output_doc_id") for ir in ind_runs):
+                        # Count individual outputs and sum tokens
+                        for ir in ind_runs:
+                            total_input_tokens += ir.get("input_tokens", 0) or 0
+                            total_output_tokens += ir.get("output_tokens", 0) or 0
+                            if ir.get("output_doc_id"):
+                                output_count += 1
+                                has_outputs = True
+                                if not output_doc_id:
+                                    output_doc_id = ir["output_doc_id"]
+                        # Count synthesis (add 1 if exists)
+                        if sr.get("synthesis_doc_id"):
+                            output_count += 1
                             has_outputs = True
-                            break
+                            if not output_doc_id:
+                                output_doc_id = sr["synthesis_doc_id"]
                     if has_outputs:
                         item._has_workflow_outputs = True
-                except Exception:
-                    pass
+                        item._output_count = output_count
+                    # Store token counts for status bar
+                    item._input_tokens = total_input_tokens
+                    item._output_tokens = total_output_tokens
+                    # Store progress info for running workflows
+                    if run.get("status") == "running":
+                        item.progress_completed = total_completed
+                        item.progress_total = total_target
+                        item.progress_stage = current_stage
+                    # For completed workflows, set doc_id to the output document
+                    # Also use the output document's timestamp for consistent sorting
+                    if output_doc_id and run.get("status") in ("completed", "failed"):
+                        item.doc_id = output_doc_id
+                        # Get the output document's timestamp for consistent timezone handling
+                        if HAS_DOCS:
+                            try:
+                                out_doc = doc_db.get_document(output_doc_id)
+                                if out_doc:
+                                    doc_created = out_doc.get("created_at")
+                                    if isinstance(doc_created, str):
+                                        from emdx.utils.datetime import parse_datetime
+                                        doc_created = parse_datetime(doc_created)
+                                    if doc_created:
+                                        item.timestamp = doc_created
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logger.debug(f"Error checking workflow outputs for run {run['id']}: {e}")
 
                 # Track for notifications
                 old_status = self._last_workflow_states.get(run["id"])
@@ -476,9 +540,33 @@ class ActivityView(Widget):
         except Exception as e:
             logger.error(f"Error loading workflows: {e}", exc_info=True)
 
+    def _get_workflow_doc_ids(self) -> set:
+        """Get all document IDs that were generated by workflows."""
+        workflow_doc_ids = set()
+        try:
+            if HAS_WORKFLOWS and wf_db:
+                runs = wf_db.list_workflow_runs(limit=50)
+                for run in runs:
+                    stage_runs = wf_db.list_stage_runs(run["id"])
+                    for sr in stage_runs:
+                        if sr.get("synthesis_doc_id"):
+                            workflow_doc_ids.add(sr["synthesis_doc_id"])
+                        if sr.get("output_doc_id"):
+                            workflow_doc_ids.add(sr["output_doc_id"])
+                        ind_runs = wf_db.list_individual_runs(sr["id"])
+                        for ir in ind_runs:
+                            if ir.get("output_doc_id"):
+                                workflow_doc_ids.add(ir["output_doc_id"])
+        except Exception as e:
+            logger.debug(f"Error getting workflow doc IDs: {e}")
+        return workflow_doc_ids
+
     async def _load_direct_saves(self) -> None:
         """Load documents that weren't created by workflows."""
         try:
+            # Get IDs of all workflow-generated documents to exclude
+            workflow_doc_ids = self._get_workflow_doc_ids()
+
             # Get recent documents (top-level only)
             docs = doc_db.list_documents(limit=100, include_archived=False, parent_id=None)
 
@@ -486,6 +574,12 @@ class ActivityView(Widget):
             week_ago = datetime.now() - timedelta(days=7)
 
             for doc in docs:
+                doc_id = doc["id"]
+
+                # Skip workflow-generated docs (by ID - more reliable than title pattern)
+                if doc_id in workflow_doc_ids:
+                    continue
+
                 created = doc.get("created_at")
                 if isinstance(created, str):
                     from emdx.utils.datetime import parse_datetime
@@ -493,7 +587,7 @@ class ActivityView(Widget):
                 if not created or created < week_ago:
                     continue
 
-                # Skip workflow-generated docs (they have specific title patterns)
+                # Also skip by title pattern as fallback
                 title = doc.get("title", "")
                 if any(
                     p in title
@@ -502,16 +596,16 @@ class ActivityView(Widget):
                     continue
 
                 # Check if this document has children
-                children_docs = doc_db.get_children(doc["id"], include_archived=False)
+                children_docs = doc_db.get_children(doc_id, include_archived=False)
                 has_children = len(children_docs) > 0
 
                 item = ActivityItem(
                     item_type="document",
-                    item_id=doc["id"],
+                    item_id=doc_id,
                     title=title[:35] if title else "Untitled",
                     status="completed",
                     timestamp=created,
-                    doc_id=doc["id"],
+                    doc_id=doc_id,
                 )
 
                 # Mark that this document can be expanded
@@ -550,25 +644,71 @@ class ActivityView(Widget):
             # Expand indicator for items that can have children
             has_doc_children = getattr(item, '_has_doc_children', False)
             has_workflow_outputs = getattr(item, '_has_workflow_outputs', False)
+            # Also treat completed workflows with doc_id as expandable (they have synthesis)
+            is_completed_workflow_with_output = (
+                item.item_type == "workflow" and
+                item.status == "completed" and
+                item.doc_id is not None
+            )
+            # Output count badge for collapsed workflows
+            output_count = getattr(item, '_output_count', 0)
+            # Running workflows are always expandable (to see individual runs)
+            is_running_workflow = item.item_type == "workflow" and item.status == "running"
             if item.expanded and item.children:
                 expand = "▼ "
-            elif (item.item_type == "workflow" and has_workflow_outputs) or \
+                badge = ""
+            elif is_running_workflow or \
+                 (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow_with_output)) or \
                  (item.item_type == "synthesis" and item.children) or \
                  has_doc_children:
                 expand = "▶ "
+                # Show output count badge for collapsed workflows with outputs
+                badge = f" [{output_count}]" if output_count > 0 and item.item_type == "workflow" else ""
             else:
                 expand = "  "
+                badge = ""
 
             # Format row
-            status_icon = item.status_icon
+            # Check if this workflow just completed (show sparkle highlight)
+            is_recently_completed = (
+                item.item_type == "workflow" and
+                item.item_id in self._recently_completed
+            )
+            if is_recently_completed:
+                status_icon = "✨"  # Sparkle for recently completed
+            else:
+                status_icon = item.status_icon
             type_icon = item.type_icon
             time_str = format_time_ago(item.timestamp)
-            title = f"{indent}{expand}{item.title}"
+
+            # For running workflows, show progress bar + stage instead of badge
+            progress_str = ""
+            if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
+                # Build mini progress bar: ▓▓▓░░ 3/5 stage
+                pct = item.progress_completed / item.progress_total if item.progress_total > 0 else 0
+                filled = int(pct * 5)
+                empty = 5 - filled
+                bar = "▓" * filled + "░" * empty
+                stage_hint = item.progress_stage[:8] if item.progress_stage else ""
+                progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
+                if stage_hint:
+                    progress_str += f" {stage_hint}"
+
+            # Truncate title to fit badge/progress within column width (30 chars)
+            prefix = f"{indent}{expand}"
+            prefix_len = len(prefix)
+            # Use progress_str for running, badge for completed
+            suffix = progress_str if progress_str else badge
+            suffix_len = len(suffix)
+            max_title_len = 30 - prefix_len - suffix_len
+            truncated_title = item.title[:max_title_len] if len(item.title) > max_title_len else item.title
+            title = f"{prefix}{truncated_title}{suffix}"
             # Show document ID or workflow run ID
-            if item.doc_id:
+            # For workflows, always show workflow run ID (not the output doc ID)
+            if item.item_type == "workflow" and item.item_id:
+                id_str = f"#{item.item_id}"
+            elif item.doc_id:
                 id_str = f"#{item.doc_id}"
-            elif item.item_type == "workflow" and item.item_id:
-                id_str = f"w{item.item_id}"
             else:
                 id_str = "—"
             cost = format_cost(item.cost) if item.cost else "—"
@@ -616,6 +756,22 @@ class ActivityView(Widget):
             and item.timestamp.date() == today
         )
 
+        # Total tokens today (input/output)
+        input_tokens_today = sum(
+            getattr(item, '_input_tokens', 0) or 0
+            for item in self.activity_items
+            if item.timestamp
+            and item.timestamp.date() == today
+            and item.item_type == "workflow"
+        )
+        output_tokens_today = sum(
+            getattr(item, '_output_tokens', 0) or 0
+            for item in self.activity_items
+            if item.timestamp
+            and item.timestamp.date() == today
+            and item.item_type == "workflow"
+        )
+
         # Generate sparkline for the week
         week_data = self._get_week_activity_data()
         spark = sparkline(week_data, width=7)
@@ -626,6 +782,10 @@ class ActivityView(Widget):
             parts.append(f"[green]🟢 {active} Active[/green]")
         else:
             parts.append("[dim]⚪ 0 Active[/dim]")
+
+        # Tokens: in↓ / out↑
+        if input_tokens_today > 0 or output_tokens_today > 0:
+            parts.append(f"↓{format_tokens(input_tokens_today)} ↑{format_tokens(output_tokens_today)}")
 
         parts.append(f"📄 {docs_today} today")
         parts.append(format_cost(cost_today))
@@ -674,8 +834,12 @@ class ActivityView(Widget):
             # Fallback to plain text if markdown fails
             preview.write(content[:50000] if content else "[dim]No content[/dim]")
 
-    async def _update_preview(self) -> None:
-        """Update the preview pane with selected item."""
+    async def _update_preview(self, force: bool = False) -> None:
+        """Update the preview pane with selected item.
+
+        Args:
+            force: If True, update even if item hasn't changed (e.g., for user selection changes)
+        """
         try:
             preview = self.query_one("#preview-content", RichLog)
             preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
@@ -684,9 +848,6 @@ class ActivityView(Widget):
         except Exception as e:
             logger.debug(f"Preview widgets not ready: {e}")
             return
-
-        # Stop any existing stream
-        self._stop_stream()
 
         def show_markdown():
             preview_scroll.display = True
@@ -701,12 +862,24 @@ class ActivityView(Widget):
             preview.write("[dim]Select an item to preview[/dim]")
             show_markdown()
             header.update("PREVIEW")
+            self._last_preview_key = None
             return
 
         item = self.flat_items[self.selected_idx]
+        current_key = (item.item_type, item.item_id, item.status)
 
-        # For running workflows, show live log
-        if item.status == "running" and item.item_type == "workflow":
+        # Skip update if same item and not forced (prevents flickering during refresh)
+        # Always update for running items (logs change) or if explicitly forced
+        if not force and item.status != "running" and self._last_preview_key == current_key:
+            return
+
+        self._last_preview_key = current_key
+
+        # Stop any existing stream
+        self._stop_stream()
+
+        # For running workflows or individual runs, show live log
+        if item.status == "running" and item.item_type in ("workflow", "individual_run"):
             await self._show_live_log(item)
             return
 
@@ -759,10 +932,64 @@ class ActivityView(Widget):
         if not run:
             return
 
-        # Build summary
+        status = run.get("status", "unknown")
+
+        # For completed/failed workflows, show the output document content directly
+        if status in ("completed", "failed") and HAS_WORKFLOWS and HAS_DOCS:
+            try:
+                # Get stage runs to find output documents
+                stage_runs = wf_db.list_stage_runs(run["id"])
+                output_doc_id = None
+
+                # Look for synthesis doc first, then individual outputs
+                for sr in stage_runs:
+                    if sr.get("synthesis_doc_id"):
+                        output_doc_id = sr["synthesis_doc_id"]
+                        break
+
+                # If no synthesis, look for individual run outputs
+                if not output_doc_id:
+                    for sr in stage_runs:
+                        ind_runs = wf_db.list_individual_runs(sr["id"])
+                        for ir in ind_runs:
+                            if ir.get("output_doc_id"):
+                                output_doc_id = ir["output_doc_id"]
+                                break
+                        if output_doc_id:
+                            break
+
+                # Show the output document content
+                if output_doc_id:
+                    doc = doc_db.get_document(output_doc_id)
+                    if doc:
+                        content = doc.get("content", "")
+                        title = doc.get("title", "Untitled")
+
+                        # Add a brief header with workflow info
+                        duration_str = ""
+                        if run.get("total_execution_time_ms"):
+                            secs = run["total_execution_time_ms"] / 1000
+                            duration_str = f" • {secs:.0f}s" if secs < 60 else f" • {secs/60:.1f}m"
+                        cost_str = f" • {format_cost(item.cost)}" if item.cost else ""
+
+                        header_line = f"*{item.status_icon} {item.title}{duration_str}{cost_str}*\n\n---\n\n"
+
+                        # Check if content already has title
+                        content_stripped = content.lstrip()
+                        if not content_stripped.startswith("# "):
+                            content = f"# {title}\n\n{content}"
+
+                        self._render_markdown_preview(header_line + content)
+                        preview_scroll.display = True
+                        preview_log.display = False
+                        header.update(f"📄 #{output_doc_id} (from w{run['id']})")
+                        return
+            except Exception as e:
+                logger.debug(f"Error loading workflow output: {e}")
+
+        # Fallback: show summary for running workflows or if no output found
         lines = [f"# {item.title}", ""]
 
-        status = run.get("status", "unknown")
         lines.append(f"**Status:** {item.status_icon} {status}")
 
         if run.get("total_execution_time_ms"):
@@ -788,7 +1015,7 @@ class ActivityView(Widget):
         header.update(f"⚡ Workflow #{run['id']}")
 
     async def _show_live_log(self, item: ActivityItem) -> None:
-        """Show live log for running workflow."""
+        """Show live log for running workflow or individual run."""
         try:
             preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
             preview_log = self.query_one("#preview-log", RichLog)
@@ -808,17 +1035,32 @@ class ActivityView(Widget):
             return
 
         try:
-            # Find active execution
-            run = item.workflow_run
-            if not run:
-                return
+            log_path = None
 
-            active_exec = wf_db.get_active_execution_for_run(run["id"])
-            if not active_exec or not active_exec.get("log_file"):
+            # For individual runs, get log file from the execution record
+            if item.item_type == "individual_run" and item.item_id:
+                try:
+                    from emdx.models.executions import get_execution
+                    # Get the individual run to find its execution ID
+                    ir = wf_db.get_individual_run(item.item_id)
+                    if ir and ir.get("agent_execution_id"):
+                        exec_record = get_execution(ir["agent_execution_id"])
+                        if exec_record and exec_record.log_file:
+                            log_path = Path(exec_record.log_file)
+                except Exception as e:
+                    logger.debug(f"Could not get individual run log: {e}")
+
+            # For workflow runs, find active execution
+            elif item.item_type == "workflow" and item.workflow_run:
+                run = item.workflow_run
+                active_exec = wf_db.get_active_execution_for_run(run["id"])
+                if active_exec and active_exec.get("log_file"):
+                    log_path = Path(active_exec["log_file"])
+
+            if not log_path:
                 preview_log.write(f"[yellow]⏳ Waiting for log...[/yellow]")
                 return
 
-            log_path = Path(active_exec["log_file"])
             if not log_path.exists():
                 preview_log.write(f"[yellow]⏳ Log file pending...[/yellow]")
                 return
@@ -859,6 +1101,11 @@ class ActivityView(Widget):
 
     def _notify_workflow_complete(self, workflow_id: int, success: bool) -> None:
         """Show notification and play sound for workflow completion."""
+        # Track recently completed for highlight effect
+        self._recently_completed.add(workflow_id)
+        # Clear highlight after 3 seconds
+        self.set_timer(3.0, lambda: self._clear_highlight(workflow_id))
+
         # Play sound
         if success:
             print("\a", end="", flush=True)  # Single bell
@@ -878,6 +1125,27 @@ class ActivityView(Widget):
 
         # Post message for parent handling
         self.post_message(self.WorkflowCompleted(workflow_id, success))
+
+        # Force preview update if this workflow is currently selected
+        # This ensures the preview switches from live log to output document
+        if self.flat_items and self.selected_idx < len(self.flat_items):
+            selected_item = self.flat_items[self.selected_idx]
+            if selected_item.item_type == "workflow" and selected_item.item_id == workflow_id:
+                # The item's status will be updated on next refresh, but we need to stop
+                # the log stream immediately and trigger preview refresh
+                self._stop_stream()
+                self._last_preview_key = None  # Force refresh on next update
+                self.call_later(lambda: self.run_worker(self._update_preview(force=True)))
+
+    def _clear_highlight(self, workflow_id: int) -> None:
+        """Clear the completion highlight for a workflow."""
+        self._recently_completed.discard(workflow_id)
+        # Refresh table to remove highlight
+        self.call_later(self._refresh_table_only)
+
+    async def _refresh_table_only(self) -> None:
+        """Refresh just the table display without reloading data."""
+        await self._update_table()
 
     def _hide_notification(self) -> None:
         """Hide the notification bar."""
@@ -904,13 +1172,18 @@ class ActivityView(Widget):
             item = self.flat_items[self.selected_idx]
             selected_id = (item.item_type, item.item_id)
 
-        # Remember which items were expanded
+        # Remember which items were expanded (including nested items like synthesis)
         expanded_ids = set()
         for item in self.activity_items:
             if item.expanded:
                 expanded_ids.add((item.item_type, item.item_id))
+            # Also check children
+            for child in item.children:
+                if child.expanded:
+                    expanded_ids.add((child.item_type, child.item_id))
 
-        await self.load_data()
+        # Load data without updating preview (prevents flicker)
+        await self.load_data(update_preview=False)
 
         # Restore expanded state
         if expanded_ids:
@@ -921,6 +1194,17 @@ class ActivityView(Widget):
                         await self._expand_workflow(item)
                     elif item.item_type == "document" and not item.expanded:
                         await self._expand_document(item)
+
+            # After re-expanding parents, check if any children need expansion
+            for item in self.activity_items:
+                for child in item.children:
+                    if (child.item_type, child.item_id) in expanded_ids and not child.expanded:
+                        if child.item_type == "synthesis" and child.children:
+                            child.expanded = True
+
+            # Re-flatten after restoring expansions
+            self._flatten_items()
+            await self._update_table()
 
         # Restore selection if possible
         if selected_id:
@@ -934,8 +1218,16 @@ class ActivityView(Widget):
                         pass
                     break
 
+        # Preview doesn't need updating during refresh unless item changed
+        # The cache in _update_preview handles this
+
     async def _expand_workflow(self, item: ActivityItem) -> None:
-        """Expand a workflow to show its outputs."""
+        """Expand a workflow to show its stage runs and individual runs.
+
+        Shows:
+        - For running workflows: individual runs with their status (running/pending/completed)
+        - For completed workflows: synthesis doc (if any) + individual outputs
+        """
         if item.item_type != "workflow" or not item.workflow_run:
             return
 
@@ -951,66 +1243,111 @@ class ActivityView(Widget):
                 stage_runs = wf_db.list_stage_runs(run["id"])
 
                 for sr in stage_runs:
-                    # Get synthesis doc
-                    if sr.get("synthesis_doc_id"):
-                        doc = doc_db.get_document(sr["synthesis_doc_id"]) if HAS_DOCS else None
-                        title = doc.get("title", "Synthesis") if doc else "Synthesis"
+                    stage_status = sr.get("status", "pending")
+                    target_runs = sr.get("target_runs", 1)
+                    runs_completed = sr.get("runs_completed", 0)
 
-                        synth_item = ActivityItem(
-                            item_type="synthesis",
-                            item_id=sr["synthesis_doc_id"],
-                            title=title[:30],
-                            status="completed",
-                            timestamp=item.timestamp,
-                            doc_id=sr["synthesis_doc_id"],
-                            depth=1,
-                        )
-
-                        # Get exploration children
-                        if HAS_DOCS:
-                            exploration_docs = doc_db.get_children(
-                                sr["synthesis_doc_id"], include_archived=False
-                            )
-                            for exp_doc in exploration_docs:
-                                exp_item = ActivityItem(
-                                    item_type="exploration",
-                                    item_id=exp_doc["id"],
-                                    title=exp_doc.get("title", "")[:25],
-                                    status="completed",
-                                    timestamp=item.timestamp,
-                                    doc_id=exp_doc["id"],
-                                    depth=2,
-                                )
-                                synth_item.children.append(exp_item)
-
-                        children.append(synth_item)
-
-                    # Get individual runs without synthesis
+                    # Get individual runs for this stage
                     ind_runs = wf_db.list_individual_runs(sr["id"])
-                    for ir in ind_runs:
-                        if ir.get("output_doc_id") and ir["output_doc_id"] != sr.get(
-                            "synthesis_doc_id"
-                        ):
-                            doc = (
-                                doc_db.get_document(ir["output_doc_id"])
-                                if HAS_DOCS
-                                else None
-                            )
-                            # Skip if this doc is a child of synthesis
-                            if doc and doc.get("parent_id"):
-                                continue
 
-                            title = doc.get("title", f"Output #{ir['run_number']}") if doc else f"Output #{ir['run_number']}"
+                    # For running/pending workflows, show each individual run with status
+                    if stage_status in ("running", "pending") or run.get("status") == "running":
+                        for ir in ind_runs:
+                            ir_status = ir.get("status", "pending")
+                            run_num = ir.get("run_number", 0)
+
+                            # Build title based on status
+                            if ir_status == "completed" and ir.get("output_doc_id"):
+                                doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
+                                title = doc.get("title", f"Run {run_num}")[:25] if doc else f"Run {run_num}"
+                            elif ir_status == "running":
+                                title = f"Run {run_num} (running...)"
+                            elif ir_status == "pending":
+                                title = f"Run {run_num} (pending)"
+                            elif ir_status == "failed":
+                                title = f"Run {run_num} (failed)"
+                            else:
+                                title = f"Run {run_num}"
+
                             child_item = ActivityItem(
-                                item_type="exploration",
-                                item_id=ir["output_doc_id"],
-                                title=title[:25],
-                                status=ir.get("status", "completed"),
+                                item_type="individual_run",
+                                item_id=ir.get("id"),
+                                title=title,
+                                status=ir_status,
                                 timestamp=item.timestamp,
-                                doc_id=ir["output_doc_id"],
+                                doc_id=ir.get("output_doc_id"),
+                                cost=ir.get("cost_usd"),
                                 depth=1,
                             )
                             children.append(child_item)
+
+                        # If there are more runs expected than records, show pending placeholders
+                        if len(ind_runs) < target_runs:
+                            for i in range(len(ind_runs) + 1, target_runs + 1):
+                                child_item = ActivityItem(
+                                    item_type="individual_run",
+                                    item_id=None,
+                                    title=f"Run {i} (pending)",
+                                    status="pending",
+                                    timestamp=item.timestamp,
+                                    doc_id=None,
+                                    depth=1,
+                                )
+                                children.append(child_item)
+
+                    # For completed workflows, show synthesis + all outputs as flat siblings
+                    else:
+                        # Show synthesis doc first if available
+                        if sr.get("synthesis_doc_id"):
+                            doc = doc_db.get_document(sr["synthesis_doc_id"]) if HAS_DOCS else None
+                            title = doc.get("title", "Synthesis") if doc else "Synthesis"
+
+                            synth_item = ActivityItem(
+                                item_type="synthesis",
+                                item_id=sr["synthesis_doc_id"],
+                                title=title[:30],
+                                status="completed",
+                                timestamp=item.timestamp,
+                                doc_id=sr["synthesis_doc_id"],
+                                depth=1,
+                            )
+                            children.append(synth_item)
+
+                            # Add individual outputs as siblings (flat, not nested)
+                            for ir in ind_runs:
+                                if ir.get("output_doc_id") and ir["output_doc_id"] != sr.get("synthesis_doc_id"):
+                                    out_doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
+                                    out_title = out_doc.get("title", f"Output #{ir['run_number']}")[:25] if out_doc else f"Output #{ir['run_number']}"
+
+                                    out_item = ActivityItem(
+                                        item_type="exploration",
+                                        item_id=ir["output_doc_id"],
+                                        title=out_title,
+                                        status=ir.get("status", "completed"),
+                                        timestamp=item.timestamp,
+                                        doc_id=ir["output_doc_id"],
+                                        cost=ir.get("cost_usd"),
+                                        depth=1,
+                                    )
+                                    children.append(out_item)
+
+                        # If no synthesis, show individual outputs directly under workflow
+                        if not sr.get("synthesis_doc_id"):
+                            for ir in ind_runs:
+                                if ir.get("output_doc_id"):
+                                    doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
+                                    title = doc.get("title", f"Output #{ir['run_number']}")[:25] if doc else f"Output #{ir['run_number']}"
+                                    child_item = ActivityItem(
+                                        item_type="exploration",
+                                        item_id=ir["output_doc_id"],
+                                        title=title,
+                                        status=ir.get("status", "completed"),
+                                        timestamp=item.timestamp,
+                                        doc_id=ir["output_doc_id"],
+                                        cost=ir.get("cost_usd"),
+                                        depth=1,
+                                    )
+                                    children.append(child_item)
 
         except Exception as e:
             logger.error(f"Error expanding workflow: {e}", exc_info=True)
@@ -1105,9 +1442,7 @@ class ActivityView(Widget):
         elif item.expanded:
             self._collapse_item(item)
             await self._update_table()
-        elif item.doc_id:
-            # Open document
-            self.post_message(self.ViewDocument(item.doc_id))
+        # No action for leaf items - preview is already visible on the right
 
     async def action_expand(self) -> None:
         """Expand current item."""
@@ -1154,7 +1489,7 @@ class ActivityView(Widget):
 
     async def action_refresh(self) -> None:
         """Manual refresh."""
-        await self.load_data()
+        await self._refresh_data()  # Use same logic as periodic refresh to preserve state
 
     def action_focus_next(self) -> None:
         """Focus next pane."""
@@ -1169,7 +1504,7 @@ class ActivityView(Widget):
         """Handle row selection change."""
         if event.cursor_row is not None:
             self.selected_idx = event.cursor_row
-            await self._update_preview()
+            await self._update_preview(force=True)  # User changed selection, force update
 
     async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Handle row selection (Enter key on DataTable)."""
