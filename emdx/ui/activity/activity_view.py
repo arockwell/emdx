@@ -134,6 +134,10 @@ class ActivityItem:
         self.workflow_run = workflow_run
         self.depth = depth
         self.expanded = False
+        # Progress tracking for running workflows
+        self.progress_completed = 0  # Runs completed
+        self.progress_total = 0  # Total target runs
+        self.progress_stage = ""  # Current stage name
 
     @property
     def status_icon(self) -> str:
@@ -298,6 +302,8 @@ class ActivityView(Widget):
         self._fullscreen = False
         # Cache to prevent flickering during refresh
         self._last_preview_key: Optional[tuple] = None  # (item_type, item_id, status)
+        # Track recently completed workflows for highlight animation
+        self._recently_completed: set = set()  # workflow_ids that just finished
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -453,15 +459,33 @@ class ActivityView(Widget):
 
                 # Check if workflow has any outputs (for expand indicator)
                 # Also capture the primary output doc ID for completed workflows
+                # And progress info for running workflows
                 try:
                     stage_runs = wf_db.list_stage_runs(run["id"])
                     has_outputs = False
                     output_doc_id = None
                     output_count = 0
+                    # Progress tracking for running workflows
+                    total_target = 0
+                    total_completed = 0
+                    current_stage = ""
+                    # Token tracking (input/output separately)
+                    total_input_tokens = 0
+                    total_output_tokens = 0
                     for sr in stage_runs:
+                        # Track progress
+                        target = sr.get("target_runs", 1)
+                        completed = sr.get("runs_completed", 0)
+                        total_target += target
+                        total_completed += completed
+                        # Track current running stage
+                        if sr.get("status") == "running":
+                            current_stage = sr.get("stage_name", "")
                         ind_runs = wf_db.list_individual_runs(sr["id"])
-                        # Count individual outputs
+                        # Count individual outputs and sum tokens
                         for ir in ind_runs:
+                            total_input_tokens += ir.get("input_tokens", 0) or 0
+                            total_output_tokens += ir.get("output_tokens", 0) or 0
                             if ir.get("output_doc_id"):
                                 output_count += 1
                                 has_outputs = True
@@ -476,6 +500,14 @@ class ActivityView(Widget):
                     if has_outputs:
                         item._has_workflow_outputs = True
                         item._output_count = output_count
+                    # Store token counts for status bar
+                    item._input_tokens = total_input_tokens
+                    item._output_tokens = total_output_tokens
+                    # Store progress info for running workflows
+                    if run.get("status") == "running":
+                        item.progress_completed = total_completed
+                        item.progress_total = total_target
+                        item.progress_stage = current_stage
                     # For completed workflows, set doc_id to the output document
                     # Also use the output document's timestamp for consistent sorting
                     if output_doc_id and run.get("status") in ("completed", "failed"):
@@ -620,10 +652,13 @@ class ActivityView(Widget):
             )
             # Output count badge for collapsed workflows
             output_count = getattr(item, '_output_count', 0)
+            # Running workflows are always expandable (to see individual runs)
+            is_running_workflow = item.item_type == "workflow" and item.status == "running"
             if item.expanded and item.children:
                 expand = "▼ "
                 badge = ""
-            elif (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow_with_output)) or \
+            elif is_running_workflow or \
+                 (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow_with_output)) or \
                  (item.item_type == "synthesis" and item.children) or \
                  has_doc_children:
                 expand = "▶ "
@@ -634,17 +669,40 @@ class ActivityView(Widget):
                 badge = ""
 
             # Format row
-            status_icon = item.status_icon
+            # Check if this workflow just completed (show sparkle highlight)
+            is_recently_completed = (
+                item.item_type == "workflow" and
+                item.item_id in self._recently_completed
+            )
+            if is_recently_completed:
+                status_icon = "✨"  # Sparkle for recently completed
+            else:
+                status_icon = item.status_icon
             type_icon = item.type_icon
             time_str = format_time_ago(item.timestamp)
 
-            # Truncate title to fit badge within column width (30 chars)
+            # For running workflows, show progress bar + stage instead of badge
+            progress_str = ""
+            if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
+                # Build mini progress bar: ▓▓▓░░ 3/5 stage
+                pct = item.progress_completed / item.progress_total if item.progress_total > 0 else 0
+                filled = int(pct * 5)
+                empty = 5 - filled
+                bar = "▓" * filled + "░" * empty
+                stage_hint = item.progress_stage[:8] if item.progress_stage else ""
+                progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
+                if stage_hint:
+                    progress_str += f" {stage_hint}"
+
+            # Truncate title to fit badge/progress within column width (30 chars)
             prefix = f"{indent}{expand}"
             prefix_len = len(prefix)
-            badge_len = len(badge)
-            max_title_len = 30 - prefix_len - badge_len
+            # Use progress_str for running, badge for completed
+            suffix = progress_str if progress_str else badge
+            suffix_len = len(suffix)
+            max_title_len = 30 - prefix_len - suffix_len
             truncated_title = item.title[:max_title_len] if len(item.title) > max_title_len else item.title
-            title = f"{prefix}{truncated_title}{badge}"
+            title = f"{prefix}{truncated_title}{suffix}"
             # Show document ID or workflow run ID
             # For workflows, always show workflow run ID (not the output doc ID)
             if item.item_type == "workflow" and item.item_id:
@@ -698,6 +756,22 @@ class ActivityView(Widget):
             and item.timestamp.date() == today
         )
 
+        # Total tokens today (input/output)
+        input_tokens_today = sum(
+            getattr(item, '_input_tokens', 0) or 0
+            for item in self.activity_items
+            if item.timestamp
+            and item.timestamp.date() == today
+            and item.item_type == "workflow"
+        )
+        output_tokens_today = sum(
+            getattr(item, '_output_tokens', 0) or 0
+            for item in self.activity_items
+            if item.timestamp
+            and item.timestamp.date() == today
+            and item.item_type == "workflow"
+        )
+
         # Generate sparkline for the week
         week_data = self._get_week_activity_data()
         spark = sparkline(week_data, width=7)
@@ -708,6 +782,10 @@ class ActivityView(Widget):
             parts.append(f"[green]🟢 {active} Active[/green]")
         else:
             parts.append("[dim]⚪ 0 Active[/dim]")
+
+        # Tokens: in↓ / out↑
+        if input_tokens_today > 0 or output_tokens_today > 0:
+            parts.append(f"↓{format_tokens(input_tokens_today)} ↑{format_tokens(output_tokens_today)}")
 
         parts.append(f"📄 {docs_today} today")
         parts.append(format_cost(cost_today))
@@ -1023,6 +1101,11 @@ class ActivityView(Widget):
 
     def _notify_workflow_complete(self, workflow_id: int, success: bool) -> None:
         """Show notification and play sound for workflow completion."""
+        # Track recently completed for highlight effect
+        self._recently_completed.add(workflow_id)
+        # Clear highlight after 3 seconds
+        self.set_timer(3.0, lambda: self._clear_highlight(workflow_id))
+
         # Play sound
         if success:
             print("\a", end="", flush=True)  # Single bell
@@ -1042,6 +1125,27 @@ class ActivityView(Widget):
 
         # Post message for parent handling
         self.post_message(self.WorkflowCompleted(workflow_id, success))
+
+        # Force preview update if this workflow is currently selected
+        # This ensures the preview switches from live log to output document
+        if self.flat_items and self.selected_idx < len(self.flat_items):
+            selected_item = self.flat_items[self.selected_idx]
+            if selected_item.item_type == "workflow" and selected_item.item_id == workflow_id:
+                # The item's status will be updated on next refresh, but we need to stop
+                # the log stream immediately and trigger preview refresh
+                self._stop_stream()
+                self._last_preview_key = None  # Force refresh on next update
+                self.call_later(lambda: self.run_worker(self._update_preview(force=True)))
+
+    def _clear_highlight(self, workflow_id: int) -> None:
+        """Clear the completion highlight for a workflow."""
+        self._recently_completed.discard(workflow_id)
+        # Refresh table to remove highlight
+        self.call_later(self._refresh_table_only)
+
+    async def _refresh_table_only(self) -> None:
+        """Refresh just the table display without reloading data."""
+        await self._update_table()
 
     def _hide_notification(self) -> None:
         """Hide the notification bar."""
