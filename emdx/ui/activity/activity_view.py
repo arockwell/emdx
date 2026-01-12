@@ -457,23 +457,25 @@ class ActivityView(Widget):
                     stage_runs = wf_db.list_stage_runs(run["id"])
                     has_outputs = False
                     output_doc_id = None
+                    output_count = 0
                     for sr in stage_runs:
-                        if sr.get("synthesis_doc_id"):
-                            has_outputs = True
-                            if not output_doc_id:
-                                output_doc_id = sr["synthesis_doc_id"]
-                            break
                         ind_runs = wf_db.list_individual_runs(sr["id"])
+                        # Count individual outputs
                         for ir in ind_runs:
                             if ir.get("output_doc_id"):
+                                output_count += 1
                                 has_outputs = True
                                 if not output_doc_id:
                                     output_doc_id = ir["output_doc_id"]
-                                break
-                        if has_outputs:
-                            break
+                        # Count synthesis (add 1 if exists)
+                        if sr.get("synthesis_doc_id"):
+                            output_count += 1
+                            has_outputs = True
+                            if not output_doc_id:
+                                output_doc_id = sr["synthesis_doc_id"]
                     if has_outputs:
                         item._has_workflow_outputs = True
+                        item._output_count = output_count
                     # For completed workflows, set doc_id to the output document
                     # Also use the output document's timestamp for consistent sorting
                     if output_doc_id and run.get("status") in ("completed", "failed"):
@@ -616,20 +618,26 @@ class ActivityView(Widget):
                 item.status == "completed" and
                 item.doc_id is not None
             )
+            # Output count badge for collapsed workflows
+            output_count = getattr(item, '_output_count', 0)
             if item.expanded and item.children:
                 expand = "▼ "
+                badge = ""
             elif (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow_with_output)) or \
                  (item.item_type == "synthesis" and item.children) or \
                  has_doc_children:
                 expand = "▶ "
+                # Show output count badge for collapsed workflows with outputs
+                badge = f" [{output_count}]" if output_count > 0 and item.item_type == "workflow" else ""
             else:
                 expand = "  "
+                badge = ""
 
             # Format row
             status_icon = item.status_icon
             type_icon = item.type_icon
             time_str = format_time_ago(item.timestamp)
-            title = f"{indent}{expand}{item.title}"
+            title = f"{indent}{expand}{item.title}{badge}"
             # Show document ID or workflow run ID
             # For workflows, always show workflow run ID (not the output doc ID)
             if item.item_type == "workflow" and item.item_id:
