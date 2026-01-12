@@ -73,19 +73,21 @@ def format_time_ago(dt: datetime) -> str:
     if not dt:
         return "—"
 
-    # If datetime is naive (no timezone), assume it's UTC and convert to local
-    if dt.tzinfo is None:
-        # Assume UTC and convert to local time
-        from datetime import timezone
-        dt_utc = dt.replace(tzinfo=timezone.utc)
-        dt_local = dt_utc.astimezone()
-        dt = dt_local.replace(tzinfo=None)
+    from datetime import timezone
 
     now = datetime.now()
     diff = now - dt
     seconds = diff.total_seconds()
 
-    # Handle future times (shouldn't happen but be safe)
+    # If timestamp appears to be in the future, it's likely stored as UTC
+    # Convert it to local time (documents use UTC, workflows use local)
+    if seconds < -60:  # More than 1 minute in "future" = probably UTC
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+        dt_local = dt_utc.astimezone().replace(tzinfo=None)
+        diff = now - dt_local
+        seconds = diff.total_seconds()
+
+    # Handle any remaining future times
     if seconds < 0:
         return "now"
 
@@ -322,6 +324,7 @@ class ActivityView(Widget):
         table.add_column("", width=2)  # Type icon
         table.add_column("Time", width=5)
         table.add_column("Title", width=30)
+        table.add_column("ID", width=6)  # Document/workflow ID
         table.add_column("Cost", width=6)
 
         await self.load_data()
@@ -561,9 +564,16 @@ class ActivityView(Widget):
             type_icon = item.type_icon
             time_str = format_time_ago(item.timestamp)
             title = f"{indent}{expand}{item.title}"
+            # Show document ID or workflow run ID
+            if item.doc_id:
+                id_str = f"#{item.doc_id}"
+            elif item.item_type == "workflow" and item.item_id:
+                id_str = f"w{item.item_id}"
+            else:
+                id_str = "—"
             cost = format_cost(item.cost) if item.cost else "—"
 
-            table.add_row(status_icon, type_icon, time_str, title, cost)
+            table.add_row(status_icon, type_icon, time_str, title, id_str, cost)
 
         # Restore selection
         if self.flat_items and self.selected_idx < len(self.flat_items):
@@ -597,11 +607,13 @@ class ActivityView(Widget):
             and item.cost
         )
 
-        # Count errors
+        # Count errors (today only)
         errors = sum(
             1
             for item in self.activity_items
             if item.status == "failed"
+            and item.timestamp
+            and item.timestamp.date() == today
         )
 
         # Generate sparkline for the week
@@ -650,9 +662,9 @@ class ActivityView(Widget):
         preview.clear()
 
         try:
-            # Limit preview to first 5000 chars for performance
-            if len(content) > 5000:
-                content = content[:5000] + "\n\n[dim]... (truncated for preview)[/dim]"
+            # Limit preview to first 50000 chars for performance
+            if len(content) > 50000:
+                content = content[:50000] + "\n\n[dim]... (truncated for preview)[/dim]"
             if content.strip():
                 markdown = RichMarkdown(content)
                 preview.write(markdown)
@@ -660,7 +672,7 @@ class ActivityView(Widget):
                 preview.write("[dim]Empty document[/dim]")
         except Exception:
             # Fallback to plain text if markdown fails
-            preview.write(content[:5000] if content else "[dim]No content[/dim]")
+            preview.write(content[:50000] if content else "[dim]No content[/dim]")
 
     async def _update_preview(self) -> None:
         """Update the preview pane with selected item."""

@@ -993,9 +993,9 @@ class DocumentBrowser(Widget):
 
             try:
                 content = detail_vm.content
-                # Limit preview to first 5000 chars for performance
-                if len(content) > 5000:
-                    content = content[:5000] + "\n\n[dim]... (truncated for preview)[/dim]"
+                # Limit preview to first 50000 chars for performance
+                if len(content) > 50000:
+                    content = content[:50000] + "\n\n[dim]... (truncated for preview)[/dim]"
                 if content.strip():
                     markdown = Markdown(content)
                     preview.write(markdown)
@@ -1003,7 +1003,7 @@ class DocumentBrowser(Widget):
                     preview.write("[dim]Empty document[/dim]")
             except Exception:
                 # Fallback to plain text if markdown fails
-                preview.write(detail_vm.content[:5000])
+                preview.write(detail_vm.content[:50000])
         except Exception:
             # Preview widget not found or not ready - ignore
             pass
