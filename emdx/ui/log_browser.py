@@ -99,7 +99,7 @@ class LogBrowser(
 
     #log-details-container {
         min-height: 8;
-        border-top: heavy gray;
+        border-top: heavy $primary;
     }
 
     #log-table {

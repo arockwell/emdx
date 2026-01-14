@@ -60,6 +60,7 @@ Horizontal {
 #details-container {
     height: 1fr;
     min-height: 10;
+    border-top: heavy $primary;
 }
 
 #doc-table {
