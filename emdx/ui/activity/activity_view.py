@@ -688,10 +688,11 @@ class ActivityView(Widget):
             # For running workflows, show progress bar + stage instead of badge
             progress_str = ""
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                # Build mini progress bar using 8ths for accuracy: ████░░░░ 2/4
+                # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
                 # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
+                # Width=10 gives perfect accuracy for 4 and 5 task workflows
                 pct = item.progress_completed / item.progress_total
-                bar_width = 8
+                bar_width = 10
                 filled_exact = pct * bar_width
                 filled_full = int(filled_exact)
                 remainder = filled_exact - filled_full
