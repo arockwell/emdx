@@ -60,6 +60,7 @@ class WorkflowExecutor:
         workflow_name_or_id: str | int,
         input_doc_id: Optional[int] = None,
         input_variables: Optional[Dict[str, Any]] = None,
+        preset_name: Optional[str] = None,
         gameplan_id: Optional[int] = None,
         task_id: Optional[int] = None,
         working_dir: Optional[str] = None,
@@ -69,27 +70,62 @@ class WorkflowExecutor:
         Args:
             workflow_name_or_id: Workflow name or ID
             input_doc_id: Optional input document ID
-            input_variables: Optional runtime variables
+            input_variables: Optional runtime variables (override preset variables)
+            preset_name: Optional preset name to use for variables
             gameplan_id: Optional link to gameplan
             task_id: Optional link to task
             working_dir: Optional working directory for agent execution (e.g., worktree path)
 
         Returns:
             WorkflowRun with execution results
+
+        Variable precedence (highest to lowest):
+            1. Runtime input_variables (--var flags)
+            2. Preset variables (--preset)
+            3. Workflow default variables
         """
         # Load workflow
         workflow = workflow_registry.get_workflow(workflow_name_or_id)
         if not workflow:
             raise ValueError(f"Workflow not found: {workflow_name_or_id}")
 
-        # Create workflow run record
+        # Load preset if specified
+        preset_id = None
+        preset_variables = {}
+        if preset_name:
+            preset_row = wf_db.get_preset_by_name(workflow.id, preset_name)
+            if not preset_row:
+                raise ValueError(f"Preset '{preset_name}' not found for workflow '{workflow.name}'")
+            preset_id = preset_row['id']
+            preset_variables = json.loads(preset_row['variables_json']) if preset_row.get('variables_json') else {}
+            # Increment preset usage
+            wf_db.increment_preset_usage(preset_id)
+
+        # Merge all variables for storage: workflow defaults + preset + runtime
+        # This captures the complete picture of what was used
+        merged_variables = {}
+        merged_variables.update(workflow.variables)
+        merged_variables.update(preset_variables)
+        if input_variables:
+            merged_variables.update(input_variables)
+
+        # Create workflow run record with preset tracking
         run_id = wf_db.create_workflow_run(
             workflow_id=workflow.id,
             input_doc_id=input_doc_id,
-            input_variables=input_variables,
+            input_variables=merged_variables,  # Store the fully merged variables
             gameplan_id=gameplan_id,
             task_id=task_id,
         )
+
+        # Update run with preset info (separate call since create_workflow_run doesn't have these params yet)
+        if preset_id or preset_name:
+            with wf_db.db_connection.get_connection() as conn:
+                conn.execute(
+                    "UPDATE workflow_runs SET preset_id = ?, preset_name = ? WHERE id = ?",
+                    (preset_id, preset_name, run_id),
+                )
+                conn.commit()
 
         # Start execution
         wf_db.update_workflow_run(
@@ -114,12 +150,8 @@ class WorkflowExecutor:
                     context['input'] = doc.get('content', '')
                     context['input_title'] = doc.get('title', '')
 
-            # Merge workflow default variables first
-            context.update(workflow.variables)
-
-            # Then override with provided variables (so user input wins)
-            if input_variables:
-                context.update(input_variables)
+            # Apply merged variables (already merged: workflow defaults + preset + runtime)
+            context.update(merged_variables)
 
             # Auto-load document content for doc_N variables
             # If a variable like doc_1, doc_2, etc. is an integer, treat it as a document ID

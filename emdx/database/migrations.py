@@ -1229,6 +1229,66 @@ def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_021_add_workflow_presets(conn: sqlite3.Connection):
+    """Add workflow_presets table for named variable configurations.
+
+    Presets are named bundles of variables that can be applied to a workflow.
+    This allows reusing workflows with different configurations without
+    creating duplicate workflow definitions.
+
+    Example:
+        Workflow: parallel_analysis
+        Presets:
+          - "security_audit": {topic: "Security", track_1: "Auth", track_2: "Input validation"}
+          - "ux_views": {topic: "UX Analysis", track_1: "Activity View", track_2: "Documents View"}
+    """
+    cursor = conn.cursor()
+
+    # Create workflow_presets table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_presets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            variables_json TEXT NOT NULL DEFAULT '{}',
+            is_default BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            usage_count INTEGER DEFAULT 0,
+            last_used_at TIMESTAMP,
+            UNIQUE(workflow_id, name),
+            FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Create indexes for efficient queries
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_workflow_presets_workflow_id
+        ON workflow_presets(workflow_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_workflow_presets_name
+        ON workflow_presets(workflow_id, name)
+    """)
+
+    # Add preset_id to workflow_runs to track which preset was used
+    cursor.execute("""
+        ALTER TABLE workflow_runs
+        ADD COLUMN preset_id INTEGER REFERENCES workflow_presets(id)
+    """)
+
+    # Add preset_name for human-readable reference (survives preset deletion)
+    cursor.execute("""
+        ALTER TABLE workflow_runs
+        ADD COLUMN preset_name TEXT
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1252,6 +1312,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (18, "Add document hierarchy columns", migration_018_add_document_hierarchy),
     (19, "Add document sources bridge table", migration_019_add_document_sources),
     (20, "Add synthesis cost tracking", migration_020_add_synthesis_cost),
+    (21, "Add workflow presets", migration_021_add_workflow_presets),
 ]
 
 

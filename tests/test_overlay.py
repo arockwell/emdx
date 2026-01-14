@@ -39,7 +39,6 @@ def test_simplified_data_storage():
     assert 'current_stage' in summary
 
     print("✅ Simplified data storage tests passed!")
-    return True
 
 def test_stage_setup():
     """Test that stage enum and setup is correct."""
@@ -61,7 +60,6 @@ def test_stage_setup():
     assert overlay.get_current_stage() == StageType.AGENT
 
     print("✅ Stage setup tests passed!")
-    return True
 
 def test_stage_completed_tracking():
     """Test that stage completion is tracked correctly."""
@@ -81,7 +79,6 @@ def test_stage_completed_tracking():
     assert overlay.stage_completed[StageType.AGENT]
 
     print("✅ Stage completion tracking tests passed!")
-    return True
 
 def main():
     """Run all tests."""
@@ -95,24 +92,23 @@ def main():
         test_stage_completed_tracking,
     ]
 
-    results = []
+    failed = 0
     for test in tests:
         try:
-            result = test()
-            results.append(result)
+            test()
         except Exception as e:
             print(f"❌ Test failed: {e}")
             import traceback
             traceback.print_exc()
-            results.append(False)
+            failed += 1
 
     print("\n" + "=" * 60)
-    if all(results):
+    if failed == 0:
         print("🎉 ALL TESTS PASSED!")
         print("=" * 60)
         return 0
     else:
-        print(f"❌ {sum(not r for r in results)} test(s) failed")
+        print(f"❌ {failed} test(s) failed")
         print("=" * 60)
         return 1
 
