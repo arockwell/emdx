@@ -1202,6 +1202,33 @@ def _backfill_document_sources(cursor):
     """)
 
 
+def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
+    """Add synthesis_cost_usd to workflow_stage_runs table.
+
+    Tracks the cost of synthesis Claude calls separately from individual runs.
+    """
+    cursor = conn.cursor()
+
+    # Add synthesis_cost_usd column
+    cursor.execute("""
+        ALTER TABLE workflow_stage_runs
+        ADD COLUMN synthesis_cost_usd REAL DEFAULT 0.0
+    """)
+
+    # Also add synthesis token tracking
+    cursor.execute("""
+        ALTER TABLE workflow_stage_runs
+        ADD COLUMN synthesis_input_tokens INTEGER DEFAULT 0
+    """)
+
+    cursor.execute("""
+        ALTER TABLE workflow_stage_runs
+        ADD COLUMN synthesis_output_tokens INTEGER DEFAULT 0
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1224,6 +1251,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (17, "Add cost_usd to individual runs", migration_017_add_cost_usd),
     (18, "Add document hierarchy columns", migration_018_add_document_hierarchy),
     (19, "Add document sources bridge table", migration_019_add_document_sources),
+    (20, "Add synthesis cost tracking", migration_020_add_synthesis_cost),
 ]
 
 

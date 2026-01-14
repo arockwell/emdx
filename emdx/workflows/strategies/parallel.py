@@ -102,6 +102,15 @@ class ParallelExecutionStrategy(ExecutionStrategy):
             context=context,
         )
 
+        # Store synthesis cost/tokens on stage run
+        if synthesis_result.get('cost_usd') or synthesis_result.get('input_tokens'):
+            wf_db.update_stage_run(
+                stage_run_id,
+                synthesis_cost_usd=synthesis_result.get('cost_usd', 0.0),
+                synthesis_input_tokens=synthesis_result.get('input_tokens', 0),
+                synthesis_output_tokens=synthesis_result.get('output_tokens', 0),
+            )
+
         return StageResult(
             success=True,
             output_doc_id=synthesis_result.get('output_doc_id'),

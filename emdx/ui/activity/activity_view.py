@@ -1306,6 +1306,7 @@ class ActivityView(Widget):
                                 status="completed",
                                 timestamp=item.timestamp,
                                 doc_id=sr["synthesis_doc_id"],
+                                cost=sr.get("synthesis_cost_usd"),
                                 depth=1,
                             )
                             children.append(synth_item)

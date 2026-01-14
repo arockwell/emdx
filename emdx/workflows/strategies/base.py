@@ -214,6 +214,7 @@ Report the document ID that was created."""
                     tokens_used=token_usage['tokens_used'],
                     input_tokens=token_usage['input_tokens'],
                     output_tokens=token_usage['output_tokens'],
+                    cost_usd=token_usage['cost_usd'],
                     completed_at=datetime.now(),
                 )
 
@@ -309,20 +310,20 @@ Report the document ID that was created."""
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
-    def _extract_token_usage(self, log_file: Path) -> Dict[str, int]:
-        """Extract token usage from execution log.
+    def _extract_token_usage(self, log_file: Path) -> Dict[str, Any]:
+        """Extract token usage and cost from execution log.
 
-        Parses the __RAW_RESULT_JSON__ line to get token counts from Claude CLI output.
+        Parses the __RAW_RESULT_JSON__ line to get token counts and cost from Claude CLI output.
 
         Args:
             log_file: Path to the execution log
 
         Returns:
-            Dict with input_tokens, output_tokens, and tokens_used (total)
+            Dict with input_tokens, output_tokens, tokens_used (total), and cost_usd
         """
         import json
 
-        result = {'input_tokens': 0, 'output_tokens': 0, 'tokens_used': 0}
+        result = {'input_tokens': 0, 'output_tokens': 0, 'tokens_used': 0, 'cost_usd': 0.0}
 
         if not log_file.exists():
             return result
@@ -349,6 +350,7 @@ Report the document ID that was created."""
                         result['input_tokens'] = input_tokens
                         result['output_tokens'] = output_tokens
                         result['tokens_used'] = input_tokens + output_tokens
+                        result['cost_usd'] = data.get('total_cost_usd', 0.0)
                         break
                     except json.JSONDecodeError:
                         continue
@@ -485,6 +487,9 @@ Report the document ID that was created."""
                 # This establishes the workflow hierarchy (exploration relationship)
                 self._link_outputs_to_synthesis(output_doc_ids, output_doc_id)
 
+                # Extract token usage from synthesis log
+                token_usage = self._extract_token_usage(log_file)
+
                 # Record document source for bridge table (enables efficient filtering)
                 sr = wf_db.get_stage_run(stage_run_id)
                 if sr and output_doc_id:
@@ -498,7 +503,10 @@ Report the document ID that was created."""
 
                 return {
                     'output_doc_id': output_doc_id,
-                    'tokens_used': 0,
+                    'tokens_used': token_usage['tokens_used'],
+                    'input_tokens': token_usage['input_tokens'],
+                    'output_tokens': token_usage['output_tokens'],
+                    'cost_usd': token_usage['cost_usd'],
                     'execution_id': exec_id,
                 }
             else:

@@ -400,6 +400,9 @@ def update_stage_run(
     execution_time_ms: Optional[int] = None,
     started_at: Optional[datetime] = None,
     completed_at: Optional[datetime] = None,
+    synthesis_cost_usd: Optional[float] = None,
+    synthesis_input_tokens: Optional[int] = None,
+    synthesis_output_tokens: Optional[int] = None,
 ) -> bool:
     """Update a stage run."""
     with db_connection.get_connection() as conn:
@@ -436,6 +439,15 @@ def update_stage_run(
         if completed_at is not None:
             updates.append("completed_at = ?")
             params.append(completed_at.isoformat() if isinstance(completed_at, datetime) else completed_at)
+        if synthesis_cost_usd is not None:
+            updates.append("synthesis_cost_usd = ?")
+            params.append(synthesis_cost_usd)
+        if synthesis_input_tokens is not None:
+            updates.append("synthesis_input_tokens = ?")
+            params.append(synthesis_input_tokens)
+        if synthesis_output_tokens is not None:
+            updates.append("synthesis_output_tokens = ?")
+            params.append(synthesis_output_tokens)
 
         if not updates:
             return False
