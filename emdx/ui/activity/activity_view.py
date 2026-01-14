@@ -826,7 +826,7 @@ class ActivityView(Widget):
 
     def _render_markdown_preview(self, content: str) -> None:
         """Render markdown content to the preview RichLog."""
-        from rich.markdown import Markdown as RichMarkdown
+        from emdx.ui.markdown_config import MarkdownConfig
 
         preview = self.query_one("#preview-content", RichLog)
         preview.clear()
@@ -836,7 +836,7 @@ class ActivityView(Widget):
             if len(content) > 50000:
                 content = content[:50000] + "\n\n[dim]... (truncated for preview)[/dim]"
             if content.strip():
-                markdown = RichMarkdown(content)
+                markdown = MarkdownConfig.create_markdown(content)
                 preview.write(markdown)
             else:
                 preview.write("[dim]Empty document[/dim]")

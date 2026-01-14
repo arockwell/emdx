@@ -3,7 +3,6 @@
 Full-screen document viewer for EMDX TUI.
 """
 
-from rich.markdown import Markdown
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
@@ -93,7 +92,8 @@ class FullScreenView(Screen):
                 markdown_content = f"""# {doc['title']}
 
 {content}"""
-            md = Markdown(markdown_content, code_theme="monokai")
+            from emdx.ui.markdown_config import MarkdownConfig
+            md = MarkdownConfig.create_markdown(markdown_content)
             content_log.write(md)
             content_log.scroll_to(0, 0, animate=False)
 

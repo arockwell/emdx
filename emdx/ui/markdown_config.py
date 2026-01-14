@@ -21,20 +21,38 @@ class MarkdownConfig:
             "default": "monokai",
             "alternatives": ["dracula", "nord", "one-dark", "gruvbox-dark"],
         },
-        "light": {"default": "manni", "alternatives": ["tango", "perldoc", "friendly", "colorful"]},
+        "light": {
+            "default": "tango",
+            "alternatives": ["manni", "perldoc", "friendly", "colorful"],
+        },
     }
 
     @staticmethod
     def get_code_theme():
-        """Get the appropriate code theme based on terminal background."""
-        # Check environment variable for user preference
+        """Get the appropriate code theme based on UI config or terminal background."""
+        # Check environment variable for user preference (highest priority)
         theme = os.environ.get("EMDX_CODE_THEME")
         if theme:
             return theme
 
-        # Try to detect terminal background (this is a simplified approach)
-        # In practice, you might want to use more sophisticated detection
-        # or let users configure this in a config file
+        # Try to get theme from UI config
+        try:
+            from emdx.config.ui_config import load_ui_config
+            from emdx.ui.themes import get_code_theme as get_theme_code_theme
+
+            config = load_ui_config()
+            code_theme = config.get("code_theme", "auto")
+
+            if code_theme != "auto":
+                return code_theme
+
+            # Auto mode: derive from main UI theme
+            main_theme = config.get("theme", "emdx-dark")
+            return get_theme_code_theme(main_theme)
+        except ImportError:
+            pass  # Fall back to terminal detection
+
+        # Try to detect terminal background (fallback approach)
         terminal_bg = os.environ.get("COLORFGBG", "").split(";")[-1]
 
         # If background is light (15 is white in many terminals)
@@ -52,8 +70,8 @@ class MarkdownConfig:
         return Markdown(
             content,
             code_theme=code_theme,
-            hyperlinks=True,  # Enable clickable links
-            inline_code_lexer="python",  # Default lexer for inline code
+            inline_code_theme=code_theme,
+            hyperlinks=True,
         )
 
     @staticmethod
@@ -67,7 +85,6 @@ class MarkdownConfig:
         return console
 
 
-# Example enhanced markdown rendering function
 def render_enhanced_markdown(content, code_theme=None):
     """
     Render markdown with enhanced formatting.
@@ -76,16 +93,15 @@ def render_enhanced_markdown(content, code_theme=None):
     with better code syntax highlighting and formatting.
     """
     console = Console(
-        force_terminal=True,  # Ensure colors work
-        width=None,  # Use full terminal width
-        highlight=True,  # Enable syntax highlighting
-        markup=True,  # Enable Rich markup
+        force_terminal=True,
+        width=None,
+        highlight=True,
+        markup=True,
     )
 
     return MarkdownConfig.render_markdown(content, console, code_theme)
 
 
-# Utility function to list available themes
 def list_available_themes():
     """List all available code themes for both dark and light terminals."""
     print("Available code themes:")
