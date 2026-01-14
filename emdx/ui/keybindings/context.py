@@ -89,12 +89,23 @@ class Context(Enum):
     MODAL_FILE_SAVE = "modal:file_save"
     MODAL_FILE_EXECUTE = "modal:file_execute"
     MODAL_WORKTREE = "modal:worktree"
+    MODAL_WORKTREE_PICK = "modal:worktree_pick"
     MODAL_STAGE = "modal:stage"
     MODAL_STAGE_DOC = "modal:stage_doc"
     MODAL_STAGE_AGENT = "modal:stage_agent"
     MODAL_STAGE_PROJECT = "modal:stage_project"
     MODAL_STAGE_CONFIG = "modal:stage_config"
     MODAL_COMMIT = "modal:commit"
+    MODAL_FULLSCREEN = "modal:fullscreen"
+    MODAL_EXECUTION = "modal:execution"
+
+    # Nested view contexts (widgets within browsers)
+    LOG_VIEW = "log:view"
+    FILE_LIST = "file:list"
+    KANBAN_VIEW = "control:kanban"
+    TIMELINE_VIEW = "control:timeline"
+    FOCUS_VIEW = "control:focus"
+    PULSE_VIEW = "control:pulse"
 
     # Input contexts (when typing in an input field)
     INPUT_TITLE = "input:title"
@@ -146,6 +157,13 @@ class Context(Enum):
             cls.VIM_VISUAL: [cls.VIM_NORMAL, cls.DOCUMENT_EDIT, cls.GLOBAL],
             cls.VIM_VLINE: [cls.VIM_NORMAL, cls.DOCUMENT_EDIT, cls.GLOBAL],
             cls.VIM_COMMAND: [cls.VIM_NORMAL, cls.DOCUMENT_EDIT, cls.GLOBAL],
+            # Nested view contexts
+            cls.LOG_VIEW: [cls.LOG_NORMAL, cls.GLOBAL],
+            cls.FILE_LIST: [cls.FILE_NORMAL, cls.GLOBAL],
+            cls.KANBAN_VIEW: [cls.CONTROL_ZOOM0, cls.CONTROL_NORMAL, cls.GLOBAL],
+            cls.TIMELINE_VIEW: [cls.CONTROL_ZOOM0, cls.CONTROL_NORMAL, cls.GLOBAL],
+            cls.FOCUS_VIEW: [cls.CONTROL_ZOOM1, cls.CONTROL_NORMAL, cls.GLOBAL],
+            cls.PULSE_VIEW: [cls.CONTROL_NORMAL, cls.GLOBAL],
             # Modals don't inherit - they override everything
             cls.MODAL_THEME: [],
             cls.MODAL_CONFIRM: [],
@@ -153,7 +171,10 @@ class Context(Enum):
             cls.MODAL_AGENT: [],
             cls.MODAL_FILE: [],
             cls.MODAL_WORKTREE: [],
+            cls.MODAL_WORKTREE_PICK: [],
             cls.MODAL_STAGE: [],
+            cls.MODAL_FULLSCREEN: [],
+            cls.MODAL_EXECUTION: [],
             # Global has no parent
             cls.GLOBAL: [],
         }
@@ -195,28 +216,29 @@ class Context(Enum):
             "ActivityView": cls.ACTIVITY_NORMAL,
             # Document browser and related
             "DocumentBrowser": cls.DOCUMENT_NORMAL,
-            "FullScreenView": cls.DOCUMENT_NORMAL,
+            "FullScreenView": cls.MODAL_FULLSCREEN,
             # Agent browser
             "AgentBrowser": cls.AGENT_NORMAL,
             "AgentHistoryModal": cls.MODAL_AGENT,
             # File browser
             "FileBrowserView": cls.FILE_NORMAL,
             "FileView": cls.FILE_NORMAL,
+            "FileList": cls.FILE_LIST,
             # Task browser
             "TaskBrowser": cls.TASK_NORMAL,
             # Workflow browser
             "WorkflowBrowser": cls.WORKFLOW_NORMAL,
             # Log browser
             "LogBrowser": cls.LOG_NORMAL,
-            "LogView": cls.LOG_NORMAL,
+            "LogView": cls.LOG_VIEW,
             # Control center / Pulse
             "ControlCenter": cls.CONTROL_NORMAL,
             "ControlCenterBrowser": cls.CONTROL_NORMAL,
             "PulseBrowser": cls.CONTROL_NORMAL,
-            "PulseView": cls.CONTROL_NORMAL,
-            "KanbanView": cls.CONTROL_ZOOM0,
-            "TimelineView": cls.CONTROL_ZOOM0,
-            "FocusView": cls.CONTROL_ZOOM1,
+            "PulseView": cls.PULSE_VIEW,
+            "KanbanView": cls.KANBAN_VIEW,
+            "TimelineView": cls.TIMELINE_VIEW,
+            "FocusView": cls.FOCUS_VIEW,
             "SmartList": cls.CONTROL_ZOOM2,
             # Git browser
             "GitBrowser": cls.GIT_NORMAL,
@@ -227,17 +249,16 @@ class Context(Enum):
             "ThemeSelectorScreen": cls.MODAL_THEME,
             # Delete confirmation
             "DeleteConfirmScreen": cls.MODAL_DELETE,
-            # Stage selection screens
-            "DocumentSelectionStage": cls.MODAL_STAGE,
-            "AgentSelectionStage": cls.MODAL_STAGE,
-            "ProjectSelectionStage": cls.MODAL_STAGE,
+            # Stage selection screens - each stage gets its own context
+            "DocumentSelectionStage": cls.MODAL_STAGE_DOC,
+            "AgentSelectionStage": cls.MODAL_STAGE_AGENT,
+            "ProjectSelectionStage": cls.MODAL_STAGE_PROJECT,
             "WorktreeSelectionStage": cls.MODAL_WORKTREE,
-            "ConfigStage": cls.MODAL_STAGE,
-            # Workflow execution
-            "WorkflowExecutionOverlay": cls.MODAL_STAGE,
-            "AgentExecutionOverlay": cls.MODAL_STAGE,
             "ConfigStage": cls.MODAL_STAGE_CONFIG,
             "ConfigSelectionStage": cls.MODAL_STAGE_CONFIG,
+            # Workflow execution
+            "WorkflowExecutionOverlay": cls.MODAL_EXECUTION,
+            "AgentExecutionOverlay": cls.MODAL_EXECUTION,
             # Agent modals
             "CreateAgentModal": cls.MODAL_AGENT_CREATE,
             "EditAgentModal": cls.MODAL_AGENT_EDIT,
@@ -260,7 +281,7 @@ class Context(Enum):
             # Title input
             "TitleInput": cls.INPUT_TITLE,
             # Worktree picker
-            "WorktreePickerScreen": cls.MODAL_WORKTREE,
+            "WorktreePickerScreen": cls.MODAL_WORKTREE_PICK,
             # Commit message
             "CommitMessageScreen": cls.MODAL_COMMIT,
             # Delete confirmation

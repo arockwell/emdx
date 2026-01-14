@@ -171,6 +171,52 @@ class KeybindingRegistry:
         for entry in entries:
             self.register(entry)
 
+    def _are_actions_similar(self, action1: str, action2: str) -> bool:
+        """
+        Check if two actions are semantically similar.
+
+        Returns True if actions do essentially the same thing
+        (e.g., cursor_down vs scroll_down vs move_down).
+        """
+        # Normalize action names
+        a1 = action1.lower().replace("_", "").replace("-", "")
+        a2 = action2.lower().replace("_", "").replace("-", "")
+
+        # Direct match after normalization
+        if a1 == a2:
+            return True
+
+        # Common synonyms for navigation
+        synonyms = {
+            "cursordown": {"scrolldown", "movedown", "down"},
+            "cursorup": {"scrollup", "moveup", "up"},
+            "cursorleft": {"scrollleft", "moveleft", "left"},
+            "cursorright": {"scrollright", "moveright", "right"},
+            "cursortop": {"scrolltop", "scrollhome", "home", "top"},
+            "cursorbottom": {"scrollbottom", "scrollend", "end", "bottom"},
+            "select": {"selectcursor", "zoomin", "enterdir"},
+            "home": {"cursorlinestart"},
+            "end": {"cursorlineend"},
+            # Text input synonyms
+            "cursorwordleft": {"cursorleftword"},
+            "cursorwordright": {"cursorrightword"},
+            "cursorwordleftselect": {"cursorleftwordselect", "cursorwordleft(true)"},
+            "cursorwordrightselect": {"cursorrighttwordselect", "cursorwordright(true)"},
+            "cursorlinestartselect": {"hometrue", "home(true)"},
+            "cursorlineendselect": {"endtrue", "end(true)"},
+            "deletewordleft": {"deleteleftword"},
+            "deletewordright": {"deleterightword"},
+            "deletetostart": {"deleteleftall", "deletelefttostart"},
+            "deletetoend": {"deleterightall", "deleterighttoend"},
+        }
+
+        for canonical, variants in synonyms.items():
+            all_variants = variants | {canonical}
+            if a1 in all_variants and a2 in all_variants:
+                return True
+
+        return False
+
     def detect_conflicts(self) -> List[ConflictReport]:
         """
         Detect all keybinding conflicts.
@@ -217,6 +263,10 @@ class KeybindingRegistry:
         # Same context, same key, different action = CRITICAL
         if ctx1 == ctx2:
             if binding1.action != binding2.action:
+                # Check if actions are semantically similar (both do same thing)
+                similar_actions = self._are_actions_similar(
+                    binding1.action, binding2.action
+                )
                 return ConflictReport(
                     key=key,
                     context1=ctx1,
@@ -224,7 +274,8 @@ class KeybindingRegistry:
                     binding1=binding1,
                     binding2=binding2,
                     conflict_type=ConflictType.SAME_CONTEXT,
-                    severity=ConflictSeverity.CRITICAL,
+                    # Downgrade to INFO if actions do the same thing
+                    severity=ConflictSeverity.INFO if similar_actions else ConflictSeverity.CRITICAL,
                 )
             # Same action = duplicate, not a conflict
             return None
