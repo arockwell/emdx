@@ -56,7 +56,7 @@ class BrowserContainer(App):
     # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
 
     BINDINGS = [
-        Binding("t", "cycle_theme", "Theme", show=True),
+        Binding("backslash", "cycle_theme", "Theme", show=True),
     ]
 
     # No CSS needed here - it's all in the widget
@@ -208,9 +208,14 @@ class BrowserContainer(App):
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             elif browser_type == "document":
-                from .document_browser import DocumentBrowser
-                self.browsers[browser_type] = DocumentBrowser()
-                logger.info("DocumentBrowser created successfully")
+                try:
+                    from .document_browser import DocumentBrowser
+                    self.browsers[browser_type] = DocumentBrowser()
+                    logger.info("DocumentBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")

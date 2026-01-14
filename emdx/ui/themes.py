@@ -14,17 +14,17 @@ from textual.theme import Theme
 
 EMDX_DARK = Theme(
     name="emdx-dark",
-    primary="#00D9FF",      # Bright cyan - main accent
-    secondary="#9D4EDD",    # Purple - secondary accent
-    accent="#FF006E",       # Hot pink - selection/highlight
-    foreground="#E6EDF3",   # Primary text (bright)
-    background="#0D1117",   # Deep dark blue-black
-    surface="#161B22",      # Slightly lighter for cards/panels
-    panel="#1C2128",        # Sidebar backgrounds
-    boost="#21262D",        # Status bars, headers
-    success="#3FB950",      # Green - success states
-    warning="#D29922",      # Amber - warning states
-    error="#F85149",        # Red - error states
+    primary="#0178D4",      # Blue - matches Textual default
+    secondary="#004578",    # Darker blue - secondary accent
+    accent="#ffa62b",       # Orange - selection/highlight
+    foreground="#e0e0e0",   # Primary text
+    background="#121212",   # Dark background
+    surface="#1e1e1e",      # Slightly lighter for cards/panels
+    panel="#252526",        # Sidebar backgrounds
+    boost="#2d2d2d",        # Status bars, headers
+    success="#4EBF71",      # Green - success states
+    warning="#ffa62b",      # Orange - warning states
+    error="#ba3c5b",        # Red - error states
     dark=True,
 )
 

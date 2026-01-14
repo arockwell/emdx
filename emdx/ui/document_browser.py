@@ -127,7 +127,7 @@ class DocumentBrowser(Widget):
                     details_container.styles.height = "34%"
                     details_container.styles.min_height = 8
                     details_container.styles.padding = 0
-                    details_container.styles.border_top = ("heavy", "$primary")
+                    # border-top is set in document_browser.tcss using $primary
                     yield RichLog(
                         id="details-panel",
                         classes="details-richlog",
