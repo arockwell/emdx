@@ -304,6 +304,8 @@ class ActivityView(Widget):
         self._last_preview_key: Optional[tuple] = None  # (item_type, item_id, status)
         # Track recently completed workflows for highlight animation
         self._recently_completed: set = set()  # workflow_ids that just finished
+        # Flag to only run zombie cleanup once on startup
+        self._zombies_cleaned = False
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -352,12 +354,14 @@ class ActivityView(Widget):
         """
         self.activity_items = []
 
-        # Clean up zombie workflow runs on first load
-        if HAS_WORKFLOWS and wf_db:
+        # Clean up zombie workflow runs only once on first load
+        # Use 24 hours to be conservative - only truly abandoned runs
+        if HAS_WORKFLOWS and wf_db and not self._zombies_cleaned:
             try:
-                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=2.0)
+                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=24.0)
                 if cleaned > 0:
                     logger.info(f"Cleaned up {cleaned} zombie workflow runs")
+                self._zombies_cleaned = True
             except Exception as e:
                 logger.debug(f"Could not cleanup zombies: {e}")
 
@@ -684,15 +688,21 @@ class ActivityView(Widget):
             # For running workflows, show progress bar + stage instead of badge
             progress_str = ""
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                # Build mini progress bar: ▓▓▓░░ 3/5 stage
-                pct = item.progress_completed / item.progress_total if item.progress_total > 0 else 0
-                filled = int(pct * 5)
-                empty = 5 - filled
-                bar = "▓" * filled + "░" * empty
-                stage_hint = item.progress_stage[:8] if item.progress_stage else ""
+                # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
+                # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
+                # Width=10 gives perfect accuracy for 4 and 5 task workflows
+                pct = item.progress_completed / item.progress_total
+                bar_width = 10
+                filled_exact = pct * bar_width
+                filled_full = int(filled_exact)
+                remainder = filled_exact - filled_full
+                # Partial block characters for the fractional part
+                partial_chars = " ▏▎▍▌▋▊▉█"
+                partial_idx = int(remainder * 8)
+                partial = partial_chars[partial_idx] if partial_idx > 0 else ""
+                empty = bar_width - filled_full - (1 if partial else 0)
+                bar = "█" * filled_full + partial + "░" * empty
                 progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
-                if stage_hint:
-                    progress_str += f" {stage_hint}"
 
             # Truncate title to fit badge/progress within column width (30 chars)
             prefix = f"{indent}{expand}"
