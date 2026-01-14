@@ -21,6 +21,7 @@ from .base import (
 )
 from . import database as wf_db
 from .registry import workflow_registry
+from emdx.database.documents import record_document_source
 
 
 @dataclass
@@ -971,6 +972,18 @@ Report the document ID that was created."""
                         content=f"# Agent Execution Log\n\n{log_content}",
                         tags=['workflow-output'],
                     )
+                    # Record document source for efficient querying
+                    ir = wf_db.get_individual_run(individual_run_id)
+                    if ir:
+                        sr = wf_db.get_stage_run(ir["stage_run_id"])
+                        if sr:
+                            record_document_source(
+                                document_id=output_doc_id,
+                                workflow_run_id=sr.get("workflow_run_id"),
+                                workflow_stage_run_id=ir["stage_run_id"],
+                                workflow_individual_run_id=individual_run_id,
+                                source_type="individual_output",
+                            )
 
                 wf_db.update_individual_run(
                     individual_run_id,
@@ -1248,6 +1261,15 @@ Report the document ID that was created."""
                         content=f"# Synthesis Log\n\n{log_content}",
                         tags=['workflow-synthesis'],
                     )
+                    # Record document source for efficient querying
+                    sr = wf_db.get_stage_run(stage_run_id)
+                    if sr:
+                        record_document_source(
+                            document_id=output_doc_id,
+                            workflow_run_id=sr.get("workflow_run_id"),
+                            workflow_stage_run_id=stage_run_id,
+                            source_type="synthesis",
+                        )
 
                 return {
                     'output_doc_id': output_doc_id,
@@ -1265,6 +1287,15 @@ Report the document ID that was created."""
                     content=combined,
                     tags=['workflow-synthesis'],
                 )
+                # Record document source for efficient querying
+                sr = wf_db.get_stage_run(stage_run_id)
+                if sr:
+                    record_document_source(
+                        document_id=doc_id,
+                        workflow_run_id=sr.get("workflow_run_id"),
+                        workflow_stage_run_id=stage_run_id,
+                        source_type="synthesis",
+                    )
 
                 return {
                     'output_doc_id': doc_id,
@@ -1282,6 +1313,15 @@ Report the document ID that was created."""
                 content=combined,
                 tags=['workflow-synthesis'],
             )
+            # Record document source for efficient querying
+            sr = wf_db.get_stage_run(stage_run_id)
+            if sr:
+                record_document_source(
+                    document_id=doc_id,
+                    workflow_run_id=sr.get("workflow_run_id"),
+                    workflow_stage_run_id=stage_run_id,
+                    source_type="synthesis",
+                )
 
             return {
                 'output_doc_id': doc_id,

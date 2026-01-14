@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from ..base import StageConfig
 from ..services import document_service, execution_service, claude_service
 from .. import database as wf_db
+from emdx.database.documents import record_document_source
 
 
 @dataclass
@@ -192,6 +193,19 @@ Report the document ID that was created."""
                 # Extract token usage from log
                 token_usage = self._extract_token_usage(log_file)
 
+                # Record document source for bridge table (enables efficient filtering)
+                ir = wf_db.get_individual_run(individual_run_id)
+                if ir and output_doc_id:
+                    sr = wf_db.get_stage_run(ir["stage_run_id"])
+                    if sr:
+                        record_document_source(
+                            document_id=output_doc_id,
+                            workflow_run_id=sr.get("workflow_run_id"),
+                            workflow_stage_run_id=ir["stage_run_id"],
+                            workflow_individual_run_id=individual_run_id,
+                            source_type="individual_output",
+                        )
+
                 wf_db.update_individual_run(
                     individual_run_id,
                     status='completed',
@@ -200,6 +214,7 @@ Report the document ID that was created."""
                     tokens_used=token_usage['tokens_used'],
                     input_tokens=token_usage['input_tokens'],
                     output_tokens=token_usage['output_tokens'],
+                    cost_usd=token_usage['cost_usd'],
                     completed_at=datetime.now(),
                 )
 
@@ -295,20 +310,20 @@ Report the document ID that was created."""
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
-    def _extract_token_usage(self, log_file: Path) -> Dict[str, int]:
-        """Extract token usage from execution log.
+    def _extract_token_usage(self, log_file: Path) -> Dict[str, Any]:
+        """Extract token usage and cost from execution log.
 
-        Parses the __RAW_RESULT_JSON__ line to get token counts from Claude CLI output.
+        Parses the __RAW_RESULT_JSON__ line to get token counts and cost from Claude CLI output.
 
         Args:
             log_file: Path to the execution log
 
         Returns:
-            Dict with input_tokens, output_tokens, and tokens_used (total)
+            Dict with input_tokens, output_tokens, tokens_used (total), and cost_usd
         """
         import json
 
-        result = {'input_tokens': 0, 'output_tokens': 0, 'tokens_used': 0}
+        result = {'input_tokens': 0, 'output_tokens': 0, 'tokens_used': 0, 'cost_usd': 0.0}
 
         if not log_file.exists():
             return result
@@ -335,6 +350,7 @@ Report the document ID that was created."""
                         result['input_tokens'] = input_tokens
                         result['output_tokens'] = output_tokens
                         result['tokens_used'] = input_tokens + output_tokens
+                        result['cost_usd'] = data.get('total_cost_usd', 0.0)
                         break
                     except json.JSONDecodeError:
                         continue
@@ -471,9 +487,26 @@ Report the document ID that was created."""
                 # This establishes the workflow hierarchy (exploration relationship)
                 self._link_outputs_to_synthesis(output_doc_ids, output_doc_id)
 
+                # Extract token usage from synthesis log
+                token_usage = self._extract_token_usage(log_file)
+
+                # Record document source for bridge table (enables efficient filtering)
+                sr = wf_db.get_stage_run(stage_run_id)
+                if sr and output_doc_id:
+                    record_document_source(
+                        document_id=output_doc_id,
+                        workflow_run_id=sr.get("workflow_run_id"),
+                        workflow_stage_run_id=stage_run_id,
+                        workflow_individual_run_id=None,
+                        source_type="synthesis",
+                    )
+
                 return {
                     'output_doc_id': output_doc_id,
-                    'tokens_used': 0,
+                    'tokens_used': token_usage['tokens_used'],
+                    'input_tokens': token_usage['input_tokens'],
+                    'output_tokens': token_usage['output_tokens'],
+                    'cost_usd': token_usage['cost_usd'],
                     'execution_id': exec_id,
                 }
             else:
@@ -490,6 +523,17 @@ Report the document ID that was created."""
 
                 # Link individual outputs as children even for fallback
                 self._link_outputs_to_synthesis(output_doc_ids, doc_id)
+
+                # Record document source for bridge table
+                sr = wf_db.get_stage_run(stage_run_id)
+                if sr and doc_id:
+                    record_document_source(
+                        document_id=doc_id,
+                        workflow_run_id=sr.get("workflow_run_id"),
+                        workflow_stage_run_id=stage_run_id,
+                        workflow_individual_run_id=None,
+                        source_type="synthesis",
+                    )
 
                 return {
                     'output_doc_id': doc_id,
@@ -510,6 +554,17 @@ Report the document ID that was created."""
 
             # Link individual outputs as children even for error case
             self._link_outputs_to_synthesis(output_doc_ids, doc_id)
+
+            # Record document source for bridge table
+            sr = wf_db.get_stage_run(stage_run_id)
+            if sr and doc_id:
+                record_document_source(
+                    document_id=doc_id,
+                    workflow_run_id=sr.get("workflow_run_id"),
+                    workflow_stage_run_id=stage_run_id,
+                    workflow_individual_run_id=None,
+                    source_type="synthesis",
+                )
 
             return {
                 'output_doc_id': doc_id,

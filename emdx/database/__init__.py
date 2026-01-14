@@ -31,6 +31,9 @@ class SQLiteDatabase:
 
     def __init__(self, db_path=None):
         self._connection = DatabaseConnection(db_path)
+        # Update global connection to use this path so module functions work correctly
+        if db_path is not None:
+            db_connection.db_path = db_path
     
     @property
     def db_path(self):

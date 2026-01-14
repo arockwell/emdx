@@ -1115,6 +1115,120 @@ def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_019_add_document_sources(conn: sqlite3.Connection):
+    """Add document_sources table to track document provenance.
+
+    This table links documents to their originating workflow runs,
+    enabling efficient queries without traversing the workflow hierarchy.
+    """
+    cursor = conn.cursor()
+
+    # Create the bridge table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL UNIQUE,
+            workflow_run_id INTEGER,
+            workflow_stage_run_id INTEGER,
+            workflow_individual_run_id INTEGER,
+            source_type TEXT NOT NULL CHECK (source_type IN ('individual_output', 'synthesis', 'stage_output')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE SET NULL,
+            FOREIGN KEY (workflow_stage_run_id) REFERENCES workflow_stage_runs(id) ON DELETE SET NULL,
+            FOREIGN KEY (workflow_individual_run_id) REFERENCES workflow_individual_runs(id) ON DELETE SET NULL
+        )
+    """)
+
+    # Indexes for efficient lookups
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doc_sources_doc ON document_sources(document_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doc_sources_run ON document_sources(workflow_run_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doc_sources_type ON document_sources(source_type)"
+    )
+
+    # Backfill from existing data
+    _backfill_document_sources(cursor)
+
+    conn.commit()
+
+
+def _backfill_document_sources(cursor):
+    """Populate document_sources from existing workflow tables."""
+    # Backfill from individual runs (most common case)
+    cursor.execute("""
+        INSERT OR IGNORE INTO document_sources
+        (document_id, workflow_run_id, workflow_stage_run_id, workflow_individual_run_id, source_type)
+        SELECT
+            wir.output_doc_id,
+            wsr.workflow_run_id,
+            wir.stage_run_id,
+            wir.id,
+            'individual_output'
+        FROM workflow_individual_runs wir
+        JOIN workflow_stage_runs wsr ON wir.stage_run_id = wsr.id
+        WHERE wir.output_doc_id IS NOT NULL
+    """)
+
+    # Backfill synthesis docs from stage runs
+    cursor.execute("""
+        INSERT OR IGNORE INTO document_sources
+        (document_id, workflow_run_id, workflow_stage_run_id, source_type)
+        SELECT
+            wsr.synthesis_doc_id,
+            wsr.workflow_run_id,
+            wsr.id,
+            'synthesis'
+        FROM workflow_stage_runs wsr
+        WHERE wsr.synthesis_doc_id IS NOT NULL
+    """)
+
+    # Backfill stage output docs (if different from synthesis)
+    cursor.execute("""
+        INSERT OR IGNORE INTO document_sources
+        (document_id, workflow_run_id, workflow_stage_run_id, source_type)
+        SELECT
+            wsr.output_doc_id,
+            wsr.workflow_run_id,
+            wsr.id,
+            'stage_output'
+        FROM workflow_stage_runs wsr
+        WHERE wsr.output_doc_id IS NOT NULL
+          AND (wsr.synthesis_doc_id IS NULL OR wsr.output_doc_id != wsr.synthesis_doc_id)
+    """)
+
+
+def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
+    """Add synthesis_cost_usd to workflow_stage_runs table.
+
+    Tracks the cost of synthesis Claude calls separately from individual runs.
+    """
+    cursor = conn.cursor()
+
+    # Add synthesis_cost_usd column
+    cursor.execute("""
+        ALTER TABLE workflow_stage_runs
+        ADD COLUMN synthesis_cost_usd REAL DEFAULT 0.0
+    """)
+
+    # Also add synthesis token tracking
+    cursor.execute("""
+        ALTER TABLE workflow_stage_runs
+        ADD COLUMN synthesis_input_tokens INTEGER DEFAULT 0
+    """)
+
+    cursor.execute("""
+        ALTER TABLE workflow_stage_runs
+        ADD COLUMN synthesis_output_tokens INTEGER DEFAULT 0
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1136,6 +1250,8 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (16, "Add input/output tokens to individual runs", migration_016_add_input_output_tokens),
     (17, "Add cost_usd to individual runs", migration_017_add_cost_usd),
     (18, "Add document hierarchy columns", migration_018_add_document_hierarchy),
+    (19, "Add document sources bridge table", migration_019_add_document_sources),
+    (20, "Add synthesis cost tracking", migration_020_add_synthesis_cost),
 ]
 
 
