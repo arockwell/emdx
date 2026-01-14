@@ -4,9 +4,13 @@ Test lazy loading performance improvements.
 """
 
 import asyncio
+
+import pytest
+
 from emdx.ui.agent_execution_overlay import AgentExecutionOverlay, StageType
 
 
+@pytest.mark.asyncio
 async def test_lazy_loading():
     """Test that stages don't load data until shown."""
     print("🔍 Testing Lazy Loading Performance")

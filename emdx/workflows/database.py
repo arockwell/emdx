@@ -750,3 +750,262 @@ def get_latest_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+# =============================================================================
+# Workflow Preset operations
+# =============================================================================
+
+def create_preset(
+    workflow_id: int,
+    name: str,
+    display_name: str,
+    variables: Dict[str, Any],
+    description: Optional[str] = None,
+    is_default: bool = False,
+    created_by: Optional[str] = None,
+) -> int:
+    """Create a new workflow preset.
+
+    Args:
+        workflow_id: ID of the workflow this preset belongs to
+        name: Unique name within the workflow (e.g., "security_audit")
+        display_name: Human-readable name (e.g., "Security Audit")
+        variables: Dict of variable values for this preset
+        description: Optional description
+        is_default: If True, this preset is used when no preset specified
+        created_by: Optional creator identifier
+
+    Returns:
+        ID of the created preset
+    """
+    with db_connection.get_connection() as conn:
+        # If setting as default, clear other defaults for this workflow
+        if is_default:
+            conn.execute(
+                "UPDATE workflow_presets SET is_default = FALSE WHERE workflow_id = ?",
+                (workflow_id,),
+            )
+
+        cursor = conn.execute(
+            """
+            INSERT INTO workflow_presets
+            (workflow_id, name, display_name, description, variables_json, is_default, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (workflow_id, name, display_name, description, json.dumps(variables), is_default, created_by),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_preset(preset_id: int) -> Optional[Dict[str, Any]]:
+    """Get a preset by ID."""
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM workflow_presets WHERE id = ?",
+            (preset_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_preset_by_name(workflow_id: int, name: str) -> Optional[Dict[str, Any]]:
+    """Get a preset by workflow ID and name."""
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM workflow_presets WHERE workflow_id = ? AND name = ?",
+            (workflow_id, name),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_default_preset(workflow_id: int) -> Optional[Dict[str, Any]]:
+    """Get the default preset for a workflow, if one exists."""
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM workflow_presets WHERE workflow_id = ? AND is_default = TRUE",
+            (workflow_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def list_presets(
+    workflow_id: Optional[int] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """List presets, optionally filtered by workflow.
+
+    Args:
+        workflow_id: If provided, only list presets for this workflow
+        limit: Maximum number of presets to return
+
+    Returns:
+        List of preset dicts, ordered by usage count (most used first)
+    """
+    with db_connection.get_connection() as conn:
+        if workflow_id:
+            cursor = conn.execute(
+                """
+                SELECT * FROM workflow_presets
+                WHERE workflow_id = ?
+                ORDER BY is_default DESC, usage_count DESC, name ASC
+                LIMIT ?
+                """,
+                (workflow_id, limit),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT * FROM workflow_presets
+                ORDER BY usage_count DESC, name ASC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def update_preset(
+    preset_id: int,
+    display_name: Optional[str] = None,
+    description: Optional[str] = None,
+    variables: Optional[Dict[str, Any]] = None,
+    is_default: Optional[bool] = None,
+) -> bool:
+    """Update a preset.
+
+    Args:
+        preset_id: ID of the preset to update
+        display_name: New display name (if provided)
+        description: New description (if provided)
+        variables: New variables dict (if provided)
+        is_default: New default status (if provided)
+
+    Returns:
+        True if the preset was updated, False if not found
+    """
+    with db_connection.get_connection() as conn:
+        # If setting as default, need to know the workflow_id
+        if is_default:
+            cursor = conn.execute(
+                "SELECT workflow_id FROM workflow_presets WHERE id = ?",
+                (preset_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE workflow_presets SET is_default = FALSE WHERE workflow_id = ?",
+                    (row['workflow_id'],),
+                )
+
+        updates = ["updated_at = CURRENT_TIMESTAMP"]
+        params = []
+
+        if display_name is not None:
+            updates.append("display_name = ?")
+            params.append(display_name)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        if variables is not None:
+            updates.append("variables_json = ?")
+            params.append(json.dumps(variables))
+        if is_default is not None:
+            updates.append("is_default = ?")
+            params.append(is_default)
+
+        params.append(preset_id)
+        cursor = conn.execute(
+            f"UPDATE workflow_presets SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def delete_preset(preset_id: int) -> bool:
+    """Delete a preset.
+
+    Args:
+        preset_id: ID of the preset to delete
+
+    Returns:
+        True if deleted, False if not found
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM workflow_presets WHERE id = ?",
+            (preset_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def increment_preset_usage(preset_id: int) -> None:
+    """Increment usage count and update last_used_at for a preset."""
+    with db_connection.get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE workflow_presets
+            SET usage_count = usage_count + 1,
+                last_used_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (preset_id,),
+        )
+        conn.commit()
+
+
+def create_preset_from_run(
+    run_id: int,
+    name: str,
+    display_name: str,
+    description: Optional[str] = None,
+    created_by: Optional[str] = None,
+) -> int:
+    """Create a preset from a workflow run's variables.
+
+    This captures the exact configuration used in a successful run
+    and saves it as a reusable preset.
+
+    Args:
+        run_id: ID of the workflow run to create preset from
+        name: Unique name for the new preset
+        display_name: Human-readable name
+        description: Optional description
+        created_by: Optional creator identifier
+
+    Returns:
+        ID of the created preset
+
+    Raises:
+        ValueError: If the run doesn't exist
+    """
+    with db_connection.get_connection() as conn:
+        # Get the run's workflow_id and input_variables
+        cursor = conn.execute(
+            "SELECT workflow_id, input_variables FROM workflow_runs WHERE id = ?",
+            (run_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"Workflow run {run_id} not found")
+
+        workflow_id = row['workflow_id']
+        variables = json.loads(row['input_variables']) if row['input_variables'] else {}
+
+        # Filter out internal variables (those starting with _)
+        variables = {k: v for k, v in variables.items() if not k.startswith('_')}
+
+        # Create the preset
+        return create_preset(
+            workflow_id=workflow_id,
+            name=name,
+            display_name=display_name,
+            variables=variables,
+            description=description,
+            created_by=created_by,
+        )

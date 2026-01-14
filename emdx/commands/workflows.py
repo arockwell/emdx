@@ -229,7 +229,15 @@ def run_workflow(
         None, "--doc", "-d", help="Input document ID"
     ),
     vars: Optional[List[str]] = typer.Option(
-        None, "--var", "-v", help="Variables as key=value pairs"
+        None, "--var", "-v", help="Variables as key=value pairs (override preset)"
+    ),
+    preset: Optional[str] = typer.Option(
+        None, "--preset", "-p", help="Preset name to use for variables"
+    ),
+    save_as: Optional[str] = typer.Option(
+        None,
+        "--save-as",
+        help="Save this run's variables as a new preset with this name",
     ),
     background: bool = typer.Option(
         False,
@@ -315,6 +323,8 @@ def run_workflow(
         console.print(f"  Stages: {len(workflow.stages)}")
         if doc_id:
             console.print(f"  Input document: #{doc_id}")
+        if preset:
+            console.print(f"  Preset: {preset}")
         if discover:
             console.print(f"  Discovery command: {discover}")
         if max_concurrent:
@@ -324,6 +334,8 @@ def run_workflow(
             console.print(f"  Variables: {user_vars}")
         if working_dir:
             console.print(f"  Working dir: {working_dir}")
+        if save_as:
+            console.print(f"  Will save as preset: {save_as}")
 
         try:
             # Run workflow
@@ -332,6 +344,7 @@ def run_workflow(
                     workflow_name_or_id=workflow.name,
                     input_doc_id=doc_id,
                     input_variables=variables if variables else None,
+                    preset_name=preset,
                     working_dir=working_dir,
                 )
             )
@@ -346,6 +359,20 @@ def run_workflow(
                 )
                 if result.output_doc_ids:
                     console.print(f"  Output documents: {result.output_doc_ids}")
+
+                # Save as preset if requested
+                if save_as:
+                    try:
+                        preset_id = wf_db.create_preset_from_run(
+                            run_id=result.id,
+                            name=save_as,
+                            display_name=save_as.replace("_", " ").replace("-", " ").title(),
+                            description=f"Created from run #{result.id}",
+                            created_by="cli",
+                        )
+                        console.print(f"  [green]✓ Saved as preset '{save_as}' (ID: {preset_id})[/green]")
+                    except Exception as e:
+                        console.print(f"  [yellow]⚠ Failed to save preset: {e}[/yellow]")
             else:
                 console.print(f"\n[red]✗ Workflow failed[/red]")
                 console.print(f"  Run ID: #{result.id}")
@@ -700,3 +727,300 @@ def delete_workflow(
     except Exception as e:
         console.print(f"[red]Error deleting workflow: {e}[/red]")
         raise typer.Exit(1)
+
+
+# =============================================================================
+# Preset Commands
+# =============================================================================
+
+@app.command("presets")
+def list_presets(
+    workflow_name: Optional[str] = typer.Argument(
+        None, help="Workflow name or ID (optional, shows all if not specified)"
+    ),
+):
+    """List presets for a workflow (or all presets)."""
+    try:
+        workflow_id = None
+        if workflow_name:
+            # Try to parse as ID first
+            try:
+                workflow_id = int(workflow_name)
+                workflow = workflow_registry.get_workflow(workflow_id)
+            except ValueError:
+                workflow = workflow_registry.get_workflow(workflow_name)
+
+            if not workflow:
+                console.print(f"[red]Workflow not found: {workflow_name}[/red]")
+                raise typer.Exit(1)
+
+            workflow_id = workflow.id
+            console.print(f"[cyan]Presets for workflow:[/cyan] {workflow.display_name}\n")
+
+        presets = wf_db.list_presets(workflow_id=workflow_id)
+
+        if not presets:
+            if workflow_name:
+                console.print("[dim]No presets found for this workflow[/dim]")
+                console.print("[dim]Create one with: emdx workflow preset create <workflow> <name> --var key=value[/dim]")
+            else:
+                console.print("[dim]No presets found[/dim]")
+            return
+
+        # Group by workflow if showing all
+        if not workflow_name:
+            # Get workflow names for grouping
+            workflows_by_id = {}
+            for preset in presets:
+                wf_id = preset['workflow_id']
+                if wf_id not in workflows_by_id:
+                    wf = workflow_registry.get_workflow(wf_id)
+                    workflows_by_id[wf_id] = wf.display_name if wf else f"Workflow #{wf_id}"
+
+            current_wf = None
+            for preset in presets:
+                wf_id = preset['workflow_id']
+                if wf_id != current_wf:
+                    current_wf = wf_id
+                    console.print(f"\n[cyan]{workflows_by_id[wf_id]}[/cyan]")
+
+                _print_preset_row(preset)
+        else:
+            for preset in presets:
+                _print_preset_row(preset)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error listing presets: {e}[/red]")
+        raise typer.Exit(1)
+
+
+def _print_preset_row(preset: dict):
+    """Print a single preset row."""
+    variables = json.loads(preset['variables_json']) if preset.get('variables_json') else {}
+    default_marker = " [green]★ default[/green]" if preset.get('is_default') else ""
+    usage = f"(used {preset['usage_count']}x)" if preset.get('usage_count', 0) > 0 else ""
+
+    console.print(f"  [bold]{preset['name']}[/bold]{default_marker} {usage}")
+    if preset.get('description'):
+        console.print(f"    [dim]{preset['description']}[/dim]")
+    if variables:
+        var_str = ", ".join(f"{k}={v}" for k, v in list(variables.items())[:3])
+        if len(variables) > 3:
+            var_str += f", ... (+{len(variables) - 3} more)"
+        console.print(f"    [dim]Variables: {var_str}[/dim]")
+
+
+@app.command("preset")
+def preset_command(
+    action: str = typer.Argument(..., help="Action: create, show, update, delete, from-run"),
+    workflow_name: Optional[str] = typer.Argument(None, help="Workflow name or ID"),
+    preset_name: Optional[str] = typer.Argument(None, help="Preset name"),
+    vars: Optional[List[str]] = typer.Option(
+        None, "--var", "-v", help="Variables as key=value pairs"
+    ),
+    description: Optional[str] = typer.Option(
+        None, "--desc", help="Preset description"
+    ),
+    default: bool = typer.Option(
+        False, "--default", help="Set as default preset for this workflow"
+    ),
+    run_id: Optional[int] = typer.Option(
+        None, "--run", "-r", help="Run ID (for from-run action)"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+):
+    """Manage workflow presets.
+
+    Actions:
+      create    Create a new preset
+      show      Show preset details
+      update    Update a preset's variables
+      delete    Delete a preset
+      from-run  Create a preset from a workflow run's variables
+
+    Examples:
+      emdx workflow preset create parallel_analysis security_audit --var topic=Security
+      emdx workflow preset show parallel_analysis security_audit
+      emdx workflow preset from-run parallel_analysis perf_check --run 223
+      emdx workflow preset delete parallel_analysis security_audit
+    """
+    try:
+        if action == "create":
+            if not workflow_name or not preset_name:
+                console.print("[red]Usage: emdx workflow preset create <workflow> <preset_name> --var key=value[/red]")
+                raise typer.Exit(1)
+
+            # Get workflow
+            workflow = _get_workflow_or_exit(workflow_name)
+
+            # Parse variables
+            variables = _parse_variables(vars)
+
+            # Create preset
+            display_name = preset_name.replace("_", " ").replace("-", " ").title()
+            preset_id = wf_db.create_preset(
+                workflow_id=workflow.id,
+                name=preset_name,
+                display_name=display_name,
+                variables=variables,
+                description=description,
+                is_default=default,
+                created_by="cli",
+            )
+
+            console.print(f"[green]✓ Created preset '{preset_name}' for {workflow.display_name}[/green]")
+            console.print(f"  ID: {preset_id}")
+            if variables:
+                console.print(f"  Variables: {variables}")
+
+        elif action == "show":
+            if not workflow_name or not preset_name:
+                console.print("[red]Usage: emdx workflow preset show <workflow> <preset_name>[/red]")
+                raise typer.Exit(1)
+
+            workflow = _get_workflow_or_exit(workflow_name)
+            preset = wf_db.get_preset_by_name(workflow.id, preset_name)
+
+            if not preset:
+                console.print(f"[red]Preset '{preset_name}' not found for workflow '{workflow.name}'[/red]")
+                raise typer.Exit(1)
+
+            variables = json.loads(preset['variables_json']) if preset.get('variables_json') else {}
+
+            console.print(f"[bold]{preset['display_name']}[/bold]")
+            console.print(f"  Name: {preset['name']}")
+            console.print(f"  Workflow: {workflow.display_name}")
+            if preset.get('description'):
+                console.print(f"  Description: {preset['description']}")
+            console.print(f"  Default: {'Yes' if preset.get('is_default') else 'No'}")
+            console.print(f"  Usage count: {preset.get('usage_count', 0)}")
+            if preset.get('last_used_at'):
+                console.print(f"  Last used: {preset['last_used_at']}")
+            console.print(f"\n  Variables:")
+            for k, v in variables.items():
+                console.print(f"    {k}: {v}")
+
+        elif action == "update":
+            if not workflow_name or not preset_name:
+                console.print("[red]Usage: emdx workflow preset update <workflow> <preset_name> --var key=value[/red]")
+                raise typer.Exit(1)
+
+            workflow = _get_workflow_or_exit(workflow_name)
+            preset = wf_db.get_preset_by_name(workflow.id, preset_name)
+
+            if not preset:
+                console.print(f"[red]Preset '{preset_name}' not found[/red]")
+                raise typer.Exit(1)
+
+            # Parse new variables and merge with existing
+            new_vars = _parse_variables(vars)
+            existing_vars = json.loads(preset['variables_json']) if preset.get('variables_json') else {}
+            merged_vars = {**existing_vars, **new_vars} if new_vars else None
+
+            success = wf_db.update_preset(
+                preset_id=preset['id'],
+                description=description,
+                variables=merged_vars,
+                is_default=default if default else None,
+            )
+
+            if success:
+                console.print(f"[green]✓ Updated preset '{preset_name}'[/green]")
+            else:
+                console.print(f"[red]Failed to update preset[/red]")
+                raise typer.Exit(1)
+
+        elif action == "delete":
+            if not workflow_name or not preset_name:
+                console.print("[red]Usage: emdx workflow preset delete <workflow> <preset_name>[/red]")
+                raise typer.Exit(1)
+
+            workflow = _get_workflow_or_exit(workflow_name)
+            preset = wf_db.get_preset_by_name(workflow.id, preset_name)
+
+            if not preset:
+                console.print(f"[red]Preset '{preset_name}' not found[/red]")
+                raise typer.Exit(1)
+
+            if not yes:
+                if not Confirm.ask(f"Delete preset '{preset_name}'?"):
+                    console.print("[yellow]Cancelled[/yellow]")
+                    return
+
+            success = wf_db.delete_preset(preset['id'])
+            if success:
+                console.print(f"[green]✓ Deleted preset '{preset_name}'[/green]")
+            else:
+                console.print(f"[red]Failed to delete preset[/red]")
+                raise typer.Exit(1)
+
+        elif action == "from-run":
+            if not workflow_name or not preset_name:
+                console.print("[red]Usage: emdx workflow preset from-run <workflow> <preset_name> --run <run_id>[/red]")
+                raise typer.Exit(1)
+
+            if not run_id:
+                console.print("[red]--run <run_id> is required for from-run action[/red]")
+                raise typer.Exit(1)
+
+            workflow = _get_workflow_or_exit(workflow_name)
+
+            # Verify run belongs to this workflow
+            run = wf_db.get_workflow_run(run_id)
+            if not run:
+                console.print(f"[red]Run #{run_id} not found[/red]")
+                raise typer.Exit(1)
+
+            if run['workflow_id'] != workflow.id:
+                console.print(f"[red]Run #{run_id} is not from workflow '{workflow.name}'[/red]")
+                raise typer.Exit(1)
+
+            preset_id = wf_db.create_preset_from_run(
+                run_id=run_id,
+                name=preset_name,
+                display_name=preset_name.replace("_", " ").replace("-", " ").title(),
+                description=description or f"Created from run #{run_id}",
+                created_by="cli",
+            )
+
+            console.print(f"[green]✓ Created preset '{preset_name}' from run #{run_id}[/green]")
+            console.print(f"  ID: {preset_id}")
+
+        else:
+            console.print(f"[red]Unknown action: {action}[/red]")
+            console.print("[dim]Valid actions: create, show, update, delete, from-run[/dim]")
+            raise typer.Exit(1)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+def _get_workflow_or_exit(workflow_name: str):
+    """Get workflow by name or ID, exit if not found."""
+    try:
+        workflow_id = int(workflow_name)
+        workflow = workflow_registry.get_workflow(workflow_id)
+    except ValueError:
+        workflow = workflow_registry.get_workflow(workflow_name)
+
+    if not workflow:
+        console.print(f"[red]Workflow not found: {workflow_name}[/red]")
+        raise typer.Exit(1)
+
+    return workflow
+
+
+def _parse_variables(vars: Optional[List[str]]) -> dict:
+    """Parse key=value variable list into dict."""
+    variables = {}
+    if vars:
+        for var in vars:
+            if "=" in var:
+                key, value = var.split("=", 1)
+                variables[key.strip()] = value.strip()
+    return variables
