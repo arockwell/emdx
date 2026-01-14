@@ -109,8 +109,13 @@ class Context(Enum):
 
     # Input contexts (when typing in an input field)
     INPUT_TITLE = "input:title"
-    INPUT_AGENT = "input:agent"
+    INPUT_AGENT_NAME = "input:agent_name"
+    INPUT_AGENT_DISPLAY = "input:agent_display"
+    INPUT_AGENT_DESC = "input:agent_desc"
     INPUT_FILE = "input:file"
+
+    # Widget-specific contexts for agent modals
+    AGENT_LIST_WIDGET = "widget:agent_list"
 
     @classmethod
     def get_parent_contexts(cls, context: "Context") -> List["Context"]:
@@ -175,6 +180,14 @@ class Context(Enum):
             cls.MODAL_STAGE: [],
             cls.MODAL_FULLSCREEN: [],
             cls.MODAL_EXECUTION: [],
+            # Input contexts - don't inherit from each other (only one active at a time)
+            cls.INPUT_TITLE: [],
+            cls.INPUT_AGENT_NAME: [],
+            cls.INPUT_AGENT_DISPLAY: [],
+            cls.INPUT_AGENT_DESC: [],
+            cls.INPUT_FILE: [],
+            # Widget contexts - isolated
+            cls.AGENT_LIST_WIDGET: [],
             # Global has no parent
             cls.GLOBAL: [],
         }
@@ -266,11 +279,11 @@ class Context(Enum):
             "DeleteAgentModal": cls.MODAL_DELETE,
             "AgentSelectionModal": cls.MODAL_AGENT_SELECT,
             "AgentHistoryModal": cls.MODAL_AGENT,
-            "AgentListWidget": cls.MODAL_AGENT_SELECT,
-            # Agent inputs
-            "AgentNameInput": cls.INPUT_AGENT,
-            "AgentDisplayNameInput": cls.INPUT_AGENT,
-            "AgentDescriptionArea": cls.INPUT_AGENT,
+            "AgentListWidget": cls.AGENT_LIST_WIDGET,
+            # Agent inputs - each gets its own context to avoid false conflicts
+            "AgentNameInput": cls.INPUT_AGENT_NAME,
+            "AgentDisplayNameInput": cls.INPUT_AGENT_DISPLAY,
+            "AgentDescriptionArea": cls.INPUT_AGENT_DESC,
             # File modals
             "SaveFileModal": cls.MODAL_FILE_SAVE,
             "ExecuteFileModal": cls.MODAL_FILE_EXECUTE,
