@@ -16,7 +16,8 @@ from typing import TYPE_CHECKING, Optional, Tuple
 
 from textual.containers import ScrollableContainer, Vertical
 from textual.widgets import RichLog
-from rich.markdown import Markdown
+
+from emdx.ui.markdown_config import MarkdownConfig
 
 if TYPE_CHECKING:
     from .inputs import TitleInput
@@ -103,7 +104,7 @@ class PreviewModeManager:
         # Render content
         if content.strip():
             try:
-                preview_content.write(Markdown(content))
+                preview_content.write(MarkdownConfig.create_markdown(content))
             except Exception as e:
                 logger.warning(f"Markdown render failed: {e}, using plain text")
                 preview_content.write(content)

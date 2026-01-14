@@ -127,7 +127,7 @@ class DocumentBrowser(Widget):
                     details_container.styles.height = "34%"
                     details_container.styles.min_height = 8
                     details_container.styles.padding = 0
-                    details_container.styles.border_top = ("heavy", "gray")
+                    # border-top is set in document_browser.tcss using $primary
                     yield RichLog(
                         id="details-panel",
                         classes="details-richlog",
@@ -989,7 +989,7 @@ class DocumentBrowser(Widget):
             preview.clear()
 
             # Render content as markdown (limit size for performance)
-            from rich.markdown import Markdown
+            from emdx.ui.markdown_config import MarkdownConfig
 
             try:
                 content = detail_vm.content
@@ -997,7 +997,7 @@ class DocumentBrowser(Widget):
                 if len(content) > 50000:
                     content = content[:50000] + "\n\n[dim]... (truncated for preview)[/dim]"
                 if content.strip():
-                    markdown = Markdown(content)
+                    markdown = MarkdownConfig.create_markdown(content)
                     preview.write(markdown)
                 else:
                     preview.write("[dim]Empty document[/dim]")

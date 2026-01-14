@@ -72,8 +72,8 @@ class VimEditor(Vertical):
         self.line_numbers.styles.min_width = line_number_width
         self.line_numbers.styles.max_width = line_number_width
 
-        # Add subtle right border to line numbers
-        self.line_numbers.styles.border_right = ("solid", "#333333")
+        # Add subtle right border to line numbers (uses theme surface color)
+        self.line_numbers.styles.border_right = ("solid", "$surface")
 
         # Configure text area to take remaining space (1fr = fractional unit)
         self.text_area.styles.width = "1fr"

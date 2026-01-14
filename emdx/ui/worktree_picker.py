@@ -35,28 +35,28 @@ class WorktreePickerScreen(ModalScreen):
     #worktree-search {
         margin-bottom: 1;
         border: solid $primary;
-        background: black;
-        color: white;
+        background: $surface;
+        color: $text;
         height: 3;
         padding: 1;
     }
-    
+
     #worktree-search:focus {
-        border: solid yellow;
-        background: black;
-        color: white;
+        border: solid $warning;
+        background: $surface;
+        color: $text;
     }
-    
+
     /* Make sure the input text is visible */
     Input {
-        background: black;
-        color: white;
+        background: $surface;
+        color: $text;
     }
-    
+
     Input:focus {
-        background: black;
-        color: white;
-        border: solid yellow;
+        background: $surface;
+        color: $text;
+        border: solid $warning;
     }
     
     #worktree-table {

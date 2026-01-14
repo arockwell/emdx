@@ -6,9 +6,13 @@ Minimal browser container - just swaps browsers, no fancy shit.
 import logging
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.reactive import reactive
 from textual.widget import Widget
+
+from emdx.config.ui_config import get_theme, set_theme
+from emdx.ui.themes import register_all_themes, get_theme_names
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,10 @@ class BrowserContainer(App):
 
     # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
 
+    BINDINGS = [
+        Binding("backslash", "cycle_theme", "Theme", show=True),
+    ]
+
     # No CSS needed here - it's all in the widget
 
     current_browser = reactive("document")
@@ -83,6 +91,18 @@ class BrowserContainer(App):
     async def on_mount(self) -> None:
         """Mount the default browser on startup."""
         logger.info("=== BrowserContainer.on_mount START ===")
+
+        # Register and apply theme
+        register_all_themes(self)
+        saved_theme = get_theme()
+        if saved_theme in get_theme_names() or saved_theme in self.available_themes:
+            self.theme = saved_theme
+            logger.info(f"Applied theme: {saved_theme}")
+        else:
+            # Fallback to default
+            self.theme = "emdx-dark"
+            logger.warning(f"Unknown theme '{saved_theme}', using emdx-dark")
+
         logger.info(f"Screen size: {self.screen.size}")
         logger.info(f"Screen region: {self.screen.region}")
 
@@ -188,9 +208,14 @@ class BrowserContainer(App):
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             elif browser_type == "document":
-                from .document_browser import DocumentBrowser
-                self.browsers[browser_type] = DocumentBrowser()
-                logger.info("DocumentBrowser created successfully")
+                try:
+                    from .document_browser import DocumentBrowser
+                    self.browsers[browser_type] = DocumentBrowser()
+                    logger.info("DocumentBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
@@ -350,3 +375,14 @@ class BrowserContainer(App):
 
         dump_widget(self.screen)
         logger.info("=== END WIDGET TREE DUMP ===")
+
+    def action_cycle_theme(self) -> None:
+        """Open theme selector modal."""
+        from emdx.ui.theme_selector import ThemeSelectorScreen
+
+        def on_theme_selected(theme_name: str | None) -> None:
+            if theme_name:
+                logger.info(f"Theme selected: {theme_name}")
+                self.notify(f"Theme: {theme_name}", timeout=2)
+
+        self.push_screen(ThemeSelectorScreen(), on_theme_selected)
