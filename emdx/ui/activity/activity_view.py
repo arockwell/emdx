@@ -690,7 +690,7 @@ class ActivityView(Widget):
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
                 # Build mini progress bar: ▓▓▓░░ 3/5 stage
                 pct = item.progress_completed / item.progress_total if item.progress_total > 0 else 0
-                filled = int(pct * 5)
+                filled = int(pct * 5 + 0.5)  # Round up at .5 (50% = 2.5 -> 3, not 2)
                 empty = 5 - filled
                 bar = "▓" * filled + "░" * empty
                 stage_hint = item.progress_stage[:8] if item.progress_stage else ""
