@@ -304,6 +304,8 @@ class ActivityView(Widget):
         self._last_preview_key: Optional[tuple] = None  # (item_type, item_id, status)
         # Track recently completed workflows for highlight animation
         self._recently_completed: set = set()  # workflow_ids that just finished
+        # Flag to only run zombie cleanup once on startup
+        self._zombies_cleaned = False
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -352,12 +354,14 @@ class ActivityView(Widget):
         """
         self.activity_items = []
 
-        # Clean up zombie workflow runs on first load
-        if HAS_WORKFLOWS and wf_db:
+        # Clean up zombie workflow runs only once on first load
+        # Use 24 hours to be conservative - only truly abandoned runs
+        if HAS_WORKFLOWS and wf_db and not self._zombies_cleaned:
             try:
-                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=2.0)
+                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=24.0)
                 if cleaned > 0:
                     logger.info(f"Cleaned up {cleaned} zombie workflow runs")
+                self._zombies_cleaned = True
             except Exception as e:
                 logger.debug(f"Could not cleanup zombies: {e}")
 

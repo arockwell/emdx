@@ -241,6 +241,9 @@ def update_workflow_run(
         if status is not None:
             updates.append("status = ?")
             params.append(status)
+            # Clear error_message when status changes to completed (unless explicitly set)
+            if status == 'completed' and error_message is None:
+                updates.append("error_message = NULL")
         if current_stage is not None:
             updates.append("current_stage = ?")
             params.append(current_stage)
@@ -295,20 +298,23 @@ def cleanup_zombie_workflow_runs(max_age_hours: float = 2.0) -> int:
     """
     with db_connection.get_connection() as conn:
         # Find and update zombie runs
+        # Use replace() to normalize ISO 'T' separator to space for consistent datetime comparison
+        # Use 'localtime' since started_at is stored in local time
         cursor = conn.execute(
             """
             UPDATE workflow_runs
             SET status = 'failed',
                 error_message = 'Marked as failed: process appears to have died without cleanup',
-                completed_at = datetime('now')
+                completed_at = datetime('now', 'localtime')
             WHERE status = 'running'
-            AND started_at < datetime('now', ? || ' hours')
+            AND datetime(replace(started_at, 'T', ' ')) < datetime('now', 'localtime', ? || ' hours')
             """,
             (f"-{max_age_hours}",),
         )
         conn.commit()
 
         # Also clean up associated stage runs and individual runs
+        # Only for workflows that are STILL failed (not ones that completed after being marked)
         conn.execute(
             """
             UPDATE workflow_stage_runs
@@ -317,7 +323,6 @@ def cleanup_zombie_workflow_runs(max_age_hours: float = 2.0) -> int:
             AND workflow_run_id IN (
                 SELECT id FROM workflow_runs
                 WHERE status = 'failed'
-                AND error_message LIKE 'Marked as failed: process appears%'
             )
             """
         )
@@ -332,7 +337,6 @@ def cleanup_zombie_workflow_runs(max_age_hours: float = 2.0) -> int:
                 AND workflow_run_id IN (
                     SELECT id FROM workflow_runs
                     WHERE status = 'failed'
-                    AND error_message LIKE 'Marked as failed: process appears%'
                 )
             )
             """

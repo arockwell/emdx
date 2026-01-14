@@ -120,6 +120,11 @@ class WorkflowExecutor:
             if input_variables:
                 context.update(input_variables)
 
+            # Auto-load document content for doc_N variables
+            # If a variable like doc_1, doc_2, etc. is an integer, treat it as a document ID
+            # and load the content into doc_N_content and doc_N_title
+            await self._load_document_variables(context)
+
             # Execute stages sequentially
             for stage in workflow.stages:
                 wf_db.update_workflow_run(run_id, current_stage=stage.name)
@@ -206,6 +211,55 @@ class WorkflowExecutor:
 
         row = wf_db.get_workflow_run(run_id)
         return WorkflowRun.from_db_row(row)
+
+    async def _load_document_variables(self, context: Dict[str, Any]) -> None:
+        """Auto-load document content for doc_N variables.
+
+        If a variable like doc_1, doc_2, etc. is an integer (document ID),
+        load the document content and title into doc_N_content and doc_N_title.
+
+        This enables parameterized workflows where each parallel track can
+        receive a different input document.
+
+        Args:
+            context: Execution context (modified in place)
+        """
+        import re
+
+        # Find all doc_N variables that look like document IDs
+        doc_pattern = re.compile(r'^doc_(\d+)$')
+        docs_to_load = []
+
+        for key, value in list(context.items()):
+            match = doc_pattern.match(key)
+            if match:
+                # Try to interpret value as a document ID
+                try:
+                    doc_id = int(value) if value else None
+                    if doc_id:
+                        docs_to_load.append((key, doc_id))
+                except (ValueError, TypeError):
+                    # Not a document ID, skip
+                    pass
+
+        # Load documents
+        for var_name, doc_id in docs_to_load:
+            try:
+                doc = document_service.get_document(doc_id)
+                if doc:
+                    context[f"{var_name}_content"] = doc.get('content', '')
+                    context[f"{var_name}_title"] = doc.get('title', '')
+                    context[f"{var_name}_id"] = doc_id
+                else:
+                    # Document not found - set empty values
+                    context[f"{var_name}_content"] = f"[Document #{doc_id} not found]"
+                    context[f"{var_name}_title"] = ""
+                    context[f"{var_name}_id"] = None
+            except Exception as e:
+                # Log error but continue - don't fail the whole workflow
+                context[f"{var_name}_content"] = f"[Error loading document #{doc_id}: {e}]"
+                context[f"{var_name}_title"] = ""
+                context[f"{var_name}_id"] = None
 
     async def _execute_stage(
         self,
@@ -358,14 +412,22 @@ class WorkflowExecutor:
             individual_runs.append((individual_run_id, prompt))
 
         # Execute all runs in parallel (with semaphore limiting)
+        # Track completion count for progress updates
+        completed_count = 0
+
         async def run_with_limit(run_id: int, prompt: str):
+            nonlocal completed_count
             async with self._semaphore:
-                return await self._run_agent(
+                result = await self._run_agent(
                     individual_run_id=run_id,
                     agent_id=stage.agent_id,
                     prompt=prompt or stage_input or "",
                     context=context,
                 )
+                # Update progress after each completion
+                completed_count += 1
+                wf_db.update_stage_run(stage_run_id, runs_completed=completed_count)
+                return result
 
         tasks = [run_with_limit(run_id, prompt) for run_id, prompt in individual_runs]
         results = await asyncio.gather(*tasks, return_exceptions=True)
