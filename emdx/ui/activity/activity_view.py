@@ -688,15 +688,20 @@ class ActivityView(Widget):
             # For running workflows, show progress bar + stage instead of badge
             progress_str = ""
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                # Build mini progress bar: ▓▓▓░░ 3/5 stage
-                pct = item.progress_completed / item.progress_total if item.progress_total > 0 else 0
-                filled = int(pct * 5 + 0.5)  # Round up at .5 (50% = 2.5 -> 3, not 2)
-                empty = 5 - filled
-                bar = "▓" * filled + "░" * empty
-                stage_hint = item.progress_stage[:8] if item.progress_stage else ""
+                # Build mini progress bar using 8ths for accuracy: ████░░░░ 2/4
+                # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
+                pct = item.progress_completed / item.progress_total
+                bar_width = 8
+                filled_exact = pct * bar_width
+                filled_full = int(filled_exact)
+                remainder = filled_exact - filled_full
+                # Partial block characters for the fractional part
+                partial_chars = " ▏▎▍▌▋▊▉█"
+                partial_idx = int(remainder * 8)
+                partial = partial_chars[partial_idx] if partial_idx > 0 else ""
+                empty = bar_width - filled_full - (1 if partial else 0)
+                bar = "█" * filled_full + partial + "░" * empty
                 progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
-                if stage_hint:
-                    progress_str += f" {stage_hint}"
 
             # Truncate title to fit badge/progress within column width (30 chars)
             prefix = f"{indent}{expand}"
