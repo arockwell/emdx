@@ -159,6 +159,11 @@ class WorkflowExecutor:
             # and load the content into doc_N_content and doc_N_title
             await self._load_document_variables(context)
 
+            # Auto-load document content for doc_N variables
+            # If a variable like doc_1, doc_2, etc. is an integer, treat it as a document ID
+            # and load the content into doc_N_content and doc_N_title
+            await self._load_document_variables(context)
+
             # Execute stages sequentially
             for stage in workflow.stages:
                 wf_db.update_workflow_run(run_id, current_stage=stage.name)
