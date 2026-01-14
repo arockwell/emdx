@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from ..base import StageConfig
 from ..services import document_service, execution_service, claude_service
 from .. import database as wf_db
+from emdx.database.documents import record_document_source
 
 
 @dataclass
@@ -191,6 +192,19 @@ Report the document ID that was created."""
 
                 # Extract token usage from log
                 token_usage = self._extract_token_usage(log_file)
+
+                # Record document source for bridge table (enables efficient filtering)
+                ir = wf_db.get_individual_run(individual_run_id)
+                if ir and output_doc_id:
+                    sr = wf_db.get_stage_run(ir["stage_run_id"])
+                    if sr:
+                        record_document_source(
+                            document_id=output_doc_id,
+                            workflow_run_id=sr.get("workflow_run_id"),
+                            workflow_stage_run_id=ir["stage_run_id"],
+                            workflow_individual_run_id=individual_run_id,
+                            source_type="individual_output",
+                        )
 
                 wf_db.update_individual_run(
                     individual_run_id,
@@ -471,6 +485,17 @@ Report the document ID that was created."""
                 # This establishes the workflow hierarchy (exploration relationship)
                 self._link_outputs_to_synthesis(output_doc_ids, output_doc_id)
 
+                # Record document source for bridge table (enables efficient filtering)
+                sr = wf_db.get_stage_run(stage_run_id)
+                if sr and output_doc_id:
+                    record_document_source(
+                        document_id=output_doc_id,
+                        workflow_run_id=sr.get("workflow_run_id"),
+                        workflow_stage_run_id=stage_run_id,
+                        workflow_individual_run_id=None,
+                        source_type="synthesis",
+                    )
+
                 return {
                     'output_doc_id': output_doc_id,
                     'tokens_used': 0,
@@ -491,6 +516,17 @@ Report the document ID that was created."""
                 # Link individual outputs as children even for fallback
                 self._link_outputs_to_synthesis(output_doc_ids, doc_id)
 
+                # Record document source for bridge table
+                sr = wf_db.get_stage_run(stage_run_id)
+                if sr and doc_id:
+                    record_document_source(
+                        document_id=doc_id,
+                        workflow_run_id=sr.get("workflow_run_id"),
+                        workflow_stage_run_id=stage_run_id,
+                        workflow_individual_run_id=None,
+                        source_type="synthesis",
+                    )
+
                 return {
                     'output_doc_id': doc_id,
                     'tokens_used': 0,
@@ -510,6 +546,17 @@ Report the document ID that was created."""
 
             # Link individual outputs as children even for error case
             self._link_outputs_to_synthesis(output_doc_ids, doc_id)
+
+            # Record document source for bridge table
+            sr = wf_db.get_stage_run(stage_run_id)
+            if sr and doc_id:
+                record_document_source(
+                    document_id=doc_id,
+                    workflow_run_id=sr.get("workflow_run_id"),
+                    workflow_stage_run_id=stage_run_id,
+                    workflow_individual_run_id=None,
+                    source_type="synthesis",
+                )
 
             return {
                 'output_doc_id': doc_id,
