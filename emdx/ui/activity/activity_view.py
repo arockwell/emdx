@@ -47,6 +47,7 @@ except ImportError:
 
 try:
     from emdx.database import documents as doc_db
+    from emdx.database import groups as groups_db
     from emdx.database.documents import (
         get_workflow_document_ids,
         list_non_workflow_documents,
@@ -54,9 +55,12 @@ try:
     from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
     HAS_DOCS = True
+    HAS_GROUPS = True
 except ImportError:
     doc_db = None
+    groups_db = None
     HAS_DOCS = False
+    HAS_GROUPS = False
 
     def get_workflow_document_ids():
         return set()
@@ -183,6 +187,17 @@ class ActivityItem:
             return "🤖"
         elif self.item_type == "document":
             return "📄"
+        elif self.item_type == "group":
+            # Use group_type-specific icons
+            group_type = getattr(self, "group_type", "batch")
+            icons = {
+                "initiative": "📋",
+                "round": "🔄",
+                "batch": "📦",
+                "session": "💾",
+                "custom": "🏷️",
+            }
+            return icons.get(group_type, "📁")
         else:
             return ""
 
@@ -382,11 +397,15 @@ class ActivityView(Widget):
             except Exception as e:
                 logger.debug(f"Could not cleanup zombies: {e}")
 
+        # Load document groups first (they contain documents)
+        if HAS_GROUPS and groups_db:
+            await self._load_groups()
+
         # Load workflows
         if HAS_WORKFLOWS and wf_db:
             await self._load_workflows()
 
-        # Load recent direct saves (documents not from workflows)
+        # Load recent direct saves (documents not from workflows or groups)
         if HAS_DOCS and doc_db:
             await self._load_direct_saves()
 
@@ -572,17 +591,68 @@ class ActivityView(Widget):
             logger.debug(f"Error getting workflow doc IDs: {e}")
             return set()
 
+    async def _load_groups(self) -> None:
+        """Load document groups into activity items."""
+        try:
+            # Get top-level groups only (those without parents)
+            top_groups = groups_db.list_groups(top_level_only=True)
+
+            for group in top_groups:
+                group_id = group["id"]
+                created = group.get("created_at")
+                if isinstance(created, str):
+                    from emdx.utils.datetime import parse_datetime
+                    created = parse_datetime(created)
+                if not created:
+                    created = datetime.now()
+
+                # Count child groups for expansion indicator
+                child_groups = groups_db.get_child_groups(group_id)
+
+                item = ActivityItem(
+                    item_type="group",
+                    item_id=group_id,
+                    title=group["name"][:35],
+                    status="completed",
+                    timestamp=created,
+                    cost=group.get("total_cost_usd", 0) or 0,
+                    tokens=group.get("total_tokens", 0) or 0,
+                )
+
+                # Store group metadata for display
+                item.group_type = group.get("group_type", "batch")
+                item.doc_count = group.get("doc_count", 0)
+                item._has_group_children = len(child_groups) > 0 or item.doc_count > 0
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading groups: {e}", exc_info=True)
+
     async def _load_direct_saves(self) -> None:
-        """Load documents that weren't created by workflows.
+        """Load documents that weren't created by workflows or added to groups.
 
         Uses the document_sources bridge table for efficient single-query filtering.
         """
         try:
+            # Get documents that are in groups (to exclude them)
+            grouped_doc_ids = set()
+            if HAS_GROUPS and groups_db:
+                try:
+                    grouped_doc_ids = groups_db.get_all_grouped_document_ids()
+                except Exception as e:
+                    logger.debug(f"Error getting grouped doc IDs: {e}")
+
             # Use efficient single-query function that excludes workflow docs via LEFT JOIN
             docs = list_non_workflow_documents(limit=100, days=7, include_archived=False)
 
             for doc in docs:
                 doc_id = doc["id"]
+
+                # Skip documents that are in groups (they'll show under their group)
+                if doc_id in grouped_doc_ids:
+                    continue
+
                 created = doc.get("created_at")
                 title = doc.get("title", "")
 
@@ -635,6 +705,7 @@ class ActivityView(Widget):
             # Expand indicator for items that can have children
             has_doc_children = getattr(item, '_has_doc_children', False)
             has_workflow_outputs = getattr(item, '_has_workflow_outputs', False)
+            has_group_children = getattr(item, '_has_group_children', False)
             # Also treat completed workflows with doc_id as expandable (they have synthesis)
             is_completed_workflow_with_output = (
                 item.item_type == "workflow" and
@@ -643,6 +714,8 @@ class ActivityView(Widget):
             )
             # Output count badge for collapsed workflows
             output_count = getattr(item, '_output_count', 0)
+            # Doc count for groups
+            doc_count = getattr(item, 'doc_count', 0)
             # Running workflows are always expandable (to see individual runs)
             is_running_workflow = item.item_type == "workflow" and item.status == "running"
             if item.expanded and item.children:
@@ -651,10 +724,17 @@ class ActivityView(Widget):
             elif is_running_workflow or \
                  (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow_with_output)) or \
                  (item.item_type == "synthesis" and item.children) or \
+                 (item.item_type == "group" and has_group_children) or \
                  has_doc_children:
                 expand = "▶ "
                 # Show output count badge for collapsed workflows with outputs
-                badge = f" [{output_count}]" if output_count > 0 and item.item_type == "workflow" else ""
+                if output_count > 0 and item.item_type == "workflow":
+                    badge = f" [{output_count}]"
+                # Show doc count badge for groups
+                elif doc_count > 0 and item.item_type == "group":
+                    badge = f" [{doc_count}]"
+                else:
+                    badge = ""
             else:
                 expand = "  "
                 badge = ""
@@ -910,6 +990,11 @@ class ActivityView(Widget):
             await self._show_workflow_summary(item)
             return
 
+        # For groups, show summary
+        if item.item_type == "group" and HAS_GROUPS:
+            await self._show_group_summary(item)
+            return
+
         # Default
         preview.clear()
         preview.write(f"[italic]{item.title}[/italic]")
@@ -1010,6 +1095,80 @@ class ActivityView(Widget):
         preview_scroll.display = True
         preview_log.display = False
         header.update(f"⚡ Workflow #{run['id']}")
+
+    async def _show_group_summary(self, item: ActivityItem) -> None:
+        """Show group summary in preview."""
+        try:
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_log = self.query_one("#preview-log", RichLog)
+            header = self.query_one("#preview-header", Static)
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready for group summary: {e}")
+            return
+
+        group_id = item.item_id
+        if not group_id:
+            return
+
+        try:
+            group = groups_db.get_group(group_id)
+            if not group:
+                return
+
+            lines = [f"# {group['name']}", ""]
+
+            if group.get("description"):
+                lines.append(group["description"])
+                lines.append("")
+
+            lines.append(f"**Type:** {group.get('group_type', 'batch')}")
+            lines.append(f"**Documents:** {group.get('doc_count', 0)}")
+
+            if group.get("total_tokens"):
+                lines.append(f"**Total tokens:** {group['total_tokens']:,}")
+            if group.get("total_cost_usd"):
+                lines.append(f"**Total cost:** ${group['total_cost_usd']:.4f}")
+
+            if group.get("project"):
+                lines.append(f"**Project:** {group['project']}")
+
+            # Show child groups if any
+            child_groups = groups_db.get_child_groups(group_id)
+            if child_groups:
+                lines.append("")
+                lines.append("## Child Groups")
+                for cg in child_groups[:10]:
+                    type_icons = {
+                        "initiative": "📋",
+                        "round": "🔄",
+                        "batch": "📦",
+                        "session": "💾",
+                    }
+                    icon = type_icons.get(cg.get("group_type", ""), "📁")
+                    lines.append(f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)")
+                if len(child_groups) > 10:
+                    lines.append(f"*... and {len(child_groups) - 10} more*")
+
+            # Show members
+            members = groups_db.get_group_members(group_id)
+            if members:
+                lines.append("")
+                lines.append("## Documents")
+                for m in members[:15]:
+                    role = m.get("role", "member")
+                    role_icons = {"primary": "★", "synthesis": "📝", "exploration": "◇", "variant": "≈"}
+                    role_icon = role_icons.get(role, "•")
+                    lines.append(f"- {role_icon} #{m['id']} {m['title'][:40]} ({role})")
+                if len(members) > 15:
+                    lines.append(f"*... and {len(members) - 15} more*")
+
+            self._render_markdown_preview("\n".join(lines))
+            preview_scroll.display = True
+            preview_log.display = False
+            header.update(f"{item.type_icon} Group #{group_id}")
+
+        except Exception as e:
+            logger.error(f"Error showing group summary: {e}", exc_info=True)
 
     async def _show_live_log(self, item: ActivityItem) -> None:
         """Show live log for running workflow or individual run."""
@@ -1189,6 +1348,8 @@ class ActivityView(Widget):
                     # Re-expand this item
                     if item.item_type == "workflow" and not item.expanded:
                         await self._expand_workflow(item)
+                    elif item.item_type == "group" and not item.expanded:
+                        await self._expand_group(item)
                     elif item.item_type == "document" and not item.expanded:
                         await self._expand_document(item)
 
@@ -1198,6 +1359,8 @@ class ActivityView(Widget):
                     if (child.item_type, child.item_id) in expanded_ids and not child.expanded:
                         if child.item_type == "synthesis" and child.children:
                             child.expanded = True
+                        elif child.item_type == "group" and getattr(child, '_has_group_children', False):
+                            await self._expand_group(child)
 
             # Re-flatten after restoring expansions
             self._flatten_items()
@@ -1410,6 +1573,88 @@ class ActivityView(Widget):
         self._flatten_items()
         await self._update_table()
 
+    async def _expand_group(self, item: ActivityItem) -> None:
+        """Expand a group to show its child groups and member documents."""
+        if item.item_type != "group":
+            return
+
+        if item.expanded:
+            return
+
+        if not getattr(item, '_has_group_children', False):
+            return
+
+        children = []
+
+        try:
+            if HAS_GROUPS:
+                group_id = item.item_id
+
+                # Load child groups first
+                child_groups = groups_db.get_child_groups(group_id)
+                for cg in child_groups:
+                    if not cg.get("is_active", True):
+                        continue
+
+                    # Count grandchildren for expansion indicator
+                    grandchildren = groups_db.get_child_groups(cg["id"])
+
+                    child_item = ActivityItem(
+                        item_type="group",
+                        item_id=cg["id"],
+                        title=cg["name"][:35],
+                        status="completed",
+                        timestamp=item.timestamp,
+                        cost=cg.get("total_cost_usd", 0) or 0,
+                        tokens=cg.get("total_tokens", 0) or 0,
+                        depth=item.depth + 1,
+                    )
+                    child_item.group_type = cg.get("group_type", "batch")
+                    child_item.doc_count = cg.get("doc_count", 0)
+                    child_item._has_group_children = len(grandchildren) > 0 or child_item.doc_count > 0
+
+                    children.append(child_item)
+
+                # Load member documents
+                members = groups_db.get_group_members(group_id)
+                for m in members:
+                    role_icons = {
+                        "primary": "★",
+                        "synthesis": "📝",
+                        "exploration": "◇",
+                        "variant": "≈",
+                    }
+                    role_icon = role_icons.get(m.get("role", ""), "")
+                    title = m.get("title", "Untitled")[:28]
+                    if role_icon:
+                        title = f"{role_icon} {title}"
+
+                    child_item = ActivityItem(
+                        item_type="document",
+                        item_id=m["id"],
+                        title=title,
+                        status="completed",
+                        timestamp=item.timestamp,
+                        doc_id=m["id"],
+                        depth=item.depth + 1,
+                    )
+
+                    # Check if document has children for expansion
+                    if HAS_DOCS:
+                        grandchildren = doc_db.get_children(m["id"], include_archived=False)
+                        if grandchildren:
+                            child_item._has_doc_children = True
+
+                    children.append(child_item)
+
+        except Exception as e:
+            logger.error(f"Error expanding group: {e}", exc_info=True)
+
+        item.children = children
+        item.expanded = True
+        self._flatten_items()
+        await self._update_table()
+
     def _collapse_item(self, item: ActivityItem) -> None:
         """Collapse an expanded item."""
         item.expanded = False
@@ -1432,9 +1677,12 @@ class ActivityView(Widget):
 
         item = self.flat_items[self.selected_idx]
         has_doc_children = getattr(item, '_has_doc_children', False)
+        has_group_children = getattr(item, '_has_group_children', False)
 
         if item.item_type == "workflow" and not item.expanded:
             await self._expand_workflow(item)
+        elif item.item_type == "group" and not item.expanded and has_group_children:
+            await self._expand_group(item)
         elif item.item_type == "document" and not item.expanded and has_doc_children:
             await self._expand_document(item)
         elif item.expanded:
@@ -1450,6 +1698,8 @@ class ActivityView(Widget):
         item = self.flat_items[self.selected_idx]
         if item.item_type == "workflow" and not item.expanded:
             await self._expand_workflow(item)
+        elif item.item_type == "group" and not item.expanded and getattr(item, '_has_group_children', False):
+            await self._expand_group(item)
         elif item.item_type == "document" and not item.expanded and getattr(item, '_has_doc_children', False):
             await self._expand_document(item)
         elif item.item_type == "synthesis" and not item.expanded:
