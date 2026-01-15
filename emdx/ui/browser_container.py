@@ -16,6 +16,14 @@ from emdx.ui.themes import register_all_themes, get_theme_names
 
 logger = logging.getLogger(__name__)
 
+# Global keybinding registry instance
+_keybinding_registry = None
+
+
+def get_keybinding_registry():
+    """Get the global keybinding registry instance."""
+    return _keybinding_registry
+
 
 class BrowserContainerWidget(Widget):
     """Widget wrapper to avoid Screen padding issue."""
@@ -90,7 +98,11 @@ class BrowserContainer(App):
 
     async def on_mount(self) -> None:
         """Mount the default browser on startup."""
+        global _keybinding_registry
         logger.info("=== BrowserContainer.on_mount START ===")
+
+        # Initialize keybinding registry and check for conflicts
+        await self._init_keybinding_registry()
 
         # Register and apply theme
         register_all_themes(self)
@@ -135,6 +147,41 @@ class BrowserContainer(App):
         logger.info(f"Mount point size after mount: {mount_point.size}")
         logger.info(f"Mount point region after mount: {mount_point.region}")
         logger.info("=== BrowserContainer.on_mount END ===")
+
+    async def _init_keybinding_registry(self) -> None:
+        """Initialize the keybinding registry and check for conflicts."""
+        global _keybinding_registry
+
+        try:
+            from emdx.ui.keybindings import KeybindingRegistry, ConflictSeverity
+            from emdx.ui.keybindings.extractor import extract_all_keybindings
+
+            # Extract all keybindings from widgets
+            entries = extract_all_keybindings()
+            logger.info(f"Extracted {len(entries)} keybindings from widgets")
+
+            # Create and populate registry
+            registry = KeybindingRegistry()
+            registry.register_many(entries)
+
+            # Detect conflicts
+            conflicts = registry.detect_conflicts()
+            _keybinding_registry = registry
+
+            # Log summary
+            logger.info(registry.summary())
+
+            # Warn about critical conflicts
+            critical = registry.get_conflicts_by_severity(ConflictSeverity.CRITICAL)
+            if critical:
+                logger.warning(f"Found {len(critical)} critical keybinding conflicts!")
+                for conflict in critical[:5]:  # Log first 5
+                    logger.warning(conflict.to_string())
+                if len(critical) > 5:
+                    logger.warning(f"... and {len(critical) - 5} more conflicts")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize keybinding registry: {e}", exc_info=True)
 
     def update_status(self, text: str) -> None:
         """Update the status bar - delegate to current browser."""
