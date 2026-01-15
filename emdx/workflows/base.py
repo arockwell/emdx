@@ -346,3 +346,15 @@ class IterationStrategy:
         # Clamp to available prompts (reuse last if more runs than prompts)
         index = min(run_number - 1, len(self.prompts) - 1)
         return self.prompts[index]
+
+
+@dataclass
+class StageResult:
+    """Result of executing a workflow stage."""
+    success: bool
+    output_doc_id: Optional[int] = None
+    synthesis_doc_id: Optional[int] = None
+    individual_outputs: List[int] = field(default_factory=list)
+    tokens_used: int = 0
+    execution_time_ms: int = 0
+    error_message: Optional[str] = None

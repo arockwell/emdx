@@ -5,20 +5,16 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
-
 from .services import document_service, execution_service, claude_service
-
-logger = logging.getLogger(__name__)
 from .base import (
     ExecutionMode,
     IterationStrategy,
     StageConfig,
+    StageResult,
     WorkflowConfig,
     WorkflowIndividualRun,
     WorkflowRun,
@@ -29,17 +25,7 @@ from .registry import workflow_registry
 from emdx.database.documents import record_document_source
 from emdx.database import groups as groups_db
 
-
-@dataclass
-class StageResult:
-    """Result of executing a stage."""
-    success: bool
-    output_doc_id: Optional[int] = None
-    synthesis_doc_id: Optional[int] = None
-    individual_outputs: List[int] = field(default_factory=list)
-    tokens_used: int = 0
-    execution_time_ms: int = 0
-    error_message: Optional[str] = None
+logger = logging.getLogger(__name__)
 
 
 class WorkflowExecutor:
