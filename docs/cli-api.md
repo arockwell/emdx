@@ -729,55 +729,6 @@ emdx export list-profiles
 
 Shows profiles sorted by usage, with numbers 1-9 for quick export.
 
----
-
-## ⌨️ **Keybinding Management**
-
-### **emdx keybindings**
-Manage TUI keybindings.
-
-```bash
-# List all keybindings
-emdx keybindings --list
-emdx keybindings -l
-
-# Show keybinding conflicts
-emdx keybindings --conflicts
-emdx keybindings -c
-
-# Filter by context
-emdx keybindings --list --context document:normal
-
-# Output as JSON
-emdx keybindings --list --json
-```
-
-**Options:**
-- `--list, -l` - List all keybindings
-- `--conflicts, -c` - Show keybinding conflicts
-- `--context TEXT` - Filter by context (e.g., `document:normal`)
-- `--json, -j` - Output as JSON
-
-#### **emdx keybindings init**
-Create example keybindings config file.
-
-```bash
-emdx keybindings init
-```
-
-Creates an example configuration file for customizing TUI keybindings.
-
-#### **emdx keybindings contexts**
-List all available contexts.
-
-```bash
-emdx keybindings contexts
-```
-
-Shows all available keybinding contexts like `document:normal`, `document:edit`, `log:normal`, etc.
-
----
-
 ## 📊 **Information Commands**
 
 ### **emdx list**
