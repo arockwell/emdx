@@ -16,6 +16,8 @@ import json
 import logging
 from typing import List, Optional, Tuple
 
+from rich.console import Console, Group
+from rich.panel import Panel
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -362,67 +364,70 @@ class WorkflowBrowser(Widget):
             self._show_run_preview(item)
 
     def _show_template_preview(self, workflow) -> None:
-        """Show workflow template preview with pipeline details."""
+        """Show workflow template preview with boxed pipeline."""
         preview = self.query_one("#preview-content", Static)
 
         lines = [
             f"[bold cyan]{workflow.display_name}[/bold cyan]",
             f"[dim]{workflow.name}[/dim]",
-            "",
         ]
 
         if workflow.description:
-            lines.append(workflow.description)
             lines.append("")
+            lines.append(workflow.description)
 
-        # Pipeline visualization
-        lines.append("[bold]Stage Pipeline:[/bold]")
         lines.append("")
 
+        # Pipeline box
+        lines.append(f"[bold]┌─ Pipeline ────────────────────────────[/bold]")
         for i, stage in enumerate(workflow.stages):
             mode = stage.mode.value
             info = MODE_INFO.get(mode, {"icon": "?", "color": "white", "name": mode})
 
             # Check if stage uses {{task}}
             has_task = "{{task}}" in (stage.prompt or "")
-            task_badge = " [green]task[/green]" if has_task else ""
+            task_badge = " [green]◆[/green]" if has_task else ""
 
-            # Stage line
-            arrow = "  └─" if i == len(workflow.stages) - 1 else "  ├─"
+            # Stage line with mode icon
+            mode_display = f"[{info['color']}]{info['icon']:>2}[/{info['color']}]"
             lines.append(
-                f"{arrow} [{info['color']}]{info['icon']}[/{info['color']}] "
-                f"[bold]{stage.name}[/bold]{task_badge}"
+                f"[bold]│[/bold] {mode_display} [bold]{stage.name}[/bold]{task_badge}"
             )
-            lines.append(f"     [dim]{info['name']} × {stage.runs}[/dim]")
-
+            lines.append(f"[bold]│[/bold]     [dim]{info['name']} × {stage.runs}[/dim]")
+        lines.append(f"[bold]└──────────────────────────────────────[/bold]")
         lines.append("")
 
-        # Task info
+        # Status / action prompt
         supports_tasks = self._workflow_supports_tasks(workflow)
         if supports_tasks:
             if self.pending_tasks:
-                lines.append(f"[bold green]Ready to run {len(self.pending_tasks)} tasks[/bold green]")
-                lines.append("[dim]Press Enter to start[/dim]")
+                lines.append(f"[bold green]┌─ Ready ───────────────────────────────[/bold green]")
+                lines.append(f"[bold green]│[/bold green] {len(self.pending_tasks)} tasks queued")
+                lines.append(f"[bold green]│[/bold green] [dim]Press Enter to run[/dim]")
+                lines.append(f"[bold green]└──────────────────────────────────────[/bold green]")
             else:
-                lines.append("[yellow]This workflow needs tasks[/yellow]")
-                lines.append("[dim]Press t to add tasks[/dim]")
+                lines.append(f"[yellow]┌─ Needs Tasks ─────────────────────────[/yellow]")
+                lines.append(f"[yellow]│[/yellow] This workflow requires task input")
+                lines.append(f"[yellow]│[/yellow] [dim]Press t to add tasks[/dim]")
+                lines.append(f"[yellow]└──────────────────────────────────────[/yellow]")
         else:
-            lines.append("[dim]Static workflow (no task input)[/dim]")
+            lines.append("[dim]Static workflow (no task input needed)[/dim]")
 
+        # CLI hint
         lines.append("")
-        lines.append("[bold]CLI:[/bold]")
+        lines.append("[dim]CLI:[/dim]")
         if self.pending_tasks:
             task_args = " ".join(f'-t "{t}"' for t in self.pending_tasks[:2])
             if len(self.pending_tasks) > 2:
                 task_args += " ..."
-            lines.append(f"[dim]emdx workflow run {workflow.name} {task_args}[/dim]")
+            lines.append(f"[dim]  emdx workflow run {workflow.name} {task_args}[/dim]")
         else:
-            lines.append(f"[dim]emdx workflow run {workflow.name} -t \"task\"[/dim]")
+            lines.append(f"[dim]  emdx workflow run {workflow.name} -t \"task\"[/dim]")
 
         preview.update("\n".join(lines))
 
     def _show_run_preview(self, run: dict) -> None:
-        """Show run preview with output links."""
+        """Show run preview with boxed sections."""
         preview = self.query_one("#preview-content", Static)
 
         # Get workflow info
@@ -436,70 +441,87 @@ class WorkflowBrowser(Widget):
         }
         status_color = status_colors.get(run["status"], "white")
 
-        lines = [
-            f"[bold cyan]Run #{run['id']}[/bold cyan]",
-            f"Workflow: {wf_name}",
-            f"Status: [{status_color}]{run['status']}[/{status_color}]",
-            "",
-        ]
+        lines = []
 
-        # Timing
-        if run.get("started_at"):
-            lines.append(f"Started: {run['started_at']}")
-        if run.get("total_execution_time_ms"):
-            secs = run['total_execution_time_ms'] / 1000
-            lines.append(f"Duration: {secs:.1f}s")
-        if run.get("total_tokens_used"):
-            lines.append(f"Tokens: {run['total_tokens_used']:,}")
-
+        # Header
+        lines.append(f"[bold cyan]Run #{run['id']}[/bold cyan]  [{status_color}]{run['status']}[/{status_color}]")
+        lines.append(f"[dim]{wf_name}[/dim]")
         lines.append("")
 
-        # Tasks that were run
+        # Timing info (compact)
+        timing_parts = []
+        if run.get("total_execution_time_ms"):
+            secs = run['total_execution_time_ms'] / 1000
+            timing_parts.append(f"{secs:.1f}s")
+        if run.get("total_tokens_used"):
+            timing_parts.append(f"{run['total_tokens_used']:,} tokens")
+        if timing_parts:
+            lines.append(f"[dim]{' · '.join(timing_parts)}[/dim]")
+            lines.append("")
+
+        # Tasks box
         if run.get("input_variables"):
             try:
                 vars_data = json.loads(run["input_variables"]) if isinstance(run["input_variables"], str) else run["input_variables"]
                 tasks = vars_data.get('tasks', [])
                 if tasks:
-                    lines.append(f"[bold]Tasks ({len(tasks)}):[/bold]")
+                    lines.append(f"[bold]┌─ Tasks ({len(tasks)}) ─────────────────────────[/bold]")
                     for i, task in enumerate(tasks):
                         task_str = str(task)
                         if isinstance(task, int):
-                            lines.append(f"  {i+1}. [cyan]doc:{task}[/cyan]")
+                            # Doc ID - show on one line
+                            lines.append(f"[bold]│[/bold] {i+1}. [cyan]doc:{task}[/cyan]")
                         else:
-                            lines.append(f"  {i+1}. {task_str}")
+                            # String task - wrap naturally with hanging indent
+                            # Split into lines if very long
+                            first_line = True
+                            remaining = task_str
+                            while remaining:
+                                chunk = remaining[:60]
+                                remaining = remaining[60:]
+                                if first_line:
+                                    lines.append(f"[bold]│[/bold] {i+1}. {chunk}")
+                                    first_line = False
+                                else:
+                                    lines.append(f"[bold]│[/bold]    {chunk}")
+                    lines.append(f"[bold]└──────────────────────────────────────[/bold]")
                     lines.append("")
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Stage progress
+        # Stages box
         if wf_db:
             stage_runs = wf_db.list_stage_runs(run["id"])
             if stage_runs:
-                lines.append("[bold]Stages:[/bold]")
+                lines.append(f"[bold]┌─ Stages ──────────────────────────────[/bold]")
                 for sr in stage_runs:
                     icon = {
                         "completed": "[green]✓[/green]",
                         "failed": "[red]✗[/red]",
-                        "running": "[yellow]…[/yellow]",
+                        "running": "[yellow]⟳[/yellow]",
                     }.get(sr["status"], "[dim]○[/dim]")
-                    lines.append(f"  {icon} {sr['stage_name']}: {sr['runs_completed']}/{sr['target_runs']}")
+                    progress = f"{sr['runs_completed']}/{sr['target_runs']}"
+                    lines.append(f"[bold]│[/bold] {icon} {sr['stage_name']:<20} {progress}")
+                lines.append(f"[bold]└──────────────────────────────────────[/bold]")
                 lines.append("")
 
-        # Output documents
+        # Outputs box
         output_ids = json.loads(run.get("output_doc_ids", "[]")) if run.get("output_doc_ids") else []
         if output_ids:
-            lines.append(f"[bold]Outputs ({len(output_ids)}):[/bold]")
-            lines.append("[dim]Press o to view in document browser[/dim]")
-            for doc_id in output_ids[:3]:
-                lines.append(f"  [cyan]doc:{doc_id}[/cyan]")
-            if len(output_ids) > 3:
-                lines.append(f"  [dim]+{len(output_ids) - 3} more[/dim]")
+            lines.append(f"[bold]┌─ Outputs ({len(output_ids)}) ───────────────────────[/bold]")
+            lines.append(f"[bold]│[/bold] [dim]Press o to view in document browser[/dim]")
+            for doc_id in output_ids:
+                lines.append(f"[bold]│[/bold] [cyan]doc:{doc_id}[/cyan]")
+            lines.append(f"[bold]└──────────────────────────────────────[/bold]")
         else:
             lines.append("[dim]No outputs yet[/dim]")
 
+        # Error (if any)
         if run.get("error_message"):
             lines.append("")
-            lines.append(f"[red]Error: {run['error_message']}[/red]")
+            lines.append(f"[bold red]┌─ Error ───────────────────────────────[/bold red]")
+            lines.append(f"[bold red]│[/bold red] {run['error_message']}")
+            lines.append(f"[bold red]└──────────────────────────────────────[/bold red]")
 
         preview.update("\n".join(lines))
 
