@@ -714,11 +714,10 @@ class ActivityView(Widget):
             has_doc_children = getattr(item, '_has_doc_children', False)
             has_workflow_outputs = getattr(item, '_has_workflow_outputs', False)
             has_group_children = getattr(item, '_has_group_children', False)
-            # Also treat completed workflows with doc_id as expandable (they have synthesis)
-            is_completed_workflow_with_output = (
+            # All completed/failed workflows should be expandable (to see outputs or debug)
+            is_completed_workflow = (
                 item.item_type == "workflow" and
-                item.status == "completed" and
-                item.doc_id is not None
+                item.status in ("completed", "failed")
             )
             # Output count badge for collapsed workflows
             output_count = getattr(item, '_output_count', 0)
@@ -730,7 +729,7 @@ class ActivityView(Widget):
                 expand = "▼ "
                 badge = ""
             elif is_running_workflow or \
-                 (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow_with_output)) or \
+                 (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow)) or \
                  (item.item_type == "synthesis" and item.children) or \
                  (item.item_type == "group" and has_group_children) or \
                  has_doc_children:
@@ -788,14 +787,26 @@ class ActivityView(Widget):
             max_title_len = 30 - prefix_len - suffix_len
             truncated_title = item.title[:max_title_len] if len(item.title) > max_title_len else item.title
             title = f"{prefix}{truncated_title}{suffix}"
-            # Show document ID or workflow run ID
-            # For workflows, always show workflow run ID (not the output doc ID)
-            if item.item_type == "workflow" and item.item_id:
-                id_str = f"#{item.item_id}"
-            elif item.doc_id:
-                id_str = f"#{item.doc_id}"
+            # Show appropriate ID based on item type
+            # - Workflows: show workflow run ID (item_id)
+            # - Documents/explorations: show doc_id
+            # - Groups: show group ID (item_id)
+            # - Individual runs: show individual run ID or doc_id if completed
+            if item.item_type in ("workflow", "group"):
+                id_str = f"#{item.item_id}" if item.item_id else "—"
+            elif item.item_type in ("document", "exploration", "synthesis"):
+                id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
+            elif item.item_type == "individual_run":
+                # Show doc_id if has output, otherwise show run ID if exists
+                doc_id = getattr(item, 'doc_id', None)
+                if doc_id:
+                    id_str = f"#{doc_id}"
+                elif item.item_id:
+                    id_str = f"r{item.item_id}"  # Prefix with 'r' for run ID
+                else:
+                    id_str = "—"
             else:
-                id_str = "—"
+                id_str = f"#{item.item_id}" if item.item_id else "—"
             cost = format_cost(item.cost) if item.cost else "—"
 
             table.add_row(status_icon, type_icon, time_str, title, id_str, cost)
@@ -1510,23 +1521,39 @@ class ActivityView(Widget):
                                     )
                                     children.append(out_item)
 
-                        # If no synthesis, show individual outputs directly under workflow
-                        if not sr.get("synthesis_doc_id"):
+                        # If no synthesis, show individual runs/outputs directly
+                        else:
                             for ir in ind_runs:
+                                ir_status = ir.get("status", "completed")
+                                run_num = ir.get("run_number", 0)
+
                                 if ir.get("output_doc_id"):
                                     doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
-                                    title = doc.get("title", f"Output #{ir['run_number']}")[:25] if doc else f"Output #{ir['run_number']}"
+                                    title = doc.get("title", f"Output #{run_num}")[:25] if doc else f"Output #{run_num}"
                                     child_item = ActivityItem(
                                         item_type="exploration",
                                         item_id=ir["output_doc_id"],
                                         title=title,
-                                        status=ir.get("status", "completed"),
+                                        status=ir_status,
                                         timestamp=item.timestamp,
                                         doc_id=ir["output_doc_id"],
                                         cost=ir.get("cost_usd"),
                                         depth=1,
                                     )
-                                    children.append(child_item)
+                                else:
+                                    # No output doc - show the run itself
+                                    title = f"Run {run_num} ({ir_status})"
+                                    child_item = ActivityItem(
+                                        item_type="individual_run",
+                                        item_id=ir.get("id"),
+                                        title=title,
+                                        status=ir_status,
+                                        timestamp=item.timestamp,
+                                        doc_id=None,
+                                        cost=ir.get("cost_usd"),
+                                        depth=1,
+                                    )
+                                children.append(child_item)
 
         except Exception as e:
             logger.error(f"Error expanding workflow: {e}", exc_info=True)
