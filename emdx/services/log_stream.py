@@ -116,9 +116,7 @@ class LogStream:
                     subscriber.on_log_error(e)
                 except Exception as e:
                     # Log subscriber error but continue with others
-                    import logging
-                    logging.debug(f"Subscriber error in log stream: {e}")
-                    pass
+                    logger.debug(f"Subscriber error in log stream: {e}")
     
     def _read_new_content(self) -> str:
         """Read only new content since last position."""
