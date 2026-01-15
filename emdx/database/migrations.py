@@ -1490,6 +1490,7 @@ def migration_025_add_standalone_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
