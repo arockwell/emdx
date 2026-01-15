@@ -342,6 +342,7 @@ def get_recursive_doc_count(group_id: int) -> int:
     """
     with db_connection.get_connection() as conn:
         # Use recursive CTE to get all descendant groups
+        # Only count documents that actually exist and aren't deleted
         cursor = conn.execute(
             """
             WITH RECURSIVE descendants AS (
@@ -354,7 +355,9 @@ def get_recursive_doc_count(group_id: int) -> int:
             )
             SELECT COUNT(DISTINCT dgm.document_id)
             FROM document_group_members dgm
+            JOIN documents d ON dgm.document_id = d.id
             WHERE dgm.group_id IN (SELECT id FROM descendants)
+              AND d.is_deleted = FALSE
             """,
             (group_id,),
         )
