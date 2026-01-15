@@ -12,10 +12,13 @@ Transform Pipeline:
 """
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -98,6 +101,7 @@ class ContentTransformer:
             try:
                 strip_tags = json.loads(strip_tags)
             except json.JSONDecodeError:
+                logger.debug("Failed to parse strip_tags JSON: %s", strip_tags)
                 return ctx
 
         content = ctx.transformed_content
@@ -126,6 +130,7 @@ class ContentTransformer:
             try:
                 tag_map = json.loads(tag_map)
             except json.JSONDecodeError:
+                logger.debug("Failed to parse tag_to_label JSON: %s", tag_map)
                 return ctx
 
         content = ctx.transformed_content
@@ -170,6 +175,7 @@ class ContentTransformer:
             try:
                 fields = json.loads(fields)
             except json.JSONDecodeError:
+                logger.debug("Failed to parse frontmatter_fields JSON: %s, using defaults", fields)
                 fields = ["title", "date"]
 
         frontmatter_data = {}
@@ -185,6 +191,7 @@ class ContentTransformer:
                 try:
                     tag_map = json.loads(tag_map)
                 except json.JSONDecodeError:
+                    logger.debug("Failed to parse tag_to_label JSON in frontmatter: %s", tag_map)
                     tag_map = {}
 
             tags = []

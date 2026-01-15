@@ -1,5 +1,6 @@
 """CLI commands for managing executions."""
 
+import logging
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -7,6 +8,8 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+
+logger = logging.getLogger(__name__)
 from rich import box
 from rich.panel import Panel
 from rich.table import Table
@@ -438,7 +441,8 @@ def execution_health():
                 cpu = proc.cpu_percent(interval=0.1)
                 mem = proc.memory_info().rss / 1024 / 1024  # MB
                 proc_status = f"CPU: {cpu:.0f}% MEM: {mem:.0f}MB"
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                logger.debug("Could not get process info for PID %s: %s", exec.pid, e)
                 proc_status = "N/A"
         else:
             proc_status = "No PID"
@@ -521,8 +525,10 @@ def monitor_executions(
                                 status_str = "[yellow]Unknown[/yellow]"
                                 
                         except psutil.NoSuchProcess:
+                            logger.debug("Process %s no longer exists", exec.pid)
                             status_str = "[red]Dead[/red]"
                         except psutil.AccessDenied:
+                            logger.debug("Access denied to process %s", exec.pid)
                             status_str = "[dim]No Access[/dim]"
                     
                     # Calculate runtime

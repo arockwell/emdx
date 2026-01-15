@@ -3,6 +3,7 @@
 Agent form widget for creating and editing agents.
 """
 
+import logging
 from textual.containers import Vertical, Horizontal
 from textual.widgets import Static, Input, TextArea, Button, Select
 from textual.widget import Widget
@@ -10,6 +11,8 @@ from textual.screen import ModalScreen
 from textual.reactive import reactive
 from textual.validation import Validator, ValidationResult
 from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 class AgentNameValidator(Validator):
@@ -323,10 +326,11 @@ class AgentForm(Widget):
                 next_index = (current_index + 1) % len(self.field_order)
                 next_field_id = self.field_order[next_index]
                 self.query_one(f"#{next_field_id}").focus()
-        except Exception:
+        except Exception as e:
             # If current field not found, focus first field
+            logger.debug("Could not determine current field, focusing first: %s", e)
             self.query_one("#agent-name").focus()
-    
+
     def focus_previous_field(self):
         """Move focus to the previous field in tab order."""
         try:
@@ -337,8 +341,9 @@ class AgentForm(Widget):
                 prev_index = (current_index - 1) % len(self.field_order)
                 prev_field_id = self.field_order[prev_index]
                 self.query_one(f"#{prev_field_id}").focus()
-        except Exception:
+        except Exception as e:
             # If current field not found, focus last field
+            logger.debug("Could not determine current field, focusing last: %s", e)
             self.query_one("#agent-user-prompt").focus()
     
     def show_validation_error(self, message: str):

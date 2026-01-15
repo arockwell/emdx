@@ -564,4 +564,5 @@ class _SelectionStateProxy:
             try:
                 self[key] = value
             except KeyError:
-                pass
+                # Key not in valid keys - silently skip unknown keys
+                logger.debug("Skipping unknown key in update: %s", key)
