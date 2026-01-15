@@ -244,6 +244,146 @@ Show execution statistics.
 emdx exec stats
 ```
 
+## 📁 **Document Groups**
+
+### **emdx group**
+Organize documents into hierarchical groups for better organization.
+
+#### **emdx group create**
+Create a new document group.
+
+```bash
+# Create a simple group
+emdx group create "My Research"
+
+# Create a group with type and description
+emdx group create "Q1 Planning" --type initiative --description "Q1 2025 planning docs"
+
+# Create nested group (child of another group)
+emdx group create "Sprint 1" --parent 42 --type round
+
+# Create project-scoped group
+emdx group create "API Docs" --project myapp --type batch
+```
+
+**Options:**
+- `--type, -t TEXT` - Group type: `batch`, `initiative`, `round`, `session`, `custom` (default: batch)
+- `--parent, -p INTEGER` - Parent group ID for nesting
+- `--project TEXT` - Associated project name
+- `--description, -d TEXT` - Group description
+
+#### **emdx group add**
+Add documents to a group.
+
+```bash
+# Add single document
+emdx group add 1 42
+
+# Add multiple documents
+emdx group add 1 42 43 44
+
+# Add with specific role
+emdx group add 1 42 --role primary
+emdx group add 1 43 44 --role exploration
+```
+
+**Options:**
+- `--role, -r TEXT` - Role in group: `primary`, `exploration`, `synthesis`, `variant`, `member` (default: member)
+
+#### **emdx group remove**
+Remove documents from a group.
+
+```bash
+# Remove single document
+emdx group remove 1 42
+
+# Remove multiple documents
+emdx group remove 1 42 43 44
+```
+
+#### **emdx group list**
+List document groups.
+
+```bash
+# List all groups
+emdx group list
+
+# Show as tree structure
+emdx group list --tree
+
+# Filter by parent (top-level only)
+emdx group list --parent -1
+
+# Filter by project
+emdx group list --project myapp
+
+# Filter by type
+emdx group list --type initiative
+
+# Include deleted groups
+emdx group list --all
+```
+
+**Options:**
+- `--parent, -p INTEGER` - Filter by parent group ID (-1 for top-level)
+- `--project TEXT` - Filter by project
+- `--type, -t TEXT` - Filter by type
+- `--tree` - Show as tree structure
+- `--all, -a` - Include inactive (deleted) groups
+
+#### **emdx group show**
+Show detailed information about a group.
+
+```bash
+emdx group show 1
+```
+
+#### **emdx group edit**
+Edit group properties.
+
+```bash
+# Rename group
+emdx group edit 1 --name "New Name"
+
+# Update description
+emdx group edit 1 --description "Updated description"
+
+# Change parent (move group)
+emdx group edit 1 --parent 2
+
+# Remove from parent (make top-level)
+emdx group edit 1 --parent 0
+
+# Change type
+emdx group edit 1 --type initiative
+```
+
+**Options:**
+- `--name, -n TEXT` - New name
+- `--description, -d TEXT` - New description
+- `--parent, -p INTEGER` - New parent group ID (0 to remove)
+- `--type, -t TEXT` - New group type
+
+#### **emdx group delete**
+Delete a document group.
+
+```bash
+# Soft delete (can be restored)
+emdx group delete 1
+
+# Skip confirmation
+emdx group delete 1 --force
+
+# Permanent delete
+emdx group delete 1 --hard
+```
+
+**Options:**
+- `--force, -f` - Skip confirmation
+- `--hard` - Permanently delete (not soft-delete)
+
+---
+
 ## 🔄 **Workflow System**
 
 Workflows are execution patterns that define HOW to process tasks. Tasks are provided at runtime.
@@ -323,6 +463,7 @@ emdx workflow preset create parallel_analysis security_audit \
 emdx workflow run parallel_analysis --preset security_audit
 ```
 
+
 ## 🔄 **Lifecycle Management**
 
 ### **emdx lifecycle**
@@ -374,6 +515,219 @@ emdx gc --execute
 # Aggressive cleanup (removes more data)
 emdx gc --aggressive --execute
 ```
+
+## 📤 **Export Profiles**
+
+### **emdx export-profile**
+Manage export profiles for document transformation and sharing.
+
+#### **emdx export-profile create**
+Create a new export profile.
+
+```bash
+# Basic clipboard profile
+emdx export-profile create simple-share
+
+# Blog post with frontmatter
+emdx export-profile create blog-post \
+  --frontmatter --fm-fields title,date,tags \
+  --dest file --path ~/blog/drafts/{{title}}.md
+
+# GitHub issue format
+emdx export-profile create github-issue \
+  --strip-tags 🚧,🚨 \
+  --tag-labels '{"🐛": "bug", "✨": "enhancement"}'
+
+# Google Docs export
+emdx export-profile create team-share \
+  --format gdoc --dest gdoc \
+  --display "Team Share"
+
+# Gist export
+emdx export-profile create quick-gist \
+  --format gist --dest gist
+
+# With header and footer templates
+emdx export-profile create report \
+  --header "# Report: {{title}}\nGenerated: {{date}}" \
+  --footer "---\nEnd of report"
+
+# Project-scoped profile
+emdx export-profile create docs-export \
+  --project myapp --desc "Export for documentation site"
+```
+
+**Options:**
+- `--display, -D TEXT` - Human-readable name
+- `--format, -f TEXT` - Output format: `markdown`, `gdoc`, `gist` (default: markdown)
+- `--dest, -d TEXT` - Destination type: `clipboard`, `file`, `gdoc`, `gist` (default: clipboard)
+- `--path TEXT` - File path (supports `{{title}}`, `{{date}}` variables)
+- `--strip-tags TEXT` - Comma-separated emoji tags to strip
+- `--frontmatter` - Add YAML frontmatter
+- `--fm-fields TEXT` - Comma-separated frontmatter fields: `title`, `date`, `tags`, `author`
+- `--header TEXT` - Header template (supports variables)
+- `--footer TEXT` - Footer template
+- `--tag-labels TEXT` - Tag to label mapping as JSON
+- `--desc TEXT` - Profile description
+- `--project, -p TEXT` - Project scope (default: global)
+
+#### **emdx export-profile list**
+List all export profiles.
+
+```bash
+# List all profiles
+emdx export-profile list
+
+# Filter by project
+emdx export-profile list --project myapp
+
+# Output as JSON
+emdx export-profile list --format json
+
+# Include inactive profiles
+emdx export-profile list --all
+```
+
+**Options:**
+- `--project, -p TEXT` - Filter by project
+- `--format, -f TEXT` - Output format: `table`, `json` (default: table)
+- `--all, -a` - Include inactive profiles
+
+#### **emdx export-profile show**
+Show details of an export profile.
+
+```bash
+emdx export-profile show blog-post
+emdx export-profile show 5  # by ID
+```
+
+#### **emdx export-profile edit**
+Edit an export profile in your editor.
+
+```bash
+emdx export-profile edit blog-post
+```
+
+Opens the profile configuration as JSON in your default editor.
+
+#### **emdx export-profile delete**
+Delete an export profile.
+
+```bash
+# Soft delete
+emdx export-profile delete old-profile
+
+# Skip confirmation
+emdx export-profile delete old-profile --force
+
+# Permanent delete
+emdx export-profile delete old-profile --hard
+```
+
+**Options:**
+- `--force, -f` - Skip confirmation
+- `--hard` - Permanently delete (not just deactivate)
+
+#### **emdx export-profile export-json**
+Export a profile as JSON for sharing.
+
+```bash
+# Export to stdout
+emdx export-profile export-json blog-post
+
+# Save to file
+emdx export-profile export-json blog-post > blog-post-profile.json
+```
+
+#### **emdx export-profile import-json**
+Import a profile from a JSON file.
+
+```bash
+# Import profile
+emdx export-profile import-json blog-post-profile.json
+
+# Overwrite existing profile
+emdx export-profile import-json blog-post-profile.json --overwrite
+```
+
+**Options:**
+- `--overwrite` - Overwrite existing profile
+
+#### **emdx export-profile history**
+Show export history.
+
+```bash
+# Show recent exports
+emdx export-profile history
+
+# Show more history
+emdx export-profile history --limit 50
+
+# Filter by profile
+emdx export-profile history --profile blog-post
+```
+
+**Options:**
+- `--limit, -n INTEGER` - Number of records to show (default: 20)
+- `--profile, -p TEXT` - Filter by profile name
+
+---
+
+### **emdx export**
+Export documents using profiles.
+
+#### **emdx export export**
+Export a document using an export profile.
+
+```bash
+# Export to clipboard using profile
+emdx export export 42 --profile blog-post
+
+# Preview without exporting
+emdx export export "My Notes" --profile github-issue --preview
+
+# Override destination
+emdx export export 42 --profile blog-post --dest clipboard
+
+# Export to specific file
+emdx export export 42 --profile share-external --dest file --path ~/export.md
+
+# Dry run (show what would happen)
+emdx export export 42 --profile blog-post --dry-run
+```
+
+**Options:**
+- `--profile, -p TEXT` - Export profile name (required)
+- `--dest, -d TEXT` - Override destination: `clipboard`, `file`, `gdoc`, `gist`
+- `--path TEXT` - Override destination path (for file destination)
+- `--preview` - Show transformed content without exporting
+- `--dry-run` - Show what would happen without exporting
+
+#### **emdx export quick**
+Quick export using profile number.
+
+```bash
+# Use most-used profile (number 1)
+emdx export quick 42
+
+# Use second most-used profile
+emdx export quick 42 -n 2
+
+# Use third most-used profile
+emdx export quick "My Document" -n 3
+```
+
+**Options:**
+- `--n, -n INTEGER` - Profile number from list 1-9 (default: 1)
+
+#### **emdx export list-profiles**
+List profiles with their quick-export numbers.
+
+```bash
+emdx export list-profiles
+```
+
+Shows profiles sorted by usage, with numbers 1-9 for quick export.
 
 ## 📊 **Information Commands**
 
