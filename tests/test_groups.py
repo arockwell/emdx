@@ -478,6 +478,107 @@ class TestGroupMetrics:
         group = groups_db.get_group(group_id)
         assert group["doc_count"] == 1
 
+    def test_token_and_cost_metrics_from_workflow_sources(self, isolate_test_database):
+        """Test that total_tokens and total_cost_usd are calculated from document sources."""
+        from emdx.database import groups as groups_db
+        from emdx.database.connection import db_connection
+        from emdx.models.documents import save_document
+
+        # Create documents
+        doc1_id = save_document(title="Doc 1", content="Content", project="test")
+        doc2_id = save_document(title="Doc 2", content="Content", project="test")
+        doc3_id = save_document(title="Doc 3 (no source)", content="Content", project="test")
+
+        # Create workflow infrastructure directly in db for testing
+        with db_connection.get_connection() as conn:
+            # Create workflow first (required for workflow_runs)
+            cursor = conn.execute(
+                """INSERT INTO workflows (name, display_name, definition_json)
+                   VALUES ('test-workflow', 'Test Workflow', '{}')"""
+            )
+            workflow_id = cursor.lastrowid
+
+            # Create workflow run
+            cursor = conn.execute(
+                """INSERT INTO workflow_runs (workflow_id, status)
+                   VALUES (?, 'completed')""",
+                (workflow_id,),
+            )
+            workflow_run_id = cursor.lastrowid
+
+            # Create stage run
+            cursor = conn.execute(
+                """INSERT INTO workflow_stage_runs (workflow_run_id, stage_name, mode, status)
+                   VALUES (?, 'test-stage', 'single', 'completed')""",
+                (workflow_run_id,),
+            )
+            stage_run_id = cursor.lastrowid
+
+            # Create individual runs with tokens and cost
+            cursor = conn.execute(
+                """INSERT INTO workflow_individual_runs
+                   (stage_run_id, run_number, status, output_doc_id, tokens_used, cost_usd)
+                   VALUES (?, 1, 'completed', ?, 100, 0.005)""",
+                (stage_run_id, doc1_id),
+            )
+            individual_run1_id = cursor.lastrowid
+
+            cursor = conn.execute(
+                """INSERT INTO workflow_individual_runs
+                   (stage_run_id, run_number, status, output_doc_id, tokens_used, cost_usd)
+                   VALUES (?, 2, 'completed', ?, 250, 0.012)""",
+                (stage_run_id, doc2_id),
+            )
+            individual_run2_id = cursor.lastrowid
+
+            # Create document sources linking documents to individual runs
+            conn.execute(
+                """INSERT INTO document_sources
+                   (document_id, workflow_run_id, workflow_individual_run_id, source_type)
+                   VALUES (?, ?, ?, 'individual_output')""",
+                (doc1_id, workflow_run_id, individual_run1_id),
+            )
+            conn.execute(
+                """INSERT INTO document_sources
+                   (document_id, workflow_run_id, workflow_individual_run_id, source_type)
+                   VALUES (?, ?, ?, 'individual_output')""",
+                (doc2_id, workflow_run_id, individual_run2_id),
+            )
+            conn.commit()
+
+        # Create a group and add documents
+        group_id = groups_db.create_group(name="Test Group")
+        groups_db.add_document_to_group(group_id, doc1_id)
+        groups_db.add_document_to_group(group_id, doc2_id)
+        groups_db.add_document_to_group(group_id, doc3_id)  # No workflow source
+
+        # Verify metrics
+        group = groups_db.get_group(group_id)
+        assert group["doc_count"] == 3
+        # Only doc1 and doc2 have workflow sources, so:
+        # total_tokens = 100 + 250 = 350
+        # total_cost_usd = 0.005 + 0.012 = 0.017
+        assert group["total_tokens"] == 350
+        assert abs(group["total_cost_usd"] - 0.017) < 0.0001
+
+    def test_metrics_zero_when_no_workflow_sources(self, isolate_test_database):
+        """Test that metrics are 0 when documents have no workflow sources."""
+        from emdx.database import groups as groups_db
+        from emdx.models.documents import save_document
+
+        # Create document without any workflow source
+        doc_id = save_document(title="Manual Doc", content="Content", project="test")
+
+        # Create group and add document
+        group_id = groups_db.create_group(name="Test Group")
+        groups_db.add_document_to_group(group_id, doc_id)
+
+        # Verify metrics are 0
+        group = groups_db.get_group(group_id)
+        assert group["doc_count"] == 1
+        assert group["total_tokens"] == 0
+        assert group["total_cost_usd"] == 0.0
+
 
 class TestGetAllGroupedDocumentIds:
     """Test getting all grouped document IDs."""

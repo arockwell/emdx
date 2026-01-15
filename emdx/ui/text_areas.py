@@ -382,7 +382,7 @@ class VimEditTextArea(TextArea):
                 return
             except Exception as e:
                 logger.debug(f"Error switching to title: {e}")
-                pass  # Title input might not exist
+                # Title input might not exist
         
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:
@@ -408,8 +408,8 @@ class VimEditTextArea(TextArea):
                     self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
                 event.stop()
                 return
-            except Exception:
-                pass  # Title input might not exist
+            except Exception as e:
+                logger.debug("Title input widget not available for focus: %s", e)
         
         # Don't stop the event - let it bubble up naturally for TextArea to handle
         # Only update line numbers for operations that might change line count

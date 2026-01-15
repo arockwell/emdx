@@ -9,7 +9,10 @@ execution control and state management delegated to separate components:
 - StageProgressDisplay: Displays stage progress
 """
 
-from typing import Optional, Dict, Any, Callable
+from typing import TYPE_CHECKING, Optional, Dict, Any, Callable, List
+
+if TYPE_CHECKING:
+    from emdx.utils.git_ops import GitWorktree
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
@@ -460,7 +463,7 @@ class AgentExecutionOverlay(ModalScreen):
         self,
         project_index: int,
         project_path: str,
-        worktrees: list = None
+        worktrees: Optional[List["GitWorktree"]] = None
     ) -> None:
         """Set selected project and its worktrees."""
         self._selection_state.set_project(project_index, project_path, worktrees)
@@ -564,4 +567,5 @@ class _SelectionStateProxy:
             try:
                 self[key] = value
             except KeyError:
-                pass
+                # Key not in valid keys - silently skip unknown keys
+                logger.debug("Skipping unknown key in update: %s", key)

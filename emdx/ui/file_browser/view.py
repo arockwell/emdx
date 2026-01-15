@@ -230,8 +230,8 @@ class FileBrowserView(FileBrowserNavigation, FileBrowserActions, Container):
             self.refresh_files()
             try:
                 self.query_one("#path-breadcrumb", Static).update(str(new_path))
-            except Exception:
-                pass  # Widget not ready yet
+            except Exception as e:
+                logger.debug("Path breadcrumb widget not ready: %s", e)
             self.selected_index = 0
 
     def watch_selected_index(self, old: int, new: int) -> None:
@@ -241,8 +241,8 @@ class FileBrowserView(FileBrowserNavigation, FileBrowserActions, Container):
                 file_list = self.query_one("#file-list", FileList)
                 file_list.selected_index = new
                 self.update_preview()
-            except Exception:
-                pass  # Widget not ready yet
+            except Exception as e:
+                logger.debug("File list widget not ready: %s", e)
 
     def watch_show_hidden(self, old: bool, new: bool) -> None:
         """React to hidden files toggle."""
@@ -271,7 +271,7 @@ class FileBrowserView(FileBrowserNavigation, FileBrowserActions, Container):
             self.query_one("#file-status-bar", Static).update(status)
         except Exception as e:
             logger.error(f"🗂️ Error in refresh_files: {e}")
-            pass  # Widgets not ready yet
+            # Widgets not ready yet
 
     def update_preview(self) -> None:
         """Update the preview pane."""
@@ -293,7 +293,7 @@ class FileBrowserView(FileBrowserNavigation, FileBrowserActions, Container):
                 logger.info("🗂️ No file selected for preview")
         except Exception as e:
             logger.error(f"🗂️ Error in update_preview: {e}")
-            pass  # Widgets not ready yet
+            # Widgets not ready yet
 
     def on_key(self, event: events.Key) -> None:
         """Handle key events, especially ESC for mode switching."""

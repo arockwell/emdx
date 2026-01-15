@@ -332,6 +332,24 @@ emdx --version
 - **Tests** for all new functionality
 - **Documentation** updates for significant changes
 
+#### **Logging Standards**
+Use the standard Python logging pattern:
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+```
+This allows callers to configure logging as needed. The `emdx/utils/logging.py` module provides `get_logger()` for cases requiring automatic file handler setup, but standard library usage is preferred for most modules.
+
+#### **Console Output Standards**
+Use the shared console instance for CLI output:
+```python
+from emdx.utils.output import console
+
+console.print("[green]Success![/green]")
+```
+This ensures consistent formatting across the CLI. Use `emdx/utils/cli.py` decorators for standardized error handling.
+
 ### **Commit Message Format**
 ```
 feat: add event-driven log streaming

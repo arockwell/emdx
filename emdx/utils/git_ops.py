@@ -419,7 +419,8 @@ def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
             ))
         
         return worktrees
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        logger.debug("Failed to get worktree list: %s", e)
         return []
 
 
@@ -473,7 +474,8 @@ def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
                 ))
         
         return files
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        logger.debug("Failed to get git status: %s", e)
         return []
 
 

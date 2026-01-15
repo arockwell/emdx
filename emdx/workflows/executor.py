@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -9,7 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
+
 from .services import document_service, execution_service, claude_service
+
+logger = logging.getLogger(__name__)
 from .base import (
     ExecutionMode,
     IterationStrategy,
@@ -538,8 +543,8 @@ class WorkflowExecutor:
                             groups_db.add_document_to_group(
                                 group_id, doc_id, role="exploration", added_by="workflow"
                             )
-                        except Exception:
-                            pass  # Don't fail on group membership issues
+                        except Exception as e:
+                            logger.debug("Failed to add doc %s to group %s: %s", doc_id, group_id, e)
                 total_tokens += result.get('tokens_used', 0)
             else:
                 errors.append(result.get('error_message', 'Unknown error'))
@@ -565,8 +570,8 @@ class WorkflowExecutor:
                 groups_db.add_document_to_group(
                     group_id, synthesis_doc_id, role="primary", added_by="workflow"
                 )
-            except Exception:
-                pass  # Don't fail on group membership issues
+            except Exception as e:
+                logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
 
         return StageResult(
             success=True,
@@ -948,8 +953,8 @@ class WorkflowExecutor:
                                 groups_db.add_document_to_group(
                                     group_id, doc_id, role="exploration", added_by="workflow"
                                 )
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("Failed to add doc %s to group %s: %s", doc_id, group_id, e)
                     total_tokens += result.get('tokens_used', 0)
                 else:
                     error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
@@ -978,8 +983,8 @@ class WorkflowExecutor:
                         groups_db.add_document_to_group(
                             group_id, synthesis_doc_id, role="primary", added_by="workflow"
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
 
             # Determine overall success
             if not stage.continue_on_failure and errors:
@@ -1229,14 +1234,10 @@ Report the document ID that was created."""
             return None
         except (OSError, IOError) as e:
             # Log file read errors
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.debug(f"Could not read log file {log_file} for output doc ID extraction: {type(e).__name__}: {e}")
             return None
         except Exception as e:
             # Log unexpected errors during parsing
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
@@ -1298,13 +1299,9 @@ Report the document ID that was created."""
 
             return empty
         except (OSError, IOError) as e:
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.debug(f"Could not read log file {log_file} for token extraction: {type(e).__name__}: {e}")
             return empty
         except Exception as e:
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting tokens from {log_file}: {type(e).__name__}: {e}")
             return empty
 

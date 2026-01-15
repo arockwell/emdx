@@ -1,6 +1,7 @@
 """Worktree pool for managing parallel git worktrees in dynamic workflows."""
 
 import asyncio
+import logging
 import os
 import random
 import subprocess
@@ -9,6 +10,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -97,8 +100,8 @@ class Worktree:
                 capture_output=True,
                 check=False,
             )
-        except Exception:
-            pass  # Best effort cleanup
+        except Exception as e:
+            logger.debug("Best effort worktree cleanup failed for %s: %s", self.path, e)
 
 
 class WorktreePool:
