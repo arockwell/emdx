@@ -34,7 +34,7 @@ class SelectionState:
     worktree_index: Optional[int] = None
 
     # Pre-loaded data for stages
-    project_worktrees: "List[GitWorktree]" = field(default_factory=list)
+    project_worktrees: List["GitWorktree"] = field(default_factory=list)
 
     # Configuration
     config: Dict[str, Any] = field(default_factory=dict)
@@ -61,7 +61,7 @@ class SelectionState:
         self,
         project_index: int,
         project_path: str,
-        worktrees: "Optional[List[GitWorktree]]" = None,
+        worktrees: Optional[List["GitWorktree"]] = None,
         data: Optional[Dict[str, Any]] = None
     ) -> None:
         """Set project selection with optional worktrees."""
