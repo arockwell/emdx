@@ -2,10 +2,13 @@
 Document CRUD operations for emdx knowledge base
 """
 
+import logging
 from typing import Any, Optional, Union
 
 from ..utils.datetime import parse_datetime
 from .connection import db_connection
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_doc_datetimes(doc: dict[str, Any], fields: list[str] | None = None) -> dict[str, Any]:
@@ -802,9 +805,7 @@ def record_document_source(
             conn.commit()
             return True
         except Exception as e:
-            from emdx.utils.logging import get_logger
-
-            get_logger(__name__).error(f"Error recording document source: {e}")
+            logger.error(f"Error recording document source: {e}")
             return False
 
 
