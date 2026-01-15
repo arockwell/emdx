@@ -15,6 +15,7 @@ and basic functionality works.
 import pytest
 from emdx.workflows.base import ExecutionMode, StageConfig, StageResult
 from emdx.workflows.executor import WorkflowExecutor
+from emdx.workflows.template import resolve_template
 
 
 class TestExecutorImports:
@@ -41,18 +42,16 @@ class TestExecutorImports:
 
 
 class TestTemplateResolution:
-    """Test the executor's template resolution."""
+    """Test template resolution (now in template.py module)."""
 
     def test_simple_variable(self):
         """Simple {{variable}} substitution works."""
-        executor = WorkflowExecutor()
-        result = executor._resolve_template("Hello {{name}}", {"name": "World"})
+        result = resolve_template("Hello {{name}}", {"name": "World"})
         assert result == "Hello World"
 
     def test_dotted_variable(self):
         """Dotted {{stage.output}} substitution works."""
-        executor = WorkflowExecutor()
-        result = executor._resolve_template(
+        result = resolve_template(
             "Previous: {{stage1.output}}",
             {"stage1.output": "test output"}
         )
@@ -60,8 +59,7 @@ class TestTemplateResolution:
 
     def test_indexed_variable(self):
         """Indexed {{array[0]}} substitution works."""
-        executor = WorkflowExecutor()
-        result = executor._resolve_template(
+        result = resolve_template(
             "First: {{items[0]}}, Second: {{items[1]}}",
             {"items": ["a", "b", "c"]}
         )
@@ -69,12 +67,10 @@ class TestTemplateResolution:
 
     def test_missing_variable(self):
         """Missing variables become empty strings."""
-        executor = WorkflowExecutor()
-        result = executor._resolve_template("Hello {{missing}}", {})
+        result = resolve_template("Hello {{missing}}", {})
         assert result == "Hello "
 
     def test_index_out_of_bounds(self):
         """Out of bounds index becomes empty string."""
-        executor = WorkflowExecutor()
-        result = executor._resolve_template("{{items[99]}}", {"items": ["a"]})
+        result = resolve_template("{{items[99]}}", {"items": ["a"]})
         assert result == ""

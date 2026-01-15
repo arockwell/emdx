@@ -20,6 +20,7 @@ from emdx.workflows.base import (
     WorkflowConfig,
 )
 from emdx.workflows.executor import WorkflowExecutor
+from emdx.workflows.output_parser import extract_output_doc_id, extract_token_usage_detailed
 
 
 class TestWorkflowExecutorInit:
@@ -44,8 +45,7 @@ class TestOutputDocIdExtraction:
         log_file = tmp_path / "test.log"
         log_file.write_text("Starting...\n✅ Saved as #456\nDone.")
 
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(log_file)
+        doc_id = extract_output_doc_id(log_file)
         assert doc_id == 456
 
     def test_extract_created_document_pattern(self, tmp_path):
@@ -53,8 +53,7 @@ class TestOutputDocIdExtraction:
         log_file = tmp_path / "test.log"
         log_file.write_text("Starting...\nCreated document #789\nDone.")
 
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(log_file)
+        doc_id = extract_output_doc_id(log_file)
         assert doc_id == 789
 
     def test_extract_last_match(self, tmp_path):
@@ -62,8 +61,7 @@ class TestOutputDocIdExtraction:
         log_file = tmp_path / "test.log"
         log_file.write_text("Saved as #100\nSaved as #200\nSaved as #300")
 
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(log_file)
+        doc_id = extract_output_doc_id(log_file)
         assert doc_id == 300
 
     def test_no_doc_id_in_log(self, tmp_path):
@@ -71,16 +69,14 @@ class TestOutputDocIdExtraction:
         log_file = tmp_path / "test.log"
         log_file.write_text("No document was created here.")
 
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(log_file)
+        doc_id = extract_output_doc_id(log_file)
         assert doc_id is None
 
     def test_missing_log_file(self, tmp_path):
         """Return None if log file doesn't exist."""
         log_file = tmp_path / "nonexistent.log"
 
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(log_file)
+        doc_id = extract_output_doc_id(log_file)
         assert doc_id is None
 
     def test_strip_ansi_codes(self, tmp_path):
@@ -89,8 +85,7 @@ class TestOutputDocIdExtraction:
         # Simulate Rich/ANSI formatted output
         log_file.write_text("\x1b[32m✅ Saved as #123\x1b[0m")
 
-        executor = WorkflowExecutor()
-        doc_id = executor._extract_output_doc_id(log_file)
+        doc_id = extract_output_doc_id(log_file)
         assert doc_id == 123
 
 
@@ -106,8 +101,7 @@ class TestTokenUsageExtraction:
             'Done.'
         )
 
-        executor = WorkflowExecutor()
-        usage = executor._extract_token_usage_detailed(log_file)
+        usage = extract_token_usage_detailed(log_file)
 
         assert usage['input'] == 105  # 100 + 5 cache_read
         assert usage['output'] == 50
@@ -120,8 +114,7 @@ class TestTokenUsageExtraction:
         """Missing log file returns zeros."""
         log_file = tmp_path / "nonexistent.log"
 
-        executor = WorkflowExecutor()
-        usage = executor._extract_token_usage_detailed(log_file)
+        usage = extract_token_usage_detailed(log_file)
 
         assert usage == {'input': 0, 'output': 0, 'cache_in': 0, 'cache_create': 0, 'total': 0, 'cost_usd': 0.0}
 
@@ -130,8 +123,7 @@ class TestTokenUsageExtraction:
         log_file = tmp_path / "test.log"
         log_file.write_text("Just some log output without the marker")
 
-        executor = WorkflowExecutor()
-        usage = executor._extract_token_usage_detailed(log_file)
+        usage = extract_token_usage_detailed(log_file)
 
         assert usage['total'] == 0
 
