@@ -1,9 +1,12 @@
 """Monitor and manage execution lifecycle."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import psutil
+
+logger = logging.getLogger(__name__)
 
 from ..database.connection import db_connection
 from ..models.executions import (
@@ -56,9 +59,11 @@ class ExecutionMonitor:
                     health['reason'] = 'Process is zombie'
                 
             except psutil.NoSuchProcess:
+                logger.debug("Process %s not found for execution %s", execution.pid, execution.id)
                 health['process_exists'] = False
                 health['reason'] = 'Process not found'
             except psutil.AccessDenied:
+                logger.debug("Access denied to process %s for execution %s", execution.pid, execution.id)
                 health['process_exists'] = True  # Assume it exists if we can't access
                 health['reason'] = 'Access denied to process'
         else:
@@ -253,10 +258,10 @@ class ExecutionMonitor:
                     actions.append(action)
                     
             except psutil.NoSuchProcess:
-                # Process already gone
-                pass
+                # Process already gone - expected during cleanup
+                logger.debug("Process %s already terminated during cleanup", pid)
             except psutil.AccessDenied:
                 # Can't access process
-                pass
+                logger.debug("Access denied to process %s during cleanup", pid)
         
         return actions

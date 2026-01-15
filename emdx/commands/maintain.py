@@ -658,7 +658,8 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
                         check=True
                     )
                     deleted += 1
-                except subprocess.CalledProcessError:
+                except subprocess.CalledProcessError as e:
+                    logger.debug("Failed to delete branch %s: %s", branch, e)
                     failed += 1
                 progress.update(task, advance=1)
         
@@ -769,7 +770,8 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                     mem_mb = proc.memory_info().rss / 1024 / 1024
                     mem_str = f", {mem_mb:.0f}MB"
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
+                    # Memory info unavailable for this process
+                    logger.debug("Could not get memory info for PID %s", proc.pid)
 
                 console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -805,7 +807,8 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                     proc.wait(timeout=1)
                     killed += 1
             except psutil.NoSuchProcess:
-                # Process already gone
+                # Process already gone - count as success
+                logger.debug("Process already terminated during cleanup")
                 terminated += 1
             except Exception as e:
                 logger.warning("Failed to terminate process: %s", e)

@@ -2,11 +2,14 @@
 Git utility functions for emdx
 """
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     import git
+
+logger = logging.getLogger(__name__)
 
 
 def get_git_project(path: Optional[Path] = None) -> Optional[str]:
@@ -57,6 +60,7 @@ def get_git_project(path: Optional[Path] = None) -> Optional[str]:
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         # Not in a git repository
         return None
-    except Exception:
+    except Exception as e:
         # Any other error, just return None
+        logger.debug("Error getting git project: %s", e)
         return None

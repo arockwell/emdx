@@ -384,7 +384,8 @@ class SimilarityService:
             try:
                 vocab_size = len(self._vectorizer.vocabulary_)
             except AttributeError:
-                pass
+                # Vectorizer may not have vocabulary_ if not fitted yet
+                logger.debug("Vectorizer has no vocabulary_ attribute, may not be fitted")
 
         return IndexStats(
             document_count=len(self._doc_ids),
