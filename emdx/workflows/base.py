@@ -264,6 +264,52 @@ class WorkflowIndividualRun:
 
 
 @dataclass
+class WorkflowPreset:
+    """Named variable configuration for a workflow.
+
+    Presets allow saving commonly-used variable combinations for reuse.
+    For example, a "security_audit" preset for parallel_analysis might set:
+        topic="Security Analysis", track_1="Authentication", track_2="Input Validation"
+    """
+    id: int
+    workflow_id: int
+    name: str
+    display_name: str
+    description: Optional[str]
+    variables: Dict[str, Any]
+    is_default: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    usage_count: int = 0
+    last_used_at: Optional[datetime] = None
+
+    @classmethod
+    def from_db_row(cls, row: Dict[str, Any]) -> 'WorkflowPreset':
+        """Create WorkflowPreset from database row."""
+        variables = json.loads(row['variables_json']) if row.get('variables_json') else {}
+
+        return cls(
+            id=row['id'],
+            workflow_id=row['workflow_id'],
+            name=row['name'],
+            display_name=row['display_name'],
+            description=row.get('description'),
+            variables=variables,
+            is_default=bool(row.get('is_default', False)),
+            created_at=row.get('created_at'),
+            updated_at=row.get('updated_at'),
+            created_by=row.get('created_by'),
+            usage_count=row.get('usage_count', 0),
+            last_used_at=row.get('last_used_at'),
+        )
+
+    def to_variables_json(self) -> str:
+        """Convert variables to JSON for database storage."""
+        return json.dumps(self.variables)
+
+
+@dataclass
 class IterationStrategy:
     """Predefined prompt sequences for iterative mode."""
     id: int

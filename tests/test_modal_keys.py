@@ -9,11 +9,11 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Label, DataTable
 from textual.binding import Binding
 
-class TestDeleteConfirmScreen(ModalScreen):
+class DeleteConfirmScreen(ModalScreen):
     """Test modal screen for delete confirmation."""
 
     CSS = """
-    TestDeleteConfirmScreen {
+    DeleteConfirmScreen {
         align: center middle;
     }
 
@@ -50,7 +50,7 @@ class TestDeleteConfirmScreen(ModalScreen):
         super().__init__()
         self.doc_id = doc_id
         self.doc_title = doc_title
-        print(f"TestDeleteConfirmScreen initialized for doc #{doc_id}")
+        print(f"DeleteConfirmScreen initialized for doc #{doc_id}")
 
     def compose(self) -> ComposeResult:
         with Grid(id="dialog"):
@@ -79,10 +79,10 @@ class TestDeleteConfirmScreen(ModalScreen):
 
     def on_key(self, event) -> None:
         """Debug key events."""
-        print(f"TestDeleteConfirmScreen.on_key: key={event.key}, character={event.character}")
+        print(f"DeleteConfirmScreen.on_key: key={event.key}, character={event.character}")
         # Don't stop propagation - let bindings handle it
 
-class TestApp(App):
+class ModalTestApp(App):
     """Test app to verify delete modal functionality."""
     
     BINDINGS = [
@@ -112,7 +112,7 @@ class TestApp(App):
             else:
                 status.update("Delete cancelled!")
         
-        self.push_screen(TestDeleteConfirmScreen(123, "Test Document"), handle_result)
+        self.push_screen(DeleteConfirmScreen(123, "Test Document"), handle_result)
     
     def on_key(self, event) -> None:
         """Debug all key events."""
@@ -123,6 +123,6 @@ if __name__ == "__main__":
     print("Press 'd' to show delete modal")
     print("In the modal, press 'y' to confirm or 'n'/'escape' to cancel")
     print("Press 'q' to quit\n")
-    
-    app = TestApp()
+
+    app = ModalTestApp()
     app.run()

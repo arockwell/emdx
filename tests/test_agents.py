@@ -29,7 +29,12 @@ from emdx.agents.generic import GenericAgent
 
 @pytest.fixture
 def sample_agent_config():
-    """Create a sample AgentConfig for testing."""
+    """Create a sample AgentConfig for testing.
+
+    NOTE: save_outputs is False by default to prevent tests from writing
+    to the real database. Tests that need to test save behavior should
+    explicitly set save_outputs=True and mock save_document.
+    """
     return AgentConfig(
         id=1,
         name="test-agent",
@@ -47,7 +52,7 @@ def sample_agent_config():
         context_search_query="{{title}}",
         include_doc_content=True,
         output_format="markdown",
-        save_outputs=True,
+        save_outputs=False,  # Disabled to prevent writing to real database in tests
         output_tags=["test", "output"],
         version=1,
         is_active=True,
