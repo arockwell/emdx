@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
+
 from .services import document_service, execution_service, claude_service
 
 logger = logging.getLogger(__name__)
@@ -541,8 +543,8 @@ class WorkflowExecutor:
                             groups_db.add_document_to_group(
                                 group_id, doc_id, role="exploration", added_by="workflow"
                             )
-                        except Exception:
-                            pass  # Don't fail on group membership issues
+                        except Exception as e:
+                            logger.debug("Failed to add doc %s to group %s: %s", doc_id, group_id, e)
                 total_tokens += result.get('tokens_used', 0)
             else:
                 errors.append(result.get('error_message', 'Unknown error'))
@@ -568,8 +570,8 @@ class WorkflowExecutor:
                 groups_db.add_document_to_group(
                     group_id, synthesis_doc_id, role="primary", added_by="workflow"
                 )
-            except Exception:
-                pass  # Don't fail on group membership issues
+            except Exception as e:
+                logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
 
         return StageResult(
             success=True,
@@ -951,8 +953,8 @@ class WorkflowExecutor:
                                 groups_db.add_document_to_group(
                                     group_id, doc_id, role="exploration", added_by="workflow"
                                 )
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("Failed to add doc %s to group %s: %s", doc_id, group_id, e)
                     total_tokens += result.get('tokens_used', 0)
                 else:
                     error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
@@ -981,8 +983,8 @@ class WorkflowExecutor:
                         groups_db.add_document_to_group(
                             group_id, synthesis_doc_id, role="primary", added_by="workflow"
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
 
             # Determine overall success
             if not stage.continue_on_failure and errors:
