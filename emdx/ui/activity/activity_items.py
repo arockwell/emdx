@@ -463,3 +463,134 @@ class ExplorationItem(ActivityItem):
             return doc.get("content", ""), f"◇ #{self.doc_id}"
 
         return "", "PREVIEW"
+
+
+@dataclass
+class GroupItem(ActivityItem):
+    """A document group (batch, round, initiative) in the activity stream."""
+
+    group: Dict[str, Any] = field(default_factory=dict)
+    doc_count: int = 0
+    total_cost: float = 0.0
+    total_tokens: int = 0
+    child_group_count: int = 0
+
+    @property
+    def item_type(self) -> str:
+        return "group"
+
+    @property
+    def type_icon(self) -> str:
+        icons = {
+            "initiative": "📋",
+            "round": "🔄",
+            "batch": "📦",
+            "session": "💾",
+            "custom": "🏷️",
+        }
+        return icons.get(self.group.get("group_type", ""), "📁")
+
+    @property
+    def status_icon(self) -> str:
+        return "📊"
+
+    def can_expand(self) -> bool:
+        return self.doc_count > 0 or self.child_group_count > 0 or len(self.children) > 0
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        """Load child groups and member documents."""
+        from emdx.database import groups
+
+        children = []
+
+        if not self.group:
+            return children
+
+        group_id = self.group.get("id")
+        if not group_id:
+            return children
+
+        # Load child groups first
+        child_groups = groups.get_child_groups(group_id)
+        for cg in child_groups:
+            if not cg.get("is_active", True):
+                continue
+
+            # Count grandchildren for expansion indicator
+            grandchildren = groups.get_child_groups(cg["id"])
+
+            children.append(
+                GroupItem(
+                    item_id=cg["id"],
+                    title=cg["name"][:35],
+                    timestamp=self.timestamp,
+                    group=cg,
+                    doc_count=cg.get("doc_count", 0),
+                    total_cost=cg.get("total_cost_usd", 0),
+                    total_tokens=cg.get("total_tokens", 0),
+                    child_group_count=len(grandchildren),
+                    depth=self.depth + 1,
+                )
+            )
+
+        # Load member documents
+        members = groups.get_group_members(group_id)
+        for m in members:
+            role_icons = {
+                "primary": "★",
+                "synthesis": "📝",
+                "exploration": "◇",
+                "variant": "≈",
+            }
+            role_icon = role_icons.get(m.get("role", ""), "")
+            title = m.get("title", "Untitled")[:30]
+            if role_icon:
+                title = f"{role_icon} {title}"
+
+            children.append(
+                DocumentItem(
+                    item_id=m["id"],
+                    title=title,
+                    timestamp=self.timestamp,
+                    doc_id=m["id"],
+                    has_children=False,
+                    depth=self.depth + 1,
+                )
+            )
+
+        return children
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        """Show group summary in preview."""
+        from emdx.database import groups
+
+        if not self.group:
+            return "", "PREVIEW"
+
+        content_parts = [f"# {self.group.get('name', 'Untitled Group')}\n"]
+
+        if self.group.get("description"):
+            content_parts.append(f"\n{self.group['description']}\n")
+
+        content_parts.append(f"\n**Type:** {self.group.get('group_type', 'batch')}")
+        content_parts.append(f"\n**Documents:** {self.doc_count}")
+
+        if self.total_tokens:
+            content_parts.append(f"\n**Total tokens:** {self.total_tokens:,}")
+        if self.total_cost:
+            content_parts.append(f"\n**Total cost:** ${self.total_cost:.4f}")
+
+        # Show member list
+        group_id = self.group.get("id")
+        if group_id:
+            members = groups.get_group_members(group_id)
+            if members:
+                content_parts.append("\n\n## Documents\n")
+                for m in members[:10]:
+                    role = m.get("role", "member")
+                    content_parts.append(f"- #{m['id']} {m['title'][:40]} ({role})\n")
+                if len(members) > 10:
+                    content_parts.append(f"\n*... and {len(members) - 10} more*\n")
+
+        content = "".join(content_parts)
+        return content, f"{self.type_icon} Group #{self.group.get('id', '?')}"

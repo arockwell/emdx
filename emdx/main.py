@@ -26,6 +26,7 @@ from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.workflows import app as workflows_app
 from emdx.commands.keybindings import app as keybindings_app
+from emdx.commands.groups import app as groups_app
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -81,6 +82,9 @@ app.add_typer(tasks_app, name="task", help="Task management")
 
 # Add workflows as a subcommand group
 app.add_typer(workflows_app, name="workflow", help="Manage and run multi-stage workflows")
+
+# Add groups as a subcommand group
+app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
 
 # Add export profile management as a subcommand group
 app.add_typer(export_profiles_app, name="export-profile", help="Manage export profiles")

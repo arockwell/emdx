@@ -4,6 +4,7 @@ EMDX Database Package
 Organized database operations split into focused modules:
 - connection: Database connection management
 - documents: Document CRUD operations
+- groups: Document group operations
 - search: Full-text search operations
 - migrations: Database schema migrations
 
@@ -24,6 +25,7 @@ from .documents import (
     update_document,
 )
 from .search import search_documents
+from . import groups
 
 
 class SQLiteDatabase:
@@ -408,6 +410,7 @@ __all__ = [
     "db",
     "SQLiteDatabase",
     "db_connection",
+    "groups",
     "save_document",
     "get_document",
     "list_documents",
