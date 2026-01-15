@@ -18,7 +18,6 @@ import re
 import textwrap
 from typing import List, Optional, Tuple
 
-from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 from textual.app import ComposeResult
