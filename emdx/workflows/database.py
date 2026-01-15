@@ -1015,12 +1015,13 @@ def get_workflow_output_doc_ids(run_id: int) -> List[int]:
     """Get all output document IDs from a workflow run.
 
     Collects output_doc_ids from the workflow run and all individual runs.
+    Only returns IDs for documents that actually exist.
 
     Args:
         run_id: Workflow run ID
 
     Returns:
-        List of document IDs
+        List of document IDs (only those that exist in documents table)
     """
     doc_ids = set()
 
@@ -1064,5 +1065,15 @@ def get_workflow_output_doc_ids(run_id: int) -> List[int]:
         for row in cursor.fetchall():
             if row['synthesis_doc_id']:
                 doc_ids.add(row['synthesis_doc_id'])
+
+        # Filter to only include docs that actually exist
+        if doc_ids:
+            placeholders = ",".join("?" * len(doc_ids))
+            cursor = conn.execute(
+                f"SELECT id FROM documents WHERE id IN ({placeholders}) AND is_deleted = FALSE",
+                list(doc_ids),
+            )
+            existing_ids = {row['id'] for row in cursor.fetchall()}
+            doc_ids = doc_ids & existing_ids
 
     return list(doc_ids)

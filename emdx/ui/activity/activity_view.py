@@ -1954,7 +1954,10 @@ class ActivityView(Widget):
             self._show_notification("Workflow run not found", is_error=True)
             return
 
-        workflow_name = run.get("workflow_name", "Workflow")
+        # Get workflow name from the workflow definition
+        workflow_id = run.get("workflow_id")
+        workflow = wf_db.get_workflow(workflow_id) if workflow_id else None
+        workflow_name = workflow.get("name", "Workflow") if workflow else "Workflow"
 
         # Check if workflow already has a group
         existing_groups = groups_db.list_groups(workflow_run_id=workflow_run_id)
@@ -1977,13 +1980,18 @@ class ActivityView(Widget):
 
             # Add all workflow output documents to this group
             output_doc_ids = wf_db.get_workflow_output_doc_ids(workflow_run_id)
+            added_count = 0
             for doc_id in output_doc_ids:
                 try:
-                    groups_db.add_document_to_group(wf_group_id, doc_id, role="member")
-                except Exception:
-                    pass  # Already in group
+                    if groups_db.add_document_to_group(wf_group_id, doc_id, role="member"):
+                        added_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to add doc {doc_id} to group: {e}")
 
-            self._show_notification(f"Grouped workflow under '{parent_name}'")
+            if added_count > 0:
+                self._show_notification(f"Grouped {added_count} docs under '{parent_name}'")
+            else:
+                self._show_notification(f"Created group under '{parent_name}' (no docs found)")
 
     def on_group_picker_cancelled(self, event: GroupPicker.Cancelled) -> None:
         """Handle picker cancellation."""
