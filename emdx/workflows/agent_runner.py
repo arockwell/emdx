@@ -9,14 +9,14 @@ Handles running Claude agents as part of workflow execution, including:
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .output_parser import extract_output_doc_id, extract_token_usage_detailed
 from .services import document_service, execution_service, claude_service
 from . import database as wf_db
-from emdx.database.documents import record_document_source
+from emdx.database.documents import record_document_source, find_documents_created_between
 
 logger = logging.getLogger(__name__)
 
@@ -126,11 +126,18 @@ async def run_agent(
         cost_usd = token_usage.get('cost_usd', 0.0)
 
         if exit_code == 0:
-            # Try to extract output document ID from log
-            output_doc_id = extract_output_doc_id(log_file)
+            # Find output document - try database query first (more reliable),
+            # then fall back to log parsing
+            output_doc_id = _find_workflow_output_doc(exec_start_time, exec_end_time)
 
             if not output_doc_id:
-                # If no document was created, save the log content as output
+                # Fallback: try to extract from log
+                output_doc_id = extract_output_doc_id(log_file)
+                if output_doc_id:
+                    logger.debug(f"Found output doc via log parsing: {output_doc_id}")
+
+            if not output_doc_id:
+                # Last resort: save the log content as output
                 log_content = log_file.read_text() if log_file.exists() else "No output captured"
                 output_doc_id = document_service.save_document(
                     title=f"Workflow Agent Output - {datetime.now().isoformat()}",
@@ -223,3 +230,47 @@ def _record_output_source(
                 )
     except Exception as e:
         logger.debug(f"Failed to record document source: {e}")
+
+
+def _find_workflow_output_doc(
+    start_time: datetime,
+    end_time: datetime,
+) -> Optional[int]:
+    """Find a workflow output document created during execution.
+
+    Queries the database for documents with the 'workflow-output' tag
+    created between start_time and end_time. This is more reliable than
+    log parsing because it doesn't depend on Claude's output format.
+
+    Args:
+        start_time: Execution start time
+        end_time: Execution end time
+
+    Returns:
+        Document ID if found, None otherwise
+    """
+    try:
+        # Add a small buffer to account for timing differences
+        # (document might be saved slightly before/after execution boundaries)
+        buffer = timedelta(seconds=2)
+        search_start = start_time - buffer
+        search_end = end_time + buffer
+
+        docs = find_documents_created_between(
+            start_time=search_start,
+            end_time=search_end,
+            tags=['workflow-output'],
+            limit=5,  # Get a few in case of duplicates
+        )
+
+        if docs:
+            # Return the most recent one (first in list since ordered DESC)
+            doc_id = docs[0]['id']
+            logger.debug(f"Found workflow output doc via database query: {doc_id}")
+            return doc_id
+
+        return None
+
+    except Exception as e:
+        logger.debug(f"Database query for workflow output failed: {e}")
+        return None

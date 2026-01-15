@@ -3,6 +3,7 @@ Document CRUD operations for emdx knowledge base
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Optional, Union
 
 from ..utils.datetime import parse_datetime
@@ -881,4 +882,59 @@ def list_non_workflow_documents(
         query += " ORDER BY d.created_at DESC LIMIT ?"
 
         cursor = conn.execute(query, (cutoff.isoformat(), limit))
+        return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]
+
+
+def find_documents_created_between(
+    start_time: datetime,
+    end_time: datetime,
+    tags: Optional[list[str]] = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Find documents created within a time window, optionally filtered by tags.
+
+    This is useful for finding documents created during workflow execution
+    without relying on log parsing.
+
+    Args:
+        start_time: Start of time window (inclusive)
+        end_time: End of time window (inclusive)
+        tags: Optional list of tags to filter by (documents must have ALL tags)
+        limit: Maximum number of documents to return
+
+    Returns:
+        List of document dictionaries, most recent first
+    """
+    with db_connection.get_connection() as conn:
+        if tags:
+            # Join with tags table to filter
+            placeholders = ",".join("?" * len(tags))
+            query = f"""
+                SELECT d.*
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = FALSE
+                  AND d.created_at >= ?
+                  AND d.created_at <= ?
+                  AND t.name IN ({placeholders})
+                GROUP BY d.id
+                HAVING COUNT(DISTINCT t.name) = ?
+                ORDER BY d.created_at DESC
+                LIMIT ?
+            """
+            params = [start_time.isoformat(), end_time.isoformat()] + tags + [len(tags), limit]
+        else:
+            query = """
+                SELECT d.*
+                FROM documents d
+                WHERE d.is_deleted = FALSE
+                  AND d.created_at >= ?
+                  AND d.created_at <= ?
+                ORDER BY d.created_at DESC
+                LIMIT ?
+            """
+            params = [start_time.isoformat(), end_time.isoformat(), limit]
+
+        cursor = conn.execute(query, params)
         return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]
