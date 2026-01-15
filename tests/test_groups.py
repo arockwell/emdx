@@ -7,6 +7,29 @@ related documents into batches, rounds, and initiatives.
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def clean_groups_table(isolate_test_database):
+    """Clean up groups tables before each test.
+
+    This fixture runs automatically before each test in this module,
+    ensuring tests don't interfere with each other.
+    """
+    from emdx.database.connection import db_connection
+
+    with db_connection.get_connection() as conn:
+        conn.execute("DELETE FROM document_group_members")
+        conn.execute("DELETE FROM document_groups")
+        conn.commit()
+
+    yield
+
+    # Also clean up after (in case test creates data that could affect other test files)
+    with db_connection.get_connection() as conn:
+        conn.execute("DELETE FROM document_group_members")
+        conn.execute("DELETE FROM document_groups")
+        conn.commit()
+
+
 class TestGroupCreation:
     """Test group creation and retrieval."""
 
