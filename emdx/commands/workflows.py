@@ -228,6 +228,9 @@ def run_workflow(
     doc_id: Optional[int] = typer.Option(
         None, "--doc", "-d", help="Input document ID"
     ),
+    task: Optional[List[str]] = typer.Option(
+        None, "--task", "-t", help="Task to run (string or doc ID). Can be specified multiple times."
+    ),
     vars: Optional[List[str]] = typer.Option(
         None, "--var", "-v", help="Variables as key=value pairs (override preset)"
     ),
@@ -268,7 +271,7 @@ def run_workflow(
         None,
         "--max-concurrent",
         "-j",
-        help="Override max concurrent executions for dynamic stages",
+        help="Override max concurrent executions for parallel/dynamic stages",
     ),
 ):
     """Run a workflow.
@@ -298,6 +301,16 @@ def run_workflow(
                     key, value = var.split("=", 1)
                     variables[key.strip()] = value.strip()
 
+        # Parse tasks (can be strings or doc IDs)
+        if task:
+            tasks = []
+            for t in task:
+                try:
+                    tasks.append(int(t))  # Try as doc ID
+                except ValueError:
+                    tasks.append(t)  # Use as string
+            variables['tasks'] = tasks
+
         # Create worktree if requested
         worktree_branch = None
         working_dir = None
@@ -323,15 +336,18 @@ def run_workflow(
         console.print(f"  Stages: {len(workflow.stages)}")
         if doc_id:
             console.print(f"  Input document: #{doc_id}")
+        if task:
+            console.print(f"  Tasks: {len(task)} task(s)")
         if preset:
             console.print(f"  Preset: {preset}")
         if discover:
             console.print(f"  Discovery command: {discover}")
         if max_concurrent:
             console.print(f"  Max concurrent: {max_concurrent}")
-        if variables and any(not k.startswith('_') for k in variables):
-            user_vars = {k: v for k, v in variables.items() if not k.startswith('_')}
-            console.print(f"  Variables: {user_vars}")
+        if variables and any(not k.startswith('_') and k != 'tasks' for k in variables):
+            user_vars = {k: v for k, v in variables.items() if not k.startswith('_') and k != 'tasks'}
+            if user_vars:
+                console.print(f"  Variables: {user_vars}")
         if working_dir:
             console.print(f"  Working dir: {working_dir}")
         if save_as:
