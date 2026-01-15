@@ -35,6 +35,7 @@ google-api-python-client = "^2.100.0"
 google-auth-httplib2 = "^0.2.0"
 google-auth-oauthlib = "^1.2.0"
 scikit-learn = "^1.6.0"  # TF-IDF similarity
+datasketch = "^1.6.0"  # MinHash/LSH for O(n) duplicate detection
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"

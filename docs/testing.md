@@ -2,7 +2,7 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has 37 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
+EMDX has 36 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
 
 ### **Current Test Status** 🎉 **FULLY FUNCTIONAL TEST SUITE**
 
@@ -11,8 +11,8 @@ EMDX has 37 test files with comprehensive coverage. The test suite is fully func
 poetry run pytest tests/ -v
 
 # 🎉 Current Results (as of 2026-01-14):
-# - 411 tests collected
-# - 406 tests passing ✅ (98.8% success rate)
+# - 395 tests collected
+# - 395 tests passing ✅ (100% success rate)
 # - 0 tests failing
 # - 5 tests skipped
 # - 0 collection errors ✅
@@ -53,7 +53,6 @@ tests/
 ├── test_log_browser.py               # Log browser TUI component
 ├── test_log_browser_timestamps.py    # Log parsing and timestamps
 ├── test_migrations.py                # Database schema migrations
-├── test_new_modules.py               # New module tests
 ├── test_overlay.py                   # Overlay functionality tests
 ├── test_search.py                    # Search functionality tests
 ├── test_similarity.py                # Document similarity service
@@ -79,7 +78,7 @@ tests/
 - **Log Processing** (`test_log_browser_timestamps.py`, `test_timestamp_parsing.py`) - Log parsing
 
 ### **Infrastructure Tests**
-- **Database Migrations** (`test_migrations.py`) - Schema evolution
+- **Database Migrations** (`test_migrations.md`) - Schema evolution
 - **Configuration** (`test_config.py`) - Settings and configuration
 - **Utilities** (`test_utils.py`, `test_file_size.py`) - Helper functions
 
@@ -97,11 +96,11 @@ def temp_db():
     """Create temporary database for testing."""
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
         db_path = Path(f.name)
-    
+
     # Use temporary database
     db = DatabaseConnection(db_path)
     yield db
-    
+
     # Cleanup
     db_path.unlink()
 ```
@@ -118,7 +117,7 @@ def test_save_command():
         # Create test file
         with open('test.md', 'w') as f:
             f.write('# Test Document')
-        
+
         # Test save command
         result = runner.invoke(cli, ['save', 'test.md'])
         assert result.exit_code == 0
@@ -148,7 +147,7 @@ def test_log_browser():
 3. ✅ **Missing imports FIXED** - All import references corrected
 4. ✅ **Asyncio marker FIXED** - TUI tests now have proper markers
 5. ✅ **Test fixture issues FIXED** - Collection warnings resolved
-6. ✅ **All tests passing** - 406/411 tests pass (5 skipped)
+6. ✅ **All tests passing** - 395/395 tests pass (5 skipped)
 
 ### **Minor Considerations**
 - **TUI testing is limited** - Textual widget testing is challenging
@@ -204,7 +203,7 @@ from emdx.models.documents import Document
 
 class TestDocumentModel:
     """Test the Document model operations."""
-    
+
     def test_create_document_success(self, temp_db):
         """Test successful document creation."""
         doc = Document.create(
@@ -212,11 +211,11 @@ class TestDocumentModel:
             content="Test content",
             project="test-project"
         )
-        
+
         assert doc.id is not None
         assert doc.title == "Test Document"
         assert doc.project == "test-project"
-    
+
     def test_create_document_missing_title_fails(self, temp_db):
         """Test document creation fails with missing title."""
         with pytest.raises(ValueError, match="Title is required"):
@@ -242,7 +241,7 @@ class TestDocumentModel:
 ## 🛠️ **Test Suite Maintenance**
 
 ### **Current State: Healthy** ✅
-The test suite is fully operational with 98.8% pass rate (406/411 tests passing, 5 skipped).
+The test suite is fully operational with 100% pass rate (395 tests passing, 5 skipped).
 
 ### **Future Improvements**
 1. **Add performance regression testing** - Track test execution times

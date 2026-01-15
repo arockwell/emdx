@@ -12,11 +12,12 @@ emdx agent list
 
 # Run an agent on a document (background with monitoring)
 emdx agent run doc-generator --doc 123 --background
-emdx log --live  # Monitor real-time progress
+# ✓ Agent started in background (execution #123)
+emdx exec tail 123  # Monitor real-time progress
 
-# Run an agent with a query (background with monitoring)  
+# Run an agent with a query (background with monitoring)
 emdx agent run code-reviewer --query "Review the auth implementation" --background
-emdx log --live  # See what the agent is doing
+emdx exec monitor  # See all running executions
 
 # Create a custom agent
 emdx agent create --name my-analyzer --prompt analyzer.md --category analysis
@@ -90,16 +91,18 @@ Run agents in the background for long tasks with real-time monitoring:
 # Start agent in background
 emdx agent run doc-generator --doc 789 --background
 # ✓ Agent started in background (execution #123)
-# Use emdx log to monitor progress
 
-# Monitor live output to see what the agent is doing
-emdx log --live
+# Monitor live output for a specific execution
+emdx exec tail 123
 # Shows real-time formatted output with timestamps and emojis:
 # [10:30:15] 🤖 Starting agent execution: Documentation Generator
-# [10:30:16] 🔧 Tools: Glob, Grep, Read, Write, Task  
+# [10:30:16] 🔧 Tools: Glob, Grep, Read, Write, Task
 # [10:30:18] 🚀 Claude Code session started
 # [10:30:22] 📋 Using tool: Glob
 # [10:30:25] 📖 Using tool: Read
+
+# Or monitor all running executions
+emdx exec monitor
 ```
 
 ## Managing Agents
@@ -235,8 +238,9 @@ emdx agent list --all  # Include inactive agents
 
 ### Execution Fails
 ```bash
-emdx log  # View execution logs
 emdx exec list --limit 5  # Check recent executions
+emdx exec show <exec_id>  # View execution details and logs
+emdx exec logs <exec_id>  # View only the logs for an execution
 ```
 
 ### Tool Access Denied
