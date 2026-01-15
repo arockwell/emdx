@@ -32,9 +32,6 @@ poetry run pytest tests/ -v
 ```
 tests/
 ├── conftest.py                       # Pytest configuration and fixtures
-├── test_agent_executor_integration.py # Agent executor integration tests
-├── test_agent_system.py              # Agent system tests
-├── test_agents.py                    # Agent configuration and registry tests
 ├── test_auto_tagger.py               # Automatic tagging system
 ├── test_browse.py                    # Browse commands (list, stats, recent)
 ├── test_claude_execute.py            # Claude Code integration

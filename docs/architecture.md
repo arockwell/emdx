@@ -19,15 +19,17 @@ emdx/
 │   ├── core.py            # save, find, view, edit, delete
 │   ├── browse.py          # list, stats, recent
 │   ├── tags.py            # tag management
-│   ├── agents.py          # AI agent management and execution
+│   ├── workflows.py       # workflow orchestration
 │   ├── gist.py            # GitHub integration
 │   ├── executions.py      # execution monitoring
 │   ├── claude_execute.py  # Claude Code integration
 │   ├── analyze.py         # database analysis
 │   └── maintain.py        # maintenance operations
-├── agents/                 # AI agent system
-│   ├── executor.py        # Agent execution engine
-│   └── registry.py        # Agent management and storage
+├── workflows/              # Workflow orchestration system
+│   ├── executor.py        # Multi-stage execution engine
+│   ├── registry.py        # Workflow management
+│   ├── strategies/        # Execution strategies (parallel, iterative, etc.)
+│   └── worktree_pool.py   # Git worktree isolation
 ├── database/               # SQLite operations
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
@@ -43,13 +45,9 @@ emdx/
 │   ├── file_browser.py      # file system browser
 │   ├── log_browser.py       # execution logs
 │   ├── git_browser.py       # git diff viewer
-│   ├── agent_browser.py     # AI agent management
-│   ├── agent_modals.py      # Agent dialogs and forms
-│   ├── agent_form.py        # Agent creation/editing
-│   ├── agent_execution_overlay.py # Multi-stage execution
-│   ├── stages/              # Agent execution stages
-│   │   ├── base.py         # Base stage framework
-│   │   └── document_selection.py # Document picker
+│   ├── workflow_browser.py  # workflow management
+│   ├── activity/            # Activity view components
+│   │   └── activity_view.py # unified activity display
 │   └── vim_editor.py        # vim modal editing
 ├── services/               # Business logic
 │   ├── log_stream.py      # event-driven log streaming
@@ -68,10 +66,10 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 
 ### **Browser Container** (`browser_container.py`)
 - **Document Mode** (default) - `d` or start here
-- **File Mode** - `f` to switch from document mode  
-- **Git Mode** - `d` to switch from document mode
+- **File Mode** - `f` to switch from document mode
+- **Git Mode** - `g` to switch from document mode
 - **Log Mode** - `l` to switch from document mode
-- **Agent Mode** - `a` to switch from document mode
+- **Activity Mode** - `a` to view workflow/execution activity
 - **Back to Document** - `q` from any other mode
 
 ### **Actual Key Bindings** (from real code):
@@ -103,15 +101,12 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - `r` - refresh  
 - `l` - toggle live mode
 
-**Agent Browser** (`agent_browser.py`):
+**Activity View** (`activity/activity_view.py`):
 - `j/k` - move up/down
 - `g/G` - go to top/bottom
-- `r` - run selected agent
-- `n` - create new agent
-- `e` - edit selected agent
-- `d` - delete selected agent
-- `h` - view execution history
-- `v` - toggle active/inactive
+- `enter` - expand/view details
+- `r` - refresh
+- Filter by workflow runs, documents, groups
 
 ## 🗃️ **Database Architecture**
 
@@ -122,11 +117,12 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **`executions`** - Execution tracking and lifecycle
 - **`documents_fts`** - Full-text search virtual table
 
-### **Agent System Tables**
-- **`agents`** - AI agent definitions and configuration
-- **`agent_executions`** - Agent execution history and results
-- **`agent_pipelines`** - Multi-agent workflow definitions
-- **`agent_templates`** - Shareable agent configurations
+### **Workflow System Tables**
+- **`workflows`** - Workflow definitions and configuration
+- **`workflow_runs`** - Workflow execution history
+- **`workflow_stage_runs`** - Stage-level execution tracking
+- **`workflow_individual_runs`** - Individual task runs within stages
+- **`workflow_presets`** - Saved variable configurations
 
 ### **Key Design Decisions**
 - **SQLite with FTS5** - Fast full-text search with simple deployment
@@ -152,14 +148,10 @@ App (emdx gui)
     ├── FileBrowser (press 'f')
     │   ├── FileTree
     │   └── FilePreview
-    └── AgentBrowser (press 'a')
-        ├── AgentTable (categorized)
-        ├── AgentDetailPanel
-        └── AgentForm (create/edit)
-            └── AgentExecutionOverlay
-                ├── DocumentSelectionStage
-                ├── AgentConfigStage
-                └── ExecutionMonitorStage
+    └── ActivityView (press 'a')
+        ├── ActivityTable (workflow runs, documents, groups)
+        ├── ContextPanel (details for selected item)
+        └── Filtering by type/status
 ```
 
 ### **Key Patterns**

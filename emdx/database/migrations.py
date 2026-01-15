@@ -1419,6 +1419,37 @@ def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_024_remove_agent_tables(conn: sqlite3.Connection):
+    """Remove the agent system tables.
+
+    The agent system has been deprecated in favor of the workflow system,
+    which provides all agent capabilities plus advanced orchestration patterns
+    (parallel execution, synthesis, worktree isolation, presets, etc.).
+
+    Tables being removed:
+    - agent_executions: Agent execution history
+    - agents: Agent definitions and configurations
+
+    This is a destructive migration - agent data will be lost. However, the
+    agent system was never actively used in production.
+    """
+    cursor = conn.cursor()
+
+    # Drop agent_executions first (references agents table)
+    cursor.execute("DROP TABLE IF EXISTS agent_executions")
+
+    # Drop agents table
+    cursor.execute("DROP TABLE IF EXISTS agents")
+
+    # Also drop any related indexes (SQLite drops them with table, but be explicit)
+    cursor.execute("DROP INDEX IF EXISTS idx_agents_category")
+    cursor.execute("DROP INDEX IF EXISTS idx_agents_is_active")
+    cursor.execute("DROP INDEX IF EXISTS idx_agent_exec_agent")
+    cursor.execute("DROP INDEX IF EXISTS idx_agent_exec_status")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1445,6 +1476,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (21, "Add workflow presets", migration_021_add_workflow_presets),
     (22, "Add document groups system", migration_022_add_document_groups),
     (23, "Deactivate legacy builtin workflows", migration_023_deactivate_legacy_workflows),
+    (24, "Remove agent system tables", migration_024_remove_agent_tables),
 ]
 
 

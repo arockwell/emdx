@@ -65,8 +65,6 @@ def isolate_test_database(tmp_path_factory):
             'emdx.database.groups',
             'emdx.workflows.database',
             'emdx.models.executions',
-            'emdx.agents.executor',
-            'emdx.agents.registry',
             'emdx.services.execution_monitor',
         ]
         import sys
