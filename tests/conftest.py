@@ -45,9 +45,47 @@ def isolate_test_database(tmp_path_factory):
     try:
         import emdx.database.connection as conn_module
         # Recreate the global instance with the test path
-        conn_module.db_connection = conn_module.DatabaseConnection()
+        new_db_connection = conn_module.DatabaseConnection()
+        conn_module.db_connection = new_db_connection
+
+        # SAFETY CHECK: Verify we're using the test database, not the real one
+        real_db = Path.home() / ".config" / "emdx" / "knowledge.db"
+        assert str(conn_module.db_connection.db_path) != str(real_db), \
+            f"CRITICAL: Test is using real database! Expected temp path, got {conn_module.db_connection.db_path}"
+
         # Run migrations on the test database
         conn_module.db_connection.ensure_schema()
+
+        # CRITICAL: Import and patch ALL modules that import db_connection directly
+        # Python caches import bindings, so `from X import Y` doesn't see updates to X.Y
+        # We MUST import these modules now (if not already) and patch them
+        modules_to_patch = [
+            'emdx.database.documents',
+            'emdx.database.search',
+            'emdx.database.groups',
+            'emdx.workflows.database',
+            'emdx.models.executions',
+            'emdx.agents.executor',
+            'emdx.agents.registry',
+            'emdx.services.execution_monitor',
+        ]
+        import sys
+        import importlib
+        for mod_name in modules_to_patch:
+            try:
+                # Import the module if not already imported
+                if mod_name not in sys.modules:
+                    importlib.import_module(mod_name)
+                # Patch its db_connection reference
+                if hasattr(sys.modules[mod_name], 'db_connection'):
+                    sys.modules[mod_name].db_connection = new_db_connection
+            except ImportError:
+                pass  # Module doesn't exist, skip
+
+        # Final safety verification
+        assert str(conn_module.db_connection.db_path) == str(test_db_path), \
+            f"Database path mismatch: expected {test_db_path}, got {conn_module.db_connection.db_path}"
+
     except ImportError:
         pass  # Module not imported yet, will pick up env var on first import
 

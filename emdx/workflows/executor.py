@@ -22,6 +22,7 @@ from .base import (
 from . import database as wf_db
 from .registry import workflow_registry
 from emdx.database.documents import record_document_source
+from emdx.database import groups as groups_db
 
 
 @dataclass
@@ -432,6 +433,25 @@ class WorkflowExecutor:
         Returns:
             StageResult with synthesis
         """
+        # Create a group for this parallel execution's outputs
+        workflow_name = context.get("workflow_name", "Workflow")
+        stage_name = stage.name or f"Stage {stage_run_id}"
+        run_id = context.get("run_id")
+
+        group_id = None
+        try:
+            group_id = groups_db.create_group(
+                name=f"{workflow_name} - {stage_name}",
+                group_type="batch",
+                workflow_run_id=run_id,
+                description=f"Parallel outputs from {stage.runs} runs",
+                created_by="workflow",
+            )
+        except Exception as e:
+            # Don't fail the workflow if group creation fails
+            import logging
+            logging.getLogger(__name__).warning(f"Could not create group for parallel stage: {e}")
+
         # Create individual run records
         individual_runs = []
         for i in range(stage.runs):
@@ -480,7 +500,16 @@ class WorkflowExecutor:
                 errors.append(str(result))
             elif result.get('success'):
                 if result.get('output_doc_id'):
-                    output_doc_ids.append(result['output_doc_id'])
+                    doc_id = result['output_doc_id']
+                    output_doc_ids.append(doc_id)
+                    # Add to group as exploration
+                    if group_id:
+                        try:
+                            groups_db.add_document_to_group(
+                                group_id, doc_id, role="exploration", added_by="workflow"
+                            )
+                        except Exception:
+                            pass  # Don't fail on group membership issues
                 total_tokens += result.get('tokens_used', 0)
             else:
                 errors.append(result.get('error_message', 'Unknown error'))
@@ -499,10 +528,20 @@ class WorkflowExecutor:
             context=context,
         )
 
+        # Add synthesis doc to group as primary
+        synthesis_doc_id = synthesis_result.get('output_doc_id')
+        if group_id and synthesis_doc_id:
+            try:
+                groups_db.add_document_to_group(
+                    group_id, synthesis_doc_id, role="primary", added_by="workflow"
+                )
+            except Exception:
+                pass  # Don't fail on group membership issues
+
         return StageResult(
             success=True,
-            output_doc_id=synthesis_result.get('output_doc_id'),
-            synthesis_doc_id=synthesis_result.get('output_doc_id'),
+            output_doc_id=synthesis_doc_id,
+            synthesis_doc_id=synthesis_doc_id,
             individual_outputs=output_doc_ids,
             tokens_used=total_tokens + synthesis_result.get('tokens_used', 0),
         )
@@ -789,6 +828,24 @@ class WorkflowExecutor:
         # Update target_runs to reflect discovered item count
         wf_db.update_stage_run(stage_run_id, target_runs=len(items))
 
+        # Create a group for this dynamic execution's outputs
+        workflow_name = context.get("workflow_name", "Workflow")
+        stage_name = stage.name or f"Stage {stage_run_id}"
+        run_id = context.get("run_id")
+
+        group_id = None
+        try:
+            group_id = groups_db.create_group(
+                name=f"{workflow_name} - {stage_name}",
+                group_type="batch",
+                workflow_run_id=run_id,
+                description=f"Dynamic outputs from {len(items)} discovered items",
+                created_by="workflow",
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not create group for dynamic stage: {e}")
+
         # Step 2: Set up worktree pool
         base_branch = context.get('base_branch', 'main')
         pool = WorktreePool(
@@ -853,7 +910,16 @@ class WorkflowExecutor:
                 elif result.get('success'):
                     successful_items += 1
                     if result.get('output_doc_id'):
-                        output_doc_ids.append(result['output_doc_id'])
+                        doc_id = result['output_doc_id']
+                        output_doc_ids.append(doc_id)
+                        # Add to group as exploration
+                        if group_id:
+                            try:
+                                groups_db.add_document_to_group(
+                                    group_id, doc_id, role="exploration", added_by="workflow"
+                                )
+                            except Exception:
+                                pass
                     total_tokens += result.get('tokens_used', 0)
                 else:
                     error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
@@ -875,6 +941,15 @@ class WorkflowExecutor:
                 )
                 synthesis_doc_id = synthesis_result.get('output_doc_id')
                 total_tokens += synthesis_result.get('tokens_used', 0)
+
+                # Add synthesis doc to group as primary
+                if group_id and synthesis_doc_id:
+                    try:
+                        groups_db.add_document_to_group(
+                            group_id, synthesis_doc_id, role="primary", added_by="workflow"
+                        )
+                    except Exception:
+                        pass
 
             # Determine overall success
             if not stage.continue_on_failure and errors:
