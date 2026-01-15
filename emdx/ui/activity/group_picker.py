@@ -37,20 +37,36 @@ class GroupPicker(Widget):
 
     class GroupSelected(Message):
         """Fired when a group is selected."""
-        def __init__(self, group_id: int, group_name: str, doc_id: Optional[int], source_group_id: Optional[int]) -> None:
+        def __init__(
+            self,
+            group_id: int,
+            group_name: str,
+            doc_id: Optional[int],
+            source_group_id: Optional[int],
+            workflow_run_id: Optional[int],
+        ) -> None:
             self.group_id = group_id
             self.group_name = group_name
             self.doc_id = doc_id
             self.source_group_id = source_group_id
+            self.workflow_run_id = workflow_run_id
             super().__init__()
 
     class GroupCreated(Message):
         """Fired when a new group is created."""
-        def __init__(self, group_id: int, group_name: str, doc_id: Optional[int], source_group_id: Optional[int]) -> None:
+        def __init__(
+            self,
+            group_id: int,
+            group_name: str,
+            doc_id: Optional[int],
+            source_group_id: Optional[int],
+            workflow_run_id: Optional[int],
+        ) -> None:
             self.group_id = group_id
             self.group_name = group_name
             self.doc_id = doc_id
             self.source_group_id = source_group_id
+            self.workflow_run_id = workflow_run_id
             super().__init__()
 
     class Cancelled(Message):
@@ -107,6 +123,7 @@ class GroupPicker(Widget):
         self.selected_index: int = 0
         self.doc_id: Optional[int] = None
         self.source_group_id: Optional[int] = None  # When nesting a group
+        self.workflow_run_id: Optional[int] = None  # When grouping a workflow
         self._visible = False
 
     def compose(self) -> ComposeResult:
@@ -114,15 +131,22 @@ class GroupPicker(Widget):
         yield Static("", id="group-list")
         yield Static("↑↓ Navigate | Enter Select | Tab Create new | Esc Cancel", id="group-hint")
 
-    def show(self, doc_id: Optional[int] = None, source_group_id: Optional[int] = None) -> None:
-        """Show the picker for a document or group.
+    def show(
+        self,
+        doc_id: Optional[int] = None,
+        source_group_id: Optional[int] = None,
+        workflow_run_id: Optional[int] = None,
+    ) -> None:
+        """Show the picker for a document, group, or workflow.
 
         Args:
             doc_id: Document to add to a group
             source_group_id: Group to nest under another group
+            workflow_run_id: Workflow run to group under a parent
         """
         self.doc_id = doc_id
         self.source_group_id = source_group_id
+        self.workflow_run_id = workflow_run_id
         self._visible = True
         self.add_class("visible")
         self._load_groups()
@@ -139,6 +163,7 @@ class GroupPicker(Widget):
         self.remove_class("visible")
         self.doc_id = None
         self.source_group_id = None
+        self.workflow_run_id = None
 
     def _load_groups(self) -> None:
         """Load recent groups from database."""
@@ -218,8 +243,9 @@ class GroupPicker(Widget):
         group = self.filtered_groups[self.selected_index]
         doc_id = self.doc_id  # Capture before hide() clears it
         source_group_id = self.source_group_id
+        workflow_run_id = self.workflow_run_id
         self.hide()
-        self.post_message(self.GroupSelected(group["id"], group["name"], doc_id, source_group_id))
+        self.post_message(self.GroupSelected(group["id"], group["name"], doc_id, source_group_id, workflow_run_id))
 
     def _create_new_group(self, name: str) -> None:
         """Create a new group with the given name."""
@@ -232,12 +258,13 @@ class GroupPicker(Widget):
         try:
             doc_id = self.doc_id  # Capture before hide() clears it
             source_group_id = self.source_group_id
+            workflow_run_id = self.workflow_run_id
             group_id = groups_db.create_group(
                 name=name.strip(),
                 group_type="batch",  # Default to batch
             )
             self.hide()
-            self.post_message(self.GroupCreated(group_id, name.strip(), doc_id, source_group_id))
+            self.post_message(self.GroupCreated(group_id, name.strip(), doc_id, source_group_id, workflow_run_id))
         except Exception as e:
             logger.error(f"Error creating group: {e}")
 

@@ -1773,7 +1773,7 @@ class ActivityView(Widget):
     # Group management actions
 
     def action_add_to_group(self) -> None:
-        """Show group picker to add selected document or group to another group."""
+        """Show group picker to add selected document, group, or workflow to another group."""
         if not self.flat_items or self.selected_idx >= len(self.flat_items):
             return
 
@@ -1785,12 +1785,17 @@ class ActivityView(Widget):
             picker.show(source_group_id=item.item_id)
             return
 
+        # Handle workflows - group all outputs under a parent group
+        if item.item_type == "workflow" and item.workflow_run:
+            picker.show(workflow_run_id=item.workflow_run.get("id"))
+            return
+
         # Handle documents
         if item.doc_id:
             picker.show(doc_id=item.doc_id)
             return
 
-        self._show_notification("Select a document or group", is_error=True)
+        self._show_notification("Select a document, group, or workflow", is_error=True)
 
     async def action_create_group(self) -> None:
         """Create a new group from the selected document."""
@@ -1830,34 +1835,45 @@ class ActivityView(Widget):
             self._show_notification(f"Error: {e}", is_error=True)
 
     async def action_ungroup(self) -> None:
-        """Remove selected document from its parent group."""
+        """Remove selected item from its parent group."""
         if not self.flat_items or self.selected_idx >= len(self.flat_items):
             return
 
         item = self.flat_items[self.selected_idx]
 
-        if not item.doc_id:
-            self._show_notification("Select a document to ungroup", is_error=True)
-            return
-
         if not HAS_GROUPS or not groups_db:
             self._show_notification("Groups not available", is_error=True)
             return
 
-        # Check if document is in any groups
         try:
-            doc_groups = groups_db.get_document_groups(item.doc_id)
-            if not doc_groups:
-                self._show_notification("Document is not in any group", is_error=True)
+            # Handle ungrouping a group (remove from parent)
+            if item.item_type == "group":
+                group = groups_db.get_group(item.item_id)
+                if not group or not group.get("parent_group_id"):
+                    self._show_notification("Group has no parent", is_error=True)
+                    return
+                groups_db.update_group(item.item_id, parent_group_id=None)
+                self._show_notification(f"Removed '{group['name']}' from parent")
+                await self._refresh_data()
                 return
 
-            # Remove from all groups (or could prompt if in multiple)
-            for group in doc_groups:
-                groups_db.remove_document_from_group(group["id"], item.doc_id)
+            # Handle ungrouping a document
+            if item.doc_id:
+                doc_groups = groups_db.get_document_groups(item.doc_id)
+                if not doc_groups:
+                    self._show_notification("Document is not in any group", is_error=True)
+                    return
 
-            group_names = ", ".join(g["name"][:20] for g in doc_groups)
-            self._show_notification(f"Removed from: {group_names}")
-            await self._refresh_data()
+                # Remove from all groups
+                for group in doc_groups:
+                    groups_db.remove_document_from_group(group["id"], item.doc_id)
+
+                group_names = ", ".join(g["name"][:20] for g in doc_groups)
+                self._show_notification(f"Removed from: {group_names}")
+                await self._refresh_data()
+                return
+
+            self._show_notification("Select a document or group to ungroup", is_error=True)
 
         except Exception as e:
             logger.error(f"Error ungrouping: {e}")
@@ -1878,7 +1894,10 @@ class ActivityView(Widget):
             return
 
         try:
-            if event.source_group_id:
+            if event.workflow_run_id:
+                # Grouping a workflow - find/create group for workflow and nest under selected
+                await self._group_workflow_under(event.workflow_run_id, event.group_id, event.group_name)
+            elif event.source_group_id:
                 # Nesting a group under another group
                 groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
                 self._show_notification(f"Moved group under '{event.group_name}'")
@@ -1901,7 +1920,10 @@ class ActivityView(Widget):
             return
 
         try:
-            if event.source_group_id:
+            if event.workflow_run_id:
+                # Grouping a workflow under a new group
+                await self._group_workflow_under(event.workflow_run_id, event.group_id, event.group_name)
+            elif event.source_group_id:
                 # Move source group under the new group
                 groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
                 self._show_notification(f"Created '{event.group_name}' and moved group under it")
@@ -1917,6 +1939,51 @@ class ActivityView(Widget):
         # Refocus the table
         table = self.query_one("#activity-table", DataTable)
         table.focus()
+
+    async def _group_workflow_under(self, workflow_run_id: int, parent_group_id: int, parent_name: str) -> None:
+        """Group a workflow's outputs under a parent group.
+
+        Finds or creates a group for the workflow run and nests it under the parent.
+        """
+        if not HAS_WORKFLOWS or not wf_db:
+            return
+
+        # Get workflow run info
+        run = wf_db.get_workflow_run(workflow_run_id)
+        if not run:
+            self._show_notification("Workflow run not found", is_error=True)
+            return
+
+        workflow_name = run.get("workflow_name", "Workflow")
+
+        # Check if workflow already has a group
+        existing_groups = groups_db.list_groups(workflow_run_id=workflow_run_id)
+
+        if existing_groups:
+            # Move existing group(s) under the parent
+            for grp in existing_groups:
+                if grp.get("parent_group_id") != parent_group_id:
+                    groups_db.update_group(grp["id"], parent_group_id=parent_group_id)
+            self._show_notification(f"Moved workflow under '{parent_name}'")
+        else:
+            # Create a new group for this workflow's outputs
+            wf_group_id = groups_db.create_group(
+                name=f"{workflow_name} #{workflow_run_id}",
+                group_type="batch",
+                parent_group_id=parent_group_id,
+                workflow_run_id=workflow_run_id,
+                created_by="user",
+            )
+
+            # Add all workflow output documents to this group
+            output_doc_ids = wf_db.get_workflow_output_doc_ids(workflow_run_id)
+            for doc_id in output_doc_ids:
+                try:
+                    groups_db.add_document_to_group(wf_group_id, doc_id, role="member")
+                except Exception:
+                    pass  # Already in group
+
+            self._show_notification(f"Grouped workflow under '{parent_name}'")
 
     def on_group_picker_cancelled(self, event: GroupPicker.Cancelled) -> None:
         """Handle picker cancellation."""

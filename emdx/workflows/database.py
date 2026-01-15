@@ -1009,3 +1009,60 @@ def create_preset_from_run(
             description=description,
             created_by=created_by,
         )
+
+
+def get_workflow_output_doc_ids(run_id: int) -> List[int]:
+    """Get all output document IDs from a workflow run.
+
+    Collects output_doc_ids from the workflow run and all individual runs.
+
+    Args:
+        run_id: Workflow run ID
+
+    Returns:
+        List of document IDs
+    """
+    doc_ids = set()
+
+    with db_connection.get_connection() as conn:
+        # Get output_doc_ids from the workflow run itself
+        cursor = conn.execute(
+            "SELECT output_doc_ids FROM workflow_runs WHERE id = ?",
+            (run_id,),
+        )
+        row = cursor.fetchone()
+        if row and row['output_doc_ids']:
+            try:
+                ids = json.loads(row['output_doc_ids'])
+                if isinstance(ids, list):
+                    doc_ids.update(ids)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Get output_doc_id from individual runs
+        cursor = conn.execute(
+            """
+            SELECT wir.output_doc_id
+            FROM workflow_individual_runs wir
+            JOIN workflow_stage_runs wsr ON wir.stage_run_id = wsr.id
+            WHERE wsr.workflow_run_id = ? AND wir.output_doc_id IS NOT NULL
+            """,
+            (run_id,),
+        )
+        for row in cursor.fetchall():
+            if row['output_doc_id']:
+                doc_ids.add(row['output_doc_id'])
+
+        # Also get synthesis docs from stage runs
+        cursor = conn.execute(
+            """
+            SELECT synthesis_doc_id FROM workflow_stage_runs
+            WHERE workflow_run_id = ? AND synthesis_doc_id IS NOT NULL
+            """,
+            (run_id,),
+        )
+        for row in cursor.fetchall():
+            if row['synthesis_doc_id']:
+                doc_ids.add(row['synthesis_doc_id'])
+
+    return list(doc_ids)
