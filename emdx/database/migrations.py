@@ -1353,6 +1353,72 @@ def migration_022_add_document_groups(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
+    """Deactivate legacy builtin workflows that are superseded by dynamic task-driven workflows.
+
+    These workflows were created before the dynamic workflow system (task_parallel, parallel_fix,
+    parallel_analysis, dynamic_items) which use --task flags for flexible execution. The legacy
+    workflows had hardcoded prompts and are no longer needed for new work.
+
+    Workflows are soft-deleted (is_active=FALSE) rather than hard-deleted to preserve
+    historical workflow_runs that reference them.
+
+    Legacy workflows being deactivated:
+    - deep_analysis, robust_planning, quick_analysis (IDs 1-3) - original builtins
+    - tech_debt_analysis, code_fix, tech_debt_discovery (IDs 4-6) - early tech debt
+    - architecture_review, fix_and_pr (IDs 7-8) - early patterns
+    - comprehensive_tech_debt, parallel_task_fix (IDs 10-11) - superseded by parallel_fix
+    - feature_exploration_v2, feature_exploration_dynamic (IDs 14-15) - superseded by task_parallel
+    - Various feature dev workflows (IDs 17-23) - one-off or superseded
+
+    Workflows kept active:
+    - #24 parallel_analysis - Reusable analysis with --task
+    - #29 dynamic_items - Dynamic item processing
+    - #30 parallel_fix - Reusable fix workflow with worktree isolation
+    - #31 task_parallel - Core task-driven parallel execution
+    """
+    cursor = conn.cursor()
+
+    # Legacy workflow names to deactivate
+    # Note: Names must match exactly what's in the database
+    legacy_workflows = [
+        'deep_analysis',
+        'robust_planning',
+        'quick_analysis',
+        'tech_debt_analysis',
+        'code_fix',
+        'tech_debt_discovery',
+        'architecture_review',
+        'fix_and_pr',
+        'comprehensive_tech_debt',
+        'parallel_task_fix',
+        'feature_exploration',
+        'feature_exploration_v2',
+        'feature_exploration_dynamic',
+        'feature_development',
+        'feature_development_v2',
+        'full_feature_development',
+        'implement_tracks_c_d',
+        'weird_feature_exploration',
+        'tech_debt_parallel_fix',
+        'merge_main_all_branches',
+        'ux_views_analysis',
+    ]
+
+    # Soft-delete by setting is_active = FALSE
+    placeholders = ','.join('?' * len(legacy_workflows))
+    cursor.execute(
+        f"""
+        UPDATE workflows
+        SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+        WHERE name IN ({placeholders})
+        """,
+        legacy_workflows,
+    )
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1378,6 +1444,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (20, "Add synthesis cost tracking", migration_020_add_synthesis_cost),
     (21, "Add workflow presets", migration_021_add_workflow_presets),
     (22, "Add document groups system", migration_022_add_document_groups),
+    (23, "Deactivate legacy builtin workflows", migration_023_deactivate_legacy_workflows),
 ]
 
 
