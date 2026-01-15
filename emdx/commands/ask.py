@@ -1,0 +1,241 @@
+"""
+AI-powered Q&A and semantic search commands for EMDX.
+"""
+
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
+
+app = typer.Typer(help="AI-powered knowledge base features")
+console = Console()
+
+
+@app.command("ask")
+def ask_question(
+    question: str = typer.Argument(..., help="Your question"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Max documents to search"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Limit to project"),
+    keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),
+    show_sources: bool = typer.Option(True, "--sources/--no-sources", help="Show source documents"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
+):
+    """
+    Ask a question about your knowledge base.
+
+    Uses semantic search if embeddings are indexed, otherwise falls back to keyword search.
+
+    Examples:
+        emdx ai ask "What's our caching strategy?"
+        emdx ai ask "How did we solve the auth bug?" --project myapp
+        emdx ai ask "What does AUTH-123 involve?"
+    """
+    from ..services.ask_service import AskService
+
+    service = AskService()
+
+    with console.status("[bold blue]Thinking...", spinner="dots"):
+        result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
+
+    # Display answer
+    console.print()
+    console.print(Panel(result.text, title="Answer", border_style="green"))
+
+    # Display metadata
+    if show_sources and result.sources:
+        console.print()
+        console.print(f"[dim]Sources: {', '.join(f'#{id}' for id in result.sources)}[/dim]")
+
+    if verbose:
+        console.print(f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]")
+
+
+@app.command("index")
+def build_index(
+    force: bool = typer.Option(False, "--force", "-f", help="Reindex all documents"),
+    batch_size: int = typer.Option(50, "--batch-size", "-b", help="Documents per batch"),
+):
+    """
+    Build or update the semantic search index.
+
+    This creates embeddings for all documents, enabling semantic search.
+    Run this once initially, then periodically to index new documents.
+
+    Examples:
+        emdx ai index          # Index new documents only
+        emdx ai index --force  # Reindex everything
+    """
+    from ..services.embedding_service import EmbeddingService
+
+    service = EmbeddingService()
+
+    # Show current stats
+    stats = service.stats()
+    console.print(f"[dim]Current index: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+
+    if stats.indexed_documents == stats.total_documents and not force:
+        console.print("[green]Index is already up to date![/green]")
+        return
+
+    # Build index
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Indexing documents...", total=None)
+        count = service.index_all(force=force, batch_size=batch_size)
+        progress.update(task, completed=True)
+
+    console.print(f"[green]Indexed {count} documents[/green]")
+
+    # Show updated stats
+    stats = service.stats()
+    console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+
+
+@app.command("search")
+def semantic_search(
+    query: str = typer.Argument(..., help="Search query"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Max results"),
+    threshold: float = typer.Option(0.3, "--threshold", "-t", help="Minimum similarity (0-1)"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+):
+    """
+    Semantic search across your documents.
+
+    Finds conceptually similar documents, not just keyword matches.
+
+    Examples:
+        emdx ai search "authentication flow"
+        emdx ai search "performance optimization" --limit 5
+    """
+    from ..services.embedding_service import EmbeddingService
+
+    service = EmbeddingService()
+
+    # Check if we have embeddings
+    stats = service.stats()
+    if stats.indexed_documents == 0:
+        console.print("[yellow]No documents indexed. Run 'emdx ai index' first.[/yellow]")
+        raise typer.Exit(1)
+
+    with console.status("[bold blue]Searching...", spinner="dots"):
+        results = service.search(query, limit=limit, threshold=threshold)
+
+    if not results:
+        console.print(f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]")
+        return
+
+    # Filter by project if specified
+    if project:
+        results = [r for r in results if r.project == project]
+
+    table = Table(title=f"Semantic search: '{query}'")
+    table.add_column("ID", style="cyan", width=6)
+    table.add_column("Score", style="green", width=6)
+    table.add_column("Title", width=40)
+    table.add_column("Snippet", style="dim")
+
+    for r in results:
+        score = f"{r.similarity:.0%}"
+        title = r.title[:38] + "..." if len(r.title) > 40 else r.title
+        snippet = r.snippet[:50] + "..." if len(r.snippet) > 50 else r.snippet
+
+        table.add_row(str(r.doc_id), score, title, snippet)
+
+    console.print(table)
+
+
+@app.command("similar")
+def find_similar(
+    doc_id: int = typer.Argument(..., help="Document ID to find similar docs for"),
+    limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
+):
+    """
+    Find documents similar to a given document.
+
+    Examples:
+        emdx ai similar 42
+        emdx ai similar 42 --limit 10
+    """
+    from ..services.embedding_service import EmbeddingService
+    from ..database import db
+
+    service = EmbeddingService()
+
+    # Get the source document title
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM documents WHERE id = ?", (doc_id,))
+        row = cursor.fetchone()
+        if not row:
+            console.print(f"[red]Document {doc_id} not found[/red]")
+            raise typer.Exit(1)
+        source_title = row[0]
+
+    with console.status("[bold blue]Finding similar...", spinner="dots"):
+        results = service.find_similar(doc_id, limit=limit)
+
+    if not results:
+        console.print(f"[yellow]No similar documents found[/yellow]")
+        return
+
+    console.print(f"[bold]Documents similar to #{doc_id} '{source_title}':[/bold]\n")
+
+    table = Table()
+    table.add_column("ID", style="cyan", width=6)
+    table.add_column("Score", style="green", width=6)
+    table.add_column("Title", width=50)
+
+    for r in results:
+        score = f"{r.similarity:.0%}"
+        table.add_row(str(r.doc_id), score, r.title)
+
+    console.print(table)
+
+
+@app.command("stats")
+def show_stats():
+    """Show embedding index statistics."""
+    from ..services.embedding_service import EmbeddingService
+
+    service = EmbeddingService()
+    stats = service.stats()
+
+    def format_bytes(b: int) -> str:
+        if b < 1024:
+            return f"{b} B"
+        elif b < 1024 * 1024:
+            return f"{b / 1024:.1f} KB"
+        else:
+            return f"{b / (1024 * 1024):.1f} MB"
+
+    console.print(Panel(f"""[bold]Embedding Index Statistics[/bold]
+
+Documents:  {stats.indexed_documents} / {stats.total_documents} indexed
+Coverage:   {stats.coverage_percent}%
+Model:      {stats.model_name}
+Index size: {format_bytes(stats.index_size_bytes)}
+""", title="AI Index"))
+
+
+@app.command("clear")
+def clear_index(
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+):
+    """Clear the embedding index (requires reindexing)."""
+    from ..services.embedding_service import EmbeddingService
+
+    if not confirm:
+        confirm = typer.confirm("This will delete all embeddings. Continue?")
+        if not confirm:
+            raise typer.Abort()
+
+    service = EmbeddingService()
+    count = service.clear_index()
+
+    console.print(f"[green]Cleared {count} embeddings[/green]")
