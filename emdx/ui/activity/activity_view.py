@@ -1521,23 +1521,39 @@ class ActivityView(Widget):
                                     )
                                     children.append(out_item)
 
-                        # If no synthesis, show individual outputs directly under workflow
-                        if not sr.get("synthesis_doc_id"):
+                        # If no synthesis, show individual runs/outputs directly
+                        else:
                             for ir in ind_runs:
+                                ir_status = ir.get("status", "completed")
+                                run_num = ir.get("run_number", 0)
+
                                 if ir.get("output_doc_id"):
                                     doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
-                                    title = doc.get("title", f"Output #{ir['run_number']}")[:25] if doc else f"Output #{ir['run_number']}"
+                                    title = doc.get("title", f"Output #{run_num}")[:25] if doc else f"Output #{run_num}"
                                     child_item = ActivityItem(
                                         item_type="exploration",
                                         item_id=ir["output_doc_id"],
                                         title=title,
-                                        status=ir.get("status", "completed"),
+                                        status=ir_status,
                                         timestamp=item.timestamp,
                                         doc_id=ir["output_doc_id"],
                                         cost=ir.get("cost_usd"),
                                         depth=1,
                                     )
-                                    children.append(child_item)
+                                else:
+                                    # No output doc - show the run itself
+                                    title = f"Run {run_num} ({ir_status})"
+                                    child_item = ActivityItem(
+                                        item_type="individual_run",
+                                        item_id=ir.get("id"),
+                                        title=title,
+                                        status=ir_status,
+                                        timestamp=item.timestamp,
+                                        doc_id=None,
+                                        cost=ir.get("cost_usd"),
+                                        depth=1,
+                                    )
+                                children.append(child_item)
 
         except Exception as e:
             logger.error(f"Error expanding workflow: {e}", exc_info=True)
