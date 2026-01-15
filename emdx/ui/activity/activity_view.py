@@ -628,7 +628,8 @@ class ActivityView(Widget):
 
                 # Store group metadata for display
                 item.group_type = group.get("group_type", "batch")
-                item.doc_count = group.get("doc_count", 0)
+                # Use recursive count to include nested groups' docs
+                item.doc_count = groups_db.get_recursive_doc_count(group_id)
                 item._has_group_children = len(child_groups) > 0 or item.doc_count > 0
 
                 self.activity_items.append(item)
@@ -1617,7 +1618,7 @@ class ActivityView(Widget):
                         depth=item.depth + 1,
                     )
                     child_item.group_type = cg.get("group_type", "batch")
-                    child_item.doc_count = cg.get("doc_count", 0)
+                    child_item.doc_count = groups_db.get_recursive_doc_count(cg["id"])
                     child_item._has_group_children = len(grandchildren) > 0 or child_item.doc_count > 0
 
                     children.append(child_item)
