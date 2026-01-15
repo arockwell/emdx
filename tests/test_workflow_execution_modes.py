@@ -691,7 +691,7 @@ class TestParallelExecutionMode:
                 current_concurrent += 1
                 max_concurrent_seen = max(max_concurrent_seen, current_concurrent)
 
-            await asyncio.sleep(0.01)  # Simulate some work
+            await asyncio.sleep(0.1)  # Simulate some work (longer to ensure concurrency tracking works)
 
             async with lock:
                 current_concurrent -= 1
