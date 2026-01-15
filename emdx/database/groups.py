@@ -386,15 +386,32 @@ def _update_group_metrics(conn, group_id: int) -> bool:
     )
     doc_count = cursor.fetchone()[0]
 
-    # TODO: Calculate total_tokens and total_cost_usd from document sources
-    # For now, just update doc_count
+    # Calculate total_tokens and total_cost_usd from document sources
+    # Documents are linked to workflow runs via document_sources table
+    # which references workflow_individual_runs containing tokens_used and cost_usd
+    cursor = conn.execute(
+        """
+        SELECT
+            COALESCE(SUM(wir.tokens_used), 0) as total_tokens,
+            COALESCE(SUM(wir.cost_usd), 0.0) as total_cost_usd
+        FROM document_group_members dgm
+        JOIN document_sources ds ON dgm.document_id = ds.document_id
+        JOIN workflow_individual_runs wir ON ds.workflow_individual_run_id = wir.id
+        WHERE dgm.group_id = ?
+        """,
+        (group_id,),
+    )
+    row = cursor.fetchone()
+    total_tokens = row[0] if row else 0
+    total_cost_usd = row[1] if row else 0.0
+
     conn.execute(
         """
         UPDATE document_groups
-        SET doc_count = ?, updated_at = ?
+        SET doc_count = ?, total_tokens = ?, total_cost_usd = ?, updated_at = ?
         WHERE id = ?
         """,
-        (doc_count, datetime.now().isoformat(), group_id),
+        (doc_count, total_tokens, total_cost_usd, datetime.now().isoformat(), group_id),
     )
     conn.commit()
     return True
