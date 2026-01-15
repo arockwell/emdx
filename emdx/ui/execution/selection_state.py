@@ -7,7 +7,10 @@ multi-stage agent execution workflows.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Dict, Any, List, Optional
+
+if TYPE_CHECKING:
+    from emdx.utils.git_ops import GitWorktree
 
 
 @dataclass
@@ -31,7 +34,7 @@ class SelectionState:
     worktree_index: Optional[int] = None
 
     # Pre-loaded data for stages
-    project_worktrees: List[Any] = field(default_factory=list)
+    project_worktrees: "List[GitWorktree]" = field(default_factory=list)
 
     # Configuration
     config: Dict[str, Any] = field(default_factory=dict)
@@ -58,7 +61,7 @@ class SelectionState:
         self,
         project_index: int,
         project_path: str,
-        worktrees: Optional[List[Any]] = None,
+        worktrees: "Optional[List[GitWorktree]]" = None,
         data: Optional[Dict[str, Any]] = None
     ) -> None:
         """Set project selection with optional worktrees."""
