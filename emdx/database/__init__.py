@@ -38,25 +38,53 @@ class SQLiteDatabase:
     This is critical for test isolation - tests create SQLiteDatabase instances
     with temporary database paths, and those instances MUST NOT write to the
     global database.
+
+    When instantiated WITHOUT a db_path (the default), this class uses the
+    global db_connection singleton. This ensures that test isolation fixtures
+    that replace db_connection will affect this instance too.
     """
 
     def __init__(self, db_path=None):
-        self._connection = DatabaseConnection(db_path)
+        if db_path is not None:
+            # Custom path: create own connection (for test isolation)
+            self._connection = DatabaseConnection(db_path)
+            self._uses_global_connection = False
+        else:
+            # No path: use global db_connection (allows test fixture override)
+            self._connection = None  # Will use db_connection dynamically
+            self._uses_global_connection = True
         # Track if we're using a custom path (for test isolation)
         self._uses_custom_path = db_path is not None
+
+    def _get_connection_instance(self):
+        """Get the appropriate DatabaseConnection instance.
+
+        Returns the global db_connection if no custom path was provided,
+        otherwise returns the instance's own connection.
+
+        IMPORTANT: We import from .connection module dynamically to ensure
+        test isolation fixtures that replace connection.db_connection work
+        correctly. A static reference to db_connection would capture the
+        object at import time, missing later replacements.
+        """
+        if self._uses_global_connection:
+            # Dynamic lookup to support test fixture patching
+            from . import connection
+            return connection.db_connection
+        return self._connection
 
     @property
     def db_path(self):
         """Get database path"""
-        return self._connection.db_path
+        return self._get_connection_instance().db_path
 
     def get_connection(self):
         """Get database connection - delegates to connection module"""
-        return self._connection.get_connection()
+        return self._get_connection_instance().get_connection()
 
     def ensure_schema(self):
         """Ensure database schema - delegates to connection module"""
-        return self._connection.ensure_schema()
+        return self._get_connection_instance().ensure_schema()
 
     # Document operations - use instance connection to ensure test isolation
     def save_document(self, title, content, project=None, tags=None, parent_id=None):
@@ -65,7 +93,7 @@ class SQLiteDatabase:
         When using a custom db_path (e.g., in tests), this operates on the
         instance's database, not the global one.
         """
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO documents (title, content, project, parent_id)
@@ -108,7 +136,7 @@ class SQLiteDatabase:
 
     def get_document(self, identifier):
         """Get a document by ID or title."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             identifier_str = str(identifier)
 
             if identifier_str.isdigit():
@@ -147,7 +175,7 @@ class SQLiteDatabase:
 
     def list_documents(self, project=None, limit=50, include_archived=False):
         """List documents with optional filters."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             conditions = ["is_deleted = FALSE"]
             params = []
 
@@ -175,7 +203,7 @@ class SQLiteDatabase:
 
     def update_document(self, doc_id, title, content):
         """Update a document."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             cursor = conn.execute(
                 """
                 UPDATE documents
@@ -189,7 +217,7 @@ class SQLiteDatabase:
 
     def delete_document(self, identifier, hard_delete=False):
         """Delete a document (soft delete by default)."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             identifier_str = str(identifier)
 
             if hard_delete:
@@ -228,7 +256,7 @@ class SQLiteDatabase:
 
     def get_recent_documents(self, limit=10):
         """Get recently accessed documents."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             cursor = conn.execute(
                 """
                 SELECT id, title, project, accessed_at, access_count
@@ -243,7 +271,7 @@ class SQLiteDatabase:
 
     def get_stats(self, project=None):
         """Get database statistics."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             if project:
                 cursor = conn.execute(
                     """
@@ -272,7 +300,7 @@ class SQLiteDatabase:
 
     def list_deleted_documents(self, days=None, limit=50):
         """List soft-deleted documents."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             if days:
                 cursor = conn.execute(
                     """
@@ -300,7 +328,7 @@ class SQLiteDatabase:
 
     def restore_document(self, identifier):
         """Restore a soft-deleted document."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             identifier_str = str(identifier)
             if identifier_str.isdigit():
                 cursor = conn.execute(
@@ -325,7 +353,7 @@ class SQLiteDatabase:
 
     def purge_deleted_documents(self, older_than_days=None):
         """Permanently delete soft-deleted documents."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             if older_than_days:
                 cursor = conn.execute(
                     """
@@ -347,7 +375,7 @@ class SQLiteDatabase:
                         created_after=None, created_before=None,
                         modified_after=None, modified_before=None):
         """Search documents using FTS."""
-        with self._connection.get_connection() as conn:
+        with self._get_connection_instance().get_connection() as conn:
             # Handle wildcard query (list all)
             if query == "*":
                 conditions = ["d.is_deleted = FALSE"]

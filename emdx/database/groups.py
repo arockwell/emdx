@@ -331,6 +331,36 @@ def get_all_grouped_document_ids() -> set[int]:
         return {row[0] for row in cursor.fetchall()}
 
 
+def get_recursive_doc_count(group_id: int) -> int:
+    """Get total document count including all nested child groups.
+
+    Args:
+        group_id: Group to calculate count for
+
+    Returns:
+        Total count of documents in this group and all descendants
+    """
+    with db_connection.get_connection() as conn:
+        # Use recursive CTE to get all descendant groups
+        cursor = conn.execute(
+            """
+            WITH RECURSIVE descendants AS (
+                -- Base case: the group itself
+                SELECT id FROM document_groups WHERE id = ?
+                UNION ALL
+                -- Recursive case: children of current groups
+                SELECT dg.id FROM document_groups dg
+                JOIN descendants d ON dg.parent_group_id = d.id
+            )
+            SELECT COUNT(DISTINCT dgm.document_id)
+            FROM document_group_members dgm
+            WHERE dgm.group_id IN (SELECT id FROM descendants)
+            """,
+            (group_id,),
+        )
+        return cursor.fetchone()[0]
+
+
 def update_group_metrics(group_id: int) -> bool:
     """Recalculate and update group metrics (doc_count, tokens, cost).
 

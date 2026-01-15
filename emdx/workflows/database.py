@@ -1009,3 +1009,71 @@ def create_preset_from_run(
             description=description,
             created_by=created_by,
         )
+
+
+def get_workflow_output_doc_ids(run_id: int) -> List[int]:
+    """Get all output document IDs from a workflow run.
+
+    Collects output_doc_ids from the workflow run and all individual runs.
+    Only returns IDs for documents that actually exist.
+
+    Args:
+        run_id: Workflow run ID
+
+    Returns:
+        List of document IDs (only those that exist in documents table)
+    """
+    doc_ids = set()
+
+    with db_connection.get_connection() as conn:
+        # Get output_doc_ids from the workflow run itself
+        cursor = conn.execute(
+            "SELECT output_doc_ids FROM workflow_runs WHERE id = ?",
+            (run_id,),
+        )
+        row = cursor.fetchone()
+        if row and row['output_doc_ids']:
+            try:
+                ids = json.loads(row['output_doc_ids'])
+                if isinstance(ids, list):
+                    doc_ids.update(ids)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Get output_doc_id from individual runs
+        cursor = conn.execute(
+            """
+            SELECT wir.output_doc_id
+            FROM workflow_individual_runs wir
+            JOIN workflow_stage_runs wsr ON wir.stage_run_id = wsr.id
+            WHERE wsr.workflow_run_id = ? AND wir.output_doc_id IS NOT NULL
+            """,
+            (run_id,),
+        )
+        for row in cursor.fetchall():
+            if row['output_doc_id']:
+                doc_ids.add(row['output_doc_id'])
+
+        # Also get synthesis docs from stage runs
+        cursor = conn.execute(
+            """
+            SELECT synthesis_doc_id FROM workflow_stage_runs
+            WHERE workflow_run_id = ? AND synthesis_doc_id IS NOT NULL
+            """,
+            (run_id,),
+        )
+        for row in cursor.fetchall():
+            if row['synthesis_doc_id']:
+                doc_ids.add(row['synthesis_doc_id'])
+
+        # Filter to only include docs that actually exist
+        if doc_ids:
+            placeholders = ",".join("?" * len(doc_ids))
+            cursor = conn.execute(
+                f"SELECT id FROM documents WHERE id IN ({placeholders}) AND is_deleted = FALSE",
+                list(doc_ids),
+            )
+            existing_ids = {row['id'] for row in cursor.fetchall()}
+            doc_ids = doc_ids & existing_ids
+
+    return list(doc_ids)
