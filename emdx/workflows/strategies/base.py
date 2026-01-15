@@ -1,5 +1,6 @@
 """Base class for execution strategies."""
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -11,6 +12,8 @@ from ..base import StageConfig
 from ..services import document_service, execution_service, claude_service
 from .. import database as wf_db
 from emdx.database.documents import record_document_source
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -299,14 +302,10 @@ Report the document ID that was created."""
             return None
         except (OSError, IOError) as e:
             # Log file read errors
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.debug(f"Could not read log file {log_file} for output doc ID extraction: {type(e).__name__}: {e}")
             return None
         except Exception as e:
             # Log unexpected errors during parsing
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
@@ -381,8 +380,6 @@ Report the document ID that was created."""
                 set_parent(doc_id, synthesis_doc_id, relationship="exploration")
             except Exception as e:
                 # Log but don't fail - hierarchy is nice-to-have
-                from emdx.utils.logging import get_logger
-                logger = get_logger(__name__)
                 logger.debug(
                     f"Could not link output #{doc_id} to synthesis #{synthesis_doc_id}: {e}"
                 )

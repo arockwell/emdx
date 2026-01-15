@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .services import document_service, execution_service, claude_service
+
+logger = logging.getLogger(__name__)
 from .base import (
     ExecutionMode,
     IterationStrategy,
@@ -1229,14 +1232,10 @@ Report the document ID that was created."""
             return None
         except (OSError, IOError) as e:
             # Log file read errors
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.debug(f"Could not read log file {log_file} for output doc ID extraction: {type(e).__name__}: {e}")
             return None
         except Exception as e:
             # Log unexpected errors during parsing
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
             return None
 
@@ -1298,13 +1297,9 @@ Report the document ID that was created."""
 
             return empty
         except (OSError, IOError) as e:
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.debug(f"Could not read log file {log_file} for token extraction: {type(e).__name__}: {e}")
             return empty
         except Exception as e:
-            from emdx.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(f"Unexpected error extracting tokens from {log_file}: {type(e).__name__}: {e}")
             return empty
 
