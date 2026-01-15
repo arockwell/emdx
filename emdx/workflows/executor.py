@@ -345,7 +345,7 @@ class WorkflowExecutor:
             wf_db.update_stage_run(
                 stage_run_id,
                 status='completed' if result.success else 'failed',
-                runs_completed=stage.runs if result.success else 0,
+                runs_completed=num_runs if result.success else 0,
                 output_doc_id=result.output_doc_id,
                 synthesis_doc_id=result.synthesis_doc_id,
                 error_message=result.error_message,
@@ -542,30 +542,33 @@ class WorkflowExecutor:
                 error_message=f"All parallel runs failed: {'; '.join(errors)}",
             )
 
-        # Synthesize results
-        synthesis_result = await synthesize_outputs(
-            stage_run_id=stage_run_id,
-            output_doc_ids=output_doc_ids,
-            synthesis_prompt=stage.synthesis_prompt,
-            context=context,
-        )
+        # Synthesize results (skip for single task - nothing to synthesize)
+        synthesis_doc_id = None
+        if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+            synthesis_result = await synthesize_outputs(
+                stage_run_id=stage_run_id,
+                output_doc_ids=output_doc_ids,
+                synthesis_prompt=stage.synthesis_prompt,
+                context=context,
+            )
 
-        # Add synthesis doc to group as primary
-        synthesis_doc_id = synthesis_result.get('output_doc_id')
-        if group_id and synthesis_doc_id:
-            try:
-                groups_db.add_document_to_group(
-                    group_id, synthesis_doc_id, role="primary", added_by="workflow"
-                )
-            except Exception as e:
-                logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
+            # Add synthesis doc to group as primary
+            synthesis_doc_id = synthesis_result.get('output_doc_id')
+            if group_id and synthesis_doc_id:
+                try:
+                    groups_db.add_document_to_group(
+                        group_id, synthesis_doc_id, role="primary", added_by="workflow"
+                    )
+                except Exception as e:
+                    logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
+            total_tokens += synthesis_result.get('tokens_used', 0)
 
         return StageResult(
             success=True,
-            output_doc_id=synthesis_doc_id,
+            output_doc_id=synthesis_doc_id or output_doc_ids[-1],
             synthesis_doc_id=synthesis_doc_id,
             individual_outputs=output_doc_ids,
-            tokens_used=total_tokens + synthesis_result.get('tokens_used', 0),
+            tokens_used=total_tokens,
         )
 
     async def _execute_iterative(
@@ -952,9 +955,9 @@ class WorkflowExecutor:
             # Update stage progress
             wf_db.update_stage_run(stage_run_id, runs_completed=successful_items)
 
-            # Step 4: Optional synthesis
+            # Step 4: Optional synthesis (skip for single task - nothing to synthesize)
             synthesis_doc_id = None
-            if output_doc_ids and stage.synthesis_prompt:
+            if len(output_doc_ids) > 1 and stage.synthesis_prompt:
                 synthesis_result = await synthesize_outputs(
                     stage_run_id=stage_run_id,
                     output_doc_ids=output_doc_ids,

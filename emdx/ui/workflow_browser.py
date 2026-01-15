@@ -546,7 +546,14 @@ class WorkflowBrowser(Widget):
                         "failed": "[red]✗[/red]",
                         "running": "[yellow]⟳[/yellow]",
                     }.get(sr["status"], "[dim]○[/dim]")
-                    progress = f"{sr['runs_completed']}/{sr['target_runs']}"
+                    # For running stages, get real-time count from individual runs
+                    if sr["status"] == "running":
+                        counts = wf_db.count_individual_runs(sr["id"])
+                        completed = counts.get("completed", 0)
+                        total = counts.get("total", sr["target_runs"])
+                        progress = f"{completed}/{total}"
+                    else:
+                        progress = f"{sr['runs_completed']}/{sr['target_runs']}"
                     lines.append(self._box_line(f"{icon} {sr['stage_name']:<20} {progress}"))
                 lines.append(self._box_bottom())
                 lines.append("")

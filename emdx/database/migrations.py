@@ -1450,6 +1450,47 @@ def migration_024_remove_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_025_add_standalone_presets(conn: sqlite3.Connection):
+    """Add standalone presets table for quick run configurations.
+
+    Unlike workflow_presets which are tied to specific workflows,
+    these presets are standalone configurations for the `emdx run` command.
+    They store discovery commands, templates, and execution options.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS run_presets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            description TEXT,
+            discover_command TEXT,
+            task_template TEXT,
+            synthesize BOOLEAN DEFAULT FALSE,
+            max_jobs INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            usage_count INTEGER DEFAULT 0,
+            last_used_at TIMESTAMP,
+            is_active BOOLEAN DEFAULT TRUE
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_run_presets_name
+        ON run_presets(name)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_run_presets_active
+        ON run_presets(is_active)
+    """)
+
+    conn.commit()
+
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1477,6 +1518,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (22, "Add document groups system", migration_022_add_document_groups),
     (23, "Deactivate legacy builtin workflows", migration_023_deactivate_legacy_workflows),
     (24, "Remove agent system tables", migration_024_remove_agent_tables),
+    (25, "Add standalone presets", migration_025_add_standalone_presets),
 ]
 
 
