@@ -244,6 +244,85 @@ Show execution statistics.
 emdx exec stats
 ```
 
+## 🔄 **Workflow System**
+
+Workflows are execution patterns that define HOW to process tasks. Tasks are provided at runtime.
+
+### **emdx workflow list**
+List available workflows.
+
+```bash
+# List all workflows
+emdx workflow list
+
+# Show workflow details
+emdx workflow show parallel_analysis
+```
+
+### **emdx workflow run**
+Run a workflow with tasks.
+
+```bash
+# Run with inline tasks (task-driven model)
+emdx workflow run task_parallel \
+  -t "Analyze authentication security" \
+  -t "Review database queries" \
+  -t "Check error handling"
+
+# Run with document IDs as tasks
+emdx workflow run task_parallel -t 5182 -t 5183
+
+# Use a preset for saved configurations
+emdx workflow run parallel_analysis --preset security_audit
+
+# Control concurrency
+emdx workflow run task_parallel -t "Task 1" -t "Task 2" -j 3  # max 3 concurrent
+
+# Run in background
+emdx workflow run task_parallel -t "Long task" --background
+
+# Use worktree isolation (recommended for parallel)
+emdx workflow run task_parallel -t "Task 1" -t "Task 2" --worktree
+```
+
+**Options:**
+- `--task/-t TEXT` - Task to run (string or doc ID). Can be repeated.
+- `--preset/-p TEXT` - Use saved preset for variables
+- `--var/-v TEXT` - Override variables (key=value)
+- `--max-concurrent/-j INTEGER` - Max parallel executions
+- `--background/--foreground` - Run mode
+- `--worktree/--no-worktree` - Git isolation
+
+### **emdx workflow runs**
+List workflow runs.
+
+```bash
+# List recent runs
+emdx workflow runs
+
+# Filter by status
+emdx workflow runs --status running
+emdx workflow runs --status completed
+
+# Show run details
+emdx workflow status 123
+```
+
+### **emdx workflow preset**
+Manage workflow presets (saved configurations).
+
+```bash
+# List presets
+emdx workflow presets
+
+# Create a preset
+emdx workflow preset create parallel_analysis security_audit \
+  --var topic="Security Review"
+
+# Use a preset
+emdx workflow run parallel_analysis --preset security_audit
+```
+
 ## 🔄 **Lifecycle Management**
 
 ### **emdx lifecycle**

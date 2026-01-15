@@ -7,6 +7,7 @@ This folder contains detailed documentation for EMDX.
 ### Getting Started
 - [CLI Reference](cli-api.md) - Complete command documentation
 - [AI Agents Guide](ai-agents.md) - Create and run custom AI agents
+- [Workflow System](workflows.md) - Multi-agent orchestration and execution patterns
 
 ### Architecture & Design
 - [Architecture Overview](architecture.md) - System design and component relationships
@@ -24,6 +25,7 @@ This folder contains detailed documentation for EMDX.
 |--------------|-----------|
 | Learn all CLI commands | [CLI Reference](cli-api.md) |
 | Create custom AI agents | [AI Agents Guide](ai-agents.md) |
+| Orchestrate multi-agent workflows | [Workflow System](workflows.md) |
 | Understand the codebase | [Architecture](architecture.md) |
 | Contribute code | [Development Setup](development-setup.md) |
 | Write tests | [Testing Guide](testing.md) |

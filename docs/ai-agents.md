@@ -153,22 +153,24 @@ The agent system adds four new tables:
 - Integrates with document relationships (parent/child)
 - Compatible with existing log browser
 
-## Coming Soon
+## Workflow Integration
 
-### Agent Pipelines
-Chain multiple agents for complex workflows:
-```bash
-emdx agent pipeline create "full-analysis" \
-  --step "code-analyzer" \
-  --step "test-suggester" \
-  --step "doc-generator"
-```
+For complex multi-agent workflows, use the **Workflow System** instead of individual agent runs. Workflows provide:
 
-### Agent Templates
-Share and reuse agent configurations:
+- **Execution patterns**: parallel, iterative, adversarial, dynamic
+- **Task-driven execution**: pass tasks at runtime via `--task` flag
+- **Worktree isolation**: each task gets its own git worktree
+- **Synthesis**: combine parallel outputs into a single result
+
+See [Workflows Documentation](workflows.md) for details.
+
 ```bash
-emdx agent template export my-agent > my-agent.json
-emdx agent template import colleague-agent.json
+# Run multiple analysis tasks in parallel
+emdx workflow run task_parallel \
+  -t "Analyze authentication" \
+  -t "Review database queries" \
+  -t "Check error handling" \
+  -j 3  # max 3 concurrent
 ```
 
 
