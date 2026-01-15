@@ -14,6 +14,8 @@ Mental model:
 import asyncio
 import json
 import logging
+import re
+import textwrap
 from typing import List, Optional, Tuple
 
 from rich.console import Console, Group
@@ -98,7 +100,7 @@ class WorkflowBrowser(Widget):
     }
 
     #left-panel {
-        width: 55%;
+        width: 40%;
         height: 100%;
     }
 
@@ -113,14 +115,19 @@ class WorkflowBrowser(Widget):
     }
 
     #right-panel {
-        width: 45%;
+        width: 60%;
         height: 100%;
         border-left: solid $primary;
     }
 
-    #preview-content {
+    #preview-scroll {
         height: 100%;
+        overflow-y: auto;
+    }
+
+    #preview-content {
         padding: 1;
+        width: 100%;
     }
 
     #task-input {
@@ -165,12 +172,57 @@ class WorkflowBrowser(Widget):
             logger.error(f"Error mounting workflow browser: {e}", exc_info=True)
             self._update_status(f"Error: {e}")
 
+    def focus(self, scroll_visible: bool = True) -> None:
+        """Focus the workflow table."""
+        try:
+            table = self.query_one("#workflow-table", DataTable)
+            if table:
+                table.focus()
+        except Exception:
+            # Widget not mounted yet
+            pass
+
     def _update_status(self, message: str) -> None:
         """Update status bar."""
         try:
             self.query_one("#status-bar", Static).update(message)
         except Exception:
             pass
+
+    def _get_preview_width(self) -> int:
+        """Get the available width for preview content."""
+        try:
+            panel = self.query_one("#right-panel")
+            # Subtract padding (1 on each side) and border (1)
+            return max(panel.size.width - 4, 40)
+        except Exception:
+            return 80  # Fallback
+
+    def _box_top(self, title: str, style: str = "bold") -> str:
+        """Generate box top line: ┌─ Title ───────┐"""
+        width = self._get_preview_width()
+        title_part = f"─ {title} "
+        # width - 2 for ┌ and ┐, then subtract title_part length
+        dashes = "─" * max(width - len(title_part) - 2, 4)
+        return f"[{style}]┌{title_part}{dashes}┐[/{style}]"
+
+    def _box_line(self, content: str, style: str = "bold") -> str:
+        """Generate box content line: │ content      │"""
+        width = self._get_preview_width()
+        # Strip markup to calculate visible length
+        visible_content = re.sub(r'\[/?[^\]]+\]', '', content)
+        padding = max(width - len(visible_content) - 4, 0)
+        return f"[{style}]│[/{style}] {content}{' ' * padding} [{style}]│[/{style}]"
+
+    def _box_bottom(self, style: str = "bold") -> str:
+        """Generate box bottom line: └───────────────┘"""
+        width = self._get_preview_width()
+        return f"[{style}]└{'─' * (width - 2)}┘[/{style}]"
+
+    def _wrap_text(self, text: str, indent: int = 0) -> List[str]:
+        """Wrap text to fit preview width."""
+        width = self._get_preview_width() - 6 - indent  # Account for box borders and indent
+        return textwrap.wrap(text, width=max(width, 20))
 
     def _get_pipeline_str(self, workflow) -> str:
         """Get visual pipeline string for a workflow's stages.
@@ -374,12 +426,13 @@ class WorkflowBrowser(Widget):
 
         if workflow.description:
             lines.append("")
-            lines.append(workflow.description)
+            for wrapped_line in self._wrap_text(workflow.description):
+                lines.append(wrapped_line)
 
         lines.append("")
 
         # Pipeline box
-        lines.append(f"[bold]┌─ Pipeline ────────────────────────────[/bold]")
+        lines.append(self._box_top("Pipeline"))
         for i, stage in enumerate(workflow.stages):
             mode = stage.mode.value
             info = MODE_INFO.get(mode, {"icon": "?", "color": "white", "name": mode})
@@ -390,26 +443,24 @@ class WorkflowBrowser(Widget):
 
             # Stage line with mode icon
             mode_display = f"[{info['color']}]{info['icon']:>2}[/{info['color']}]"
-            lines.append(
-                f"[bold]│[/bold] {mode_display} [bold]{stage.name}[/bold]{task_badge}"
-            )
-            lines.append(f"[bold]│[/bold]     [dim]{info['name']} × {stage.runs}[/dim]")
-        lines.append(f"[bold]└──────────────────────────────────────[/bold]")
+            lines.append(self._box_line(f"{mode_display} [bold]{stage.name}[/bold]{task_badge}"))
+            lines.append(self._box_line(f"    [dim]{info['name']} × {stage.runs}[/dim]"))
+        lines.append(self._box_bottom())
         lines.append("")
 
         # Status / action prompt
         supports_tasks = self._workflow_supports_tasks(workflow)
         if supports_tasks:
             if self.pending_tasks:
-                lines.append(f"[bold green]┌─ Ready ───────────────────────────────[/bold green]")
-                lines.append(f"[bold green]│[/bold green] {len(self.pending_tasks)} tasks queued")
-                lines.append(f"[bold green]│[/bold green] [dim]Press Enter to run[/dim]")
-                lines.append(f"[bold green]└──────────────────────────────────────[/bold green]")
+                lines.append(self._box_top("Ready", "bold green"))
+                lines.append(self._box_line(f"{len(self.pending_tasks)} tasks queued", "bold green"))
+                lines.append(self._box_line("[dim]Press Enter to run[/dim]", "bold green"))
+                lines.append(self._box_bottom("bold green"))
             else:
-                lines.append(f"[yellow]┌─ Needs Tasks ─────────────────────────[/yellow]")
-                lines.append(f"[yellow]│[/yellow] This workflow requires task input")
-                lines.append(f"[yellow]│[/yellow] [dim]Press t to add tasks[/dim]")
-                lines.append(f"[yellow]└──────────────────────────────────────[/yellow]")
+                lines.append(self._box_top("Needs Tasks", "yellow"))
+                lines.append(self._box_line("This workflow requires task input", "yellow"))
+                lines.append(self._box_line("[dim]Press t to add tasks[/dim]", "yellow"))
+                lines.append(self._box_bottom("yellow"))
         else:
             lines.append("[dim]Static workflow (no task input needed)[/dim]")
 
@@ -465,26 +516,22 @@ class WorkflowBrowser(Widget):
                 vars_data = json.loads(run["input_variables"]) if isinstance(run["input_variables"], str) else run["input_variables"]
                 tasks = vars_data.get('tasks', [])
                 if tasks:
-                    lines.append(f"[bold]┌─ Tasks ({len(tasks)}) ─────────────────────────[/bold]")
+                    lines.append(self._box_top(f"Tasks ({len(tasks)})"))
+                    wrap_width = self._get_preview_width() - 8  # Account for box + number prefix
                     for i, task in enumerate(tasks):
                         task_str = str(task)
                         if isinstance(task, int):
                             # Doc ID - show on one line
-                            lines.append(f"[bold]│[/bold] {i+1}. [cyan]doc:{task}[/cyan]")
+                            lines.append(self._box_line(f"{i+1}. [cyan]doc:{task}[/cyan]"))
                         else:
-                            # String task - wrap naturally with hanging indent
-                            # Split into lines if very long
-                            first_line = True
-                            remaining = task_str
-                            while remaining:
-                                chunk = remaining[:60]
-                                remaining = remaining[60:]
-                                if first_line:
-                                    lines.append(f"[bold]│[/bold] {i+1}. {chunk}")
-                                    first_line = False
+                            # String task - wrap at word boundaries
+                            wrapped = textwrap.wrap(task_str, width=max(wrap_width, 30))
+                            for j, line in enumerate(wrapped):
+                                if j == 0:
+                                    lines.append(self._box_line(f"{i+1}. {line}"))
                                 else:
-                                    lines.append(f"[bold]│[/bold]    {chunk}")
-                    lines.append(f"[bold]└──────────────────────────────────────[/bold]")
+                                    lines.append(self._box_line(f"   {line}"))
+                    lines.append(self._box_bottom())
                     lines.append("")
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -493,7 +540,7 @@ class WorkflowBrowser(Widget):
         if wf_db:
             stage_runs = wf_db.list_stage_runs(run["id"])
             if stage_runs:
-                lines.append(f"[bold]┌─ Stages ──────────────────────────────[/bold]")
+                lines.append(self._box_top("Stages"))
                 for sr in stage_runs:
                     icon = {
                         "completed": "[green]✓[/green]",
@@ -501,27 +548,28 @@ class WorkflowBrowser(Widget):
                         "running": "[yellow]⟳[/yellow]",
                     }.get(sr["status"], "[dim]○[/dim]")
                     progress = f"{sr['runs_completed']}/{sr['target_runs']}"
-                    lines.append(f"[bold]│[/bold] {icon} {sr['stage_name']:<20} {progress}")
-                lines.append(f"[bold]└──────────────────────────────────────[/bold]")
+                    lines.append(self._box_line(f"{icon} {sr['stage_name']:<20} {progress}"))
+                lines.append(self._box_bottom())
                 lines.append("")
 
         # Outputs box
         output_ids = json.loads(run.get("output_doc_ids", "[]")) if run.get("output_doc_ids") else []
         if output_ids:
-            lines.append(f"[bold]┌─ Outputs ({len(output_ids)}) ───────────────────────[/bold]")
-            lines.append(f"[bold]│[/bold] [dim]Press o to view in document browser[/dim]")
+            lines.append(self._box_top(f"Outputs ({len(output_ids)})"))
+            lines.append(self._box_line("[dim]Press o to view in document browser[/dim]"))
             for doc_id in output_ids:
-                lines.append(f"[bold]│[/bold] [cyan]doc:{doc_id}[/cyan]")
-            lines.append(f"[bold]└──────────────────────────────────────[/bold]")
+                lines.append(self._box_line(f"[cyan]doc:{doc_id}[/cyan]"))
+            lines.append(self._box_bottom())
         else:
             lines.append("[dim]No outputs yet[/dim]")
 
         # Error (if any)
         if run.get("error_message"):
             lines.append("")
-            lines.append(f"[bold red]┌─ Error ───────────────────────────────[/bold red]")
-            lines.append(f"[bold red]│[/bold red] {run['error_message']}")
-            lines.append(f"[bold red]└──────────────────────────────────────[/bold red]")
+            lines.append(self._box_top("Error", "bold red"))
+            for line in self._wrap_text(run["error_message"]):
+                lines.append(self._box_line(line, "bold red"))
+            lines.append(self._box_bottom("bold red"))
 
         preview.update("\n".join(lines))
 
@@ -568,9 +616,18 @@ class WorkflowBrowser(Widget):
             self._update_status("No outputs for this run")
             return
 
-        # TODO: Navigate to document browser filtered by these IDs
-        # For now, show a message with the IDs
-        self._update_status(f"Outputs: {', '.join(str(d) for d in output_ids[:5])}")
+        # Navigate to document browser and view first output
+        first_doc_id = output_ids[0]
+
+        async def go_to_document():
+            if hasattr(self.app, "switch_browser"):
+                await self.app.switch_browser("document")
+                # Try to select the document
+                doc_browser = self.app.browsers.get("document") if hasattr(self.app, "browsers") else None
+                if doc_browser and hasattr(doc_browser, "select_document_by_id"):
+                    await doc_browser.select_document_by_id(first_doc_id)
+
+        asyncio.create_task(go_to_document())
 
     # Task input actions
     def action_add_task(self) -> None:
