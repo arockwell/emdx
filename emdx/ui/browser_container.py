@@ -222,17 +222,6 @@ class BrowserContainer(App):
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
-            elif browser_type == "agent":
-                try:
-                    from .agent_browser import AgentBrowser
-                    self.browsers[browser_type] = AgentBrowser()
-                    logger.info("AgentBrowser created successfully")
-                except Exception as e:
-                    logger.error(f"Failed to create AgentBrowser: {e}", exc_info=True)
-                    # Create a simple error message widget instead
-                    from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Agent browser failed to load:\n{str(e)}\n\nCheck logs for details.")
-                    logger.error(f"AgentBrowser creation failed, showing error message")
             elif browser_type == "control":
                 from .pulse_browser import PulseBrowser
                 self.browsers[browser_type] = PulseBrowser()
@@ -366,10 +355,6 @@ class BrowserContainer(App):
                 await self.switch_browser("log")
                 event.stop()
                 return
-            elif key == "a":
-                await self.switch_browser("agent")
-                event.stop()
-                return
             elif key == "c":
                 await self.switch_browser("control")
                 event.stop()
@@ -384,7 +369,7 @@ class BrowserContainer(App):
                 return
 
         # Q from sub-browsers goes back to activity (the new default)
-        if key == "q" and self.current_browser in ["file", "git", "log", "agent", "control", "workflow", "tasks"]:
+        if key == "q" and self.current_browser in ["file", "git", "log", "control", "workflow", "tasks"]:
             await self.switch_browser("activity")
             event.stop()
             return

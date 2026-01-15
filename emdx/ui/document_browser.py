@@ -56,7 +56,6 @@ class DocumentBrowser(Widget):
         Binding("t", "add_tags", "Add Tags"),
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
-        Binding("x", "execute_document", "Run Agent"),
         Binding("r", "refresh", "Refresh"),
         # Hierarchy navigation
         Binding("l", "expand_children", "Expand", show=False),
@@ -776,63 +775,6 @@ class DocumentBrowser(Widget):
             app = self.app
             if hasattr(app, 'update_status'):
                 app.update_status(message)
-    
-    def action_execute_document(self) -> None:
-        """Open multi-stage agent execution overlay for the current document."""
-        table = self.query_one("#doc-table", DataTable)
-        doc_item = self.presenter.get_document_at_index(table.cursor_row)
-        if not doc_item:
-            self.update_status("No document selected for agent execution")
-            return
-
-        doc_id = doc_item.id
-        doc_title = doc_item.title
-
-        # Import the new agent execution overlay
-        from .agent_execution_overlay import AgentExecutionOverlay
-
-        async def handle_execution_result(result):
-            """Handle the result from agent execution overlay."""
-            if result and result.get('document_id') and result.get('agent_id'):
-                document_id = result['document_id']
-                agent_id = result['agent_id']
-                worktree_index = result.get('worktree_index')
-                config = result.get('config', {})
-                background = config.get('background', True)
-
-                # Execute the agent
-                try:
-                    from ..agents.executor import agent_executor
-
-                    logger.info(f"Starting agent execution: agent={agent_id}, doc={document_id}, background={background}")
-
-                    execution_id = await agent_executor.execute_agent(
-                        agent_id=agent_id,
-                        input_type='document',
-                        input_doc_id=document_id,
-                        background=background,
-                        variables=config.get('variables', {})
-                    )
-
-                    self.update_status(f"✅ Agent #{execution_id} started!")
-                    logger.info(f"Agent execution started: #{execution_id}")
-
-                except Exception as e:
-                    logger.error(f"Error starting agent: {e}", exc_info=True)
-                    self.update_status(f"❌ Error starting agent: {str(e)}")
-            else:
-                # User cancelled
-                self.update_status("Agent execution cancelled")
-                logger.info("Agent execution cancelled by user")
-
-        # Open the new multi-stage agent execution overlay
-        # Pre-select the current document and start at agent selection stage
-        overlay = AgentExecutionOverlay(
-            initial_document_id=doc_id,  # Pre-select current document
-            start_stage=None,  # Will auto-start at agent stage when document is pre-selected
-        )
-        # Pass the async callback to push_screen - it will be called when the overlay is dismissed
-        self.app.push_screen(overlay, handle_execution_result)
     
     async def action_new_document(self) -> None:
         """Create a new document."""

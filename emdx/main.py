@@ -20,7 +20,6 @@ from emdx.commands.gdoc import app as gdoc_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
-from emdx.commands.agents import app as agents_app
 from emdx.commands.similarity import app as similarity_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
@@ -73,9 +72,6 @@ app.command(name="maintain")(maintain_app.registered_commands[0].callback)
 
 # Add lifecycle as a subcommand group (keeping this as-is)
 app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
-
-# Add agents as a subcommand group
-app.add_typer(agents_app, name="agent", help="Manage and run AI agents")
 
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Task management")
