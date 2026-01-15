@@ -102,9 +102,6 @@ class Context(Enum):
     # Nested view contexts (widgets within browsers)
     LOG_VIEW = "log:view"
     FILE_LIST = "file:list"
-    KANBAN_VIEW = "control:kanban"
-    TIMELINE_VIEW = "control:timeline"
-    FOCUS_VIEW = "control:focus"
     PULSE_VIEW = "control:pulse"
 
     # Input contexts (when typing in an input field)
@@ -165,9 +162,6 @@ class Context(Enum):
             # Nested view contexts
             cls.LOG_VIEW: [cls.LOG_NORMAL, cls.GLOBAL],
             cls.FILE_LIST: [cls.FILE_NORMAL, cls.GLOBAL],
-            cls.KANBAN_VIEW: [cls.CONTROL_ZOOM0, cls.CONTROL_NORMAL, cls.GLOBAL],
-            cls.TIMELINE_VIEW: [cls.CONTROL_ZOOM0, cls.CONTROL_NORMAL, cls.GLOBAL],
-            cls.FOCUS_VIEW: [cls.CONTROL_ZOOM1, cls.CONTROL_NORMAL, cls.GLOBAL],
             cls.PULSE_VIEW: [cls.CONTROL_NORMAL, cls.GLOBAL],
             # Modals don't inherit - they override everything
             cls.MODAL_THEME: [],
@@ -249,10 +243,6 @@ class Context(Enum):
             "ControlCenterBrowser": cls.CONTROL_NORMAL,
             "PulseBrowser": cls.CONTROL_NORMAL,
             "PulseView": cls.PULSE_VIEW,
-            "KanbanView": cls.KANBAN_VIEW,
-            "TimelineView": cls.TIMELINE_VIEW,
-            "FocusView": cls.FOCUS_VIEW,
-            "SmartList": cls.CONTROL_ZOOM2,
             # Git browser
             "GitBrowser": cls.GIT_NORMAL,
             # Vim editor
@@ -301,8 +291,6 @@ class Context(Enum):
             "DeleteConfirmationDialog": cls.MODAL_DELETE,
             # Activity browser
             "ActivityBrowser": cls.ACTIVITY_NORMAL,
-            # Smart list (pulse)
-            "SmartListPanel": cls.CONTROL_ZOOM2,
             # Category select
             "CategorySelect": cls.MODAL_STAGE,
         }
