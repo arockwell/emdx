@@ -231,6 +231,9 @@ def run_workflow(
     task: Optional[List[str]] = typer.Option(
         None, "--task", "-t", help="Task to run (string or doc ID). Can be specified multiple times."
     ),
+    title: Optional[str] = typer.Option(
+        None, "--title", help="Custom title for this run (shown in Activity view)"
+    ),
     vars: Optional[List[str]] = typer.Option(
         None, "--var", "-v", help="Variables as key=value pairs (override preset)"
     ),
@@ -332,7 +335,13 @@ def run_workflow(
             variables['_max_concurrent_override'] = max_concurrent
         variables['base_branch'] = base_branch
 
+        # Store title in input_variables (used by Activity view)
+        if title:
+            variables['task_title'] = title
+
         console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name}")
+        if title:
+            console.print(f"  Title: {title}")
         console.print(f"  Stages: {len(workflow.stages)}")
         if doc_id:
             console.print(f"  Input document: #{doc_id}")
@@ -714,10 +723,6 @@ def delete_workflow(
 
         if not workflow:
             console.print(f"[red]Workflow not found: {workflow_name}[/red]")
-            raise typer.Exit(1)
-
-        if workflow.is_builtin:
-            console.print(f"[red]Cannot delete builtin workflow: {workflow.name}[/red]")
             raise typer.Exit(1)
 
         # Confirm deletion
