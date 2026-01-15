@@ -1,6 +1,10 @@
 """
 Document merging service for EMDX.
 Intelligently merges related documents while preserving important information.
+
+Uses TF-IDF pre-filtering for O(n) merge candidate search instead of O(n²)
+pairwise comparison. The SimilarityService handles vectorization and cosine
+similarity via efficient matrix operations.
 """
 
 import difflib
@@ -15,6 +19,7 @@ from ..database.connection import DatabaseConnection
 from ..models.documents import delete_document, get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags
 from ..utils.datetime import parse_datetime
+from .similarity import SimilarityService
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +48,19 @@ class MergeStrategy:
 
 
 class DocumentMerger:
-    """Service for intelligently merging related documents."""
-    
+    """Service for intelligently merging related documents.
+
+    Uses TF-IDF pre-filtering via SimilarityService to achieve O(n) complexity
+    for merge candidate search instead of O(n²) pairwise comparison.
+    """
+
     SIMILARITY_THRESHOLD = 0.7  # Minimum similarity for merge candidates
-    
+    PREFILTER_THRESHOLD = 0.3   # Lower threshold for TF-IDF pre-filtering
+
     def __init__(self, db_path: Optional[Union[str, Path]] = None):
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
+        self._similarity_service = SimilarityService(self.db_path)
     
     def find_merge_candidates(
         self,
@@ -59,6 +70,13 @@ class DocumentMerger:
     ) -> List[MergeCandidate]:
         """
         Find documents that are candidates for merging.
+
+        Uses TF-IDF pre-filtering via SimilarityService for O(n) complexity
+        instead of O(n²) pairwise comparison. The algorithm:
+        1. Build TF-IDF index of all documents (O(n))
+        2. Compute similarity matrix via sparse matrix operations (O(n*k))
+        3. Filter pairs above threshold
+        4. Refine with title similarity for final scoring
 
         Args:
             project: Filter by specific project
@@ -70,10 +88,119 @@ class DocumentMerger:
         """
         threshold = similarity_threshold or self.SIMILARITY_THRESHOLD
 
+        # Rebuild index to ensure fresh data
+        if progress_callback:
+            progress_callback(0, 100, 0)
+
+        self._similarity_service.build_index(force=True)
+
+        if progress_callback:
+            progress_callback(20, 100, 0)
+
+        # Use TF-IDF pre-filtering with lower threshold to catch potential candidates
+        # The find_all_duplicate_pairs method uses efficient matrix operations
+        prefilter_threshold = min(self.PREFILTER_THRESHOLD, threshold * 0.5)
+        similar_pairs = self._similarity_service.find_all_duplicate_pairs(
+            min_similarity=prefilter_threshold,
+            progress_callback=lambda c, t, f: progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None
+        )
+
+        if progress_callback:
+            progress_callback(70, 100, len(similar_pairs))
+
+        # Get document metadata for filtering and scoring
+        doc_metadata = self._get_document_metadata(project)
+
+        if progress_callback:
+            progress_callback(75, 100, len(similar_pairs))
+
+        candidates = []
+        total_pairs = len(similar_pairs)
+
+        for i, (doc1_id, doc2_id, doc1_title, doc2_title, tfidf_sim) in enumerate(similar_pairs):
+            # Report progress
+            if progress_callback and i % 100 == 0:
+                progress_callback(75 + int((i / max(total_pairs, 1)) * 20), 100, len(candidates))
+
+            # Skip if project filter doesn't match
+            if project:
+                doc1_meta = doc_metadata.get(doc1_id)
+                doc2_meta = doc_metadata.get(doc2_id)
+                if not doc1_meta or not doc2_meta:
+                    continue
+                if doc1_meta['project'] != project and doc2_meta['project'] != project:
+                    continue
+
+            # Get metadata for both docs
+            doc1_meta = doc_metadata.get(doc1_id)
+            doc2_meta = doc_metadata.get(doc2_id)
+
+            if not doc1_meta or not doc2_meta:
+                continue
+
+            # Skip if both have high access counts (likely both important)
+            if doc1_meta['access_count'] > 50 and doc2_meta['access_count'] > 50:
+                continue
+
+            # Calculate title similarity for refined scoring
+            title_sim = self._calculate_similarity(doc1_title, doc2_title)
+
+            # Combine TF-IDF content similarity with title similarity
+            # TF-IDF already captures content similarity well
+            overall_sim = (title_sim * 0.4) + (tfidf_sim * 0.6)
+
+            if overall_sim >= threshold:
+                # Determine merge reason
+                if title_sim > 0.8:
+                    reason = "Nearly identical titles"
+                elif tfidf_sim > 0.9:
+                    reason = "Nearly identical content"
+                elif title_sim > 0.6 and tfidf_sim > 0.7:
+                    reason = "Similar title and content"
+                else:
+                    reason = "Related content"
+
+                # Recommend which to keep
+                doc1_content_len = len(doc1_meta.get('content') or '')
+                doc2_content_len = len(doc2_meta.get('content') or '')
+
+                if doc1_meta['access_count'] > doc2_meta['access_count']:
+                    action = f"Merge into #{doc1_id} (more views)"
+                elif doc1_content_len > doc2_content_len:
+                    action = f"Merge into #{doc1_id} (more content)"
+                else:
+                    action = f"Merge into #{doc2_id}"
+
+                candidates.append(MergeCandidate(
+                    doc1_id=doc1_id,
+                    doc2_id=doc2_id,
+                    doc1_title=doc1_title,
+                    doc2_title=doc2_title,
+                    similarity_score=overall_sim,
+                    merge_reason=reason,
+                    recommended_action=action
+                ))
+
+        if progress_callback:
+            progress_callback(100, 100, len(candidates))
+
+        # Sort by similarity score
+        candidates.sort(key=lambda c: c.similarity_score, reverse=True)
+        return candidates
+
+    def _get_document_metadata(self, project: Optional[str] = None) -> Dict[int, Dict[str, Any]]:
+        """
+        Get metadata for all active documents.
+
+        Args:
+            project: Optional project filter
+
+        Returns:
+            Dict mapping doc_id to metadata dict
+        """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Get all active documents
             query = """
                 SELECT id, title, content, project, access_count
                 FROM documents
@@ -88,65 +215,15 @@ class DocumentMerger:
             cursor.execute(query, params)
             documents = cursor.fetchall()
 
-        candidates = []
-        total_docs = len(documents)
-
-        # Compare all document pairs
-        for i, doc1 in enumerate(documents):
-            # Report progress
-            if progress_callback and i % 50 == 0:
-                progress_callback(i, total_docs, len(candidates))
-
-            for doc2 in documents[i+1:]:
-                # Skip if both have high access counts (likely both important)
-                if doc1['access_count'] > 50 and doc2['access_count'] > 50:
-                    continue
-                
-                # Check title similarity
-                title_sim = self._calculate_similarity(doc1['title'], doc2['title'])
-                
-                # Check content similarity (expensive, so only if titles are somewhat similar)
-                if title_sim > 0.3:
-                    content_sim = self._calculate_similarity(
-                        doc1['content'] or '', 
-                        doc2['content'] or ''
-                    )
-                    
-                    # Weighted similarity
-                    overall_sim = (title_sim * 0.4) + (content_sim * 0.6)
-                    
-                    if overall_sim >= threshold:
-                        # Determine merge reason
-                        if title_sim > 0.8:
-                            reason = "Nearly identical titles"
-                        elif content_sim > 0.9:
-                            reason = "Nearly identical content"
-                        elif title_sim > 0.6 and content_sim > 0.7:
-                            reason = "Similar title and content"
-                        else:
-                            reason = "Related content"
-                        
-                        # Recommend which to keep
-                        if doc1['access_count'] > doc2['access_count']:
-                            action = f"Merge into #{doc1['id']} (more views)"
-                        elif len(doc1['content'] or '') > len(doc2['content'] or ''):
-                            action = f"Merge into #{doc1['id']} (more content)"
-                        else:
-                            action = f"Merge into #{doc2['id']}"
-                        
-                        candidates.append(MergeCandidate(
-                            doc1_id=doc1['id'],
-                            doc2_id=doc2['id'],
-                            doc1_title=doc1['title'],
-                            doc2_title=doc2['title'],
-                            similarity_score=overall_sim,
-                            merge_reason=reason,
-                            recommended_action=action
-                        ))
-        
-        # Sort by similarity score
-        candidates.sort(key=lambda c: c.similarity_score, reverse=True)
-        return candidates
+        return {
+            doc['id']: {
+                'title': doc['title'],
+                'content': doc['content'],
+                'project': doc['project'],
+                'access_count': doc['access_count']
+            }
+            for doc in documents
+        }
     
     def _calculate_similarity(self, text1: str, text2: str) -> float:
         """Calculate similarity between two texts using SequenceMatcher."""
