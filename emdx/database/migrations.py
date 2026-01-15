@@ -1289,6 +1289,70 @@ def migration_021_add_workflow_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_022_add_document_groups(conn: sqlite3.Connection):
+    """Add document grouping system for organizing related documents.
+
+    This enables hierarchical organization of documents into batches, rounds,
+    and initiatives - independent of how they were created (workflow, sub-agent,
+    manual save).
+    """
+    cursor = conn.cursor()
+
+    # Create document_groups table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            parent_group_id INTEGER,
+            group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),
+            project TEXT,
+            workflow_run_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT TRUE,
+            doc_count INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            total_cost_usd REAL DEFAULT 0.0,
+
+            FOREIGN KEY (parent_group_id) REFERENCES document_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE SET NULL
+        )
+    """)
+
+    # Create document_group_members table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_group_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            document_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'member' CHECK (role IN ('primary', 'exploration', 'synthesis', 'variant', 'member')),
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            added_by TEXT,
+
+            UNIQUE (group_id, document_id),
+            FOREIGN KEY (group_id) REFERENCES document_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Create indexes for document_groups
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_name ON document_groups(name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_project ON document_groups(project)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_workflow ON document_groups(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_type ON document_groups(group_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_active ON document_groups(is_active)")
+
+    # Create indexes for document_group_members
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dgm_group ON document_group_members(group_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dgm_doc ON document_group_members(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dgm_role ON document_group_members(role)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1313,6 +1377,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (19, "Add document sources bridge table", migration_019_add_document_sources),
     (20, "Add synthesis cost tracking", migration_020_add_synthesis_cost),
     (21, "Add workflow presets", migration_021_add_workflow_presets),
+    (22, "Add document groups system", migration_022_add_document_groups),
 ]
 
 
