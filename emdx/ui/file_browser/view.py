@@ -230,8 +230,8 @@ class FileBrowserView(FileBrowserNavigation, FileBrowserActions, Container):
             self.refresh_files()
             try:
                 self.query_one("#path-breadcrumb", Static).update(str(new_path))
-            except Exception:
-                pass  # Widget not ready yet
+            except Exception as e:
+                logger.debug("Path breadcrumb widget not ready: %s", e)
             self.selected_index = 0
 
     def watch_selected_index(self, old: int, new: int) -> None:
@@ -241,8 +241,8 @@ class FileBrowserView(FileBrowserNavigation, FileBrowserActions, Container):
                 file_list = self.query_one("#file-list", FileList)
                 file_list.selected_index = new
                 self.update_preview()
-            except Exception:
-                pass  # Widget not ready yet
+            except Exception as e:
+                logger.debug("File list widget not ready: %s", e)
 
     def watch_show_hidden(self, old: bool, new: bool) -> None:
         """React to hidden files toggle."""

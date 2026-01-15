@@ -141,8 +141,8 @@ class VimEditor(Vertical):
             if hasattr(self.text_area, 'selection'):
                 try:
                     self.text_area.selection = None
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Could not clear selection: %s", e)
                     
             # Note: scroll_to, scroll_offset, scroll_x/y methods disabled due to
             # first-line visibility issues in Textual TextArea
@@ -160,8 +160,8 @@ class VimEditor(Vertical):
             if hasattr(self.text_area, 'move_cursor'):
                 try:
                     self.text_area.move_cursor((0, 0))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Could not move cursor via move_cursor: %s", e)
                     
             # Focus the text area AFTER positioning
             self.text_area.focus()

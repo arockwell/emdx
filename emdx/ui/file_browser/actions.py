@@ -314,8 +314,8 @@ class FileBrowserActions:
                     try:
                         vim_editor = self.query_one("#edit-preview-container")
                         vim_editor.remove()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Edit preview container not present to remove: %s", e)
 
                     # Just recreate the FilePreview widget to replace the vim editor
                     new_preview = FilePreview(id="file-preview", classes="file-preview-pane")
@@ -500,8 +500,8 @@ class FileBrowserActions:
                 fallback_container = ScrollableContainer(id="file-preview", classes="file-preview-pane")
                 fallback_container.mount(Static(f"Preview of {selected_file.name}"))
                 horizontal_container.mount(fallback_container)
-            except Exception:
-                pass
+            except Exception as e2:
+                logger.debug("Fallback preview mount also failed: %s", e2)
 
     def handle_save_result(self: "FileBrowserView", result: Optional[dict]) -> None:
         """Handle result from save modal."""
