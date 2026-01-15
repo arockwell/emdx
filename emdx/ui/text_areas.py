@@ -382,7 +382,7 @@ class VimEditTextArea(TextArea):
                 return
             except Exception as e:
                 logger.debug(f"Error switching to title: {e}")
-                pass  # Title input might not exist
+                # Title input might not exist
         
         # Clear pending command if not handled
         if char not in ["g", "d", "y"]:

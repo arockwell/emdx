@@ -81,7 +81,7 @@ class TitleInput(Input):
                 return
             except Exception as e:
                 logger.debug(f"Could not switch to vim editor: {e}")
-                pass  # Editor might not exist
+                # Editor might not exist
         
         # For other keys (typing), let Input handle normally
         # Input widget doesn't have on_key method, so don't call super()
