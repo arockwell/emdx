@@ -23,6 +23,11 @@ class ExecutionMode(Enum):
     DYNAMIC = "dynamic"         # Discover items at runtime, process each in parallel
 
 
+class StageConfigError(ValueError):
+    """Error in stage configuration."""
+    pass
+
+
 @dataclass
 class StageConfig:
     """Configuration for a single workflow stage."""
@@ -41,6 +46,48 @@ class StageConfig:
     item_variable: str = "item"  # Variable name for each discovered item in prompt
     max_concurrent: int = DEFAULT_MAX_CONCURRENT_STAGES  # Max parallel executions for dynamic mode
     continue_on_failure: bool = True  # Continue processing other items if one fails
+
+    def __post_init__(self):
+        """Validate stage configuration after initialization."""
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate stage configuration.
+
+        Raises:
+            StageConfigError: If configuration is invalid
+        """
+        # Stage name is required
+        if not self.name or not self.name.strip():
+            raise StageConfigError("Stage name is required")
+
+        # Runs must be positive
+        if self.runs < 1:
+            raise StageConfigError(f"Stage '{self.name}': runs must be >= 1, got {self.runs}")
+
+        # Parallel mode should have synthesis_prompt for good results
+        # (warning only - we still provide a default)
+        if self.mode == ExecutionMode.PARALLEL and self.runs > 1 and not self.synthesis_prompt:
+            # This is a soft warning - we have a default synthesis prompt
+            pass
+
+        # Dynamic mode requires discovery_command
+        if self.mode == ExecutionMode.DYNAMIC and not self.discovery_command:
+            raise StageConfigError(
+                f"Stage '{self.name}': dynamic mode requires discovery_command"
+            )
+
+        # max_concurrent must be positive
+        if self.max_concurrent < 1:
+            raise StageConfigError(
+                f"Stage '{self.name}': max_concurrent must be >= 1, got {self.max_concurrent}"
+            )
+
+        # timeout must be reasonable
+        if self.timeout_seconds < 1:
+            raise StageConfigError(
+                f"Stage '{self.name}': timeout_seconds must be >= 1, got {self.timeout_seconds}"
+            )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'StageConfig':
@@ -349,6 +396,30 @@ class IterationStrategy:
 
 
 @dataclass
+class WorkflowError:
+    """Structured workflow error with context.
+
+    Provides detailed information about what went wrong during
+    workflow execution, including which stage and run failed.
+
+    Attributes:
+        stage_name: Name of the stage where error occurred
+        run_number: Run number within stage (if applicable)
+        error_type: Category of error for programmatic handling
+        message: Human-readable error message
+        recoverable: Whether execution can continue
+        details: Additional error details (stack trace, etc.)
+    """
+
+    stage_name: str
+    error_type: str  # 'agent_failed', 'synthesis_failed', 'discovery_failed', 'validation', 'timeout'
+    message: str
+    run_number: Optional[int] = None
+    recoverable: bool = False
+    details: Optional[Dict[str, Any]] = None
+
+
+@dataclass
 class StageResult:
     """Result of executing a workflow stage."""
     success: bool
@@ -358,3 +429,4 @@ class StageResult:
     tokens_used: int = 0
     execution_time_ms: int = 0
     error_message: Optional[str] = None
+    errors: List[WorkflowError] = field(default_factory=list)  # Structured errors
