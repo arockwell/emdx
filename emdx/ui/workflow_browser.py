@@ -461,13 +461,12 @@ class WorkflowBrowser(Widget):
                 tasks = vars_data.get('tasks', [])
                 if tasks:
                     lines.append(f"[bold]Tasks ({len(tasks)}):[/bold]")
-                    for i, task in enumerate(tasks[:4]):
-                        task_str = str(task)[:40]
-                        if len(str(task)) > 40:
-                            task_str += "..."
-                        lines.append(f"  {i+1}. {task_str}")
-                    if len(tasks) > 4:
-                        lines.append(f"  [dim]+{len(tasks) - 4} more[/dim]")
+                    for i, task in enumerate(tasks):
+                        task_str = str(task)
+                        if isinstance(task, int):
+                            lines.append(f"  {i+1}. [cyan]doc:{task}[/cyan]")
+                        else:
+                            lines.append(f"  {i+1}. {task_str}")
                     lines.append("")
             except (json.JSONDecodeError, TypeError):
                 pass
