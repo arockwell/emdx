@@ -30,6 +30,7 @@ from .activity_items import (
     IndividualRunItem,
     ExplorationItem,
 )
+from .group_picker import GroupPicker
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,9 @@ class ActivityView(Widget):
         ("h", "collapse", "Collapse"),
         ("f", "fullscreen", "Fullscreen"),
         ("r", "refresh", "Refresh"),
+        ("g", "add_to_group", "Add to Group"),
+        ("G", "create_group", "Create Group"),
+        ("u", "ungroup", "Ungroup"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
     ]
@@ -359,6 +363,9 @@ class ActivityView(Widget):
                 with ScrollableContainer(id="preview-scroll"):
                     yield RichLog(id="preview-content", highlight=True, markup=True, wrap=True, auto_scroll=False)
                 yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
+
+        # Group picker (inline at bottom, hidden by default)
+        yield GroupPicker(id="group-picker")
 
     async def on_mount(self) -> None:
         """Initialize the view."""
@@ -1761,3 +1768,143 @@ class ActivityView(Widget):
     def on_unmount(self) -> None:
         """Cleanup on unmount."""
         self._stop_stream()
+
+    # Group management actions
+
+    def action_add_to_group(self) -> None:
+        """Show group picker to add selected document to a group."""
+        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+            return
+
+        item = self.flat_items[self.selected_idx]
+
+        # Only allow grouping documents (not workflows or groups themselves)
+        if not item.doc_id:
+            self._show_notification("Select a document to add to a group", is_error=True)
+            return
+
+        # Show the group picker
+        picker = self.query_one("#group-picker", GroupPicker)
+        picker.show(item.doc_id)
+
+    async def action_create_group(self) -> None:
+        """Create a new group from the selected document."""
+        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+            return
+
+        item = self.flat_items[self.selected_idx]
+
+        if not item.doc_id:
+            self._show_notification("Select a document to create a group from", is_error=True)
+            return
+
+        if not HAS_GROUPS or not groups_db:
+            self._show_notification("Groups not available", is_error=True)
+            return
+
+        # Get document title for group name
+        try:
+            doc = doc_db.get_document(item.doc_id) if HAS_DOCS else None
+            doc_title = doc.get("title", "Untitled") if doc else "Untitled"
+
+            # Create group named after the document
+            group_name = f"{doc_title[:30]} Group"
+            group_id = groups_db.create_group(
+                name=group_name,
+                group_type="batch",
+            )
+
+            # Add the document to it
+            groups_db.add_document_to_group(group_id, item.doc_id, role="primary")
+
+            self._show_notification(f"Created group '{group_name}'")
+            await self._refresh_data()
+
+        except Exception as e:
+            logger.error(f"Error creating group: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
+
+    async def action_ungroup(self) -> None:
+        """Remove selected document from its parent group."""
+        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+            return
+
+        item = self.flat_items[self.selected_idx]
+
+        if not item.doc_id:
+            self._show_notification("Select a document to ungroup", is_error=True)
+            return
+
+        if not HAS_GROUPS or not groups_db:
+            self._show_notification("Groups not available", is_error=True)
+            return
+
+        # Check if document is in any groups
+        try:
+            doc_groups = groups_db.get_document_groups(item.doc_id)
+            if not doc_groups:
+                self._show_notification("Document is not in any group", is_error=True)
+                return
+
+            # Remove from all groups (or could prompt if in multiple)
+            for group in doc_groups:
+                groups_db.remove_document_from_group(group["id"], item.doc_id)
+
+            group_names = ", ".join(g["name"][:20] for g in doc_groups)
+            self._show_notification(f"Removed from: {group_names}")
+            await self._refresh_data()
+
+        except Exception as e:
+            logger.error(f"Error ungrouping: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
+
+    def _show_notification(self, message: str, is_error: bool = False) -> None:
+        """Show a notification message."""
+        self.notification_is_error = is_error
+        self.notification_text = message
+        self.notification_visible = True
+        self.set_timer(3.0, self._hide_notification)
+
+    # Group picker message handlers
+
+    async def on_group_picker_group_selected(self, event: GroupPicker.GroupSelected) -> None:
+        """Handle group selection from picker."""
+        picker = self.query_one("#group-picker", GroupPicker)
+        doc_id = picker.doc_id
+
+        if doc_id and HAS_GROUPS and groups_db:
+            try:
+                groups_db.add_document_to_group(event.group_id, doc_id)
+                self._show_notification(f"Added to '{event.group_name}'")
+                await self._refresh_data()
+            except Exception as e:
+                logger.error(f"Error adding to group: {e}")
+                self._show_notification(f"Error: {e}", is_error=True)
+
+        # Refocus the table
+        table = self.query_one("#activity-table", DataTable)
+        table.focus()
+
+    async def on_group_picker_group_created(self, event: GroupPicker.GroupCreated) -> None:
+        """Handle new group creation from picker."""
+        picker = self.query_one("#group-picker", GroupPicker)
+        doc_id = picker.doc_id
+
+        if doc_id and HAS_GROUPS and groups_db:
+            try:
+                groups_db.add_document_to_group(event.group_id, doc_id)
+                self._show_notification(f"Created '{event.group_name}' and added document")
+                await self._refresh_data()
+            except Exception as e:
+                logger.error(f"Error adding to new group: {e}")
+                self._show_notification(f"Error: {e}", is_error=True)
+
+        # Refocus the table
+        table = self.query_one("#activity-table", DataTable)
+        table.focus()
+
+    def on_group_picker_cancelled(self, event: GroupPicker.Cancelled) -> None:
+        """Handle picker cancellation."""
+        # Refocus the table
+        table = self.query_one("#activity-table", DataTable)
+        table.focus()
