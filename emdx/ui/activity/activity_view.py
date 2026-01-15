@@ -1772,20 +1772,24 @@ class ActivityView(Widget):
     # Group management actions
 
     def action_add_to_group(self) -> None:
-        """Show group picker to add selected document to a group."""
+        """Show group picker to add selected document or group to another group."""
         if not self.flat_items or self.selected_idx >= len(self.flat_items):
             return
 
         item = self.flat_items[self.selected_idx]
+        picker = self.query_one("#group-picker", GroupPicker)
 
-        # Only allow grouping documents (not workflows or groups themselves)
-        if not item.doc_id:
-            self._show_notification("Select a document to add to a group", is_error=True)
+        # Handle groups - nest under another group
+        if item.item_type == "group":
+            picker.show(source_group_id=item.item_id)
             return
 
-        # Show the group picker
-        picker = self.query_one("#group-picker", GroupPicker)
-        picker.show(item.doc_id)
+        # Handle documents
+        if item.doc_id:
+            picker.show(doc_id=item.doc_id)
+            return
+
+        self._show_notification("Select a document or group", is_error=True)
 
     async def action_create_group(self) -> None:
         """Create a new group from the selected document."""
@@ -1869,16 +1873,22 @@ class ActivityView(Widget):
 
     async def on_group_picker_group_selected(self, event: GroupPicker.GroupSelected) -> None:
         """Handle group selection from picker."""
-        doc_id = event.doc_id
+        if not HAS_GROUPS or not groups_db:
+            return
 
-        if doc_id and HAS_GROUPS and groups_db:
-            try:
-                groups_db.add_document_to_group(event.group_id, doc_id)
+        try:
+            if event.source_group_id:
+                # Nesting a group under another group
+                groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
+                self._show_notification(f"Moved group under '{event.group_name}'")
+            elif event.doc_id:
+                # Adding a document to a group
+                groups_db.add_document_to_group(event.group_id, event.doc_id)
                 self._show_notification(f"Added to '{event.group_name}'")
-                await self._refresh_data()
-            except Exception as e:
-                logger.error(f"Error adding to group: {e}")
-                self._show_notification(f"Error: {e}", is_error=True)
+            await self._refresh_data()
+        except Exception as e:
+            logger.error(f"Error in group operation: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
 
         # Refocus the table
         table = self.query_one("#activity-table", DataTable)
@@ -1886,16 +1896,22 @@ class ActivityView(Widget):
 
     async def on_group_picker_group_created(self, event: GroupPicker.GroupCreated) -> None:
         """Handle new group creation from picker."""
-        doc_id = event.doc_id
+        if not HAS_GROUPS or not groups_db:
+            return
 
-        if doc_id and HAS_GROUPS and groups_db:
-            try:
-                groups_db.add_document_to_group(event.group_id, doc_id)
+        try:
+            if event.source_group_id:
+                # Move source group under the new group
+                groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
+                self._show_notification(f"Created '{event.group_name}' and moved group under it")
+            elif event.doc_id:
+                # Add document to the new group
+                groups_db.add_document_to_group(event.group_id, event.doc_id)
                 self._show_notification(f"Created '{event.group_name}' and added document")
-                await self._refresh_data()
-            except Exception as e:
-                logger.error(f"Error adding to new group: {e}")
-                self._show_notification(f"Error: {e}", is_error=True)
+            await self._refresh_data()
+        except Exception as e:
+            logger.error(f"Error in group operation: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
 
         # Refocus the table
         table = self.query_one("#activity-table", DataTable)

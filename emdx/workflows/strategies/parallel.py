@@ -42,9 +42,16 @@ class ParallelExecutionStrategy(ExecutionStrategy):
         Returns:
             StageResult with synthesis
         """
+        # Determine run count: use prompts length if provided, otherwise stage.runs
+        num_runs = len(stage.prompts) if stage.prompts else stage.runs
+
+        # Create semaphore from stage config (allows runtime override)
+        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent
+        semaphore = asyncio.Semaphore(max_concurrent)
+
         # Create individual run records
         individual_runs: List[tuple[int, Optional[str]]] = []
-        for i in range(stage.runs):
+        for i in range(num_runs):
             # Support per-run prompts (stage.prompts) or single prompt (stage.prompt)
             if stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
@@ -62,7 +69,7 @@ class ParallelExecutionStrategy(ExecutionStrategy):
 
         # Execute all runs in parallel (with semaphore limiting)
         async def run_with_limit(run_id: int, prompt: Optional[str]) -> Dict[str, Any]:
-            async with self._semaphore:
+            async with semaphore:
                 return await self.run_agent(
                     individual_run_id=run_id,
                     agent_id=stage.agent_id,
