@@ -2,23 +2,23 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has 24 test files that cover functionality. **MAJOR PROGRESS**: Core import errors have been fixed and key test files are now working!
+EMDX has 37 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
 
 ### **Current Test Status** 🎉 **FULLY FUNCTIONAL TEST SUITE**
 
 ```bash
-# 🎉 MASSIVE SUCCESS: Test suite is now fully operational!
+# 🎉 Test suite is fully operational!
 poetry run pytest tests/ -v
 
-# 🎉 Final Results:
-# - 172 tests collected (up from 134 with broken imports)
-# - 125 tests passing ✅ (72.7% success rate)
-# - 45 tests failing (mostly logic/mock issues, not import errors)
-# - 2 tests skipped
-# - 0 collection errors ✅ (down from 6 critical import errors)
+# 🎉 Current Results (as of 2026-01-14):
+# - 411 tests collected
+# - 406 tests passing ✅ (98.8% success rate)
+# - 0 tests failing
+# - 5 tests skipped
+# - 0 collection errors ✅
 
 # ✅ ALL IMPORT ERRORS FIXED:
-# - emdx.browse → emdx.commands.browse  
+# - emdx.browse → emdx.commands.browse
 # - emdx.cli → emdx.main
 # - emdx.sqlite_database → emdx.database
 # - emdx.migrations → emdx.database.migrations
@@ -31,31 +31,39 @@ poetry run pytest tests/ -v
 
 ```
 tests/
-├── conftest.py                    # Pytest configuration and fixtures
-├── test_core.py                   # Core CLI commands (save, find, view)
-├── test_database.py               # Database operations and models
-├── test_tags.py                   # Tag system and emoji aliases
-├── test_migrations.py             # Database schema migrations
-├── test_cli.py                    # CLI integration tests
-├── test_browse.py                 # Browse commands (list, stats, recent)
-├── test_auto_tagger.py            # Automatic tagging system
-├── test_claude_execute.py         # Claude Code integration
-├── test_execution_system.py       # Execution tracking and monitoring
-├── test_log_browser.py            # Log browser TUI component
-├── test_log_browser_timestamps.py # Log parsing and timestamps
-├── test_smart_execution.py        # Smart execution features
-├── test_vim_line_numbers.py       # Vim editor line numbering
-├── test_input_content.py          # Content input handling
-├── test_sqlite_database.py        # SQLite-specific database tests
-├── test_utils.py                  # Utility functions
-├── test_config.py                 # Configuration management
-├── test_file_size.py              # File size utilities
-├── test_tagging_config.py         # Tagging configuration
-├── test_fixtures.py               # Test fixture utilities
-├── test_timestamp_parsing.py      # Timestamp parsing logic
-├── test_new_modules.py            # New module tests
-├── test_init.py                   # Package initialization
-└── test_*.py                      # Various other test modules
+├── conftest.py                       # Pytest configuration and fixtures
+├── test_agent_executor_integration.py # Agent executor integration tests
+├── test_agent_system.py              # Agent system tests
+├── test_agents.py                    # Agent configuration and registry tests
+├── test_auto_tagger.py               # Automatic tagging system
+├── test_browse.py                    # Browse commands (list, stats, recent)
+├── test_claude_execute.py            # Claude Code integration
+├── test_cli.py                       # CLI integration tests
+├── test_config.py                    # Configuration management
+├── test_core.py                      # Core CLI commands (save, find, view)
+├── test_database.py                  # Database operations and models
+├── test_execution_system.py          # Execution tracking and monitoring
+├── test_export_profiles.py           # Export profile functionality
+├── test_file_size.py                 # File size utilities
+├── test_file_watcher.py              # File watcher service tests
+├── test_groups.py                    # Document group management
+├── test_init.py                      # Package initialization
+├── test_input_content.py             # Content input handling
+├── test_lazy_loading.py              # Lazy loading functionality
+├── test_log_browser.py               # Log browser TUI component
+├── test_log_browser_timestamps.py    # Log parsing and timestamps
+├── test_migrations.py                # Database schema migrations
+├── test_new_modules.py               # New module tests
+├── test_overlay.py                   # Overlay functionality tests
+├── test_search.py                    # Search functionality tests
+├── test_similarity.py                # Document similarity service
+├── test_smart_execution.py           # Smart execution features
+├── test_sqlite_database.py           # SQLite-specific database tests
+├── test_tags.py                      # Tag system and emoji aliases
+├── test_timestamp_parsing.py         # Timestamp parsing logic
+├── test_utils.py                     # Utility functions
+├── test_vim_line_numbers.py          # Vim editor line numbering
+└── test_workflow_executor.py         # Workflow executor tests
 ```
 
 ## 🎯 **Test Categories**
@@ -134,24 +142,21 @@ def test_log_browser():
 
 ## 🚨 **Known Test Issues**
 
-### **Remaining Issues** (Much Improved!)
+### **Resolved Issues** ✅
 1. ✅ **Import errors FIXED** - All module path issues resolved
-2. ✅ **Module paths FIXED** - Updated to current code structure  
+2. ✅ **Module paths FIXED** - Updated to current code structure
 3. ✅ **Missing imports FIXED** - All import references corrected
 4. ✅ **Asyncio marker FIXED** - TUI tests now have proper markers
 5. ✅ **Test fixture issues FIXED** - Collection warnings resolved
+6. ✅ **All tests passing** - 406/411 tests pass (5 skipped)
 
-### **Secondary Issues**
-6. **Test organization could be better** - Some overlap between test files
-7. **TUI testing is limited** - Textual widget testing is challenging  
-8. **Some tests are flaky** - Especially timing-dependent execution tests
-9. **Mock usage inconsistent** - Some tests use real files, others mock
-10. **Test data cleanup** - Some tests don't clean up properly
+### **Minor Considerations**
+- **TUI testing is limited** - Textual widget testing is challenging
+- **Some timing-dependent tests** - May be sensitive to system load
 
 ### **Test Coverage Gaps**
 - **Full TUI integration** - Hard to test complete user workflows
 - **Cross-platform behavior** - Most testing on single platform
-- **Error edge cases** - Some error conditions not well tested
 - **Performance testing** - No performance regression tests
 
 ## 🎯 **Running Tests Effectively**
@@ -234,28 +239,21 @@ class TestDocumentModel:
 - **Add integration tests** - Test complete workflows
 - **Performance tests** - Ensure no regressions
 
-## 🛠️ **Fixing the Test Suite**
+## 🛠️ **Test Suite Maintenance**
 
-### **Priority 1: Make Tests Run**
-1. **Fix import errors** - Update module paths to match current code structure
-2. **Add missing asyncio marker** - Fix pytest configuration for TUI tests
-3. **Fix import paths** - Update references to moved/renamed modules
-4. **Remove obsolete tests** - Delete tests for deleted functionality
+### **Current State: Healthy** ✅
+The test suite is fully operational with 98.8% pass rate (406/411 tests passing, 5 skipped).
 
-### **Priority 2: Test Quality**
-5. **Clean up test organization** and remove duplication
-6. **Fix flaky execution system tests**  
-7. **Improve TUI testing** with better patterns
-8. **Add more error condition tests**
+### **Future Improvements**
+1. **Add performance regression testing** - Track test execution times
+2. **Cross-platform testing automation** - CI/CD for multiple platforms
+3. **Visual regression testing for TUI** - Screenshot comparisons
+4. **Load testing for large document collections** - Stress testing
 
-### **Priority 3: Enhancement**
-9. **Add performance regression testing**
-10. **Cross-platform testing automation**
-11. **Visual regression testing for TUI**
-12. **Load testing for large document collections**
+## 💡 **Contributing Tests**
 
-## 💡 **Test Fix Strategy**
-
-The test suite needs significant work before it can be considered functional. The tests contain valuable patterns and expected behavior documentation, but most don't currently run due to import errors from code refactoring.
-
-**Quick win**: Fix the import errors in a few key test files to have some working tests, rather than trying to fix all 24 at once.
+When adding new features, follow the patterns in existing test files:
+- Use `temp_db` fixture for database tests
+- Use `CliRunner` for CLI integration tests
+- Mock external dependencies consistently
+- Clean up resources in fixtures using `yield` pattern
