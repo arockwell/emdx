@@ -158,14 +158,26 @@ The agent system adds four new tables:
 
 ## Workflow Integration
 
-For complex multi-agent workflows, use the **Workflow System** instead of individual agent runs. Workflows provide:
+For complex multi-agent workflows, use the **Workflow System** instead of individual agent runs.
 
-- **Execution patterns**: parallel, iterative, adversarial, dynamic
+### When to Use Workflows vs Agents
+
+| Scenario | Use |
+|----------|-----|
+| Single analysis task | `emdx agent run` |
+| Multiple parallel tasks | `emdx workflow run task_parallel` |
+| Code fixes that might conflict | `emdx workflow run parallel_fix --worktree` |
+| Progressive refinement | `emdx workflow run iterative_refine` |
+| Advocate/Critic debate | `emdx workflow run adversarial_review` |
+
+### Workflow Benefits
+
 - **Task-driven execution**: pass tasks at runtime via `--task` flag
-- **Worktree isolation**: each task gets its own git worktree
+- **Worktree isolation**: each parallel task gets its own git worktree (prevents conflicts)
 - **Synthesis**: combine parallel outputs into a single result
+- **Execution tracking**: full history in Activity view with `--title` labels
 
-See [Workflows Documentation](workflows.md) for details.
+### Common Workflow Patterns
 
 ```bash
 # Run multiple analysis tasks in parallel
@@ -173,8 +185,24 @@ emdx workflow run task_parallel \
   -t "Analyze authentication" \
   -t "Review database queries" \
   -t "Check error handling" \
+  --title "Security Review" \
   -j 3  # max 3 concurrent
+
+# Fix multiple issues with worktree isolation
+emdx workflow run parallel_fix \
+  -t "Fix type hints in models/" \
+  -t "Add missing docstrings" \
+  -t "Remove unused imports" \
+  --worktree --base-branch main
+
+# Chain analysis output into fixes
+# 1. Run analysis, note output doc IDs
+emdx workflow run task_parallel -t "Find tech debt issues"
+# 2. Use those doc IDs as fix tasks
+emdx workflow run parallel_fix -t 5182 -t 5183 --worktree
 ```
+
+See [Workflows Documentation](workflows.md) for full details.
 
 
 ## Technical Details
