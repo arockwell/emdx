@@ -358,7 +358,7 @@ class WorkflowExecutor:
             wf_db.update_stage_run(
                 stage_run_id,
                 status='completed' if result.success else 'failed',
-                runs_completed=stage.runs if result.success else 0,
+                runs_completed=num_runs if result.success else 0,
                 output_doc_id=result.output_doc_id,
                 synthesis_doc_id=result.synthesis_doc_id,
                 error_message=result.error_message,
