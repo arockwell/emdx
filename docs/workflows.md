@@ -2,6 +2,43 @@
 
 The EMDX workflow system provides powerful orchestration for multi-agent executions. Workflows are **execution patterns** that define *how* to process tasks, while tasks are provided at runtime.
 
+## Recommended Workflows
+
+These are the core dynamic workflows designed for reuse with `--task` flags:
+
+| Workflow | ID | Purpose | Best For |
+|----------|-----|---------|----------|
+| **task_parallel** | 31 | Run arbitrary tasks in parallel | Multi-task analysis, parallel fixes |
+| **parallel_fix** | 30 | Parallel fixes with worktree isolation | Code fixes that touch same files |
+| **parallel_analysis** | 24 | Parallel analysis with synthesis | Multi-perspective reviews |
+| **dynamic_items** | 29 | Process items discovered at runtime | File processing, branch operations |
+
+### Quick Examples
+
+```bash
+# Run 5 analysis tasks in parallel
+emdx workflow run task_parallel \
+  -t "Analyze authentication security" \
+  -t "Review error handling patterns" \
+  -t "Check for dead code" \
+  -t "Evaluate test coverage" \
+  -t "Audit logging practices" \
+  --title "Security Audit Q1" \
+  -j 3
+
+# Fix multiple issues with worktree isolation (prevents conflicts)
+emdx workflow run parallel_fix \
+  -t "Fix type hints in auth module" \
+  -t "Add missing docstrings to API" \
+  -t "Remove deprecated imports" \
+  --worktree --base-branch main
+
+# Discover and process all Python files
+emdx workflow run dynamic_items \
+  --discover "find . -name '*.py' -type f | head -10" \
+  -j 5
+```
+
 ## Core Concept: Execution Patterns vs Runtime Tasks
 
 **Key Mental Model**: Workflows define the *shape* of execution. Tasks are the *data* you feed in.
@@ -143,6 +180,11 @@ emdx workflow run task_parallel \
   -t "Find irrelevant documentation" \
   -t "Identify dead code" \
   -t "Evaluate architecture"
+
+# Add a custom title (shown in Activity view)
+emdx workflow run task_parallel \
+  -t "Security review" \
+  --title "Q1 Security Audit"
 
 # Tasks can be document IDs
 emdx workflow run task_parallel -t 5182 -t 5183 -t 5184

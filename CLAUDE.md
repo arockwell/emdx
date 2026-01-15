@@ -142,6 +142,55 @@ poetry run emdx tag 123 done success
 poetry run emdx untag 123 blocked
 ```
 
+## 🔄 Workflow System for Multi-Agent Tasks
+
+When working on tasks that benefit from parallel execution or multiple perspectives, use the workflow system instead of running individual commands.
+
+### Core Workflows
+
+| Workflow | Use When |
+|----------|----------|
+| `task_parallel` | Running multiple analysis or fix tasks in parallel |
+| `parallel_fix` | Multiple code fixes that might touch same files (uses worktree isolation) |
+| `parallel_analysis` | Getting multiple perspectives on a problem with synthesis |
+
+### Common Patterns
+
+```bash
+# Analyze multiple aspects of a codebase in parallel
+emdx workflow run task_parallel \
+  -t "Find dead code and unused imports" \
+  -t "Identify missing error handling" \
+  -t "Review test coverage gaps" \
+  --title "Tech Debt Analysis" \
+  -j 3
+
+# Fix multiple issues with worktree isolation (each task gets own branch)
+emdx workflow run parallel_fix \
+  -t "Add type hints to auth module" \
+  -t "Fix exception handling in api/" \
+  -t "Remove deprecated function calls" \
+  --worktree --base-branch main
+
+# Use document IDs as tasks (from previous analysis)
+emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
+```
+
+### When to Use Workflows vs Direct Commands
+
+**Use workflows when:**
+- Running 3+ similar tasks that can parallelize
+- Tasks might modify the same files (use `--worktree`)
+- You want synthesis of multiple outputs
+- Tracking execution history matters
+
+**Use direct commands when:**
+- Single, simple task
+- Interactive exploration
+- Quick one-off operations
+
+For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
+
 ## 📊 Key Features for Claude Integration
 
 ### Event-Driven Log Streaming

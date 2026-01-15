@@ -141,6 +141,7 @@ class ActivityItem:
         doc_id: Optional[int] = None,
         error_message: Optional[str] = None,
         workflow_run: Optional[Dict] = None,
+        individual_run: Optional[Dict] = None,
         depth: int = 0,
     ):
         self.item_type = item_type
@@ -154,6 +155,7 @@ class ActivityItem:
         self.doc_id = doc_id
         self.error_message = error_message
         self.workflow_run = workflow_run
+        self.individual_run = individual_run
         self.depth = depth
         self.expanded = False
         # Progress tracking for running workflows
@@ -401,12 +403,12 @@ class ActivityView(Widget):
         """Initialize the view."""
         # Setup activity table
         table = self.query_one("#activity-table", DataTable)
-        table.add_column("", width=2)  # Status icon
-        table.add_column("", width=2)  # Type icon
-        table.add_column("Time", width=5)
-        table.add_column("Title", width=30)
+        table.add_column("", width=2)  # Combined status/type icon
+        table.add_column("Time", width=4)
+        table.add_column("Title", width=48)  # Expanded further
         table.add_column("ID", width=6)  # Document/workflow ID
-        table.add_column("Cost", width=6)
+        table.add_column("Dur", width=6)  # Duration (for workflows)
+        table.add_column("Cost", width=7)
 
         await self.load_data()
         table.focus()
@@ -528,7 +530,7 @@ class ActivityView(Widget):
                 item = ActivityItem(
                     item_type="workflow",
                     item_id=run["id"],
-                    title=title[:35],
+                    title=title[:50],  # Allow longer titles (truncated in render)
                     status=run.get("status", "unknown"),
                     timestamp=started,
                     cost=cost,
@@ -650,7 +652,7 @@ class ActivityView(Widget):
                 item = ActivityItem(
                     item_type="group",
                     item_id=group_id,
-                    title=group["name"][:35],
+                    title=group["name"][:50],
                     status="completed",
                     timestamp=created,
                     cost=group.get("total_cost_usd", 0) or 0,
@@ -702,7 +704,7 @@ class ActivityView(Widget):
                 item = ActivityItem(
                     item_type="document",
                     item_id=doc_id,
-                    title=title[:35] if title else "Untitled",
+                    title=title[:50] if title else "Untitled",
                     status="completed",
                     timestamp=created,
                     doc_id=doc_id,
@@ -778,16 +780,18 @@ class ActivityView(Widget):
                 badge = ""
 
             # Format row
-            # Check if this workflow just completed (show sparkle highlight)
+            # Combined icon: show status icon only for non-completed items
+            # Otherwise show type icon. This reduces visual noise from wall of green checkmarks.
             is_recently_completed = (
                 item.item_type == "workflow" and
                 item.item_id in self._recently_completed
             )
             if is_recently_completed:
-                status_icon = "✨"  # Sparkle for recently completed
+                icon = "✨"  # Sparkle for recently completed
+            elif item.status in ("running", "failed", "pending", "queued"):
+                icon = item.status_icon  # Show status for actionable states
             else:
-                status_icon = item.status_icon
-            type_icon = item.type_icon
+                icon = item.type_icon  # Show type for completed items
             time_str = format_time_ago(item.timestamp)
 
             # For running workflows, show progress bar + stage instead of badge
@@ -809,13 +813,13 @@ class ActivityView(Widget):
                 bar = "█" * filled_full + partial + "░" * empty
                 progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
 
-            # Truncate title to fit badge/progress within column width (30 chars)
+            # Truncate title to fit badge/progress within column width (48 chars)
             prefix = f"{indent}{expand}"
             prefix_len = len(prefix)
             # Use progress_str for running, badge for completed
             suffix = progress_str if progress_str else badge
             suffix_len = len(suffix)
-            max_title_len = 30 - prefix_len - suffix_len
+            max_title_len = 48 - prefix_len - suffix_len
             truncated_title = item.title[:max_title_len] if len(item.title) > max_title_len else item.title
             title = f"{prefix}{truncated_title}{suffix}"
             # Show appropriate ID based on item type
@@ -838,9 +842,29 @@ class ActivityView(Widget):
                     id_str = "—"
             else:
                 id_str = f"#{item.item_id}" if item.item_id else "—"
+
+            # Format duration for workflows and individual runs
+            duration_str = "—"
+            duration_ms = None
+            if item.workflow_run and item.workflow_run.get("total_execution_time_ms"):
+                duration_ms = item.workflow_run["total_execution_time_ms"]
+            elif item.individual_run and item.individual_run.get("execution_time_ms"):
+                duration_ms = item.individual_run["execution_time_ms"]
+
+            if duration_ms:
+                total_secs = duration_ms / 1000
+                if total_secs >= 3600:
+                    duration_str = f"{total_secs/3600:.1f}h"
+                elif total_secs >= 60:
+                    mins = int(total_secs / 60)
+                    secs = int(total_secs % 60)
+                    duration_str = f"{mins}m{secs:02d}s" if secs else f"{mins}m"
+                else:
+                    duration_str = f"{int(total_secs)}s"
+
             cost = format_cost(item.cost) if item.cost else "—"
 
-            table.add_row(status_icon, type_icon, time_str, title, id_str, cost)
+            table.add_row(icon, time_str, title, id_str, duration_str, cost)
 
         # Restore selection
         if self.flat_items and self.selected_idx < len(self.flat_items):
@@ -1085,7 +1109,7 @@ class ActivityView(Widget):
         # Workflow run details
         if item.item_type == "workflow" and item.workflow_run:
             await self._show_workflow_context(item, context_content, context_header)
-        # Document details
+        # Document details (standalone, not from workflow)
         elif item.item_type == "document" and item.doc_id:
             await self._show_document_context(item, context_content, context_header)
         # Group details
@@ -1094,10 +1118,13 @@ class ActivityView(Widget):
         # Individual run details
         elif item.item_type == "individual_run":
             await self._show_individual_run_context(item, context_content, context_header)
-        # Synthesis details
+        # Synthesis/Exploration with individual_run data - show run info
+        elif item.individual_run and item.item_type in ("synthesis", "exploration"):
+            await self._show_individual_run_context(item, context_content, context_header)
+        # Synthesis details (no run data)
         elif item.item_type == "synthesis" and item.doc_id:
             await self._show_document_context(item, context_content, context_header)
-        # Exploration details
+        # Exploration details (no run data)
         elif item.item_type == "exploration" and item.doc_id:
             await self._show_document_context(item, context_content, context_header)
         else:
@@ -1314,8 +1341,8 @@ class ActivityView(Widget):
             content.write("[dim]Run details not available[/dim]")
             return
 
-        # Get individual run data - either from workflow_run or fetch by item_id
-        run = item.workflow_run
+        # Get individual run data - check individual_run first, then workflow_run, then fetch
+        run = item.individual_run or item.workflow_run
         if not run and item.item_id:
             try:
                 run = wf_db.get_individual_run(item.item_id)
@@ -1338,11 +1365,24 @@ class ActivityView(Widget):
         stats_parts = []
         if run.get("execution_time_ms"):
             secs = run["execution_time_ms"] / 1000
-            stats_parts.append(f"{secs:.1f}s")
-        if run.get("tokens_used"):
+            if secs >= 60:
+                mins = int(secs / 60)
+                secs_rem = int(secs % 60)
+                stats_parts.append(f"{mins}m{secs_rem}s")
+            else:
+                stats_parts.append(f"{secs:.1f}s")
+        # Show input/output tokens if available, otherwise total
+        if run.get("input_tokens") or run.get("output_tokens"):
+            in_tok = run.get("input_tokens", 0)
+            out_tok = run.get("output_tokens", 0)
+            # Format with k suffix for readability
+            in_str = f"{in_tok/1000:.0f}k" if in_tok >= 1000 else str(in_tok)
+            out_str = f"{out_tok/1000:.0f}k" if out_tok >= 1000 else str(out_tok)
+            stats_parts.append(f"{in_str}↓ {out_str}↑")
+        elif run.get("tokens_used"):
             stats_parts.append(f"{run['tokens_used']:,} tok")
         if run.get("cost_usd"):
-            stats_parts.append(f"${run['cost_usd']:.4f}")
+            stats_parts.append(f"${run['cost_usd']:.2f}")
         if stats_parts:
             content.write(f"[dim]{' · '.join(stats_parts)}[/dim]")
 
@@ -1806,6 +1846,7 @@ class ActivityView(Widget):
                                 timestamp=item.timestamp,
                                 doc_id=ir.get("output_doc_id"),
                                 cost=ir.get("cost_usd"),
+                                individual_run=ir,
                                 depth=1,
                             )
                             children.append(child_item)
@@ -1857,6 +1898,7 @@ class ActivityView(Widget):
                                         timestamp=item.timestamp,
                                         doc_id=ir["output_doc_id"],
                                         cost=ir.get("cost_usd"),
+                                        individual_run=ir,
                                         depth=1,
                                     )
                                     children.append(out_item)
@@ -1878,6 +1920,7 @@ class ActivityView(Widget):
                                         timestamp=item.timestamp,
                                         doc_id=ir["output_doc_id"],
                                         cost=ir.get("cost_usd"),
+                                        individual_run=ir,
                                         depth=1,
                                     )
                                 else:
@@ -1891,6 +1934,7 @@ class ActivityView(Widget):
                                         timestamp=item.timestamp,
                                         doc_id=None,
                                         cost=ir.get("cost_usd"),
+                                        individual_run=ir,
                                         depth=1,
                                     )
                                 children.append(child_item)
@@ -1987,7 +2031,7 @@ class ActivityView(Widget):
                     child_item = ActivityItem(
                         item_type="group",
                         item_id=cg["id"],
-                        title=cg["name"][:35],
+                        title=cg["name"][:50],
                         status="completed",
                         timestamp=item.timestamp,
                         cost=cg.get("total_cost_usd", 0) or 0,
