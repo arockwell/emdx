@@ -990,6 +990,16 @@ class ActivityView(Widget):
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
+                else:
+                    # Document doesn't exist - show placeholder
+                    self._render_markdown_preview(
+                        f"# {item.title}\n\n"
+                        f"*Document #{item.doc_id} not found*\n\n"
+                        "This document may have been deleted or the database may be out of sync."
+                    )
+                    show_markdown()
+                    header.update(f"⚠️ #{item.doc_id} (missing)")
+                    return
             except Exception as e:
                 logger.error(f"Error loading document: {e}")
 
