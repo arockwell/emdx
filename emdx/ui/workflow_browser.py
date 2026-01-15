@@ -1,22 +1,31 @@
 #!/usr/bin/env python3
 """
-Workflow browser - view and manage workflow presets and runs.
+Workflow browser - template-focused workflow launcher.
 
-Presets are the primary view - they represent the actual tasks you run.
-Workflows are shown as groupings/categories for presets.
+Primary view shows workflow templates with their stage pipelines visually.
+Secondary view shows recent runs with links to outputs.
+
+Mental model:
+- Workflows are execution patterns (templates)
+- Tasks are provided at runtime
+- Runs show history with links to outputs
 """
 
 import asyncio
 import json
 import logging
-from datetime import datetime
+import re
+import textwrap
+from typing import List, Optional, Tuple
 
+from rich.console import Console, Group
+from rich.panel import Panel
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widget import Widget
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable, Input, Static
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +42,21 @@ except Exception as e:
     wf_db = None
 
 
-class WorkflowBrowser(Widget):
-    """Browser for viewing and managing workflow presets.
+# Mode icons and colors for visual pipeline display
+MODE_INFO = {
+    "single": {"icon": "1", "color": "dim", "name": "single"},
+    "parallel": {"icon": "||", "color": "cyan", "name": "parallel"},
+    "iterative": {"icon": "→", "color": "yellow", "name": "iterative"},
+    "adversarial": {"icon": "⚔", "color": "red", "name": "adversarial"},
+    "dynamic": {"icon": "*", "color": "magenta", "name": "dynamic"},
+}
 
-    Presets are the primary view - they represent runnable configurations.
-    Workflows are shown as groupings.
+
+class WorkflowBrowser(Widget):
+    """Template-focused workflow browser.
+
+    Shows workflow patterns with visual stage pipelines.
+    Tasks are provided at runtime via CLI or task input.
     """
 
     BINDINGS = [
@@ -45,20 +64,23 @@ class WorkflowBrowser(Widget):
         Binding("k", "cursor_up", "Up"),
         Binding("g", "cursor_top", "Top"),
         Binding("G", "cursor_bottom", "Bottom"),
-        Binding("enter", "run_preset", "Run"),
-        Binding("r", "show_runs", "Runs"),
-        Binding("w", "show_workflows", "Workflows"),
-        Binding("tab", "cycle_view", "Cycle View"),
+        Binding("enter", "run_workflow", "Run"),
+        Binding("t", "add_task", "Add Task"),
+        Binding("T", "clear_tasks", "Clear"),
+        Binding("r", "toggle_runs", "Runs"),
+        Binding("o", "view_outputs", "Outputs"),
+        Binding("escape", "cancel_input", "Cancel", show=False),
     ]
 
     def __init__(self):
         super().__init__()
-        self.presets_by_workflow = {}  # workflow_id -> list of presets
-        self.workflows_map = {}  # workflow_id -> workflow
-        self.flat_items = []  # Flattened list for table navigation: (type, item)
+        self.workflows_list = []
         self.runs_list = []
-        self.current_selection = None  # (type, item) - "preset", "workflow", or "run"
-        self.view_mode = "presets"  # "presets", "workflows", or "runs"
+        self.flat_items = []  # (type, item) for navigation
+        self.current_selection = None
+        self.view_mode = "templates"  # "templates" or "runs"
+        self.pending_tasks: List[str] = []
+        self.task_input_active = False
 
     DEFAULT_CSS = """
     WorkflowBrowser {
@@ -66,296 +88,274 @@ class WorkflowBrowser(Widget):
         height: 100%;
     }
 
-    .workflow-status {
+    .status-bar {
         height: 1;
         background: $boost;
         color: $text;
         padding: 0 1;
-        text-align: center;
     }
 
-    .workflow-content {
+    .main-content {
         height: 1fr;
     }
 
-    #workflow-sidebar {
-        width: 50%;
+    #left-panel {
+        width: 40%;
         height: 100%;
     }
 
     #workflow-table {
-        height: 66%;
+        height: 60%;
     }
 
-    #workflow-details {
-        height: 34%;
-        border: solid $primary;
+    #task-panel {
+        height: 40%;
+        border-top: solid $secondary;
         padding: 1;
     }
 
-    #workflow-preview-container {
-        width: 50%;
+    #right-panel {
+        width: 60%;
         height: 100%;
+        border-left: solid $primary;
     }
 
-    #workflow-preview {
+    #preview-scroll {
         height: 100%;
+        overflow-y: auto;
+    }
+
+    #preview-content {
         padding: 1;
+        width: 100%;
     }
 
-    #workflow-content {
-        height: 100%;
-        border: solid $primary;
+    #task-input {
+        dock: top;
+        display: none;
+        margin: 0 1;
+    }
+
+    #task-input.visible {
+        display: block;
     }
     """
 
     def compose(self) -> ComposeResult:
         """Create UI layout."""
-        yield Static("Presets | Enter=Run | r=Runs | w=Workflows", classes="workflow-status", id="workflow-status-bar")
+        yield Static(
+            "Templates | Enter=Run | t=Task | r=Runs",
+            classes="status-bar",
+            id="status-bar"
+        )
 
-        with Horizontal(classes="workflow-content"):
-            # Left sidebar - preset/workflow/run list
-            with Vertical(id="workflow-sidebar"):
+        yield Input(
+            placeholder="Enter task (string or doc ID)...",
+            id="task-input"
+        )
+
+        with Horizontal(classes="main-content"):
+            with Vertical(id="left-panel"):
                 yield DataTable(id="workflow-table", cursor_type="row")
-                yield Static("", id="workflow-details", markup=True)
+                yield Static("", id="task-panel", markup=True)
 
-            # Right preview - details
-            with Vertical(id="workflow-preview-container"):
-                with ScrollableContainer(id="workflow-preview"):
-                    yield Static("", id="workflow-content", markup=True)
+            with Vertical(id="right-panel"):
+                with ScrollableContainer(id="preview-scroll"):
+                    yield Static("", id="preview-content", markup=True)
 
     def on_mount(self) -> None:
-        """Set up when mounted."""
+        """Initialize the browser."""
         try:
-            self.update_status("Loading presets...")
-            self.load_presets()
+            self.load_templates()
+            self._update_task_panel()
         except Exception as e:
-            logger.error(f"Error in WorkflowBrowser.on_mount: {e}", exc_info=True)
-            self.update_status(f"Error: {e}")
+            logger.error(f"Error mounting workflow browser: {e}", exc_info=True)
+            self._update_status(f"Error: {e}")
 
-    def _setup_presets_table(self) -> None:
-        """Set up the presets table columns."""
-        table = self.query_one("#workflow-table", DataTable)
-        table.clear(columns=True)
-        table.add_column("", width=3)  # Indicator column
-        table.add_column("Name", width=25)
-        table.add_column("Used", width=6)
-        table.add_column("Description", width=25)
-
-    def _setup_workflows_table(self) -> None:
-        """Set up the workflows table columns."""
-        table = self.query_one("#workflow-table", DataTable)
-        table.clear(columns=True)
-        table.add_column("ID", width=5)
-        table.add_column("Name", width=25)
-        table.add_column("Presets", width=8)
-        table.add_column("Runs", width=8)
-
-    def _setup_runs_table(self) -> None:
-        """Set up the runs table columns."""
-        table = self.query_one("#workflow-table", DataTable)
-        table.clear(columns=True)
-        table.add_column("Run", width=6)
-        table.add_column("Preset", width=15)
-        table.add_column("Status", width=12)
-        table.add_column("Time", width=10)
-
-    def load_presets(self) -> None:
-        """Load presets grouped by workflow."""
-        if not workflow_registry or not wf_db:
-            self.update_status("Workflow components not available")
-            return
-
+    def focus(self, scroll_visible: bool = True) -> None:
+        """Focus the workflow table."""
         try:
-            self._setup_presets_table()
             table = self.query_one("#workflow-table", DataTable)
-            table.clear()
+            if table:
+                table.focus()
+        except Exception:
+            # Widget not mounted yet
+            pass
 
-            # Load all workflows and presets
-            workflows = workflow_registry.list_workflows(include_inactive=False)
-            self.workflows_map = {wf.id: wf for wf in workflows}
+    def _update_status(self, message: str) -> None:
+        """Update status bar."""
+        try:
+            self.query_one("#status-bar", Static).update(message)
+        except Exception:
+            pass
 
-            # Get all presets
-            all_presets = wf_db.list_presets()
+    def _get_preview_width(self) -> int:
+        """Get the available width for preview content."""
+        try:
+            panel = self.query_one("#right-panel")
+            # Subtract padding (1 on each side) and border (1)
+            return max(panel.size.width - 4, 40)
+        except Exception:
+            return 80  # Fallback
 
-            # Group presets by workflow
-            self.presets_by_workflow = {}
-            for preset in all_presets:
-                wf_id = preset['workflow_id']
-                if wf_id not in self.presets_by_workflow:
-                    self.presets_by_workflow[wf_id] = []
-                self.presets_by_workflow[wf_id].append(preset)
+    def _box_top(self, title: str, style: str = "bold") -> str:
+        """Generate box top line: ┌─ Title ───────┐"""
+        width = self._get_preview_width()
+        title_part = f"─ {title} "
+        # width - 2 for ┌ and ┐, then subtract title_part length
+        dashes = "─" * max(width - len(title_part) - 2, 4)
+        return f"[{style}]┌{title_part}{dashes}┐[/{style}]"
 
-            # Build flat list and populate table
-            self.flat_items = []
-            total_presets = 0
+    def _box_line(self, content: str, style: str = "bold") -> str:
+        """Generate box content line: │ content      │"""
+        width = self._get_preview_width()
+        # Strip markup to calculate visible length
+        visible_content = re.sub(r'\[/?[^\]]+\]', '', content)
+        padding = max(width - len(visible_content) - 4, 0)
+        return f"[{style}]│[/{style}] {content}{' ' * padding} [{style}]│[/{style}]"
 
-            # Sort workflows by total preset usage (most used first)
-            workflow_usage = {}
-            for wf_id, presets in self.presets_by_workflow.items():
-                workflow_usage[wf_id] = sum(p.get('usage_count', 0) for p in presets)
+    def _box_bottom(self, style: str = "bold") -> str:
+        """Generate box bottom line: └───────────────┘"""
+        width = self._get_preview_width()
+        return f"[{style}]└{'─' * (width - 2)}┘[/{style}]"
 
-            sorted_workflow_ids = sorted(
-                self.presets_by_workflow.keys(),
-                key=lambda wf_id: workflow_usage.get(wf_id, 0),
-                reverse=True
-            )
+    def _wrap_text(self, text: str, indent: int = 0) -> List[str]:
+        """Wrap text to fit preview width."""
+        width = self._get_preview_width() - 6 - indent  # Account for box borders and indent
+        return textwrap.wrap(text, width=max(width, 20))
 
-            for wf_id in sorted_workflow_ids:
-                presets = self.presets_by_workflow[wf_id]
-                wf = self.workflows_map.get(wf_id)
-                if not wf:
-                    continue
+    def _get_pipeline_str(self, workflow) -> str:
+        """Get visual pipeline string for a workflow's stages.
 
-                # Add workflow header row
-                self.flat_items.append(("workflow_header", wf))
-                table.add_row(
-                    "📁",
-                    f"[bold]{wf.display_name}[/bold]",
-                    "",
-                    f"[dim]{len(presets)} presets[/dim]",
-                )
+        Example: "|| → ∑" for parallel with synthesis
+        """
+        if not workflow.stages:
+            return "[dim]empty[/dim]"
 
-                # Add presets under this workflow
-                for preset in presets:
-                    self.flat_items.append(("preset", preset))
-                    total_presets += 1
+        parts = []
+        for stage in workflow.stages:
+            mode = stage.mode.value
+            info = MODE_INFO.get(mode, {"icon": "?", "color": "white"})
+            parts.append(f"[{info['color']}]{info['icon']}[/{info['color']}]")
 
-                    default_marker = "★" if preset.get('is_default') else " "
-                    usage = str(preset.get('usage_count', 0)) + "x"
-                    desc = preset.get('description', '')[:25] if preset.get('description') else ""
+        return " → ".join(parts)
 
-                    table.add_row(
-                        f"  {default_marker}",
-                        preset['name'],
-                        usage,
-                        f"[dim]{desc}[/dim]",
-                    )
+    def _workflow_supports_tasks(self, workflow) -> bool:
+        """Check if workflow has {{task}} in any prompt."""
+        for stage in workflow.stages:
+            if stage.prompt and "{{task}}" in stage.prompt:
+                return True
+            if stage.prompts:
+                for p in stage.prompts:
+                    if "{{task}}" in p:
+                        return True
+        return False
 
-            # Show workflows with no presets at the bottom (collapsed)
-            workflows_without_presets = [
-                wf for wf in workflows
-                if wf.id not in self.presets_by_workflow
-            ]
-            if workflows_without_presets:
-                self.flat_items.append(("separator", None))
-                table.add_row("", "[dim]─── No presets ───[/dim]", "", "")
-
-                for wf in workflows_without_presets[:5]:
-                    self.flat_items.append(("workflow_no_presets", wf))
-                    table.add_row(
-                        "[dim]📄[/dim]",
-                        f"[dim]{wf.display_name}[/dim]",
-                        "",
-                        "[dim]template only[/dim]",
-                    )
-                if len(workflows_without_presets) > 5:
-                    self.flat_items.append(("more", len(workflows_without_presets) - 5))
-                    table.add_row("", f"[dim]... +{len(workflows_without_presets) - 5} more[/dim]", "", "")
-
-            self.update_status(f"Presets: {total_presets} | Enter=Run | r=Runs | w=Workflows")
-            self.view_mode = "presets"
-
-            # Select first preset if available
-            if self.flat_items:
-                # Find first actual preset (skip workflow headers)
-                for i, (item_type, _) in enumerate(self.flat_items):
-                    if item_type == "preset":
-                        table.move_cursor(row=i)
-                        self._on_item_selected(i)
-                        break
-                else:
-                    table.move_cursor(row=0)
-                    self._on_item_selected(0)
-
-        except Exception as e:
-            logger.error(f"Error loading presets: {e}", exc_info=True)
-            self.update_status(f"Error: {e}")
-
-    def load_workflows(self) -> None:
-        """Load workflows list (template view)."""
+    def load_templates(self) -> None:
+        """Load workflow templates (primary view)."""
         if not workflow_registry:
-            self.update_status("Workflow registry not available")
+            self._update_status("Workflow registry not available")
             return
 
         try:
-            self._setup_workflows_table()
             table = self.query_one("#workflow-table", DataTable)
-            table.clear()
+            table.clear(columns=True)
+            table.add_column("Pipeline", width=12)
+            table.add_column("Name", width=24)
+            table.add_column("Task", width=5)
+            table.add_column("Runs", width=5)
 
             workflows = workflow_registry.list_workflows(include_inactive=False)
+            # Sort by usage
+            workflows = sorted(workflows, key=lambda w: w.usage_count, reverse=True)
+            self.workflows_list = workflows
             self.flat_items = []
 
             for wf in workflows:
                 self.flat_items.append(("workflow", wf))
 
-                # Count presets for this workflow
-                presets = wf_db.list_presets(workflow_id=wf.id) if wf_db else []
+                pipeline = self._get_pipeline_str(wf)
+                supports_tasks = self._workflow_supports_tasks(wf)
+                task_indicator = "[green]✓[/green]" if supports_tasks else "[dim]-[/dim]"
 
                 table.add_row(
-                    str(wf.id),
-                    wf.display_name,
-                    str(len(presets)),
+                    pipeline,
+                    wf.display_name[:24],
+                    task_indicator,
                     str(wf.usage_count),
                 )
 
-            self.update_status(f"Workflows: {len(workflows)} | Tab=Presets")
-            self.view_mode = "workflows"
+            task_count = len(self.pending_tasks)
+            task_info = f" [{task_count} tasks]" if task_count > 0 else ""
+            self._update_status(f"Templates ({len(workflows)}){task_info} | Enter=Run | t=Task | r=Runs")
+            self.view_mode = "templates"
 
             if self.flat_items:
                 table.move_cursor(row=0)
                 self._on_item_selected(0)
 
         except Exception as e:
-            logger.error(f"Error loading workflows: {e}", exc_info=True)
-            self.update_status(f"Error: {e}")
+            logger.error(f"Error loading templates: {e}", exc_info=True)
+            self._update_status(f"Error: {e}")
 
-    def load_runs(self, preset_name: str = None) -> None:
-        """Load workflow runs, optionally filtered by preset."""
+    def load_runs(self) -> None:
+        """Load recent runs with output links."""
         if not wf_db:
-            self.update_status("Workflow database not available")
+            self._update_status("Database not available")
             return
 
         try:
-            self._setup_runs_table()
-            self.runs_list = wf_db.list_workflow_runs(limit=50)
-
-            # Filter by preset if specified
-            if preset_name:
-                self.runs_list = [r for r in self.runs_list if r.get('preset_name') == preset_name]
-
             table = self.query_one("#workflow-table", DataTable)
-            table.clear()
+            table.clear(columns=True)
+            table.add_column("ID", width=6)
+            table.add_column("Workflow", width=18)
+            table.add_column("Tasks", width=6)
+            table.add_column("Status", width=10)
+            table.add_column("Output", width=6)
+
+            self.runs_list = wf_db.list_workflow_runs(limit=30)
             self.flat_items = []
 
             for run in self.runs_list:
                 self.flat_items.append(("run", run))
 
-                # Format status with indicator
+                # Get workflow name
+                wf = workflow_registry.get_workflow(run["workflow_id"]) if workflow_registry else None
+                wf_name = wf.display_name[:18] if wf else f"#{run['workflow_id']}"
+
+                # Get task count
+                task_count = "-"
+                if run.get("input_variables"):
+                    try:
+                        vars_data = json.loads(run["input_variables"]) if isinstance(run["input_variables"], str) else run["input_variables"]
+                        tasks = vars_data.get('tasks', [])
+                        if tasks:
+                            task_count = str(len(tasks))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                # Format status
                 status = run["status"]
-                if status == "completed":
-                    status = "✓ done"
-                elif status == "failed":
-                    status = "✗ failed"
-                elif status == "running":
-                    status = "⟳ running"
+                status_display = {
+                    "completed": "[green]done[/green]",
+                    "failed": "[red]fail[/red]",
+                    "running": "[yellow]run[/yellow]",
+                    "pending": "[dim]...[/dim]",
+                }.get(status, status)
 
-                # Format time
-                time_str = "-"
-                if run.get("total_execution_time_ms"):
-                    time_str = f"{run['total_execution_time_ms'] / 1000:.1f}s"
-
-                preset_display = run.get('preset_name') or "[dim]no preset[/dim]"
+                # Output doc indicator
+                output_ids = json.loads(run.get("output_doc_ids", "[]")) if run.get("output_doc_ids") else []
+                output_indicator = f"[cyan]{len(output_ids)}[/cyan]" if output_ids else "[dim]-[/dim]"
 
                 table.add_row(
                     f"#{run['id']}",
-                    preset_display,
-                    status,
-                    time_str,
+                    wf_name,
+                    task_count,
+                    status_display,
+                    output_indicator,
                 )
 
-            filter_text = f" ({preset_name})" if preset_name else ""
-            self.update_status(f"Runs: {len(self.runs_list)}{filter_text} | Tab=Presets")
+            self._update_status(f"Runs ({len(self.runs_list)}) | o=View Outputs | Tab=Templates")
             self.view_mode = "runs"
 
             if self.flat_items:
@@ -364,288 +364,359 @@ class WorkflowBrowser(Widget):
 
         except Exception as e:
             logger.error(f"Error loading runs: {e}", exc_info=True)
-            self.update_status(f"Error: {e}")
+            self._update_status(f"Error: {e}")
+
+    def _update_task_panel(self) -> None:
+        """Update the task panel."""
+        panel = self.query_one("#task-panel", Static)
+
+        lines = ["[bold]Tasks to Run[/bold]"]
+
+        if not self.pending_tasks:
+            lines.append("")
+            lines.append("[dim]No tasks queued[/dim]")
+            lines.append("[dim]Press t to add tasks[/dim]")
+            lines.append("")
+            lines.append("[dim]Tasks can be:[/dim]")
+            lines.append("[dim]  • Text strings[/dim]")
+            lines.append("[dim]  • Document IDs (numbers)[/dim]")
+        else:
+            lines.append(f"[green]{len(self.pending_tasks)} ready[/green]")
+            lines.append("")
+
+            for i, task in enumerate(self.pending_tasks[:5]):
+                task_str = str(task)
+                if len(task_str) > 35:
+                    task_str = task_str[:32] + "..."
+                # Show doc ID indicator
+                if isinstance(task, int):
+                    lines.append(f"  {i+1}. [cyan]doc:{task}[/cyan]")
+                else:
+                    lines.append(f"  {i+1}. {task_str}")
+
+            if len(self.pending_tasks) > 5:
+                lines.append(f"  [dim]+{len(self.pending_tasks) - 5} more[/dim]")
+
+            lines.append("")
+            lines.append("[dim]T=Clear | Enter=Run[/dim]")
+
+        panel.update("\n".join(lines))
 
     def _on_item_selected(self, row_index: int) -> None:
-        """Handle item selection based on current view."""
+        """Handle item selection."""
         if row_index < 0 or row_index >= len(self.flat_items):
             return
 
         item_type, item = self.flat_items[row_index]
         self.current_selection = (item_type, item)
 
-        if item_type == "preset":
-            self._show_preset_details(item)
-        elif item_type in ("workflow_header", "workflow", "workflow_no_presets"):
-            self._show_workflow_details(item)
+        if item_type == "workflow":
+            self._show_template_preview(item)
         elif item_type == "run":
-            self._show_run_details(item)
-        elif item_type == "separator" or item_type == "more":
-            # Non-selectable rows - show hint
-            details = self.query_one("#workflow-details", Static)
-            details.update("[dim]Navigate to a preset or workflow[/dim]")
-            preview = self.query_one("#workflow-content", Static)
-            preview.update("")
+            self._show_run_preview(item)
 
-    def _show_preset_details(self, preset: dict) -> None:
-        """Show preset details in the panels."""
-        wf = self.workflows_map.get(preset['workflow_id'])
-        wf_name = wf.display_name if wf else f"Workflow #{preset['workflow_id']}"
+    def _show_template_preview(self, workflow) -> None:
+        """Show workflow template preview with boxed pipeline."""
+        preview = self.query_one("#preview-content", Static)
 
-        # Update details panel (bottom left)
-        details = self.query_one("#workflow-details", Static)
-        default_marker = " [green]★ default[/green]" if preset.get('is_default') else ""
-        details_text = (
-            f"[bold]{preset['display_name']}[/bold]{default_marker}\n"
-            f"Workflow: {wf_name}\n"
-            f"Used: {preset.get('usage_count', 0)}x"
-        )
-        details.update(details_text)
-
-        # Update preview panel (right side)
-        preview = self.query_one("#workflow-content", Static)
-        variables = json.loads(preset['variables_json']) if preset.get('variables_json') else {}
-
-        preview_lines = [
-            f"[bold cyan]{preset['display_name']}[/bold cyan]",
-            f"[dim]{preset['name']}[/dim]",
-            f"Workflow: {wf_name}\n",
-        ]
-
-        if preset.get('description'):
-            preview_lines.append(f"{preset['description']}\n")
-
-        preview_lines.append("[bold]Variables:[/bold]")
-        if variables:
-            for k, v in variables.items():
-                # Truncate long values
-                v_str = str(v)
-                if len(v_str) > 50:
-                    v_str = v_str[:47] + "..."
-                preview_lines.append(f"  [green]{k}[/green]: {v_str}")
-        else:
-            preview_lines.append("  [dim]No variables defined[/dim]")
-
-        preview_lines.append(f"\n[bold]Usage:[/bold]")
-        preview_lines.append(f"  Run count: {preset.get('usage_count', 0)}")
-        if preset.get('last_used_at'):
-            preview_lines.append(f"  Last used: {preset['last_used_at']}")
-
-        # Show how to run
-        preview_lines.append(f"\n[bold]Run with:[/bold]")
-        preview_lines.append(f"  [cyan]emdx workflow run {wf.name if wf else 'workflow'} --preset {preset['name']}[/cyan]")
-
-        preview.update("\n".join(preview_lines))
-
-    def _show_workflow_details(self, workflow) -> None:
-        """Show workflow details in the panels."""
-        # Update details panel
-        details = self.query_one("#workflow-details", Static)
-        details_text = (
-            f"[bold]{workflow.display_name}[/bold]\n"
-            f"Category: {workflow.category}\n"
-            f"Stages: {len(workflow.stages)} | Runs: {workflow.usage_count}"
-        )
-        details.update(details_text)
-
-        # Update preview panel
-        preview = self.query_one("#workflow-content", Static)
-        preview_lines = [
+        lines = [
             f"[bold cyan]{workflow.display_name}[/bold cyan]",
-            f"[dim]{workflow.name}[/dim]\n",
+            f"[dim]{workflow.name}[/dim]",
         ]
 
         if workflow.description:
-            preview_lines.append(f"{workflow.description}\n")
+            lines.append("")
+            for wrapped_line in self._wrap_text(workflow.description):
+                lines.append(wrapped_line)
 
-        preview_lines.append("[bold]Stages:[/bold]")
-        for i, stage in enumerate(workflow.stages, 1):
-            mode_indicator = {
-                "single": "1️⃣",
-                "parallel": "⏸️",
-                "iterative": "🔄",
-                "adversarial": "⚔️",
-                "dynamic": "🔀",
-            }.get(stage.mode.value, "❓")
+        lines.append("")
 
-            preview_lines.append(
-                f"  {i}. {mode_indicator} [green]{stage.name}[/green] - {stage.mode.value} x{stage.runs}"
-            )
+        # Pipeline box
+        lines.append(self._box_top("Pipeline"))
+        for i, stage in enumerate(workflow.stages):
+            mode = stage.mode.value
+            info = MODE_INFO.get(mode, {"icon": "?", "color": "white", "name": mode})
 
-        # Show presets for this workflow
-        if wf_db:
-            presets = wf_db.list_presets(workflow_id=workflow.id)
-            if presets:
-                preview_lines.append(f"\n[bold]Presets:[/bold] ({len(presets)})")
-                for preset in presets:
-                    default_marker = " [green]★[/green]" if preset.get('is_default') else ""
-                    preview_lines.append(f"  • {preset['name']}{default_marker}")
+            # Check if stage uses {{task}}
+            has_task = "{{task}}" in (stage.prompt or "")
+            task_badge = " [green]◆[/green]" if has_task else ""
+
+            # Stage line with mode icon
+            mode_display = f"[{info['color']}]{info['icon']:>2}[/{info['color']}]"
+            lines.append(self._box_line(f"{mode_display} [bold]{stage.name}[/bold]{task_badge}"))
+            lines.append(self._box_line(f"    [dim]{info['name']} × {stage.runs}[/dim]"))
+        lines.append(self._box_bottom())
+        lines.append("")
+
+        # Status / action prompt
+        supports_tasks = self._workflow_supports_tasks(workflow)
+        if supports_tasks:
+            if self.pending_tasks:
+                lines.append(self._box_top("Ready", "bold green"))
+                lines.append(self._box_line(f"{len(self.pending_tasks)} tasks queued", "bold green"))
+                lines.append(self._box_line("[dim]Press Enter to run[/dim]", "bold green"))
+                lines.append(self._box_bottom("bold green"))
             else:
-                preview_lines.append(f"\n[dim]No presets - create one with:[/dim]")
-                preview_lines.append(f"  [cyan]emdx workflow preset create {workflow.name} <name> --var key=value[/cyan]")
+                lines.append(self._box_top("Needs Tasks", "yellow"))
+                lines.append(self._box_line("This workflow requires task input", "yellow"))
+                lines.append(self._box_line("[dim]Press t to add tasks[/dim]", "yellow"))
+                lines.append(self._box_bottom("yellow"))
+        else:
+            lines.append("[dim]Static workflow (no task input needed)[/dim]")
 
-        preview.update("\n".join(preview_lines))
+        # CLI hint
+        lines.append("")
+        lines.append("[dim]CLI:[/dim]")
+        if self.pending_tasks:
+            task_args = " ".join(f'-t "{t}"' for t in self.pending_tasks[:2])
+            if len(self.pending_tasks) > 2:
+                task_args += " ..."
+            lines.append(f"[dim]  emdx workflow run {workflow.name} {task_args}[/dim]")
+        else:
+            lines.append(f"[dim]  emdx workflow run {workflow.name} -t \"task\"[/dim]")
 
-    def _show_run_details(self, run: dict) -> None:
-        """Show run details in the panels."""
-        status_color = {
-            "completed": "green",
-            "failed": "red",
-            "running": "yellow",
-            "pending": "blue",
-        }.get(run["status"], "white")
+        preview.update("\n".join(lines))
 
-        # Update details panel
-        details = self.query_one("#workflow-details", Static)
-        details_text = (
-            f"[bold]Run #{run['id']}[/bold]\n"
-            f"Status: [{status_color}]{run['status']}[/{status_color}]\n"
-            f"Tokens: {run.get('total_tokens_used', 0)}"
-        )
-        details.update(details_text)
+    def _show_run_preview(self, run: dict) -> None:
+        """Show run preview with boxed sections."""
+        preview = self.query_one("#preview-content", Static)
 
-        # Update preview panel
-        preview = self.query_one("#workflow-content", Static)
+        # Get workflow info
         wf = workflow_registry.get_workflow(run["workflow_id"]) if workflow_registry else None
         wf_name = wf.display_name if wf else f"Workflow #{run['workflow_id']}"
 
-        preview_lines = [
-            f"[bold cyan]Run #{run['id']}[/bold cyan]",
-            f"Workflow: {wf_name}",
-        ]
+        status_colors = {
+            "completed": "green",
+            "failed": "red",
+            "running": "yellow",
+        }
+        status_color = status_colors.get(run["status"], "white")
 
-        if run.get("preset_name"):
-            preview_lines.append(f"Preset: [cyan]{run['preset_name']}[/cyan]")
+        lines = []
 
-        preview_lines.append("")
-        preview_lines.append(f"Status: [{status_color}]{run['status']}[/{status_color}]")
+        # Header
+        lines.append(f"[bold cyan]Run #{run['id']}[/bold cyan]  [{status_color}]{run['status']}[/{status_color}]")
+        lines.append(f"[dim]{wf_name}[/dim]")
+        lines.append("")
 
-        if run.get("started_at"):
-            preview_lines.append(f"Started: {run['started_at']}")
-        if run.get("completed_at"):
-            preview_lines.append(f"Completed: {run['completed_at']}")
+        # Timing info (compact)
+        timing_parts = []
         if run.get("total_execution_time_ms"):
-            preview_lines.append(f"Duration: {run['total_execution_time_ms'] / 1000:.2f}s")
+            secs = run['total_execution_time_ms'] / 1000
+            timing_parts.append(f"{secs:.1f}s")
+        if run.get("total_tokens_used"):
+            timing_parts.append(f"{run['total_tokens_used']:,} tokens")
+        if timing_parts:
+            lines.append(f"[dim]{' · '.join(timing_parts)}[/dim]")
+            lines.append("")
 
-        preview_lines.append(f"\nTokens used: {run.get('total_tokens_used', 0)}")
-
-        if run.get("error_message"):
-            preview_lines.append(f"\n[red]Error:[/red] {run['error_message']}")
-
-        # Show input variables
+        # Tasks box
         if run.get("input_variables"):
-            variables = json.loads(run["input_variables"]) if isinstance(run["input_variables"], str) else run["input_variables"]
-            if variables:
-                preview_lines.append(f"\n[bold]Variables used:[/bold]")
-                for k, v in list(variables.items())[:10]:
-                    if not k.startswith('_'):
-                        v_str = str(v)[:40]
-                        preview_lines.append(f"  {k}: {v_str}")
+            try:
+                vars_data = json.loads(run["input_variables"]) if isinstance(run["input_variables"], str) else run["input_variables"]
+                tasks = vars_data.get('tasks', [])
+                if tasks:
+                    lines.append(self._box_top(f"Tasks ({len(tasks)})"))
+                    wrap_width = self._get_preview_width() - 8  # Account for box + number prefix
+                    for i, task in enumerate(tasks):
+                        task_str = str(task)
+                        if isinstance(task, int):
+                            # Doc ID - show on one line
+                            lines.append(self._box_line(f"{i+1}. [cyan]doc:{task}[/cyan]"))
+                        else:
+                            # String task - wrap at word boundaries
+                            wrapped = textwrap.wrap(task_str, width=max(wrap_width, 30))
+                            for j, line in enumerate(wrapped):
+                                if j == 0:
+                                    lines.append(self._box_line(f"{i+1}. {line}"))
+                                else:
+                                    lines.append(self._box_line(f"   {line}"))
+                    lines.append(self._box_bottom())
+                    lines.append("")
+            except (json.JSONDecodeError, TypeError):
+                pass
 
-        # Load stage runs
+        # Stages box
         if wf_db:
             stage_runs = wf_db.list_stage_runs(run["id"])
             if stage_runs:
-                preview_lines.append("\n[bold]Stages:[/bold]")
+                lines.append(self._box_top("Stages"))
                 for sr in stage_runs:
-                    status_icon = {
-                        "completed": "✓",
-                        "failed": "✗",
-                        "running": "⟳",
-                        "pending": "○",
-                    }.get(sr["status"], "?")
-                    preview_lines.append(
-                        f"  {status_icon} {sr['stage_name']}: {sr['runs_completed']}/{sr['target_runs']}"
-                    )
+                    icon = {
+                        "completed": "[green]✓[/green]",
+                        "failed": "[red]✗[/red]",
+                        "running": "[yellow]⟳[/yellow]",
+                    }.get(sr["status"], "[dim]○[/dim]")
+                    progress = f"{sr['runs_completed']}/{sr['target_runs']}"
+                    lines.append(self._box_line(f"{icon} {sr['stage_name']:<20} {progress}"))
+                lines.append(self._box_bottom())
+                lines.append("")
 
-        preview.update("\n".join(preview_lines))
+        # Outputs box
+        output_ids = json.loads(run.get("output_doc_ids", "[]")) if run.get("output_doc_ids") else []
+        if output_ids:
+            lines.append(self._box_top(f"Outputs ({len(output_ids)})"))
+            lines.append(self._box_line("[dim]Press o to view in document browser[/dim]"))
+            for doc_id in output_ids:
+                lines.append(self._box_line(f"[cyan]doc:{doc_id}[/cyan]"))
+            lines.append(self._box_bottom())
+        else:
+            lines.append("[dim]No outputs yet[/dim]")
 
-    def update_status(self, message: str) -> None:
-        """Update status bar."""
-        try:
-            status_bar = self.query_one("#workflow-status-bar", Static)
-            status_bar.update(message)
-        except Exception:
-            pass
+        # Error (if any)
+        if run.get("error_message"):
+            lines.append("")
+            lines.append(self._box_top("Error", "bold red"))
+            for line in self._wrap_text(run["error_message"]):
+                lines.append(self._box_line(line, "bold red"))
+            lines.append(self._box_bottom("bold red"))
 
+        preview.update("\n".join(lines))
+
+    # Navigation actions
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Handle row selection changes."""
+        """Handle row selection."""
         if event.cursor_row is not None:
             self._on_item_selected(event.cursor_row)
 
     def action_cursor_down(self) -> None:
-        """Move cursor down."""
         table = self.query_one("#workflow-table", DataTable)
         table.action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        """Move cursor up."""
         table = self.query_one("#workflow-table", DataTable)
         table.action_cursor_up()
 
     def action_cursor_top(self) -> None:
-        """Move cursor to top."""
         table = self.query_one("#workflow-table", DataTable)
         table.move_cursor(row=0)
 
     def action_cursor_bottom(self) -> None:
-        """Move cursor to bottom."""
         table = self.query_one("#workflow-table", DataTable)
         table.move_cursor(row=len(self.flat_items) - 1)
 
-    def action_cycle_view(self) -> None:
-        """Cycle between presets, workflows, and runs views."""
-        if self.view_mode == "presets":
+    # View actions
+    def action_toggle_runs(self) -> None:
+        """Toggle between templates and runs view."""
+        if self.view_mode == "templates":
             self.load_runs()
-        elif self.view_mode == "runs":
-            self.load_workflows()
         else:
-            self.load_presets()
+            self.load_templates()
 
-    def action_show_runs(self) -> None:
-        """Show runs, filtered by current preset if one is selected."""
-        if self.current_selection and self.current_selection[0] == "preset":
-            preset = self.current_selection[1]
-            self.load_runs(preset_name=preset['name'])
-        else:
-            self.load_runs()
+    def action_view_outputs(self) -> None:
+        """Navigate to outputs for current run."""
+        if not self.current_selection or self.current_selection[0] != "run":
+            self._update_status("Select a run to view outputs")
+            return
 
-    def action_show_workflows(self) -> None:
-        """Show workflows view."""
-        self.load_workflows()
+        run = self.current_selection[1]
+        output_ids = json.loads(run.get("output_doc_ids", "[]")) if run.get("output_doc_ids") else []
 
-    def action_run_preset(self) -> None:
-        """Run the selected preset."""
+        if not output_ids:
+            self._update_status("No outputs for this run")
+            return
+
+        # Navigate to document browser and view first output
+        first_doc_id = output_ids[0]
+
+        async def go_to_document():
+            if hasattr(self.app, "switch_browser"):
+                await self.app.switch_browser("document")
+                # Try to select the document
+                doc_browser = self.app.browsers.get("document") if hasattr(self.app, "browsers") else None
+                if doc_browser and hasattr(doc_browser, "select_document_by_id"):
+                    await doc_browser.select_document_by_id(first_doc_id)
+
+        asyncio.create_task(go_to_document())
+
+    # Task input actions
+    def action_add_task(self) -> None:
+        """Show task input."""
+        task_input = self.query_one("#task-input", Input)
+        task_input.display = True
+        task_input.add_class("visible")
+        task_input.focus()
+        self.task_input_active = True
+        self._update_status("Enter task, press Enter to add")
+
+    def action_clear_tasks(self) -> None:
+        """Clear pending tasks."""
+        self.pending_tasks = []
+        self._update_task_panel()
+        self._update_status("Tasks cleared")
+
+    def action_cancel_input(self) -> None:
+        """Cancel task input."""
+        if self.task_input_active:
+            task_input = self.query_one("#task-input", Input)
+            task_input.value = ""
+            task_input.remove_class("visible")
+            task_input.display = False
+            self.task_input_active = False
+            self.query_one("#workflow-table", DataTable).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle task input submission."""
+        if event.input.id == "task-input":
+            task_value = event.value.strip()
+            if task_value:
+                # Try as doc ID first
+                try:
+                    task = int(task_value)
+                except ValueError:
+                    task = task_value
+
+                self.pending_tasks.append(task)
+                self._update_task_panel()
+                self._update_status(f"Added task ({len(self.pending_tasks)} total)")
+
+            event.input.value = ""
+            event.input.remove_class("visible")
+            event.input.display = False
+            self.task_input_active = False
+            self.query_one("#workflow-table", DataTable).focus()
+
+    # Run action
+    def action_run_workflow(self) -> None:
+        """Run selected workflow with pending tasks."""
         if not self.current_selection:
-            self.update_status("Select a preset to run")
+            self._update_status("Select a workflow")
             return
 
         item_type, item = self.current_selection
 
-        if item_type != "preset":
-            self.update_status("Select a preset to run (not a workflow header)")
+        if item_type != "workflow":
+            self._update_status("Select a workflow template to run")
             return
 
-        preset = item
-        wf = self.workflows_map.get(preset['workflow_id'])
-        if not wf:
-            self.update_status("Workflow not found for preset")
+        workflow = item
+
+        # Check if tasks needed
+        if self._workflow_supports_tasks(workflow) and not self.pending_tasks:
+            self._update_status("Add tasks first (press t)")
             return
 
-        self.update_status(f"Running: {preset['name']}...")
+        task_info = f" with {len(self.pending_tasks)} tasks" if self.pending_tasks else ""
+        self._update_status(f"Running {workflow.display_name}{task_info}...")
 
-        # Run workflow with preset asynchronously
-        async def run_with_preset():
+        async def run():
             try:
-                result = await workflow_executor.execute_workflow(
-                    workflow_name_or_id=wf.name,
-                    preset_name=preset['name'],
-                )
-                if result.status == "completed":
-                    self.update_status(f"✓ Completed - Run #{result.id}")
-                else:
-                    self.update_status(f"✗ {result.status} - {result.error_message or 'Unknown error'}")
-            except Exception as e:
-                self.update_status(f"Error: {e}")
+                variables = {}
+                if self.pending_tasks:
+                    variables['tasks'] = self.pending_tasks.copy()
 
-        asyncio.create_task(run_with_preset())
+                result = await workflow_executor.execute_workflow(
+                    workflow_name_or_id=workflow.name,
+                    input_variables=variables if variables else None,
+                )
+
+                if result.status == "completed":
+                    self._update_status(f"Done! Run #{result.id} ({result.total_tokens_used:,} tokens)")
+                    self.pending_tasks = []
+                    self._update_task_panel()
+                else:
+                    self._update_status(f"Failed: {result.error_message or 'Unknown'}")
+            except Exception as e:
+                self._update_status(f"Error: {e}")
+
+        asyncio.create_task(run())

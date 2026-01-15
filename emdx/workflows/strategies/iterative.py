@@ -40,12 +40,15 @@ class IterativeExecutionStrategy(ExecutionStrategy):
         if stage.iteration_strategy:
             strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
 
+        # Determine run count: use prompts length if provided, otherwise stage.runs
+        num_runs = len(stage.prompts) if stage.prompts else stage.runs
+
         previous_outputs: List[str] = []
         output_doc_ids: List[int] = []
         total_tokens = 0
         last_output_id = None
 
-        for i in range(stage.runs):
+        for i in range(num_runs):
             run_number = i + 1
 
             # Build prompt for this iteration

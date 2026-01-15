@@ -311,12 +311,18 @@ class WorkflowExecutor:
         Returns:
             StageResult with execution results
         """
-        # Create stage run record
+        # Expand tasks into prompts BEFORE creating stage run (so target_runs is correct)
+        self._expand_tasks_to_prompts(stage, context)
+
+        # Determine actual run count
+        num_runs = len(stage.prompts) if stage.prompts else stage.runs
+
+        # Create stage run record with correct target
         stage_run_id = wf_db.create_stage_run(
             workflow_run_id=workflow_run_id,
             stage_name=stage.name,
             mode=stage.mode.value,
-            target_runs=stage.runs,
+            target_runs=num_runs,
         )
 
         wf_db.update_stage_run(stage_run_id, status='running', started_at=datetime.now())
@@ -433,13 +439,16 @@ class WorkflowExecutor:
         stage_name = stage.name or f"Stage {stage_run_id}"
         run_id = context.get("run_id")
 
+        # Determine run count: use prompts length if provided, otherwise stage.runs
+        num_runs = len(stage.prompts) if stage.prompts else stage.runs
+
         group_id = None
         try:
             group_id = groups_db.create_group(
                 name=f"{workflow_name} - {stage_name}",
                 group_type="batch",
                 workflow_run_id=run_id,
-                description=f"Parallel outputs from {stage.runs} runs",
+                description=f"Parallel outputs from {num_runs} runs",
                 created_by="workflow",
             )
         except Exception as e:
@@ -449,7 +458,7 @@ class WorkflowExecutor:
 
         # Create individual run records
         individual_runs = []
-        for i in range(stage.runs):
+        for i in range(num_runs):
             # Support per-run prompts (like iterative mode) or single prompt for all
             if stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
@@ -464,26 +473,52 @@ class WorkflowExecutor:
             )
             individual_runs.append((individual_run_id, prompt))
 
-        # Execute all runs in parallel (with semaphore limiting)
+        # Execute all runs in parallel with worktree isolation
         # Track completion count for progress updates
         completed_count = 0
 
-        async def run_with_limit(run_id: int, prompt: str):
-            nonlocal completed_count
-            async with self._semaphore:
-                result = await self._run_agent(
-                    individual_run_id=run_id,
-                    agent_id=stage.agent_id,
-                    prompt=prompt or stage_input or "",
-                    context=context,
-                )
-                # Update progress after each completion
-                completed_count += 1
-                wf_db.update_stage_run(stage_run_id, runs_completed=completed_count)
-                return result
+        # Get max_concurrent from context or stage config
+        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent or self.max_concurrent
 
-        tasks = [run_with_limit(run_id, prompt) for run_id, prompt in individual_runs]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Use worktree pool for isolation when running multiple tasks
+        from .worktree_pool import WorktreePool
+
+        base_branch = context.get('base_branch', 'main')
+        pool = WorktreePool(
+            max_size=max_concurrent,
+            base_branch=base_branch,
+        )
+
+        async def run_with_worktree(run_id: int, prompt: str, run_number: int):
+            nonlocal completed_count
+            try:
+                async with pool.acquire(target_branch=f"parallel-{stage_run_id}-{run_number}") as worktree:
+                    # Create isolated context with worktree path
+                    run_context = dict(context)
+                    run_context['_working_dir'] = worktree.path
+
+                    result = await self._run_agent(
+                        individual_run_id=run_id,
+                        agent_id=stage.agent_id,
+                        prompt=prompt or stage_input or "",
+                        context=run_context,
+                    )
+                    # Update progress after each completion
+                    completed_count += 1
+                    wf_db.update_stage_run(stage_run_id, runs_completed=completed_count)
+                    return result
+            except Exception as e:
+                return {'success': False, 'error_message': str(e)}
+
+        try:
+            tasks = [
+                run_with_worktree(run_id, prompt, i + 1)
+                for i, (run_id, prompt) in enumerate(individual_runs)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            # Clean up worktree pool
+            await pool.cleanup()
 
         # Collect successful outputs
         output_doc_ids = []
@@ -1434,6 +1469,37 @@ Report the document ID that was created."""
                 'output_doc_id': doc_id,
                 'tokens_used': 0,
         }
+
+    def _expand_tasks_to_prompts(self, stage: StageConfig, context: Dict[str, Any]) -> None:
+        """Expand tasks into prompts if tasks are provided.
+
+        If context contains 'tasks' list and stage has a prompt template,
+        generates one prompt per task by substituting {{task}}, {{task_title}},
+        and {{task_id}} placeholders.
+
+        Args:
+            stage: Stage configuration to modify
+            context: Execution context with optional 'tasks' list
+        """
+        tasks = context.get('tasks')
+        if not tasks or not stage.prompt:
+            return
+
+        # Import here to avoid circular imports
+        from .tasks import resolve_tasks
+
+        resolved_tasks = resolve_tasks(tasks)
+        prompts = []
+
+        for task_ctx in resolved_tasks:
+            prompt = stage.prompt
+            prompt = prompt.replace('{{task}}', task_ctx.content)
+            prompt = prompt.replace('{{task_title}}', task_ctx.title)
+            prompt = prompt.replace('{{task_id}}', str(task_ctx.id) if task_ctx.id else '')
+            prompts.append(prompt)
+
+        # Set prompts on stage (parallel strategy will use these)
+        stage.prompts = prompts
 
     def _resolve_template(self, template: Optional[str], context: Dict[str, Any]) -> str:
         """Resolve {{variable}} templates in a string.

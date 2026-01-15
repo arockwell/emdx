@@ -1,0 +1,438 @@
+# EMDX Workflow System
+
+The EMDX workflow system provides powerful orchestration for multi-agent executions. Workflows are **execution patterns** that define *how* to process tasks, while tasks are provided at runtime.
+
+## Core Concept: Execution Patterns vs Runtime Tasks
+
+**Key Mental Model**: Workflows define the *shape* of execution. Tasks are the *data* you feed in.
+
+```
+Workflow = HOW to process (pattern, strategy, synthesis)
+Tasks    = WHAT to process (provided at runtime via --task)
+```
+
+This separation means:
+- One workflow can be reused for many different task sets
+- The number of runs is determined by the number of tasks, not hardcoded
+- Tasks can be strings (direct input) or document IDs (load content from DB)
+
+## Execution Modes
+
+EMDX supports five execution modes, each with different processing patterns.
+
+### SINGLE
+Run once with a single prompt.
+
+```yaml
+stages:
+  - name: analyze
+    mode: single
+    prompt: "Analyze this codebase for security issues"
+```
+
+**Use case**: Simple, one-shot tasks like analysis or report generation.
+
+### PARALLEL
+Run N times simultaneously, then synthesize all outputs into one result.
+
+```yaml
+stages:
+  - name: multi_perspective
+    mode: parallel
+    runs: 5
+    prompt: "Review {{input}} from a {{perspective}} perspective"
+    synthesis_prompt: "Synthesize these {{output_count}} reviews into a coherent summary:\n\n{{outputs}}"
+```
+
+**Use case**: Get multiple perspectives on the same problem, then combine insights.
+
+With tasks (task-driven parallel):
+```bash
+emdx workflow run parallel_analysis \
+  -t "Analyze authentication security" \
+  -t "Analyze input validation" \
+  -t "Analyze data encryption" \
+  -j 3  # max 3 concurrent
+```
+
+### ITERATIVE
+Run N times sequentially, with each run building on the previous output.
+
+```yaml
+stages:
+  - name: refine
+    mode: iterative
+    runs: 3
+    prompts:
+      - "Create initial draft: {{input}}"
+      - "Refine this draft, improving clarity: {{prev}}"
+      - "Final polish, fix any remaining issues: {{prev}}"
+```
+
+**Use case**: Progressive refinement, where each iteration improves upon the last.
+
+Template variables for iterative mode:
+- `{{prev}}` - Output from the previous iteration
+- `{{all_prev}}` - All previous outputs joined with separators
+- `{{run_number}}` - Current iteration number (1-indexed)
+
+### ADVERSARIAL
+Three-role pattern: Advocate -> Critic -> Synthesizer.
+
+```yaml
+stages:
+  - name: debate
+    mode: adversarial
+    runs: 3
+    prompts:
+      - "ADVOCATE: Argue strongly FOR this approach: {{input}}"
+      - "CRITIC: Challenge this advocacy. What are the weaknesses?: {{prev}}"
+      - "SYNTHESIS: Given the advocacy and criticism, provide balanced assessment:\n\nAdvocate: {{all_prev[0]}}\nCritic: {{prev}}"
+```
+
+**Use case**: Thorough analysis through debate, finding both strengths and weaknesses.
+
+### DYNAMIC
+Discover items at runtime via a shell command, then process each in parallel.
+
+```yaml
+stages:
+  - name: process_files
+    mode: dynamic
+    discovery_command: "find . -name '*.py' -type f"
+    item_variable: file
+    max_concurrent: 5
+    continue_on_failure: true
+    prompt: "Analyze Python file: {{file}}"
+    synthesis_prompt: "Summarize findings from all {{output_count}} files:\n\n{{outputs}}"
+```
+
+**Use case**: Process a dynamic list of items (files, branches, issues) discovered at runtime.
+
+## CLI Commands
+
+### List Workflows
+```bash
+# List all workflows
+emdx workflow list
+
+# Filter by category
+emdx workflow list --category analysis
+
+# Include inactive workflows
+emdx workflow list --all
+
+# JSON output
+emdx workflow list --format json
+```
+
+### Show Workflow Details
+```bash
+emdx workflow show <name_or_id>
+emdx workflow show parallel_analysis
+emdx workflow show 5
+```
+
+### Run a Workflow
+```bash
+# Basic run with input document
+emdx workflow run <workflow> --doc <doc_id>
+
+# Run with tasks (task-driven execution)
+emdx workflow run task_parallel \
+  -t "Find irrelevant documentation" \
+  -t "Identify dead code" \
+  -t "Evaluate architecture"
+
+# Tasks can be document IDs
+emdx workflow run task_parallel -t 5182 -t 5183 -t 5184
+
+# Mix strings and doc IDs
+emdx workflow run task_parallel -t "Analyze auth" -t 5185
+
+# Control concurrency
+emdx workflow run task_parallel -t "task1" -t "task2" -t "task3" -j 2
+
+# Use a preset
+emdx workflow run parallel_analysis --preset security_audit
+
+# Override variables
+emdx workflow run my_workflow --var topic=Security --var depth=deep
+
+# Save this run's config as a preset
+emdx workflow run parallel_analysis -t "task" --save-as my_preset
+
+# Run in isolated worktree
+emdx workflow run my_workflow --worktree --base-branch main
+
+# Override discovery command for dynamic mode
+emdx workflow run dynamic_analysis --discover "ls *.py"
+```
+
+### Monitor Runs
+```bash
+# List recent runs
+emdx workflow runs
+
+# Filter by workflow
+emdx workflow runs --workflow parallel_analysis
+
+# Filter by status
+emdx workflow runs --status running
+
+# Show detailed run status
+emdx workflow status <run_id>
+emdx workflow status 42
+```
+
+### Manage Presets
+```bash
+# List all presets
+emdx workflow presets
+
+# List presets for a specific workflow
+emdx workflow presets parallel_analysis
+
+# Create a preset
+emdx workflow preset create parallel_analysis security_audit \
+  --var topic=Security \
+  --var depth=comprehensive \
+  --desc "Thorough security review"
+
+# Show preset details
+emdx workflow preset show parallel_analysis security_audit
+
+# Update preset variables
+emdx workflow preset update parallel_analysis security_audit --var depth=quick
+
+# Create preset from a successful run
+emdx workflow preset from-run parallel_analysis good_config --run 223
+
+# Delete preset
+emdx workflow preset delete parallel_analysis old_preset
+```
+
+### List Iteration Strategies
+```bash
+emdx workflow strategies
+emdx workflow strategies --category refinement
+```
+
+## Template System
+
+Workflows use `{{variable}}` syntax for dynamic content.
+
+### Standard Variables
+| Variable | Description |
+|----------|-------------|
+| `{{input}}` | Input document content or previous stage output |
+| `{{input_title}}` | Title of input document |
+| `{{prev}}` | Previous iteration output (iterative/adversarial mode) |
+| `{{all_prev}}` | All previous outputs as list |
+| `{{run_number}}` | Current run number (1-indexed) |
+
+### Task Variables (from --task flag)
+| Variable | Description |
+|----------|-------------|
+| `{{task}}` | Task content (string or loaded document content) |
+| `{{task_title}}` | Document title (if task was a doc ID) |
+| `{{task_id}}` | Document ID (if task was a doc ID) |
+
+### Dynamic Mode Variables
+| Variable | Description |
+|----------|-------------|
+| `{{item}}` | Current discovered item (configurable via `item_variable`) |
+| `{{item_index}}` | Zero-based index of current item |
+| `{{total_items}}` | Total number of discovered items |
+
+### Parallel/Synthesis Variables
+| Variable | Description |
+|----------|-------------|
+| `{{outputs}}` | All parallel outputs joined with separators |
+| `{{output_count}}` | Number of outputs being synthesized |
+
+### Stage Output Variables
+| Variable | Description |
+|----------|-------------|
+| `{{stage_name.output}}` | Output from a named stage |
+| `{{stage_name.output_id}}` | Document ID of stage output |
+| `{{stage_name.synthesis}}` | Synthesis output from parallel stage |
+
+### Indexed Access
+```yaml
+# Access specific item from a list
+prompt: "First point was: {{all_prev[0]}}"
+```
+
+## StageConfig Reference
+
+Each stage in a workflow is configured with these fields:
+
+```yaml
+stages:
+  - name: string              # Required: unique stage name
+    mode: string              # Required: single|parallel|iterative|adversarial|dynamic
+    runs: int                 # Number of runs (default: 3)
+    agent_id: int             # Optional: specific agent to use
+    prompt: string            # Prompt template for this stage
+    prompts: [string]         # Per-run prompts (for iterative/parallel)
+    iteration_strategy: string # Named strategy for iterative mode
+    synthesis_prompt: string  # Prompt for synthesizing parallel/dynamic outputs
+    input: string             # Template reference like "{{prev_stage.output}}"
+    timeout_seconds: int      # Stage timeout (default: 3600)
+
+    # Dynamic mode specific:
+    discovery_command: string # Shell command that outputs items (one per line)
+    item_variable: string     # Variable name for each item (default: "item")
+    max_concurrent: int       # Max parallel executions (default: 10)
+    continue_on_failure: bool # Keep processing if one item fails (default: true)
+```
+
+## Worktree Isolation
+
+For parallel execution, EMDX can create isolated git worktrees to prevent conflicts.
+
+### Why Worktrees?
+When running multiple agents in parallel, they may:
+- Modify the same files simultaneously
+- Create conflicting git states
+- Step on each other's changes
+
+Worktree isolation gives each parallel task its own working directory.
+
+### Using Worktrees
+```bash
+# Enable worktree isolation
+emdx workflow run parallel_analysis --worktree
+
+# Specify base branch
+emdx workflow run parallel_analysis --worktree --base-branch develop
+
+# Keep worktrees for debugging (not cleaned up)
+emdx workflow run parallel_analysis --worktree --keep-worktree
+```
+
+### WorktreePool
+The `WorktreePool` manages worktree lifecycle:
+- Creates worktrees on-demand up to `max_concurrent`
+- Reuses worktrees when possible
+- Cleans up on completion (unless `--keep-worktree`)
+- Resets worktrees between uses
+
+## Presets
+
+Presets save commonly-used variable configurations for reuse.
+
+### Preset Benefits
+- **Consistency**: Same configuration across runs
+- **Speed**: No need to type long --var lists
+- **Sharing**: Team can use standardized configurations
+- **History**: Track which presets work well
+
+### Preset Workflow
+```bash
+# 1. Run with variables
+emdx workflow run parallel_analysis \
+  -t "Auth review" \
+  --var depth=comprehensive \
+  --var focus=security
+
+# 2. If successful, save as preset
+emdx workflow run parallel_analysis \
+  -t "Auth review" \
+  --var depth=comprehensive \
+  --var focus=security \
+  --save-as security_deep
+
+# 3. Reuse the preset
+emdx workflow run parallel_analysis -t "New task" --preset security_deep
+
+# Or create from a successful run
+emdx workflow preset from-run parallel_analysis security_deep --run 42
+```
+
+### Variable Precedence
+When running a workflow, variables are merged in this order (later wins):
+1. Workflow default variables
+2. Preset variables (--preset)
+3. Runtime variables (--var)
+
+## Practical Examples
+
+### Example 1: Multi-Perspective Code Review
+```bash
+emdx workflow run parallel_analysis \
+  -t "Review security aspects of auth.py" \
+  -t "Review performance aspects of auth.py" \
+  -t "Review maintainability of auth.py" \
+  -j 3
+```
+
+### Example 2: Process All Python Files
+Create a dynamic workflow or use discovery override:
+```bash
+emdx workflow run dynamic_analysis \
+  --discover "find . -name '*.py' -type f | head -20" \
+  -j 5
+```
+
+### Example 3: Iterative Document Refinement
+```bash
+# Create a document with initial content
+echo "Draft: My initial ideas..." | emdx save --title "Draft"
+
+# Run iterative refinement
+emdx workflow run iterative_refine --doc 5200
+```
+
+### Example 4: Task-Driven Analysis with Document IDs
+```bash
+# Save analysis tasks as documents
+echo "Analyze authentication flow" | emdx save --title "Auth Task"
+echo "Analyze API security" | emdx save --title "API Task"
+
+# Use document IDs as tasks
+emdx workflow run task_parallel -t 5182 -t 5183
+```
+
+### Example 5: Using Presets for Consistency
+```bash
+# Create preset for security audits
+emdx workflow preset create parallel_analysis security_audit \
+  --var focus=security \
+  --var depth=comprehensive \
+  --var output_format=detailed
+
+# Use preset for all security reviews
+emdx workflow run parallel_analysis --preset security_audit \
+  -t "Review user input handling" \
+  -t "Review database queries" \
+  -t "Review file operations"
+```
+
+## Architecture Notes
+
+### Execution Flow
+1. CLI parses tasks and variables
+2. Workflow config loaded from database
+3. Tasks expanded into prompts (if task-driven)
+4. Stages execute sequentially
+5. Each stage may run parallel/iterative/etc. internally
+6. Outputs saved as documents
+7. Final synthesis (if applicable) creates summary document
+
+### Document Groups
+Parallel and dynamic executions create document groups:
+- Individual outputs saved as "exploration" role
+- Synthesis output saved as "primary" role
+- Groups enable easy browsing of related outputs
+
+### Database Tables
+- `workflows` - Workflow definitions
+- `workflow_presets` - Saved variable configurations
+- `workflow_runs` - Execution history
+- `workflow_stage_runs` - Stage-level tracking
+- `workflow_individual_runs` - Individual run tracking
+- `iteration_strategies` - Predefined prompt sequences
+
+For schema details, see [Database Design](database-design.md).
