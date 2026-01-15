@@ -1,7 +1,6 @@
 """Tests for newly added modules.
 
-Covering: gist, tag_commands, textual_browser_minimal, nvim_wrapper,
-markdown_config, mdcat_renderer, gui.
+Covering: gist, tag_commands, nvim_wrapper, markdown_config, gui.
 """
 
 
@@ -24,13 +23,6 @@ class TestModuleImports:
         assert hasattr(tag_commands, "tag")
         assert hasattr(tag_commands, "untag")
 
-    def test_textual_browser_minimal_import(self):
-        """Test that textual_browser module can be imported."""
-        from emdx.ui import textual_browser as textual_browser_minimal
-
-        assert hasattr(textual_browser_minimal, "FullScreenView")
-        # Note: MinimalDocumentBrowser was deprecated and removed
-
     def test_nvim_wrapper_import(self):
         """Test that nvim_wrapper module can be imported."""
         from emdx.ui import nvim_wrapper
@@ -45,13 +37,6 @@ class TestModuleImports:
 
         assert hasattr(markdown_config, "MarkdownConfig")
         assert hasattr(markdown_config, "render_enhanced_markdown")
-
-    def test_mdcat_renderer_import(self):
-        """Test that mdcat_renderer module can be imported."""
-        from emdx.ui import mdcat_renderer
-
-        assert hasattr(mdcat_renderer, "MdcatRenderer")
-        assert hasattr(mdcat_renderer, "MdcatWidget")
 
     def test_gui_import(self):
         """Test that gui module can be imported."""
@@ -90,24 +75,3 @@ class TestMarkdownConfigBasicFunctionality:
         for theme_type in ["dark", "light"]:
             assert "default" in themes[theme_type]
             assert "alternatives" in themes[theme_type]
-
-
-class TestMdcatRendererBasicFunctionality:
-    """Test basic mdcat renderer functionality."""
-
-    def test_is_available_callable(self):
-        """Test that is_available method is callable."""
-        from emdx.ui import mdcat_renderer
-
-        # Should be callable without errors
-        result = mdcat_renderer.MdcatRenderer.is_available()
-        assert isinstance(result, bool)
-
-    def test_get_terminal_info_callable(self):
-        """Test that get_terminal_info method is callable."""
-        from emdx.ui import mdcat_renderer
-
-        # Should be callable without errors
-        term, supports_images = mdcat_renderer.MdcatRenderer.get_terminal_info()
-        assert isinstance(term, str)
-        assert isinstance(supports_images, bool)

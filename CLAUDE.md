@@ -1,27 +1,10 @@
 # EMDX - Knowledge Base CLI Tool
 
-## ⚠️ CRITICAL BUG: Interactive Commands (2025-07-13)
+## ⚠️ CRITICAL: Interactive Commands
 
-**NEVER run these commands as they will hang Claude Code:**
-- `emdx gui` - Interactive TUI browser
-- `emdx tui` - Alternative TUI interface
+**NEVER run `emdx gui`** - This launches an interactive TUI that will hang Claude Code sessions.
 
-**KNOWN BUG**: As of July 2025, Claude Code's deny rules are NOT working. Even with:
-- Explicit deny patterns in settings.json
-- PreToolUse hooks
-- Multiple pattern formats
-
-These commands STILL execute and hang the session. This is a critical bug in Claude Code's permission system.
-
-**WORKAROUND**: Simply don't ask Claude to run these commands until the bug is fixed.
-
-## 🧪 Testing Features (2025-07-27)
-
-Test these new features when working with EMDX:
-- **Event-driven log streaming** - Real-time log updates without polling
-- **Git diff browser** - Press 'd' in TUI to enter git diff browser mode
-- **Worktree switching** - Press 'w' in git mode to switch worktrees interactively
-- **Comprehensive docs** - New docs/ folder with detailed project documentation
+**WORKAROUND**: Do not ask Claude to run the GUI command. Use CLI commands instead.
 
 ## 📖 Project Overview
 
@@ -161,7 +144,7 @@ poetry run emdx untag 123 blocked
 
 ## 📊 Key Features for Claude Integration
 
-### Event-Driven Log Streaming (NEW!)
+### Event-Driven Log Streaming
 - **Real-time updates** without polling overhead
 - **OS-level file watching** for reliable change detection
 - **Clean resource management** with automatic cleanup

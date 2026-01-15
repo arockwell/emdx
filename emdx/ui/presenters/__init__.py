@@ -1,9 +1,8 @@
 """
-Presenters for UI components.
+Presenters for UI components (STUB MODULE).
 
-Presenters contain the business logic that transforms data from
-the model layer into ViewModels for display. They decouple UI
-widgets from database access and business logic.
+This module was deleted in PR #300 but is still imported by document_browser.py.
+This is a stub implementation that provides the interface without full implementation.
 """
 
 from .document_browser_presenter import DocumentBrowserPresenter

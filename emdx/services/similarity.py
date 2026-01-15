@@ -523,6 +523,7 @@ def compute_content_similarity(content1: str, content2: str) -> float:
         tfidf_matrix = vectorizer.fit_transform([content1, content2])
         similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
         return float(similarity)
-    except Exception:
+    except Exception as e:
         # If vectorization fails (e.g., empty vocabulary), return 0
+        logger.warning("TF-IDF vectorization failed, returning 0 similarity: %s", e)
         return 0.0
