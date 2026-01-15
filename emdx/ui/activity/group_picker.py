@@ -37,16 +37,18 @@ class GroupPicker(Widget):
 
     class GroupSelected(Message):
         """Fired when a group is selected."""
-        def __init__(self, group_id: int, group_name: str) -> None:
+        def __init__(self, group_id: int, group_name: str, doc_id: int) -> None:
             self.group_id = group_id
             self.group_name = group_name
+            self.doc_id = doc_id
             super().__init__()
 
     class GroupCreated(Message):
         """Fired when a new group is created."""
-        def __init__(self, group_id: int, group_name: str) -> None:
+        def __init__(self, group_id: int, group_name: str, doc_id: int) -> None:
             self.group_id = group_id
             self.group_name = group_name
+            self.doc_id = doc_id
             super().__init__()
 
     class Cancelled(Message):
@@ -199,8 +201,9 @@ class GroupPicker(Widget):
             return
 
         group = self.filtered_groups[self.selected_index]
-        self.post_message(self.GroupSelected(group["id"], group["name"]))
+        doc_id = self.doc_id  # Capture before hide() clears it
         self.hide()
+        self.post_message(self.GroupSelected(group["id"], group["name"], doc_id))
 
     def _create_new_group(self, name: str) -> None:
         """Create a new group with the given name."""
@@ -211,12 +214,13 @@ class GroupPicker(Widget):
             return
 
         try:
+            doc_id = self.doc_id  # Capture before hide() clears it
             group_id = groups_db.create_group(
                 name=name.strip(),
                 group_type="batch",  # Default to batch
             )
-            self.post_message(self.GroupCreated(group_id, name.strip()))
             self.hide()
+            self.post_message(self.GroupCreated(group_id, name.strip(), doc_id))
         except Exception as e:
             logger.error(f"Error creating group: {e}")
 

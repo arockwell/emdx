@@ -1869,8 +1869,7 @@ class ActivityView(Widget):
 
     async def on_group_picker_group_selected(self, event: GroupPicker.GroupSelected) -> None:
         """Handle group selection from picker."""
-        picker = self.query_one("#group-picker", GroupPicker)
-        doc_id = picker.doc_id
+        doc_id = event.doc_id
 
         if doc_id and HAS_GROUPS and groups_db:
             try:
@@ -1887,8 +1886,7 @@ class ActivityView(Widget):
 
     async def on_group_picker_group_created(self, event: GroupPicker.GroupCreated) -> None:
         """Handle new group creation from picker."""
-        picker = self.query_one("#group-picker", GroupPicker)
-        doc_id = picker.doc_id
+        doc_id = event.doc_id
 
         if doc_id and HAS_GROUPS and groups_db:
             try:
