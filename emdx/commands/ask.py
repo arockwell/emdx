@@ -53,6 +53,59 @@ def ask_question(
         console.print(f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]")
 
 
+@app.command("context")
+def get_context(
+    question: str = typer.Argument(..., help="Your question"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Max documents to retrieve"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Limit to project"),
+    keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search"),
+    include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),
+):
+    """
+    Retrieve context for a question (for piping to claude CLI).
+
+    Outputs retrieved documents as plain text, suitable for piping to claude.
+
+    Examples:
+        emdx ai context "How does auth work?" | claude
+        emdx ai context "What's the API design?" | claude "summarize this"
+        emdx ai context "error handling" --no-question | claude "list the patterns"
+    """
+    from ..services.ask_service import AskService
+    import sys
+
+    service = AskService()
+
+    # Retrieve docs (reuse the retrieval logic)
+    if keyword or not service._has_embeddings():
+        docs, method = service._retrieve_keyword(question, limit, project)
+    else:
+        docs, method = service._retrieve_semantic(question, limit, project)
+
+    if not docs:
+        print("No relevant documents found.", file=sys.stderr)
+        raise typer.Exit(1)
+
+    # Build context output
+    output_parts = []
+
+    if include_question:
+        output_parts.append(f"Question: {question}\n")
+        output_parts.append("=" * 60 + "\n")
+
+    for doc_id, title, content in docs:
+        # Truncate very long documents
+        truncated = content[:4000] if len(content) > 4000 else content
+        output_parts.append(f"# Document #{doc_id}: {title}\n\n{truncated}\n")
+        output_parts.append("-" * 60 + "\n")
+
+    # Print to stdout (for piping)
+    print("\n".join(output_parts))
+
+    # Print metadata to stderr (so it doesn't pollute the pipe)
+    print(f"Retrieved {len(docs)} docs via {method} search", file=sys.stderr)
+
+
 @app.command("index")
 def build_index(
     force: bool = typer.Option(False, "--force", "-f", help="Reindex all documents"),
