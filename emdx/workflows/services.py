@@ -23,7 +23,7 @@ class DocumentService:
         Returns:
             Document dict with 'content', 'title', etc. or None if not found
         """
-        from emdx.models.documents import get_document
+        from emdx.database import get_document
         return get_document(doc_id)
 
     @staticmethod
@@ -42,7 +42,7 @@ class DocumentService:
         Returns:
             Created document ID
         """
-        from emdx.models.documents import save_document
+        from emdx.database import save_document
         return save_document(title=title, content=content, tags=tags)
 
 

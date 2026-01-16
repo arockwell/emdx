@@ -257,15 +257,7 @@ class ProjectSelectionStage(OverlayStage):
         """Navigate to previous stage."""
         self.request_navigation("prev")
 
-    def action_cancel(self) -> None:
-        """Cancel the overlay."""
-        try:
-            if hasattr(self.host, 'action_cancel'):
-                self.host.action_cancel()
-        except Exception as e:
-            logger.error(f"Failed to cancel overlay: {e}")
-
-    def get_selection_data(self) -> Dict[str, Any]:
+    def get_selection_data(self) -> dict[str, Any]:
         """Get current selection data."""
         if self.selected_project:
             return {

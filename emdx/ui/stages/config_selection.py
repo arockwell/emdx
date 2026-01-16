@@ -198,14 +198,6 @@ class ConfigSelectionStage(OverlayStage):
         """Navigate to previous stage."""
         self.request_navigation("prev")
 
-    def action_cancel(self) -> None:
-        """Cancel the overlay."""
-        try:
-            if hasattr(self.host, 'action_cancel'):
-                self.host.action_cancel()
-        except Exception as e:
-            logger.error(f"Failed to cancel overlay: {e}")
-
     def get_help_text(self) -> str:
         """Get help text for this stage."""
         return "Configure execution settings. Press Ctrl+S or Enter to execute, B to toggle background, Shift+Tab to go back."

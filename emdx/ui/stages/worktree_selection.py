@@ -422,14 +422,6 @@ class WorktreeSelectionStage(OverlayStage):
         """Navigate to previous stage."""
         self.request_navigation("prev")
 
-    def action_cancel(self) -> None:
-        """Cancel the overlay."""
-        try:
-            if hasattr(self.host, 'action_cancel'):
-                self.host.action_cancel()
-        except Exception as e:
-            logger.error(f"Failed to cancel overlay: {e}")
-
     def get_help_text(self) -> str:
         """Get help text for this stage."""
         return "Select a worktree for agent execution. Use ↑↓ or j/k to navigate, Enter to select, C/S to use current, Tab to continue."

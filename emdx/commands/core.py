@@ -16,8 +16,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from emdx.database import db
-from emdx.models.documents import (
+from emdx.database import (
+    db,
     delete_document,
     get_document,
     list_deleted_documents,

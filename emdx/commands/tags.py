@@ -8,8 +8,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from emdx.database import db
-from emdx.models.documents import get_document
+from emdx.database import db, get_document
 from emdx.models.tags import (
     add_tags_to_document,
     get_document_tags,

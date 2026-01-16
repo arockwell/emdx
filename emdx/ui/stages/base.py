@@ -3,11 +3,14 @@
 Base class and interface for overlay stages.
 """
 
+import logging
 from abc import abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any
 
 from textual.widget import Widget
 from textual.message import Message
+
+logger = logging.getLogger(__name__)
 
 
 class OverlayStage(Widget):
@@ -103,6 +106,14 @@ class OverlayStage(Widget):
             await self.load_stage_data()
             await self.set_focus_to_primary_input()
             self._data_loaded = True
+
+    def action_cancel(self) -> None:
+        """Cancel the overlay by delegating to host."""
+        try:
+            if hasattr(self.host, "action_cancel"):
+                self.host.action_cancel()
+        except Exception as e:
+            logger.error(f"Failed to cancel overlay: {e}")
 
 
 class PlaceholderStage(OverlayStage):

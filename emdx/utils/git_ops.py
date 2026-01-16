@@ -14,6 +14,32 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 
+def _run_git(
+    args: list[str], cwd: str | None = None, check: bool = True
+) -> tuple[bool, str]:
+    """Run a git command and return (success, output_or_error).
+
+    Args:
+        args: Git command arguments (e.g., ['add', 'file.py'])
+        cwd: Working directory for the command
+        check: If True, treat non-zero exit as failure
+
+    Returns:
+        Tuple of (success, stdout_on_success_or_stderr_on_failure)
+    """
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            check=check,
+            cwd=cwd,
+        )
+        return True, result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        return False, e.stderr.strip() if e.stderr else ""
+
+
 @dataclass
 class GitWorktree:
     """Represents a git worktree."""
@@ -572,98 +598,38 @@ def is_git_repository(path: Optional[str] = None) -> bool:
 
 def get_current_branch(worktree_path: Optional[str] = None) -> str:
     """Get current git branch name."""
-    try:
-        cwd = worktree_path if worktree_path else None
-        result = subprocess.run(
-            ['git', 'branch', '--show-current'],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError:
-        return "unknown"
+    success, output = _run_git(["branch", "--show-current"], cwd=worktree_path)
+    return output if success else "unknown"
 
 
 def get_repository_root(path: Optional[str] = None) -> Optional[str]:
     """Get the root directory of the git repository."""
-    try:
-        cwd = path if path else None
-        result = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError:
-        return None
+    success, output = _run_git(["rev-parse", "--show-toplevel"], cwd=path)
+    return output if success else None
 
 
 def git_stage_file(file_path: str, worktree_path: Optional[str] = None) -> bool:
     """Stage a file for commit."""
-    try:
-        cwd = worktree_path if worktree_path else None
-        subprocess.run(
-            ['git', 'add', file_path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
-        return True
-    except subprocess.CalledProcessError:
-        return False
+    success, _ = _run_git(["add", file_path], cwd=worktree_path)
+    return success
 
 
 def git_unstage_file(file_path: str, worktree_path: Optional[str] = None) -> bool:
     """Unstage a file (remove from staging area)."""
-    try:
-        cwd = worktree_path if worktree_path else None
-        subprocess.run(
-            ['git', 'reset', 'HEAD', file_path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
-        return True
-    except subprocess.CalledProcessError:
-        return False
+    success, _ = _run_git(["reset", "HEAD", file_path], cwd=worktree_path)
+    return success
 
 
 def git_commit(message: str, worktree_path: Optional[str] = None) -> Tuple[bool, str]:
     """Commit staged changes with a message."""
-    try:
-        cwd = worktree_path if worktree_path else None
-        result = subprocess.run(
-            ['git', 'commit', '-m', message],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
-        return True, result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return False, e.stderr.strip() if e.stderr else "Commit failed"
+    success, output = _run_git(["commit", "-m", message], cwd=worktree_path)
+    return success, output if success else (output or "Commit failed")
 
 
 def git_discard_changes(file_path: str, worktree_path: Optional[str] = None) -> bool:
     """Discard unstaged changes to a file."""
-    try:
-        cwd = worktree_path if worktree_path else None
-        subprocess.run(
-            ['git', 'checkout', 'HEAD', '--', file_path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
-        return True
-    except subprocess.CalledProcessError:
-        return False
+    success, _ = _run_git(["checkout", "HEAD", "--", file_path], cwd=worktree_path)
+    return success
 
 
 def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: Optional[str] = None, repo_path: Optional[str] = None) -> Tuple[bool, str, str]:

@@ -12,8 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from emdx.database import db
-from emdx.models.documents import get_document
+from emdx.database import db, get_document
 
 if TYPE_CHECKING:
     from github import Github, GithubException

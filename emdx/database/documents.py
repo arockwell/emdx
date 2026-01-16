@@ -3,9 +3,38 @@ Document CRUD operations for emdx knowledge base
 """
 
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from .connection import db_connection
+
+# Date fields that need parsing from ISO format strings
+_DATE_FIELDS = ("created_at", "updated_at", "accessed_at", "deleted_at")
+
+
+def _parse_doc_dates(doc: dict[str, Any]) -> dict[str, Any]:
+    """Parse ISO format date strings to datetime objects in a document dict."""
+    for field in _DATE_FIELDS:
+        if field in doc and isinstance(doc[field], str):
+            doc[field] = datetime.fromisoformat(doc[field])
+    return doc
+
+
+def _get_identifier_clause(identifier: str | int, deleted: bool = False) -> tuple[str, tuple]:
+    """Build SQL WHERE clause and params for identifier lookup.
+
+    Args:
+        identifier: Document ID (int/digit string) or title (string)
+        deleted: If True, match deleted docs; if False, match non-deleted
+
+    Returns:
+        Tuple of (where_clause, params) for SQL query
+    """
+    identifier_str = str(identifier)
+    is_deleted = "TRUE" if deleted else "FALSE"
+
+    if identifier_str.isdigit():
+        return f"id = ? AND is_deleted = {is_deleted}", (int(identifier_str),)
+    return f"LOWER(title) = LOWER(?) AND is_deleted = {is_deleted}", (identifier_str,)
 
 
 def save_document(title: str, content: str, project: Optional[str] = None, tags: Optional[list[str]] = None, parent_id: Optional[int] = None) -> int:
@@ -30,59 +59,25 @@ def save_document(title: str, content: str, project: Optional[str] = None, tags:
         return doc_id
 
 
-def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
+def get_document(identifier: str | int) -> Optional[dict[str, Any]]:
     """Get a document by ID or title"""
+    where_clause, params = _get_identifier_clause(identifier)
+
     with db_connection.get_connection() as conn:
-        # Convert to string for consistent handling
-        identifier_str = str(identifier)
-        
         # Update access tracking
-        if identifier_str.isdigit():
-            conn.execute(
-                """
-                UPDATE documents
-                SET accessed_at = CURRENT_TIMESTAMP,
-                    access_count = access_count + 1
-                WHERE id = ? AND is_deleted = FALSE
+        conn.execute(
+            f"""
+            UPDATE documents
+            SET accessed_at = CURRENT_TIMESTAMP, access_count = access_count + 1
+            WHERE {where_clause}
             """,
-                (int(identifier_str),),
-            )
-
-            cursor = conn.execute(
-                """
-                SELECT * FROM documents WHERE id = ? AND is_deleted = FALSE
-            """,
-                (int(identifier_str),),
-            )
-        else:
-            conn.execute(
-                """
-                UPDATE documents
-                SET accessed_at = CURRENT_TIMESTAMP,
-                    access_count = access_count + 1
-                WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
-            """,
-                (identifier_str,),
-            )
-
-            cursor = conn.execute(
-                """
-                SELECT * FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
-            """,
-                (identifier_str,),
-            )
-
+            params,
+        )
+        cursor = conn.execute(f"SELECT * FROM documents WHERE {where_clause}", params)
         conn.commit()
         row = cursor.fetchone()
 
-        if row:
-            # Convert Row to dict and parse datetime strings
-            doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            return doc
-        return None
+        return _parse_doc_dates(dict(row)) if row else None
 
 
 def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
@@ -96,7 +91,7 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
                 WHERE project = ? AND is_deleted = FALSE
                 ORDER BY id DESC
                 LIMIT ?
-            """,
+                """,
                 (project, limit),
             )
         else:
@@ -107,19 +102,11 @@ def list_documents(project: Optional[str] = None, limit: int = 50) -> list[dict[
                 WHERE is_deleted = FALSE
                 ORDER BY id DESC
                 LIMIT ?
-            """,
+                """,
                 (limit,),
             )
 
-        # Convert rows and parse datetime strings
-        docs = []
-        for row in cursor.fetchall():
-            doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            docs.append(doc)
-        return docs
+        return [_parse_doc_dates(dict(row)) for row in cursor.fetchall()]
 
 
 def update_document(doc_id: int, title: str, content: str) -> bool:
@@ -138,49 +125,22 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
         return cursor.rowcount > 0
 
 
-def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> bool:
+def delete_document(identifier: str | int, hard_delete: bool = False) -> bool:
     """Delete a document by ID or title (soft delete by default)"""
-    with db_connection.get_connection() as conn:
-        # Convert to string for consistent handling
-        identifier_str = str(identifier)
-        
-        if hard_delete:
-            # Permanent deletion
-            if identifier_str.isdigit():
-                cursor = conn.execute(
-                    """
-                    DELETE FROM documents WHERE id = ? AND is_deleted = FALSE
-                """,
-                    (int(identifier_str),),
-                )
-            else:
-                cursor = conn.execute(
-                    """
-                    DELETE FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
-                """,
-                    (identifier_str,),
-                )
-        else:
-            # Soft delete
-            if identifier_str.isdigit():
-                cursor = conn.execute(
-                    """
-                    UPDATE documents
-                    SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
-                    WHERE id = ? AND is_deleted = FALSE
-                """,
-                    (int(identifier_str),),
-                )
-            else:
-                cursor = conn.execute(
-                    """
-                    UPDATE documents
-                    SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
-                    WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
-                """,
-                    (identifier_str,),
-                )
+    where_clause, params = _get_identifier_clause(identifier)
 
+    with db_connection.get_connection() as conn:
+        if hard_delete:
+            cursor = conn.execute(f"DELETE FROM documents WHERE {where_clause}", params)
+        else:
+            cursor = conn.execute(
+                f"""
+                UPDATE documents
+                SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
+                WHERE {where_clause}
+                """,
+                params,
+            )
         conn.commit()
         return cursor.rowcount > 0
 
@@ -195,19 +155,10 @@ def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
             WHERE is_deleted = FALSE
             ORDER BY accessed_at DESC
             LIMIT ?
-        """,
+            """,
             (limit,),
         )
-
-        # Convert rows and parse datetime strings
-        docs = []
-        for row in cursor.fetchall():
-            doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            docs.append(doc)
-        return docs
+        return [_parse_doc_dates(dict(row)) for row in cursor.fetchall()]
 
 
 def get_stats(project: Optional[str] = None) -> dict[str, Any]:
@@ -291,7 +242,7 @@ def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[
                 AND deleted_at >= datetime('now', '-' || ? || ' days')
                 ORDER BY deleted_at DESC
                 LIMIT ?
-            """,
+                """,
                 (days, limit),
             )
         else:
@@ -302,45 +253,26 @@ def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[
                 WHERE is_deleted = TRUE
                 ORDER BY deleted_at DESC
                 LIMIT ?
-            """,
+                """,
                 (limit,),
             )
 
-        # Convert rows and parse datetime strings
-        docs = []
-        for row in cursor.fetchall():
-            doc = dict(row)
-            for field in ["created_at", "updated_at", "accessed_at", "deleted_at"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = datetime.fromisoformat(doc[field])
-            docs.append(doc)
-        return docs
+        return [_parse_doc_dates(dict(row)) for row in cursor.fetchall()]
 
 
-def restore_document(identifier: Union[str, int]) -> bool:
+def restore_document(identifier: str | int) -> bool:
     """Restore a soft-deleted document"""
-    with db_connection.get_connection() as conn:
-        # Convert to string for consistent handling
-        identifier_str = str(identifier)
-        if identifier_str.isdigit():
-            cursor = conn.execute(
-                """
-                UPDATE documents
-                SET is_deleted = FALSE, deleted_at = NULL
-                WHERE id = ? AND is_deleted = TRUE
-            """,
-                (int(identifier),),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                UPDATE documents
-                SET is_deleted = FALSE, deleted_at = NULL
-                WHERE LOWER(title) = LOWER(?) AND is_deleted = TRUE
-            """,
-                (identifier,),
-            )
+    where_clause, params = _get_identifier_clause(identifier, deleted=True)
 
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            f"""
+            UPDATE documents
+            SET is_deleted = FALSE, deleted_at = NULL
+            WHERE {where_clause}
+            """,
+            params,
+        )
         conn.commit()
         return cursor.rowcount > 0
 
