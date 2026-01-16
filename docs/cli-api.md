@@ -885,4 +885,197 @@ emdx untag 123 active
 emdx find --tags "gameplan" --project "myproject"
 ```
 
+---
+
+## 🚀 Quick Task Execution
+
+The `emdx run` command provides a streamlined interface for running tasks in parallel. It's syntactic sugar for the `task_parallel` workflow.
+
+### Basic Usage
+
+```bash
+# Run a single task
+emdx run "analyze the auth module"
+
+# Run multiple tasks in parallel
+emdx run "task1" "task2" "task3"
+
+# Run document IDs as tasks (content becomes the task)
+emdx run 5350 5351 5352
+
+# Add synthesis to combine outputs
+emdx run --synthesize "analyze" "review" "plan"
+
+# Control concurrency
+emdx run -j 3 "task1" "task2" "task3" "task4" "task5"
+
+# Set a title for the run (shows in Activity view)
+emdx run -T "Auth Analysis" "check login" "check logout"
+```
+
+### Dynamic Task Discovery
+
+Discover tasks at runtime using shell commands:
+
+```bash
+# Discover from git branches
+emdx run -d "git branch -r | grep feature" -t "Review branch {{task}}"
+
+# Discover from PR list
+emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{task}}"
+
+# Discover from file patterns
+emdx run -d "fd -e py -d 1 src/" -t "Analyze {{task}}"
+```
+
+### Presets
+
+Save common configurations for reuse:
+
+```bash
+# Use a preset
+emdx run -p fix-conflicts
+
+# Presets can include discovery commands, templates, and synthesis settings
+# Manage presets via: emdx workflow preset
+```
+
+### Options Reference
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--title` | `-T` | Title for this run (shows in Activity) |
+| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--synthesize` | `-s` | Combine outputs with synthesis stage |
+| `--preset` | `-p` | Use a saved preset |
+| `--discover` | `-d` | Shell command to discover tasks |
+| `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
+
+### When to Use `emdx run` vs `emdx workflow`
+
+| Use `emdx run` when... | Use `emdx workflow` when... |
+|------------------------|----------------------------|
+| Quick, ad-hoc parallel tasks | Complex multi-stage workflows |
+| Simple task lists | Need iterative or adversarial modes |
+| One-off discovery commands | Custom stage configurations |
+| Just want tasks done fast | Need detailed run monitoring |
+
+---
+
+## ✨ AI-Powered Knowledge Base
+
+The `emdx ai` commands provide semantic search and Q&A capabilities over your knowledge base using embeddings and LLMs.
+
+### Getting Started
+
+```bash
+# Build the embedding index (one-time, ~1-2 minutes)
+emdx ai index
+
+# Check index status
+emdx ai stats
+```
+
+### Semantic Search
+
+Find documents by meaning, not just keywords:
+
+```bash
+# Search for conceptually related documents
+emdx ai search "authentication flow"
+emdx ai search "error handling patterns" --limit 10
+
+# Filter by project
+emdx ai search "database optimization" --project myapp
+
+# Adjust similarity threshold (0-1)
+emdx ai search "caching strategy" --threshold 0.5
+```
+
+### Find Similar Documents
+
+```bash
+# Find documents similar to a given document
+emdx ai similar 42
+emdx ai similar 42 --limit 10
+```
+
+### Q&A with Claude API
+
+Ask questions and get synthesized answers (requires `ANTHROPIC_API_KEY`):
+
+```bash
+# Ask questions about your knowledge base
+emdx ai ask "What's our caching strategy?"
+emdx ai ask "How did we solve the auth bug?" --project myapp
+
+# Reference specific documents
+emdx ai ask "What does ticket AUTH-123 involve?"
+
+# Force keyword search (no embeddings)
+emdx ai ask "recent changes" --keyword
+```
+
+### Context Retrieval (for Claude CLI)
+
+Retrieve context and pipe to the `claude` CLI to use your Claude Max subscription instead of API:
+
+```bash
+# Basic usage - pipe to claude
+emdx ai context "How does the workflow system work?" | claude
+
+# With a specific prompt
+emdx ai context "What are the tag conventions?" | claude "summarize briefly"
+
+# Limit docs and filter by project
+emdx ai context "error handling" --limit 5 --project emdx | claude
+
+# Raw docs without question
+emdx ai context "auth patterns" --no-question | claude "list the patterns"
+```
+
+### Index Management
+
+```bash
+# Build index for new documents only
+emdx ai index
+
+# Force reindex everything
+emdx ai index --force
+
+# Check index statistics
+emdx ai stats
+
+# Clear all embeddings (requires reindexing)
+emdx ai clear --yes
+```
+
+### Commands Reference
+
+| Command | Description | Needs API Key? |
+|---------|-------------|----------------|
+| `emdx ai index` | Build/update embedding index | No |
+| `emdx ai search` | Semantic search | No |
+| `emdx ai similar` | Find similar documents | No |
+| `emdx ai stats` | Show index statistics | No |
+| `emdx ai clear` | Clear embedding index | No |
+| `emdx ai ask` | Q&A with Claude API | **Yes** |
+| `emdx ai context` | Get context for piping | No |
+
+### How It Works
+
+1. **Indexing**: Documents are converted to 384-dimensional vectors using `all-MiniLM-L6-v2` (runs locally, no API cost)
+2. **Search**: Queries are vectorized and compared using cosine similarity
+3. **Fallback**: If embeddings aren't available, falls back to keyword search (FTS5)
+4. **Q&A**: Top-N relevant docs are sent to Claude as context for answering
+
+### Tips
+
+- Run `emdx ai index` periodically to index new documents
+- Use `emdx ai context | claude` to avoid API costs (uses Claude Max)
+- Semantic search works best with natural language queries
+- Lower threshold values (0.2-0.3) return more results but less relevant
+
+---
+
 This CLI provides powerful knowledge management with intuitive commands and comprehensive execution tracking, all optimized for developer workflows and productivity.
