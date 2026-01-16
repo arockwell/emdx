@@ -1490,6 +1490,40 @@ def migration_025_add_standalone_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_026_add_embeddings(conn: sqlite3.Connection):
+    """Add document embeddings table for semantic search.
+
+    Stores vector embeddings computed by sentence-transformers for
+    semantic similarity search and RAG (retrieval-augmented generation).
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            model_name TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            dimension INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(document_id, model_name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_embeddings_document
+        ON document_embeddings(document_id)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_embeddings_model
+        ON document_embeddings(model_name)
+    """)
+
+    conn.commit()
+
 
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
@@ -1519,6 +1553,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (23, "Deactivate legacy builtin workflows", migration_023_deactivate_legacy_workflows),
     (24, "Remove agent system tables", migration_024_remove_agent_tables),
     (25, "Add standalone presets", migration_025_add_standalone_presets),
+    (26, "Add embeddings for semantic search", migration_026_add_embeddings),
 ]
 
 

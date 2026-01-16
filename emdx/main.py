@@ -28,6 +28,7 @@ from emdx.commands.keybindings import app as keybindings_app
 from emdx.commands.preset import app as preset_app
 from emdx.commands.run import run as run_command
 from emdx.commands.groups import app as groups_app
+from emdx.commands.ask import app as ask_app
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -95,6 +96,9 @@ app.add_typer(keybindings_app, name="keybindings", help="Manage TUI keybindings"
 
 # Add preset management as a subcommand group
 app.add_typer(preset_app, name="preset", help="Manage run presets")
+
+# Add AI-powered features (ask, semantic search, embeddings)
+app.add_typer(ask_app, name="ai", help="AI-powered Q&A and semantic search")
 
 # Add the run command for quick task execution
 app.command(name="run")(run_command)

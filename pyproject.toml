@@ -36,6 +36,9 @@ google-auth-httplib2 = "^0.2.0"
 google-auth-oauthlib = "^1.2.0"
 scikit-learn = "^1.6.0"  # TF-IDF similarity
 datasketch = "^1.6.0"  # MinHash/LSH for O(n) duplicate detection
+sentence-transformers = "^3.0.0"  # Local embeddings for semantic search
+anthropic = "^0.40.0"  # Claude API for RAG Q&A
+numpy = "^1.26.0"  # Vector operations for embeddings
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
