@@ -50,6 +50,7 @@ class DocumentBrowser(Widget):
         Binding("k", "cursor_up", "Up"),
         Binding("g", "cursor_top", "Top"),
         Binding("G", "cursor_bottom", "Bottom"),
+        Binding("i", "create_gist", "Gist"),
         Binding("e", "edit_document", "Edit"),
         Binding("n", "new_document", "New"),
         Binding("/", "search", "Search"),
@@ -664,7 +665,41 @@ class DocumentBrowser(Widget):
         """Move cursor up."""
         table = self.query_one("#doc-table", DataTable)
         table.action_cursor_up()
-        
+
+    async def action_create_gist(self) -> None:
+        """Create a copy of the currently selected document."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.cursor_row is None:
+            self.update_status("No document selected")
+            return
+
+        doc_item = self.presenter.get_document_at_index(table.cursor_row)
+        if not doc_item:
+            self.update_status("No document selected")
+            return
+
+        doc_detail = self.presenter.get_document_detail(doc_item.id)
+        if not doc_detail:
+            self.update_status("Could not load document")
+            return
+
+        try:
+            from emdx.database.documents import save_document
+            from emdx.utils.git import get_git_project
+
+            project = get_git_project()
+            new_doc_id = save_document(
+                title=f"{doc_detail.title} (copy)",
+                content=doc_detail.content,
+                project=project,
+            )
+
+            self.update_status(f"Created gist #{new_doc_id}")
+            await self.load_documents()
+
+        except Exception as e:
+            self.update_status(f"Error: {e}")
+
     def action_cursor_top(self) -> None:
         """Move cursor to top."""
         table = self.query_one("#doc-table", DataTable)
