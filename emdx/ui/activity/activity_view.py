@@ -269,16 +269,16 @@ class ActivityView(Widget):
     }
 
     #activity-panel {
-        width: 45%;
+        width: 40%;
         height: 100%;
     }
 
     #activity-list-section {
-        height: 60%;
+        height: 70%;
     }
 
     #context-section {
-        height: 40%;
+        height: 30%;
         border-top: solid $secondary;
     }
 
@@ -297,7 +297,7 @@ class ActivityView(Widget):
     }
 
     #preview-panel {
-        width: 55%;
+        width: 60%;
         height: 100%;
         border-left: solid $primary;
     }
@@ -402,14 +402,12 @@ class ActivityView(Widget):
 
     async def on_mount(self) -> None:
         """Initialize the view."""
-        # Setup activity table
+        # Setup activity table - Icon, Time, Title (dynamic), ID
         table = self.query_one("#activity-table", DataTable)
         table.add_column("", width=2)  # Combined status/type icon
         table.add_column("Time", width=4)
-        table.add_column("Title", width=48)  # Expanded further
+        table.add_column("Title")  # Dynamic width - no fixed width
         table.add_column("ID", width=6)  # Document/workflow ID
-        table.add_column("Dur", width=6)  # Duration (for workflows)
-        table.add_column("Cost", width=7)
 
         await self.load_data()
         table.focus()
@@ -531,7 +529,7 @@ class ActivityView(Widget):
                 item = ActivityItem(
                     item_type="workflow",
                     item_id=run["id"],
-                    title=title[:50],  # Allow longer titles (truncated in render)
+                    title=title,
                     status=run.get("status", "unknown"),
                     timestamp=started,
                     cost=cost,
@@ -653,7 +651,7 @@ class ActivityView(Widget):
                 item = ActivityItem(
                     item_type="group",
                     item_id=group_id,
-                    title=group["name"][:50],
+                    title=group["name"],
                     status="completed",
                     timestamp=created,
                     cost=group.get("total_cost_usd", 0) or 0,
@@ -705,7 +703,7 @@ class ActivityView(Widget):
                 item = ActivityItem(
                     item_type="document",
                     item_id=doc_id,
-                    title=title[:50] if title else "Untitled",
+                    title=title or "Untitled",
                     status="completed",
                     timestamp=created,
                     doc_id=doc_id,
@@ -814,15 +812,10 @@ class ActivityView(Widget):
                 bar = "█" * filled_full + partial + "░" * empty
                 progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
 
-            # Truncate title to fit badge/progress within column width (48 chars)
+            # Build title with prefix and suffix (progress bar or badge)
             prefix = f"{indent}{expand}"
-            prefix_len = len(prefix)
-            # Use progress_str for running, badge for completed
             suffix = progress_str if progress_str else badge
-            suffix_len = len(suffix)
-            max_title_len = 48 - prefix_len - suffix_len
-            truncated_title = item.title[:max_title_len] if len(item.title) > max_title_len else item.title
-            title = f"{prefix}{truncated_title}{suffix}"
+            title = f"{prefix}{item.title}{suffix}"
             # Show appropriate ID based on item type
             # - Workflows: show workflow run ID (item_id)
             # - Documents/explorations: show doc_id
@@ -844,28 +837,7 @@ class ActivityView(Widget):
             else:
                 id_str = f"#{item.item_id}" if item.item_id else "—"
 
-            # Format duration for workflows and individual runs
-            duration_str = "—"
-            duration_ms = None
-            if item.workflow_run and item.workflow_run.get("total_execution_time_ms"):
-                duration_ms = item.workflow_run["total_execution_time_ms"]
-            elif item.individual_run and item.individual_run.get("execution_time_ms"):
-                duration_ms = item.individual_run["execution_time_ms"]
-
-            if duration_ms:
-                total_secs = duration_ms / 1000
-                if total_secs >= 3600:
-                    duration_str = f"{total_secs/3600:.1f}h"
-                elif total_secs >= 60:
-                    mins = int(total_secs / 60)
-                    secs = int(total_secs % 60)
-                    duration_str = f"{mins}m{secs:02d}s" if secs else f"{mins}m"
-                else:
-                    duration_str = f"{int(total_secs)}s"
-
-            cost = format_cost(item.cost) if item.cost else "—"
-
-            table.add_row(icon, time_str, title, id_str, duration_str, cost)
+            table.add_row(icon, time_str, title, id_str)
 
         # Restore selection
         if self.flat_items and self.selected_idx < len(self.flat_items):
@@ -1086,11 +1058,7 @@ class ActivityView(Widget):
         show_markdown()
 
     async def _update_context_panel(self) -> None:
-        """Update the context panel with details about selected item.
-
-        Shows workflow run details (tasks, stages, outputs) for workflows,
-        or document metadata for documents.
-        """
+        """Update the context panel with details about selected item."""
         try:
             context_content = self.query_one("#context-content", RichLog)
             context_header = self.query_one("#context-header", Static)
@@ -1110,24 +1078,15 @@ class ActivityView(Widget):
         # Workflow run details
         if item.item_type == "workflow" and item.workflow_run:
             await self._show_workflow_context(item, context_content, context_header)
-        # Document details (standalone, not from workflow)
-        elif item.item_type == "document" and item.doc_id:
+        # Document details
+        elif item.doc_id:
             await self._show_document_context(item, context_content, context_header)
         # Group details
         elif item.item_type == "group":
             await self._show_group_context(item, context_content, context_header)
         # Individual run details
-        elif item.item_type == "individual_run":
+        elif item.item_type == "individual_run" or item.individual_run:
             await self._show_individual_run_context(item, context_content, context_header)
-        # Synthesis/Exploration with individual_run data - show run info
-        elif item.individual_run and item.item_type in ("synthesis", "exploration"):
-            await self._show_individual_run_context(item, context_content, context_header)
-        # Synthesis details (no run data)
-        elif item.item_type == "synthesis" and item.doc_id:
-            await self._show_document_context(item, context_content, context_header)
-        # Exploration details (no run data)
-        elif item.item_type == "exploration" and item.doc_id:
-            await self._show_document_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
             context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
@@ -1144,7 +1103,7 @@ class ActivityView(Widget):
         status_colors = {"completed": "green", "failed": "red", "running": "yellow"}
         status_color = status_colors.get(status, "white")
 
-        header.update(f"⚡ Run #{run['id']} [{status_color}]{status}[/{status_color}]")
+        header.update(f"⚡ #{run['id']} [{status_color}]{status}[/{status_color}]")
 
         # Timing info as compact line
         timing_parts = []
@@ -1152,7 +1111,7 @@ class ActivityView(Widget):
             secs = run["total_execution_time_ms"] / 1000
             timing_parts.append(f"{secs:.1f}s" if secs < 60 else f"{secs/60:.1f}m")
         if run.get("total_tokens_used"):
-            timing_parts.append(f"{run['total_tokens_used']:,} tok")
+            timing_parts.append(f"{format_tokens(run['total_tokens_used'])}")
         if item.cost:
             timing_parts.append(format_cost(item.cost))
         if timing_parts:
@@ -1166,33 +1125,15 @@ class ActivityView(Widget):
                     vars_data = json.loads(vars_data)
                 tasks = vars_data.get("tasks", [])
                 if tasks:
-                    content.write("")
-                    content.write(f"[bold cyan]─── Tasks ({len(tasks)}) ───[/bold cyan]")
-                    # Get available width from context panel
-                    try:
-                        context_section = self.query_one("#context-section")
-                        wrap_width = max(context_section.size.width - 4, 40)  # Leave padding
-                    except Exception:
-                        wrap_width = 60  # Fallback
-                    # Calculate indent width based on max number (e.g., "10. " = 4 chars)
-                    max_num_width = len(str(len(tasks))) + 2  # +2 for ". "
-                    indent = " " * max_num_width
-                    for i, task in enumerate(tasks):
-                        # Right-align number so all text starts at same column
-                        num_str = f"{i+1}.".rjust(max_num_width - 1) + " "
+                    content.write(f"[bold cyan]Tasks ({len(tasks)})[/bold cyan]")
+                    for i, task in enumerate(tasks[:5]):  # Show first 5
                         if isinstance(task, int):
-                            content.write(f"{num_str}[cyan]#{task}[/cyan]")
+                            content.write(f"  {i+1}. [cyan]#{task}[/cyan]")
                         else:
-                            # Wrap with hanging indent
-                            import textwrap
-                            task_str = str(task)
-                            wrapped = textwrap.fill(
-                                task_str,
-                                width=wrap_width,
-                                initial_indent=num_str,
-                                subsequent_indent=indent,
-                            )
-                            content.write(wrapped)
+                            task_str = str(task)[:60]
+                            content.write(f"  {i+1}. {task_str}")
+                    if len(tasks) > 5:
+                        content.write(f"  [dim]... +{len(tasks)-5} more[/dim]")
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -1200,37 +1141,14 @@ class ActivityView(Widget):
         if HAS_WORKFLOWS and wf_db:
             stage_runs = wf_db.list_stage_runs(run["id"])
             if stage_runs:
-                content.write("")
-                content.write(f"[bold cyan]─── Stages ({len(stage_runs)}) ───[/bold cyan]")
+                content.write(f"[bold cyan]Stages[/bold cyan]")
                 for sr in stage_runs:
-                    icon = {
-                        "completed": "[green]✓[/green]",
-                        "failed": "[red]✗[/red]",
-                        "running": "[yellow]⟳[/yellow]",
-                        "pending": "[dim]○[/dim]",
-                    }.get(sr["status"], "[dim]○[/dim]")
-                    progress = f"[dim]{sr['runs_completed']}/{sr['target_runs']}[/dim]"
-                    content.write(f"{icon} {sr['stage_name']} {progress}")
-
-        # Output documents
-        output_ids = []
-        if run.get("output_doc_ids"):
-            try:
-                output_ids = json.loads(run["output_doc_ids"]) if isinstance(run["output_doc_ids"], str) else run["output_doc_ids"]
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-        if output_ids:
-            content.write("")
-            content.write(f"[bold cyan]─── Outputs ({len(output_ids)}) ───[/bold cyan]")
-            for doc_id in output_ids:
-                content.write(f"[cyan]#{doc_id}[/cyan]")
+                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
+                    content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
 
         # Error if any
         if run.get("error_message"):
-            content.write("")
-            content.write("[bold red]─── Error ───[/bold red]")
-            content.write(f"[red]{run['error_message']}[/red]")
+            content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
 
     async def _show_document_context(
         self, item: ActivityItem, content: RichLog, header: Static
@@ -1238,49 +1156,31 @@ class ActivityView(Widget):
         """Show document metadata in context panel."""
         if not HAS_DOCS or not item.doc_id:
             header.update("DOCUMENT")
-            content.write("[dim]Document not found[/dim]")
             return
 
         try:
             doc = doc_db.get_document(item.doc_id)
             if not doc:
                 header.update(f"📄 #{item.doc_id}")
-                content.write("[dim]Document not found[/dim]")
                 return
 
             header.update(f"📄 #{doc['id']}")
 
-            # Compact metadata line
+            # Compact metadata
             meta_parts = []
-            if doc.get("project"):
-                meta_parts.append(doc["project"])
             doc_content = doc.get("content", "")
             word_count = len(doc_content.split())
             meta_parts.append(f"{word_count} words")
-            if doc.get("access_count"):
-                meta_parts.append(f"{doc['access_count']} views")
+            if doc.get("project"):
+                meta_parts.append(doc["project"])
             content.write(f"[dim]{' · '.join(meta_parts)}[/dim]")
 
             # Tags
-            tags = doc.get("tags", "")
-            if tags:
-                content.write("")
-                content.write(f"[bold cyan]─── Tags ───[/bold cyan]")
-                content.write(f"{tags}")
-
-            # Dates
-            content.write("")
-            content.write(f"[bold cyan]─── Info ───[/bold cyan]")
-            if doc.get("created_at"):
-                created = str(doc["created_at"])[:16]
-                content.write(f"Created: [dim]{created}[/dim]")
-            if doc.get("updated_at"):
-                updated = str(doc["updated_at"])[:16]
-                content.write(f"Updated: [dim]{updated}[/dim]")
+            if doc.get("tags"):
+                content.write(f"Tags: {doc['tags']}")
 
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
-            content.write(f"[red]Error loading document[/red]")
 
     async def _show_group_context(
         self, item: ActivityItem, content: RichLog, header: Static
@@ -1288,127 +1188,53 @@ class ActivityView(Widget):
         """Show group details in context panel."""
         if not HAS_GROUPS:
             header.update("GROUP")
-            content.write("[dim]Groups not available[/dim]")
             return
 
         try:
             group = groups_db.get_group(item.item_id)
             if not group:
                 header.update(f"📦 #{item.item_id}")
-                content.write("[dim]Group not found[/dim]")
                 return
 
-            header.update(f"📦 #{group['id']} {group['name']}")
+            header.update(f"📦 {group['name']}")
+            content.write(f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]")
 
-            # Compact metadata line
-            meta_parts = [group.get('group_type', 'batch')]
-            meta_parts.append(f"{group.get('doc_count', 0)} docs")
-            if group.get("project"):
-                meta_parts.append(group["project"])
-            content.write(f"[dim]{' · '.join(meta_parts)}[/dim]")
-
-            # Description
             if group.get("description"):
-                content.write("")
-                content.write(f"{group['description']}")
-
-            # Child groups
-            child_groups = groups_db.get_child_groups(item.item_id)
-            if child_groups:
-                content.write("")
-                content.write(f"[bold cyan]─── Child Groups ({len(child_groups)}) ───[/bold cyan]")
-                for cg in child_groups:
-                    content.write(f"[cyan]#{cg['id']}[/cyan] {cg['name']}")
-
-            # Members
-            members = groups_db.get_group_members(item.item_id)
-            if members:
-                content.write("")
-                content.write(f"[bold cyan]─── Members ({len(members)}) ───[/bold cyan]")
-                for m in members:
-                    title = m.get("title", "Untitled")
-                    content.write(f"[cyan]#{m['id']}[/cyan] {title}")
+                content.write(f"{group['description'][:100]}")
 
         except Exception as e:
             logger.error(f"Error showing group context: {e}")
-            content.write(f"[red]Error loading group[/red]")
 
     async def _show_individual_run_context(
         self, item: ActivityItem, content: RichLog, header: Static
     ) -> None:
         """Show individual run details in context panel."""
-        if not HAS_WORKFLOWS:
-            header.update("RUN")
-            content.write("[dim]Run details not available[/dim]")
-            return
-
-        # Get individual run data - check individual_run first, then workflow_run, then fetch
         run = item.individual_run or item.workflow_run
-        if not run and item.item_id:
-            try:
-                run = wf_db.get_individual_run(item.item_id)
-            except Exception as e:
-                logger.debug(f"Could not fetch individual run {item.item_id}: {e}")
-
         if not run:
             header.update("RUN")
-            content.write(f"[dim]{item.title}[/dim]")
             return
 
         status = run.get("status", item.status or "unknown")
-        status_colors = {"completed": "green", "failed": "red", "running": "yellow", "pending": "dim"}
+        status_colors = {"completed": "green", "failed": "red", "running": "yellow"}
         status_color = status_colors.get(status, "white")
 
         run_num = run.get("run_number", "?")
         header.update(f"🤖 Run {run_num} [{status_color}]{status}[/{status_color}]")
 
-        # Compact stats line
+        # Stats
         stats_parts = []
         if run.get("execution_time_ms"):
             secs = run["execution_time_ms"] / 1000
-            if secs >= 60:
-                mins = int(secs / 60)
-                secs_rem = int(secs % 60)
-                stats_parts.append(f"{mins}m{secs_rem}s")
-            else:
-                stats_parts.append(f"{secs:.1f}s")
-        # Show input/output tokens if available, otherwise total
+            stats_parts.append(f"{secs:.1f}s")
         if run.get("input_tokens") or run.get("output_tokens"):
-            in_tok = run.get("input_tokens", 0)
-            out_tok = run.get("output_tokens", 0)
-            # Format with k suffix for readability
-            in_str = f"{in_tok/1000:.0f}k" if in_tok >= 1000 else str(in_tok)
-            out_str = f"{out_tok/1000:.0f}k" if out_tok >= 1000 else str(out_tok)
-            stats_parts.append(f"{in_str}↓ {out_str}↑")
-        elif run.get("tokens_used"):
-            stats_parts.append(f"{run['tokens_used']:,} tok")
+            stats_parts.append(f"{format_tokens(run.get('input_tokens', 0))}↓ {format_tokens(run.get('output_tokens', 0))}↑")
         if run.get("cost_usd"):
             stats_parts.append(f"${run['cost_usd']:.2f}")
         if stats_parts:
             content.write(f"[dim]{' · '.join(stats_parts)}[/dim]")
 
-        # Input/Prompt - what was passed to the run
-        if run.get("prompt_used"):
-            content.write("")
-            content.write(f"[bold cyan]─── Prompt ───[/bold cyan]")
-            content.write(f"{run['prompt_used']}")
-
-        if run.get("input_context"):
-            content.write("")
-            content.write(f"[bold cyan]─── Input Context ───[/bold cyan]")
-            content.write(f"{run['input_context']}")
-
-        # Output
-        if run.get("output_doc_id"):
-            content.write("")
-            content.write(f"[bold cyan]─── Output ───[/bold cyan]")
-            content.write(f"[cyan]#{run['output_doc_id']}[/cyan]")
-
-        # Error
         if run.get("error_message"):
-            content.write("")
-            content.write("[bold red]─── Error ───[/bold red]")
-            content.write(f"[red]{run['error_message']}[/red]")
+            content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
 
     async def _show_workflow_summary(self, item: ActivityItem) -> None:
         """Show workflow summary in preview."""
