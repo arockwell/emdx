@@ -209,8 +209,8 @@ def save(
     ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
     suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
-    no_supersede: bool = typer.Option(
-        False, "--no-supersede", help="Don't auto-supersede existing docs with same title"
+    supersede: bool = typer.Option(
+        False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
@@ -228,7 +228,7 @@ def save(
 
     # Step 4.5: Check for supersede candidate (before creating new doc)
     supersede_target = None
-    if not no_supersede:
+    if supersede:
         supersede_target = find_supersede_candidate(
             title=metadata.title,
             project=metadata.project,
