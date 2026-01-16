@@ -246,6 +246,7 @@ class ActivityView(Widget):
         ("r", "refresh", "Refresh"),
         ("g", "add_to_group", "Add to Group"),
         ("G", "create_group", "Create Group"),
+        ("i", "create_gist", "New Gist"),
         ("u", "ungroup", "Ungroup"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
@@ -2191,6 +2192,50 @@ class ActivityView(Widget):
     def on_unmount(self) -> None:
         """Cleanup on unmount."""
         self._stop_stream()
+
+    # Gist/quick document creation
+
+    async def action_create_gist(self) -> None:
+        """Create a copy of the currently selected document."""
+        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+            self._show_notification("No item selected", is_error=True)
+            return
+
+        item = self.flat_items[self.selected_idx]
+
+        if not item.doc_id:
+            self._show_notification("Select a document to gist", is_error=True)
+            return
+
+        if not HAS_DOCS or not doc_db:
+            self._show_notification("Documents not available", is_error=True)
+            return
+
+        try:
+            doc = doc_db.get_document(item.doc_id)
+            if not doc:
+                self._show_notification("Document not found", is_error=True)
+                return
+
+            title = doc.get("title", "Untitled")
+            content = doc.get("content", "")
+
+            from emdx.database.documents import save_document
+            from emdx.utils.git import get_git_project
+
+            project = get_git_project()
+            new_doc_id = save_document(
+                title=f"{title} (copy)",
+                content=content,
+                project=project,
+            )
+
+            self._show_notification(f"Created gist #{new_doc_id}")
+            await self._refresh_data()
+
+        except Exception as e:
+            logger.error(f"Error creating gist: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
 
     # Group management actions
 
