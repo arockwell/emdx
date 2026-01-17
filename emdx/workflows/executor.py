@@ -546,6 +546,9 @@ class WorkflowExecutor:
         # Synthesize results (skip for single task - nothing to synthesize)
         synthesis_doc_id = None
         if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+            # Emit synthesis phase status for UI display
+            wf_db.update_stage_run(stage_run_id, status='synthesizing')
+
             synthesis_result = await synthesize_outputs(
                 stage_run_id=stage_run_id,
                 output_doc_ids=output_doc_ids,
@@ -959,6 +962,9 @@ class WorkflowExecutor:
             # Step 4: Optional synthesis (skip for single task - nothing to synthesize)
             synthesis_doc_id = None
             if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+                # Emit synthesis phase status for UI display
+                wf_db.update_stage_run(stage_run_id, status='synthesizing')
+
                 synthesis_result = await synthesize_outputs(
                     stage_run_id=stage_run_id,
                     output_doc_ids=output_doc_ids,
