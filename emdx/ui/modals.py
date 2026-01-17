@@ -216,3 +216,140 @@ class KeybindingsHelpScreen(ModalScreen):
         if event.key not in ("escape", "question_mark", "q"):
             # Let specific bindings handle their keys
             pass
+
+
+class HelpMixin:
+    """Mixin to add ? keybinding help to any widget.
+
+    Usage:
+        class MyWidget(HelpMixin, Widget):
+            BINDINGS = [...]
+
+            # Optional: Override to customize help
+            HELP_TITLE = "My Widget"
+            HELP_CATEGORIES = {
+                "cursor_down": "Navigation",
+                "cursor_up": "Navigation",
+                ...
+            }
+
+    The mixin will auto-generate help from BINDINGS, or you can
+    override get_help_bindings() for full control.
+    """
+
+    # Override these in subclasses for customization
+    HELP_TITLE: str = "Keybindings"
+    HELP_CATEGORIES: dict = {}  # action_name -> category
+
+    # Default category mappings for common actions
+    _DEFAULT_CATEGORIES = {
+        # Navigation
+        "cursor_down": "Navigation",
+        "cursor_up": "Navigation",
+        "cursor_top": "Navigation",
+        "cursor_bottom": "Navigation",
+        "expand": "Navigation",
+        "collapse": "Navigation",
+        "expand_children": "Navigation",
+        "collapse_children": "Navigation",
+        "select": "Navigation",
+        "focus_next": "Navigation",
+        "focus_prev": "Navigation",
+        # Actions
+        "create_gist": "Actions",
+        "add_to_group": "Actions",
+        "create_group": "Actions",
+        "ungroup": "Actions",
+        "fullscreen": "Actions",
+        "refresh": "Actions",
+        "edit_document": "Editing",
+        "new_document": "Editing",
+        "add_tags": "Tags",
+        "remove_tags": "Tags",
+        "search": "Search",
+        "toggle_archived": "View",
+        "selection_mode": "View",
+        # General
+        "show_help": "General",
+        "quit": "General",
+    }
+
+    # Human-readable key names
+    _KEY_DISPLAY = {
+        "question_mark": "?",
+        "escape": "Esc",
+        "enter": "Enter",
+        "tab": "Tab",
+        "shift+tab": "Shift+Tab",
+        "up": "↑",
+        "down": "↓",
+        "left": "←",
+        "right": "→",
+        "space": "Space",
+    }
+
+    def get_help_bindings(self) -> List[Tuple[str, str, str]]:
+        """Get bindings formatted for help display.
+
+        Returns list of (category, key, description) tuples.
+        Override this method for full customization.
+        """
+        bindings_list = []
+        categories = {**self._DEFAULT_CATEGORIES, **self.HELP_CATEGORIES}
+
+        # Get BINDINGS from the class
+        raw_bindings = getattr(self, 'BINDINGS', [])
+
+        for binding in raw_bindings:
+            # Handle both tuple and Binding object formats
+            if hasattr(binding, 'key'):
+                # Textual Binding object
+                key = binding.key
+                action = binding.action
+                description = binding.description
+                show = getattr(binding, 'show', True)
+            else:
+                # Tuple format: (key, action, description)
+                key, action, description = binding[:3]
+                show = True
+
+            # Skip hidden bindings
+            if not show:
+                continue
+
+            # Skip internal actions
+            if action in ('close', 'cancel'):
+                continue
+
+            # Get category
+            category = categories.get(action, "Other")
+
+            # Format key for display
+            display_key = self._KEY_DISPLAY.get(key, key)
+
+            bindings_list.append((category, display_key, description))
+
+        # Sort by category, then by key
+        category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]
+
+        def sort_key(item):
+            cat = item[0]
+            try:
+                return (category_order.index(cat), item[1])
+            except ValueError:
+                return (len(category_order), item[1])
+
+        bindings_list.sort(key=sort_key)
+
+        # Add help binding at the end if not already present
+        has_help = any(b[2] == "Show this help" or b[1] == "?" for b in bindings_list)
+        if not has_help:
+            bindings_list.append(("General", "?", "Show this help"))
+
+        return bindings_list
+
+    def action_show_help(self) -> None:
+        """Show keybindings help modal."""
+        bindings = self.get_help_bindings()
+        title = getattr(self, 'HELP_TITLE', 'Keybindings')
+        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title=title))

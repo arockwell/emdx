@@ -22,7 +22,7 @@ from emdx.models.tags import get_document_tags
 from .presenters import DocumentBrowserPresenter
 from .viewmodels import DocumentDetailVM, DocumentListVM
 from .vim_editor import VimEditor
-from .modals import KeybindingsHelpScreen
+from .modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,10 @@ class TextAreaHost(Protocol):
         ...
 
 
-class DocumentBrowser(Widget):
+class DocumentBrowser(HelpMixin, Widget):
     """Document browser widget that can host text areas."""
+
+    HELP_TITLE = "Document Browser"
 
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
@@ -725,26 +727,6 @@ class DocumentBrowser(Widget):
     async def action_refresh(self) -> None:
         """Refresh the document list."""
         await self.load_documents()
-
-    def action_show_help(self) -> None:
-        """Show keybindings help modal."""
-        bindings = [
-            ("Navigation", "j / k", "Move down / up"),
-            ("Navigation", "g / G", "Go to top / bottom"),
-            ("Navigation", "l / h", "Expand / collapse children"),
-            ("Editing", "e", "Edit document"),
-            ("Editing", "n", "New document"),
-            ("Editing", "i", "Copy document (gist)"),
-            ("Tags", "t", "Add tags"),
-            ("Tags", "T", "Remove tags"),
-            ("Search", "/", "Search documents"),
-            ("Other", "s", "Selection mode"),
-            ("Other", "a", "Toggle archived"),
-            ("Other", "r", "Refresh"),
-            ("General", "?", "Show this help"),
-            ("General", "q", "Quit"),
-        ]
-        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title="Document Browser"))
 
     async def action_expand_children(self) -> None:
         """Expand children of the selected document."""

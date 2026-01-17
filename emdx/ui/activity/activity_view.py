@@ -31,7 +31,7 @@ from .activity_items import (
     ExplorationItem,
 )
 from .group_picker import GroupPicker
-from ..modals import KeybindingsHelpScreen
+from ..modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,10 @@ class AgentLogSubscriber(LogStreamSubscriber):
         logger.error(f"Log stream error: {error}")
 
 
-class ActivityView(Widget):
+class ActivityView(HelpMixin, Widget):
+    """Activity View - Mission Control for EMDX."""
+
+    HELP_TITLE = "Activity View"
     """Mission Control - the primary view for monitoring EMDX activity."""
 
     class ViewDocument(Message):
@@ -2005,24 +2008,6 @@ class ActivityView(Widget):
     def action_focus_prev(self) -> None:
         """Focus previous pane."""
         pass
-
-    def action_show_help(self) -> None:
-        """Show keybindings help modal."""
-        bindings = [
-            ("Navigation", "j / k", "Move down / up"),
-            ("Navigation", "Enter", "Expand / collapse"),
-            ("Navigation", "l / h", "Expand / collapse"),
-            ("Navigation", "Tab", "Next pane"),
-            ("Actions", "i", "Copy document (gist)"),
-            ("Actions", "g", "Add to group"),
-            ("Actions", "G", "Create new group"),
-            ("Actions", "u", "Remove from group"),
-            ("Actions", "f", "Fullscreen preview"),
-            ("Actions", "r", "Refresh"),
-            ("General", "?", "Show this help"),
-            ("General", "q", "Quit"),
-        ]
-        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title="Activity View"))
 
     async def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row selection change."""
