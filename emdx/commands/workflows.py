@@ -272,8 +272,11 @@ def run_workflow(
     ),
     max_concurrent: Optional[int] = typer.Option(
         None,
-        "--max-concurrent",
         "-j",
+        "--jobs",
+        "-P",
+        "--parallel",
+        "--max-concurrent",
         help="Override max concurrent executions for parallel/dynamic stages",
     ),
 ):
@@ -281,6 +284,31 @@ def run_workflow(
 
     Use --worktree (-w) when running multiple workflows in parallel to avoid
     git conflicts. Each workflow will get its own isolated worktree.
+
+    Examples:
+        # Run multiple tasks in parallel with a workflow
+        emdx workflow run task_parallel -t "Analyze auth module" -t "Review tests" -t "Check docs"
+
+        # Use document IDs as tasks (from previous analysis)
+        emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184
+
+        # Specify a custom title for the Activity view
+        emdx workflow run task_parallel -t "Task 1" -t "Task 2" --title "My Analysis Run"
+
+        # Use worktree isolation for parallel runs that modify files
+        emdx workflow run parallel_fix -t "Add type hints" -t "Fix imports" --worktree
+
+        # Specify base branch for worktree
+        emdx workflow run parallel_fix -t "Fix bug" --worktree --base-branch develop
+
+        # Limit concurrent executions
+        emdx workflow run task_parallel -t "Task 1" -t "Task 2" -t "Task 3" -j 2
+
+        # Use a preset with custom variable overrides
+        emdx workflow run task_parallel --preset security_audit --var depth=deep
+
+        # Save current run variables as a new preset
+        emdx workflow run task_parallel -t "Review code" --var topic=Performance --save-as perf_review
     """
     worktree_path = None
 

@@ -115,7 +115,7 @@ def create(
         help="What to do with each {{item}}"
     ),
     parallel: int = typer.Option(
-        3, "-j", "--parallel",
+        3, "-j", "--jobs", "-P", "--parallel",
         help="Max concurrent executions"
     ),
     synthesize: Optional[str] = typer.Option(
@@ -398,7 +398,7 @@ def run_command(
         help="Override discovery command"
     ),
     parallel: int = typer.Option(
-        3, "-j", "--parallel",
+        3, "-j", "--jobs", "-P", "--parallel",
         help="Max concurrent executions"
     ),
     synthesize: Optional[str] = typer.Option(
@@ -433,7 +433,7 @@ def main(
         help="Prompt for one-off execution"
     ),
     parallel: int = typer.Option(
-        3, "-j", "--parallel",
+        3, "-j", "--jobs", "-P", "--parallel",
         help="Max concurrent executions"
     ),
     synthesize: Optional[str] = typer.Option(
