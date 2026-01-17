@@ -4,7 +4,10 @@ Handles {{variable}} substitution in workflow prompts and configuration.
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emdx.workflows.tasks import TaskContext
 
 
 def resolve_template(template: Optional[str], context: Dict[str, Any]) -> str:
@@ -52,7 +55,7 @@ def resolve_template(template: Optional[str], context: Dict[str, Any]) -> str:
 
 def expand_tasks_to_prompts(
     prompt_template: str,
-    tasks: List[Any],
+    tasks: List["TaskContext"],
 ) -> List[str]:
     """Expand a prompt template with a list of tasks.
 
