@@ -1,7 +1,8 @@
 """Pipeline Browser - TUI for viewing and managing the streaming pipeline."""
 
 import logging
-from typing import Optional
+from datetime import datetime
+from typing import Optional, List, Dict, Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -13,103 +14,212 @@ from textual.widgets import DataTable, Static, MarkdownViewer
 
 from emdx.database.documents import (
     get_document,
-    get_oldest_at_stage,
     get_pipeline_stats,
     list_documents_at_stage,
     update_document_stage,
 )
+from emdx.database.connection import db_connection
 
 logger = logging.getLogger(__name__)
 
 # Pipeline stages in order
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
-STAGE_COLORS = {
-    "idea": "cyan",
-    "prompt": "yellow",
-    "analyzed": "green",
-    "planned": "blue",
-    "done": "dim",
+STAGE_EMOJI = {
+    "idea": "💡",
+    "prompt": "📝",
+    "analyzed": "🔍",
+    "planned": "📋",
+    "done": "✅",
+}
+NEXT_STAGE = {
+    "idea": "prompt",
+    "prompt": "analyzed",
+    "analyzed": "planned",
+    "planned": "done",
 }
 
 
-class StageColumn(Widget):
-    """A column representing one pipeline stage."""
+def get_recent_pipeline_activity(limit: int = 20) -> List[Dict[str, Any]]:
+    """Get recent pipeline activity from executions and document changes."""
+    with db_connection.get_connection() as conn:
+        # Get recent executions related to pipeline
+        cursor = conn.execute(
+            """
+            SELECT
+                e.id,
+                e.doc_id,
+                e.doc_title,
+                e.status,
+                e.started_at,
+                e.completed_at,
+                d.stage,
+                d.parent_id
+            FROM executions e
+            LEFT JOIN documents d ON e.doc_id = d.id
+            WHERE e.doc_title LIKE 'Pipeline:%' OR d.stage IS NOT NULL
+            ORDER BY e.started_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            results.append({
+                "exec_id": row[0],
+                "doc_id": row[1],
+                "doc_title": row[2],
+                "status": row[3],
+                "started_at": row[4],
+                "completed_at": row[5],
+                "stage": row[6],
+                "parent_id": row[7],
+            })
+        return results
+
+
+class StageSummaryBar(Widget):
+    """Compact bar showing all stages with counts and current selection."""
 
     DEFAULT_CSS = """
-    StageColumn {
-        width: 1fr;
-        height: 100%;
-        border: solid $primary;
+    StageSummaryBar {
+        height: 3;
+        background: $surface;
         padding: 0 1;
     }
 
-    StageColumn.selected {
-        border: double $accent;
-    }
-
-    StageColumn .stage-header {
-        height: 2;
+    StageSummaryBar #stage-bar {
+        height: 1;
         text-align: center;
-        background: $surface;
-        padding: 0;
     }
 
-    StageColumn .stage-count {
+    StageSummaryBar #stage-detail {
         height: 1;
         text-align: center;
         color: $text-muted;
     }
+    """
 
-    StageColumn .stage-docs {
-        height: 1fr;
+    current_stage = reactive("idea")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.stats: Dict[str, int] = {}
+
+    def compose(self) -> ComposeResult:
+        yield Static("", id="stage-bar")
+        yield Static("", id="stage-detail")
+
+    def refresh_stats(self) -> None:
+        """Refresh stage statistics."""
+        self.stats = get_pipeline_stats()
+        self._update_display()
+
+    def _update_display(self) -> None:
+        """Update the display."""
+        bar = self.query_one("#stage-bar", Static)
+        detail = self.query_one("#stage-detail", Static)
+
+        # Build stage bar with arrows
+        parts = []
+        for stage in STAGES:
+            count = self.stats.get(stage, 0)
+            emoji = STAGE_EMOJI.get(stage, "")
+
+            if stage == self.current_stage:
+                # Highlighted current stage
+                parts.append(f"[bold reverse] {emoji} {stage.upper()} ({count}) [/]")
+            elif count > 0:
+                parts.append(f"[bold]{emoji} {stage}[/bold] ({count})")
+            else:
+                parts.append(f"[dim]{emoji} {stage} (0)[/dim]")
+
+        bar.update(" → ".join(parts))
+
+        # Show detail for current stage
+        count = self.stats.get(self.current_stage, 0)
+        if count > 0:
+            detail.update(f"[bold]← h[/bold] prev stage │ [bold]l →[/bold] next stage │ {count} document{'s' if count != 1 else ''} at {self.current_stage}")
+        else:
+            detail.update(f"[bold]← h[/bold] prev stage │ [bold]l →[/bold] next stage │ No documents at {self.current_stage}")
+
+
+class DocumentList(Widget):
+    """List of documents at the current stage with more detail."""
+
+    DEFAULT_CSS = """
+    DocumentList {
+        height: 100%;
+        border: solid $primary;
     }
 
-    StageColumn DataTable {
+    DocumentList #doc-table {
         height: 100%;
+    }
+
+    DocumentList.focused {
+        border: double $accent;
     }
     """
 
-    selected = reactive(False)
+    class DocumentSelected(Message):
+        """Fired when a document is selected."""
+        def __init__(self, doc_id: int):
+            self.doc_id = doc_id
+            super().__init__()
 
-    def __init__(self, stage: str, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.stage = stage
-        self.docs = []
+        self.docs: List[Dict[str, Any]] = []
+        self.current_stage = "idea"
 
     def compose(self) -> ComposeResult:
-        color = STAGE_COLORS.get(self.stage, "white")
-        yield Static(f"[bold {color}]{self.stage.upper()}[/]", classes="stage-header")
-        yield Static("0 docs", classes="stage-count")
-        with Vertical(classes="stage-docs"):
-            table = DataTable(id=f"table-{self.stage}")
-            table.add_column("ID", width=5)
-            table.add_column("Title", width=20)
-            table.cursor_type = "row"
-            yield table
+        table = DataTable(id="doc-table")
+        table.add_column("ID", width=6)
+        table.add_column("Title", width=40)
+        table.add_column("Parent", width=8)
+        table.add_column("Created", width=12)
+        table.cursor_type = "row"
+        yield table
 
-    def watch_selected(self, selected: bool) -> None:
-        """Update styling when selection changes."""
-        self.set_class(selected, "selected")
+    def load_stage(self, stage: str) -> None:
+        """Load documents for a stage."""
+        self.current_stage = stage
+        self.docs = list_documents_at_stage(stage, limit=50)
+        self._refresh_table()
 
-    def refresh_docs(self) -> None:
-        """Refresh the documents list for this stage."""
-        self.docs = list_documents_at_stage(self.stage, limit=50)
-
-        # Update count
-        count_widget = self.query_one(".stage-count", Static)
-        count = len(self.docs)
-        count_widget.update(f"{count} doc{'s' if count != 1 else ''}")
-
-        # Update table
-        table = self.query_one(f"#table-{self.stage}", DataTable)
+    def _refresh_table(self) -> None:
+        """Refresh the table display."""
+        table = self.query_one("#doc-table", DataTable)
         table.clear()
+
+        if not self.docs:
+            return
+
         for doc in self.docs:
-            title = doc["title"][:18] + ".." if len(doc["title"]) > 20 else doc["title"]
-            table.add_row(str(doc["id"]), title, key=str(doc["id"]))
+            doc_id = str(doc["id"])
+
+            # Title - show more of it
+            title = doc["title"]
+            if title.startswith("Pipeline: "):
+                title = title[10:]  # Remove "Pipeline: " prefix
+            if len(title) > 38:
+                title = title[:35] + "..."
+
+            # Parent ID
+            parent = str(doc.get("parent_id") or "-")
+
+            # Created time
+            created = ""
+            if doc.get("created_at"):
+                created = doc["created_at"].strftime("%m/%d %H:%M")
+
+            table.add_row(doc_id, title, parent, created, key=doc_id)
 
     def get_selected_doc_id(self) -> Optional[int]:
-        """Get the currently selected document ID."""
-        table = self.query_one(f"#table-{self.stage}", DataTable)
+        """Get currently selected document ID."""
+        table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0 and table.cursor_row is not None:
             row_key = table.get_row_at(table.cursor_row)
             if row_key:
@@ -119,19 +229,33 @@ class StageColumn(Widget):
                     pass
         return None
 
+    def move_cursor(self, direction: int) -> None:
+        """Move cursor up (-1) or down (+1)."""
+        table = self.query_one("#doc-table", DataTable)
+        if table.row_count > 0:
+            if direction > 0:
+                table.action_cursor_down()
+            else:
+                table.action_cursor_up()
+
+            # Notify of selection change
+            doc_id = self.get_selected_doc_id()
+            if doc_id:
+                self.post_message(self.DocumentSelected(doc_id))
+
 
 class DocumentPreview(Widget):
-    """Preview pane for selected document."""
+    """Preview pane for selected document content."""
 
     DEFAULT_CSS = """
     DocumentPreview {
         height: 100%;
         border: solid $primary;
-        padding: 1;
+        padding: 0 1;
     }
 
-    DocumentPreview #preview-title {
-        height: 2;
+    DocumentPreview #preview-header {
+        height: 3;
         background: $surface;
         padding: 0 1;
     }
@@ -153,7 +277,7 @@ class DocumentPreview(Widget):
         self.current_doc_id: Optional[int] = None
 
     def compose(self) -> ComposeResult:
-        yield Static("[dim]Select a document to preview[/dim]", id="preview-title")
+        yield Static("[dim]Select a document to preview[/dim]", id="preview-header")
         yield MarkdownViewer("", id="preview-content", show_table_of_contents=False)
 
     def show_document(self, doc_id: int) -> None:
@@ -165,30 +289,122 @@ class DocumentPreview(Widget):
         doc = get_document(str(doc_id))
 
         if doc:
-            title_widget = self.query_one("#preview-title", Static)
-            title_widget.update(f"[bold]#{doc['id']}[/bold] {doc['title'][:50]}")
+            header = self.query_one("#preview-header", Static)
+
+            # Build header with more info
+            stage = doc.get("stage") or "none"
+            parent = doc.get("parent_id")
+            parent_info = f" [dim]← parent #{parent}[/dim]" if parent else ""
+
+            header.update(
+                f"[bold]#{doc['id']}[/bold] │ {STAGE_EMOJI.get(stage, '')} {stage}{parent_info}\n"
+                f"[dim]{doc['title'][:70]}[/dim]"
+            )
 
             content_widget = self.query_one("#preview-content", MarkdownViewer)
-            # Truncate very long content for preview
             content = doc["content"]
-            if len(content) > 5000:
-                content = content[:5000] + "\n\n[...truncated...]"
+            if len(content) > 8000:
+                content = content[:8000] + "\n\n[...truncated...]"
             content_widget.document.update(content)
 
     def clear(self) -> None:
         """Clear the preview."""
         self.current_doc_id = None
-        title_widget = self.query_one("#preview-title", Static)
-        title_widget.update("[dim]Select a document to preview[/dim]")
-        content_widget = self.query_one("#preview-content", MarkdownViewer)
-        content_widget.document.update("")
+        header = self.query_one("#preview-header", Static)
+        header.update("[dim]Select a document to preview[/dim]")
+        content = self.query_one("#preview-content", MarkdownViewer)
+        content.document.update("")
+
+
+class ActivityFeed(Widget):
+    """Shows recent pipeline activity."""
+
+    DEFAULT_CSS = """
+    ActivityFeed {
+        height: 8;
+        border: solid $primary;
+    }
+
+    ActivityFeed #activity-header {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    ActivityFeed #activity-table {
+        height: 1fr;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Static("[bold]Recent Activity[/bold]", id="activity-header")
+        table = DataTable(id="activity-table")
+        table.add_column("Time", width=8)
+        table.add_column("Doc", width=6)
+        table.add_column("Status", width=10)
+        table.add_column("Details", width=50)
+        table.cursor_type = "none"
+        table.show_cursor = False
+        yield table
+
+    def refresh_activity(self) -> None:
+        """Refresh the activity feed."""
+        table = self.query_one("#activity-table", DataTable)
+        table.clear()
+
+        activities = get_recent_pipeline_activity(limit=10)
+
+        for act in activities:
+            # Time
+            time_str = ""
+            if act.get("completed_at"):
+                try:
+                    dt = datetime.fromisoformat(act["completed_at"])
+                    time_str = dt.strftime("%H:%M:%S")
+                except:
+                    time_str = "?"
+            elif act.get("started_at"):
+                try:
+                    dt = datetime.fromisoformat(act["started_at"])
+                    time_str = dt.strftime("%H:%M:%S")
+                except:
+                    time_str = "?"
+
+            # Doc ID
+            doc_id = str(act.get("doc_id") or "?")
+
+            # Status with color
+            status = act.get("status", "?")
+            if status == "completed":
+                status_display = "[green]✓ done[/green]"
+            elif status == "running":
+                status_display = "[yellow]⟳ running[/yellow]"
+            elif status == "failed":
+                status_display = "[red]✗ failed[/red]"
+            else:
+                status_display = f"[dim]{status}[/dim]"
+
+            # Details
+            title = act.get("doc_title", "")
+            if title.startswith("Pipeline: "):
+                title = title[10:]
+            stage = act.get("stage") or ""
+            parent = act.get("parent_id")
+
+            details = title[:35]
+            if stage:
+                details += f" → {stage}"
+            if parent:
+                details += f" (from #{parent})"
+
+            table.add_row(time_str, doc_id, status_display, details)
 
 
 class PipelineView(Widget):
-    """Main pipeline view with stage columns and preview."""
+    """Main pipeline view with stage navigation and preview."""
 
     class ViewDocument(Message):
-        """Message to view a document."""
+        """Message to view a document fullscreen."""
         def __init__(self, doc_id: int):
             self.doc_id = doc_id
             super().__init__()
@@ -200,26 +416,20 @@ class PipelineView(Widget):
             self.doc_id = doc_id
             super().__init__()
 
-    class SelectionChanged(Message):
-        """Message when selection changes."""
-        def __init__(self, doc_id: Optional[int]):
-            self.doc_id = doc_id
-            super().__init__()
-
     BINDINGS = [
-        Binding("h", "move_left", "Left stage", show=False),
-        Binding("l", "move_right", "Right stage", show=False),
-        Binding("left", "move_left", "Left stage", show=False),
-        Binding("right", "move_right", "Right stage", show=False),
+        Binding("h", "prev_stage", "Prev Stage", show=False),
+        Binding("l", "next_stage", "Next Stage", show=False),
+        Binding("left", "prev_stage", "Prev Stage", show=False),
+        Binding("right", "next_stage", "Next Stage", show=False),
         Binding("j", "move_down", "Down", show=False),
         Binding("k", "move_up", "Up", show=False),
         Binding("down", "move_down", "Down", show=False),
         Binding("up", "move_up", "Up", show=False),
-        Binding("enter", "view_doc", "View", show=True),
+        Binding("enter", "view_doc", "View Full", show=True),
         Binding("a", "advance_doc", "Advance", show=True),
-        Binding("r", "refresh", "Refresh", show=True),
         Binding("p", "process", "Process", show=True),
         Binding("s", "synthesize", "Synthesize", show=True),
+        Binding("r", "refresh", "Refresh", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -228,28 +438,29 @@ class PipelineView(Widget):
         height: 100%;
     }
 
-    #pipeline-header {
-        height: 2;
-        text-align: center;
-        background: $surface;
-        padding: 0 1;
+    #pv-summary {
+        height: 3;
     }
 
-    #pipeline-main {
+    #pv-main {
         height: 1fr;
     }
 
-    #pipeline-columns {
-        width: 60%;
+    #pv-list-container {
+        width: 45%;
         height: 100%;
     }
 
-    #pipeline-preview {
-        width: 40%;
+    #pv-preview-container {
+        width: 55%;
         height: 100%;
     }
 
-    #pipeline-status {
+    #pv-activity {
+        height: 8;
+    }
+
+    #pv-status {
         height: 1;
         background: $surface;
         padding: 0 1;
@@ -260,102 +471,109 @@ class PipelineView(Widget):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.stage_columns = {}
+        self.summary: Optional[StageSummaryBar] = None
+        self.doc_list: Optional[DocumentList] = None
         self.preview: Optional[DocumentPreview] = None
+        self.activity: Optional[ActivityFeed] = None
 
     def compose(self) -> ComposeResult:
-        yield Static(
-            "[bold]Pipeline[/bold] │ idea [dim]→[/dim] prompt [dim]→[/dim] analyzed [dim]→[/dim] planned [dim]→[/dim] done",
-            id="pipeline-header"
-        )
-        with Horizontal(id="pipeline-main"):
-            with Horizontal(id="pipeline-columns"):
-                for stage in STAGES:
-                    col = StageColumn(stage, id=f"col-{stage}")
-                    self.stage_columns[stage] = col
-                    yield col
-            self.preview = DocumentPreview(id="pipeline-preview")
-            yield self.preview
-        yield Static("", id="pipeline-status")
+        self.summary = StageSummaryBar(id="pv-summary")
+        yield self.summary
+
+        with Horizontal(id="pv-main"):
+            with Vertical(id="pv-list-container"):
+                self.doc_list = DocumentList(id="pv-doc-list")
+                yield self.doc_list
+            with Vertical(id="pv-preview-container"):
+                self.preview = DocumentPreview(id="pv-preview")
+                yield self.preview
+
+        self.activity = ActivityFeed(id="pv-activity")
+        yield self.activity
+
+        yield Static("", id="pv-status")
 
     def on_mount(self) -> None:
         """Initialize on mount."""
         self.refresh_all()
-        self._update_selection()
-        self._update_preview()
 
     def refresh_all(self) -> None:
-        """Refresh all stage columns."""
-        stats = get_pipeline_stats()
-        total = sum(stats.values())
+        """Refresh all components."""
+        # Update summary bar
+        if self.summary:
+            self.summary.current_stage = STAGES[self.current_stage_idx]
+            self.summary.refresh_stats()
 
-        for stage, col in self.stage_columns.items():
-            col.refresh_docs()
+        # Load documents for current stage
+        if self.doc_list:
+            stage = STAGES[self.current_stage_idx]
+            self.doc_list.load_stage(stage)
 
-        status = self.query_one("#pipeline-status", Static)
-        status.update(f"Total: {total} │ [dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize │ [dim]r[/dim] refresh")
+            # Update preview with first doc
+            doc_id = self.doc_list.get_selected_doc_id()
+            if doc_id and self.preview:
+                self.preview.show_document(doc_id)
+            elif self.preview:
+                self.preview.clear()
 
-        self._update_preview()
+        # Refresh activity feed
+        if self.activity:
+            self.activity.refresh_activity()
 
-    def _update_selection(self) -> None:
-        """Update which column is selected."""
-        for idx, stage in enumerate(STAGES):
-            col = self.stage_columns[stage]
-            col.selected = (idx == self.current_stage_idx)
-
-    def _update_preview(self) -> None:
-        """Update the preview pane with selected document."""
-        stage = STAGES[self.current_stage_idx]
-        col = self.stage_columns[stage]
-        doc_id = col.get_selected_doc_id()
-
-        if doc_id and self.preview:
-            self.preview.show_document(doc_id)
-        elif self.preview:
-            self.preview.clear()
+        # Update status
+        self._update_status("[dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize │ [dim]r[/dim] refresh")
 
     def watch_current_stage_idx(self, idx: int) -> None:
-        """React to stage index change."""
-        self._update_selection()
-        self._update_preview()
+        """React to stage change."""
+        if self.summary:
+            self.summary.current_stage = STAGES[idx]
+            self.summary._update_display()
+        if self.doc_list:
+            self.doc_list.load_stage(STAGES[idx])
+            # Update preview
+            doc_id = self.doc_list.get_selected_doc_id()
+            if doc_id and self.preview:
+                self.preview.show_document(doc_id)
+            elif self.preview:
+                self.preview.clear()
 
-    def action_move_left(self) -> None:
+    def on_document_list_document_selected(self, event: DocumentList.DocumentSelected) -> None:
+        """Handle document selection."""
+        if self.preview:
+            self.preview.show_document(event.doc_id)
+
+    def action_prev_stage(self) -> None:
         """Move to previous stage."""
         if self.current_stage_idx > 0:
             self.current_stage_idx -= 1
-            self._update_preview()
 
-    def action_move_right(self) -> None:
+    def action_next_stage(self) -> None:
         """Move to next stage."""
         if self.current_stage_idx < len(STAGES) - 1:
             self.current_stage_idx += 1
-            self._update_preview()
 
     def action_move_down(self) -> None:
-        """Move cursor down in current stage."""
-        stage = STAGES[self.current_stage_idx]
-        col = self.stage_columns[stage]
-        table = col.query_one(f"#table-{stage}", DataTable)
-        if table.row_count > 0:
-            table.action_cursor_down()
-            self._update_preview()
+        """Move cursor down."""
+        if self.doc_list:
+            self.doc_list.move_cursor(1)
+            doc_id = self.doc_list.get_selected_doc_id()
+            if doc_id and self.preview:
+                self.preview.show_document(doc_id)
 
     def action_move_up(self) -> None:
-        """Move cursor up in current stage."""
-        stage = STAGES[self.current_stage_idx]
-        col = self.stage_columns[stage]
-        table = col.query_one(f"#table-{stage}", DataTable)
-        if table.row_count > 0:
-            table.action_cursor_up()
-            self._update_preview()
+        """Move cursor up."""
+        if self.doc_list:
+            self.doc_list.move_cursor(-1)
+            doc_id = self.doc_list.get_selected_doc_id()
+            if doc_id and self.preview:
+                self.preview.show_document(doc_id)
 
     def action_view_doc(self) -> None:
-        """View selected document."""
-        stage = STAGES[self.current_stage_idx]
-        col = self.stage_columns[stage]
-        doc_id = col.get_selected_doc_id()
-        if doc_id:
-            self.post_message(self.ViewDocument(doc_id))
+        """View selected document fullscreen."""
+        if self.doc_list:
+            doc_id = self.doc_list.get_selected_doc_id()
+            if doc_id:
+                self.post_message(self.ViewDocument(doc_id))
 
     def action_advance_doc(self) -> None:
         """Advance selected document to next stage."""
@@ -364,23 +582,19 @@ class PipelineView(Widget):
             self._update_status("[yellow]Already at final stage[/yellow]")
             return
 
-        col = self.stage_columns[stage]
-        doc_id = col.get_selected_doc_id()
+        if not self.doc_list:
+            return
+
+        doc_id = self.doc_list.get_selected_doc_id()
         if not doc_id:
             self._update_status("[yellow]No document selected[/yellow]")
             return
 
-        next_idx = STAGES.index(stage) + 1
-        next_stage = STAGES[next_idx]
-
-        update_document_stage(doc_id, next_stage)
-        self._update_status(f"[green]Moved #{doc_id}: {stage} → {next_stage}[/green]")
-        self.refresh_all()
-
-    def action_refresh(self) -> None:
-        """Refresh all data."""
-        self.refresh_all()
-        self._update_status("[dim]Refreshed[/dim]")
+        next_stage = NEXT_STAGE.get(stage)
+        if next_stage:
+            update_document_stage(doc_id, next_stage)
+            self._update_status(f"[green]Moved #{doc_id}: {stage} → {next_stage}[/green]")
+            self.refresh_all()
 
     def action_process(self) -> None:
         """Process the current stage."""
@@ -389,8 +603,7 @@ class PipelineView(Widget):
             self._update_status("[yellow]'done' is terminal - nothing to process[/yellow]")
             return
 
-        col = self.stage_columns[stage]
-        doc_id = col.get_selected_doc_id()
+        doc_id = self.doc_list.get_selected_doc_id() if self.doc_list else None
         self.post_message(self.ProcessStage(stage, doc_id))
 
     def action_synthesize(self) -> None:
@@ -402,7 +615,6 @@ class PipelineView(Widget):
             self._update_status(f"[yellow]Need 2+ docs at '{stage}' to synthesize[/yellow]")
             return
 
-        # Run synthesize command
         import subprocess
         try:
             result = subprocess.run(
@@ -420,9 +632,13 @@ class PipelineView(Widget):
 
         self.refresh_all()
 
+    def action_refresh(self) -> None:
+        """Refresh all data."""
+        self.refresh_all()
+
     def _update_status(self, text: str) -> None:
         """Update status bar."""
-        status = self.query_one("#pipeline-status", Static)
+        status = self.query_one("#pv-status", Static)
         status.update(text)
 
 
@@ -470,7 +686,6 @@ class PipelineBrowser(Widget):
     def on_pipeline_view_view_document(self, event: PipelineView.ViewDocument) -> None:
         """Handle request to view document."""
         logger.info(f"Would view document #{event.doc_id}")
-        # Forward to parent app
         if hasattr(self.app, "_view_document"):
             self.call_later(lambda: self.app._view_document(event.doc_id))
 
@@ -480,20 +695,18 @@ class PipelineBrowser(Widget):
         stage = event.stage
         doc_id = event.doc_id
 
-        # Build command
-        cmd = ["poetry", "run", "emdx", "pipeline", "process", stage]
+        cmd = ["poetry", "run", "emdx", "pipeline", "process", stage, "--sync"]
         if doc_id:
             cmd.extend(["--doc", str(doc_id)])
 
         try:
-            # Run in background
             subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self._update_status(f"[green]Started processing {stage}[/green]")
+            self._update_status(f"[green]Started processing {stage} (sync mode)[/green]")
         except Exception as e:
             self._update_status(f"[red]Error: {e}[/red]")
 
-        # Refresh after a short delay
-        self.set_timer(2.0, self._refresh)
+        # Refresh after delay
+        self.set_timer(3.0, self._refresh)
 
     def _refresh(self) -> None:
         """Refresh the pipeline view."""
