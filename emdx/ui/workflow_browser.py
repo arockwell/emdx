@@ -64,6 +64,7 @@ class WorkflowBrowser(HelpMixin, Widget):
     HELP_CATEGORIES = {
         "run_workflow": "Actions",
         "add_task": "Tasks",
+        "delete_task": "Tasks",
         "clear_tasks": "Tasks",
         "toggle_runs": "View",
         "view_outputs": "Actions",
@@ -77,6 +78,7 @@ class WorkflowBrowser(HelpMixin, Widget):
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("enter", "run_workflow", "Run"),
         Binding("t", "add_task", "Add Task"),
+        Binding("d", "delete_task", "Delete Task"),
         Binding("T", "clear_tasks", "Clear Tasks"),
         Binding("r", "toggle_runs", "Toggle Runs"),
         Binding("o", "view_outputs", "View Outputs"),
@@ -410,7 +412,7 @@ class WorkflowBrowser(HelpMixin, Widget):
                 lines.append(f"  [dim]+{len(self.pending_tasks) - 5} more[/dim]")
 
             lines.append("")
-            lines.append("[dim]T=Clear | Enter=Run[/dim]")
+            lines.append("[dim]d=Delete | T=Clear | Enter=Run[/dim]")
 
         panel.update("\n".join(lines))
 
@@ -663,6 +665,26 @@ class WorkflowBrowser(HelpMixin, Widget):
         self.pending_tasks = []
         self._update_task_panel()
         self._update_status("Tasks cleared")
+
+    def action_delete_task(self) -> None:
+        """Delete the last task from the queue."""
+        if not self.pending_tasks:
+            self._update_status("No tasks to delete")
+            return
+
+        removed_task = self.pending_tasks.pop()
+        self._update_task_panel()
+
+        # Show what was removed (truncated if long)
+        task_str = str(removed_task)
+        if len(task_str) > 30:
+            task_str = task_str[:27] + "..."
+        remaining = len(self.pending_tasks)
+        self._update_status(f"Removed: {task_str} ({remaining} remaining)")
+
+        # Update preview if viewing a workflow
+        if self.current_selection and self.current_selection[0] == "workflow":
+            self._show_template_preview(self.current_selection[1])
 
     def action_cancel_input(self) -> None:
         """Cancel task input."""
