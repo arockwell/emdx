@@ -28,6 +28,7 @@ from emdx.services.log_stream import LogStream, LogStreamSubscriber
 from .log_browser_display import LogBrowserDisplayMixin
 from .log_browser_filtering import LogBrowserFilteringMixin
 from .log_browser_navigation import LogBrowserHost, LogBrowserNavigationMixin
+from .modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class LogBrowserSubscriber(LogStreamSubscriber):
 
 
 class LogBrowser(
+    HelpMixin,
     LogBrowserDisplayMixin,
     LogBrowserFilteringMixin,
     LogBrowserNavigationMixin,
@@ -64,6 +66,11 @@ class LogBrowser(
       exit_selection_mode
     """
 
+    HELP_TITLE = "Log Browser"
+    HELP_CATEGORIES = {
+        "toggle_live": "View",
+    }
+
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
         Binding("k", "cursor_up", "Up"),
@@ -72,6 +79,7 @@ class LogBrowser(
         Binding("s", "selection_mode", "Select"),
         Binding("r", "refresh", "Refresh"),
         Binding("l", "toggle_live", "Live Mode"),
+        Binding("question_mark", "show_help", "Help"),
         # Note: 'q' key is handled by BrowserContainer to switch back to document browser
     ]
 

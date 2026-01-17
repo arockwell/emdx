@@ -137,8 +137,9 @@ async def run_agent(
                     content=f"# Agent Execution Log\n\n{log_content}",
                     tags=['workflow-output'],
                 )
-                # Record document source for efficient querying
-                _record_output_source(individual_run_id, output_doc_id, "individual_output")
+
+            # Record document source for efficient querying (for all outputs)
+            _record_output_source(individual_run_id, output_doc_id, "individual_output")
 
             wf_db.update_individual_run(
                 individual_run_id,

@@ -26,6 +26,8 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, Static
 
+from .modals import HelpMixin
+
 logger = logging.getLogger(__name__)
 
 # Import workflow components
@@ -51,12 +53,22 @@ MODE_INFO = {
 }
 
 
-class WorkflowBrowser(Widget):
+class WorkflowBrowser(HelpMixin, Widget):
     """Template-focused workflow browser.
 
     Shows workflow patterns with visual stage pipelines.
     Tasks are provided at runtime via CLI or task input.
     """
+
+    HELP_TITLE = "Workflow Browser"
+    HELP_CATEGORIES = {
+        "run_workflow": "Actions",
+        "add_task": "Tasks",
+        "clear_tasks": "Tasks",
+        "toggle_runs": "View",
+        "view_outputs": "Actions",
+        "cancel_input": "Other",
+    }
 
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
@@ -65,9 +77,10 @@ class WorkflowBrowser(Widget):
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("enter", "run_workflow", "Run"),
         Binding("t", "add_task", "Add Task"),
-        Binding("T", "clear_tasks", "Clear"),
-        Binding("r", "toggle_runs", "Runs"),
-        Binding("o", "view_outputs", "Outputs"),
+        Binding("T", "clear_tasks", "Clear Tasks"),
+        Binding("r", "toggle_runs", "Toggle Runs"),
+        Binding("o", "view_outputs", "View Outputs"),
+        Binding("question_mark", "show_help", "Help"),
         Binding("escape", "cancel_input", "Cancel", show=False),
     ]
 

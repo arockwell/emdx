@@ -31,6 +31,7 @@ from .activity_items import (
     ExplorationItem,
 )
 from .group_picker import GroupPicker
+from ..modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +219,10 @@ class AgentLogSubscriber(LogStreamSubscriber):
         logger.error(f"Log stream error: {error}")
 
 
-class ActivityView(Widget):
+class ActivityView(HelpMixin, Widget):
+    """Activity View - Mission Control for EMDX."""
+
+    HELP_TITLE = "Activity View"
     """Mission Control - the primary view for monitoring EMDX activity."""
 
     class ViewDocument(Message):
@@ -250,6 +254,7 @@ class ActivityView(Widget):
         ("u", "ungroup", "Ungroup"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
+        ("question_mark", "show_help", "Help"),
     ]
 
     DEFAULT_CSS = """
@@ -560,6 +565,12 @@ class ActivityView(Widget):
                         # Track current running stage
                         if sr.get("status") == "running":
                             current_stage = sr.get("stage_name", "")
+                        # Check synthesis FIRST (prefer over individual outputs)
+                        if sr.get("synthesis_doc_id"):
+                            output_count += 1
+                            has_outputs = True
+                            if not output_doc_id:
+                                output_doc_id = sr["synthesis_doc_id"]
                         ind_runs = wf_db.list_individual_runs(sr["id"])
                         # Count individual outputs and sum tokens
                         for ir in ind_runs:
@@ -570,12 +581,6 @@ class ActivityView(Widget):
                                 has_outputs = True
                                 if not output_doc_id:
                                     output_doc_id = ir["output_doc_id"]
-                        # Count synthesis (add 1 if exists)
-                        if sr.get("synthesis_doc_id"):
-                            output_count += 1
-                            has_outputs = True
-                            if not output_doc_id:
-                                output_doc_id = sr["synthesis_doc_id"]
                     if has_outputs:
                         item._has_workflow_outputs = True
                         item._output_count = output_count

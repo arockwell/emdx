@@ -22,6 +22,7 @@ from emdx.models.tags import get_document_tags
 from .presenters import DocumentBrowserPresenter
 from .viewmodels import DocumentDetailVM, DocumentListVM
 from .vim_editor import VimEditor
+from .modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,10 @@ class TextAreaHost(Protocol):
         ...
 
 
-class DocumentBrowser(Widget):
+class DocumentBrowser(HelpMixin, Widget):
     """Document browser widget that can host text areas."""
+
+    HELP_TITLE = "Document Browser"
 
     BINDINGS = [
         Binding("j", "cursor_down", "Down"),
@@ -58,6 +61,7 @@ class DocumentBrowser(Widget):
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
         Binding("r", "refresh", "Refresh"),
+        Binding("question_mark", "show_help", "Help"),
         # Hierarchy navigation
         Binding("l", "expand_children", "Expand", show=False),
         Binding("right", "expand_children", "Expand", show=False),
