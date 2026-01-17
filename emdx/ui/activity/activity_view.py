@@ -1110,6 +1110,13 @@ class ActivityView(HelpMixin, Widget):
 
         header.update(f"⚡ #{run['id']} [{status_color}]{status}[/{status_color}]")
 
+        # For running workflows, show progress prominently
+        if status == "running" and item.progress_total:
+            progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
+            content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
+            if item.progress_stage:
+                content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
+
         # Timing info as compact line
         timing_parts = []
         if run.get("total_execution_time_ms"):
@@ -1130,15 +1137,46 @@ class ActivityView(HelpMixin, Widget):
                     vars_data = json.loads(vars_data)
                 tasks = vars_data.get("tasks", [])
                 if tasks:
-                    content.write(f"[bold cyan]Tasks ({len(tasks)})[/bold cyan]")
-                    for i, task in enumerate(tasks[:5]):  # Show first 5
+                    content.write("")
+                    content.write(f"[bold cyan]─── Tasks ({len(tasks)}) ───[/bold cyan]")
+                    # Get available width from context panel
+                    try:
+                        context_section = self.query_one("#context-section")
+                        wrap_width = max(context_section.size.width - 4, 40)
+                    except Exception:
+                        wrap_width = 50
+                    # Calculate indent width based on max number
+                    max_num_width = len(str(len(tasks))) + 2  # +2 for ". "
+                    indent = " " * max_num_width
+                    import textwrap
+                    for i, task in enumerate(tasks):
+                        num_str = f"{i+1}.".rjust(max_num_width - 1) + " "
                         if isinstance(task, int):
-                            content.write(f"  {i+1}. [cyan]#{task}[/cyan]")
+                            # Fetch document title for doc ID tasks
+                            task_str = f"#{task}"
+                            if HAS_DOCS:
+                                try:
+                                    doc = doc_db.get_document(task)
+                                    if doc and doc.get("title"):
+                                        task_str = f"#{task}: {doc['title']}"
+                                except Exception:
+                                    pass
+                            wrapped = textwrap.fill(
+                                task_str,
+                                width=wrap_width,
+                                initial_indent=num_str,
+                                subsequent_indent=indent,
+                            )
+                            content.write(f"[cyan]{wrapped}[/cyan]")
                         else:
-                            task_str = str(task)[:60]
-                            content.write(f"  {i+1}. {task_str}")
-                    if len(tasks) > 5:
-                        content.write(f"  [dim]... +{len(tasks)-5} more[/dim]")
+                            task_str = str(task)
+                            wrapped = textwrap.fill(
+                                task_str,
+                                width=wrap_width,
+                                initial_indent=num_str,
+                                subsequent_indent=indent,
+                            )
+                            content.write(wrapped)
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -1146,10 +1184,40 @@ class ActivityView(HelpMixin, Widget):
         if HAS_WORKFLOWS and wf_db:
             stage_runs = wf_db.list_stage_runs(run["id"])
             if stage_runs:
-                content.write(f"[bold cyan]Stages[/bold cyan]")
+                content.write("")
+                content.write(f"[bold cyan]─── Stages ───[/bold cyan]")
                 for sr in stage_runs:
                     icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
                     content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
+
+            # Show prompt from first individual run (gives context for what the workflow is doing)
+            for sr in stage_runs:
+                ind_runs = wf_db.list_individual_runs(sr["id"])
+                if ind_runs:
+                    first_run = ind_runs[0]
+                    prompt = first_run.get("prompt_used", "")
+                    if prompt:
+                        # Extract just the task part
+                        task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
+                        if task_match:
+                            task_text = task_match.group(1).strip()
+                        else:
+                            task_text = prompt.split("\n")[0]
+
+                        content.write("")
+                        label = "Current Prompt" if status == "running" else "Prompt"
+                        content.write(f"[bold cyan]─── {label} ───[/bold cyan]")
+                        try:
+                            context_section = self.query_one("#context-section")
+                            wrap_width = max(context_section.size.width - 4, 40)
+                        except Exception:
+                            wrap_width = 50
+
+                        import textwrap
+                        wrapped = textwrap.fill(task_text, width=wrap_width)
+                        for line in wrapped.split("\n"):
+                            content.write(f"[dim]{line}[/dim]")
+                        break  # Only show first prompt
 
         # Error if any
         if run.get("error_message"):
@@ -1171,18 +1239,98 @@ class ActivityView(HelpMixin, Widget):
 
             header.update(f"📄 #{doc['id']}")
 
-            # Compact metadata
-            meta_parts = []
-            doc_content = doc.get("content", "")
-            word_count = len(doc_content.split())
-            meta_parts.append(f"{word_count} words")
-            if doc.get("project"):
-                meta_parts.append(doc["project"])
-            content.write(f"[dim]{' · '.join(meta_parts)}[/dim]")
+            # Get tags for this document
+            try:
+                from emdx.models.tags import get_document_tags
+                tags = get_document_tags(item.doc_id)
+            except ImportError:
+                tags = []
 
-            # Tags
-            if doc.get("tags"):
-                content.write(f"Tags: {doc['tags']}")
+            # Check if this doc came from a workflow
+            source = doc_db.get_document_source(item.doc_id)
+            if source and HAS_WORKFLOWS:
+                # Get workflow run info
+                run_id = source.get("workflow_run_id")
+                ind_run_id = source.get("workflow_individual_run_id")
+
+                if run_id:
+                    run = wf_db.get_workflow_run(run_id)
+                    if run:
+                        wf = wf_db.get_workflow(run.get("workflow_id"))
+                        wf_name = wf.get("name", "workflow") if wf else "workflow"
+                        content.write(f"[dim]Source:[/dim] {wf_name} [cyan]#w{run_id}[/cyan]")
+
+                # Get the prompt that created this doc
+                if ind_run_id:
+                    ind_run = wf_db.get_individual_run(ind_run_id)
+                    if ind_run:
+                        # Show cost/time for this specific run
+                        meta_parts = []
+                        if ind_run.get("cost_usd"):
+                            meta_parts.append(format_cost(ind_run["cost_usd"]))
+                        if ind_run.get("execution_time_ms"):
+                            secs = ind_run["execution_time_ms"] / 1000
+                            meta_parts.append(f"{secs:.0f}s" if secs < 60 else f"{secs/60:.1f}m")
+                        if ind_run.get("tokens_used"):
+                            meta_parts.append(format_tokens(ind_run["tokens_used"]))
+                        if meta_parts:
+                            content.write(f"[dim]{' · '.join(meta_parts)}[/dim]")
+
+                        # Show the prompt (extract task portion)
+                        prompt = ind_run.get("prompt_used", "")
+                        if prompt:
+                            # Extract just the task part (before ## Instructions)
+                            task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
+                            if task_match:
+                                task_text = task_match.group(1).strip()
+                            else:
+                                task_text = prompt.split("\n")[0]  # First line as fallback
+
+                            content.write("")
+                            content.write("[bold cyan]─── Prompt ───[/bold cyan]")
+                            # Wrap the prompt text
+                            try:
+                                context_section = self.query_one("#context-section")
+                                wrap_width = max(context_section.size.width - 4, 40)
+                            except Exception:
+                                wrap_width = 50
+
+                            import textwrap
+                            wrapped = textwrap.fill(task_text, width=wrap_width)
+                            for line in wrapped.split("\n"):
+                                content.write(f"[dim]{line}[/dim]")
+
+                # Show tags at the end for workflow docs
+                if tags:
+                    content.write("")
+                    content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
+            else:
+                # Not from workflow - show richer metadata
+                # Line 1: Project and created date
+                meta_line1 = []
+                if doc.get("project"):
+                    meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
+                if doc.get("created_at"):
+                    from emdx.utils.datetime import parse_datetime
+                    created_dt = parse_datetime(doc["created_at"])
+                    if created_dt:
+                        meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
+                if meta_line1:
+                    content.write(" · ".join(meta_line1))
+
+                # Line 2: Word count and access count
+                meta_line2 = []
+                doc_content = doc.get("content", "")
+                word_count = len(doc_content.split())
+                meta_line2.append(f"{word_count} words")
+                access_count = doc.get("access_count", 0)
+                if access_count and access_count > 1:
+                    meta_line2.append(f"{access_count} views")
+                content.write(f"[dim]{' · '.join(meta_line2)}[/dim]")
+
+                # Line 3: Tags
+                if tags:
+                    content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
 
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
@@ -1240,6 +1388,30 @@ class ActivityView(HelpMixin, Widget):
 
         if run.get("error_message"):
             content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
+
+        # Show the prompt (extract task portion)
+        prompt = run.get("prompt_used", "")
+        if prompt:
+            # Extract just the task part (before ## Instructions)
+            task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
+            if task_match:
+                task_text = task_match.group(1).strip()
+            else:
+                task_text = prompt.split("\n")[0]  # First line as fallback
+
+            content.write("")
+            content.write("[bold cyan]─── Prompt ───[/bold cyan]")
+            # Wrap the prompt text
+            try:
+                context_section = self.query_one("#context-section")
+                wrap_width = max(context_section.size.width - 4, 40)
+            except Exception:
+                wrap_width = 50
+
+            import textwrap
+            wrapped = textwrap.fill(task_text, width=wrap_width)
+            for line in wrapped.split("\n"):
+                content.write(f"[dim]{line}[/dim]")
 
     async def _show_workflow_summary(self, item: ActivityItem) -> None:
         """Show workflow summary in preview."""
