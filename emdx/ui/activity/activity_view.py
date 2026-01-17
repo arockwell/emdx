@@ -1152,7 +1152,22 @@ class ActivityView(HelpMixin, Widget):
                     for i, task in enumerate(tasks):
                         num_str = f"{i+1}.".rjust(max_num_width - 1) + " "
                         if isinstance(task, int):
-                            content.write(f"{num_str}[cyan]#{task}[/cyan]")
+                            # Fetch document title for doc ID tasks
+                            task_str = f"#{task}"
+                            if HAS_DOCS:
+                                try:
+                                    doc = doc_db.get_document(task)
+                                    if doc and doc.get("title"):
+                                        task_str = f"#{task}: {doc['title']}"
+                                except Exception:
+                                    pass
+                            wrapped = textwrap.fill(
+                                task_str,
+                                width=wrap_width,
+                                initial_indent=num_str,
+                                subsequent_indent=indent,
+                            )
+                            content.write(f"[cyan]{wrapped}[/cyan]")
                         else:
                             task_str = str(task)
                             wrapped = textwrap.fill(
