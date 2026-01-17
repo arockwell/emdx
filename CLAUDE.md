@@ -142,6 +142,24 @@ poetry run emdx tag 123 done success
 poetry run emdx untag 123 blocked
 ```
 
+## 🚀 Quick Task Execution (`emdx run`)
+
+The fastest way to run parallel tasks:
+
+```bash
+# Run multiple tasks in parallel
+emdx run "analyze auth" "review tests" "check docs"
+
+# With synthesis to combine outputs
+emdx run --synthesize "task1" "task2" "task3"
+
+# Dynamic discovery from shell commands
+emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
+
+# Control concurrency
+emdx run -j 3 "task1" "task2" "task3" "task4"
+```
+
 ## 🔄 Workflow System for Multi-Agent Tasks
 
 When working on tasks that benefit from parallel execution or multiple perspectives, use the workflow system instead of running individual commands.
@@ -176,20 +194,47 @@ emdx workflow run parallel_fix \
 emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
 ```
 
-### When to Use Workflows vs Direct Commands
+### When to Use `emdx run` vs `emdx workflow`
 
-**Use workflows when:**
-- Running 3+ similar tasks that can parallelize
-- Tasks might modify the same files (use `--worktree`)
-- You want synthesis of multiple outputs
-- Tracking execution history matters
-
-**Use direct commands when:**
-- Single, simple task
-- Interactive exploration
-- Quick one-off operations
+| Use `emdx run` when... | Use `emdx workflow` when... |
+|------------------------|----------------------------|
+| Quick, ad-hoc parallel tasks | Complex multi-stage workflows |
+| Simple task lists | Need iterative or adversarial modes |
+| One-off discovery commands | Custom stage configurations |
+| Just want tasks done fast | Need detailed run monitoring |
 
 For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
+
+## ✨ AI-Powered Search & Q&A (`emdx ai`)
+
+Semantic search and Q&A over your knowledge base:
+
+```bash
+# Build embedding index (one-time setup)
+emdx ai index
+
+# Semantic search - finds conceptually related docs
+emdx ai search "authentication patterns"
+emdx ai similar 42  # Find docs similar to #42
+
+# Q&A with Claude API (needs ANTHROPIC_API_KEY)
+emdx ai ask "How does the workflow system work?"
+
+# Q&A with Claude CLI (uses Claude Max subscription - no API cost!)
+emdx ai context "How does the workflow system work?" | claude
+emdx ai context "error handling" --limit 5 | claude "summarize"
+```
+
+### AI Commands Quick Reference
+
+| Command | Description | Needs API Key? |
+|---------|-------------|----------------|
+| `emdx ai index` | Build embeddings | No |
+| `emdx ai search "query"` | Semantic search | No |
+| `emdx ai similar <id>` | Find similar docs | No |
+| `emdx ai ask "question"` | Q&A with Claude API | **Yes** |
+| `emdx ai context "q" \| claude` | Q&A with Claude CLI | No |
+| `emdx ai stats` | Show index status | No |
 
 ## 📊 Key Features for Claude Integration
 
