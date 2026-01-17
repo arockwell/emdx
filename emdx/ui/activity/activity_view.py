@@ -482,7 +482,7 @@ class ActivityView(HelpMixin, Widget):
                 # Parse timestamp
                 started = run.get("started_at")
                 if isinstance(started, str):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     started = parse_datetime(started)
                 if not started:
                     started = datetime.now()
@@ -603,7 +603,7 @@ class ActivityView(HelpMixin, Widget):
                                 if out_doc:
                                     doc_created = out_doc.get("created_at")
                                     if isinstance(doc_created, str):
-                                        from emdx.utils.datetime import parse_datetime
+                                        from emdx.utils.datetime_utils import parse_datetime
                                         doc_created = parse_datetime(doc_created)
                                     if doc_created:
                                         item.timestamp = doc_created
@@ -645,7 +645,7 @@ class ActivityView(HelpMixin, Widget):
                 group_id = group["id"]
                 created = group.get("created_at")
                 if isinstance(created, str):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     created = parse_datetime(created)
                 if not created:
                     created = datetime.now()
@@ -1311,7 +1311,7 @@ class ActivityView(HelpMixin, Widget):
                 if doc.get("project"):
                     meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
                 if doc.get("created_at"):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     created_dt = parse_datetime(doc["created_at"])
                     if created_dt:
                         meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")

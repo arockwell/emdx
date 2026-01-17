@@ -5,7 +5,7 @@ Document CRUD operations for emdx knowledge base
 import logging
 from typing import Any, Optional, Union
 
-from ..utils.datetime import parse_datetime
+from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
 
 logger = logging.getLogger(__name__)
