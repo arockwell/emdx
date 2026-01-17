@@ -29,6 +29,7 @@ from emdx.commands.preset import app as preset_app
 from emdx.commands.run import run as run_command
 from emdx.commands.groups import app as groups_app
 from emdx.commands.ask import app as ask_app
+from emdx.commands.each import app as each_app
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -102,6 +103,9 @@ app.add_typer(ask_app, name="ai", help="AI-powered Q&A and semantic search")
 
 # Add the run command for quick task execution
 app.command(name="run")(run_command)
+
+# Add each command for reusable parallel commands
+app.add_typer(each_app, name="each", help="Create and run reusable parallel commands")
 
 # Add the gui command
 app.command()(gui)
