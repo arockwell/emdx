@@ -235,7 +235,6 @@ class Context(Enum):
             "AgentHistoryModal": cls.MODAL_AGENT,
             # File browser
             "FileBrowserView": cls.FILE_NORMAL,
-            "FileView": cls.FILE_NORMAL,
             "FileList": cls.FILE_LIST,
             # Task browser
             "TaskBrowser": cls.TASK_NORMAL,
@@ -245,7 +244,6 @@ class Context(Enum):
             "LogBrowser": cls.LOG_NORMAL,
             "LogView": cls.LOG_VIEW,
             # Control center / Pulse
-            "ControlCenter": cls.CONTROL_NORMAL,
             "ControlCenterBrowser": cls.CONTROL_NORMAL,
             "PulseBrowser": cls.CONTROL_NORMAL,
             "PulseView": cls.PULSE_VIEW,
@@ -267,10 +265,8 @@ class Context(Enum):
             "AgentSelectionStage": cls.MODAL_STAGE_AGENT,
             "ProjectSelectionStage": cls.MODAL_STAGE_PROJECT,
             "WorktreeSelectionStage": cls.MODAL_WORKTREE,
-            "ConfigStage": cls.MODAL_STAGE_CONFIG,
             "ConfigSelectionStage": cls.MODAL_STAGE_CONFIG,
             # Workflow execution
-            "WorkflowExecutionOverlay": cls.MODAL_EXECUTION,
             "AgentExecutionOverlay": cls.MODAL_EXECUTION,
             # Agent modals
             "CreateAgentModal": cls.MODAL_AGENT_CREATE,
