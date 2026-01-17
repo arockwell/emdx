@@ -25,6 +25,7 @@ from .output_parser import extract_output_doc_id, extract_token_usage_detailed
 from .agent_runner import run_agent
 from .synthesis import synthesize_outputs
 from emdx.database import groups as groups_db
+from emdx.config import DEFAULT_MAX_CONCURRENT_WORKFLOWS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class WorkflowExecutor:
     - adversarial: Advocate -> Critic -> Synthesizer pattern
     """
 
-    def __init__(self, max_concurrent: int = 10):
+    def __init__(self, max_concurrent: int = DEFAULT_MAX_CONCURRENT_WORKFLOWS):
         """Initialize executor.
 
         Args:
