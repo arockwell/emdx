@@ -951,14 +951,134 @@ emdx run -p fix-conflicts
 | `--discover` | `-d` | Shell command to discover tasks |
 | `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
 
-### When to Use `emdx run` vs `emdx workflow`
+### When to Use `emdx run` vs `emdx each` vs `emdx workflow`
 
-| Use `emdx run` when... | Use `emdx workflow` when... |
-|------------------------|----------------------------|
-| Quick, ad-hoc parallel tasks | Complex multi-stage workflows |
-| Simple task lists | Need iterative or adversarial modes |
-| One-off discovery commands | Custom stage configurations |
-| Just want tasks done fast | Need detailed run monitoring |
+| Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------|-------------------------|----------------------------|
+| Quick, ad-hoc parallel tasks | Reusable discovery+action commands | Complex multi-stage workflows |
+| Simple task lists | Same operation on many items | Need iterative or adversarial modes |
+| One-off execution | Save commands for future use | Custom stage configurations |
+| Just want tasks done fast | "For each X, do Y" patterns | Need detailed run monitoring |
+
+---
+
+## 🔁 Reusable Parallel Commands (`emdx each`)
+
+Create saved commands that discover items and process them in parallel. Think of it as "for each item from this command, do this action."
+
+### Why `emdx each`?
+
+Ever find yourself running the same parallel discovery task repeatedly?
+
+```bash
+# Tedious to retype every time
+emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{task}}, resolve conflicts"
+```
+
+Save it once, run it forever:
+
+```bash
+# Create once
+emdx each create fix-conflicts \
+  --from "gh pr list ... | jq ..." \
+  --do "Merge main into {{item}}, resolve conflicts"
+
+# Run anytime
+emdx each run fix-conflicts
+```
+
+### Creating Commands
+
+```bash
+emdx each create <name> --from <command> --do <prompt> [options]
+```
+
+**Options:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--from` | | Shell command that outputs items (one per line) |
+| `--do` | | What to do with each `{{item}}` |
+| `--parallel` | `-j` | Max concurrent (default: 3) |
+| `--synthesize` | `-s` | Combine results (optional custom prompt) |
+| `--description` | | Human description |
+
+**Note:** Worktree isolation is auto-enabled when `--from` involves git/gh commands.
+
+### Examples
+
+```bash
+# Fix PRs with merge conflicts
+emdx each create fix-conflicts \
+  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
+  --do "Merge origin/main into {{item}}, resolve conflicts, push"
+
+# Review all open PRs
+emdx each create review-prs \
+  --from "gh pr list --json number --jq '.[].number'" \
+  --do "Review PR #{{item}} for bugs and security issues" \
+  --synthesize "Summarize findings across all {{count}} PRs"
+
+# Analyze Python files
+emdx each create audit-python \
+  --from "fd -e py -d 2 src/" \
+  --do "Review {{item}} for code quality" \
+  -j 5 \
+  --synthesize
+```
+
+### Running Commands
+
+```bash
+# Run with saved discovery
+emdx each run fix-conflicts
+
+# Override with explicit items
+emdx each run fix-conflicts feature-auth feature-payments
+
+# Override discovery command
+emdx each run fix-conflicts --from "echo 'specific-branch'"
+```
+
+### One-Off Execution (Without Saving)
+
+```bash
+# Discover and process without saving
+emdx each --from "fd -e md docs/" --do "Check {{item}} for broken links"
+```
+
+### Managing Commands
+
+```bash
+# List all saved commands
+emdx each list
+
+# Show command details
+emdx each show fix-conflicts
+
+# Edit in $EDITOR
+emdx each edit fix-conflicts
+
+# Delete
+emdx each delete fix-conflicts
+```
+
+### Variables
+
+**In `--do` prompt:**
+
+| Variable | Description |
+|----------|-------------|
+| `{{item}}` | Current item from discovery |
+| `{{index}}` | Zero-based index |
+| `{{total}}` | Total items discovered |
+
+**In `--synthesize` prompt:**
+
+| Variable | Description |
+|----------|-------------|
+| `{{outputs}}` | All outputs combined |
+| `{{count}}` | Number processed |
 
 ---
 

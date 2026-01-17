@@ -160,6 +160,36 @@ emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
 emdx run -j 3 "task1" "task2" "task3" "task4"
 ```
 
+## 🔁 Reusable Parallel Commands (`emdx each`)
+
+Create saved commands that discover items and process them in parallel. Perfect for repeatable "for each X, do Y" patterns.
+
+```bash
+# Create a reusable command
+emdx each create fix-conflicts \
+  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
+  --do "Merge origin/main into {{item}}, resolve conflicts, push"
+
+# Run it anytime
+emdx each run fix-conflicts
+
+# One-off execution (without saving)
+emdx each --from "fd -e py src/" --do "Review {{item}} for security issues"
+
+# Manage saved commands
+emdx each list                    # List all saved commands
+emdx each show fix-conflicts      # Show command details
+emdx each edit fix-conflicts      # Edit in $EDITOR
+emdx each delete fix-conflicts    # Delete command
+```
+
+**Key features:**
+- `--from`: Shell command that outputs items (one per line)
+- `--do`: What to do with each `{{item}}`
+- `-j`: Max parallel executions (default: 3)
+- `--synthesize`: Combine results at the end
+- Worktree isolation is auto-enabled for git/gh commands
+
 ## 🔄 Workflow System for Multi-Agent Tasks
 
 When working on tasks that benefit from parallel execution or multiple perspectives, use the workflow system instead of running individual commands.
@@ -170,7 +200,6 @@ When working on tasks that benefit from parallel execution or multiple perspecti
 |----------|----------|
 | `task_parallel` | Running multiple analysis or fix tasks in parallel |
 | `parallel_fix` | Multiple code fixes that might touch same files (uses worktree isolation) |
-| `parallel_analysis` | Getting multiple perspectives on a problem with synthesis |
 
 ### Common Patterns
 
@@ -194,14 +223,14 @@ emdx workflow run parallel_fix \
 emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
 ```
 
-### When to Use `emdx run` vs `emdx workflow`
+### When to Use `emdx run` vs `emdx each` vs `emdx workflow`
 
-| Use `emdx run` when... | Use `emdx workflow` when... |
-|------------------------|----------------------------|
-| Quick, ad-hoc parallel tasks | Complex multi-stage workflows |
-| Simple task lists | Need iterative or adversarial modes |
-| One-off discovery commands | Custom stage configurations |
-| Just want tasks done fast | Need detailed run monitoring |
+| Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------|-------------------------|----------------------------|
+| Quick, ad-hoc parallel tasks | Reusable discovery+action | Complex multi-stage workflows |
+| Simple task lists | "For each X, do Y" patterns | Need iterative or adversarial modes |
+| One-off execution | Save for future use | Custom stage configurations |
+| Just want tasks done fast | Same operation on many items | Need detailed run monitoring |
 
 For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
 
