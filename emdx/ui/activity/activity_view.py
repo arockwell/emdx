@@ -1188,6 +1188,13 @@ class ActivityView(HelpMixin, Widget):
 
             header.update(f"📄 #{doc['id']}")
 
+            # Get tags for this document
+            try:
+                from emdx.models.tags import get_document_tags
+                tags = get_document_tags(item.doc_id)
+            except ImportError:
+                tags = []
+
             # Check if this doc came from a workflow
             source = doc_db.get_document_source(item.doc_id)
             if source and HAS_WORKFLOWS:
@@ -1243,14 +1250,38 @@ class ActivityView(HelpMixin, Widget):
                                 content.write(f"[dim]{line}[/dim]")
                             if len(wrapped.split("\n")) > 6:
                                 content.write("[dim]...[/dim]")
+
+                # Show tags at the end for workflow docs
+                if tags:
+                    content.write("")
+                    content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
             else:
-                # Not from workflow - show basic metadata
-                meta_parts = []
+                # Not from workflow - show richer metadata
+                # Line 1: Project and created date
+                meta_line1 = []
+                if doc.get("project"):
+                    meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
+                if doc.get("created_at"):
+                    from emdx.utils.datetime import parse_datetime
+                    created_dt = parse_datetime(doc["created_at"])
+                    if created_dt:
+                        meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
+                if meta_line1:
+                    content.write(" · ".join(meta_line1))
+
+                # Line 2: Word count and access count
+                meta_line2 = []
                 doc_content = doc.get("content", "")
                 word_count = len(doc_content.split())
-                meta_parts.append(f"{word_count} words")
-                if meta_parts:
-                    content.write(f"[dim]{' · '.join(meta_parts)}[/dim]")
+                meta_line2.append(f"{word_count} words")
+                access_count = doc.get("access_count", 0)
+                if access_count and access_count > 1:
+                    meta_line2.append(f"{access_count} views")
+                content.write(f"[dim]{' · '.join(meta_line2)}[/dim]")
+
+                # Line 3: Tags
+                if tags:
+                    content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
 
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
