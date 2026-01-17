@@ -27,6 +27,7 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Input, Static
 
 from .modals import HelpMixin
+from ..models.documents import get_document
 
 logger = logging.getLogger(__name__)
 
@@ -681,13 +682,26 @@ class WorkflowBrowser(HelpMixin, Widget):
             if task_value:
                 # Try as doc ID first
                 try:
-                    task = int(task_value)
+                    doc_id = int(task_value)
+                    # Validate document ID exists
+                    doc = get_document(str(doc_id))
+                    if doc is None:
+                        self._update_status(f"Error: Document #{doc_id} not found")
+                        event.input.value = ""
+                        return
+                    task = doc_id
+                    doc_title = doc.get("title", "Untitled")
+                    # Truncate long titles
+                    if len(doc_title) > 40:
+                        doc_title = doc_title[:37] + "..."
+                    status_msg = f"Added: #{doc_id} - {doc_title} ({len(self.pending_tasks) + 1} total)"
                 except ValueError:
                     task = task_value
+                    status_msg = f"Added task ({len(self.pending_tasks) + 1} total)"
 
                 self.pending_tasks.append(task)
                 self._update_task_panel()
-                self._update_status(f"Added task ({len(self.pending_tasks)} total)")
+                self._update_status(status_msg)
 
             event.input.value = ""
             event.input.remove_class("visible")
