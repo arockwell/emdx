@@ -42,6 +42,12 @@ except Exception as e:
     workflow_registry = None
     wf_db = None
 
+# Import document functions for title lookup
+try:
+    from ..database.documents import get_document
+except ImportError:
+    get_document = None
+
 
 # Mode icons and colors for visual pipeline display
 MODE_INFO = {
@@ -400,9 +406,24 @@ class WorkflowBrowser(HelpMixin, Widget):
                 task_str = str(task)
                 if len(task_str) > 35:
                     task_str = task_str[:32] + "..."
-                # Show doc ID indicator
+                # Show doc ID with title if available
                 if isinstance(task, int):
-                    lines.append(f"  {i+1}. [cyan]doc:{task}[/cyan]")
+                    doc_title = None
+                    if get_document:
+                        try:
+                            doc = get_document(task)
+                            if doc:
+                                doc_title = doc.get("title")
+                        except Exception:
+                            pass
+                    if doc_title:
+                        # Truncate title if needed (leave room for "#ID: ")
+                        max_title_len = 30 - len(str(task))
+                        if len(doc_title) > max_title_len:
+                            doc_title = doc_title[: max_title_len - 3] + "..."
+                        lines.append(f"  {i+1}. [cyan]#{task}: {doc_title}[/cyan]")
+                    else:
+                        lines.append(f"  {i+1}. [cyan]#{task}[/cyan]")
                 else:
                     lines.append(f"  {i+1}. {task_str}")
 
