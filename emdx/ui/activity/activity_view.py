@@ -1253,10 +1253,8 @@ class ActivityView(HelpMixin, Widget):
 
                             import textwrap
                             wrapped = textwrap.fill(task_text, width=wrap_width)
-                            for line in wrapped.split("\n")[:6]:  # Limit to 6 lines
+                            for line in wrapped.split("\n"):
                                 content.write(f"[dim]{line}[/dim]")
-                            if len(wrapped.split("\n")) > 6:
-                                content.write("[dim]...[/dim]")
 
                 # Show tags at the end for workflow docs
                 if tags:
@@ -1368,10 +1366,8 @@ class ActivityView(HelpMixin, Widget):
 
             import textwrap
             wrapped = textwrap.fill(task_text, width=wrap_width)
-            for line in wrapped.split("\n")[:6]:  # Limit to 6 lines
+            for line in wrapped.split("\n"):
                 content.write(f"[dim]{line}[/dim]")
-            if len(wrapped.split("\n")) > 6:
-                content.write("[dim]...[/dim]")
 
     async def _show_workflow_summary(self, item: ActivityItem) -> None:
         """Show workflow summary in preview."""
