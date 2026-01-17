@@ -146,7 +146,7 @@ class StageSummaryBar(Widget):
 
 
 class DocumentList(Widget):
-    """List of documents at the current stage with more detail."""
+    """List of documents at the current stage with multi-select support."""
 
     DEFAULT_CSS = """
     DocumentList {
@@ -161,6 +161,13 @@ class DocumentList(Widget):
     DocumentList.focused {
         border: double $accent;
     }
+
+    DocumentList #selection-status {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+        color: $text-muted;
+    }
     """
 
     class DocumentSelected(Message):
@@ -169,25 +176,36 @@ class DocumentList(Widget):
             self.doc_id = doc_id
             super().__init__()
 
+    class SelectionChanged(Message):
+        """Fired when multi-selection changes."""
+        def __init__(self, selected_ids: List[int]):
+            self.selected_ids = selected_ids
+            super().__init__()
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.docs: List[Dict[str, Any]] = []
         self.current_stage = "idea"
+        self.selected_ids: set[int] = set()  # Multi-select tracking
 
     def compose(self) -> ComposeResult:
         table = DataTable(id="doc-table")
+        table.add_column("", width=2)  # Selection marker column
         table.add_column("ID", width=6)
-        table.add_column("Title", width=40)
+        table.add_column("Title", width=38)
         table.add_column("Parent", width=8)
         table.add_column("Created", width=12)
         table.cursor_type = "row"
         yield table
+        yield Static("", id="selection-status")
 
     def load_stage(self, stage: str) -> None:
         """Load documents for a stage."""
         self.current_stage = stage
         self.docs = list_documents_at_stage(stage, limit=50)
+        self.selected_ids.clear()  # Clear selection when changing stages
         self._refresh_table()
+        self._update_selection_status()
 
     def _refresh_table(self) -> None:
         """Refresh the table display."""
@@ -198,14 +216,28 @@ class DocumentList(Widget):
             return
 
         for doc in self.docs:
-            doc_id = str(doc["id"])
+            doc_id = doc["id"]
+            doc_id_str = str(doc_id)
+
+            # Selection marker
+            marker = "●" if doc_id in self.selected_ids else " "
 
             # Title - show more of it
             title = doc["title"]
             if title.startswith("Pipeline: "):
                 title = title[10:]  # Remove "Pipeline: " prefix
-            if len(title) > 38:
-                title = title[:35] + "..."
+
+            # For done stage, check if there's a child (output) doc
+            if self.current_stage == "done":
+                # Check for children that indicate completion
+                child_info = self._get_child_info(doc_id)
+                if child_info:
+                    title = f"✓ {title}"
+                if len(title) > 36:
+                    title = title[:33] + "..."
+            else:
+                if len(title) > 36:
+                    title = title[:33] + "..."
 
             # Parent ID
             parent = str(doc.get("parent_id") or "-")
@@ -215,16 +247,68 @@ class DocumentList(Widget):
             if doc.get("created_at"):
                 created = doc["created_at"].strftime("%m/%d %H:%M")
 
-            table.add_row(doc_id, title, parent, created, key=doc_id)
+            table.add_row(marker, doc_id_str, title, parent, created, key=doc_id_str)
+
+    def _get_child_info(self, parent_id: int) -> Optional[Dict[str, Any]]:
+        """Get info about child documents (outputs from processing)."""
+        with db_connection.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT id, title, stage FROM documents WHERE parent_id = ? LIMIT 1",
+                (parent_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {"id": row[0], "title": row[1], "stage": row[2]}
+        return None
+
+    def _update_selection_status(self) -> None:
+        """Update the selection status bar."""
+        status = self.query_one("#selection-status", Static)
+        count = len(self.selected_ids)
+        if count > 0:
+            ids = ", ".join(f"#{id}" for id in sorted(self.selected_ids))
+            status.update(f"[bold cyan]Selected ({count}):[/] {ids} │ [dim]Space[/dim] toggle │ [dim]s[/dim] synthesize selected")
+        else:
+            status.update("[dim]Space to select docs for synthesis │ s synthesizes all if none selected[/dim]")
+
+    def toggle_selection(self) -> None:
+        """Toggle selection of current document."""
+        doc_id = self.get_selected_doc_id()
+        if doc_id:
+            if doc_id in self.selected_ids:
+                self.selected_ids.remove(doc_id)
+            else:
+                self.selected_ids.add(doc_id)
+            self._refresh_table()
+            self._update_selection_status()
+            self.post_message(self.SelectionChanged(list(self.selected_ids)))
+
+    def select_all(self) -> None:
+        """Select all documents in current stage."""
+        self.selected_ids = {doc["id"] for doc in self.docs}
+        self._refresh_table()
+        self._update_selection_status()
+        self.post_message(self.SelectionChanged(list(self.selected_ids)))
+
+    def clear_selection(self) -> None:
+        """Clear all selections."""
+        self.selected_ids.clear()
+        self._refresh_table()
+        self._update_selection_status()
+        self.post_message(self.SelectionChanged([]))
+
+    def get_selected_ids(self) -> List[int]:
+        """Get list of selected document IDs."""
+        return list(self.selected_ids)
 
     def get_selected_doc_id(self) -> Optional[int]:
-        """Get currently selected document ID."""
+        """Get currently selected document ID (cursor position)."""
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0 and table.cursor_row is not None:
             row_key = table.get_row_at(table.cursor_row)
             if row_key:
                 try:
-                    return int(row_key[0])
+                    return int(row_key[1])  # ID is now in column 1 (after marker)
                 except (ValueError, IndexError):
                     pass
         return None
@@ -296,16 +380,59 @@ class DocumentPreview(Widget):
             parent = doc.get("parent_id")
             parent_info = f" [dim]← parent #{parent}[/dim]" if parent else ""
 
-            header.update(
-                f"[bold]#{doc['id']}[/bold] │ {STAGE_EMOJI.get(stage, '')} {stage}{parent_info}\n"
-                f"[dim]{doc['title'][:70]}[/dim]"
-            )
+            # For done stage, show the output chain
+            if stage == "done":
+                children = self._get_document_children(doc_id)
+                if children:
+                    child_info = " → ".join(f"#{c['id']} ({c['stage']})" for c in children)
+                    header.update(
+                        f"[bold]#{doc['id']}[/bold] │ {STAGE_EMOJI.get(stage, '')} {stage} │ [green]Outputs: {child_info}[/green]\n"
+                        f"[dim]{doc['title'][:70]}[/dim]"
+                    )
+                else:
+                    header.update(
+                        f"[bold]#{doc['id']}[/bold] │ {STAGE_EMOJI.get(stage, '')} {stage} │ [yellow]No outputs yet[/yellow]\n"
+                        f"[dim]{doc['title'][:70]}[/dim]"
+                    )
+            else:
+                header.update(
+                    f"[bold]#{doc['id']}[/bold] │ {STAGE_EMOJI.get(stage, '')} {stage}{parent_info}\n"
+                    f"[dim]{doc['title'][:70]}[/dim]"
+                )
 
             content_widget = self.query_one("#preview-content", MarkdownViewer)
             content = doc["content"]
+
+            # For done stage, show a summary with lineage
+            if stage == "done":
+                children = self._get_document_children(doc_id)
+                if children:
+                    lineage = "## 📊 Pipeline Results\n\n"
+                    lineage += f"**Input:** #{doc_id}\n\n"
+                    lineage += "**Outputs:**\n"
+                    for child in children:
+                        lineage += f"- #{child['id']} → {child['stage']}: {child['title'][:50]}\n"
+                    lineage += "\n---\n\n## Original Input\n\n"
+                    content = lineage + content
+
             if len(content) > 8000:
                 content = content[:8000] + "\n\n[...truncated...]"
             content_widget.document.update(content)
+
+    def _get_document_children(self, parent_id: int) -> List[Dict[str, Any]]:
+        """Get all child documents recursively."""
+        children = []
+        with db_connection.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT id, title, stage FROM documents WHERE parent_id = ? ORDER BY id",
+                (parent_id,)
+            )
+            for row in cursor.fetchall():
+                child = {"id": row[0], "title": row[1], "stage": row[2]}
+                children.append(child)
+                # Recursively get grandchildren
+                children.extend(self._get_document_children(row[0]))
+        return children
 
     def clear(self) -> None:
         """Clear the preview."""
@@ -425,10 +552,13 @@ class PipelineView(Widget):
         Binding("k", "move_up", "Up", show=False),
         Binding("down", "move_down", "Down", show=False),
         Binding("up", "move_up", "Up", show=False),
+        Binding("space", "toggle_select", "Select", show=True),
         Binding("enter", "view_doc", "View Full", show=True),
         Binding("a", "advance_doc", "Advance", show=True),
         Binding("p", "process", "Process", show=True),
         Binding("s", "synthesize", "Synthesize", show=True),
+        Binding("ctrl+a", "select_all", "Select All", show=False),
+        Binding("escape", "clear_selection", "Clear", show=False),
         Binding("r", "refresh", "Refresh", show=True),
     ]
 
@@ -606,30 +736,67 @@ class PipelineView(Widget):
         doc_id = self.doc_list.get_selected_doc_id() if self.doc_list else None
         self.post_message(self.ProcessStage(stage, doc_id))
 
-    def action_synthesize(self) -> None:
-        """Synthesize all docs at current stage."""
-        stage = STAGES[self.current_stage_idx]
-        docs = list_documents_at_stage(stage)
+    def action_toggle_select(self) -> None:
+        """Toggle selection of current document."""
+        if self.doc_list:
+            self.doc_list.toggle_selection()
 
-        if len(docs) < 2:
-            self._update_status(f"[yellow]Need 2+ docs at '{stage}' to synthesize[/yellow]")
+    def action_select_all(self) -> None:
+        """Select all documents in current stage."""
+        if self.doc_list:
+            self.doc_list.select_all()
+
+    def action_clear_selection(self) -> None:
+        """Clear all selections."""
+        if self.doc_list:
+            self.doc_list.clear_selection()
+
+    def action_synthesize(self) -> None:
+        """Synthesize selected docs (or all if none selected)."""
+        stage = STAGES[self.current_stage_idx]
+
+        # Get selected doc IDs, or all docs if none selected
+        selected_ids = self.doc_list.get_selected_ids() if self.doc_list else []
+
+        if not selected_ids:
+            # No selection - use all docs at stage
+            docs = list_documents_at_stage(stage)
+            doc_ids = [d["id"] for d in docs]
+        else:
+            doc_ids = selected_ids
+
+        if len(doc_ids) < 2:
+            self._update_status(f"[yellow]Need 2+ docs to synthesize (selected: {len(doc_ids)})[/yellow]")
             return
 
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["poetry", "run", "emdx", "pipeline", "synthesize", stage],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                self._update_status(f"[green]Synthesized {len(docs)} docs from '{stage}'[/green]")
-            else:
-                self._update_status(f"[red]Synthesize failed[/red]")
-        except Exception as e:
-            self._update_status(f"[red]Error: {e}[/red]")
+        # Synthesize the selected documents
+        from ..database.documents import get_document, save_document_to_pipeline, update_document_stage
 
+        # Build combined content
+        combined_content = f"# Synthesized from {len(doc_ids)} documents\n\n"
+        for doc_id in doc_ids:
+            doc = get_document(str(doc_id))
+            if doc:
+                combined_content += f"## From: {doc['title']}\n\n"
+                combined_content += doc["content"]
+                combined_content += "\n\n---\n\n"
+
+        # Determine next stage
+        next_stage = NEXT_STAGE.get(stage, "planned")
+
+        # Create the synthesized document
+        title = f"Synthesis: {len(doc_ids)} {stage} documents"
+        new_doc_id = save_document_to_pipeline(
+            title=title,
+            content=combined_content,
+            stage=next_stage,
+        )
+
+        # Move source docs to done
+        for doc_id in doc_ids:
+            update_document_stage(doc_id, "done")
+
+        self._update_status(f"[green]Synthesized {len(doc_ids)} docs → #{new_doc_id} at '{next_stage}'[/green]")
         self.refresh_all()
 
     def action_refresh(self) -> None:
