@@ -31,6 +31,7 @@ from .activity_items import (
     ExplorationItem,
 )
 from .group_picker import GroupPicker
+from ..modals import KeybindingsHelpScreen
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +251,7 @@ class ActivityView(Widget):
         ("u", "ungroup", "Ungroup"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
+        ("question_mark", "show_help", "Help"),
     ]
 
     DEFAULT_CSS = """
@@ -2003,6 +2005,24 @@ class ActivityView(Widget):
     def action_focus_prev(self) -> None:
         """Focus previous pane."""
         pass
+
+    def action_show_help(self) -> None:
+        """Show keybindings help modal."""
+        bindings = [
+            ("Navigation", "j / k", "Move down / up"),
+            ("Navigation", "Enter", "Expand / collapse"),
+            ("Navigation", "l / h", "Expand / collapse"),
+            ("Navigation", "Tab", "Next pane"),
+            ("Actions", "i", "Copy document (gist)"),
+            ("Actions", "g", "Add to group"),
+            ("Actions", "G", "Create new group"),
+            ("Actions", "u", "Remove from group"),
+            ("Actions", "f", "Fullscreen preview"),
+            ("Actions", "r", "Refresh"),
+            ("General", "?", "Show this help"),
+            ("General", "q", "Quit"),
+        ]
+        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title="Activity View"))
 
     async def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row selection change."""

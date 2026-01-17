@@ -4,11 +4,12 @@ Modal screens for EMDX TUI.
 """
 
 import logging
+from typing import List, Tuple
 
 from textual.app import ComposeResult
-from textual.containers import Grid
+from textual.containers import Grid, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label
+from textual.widgets import Button, Label, Static
 
 # Set up logging for debugging
 logger = logging.getLogger(__name__)
@@ -102,3 +103,116 @@ class DeleteConfirmScreen(ModalScreen):
         # Don't consume the event - let bindings handle it
         # Important: Don't call event.stop() or event.prevent_default() here
         # as that would prevent the bindings from working
+
+
+class KeybindingsHelpScreen(ModalScreen):
+    """Modal screen showing available keybindings."""
+
+    CSS = """
+    KeybindingsHelpScreen {
+        align: center middle;
+    }
+
+    #help-dialog {
+        padding: 1 2;
+        width: 50;
+        height: auto;
+        max-height: 80%;
+        border: thick $background 80%;
+        background: $surface;
+    }
+
+    #help-title {
+        text-align: center;
+        text-style: bold;
+        padding-bottom: 1;
+    }
+
+    .help-section {
+        padding-top: 1;
+    }
+
+    .help-section-title {
+        text-style: bold;
+        color: $accent;
+    }
+
+    .help-row {
+        padding-left: 2;
+    }
+
+    .help-key {
+        text-style: bold;
+        color: $text;
+        width: 12;
+    }
+
+    .help-desc {
+        color: $text-muted;
+    }
+
+    #help-footer {
+        text-align: center;
+        padding-top: 1;
+        color: $text-muted;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "close", "Close"),
+        ("question_mark", "close", "Close"),
+        ("q", "close", "Close"),
+    ]
+
+    def __init__(self, bindings: List[Tuple[str, str, str]] = None, title: str = "Keybindings"):
+        """Initialize help screen.
+
+        Args:
+            bindings: List of (section, key, description) tuples.
+                      If None, uses default Activity view bindings.
+            title: Title for the help dialog.
+        """
+        super().__init__()
+        self.title = title
+        self.bindings_data = bindings or self._default_bindings()
+
+    def _default_bindings(self) -> List[Tuple[str, str, str]]:
+        """Default keybindings for Activity view."""
+        return [
+            ("Navigation", "j / k", "Move down / up"),
+            ("Navigation", "Enter", "Expand / collapse"),
+            ("Navigation", "l / h", "Expand / collapse"),
+            ("Navigation", "Tab", "Next pane"),
+            ("Actions", "i", "Copy document (gist)"),
+            ("Actions", "g", "Add to group"),
+            ("Actions", "G", "Create new group"),
+            ("Actions", "u", "Remove from group"),
+            ("Actions", "f", "Fullscreen preview"),
+            ("Actions", "r", "Refresh"),
+            ("General", "?", "Show this help"),
+            ("General", "q", "Quit"),
+        ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="help-dialog"):
+            yield Static(f"─── {self.title} ───", id="help-title")
+
+            # Group bindings by section
+            current_section = None
+            for section, key, desc in self.bindings_data:
+                if section != current_section:
+                    current_section = section
+                    yield Static(f"[bold $accent]{section}[/]", classes="help-section-title")
+
+                yield Static(f"  [bold]{key:<10}[/] [dim]{desc}[/]", classes="help-row")
+
+            yield Static("Press ? or Esc to close", id="help-footer")
+
+    def action_close(self) -> None:
+        self.dismiss()
+
+    def on_key(self, event) -> None:
+        # Close on any key for convenience
+        if event.key not in ("escape", "question_mark", "q"):
+            # Let specific bindings handle their keys
+            pass

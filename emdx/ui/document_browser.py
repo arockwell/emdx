@@ -22,6 +22,7 @@ from emdx.models.tags import get_document_tags
 from .presenters import DocumentBrowserPresenter
 from .viewmodels import DocumentDetailVM, DocumentListVM
 from .vim_editor import VimEditor
+from .modals import KeybindingsHelpScreen
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class DocumentBrowser(Widget):
         Binding("T", "remove_tags", "Remove Tags"),
         Binding("s", "selection_mode", "Select"),
         Binding("r", "refresh", "Refresh"),
+        Binding("question_mark", "show_help", "Help"),
         # Hierarchy navigation
         Binding("l", "expand_children", "Expand", show=False),
         Binding("right", "expand_children", "Expand", show=False),
@@ -723,6 +725,26 @@ class DocumentBrowser(Widget):
     async def action_refresh(self) -> None:
         """Refresh the document list."""
         await self.load_documents()
+
+    def action_show_help(self) -> None:
+        """Show keybindings help modal."""
+        bindings = [
+            ("Navigation", "j / k", "Move down / up"),
+            ("Navigation", "g / G", "Go to top / bottom"),
+            ("Navigation", "l / h", "Expand / collapse children"),
+            ("Editing", "e", "Edit document"),
+            ("Editing", "n", "New document"),
+            ("Editing", "i", "Copy document (gist)"),
+            ("Tags", "t", "Add tags"),
+            ("Tags", "T", "Remove tags"),
+            ("Search", "/", "Search documents"),
+            ("Other", "s", "Selection mode"),
+            ("Other", "a", "Toggle archived"),
+            ("Other", "r", "Refresh"),
+            ("General", "?", "Show this help"),
+            ("General", "q", "Quit"),
+        ]
+        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title="Document Browser"))
 
     async def action_expand_children(self) -> None:
         """Expand children of the selected document."""
