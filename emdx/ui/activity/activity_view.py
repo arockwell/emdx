@@ -560,6 +560,12 @@ class ActivityView(Widget):
                         # Track current running stage
                         if sr.get("status") == "running":
                             current_stage = sr.get("stage_name", "")
+                        # Check synthesis FIRST (prefer over individual outputs)
+                        if sr.get("synthesis_doc_id"):
+                            output_count += 1
+                            has_outputs = True
+                            if not output_doc_id:
+                                output_doc_id = sr["synthesis_doc_id"]
                         ind_runs = wf_db.list_individual_runs(sr["id"])
                         # Count individual outputs and sum tokens
                         for ir in ind_runs:
@@ -570,12 +576,6 @@ class ActivityView(Widget):
                                 has_outputs = True
                                 if not output_doc_id:
                                     output_doc_id = ir["output_doc_id"]
-                        # Count synthesis (add 1 if exists)
-                        if sr.get("synthesis_doc_id"):
-                            output_count += 1
-                            has_outputs = True
-                            if not output_doc_id:
-                                output_doc_id = sr["synthesis_doc_id"]
                     if has_outputs:
                         item._has_workflow_outputs = True
                         item._output_count = output_count
