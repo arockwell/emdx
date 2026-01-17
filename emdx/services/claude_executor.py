@@ -205,3 +205,99 @@ def execute_claude_detached(
             return process.pid
         else:
             raise
+
+
+def execute_claude_sync(
+    task: str,
+    execution_id: int,
+    log_file: Path,
+    allowed_tools: Optional[List[str]] = None,
+    working_dir: Optional[str] = None,
+    doc_id: Optional[str] = None,
+    timeout: int = 300,
+) -> dict:
+    """Execute a task with Claude synchronously, waiting for completion.
+
+    Args:
+        task: The task prompt to execute
+        execution_id: Numeric database execution ID
+        log_file: Path to the log file
+        allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
+        working_dir: Working directory for execution
+        doc_id: Document ID (for logging)
+        timeout: Maximum seconds to wait (default 300 = 5 minutes)
+
+    Returns:
+        Dict with 'success' (bool) and 'output' (str) or 'error' (str)
+    """
+    if allowed_tools is None:
+        allowed_tools = DEFAULT_ALLOWED_TOOLS
+
+    # Validate environment first
+    is_valid, env_info = validate_execution_environment(verbose=False)
+    if not is_valid:
+        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
+        return {"success": False, "error": f"Environment validation failed: {error_msg}"}
+
+    # Ensure claude is in PATH
+    ensure_claude_in_path()
+
+    # Expand @filename references
+    expanded_task = parse_task_content(task)
+
+    # Build Claude command - simpler for sync execution
+    cmd = [
+        "claude",
+        "--print", expanded_task,
+        "--allowedTools", ",".join(allowed_tools),
+        "--output-format", "text",
+        "--model", DEFAULT_CLAUDE_MODEL,
+    ]
+
+    # Ensure log directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Initialize structured logger
+    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
+    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {
+        "doc_id": doc_id,
+        "working_dir": working_dir,
+        "allowed_tools": allowed_tools,
+        "mode": "synchronous"
+    })
+
+    try:
+        # Run synchronously with timeout
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=working_dir,
+        )
+
+        # Log the output
+        with open(log_file, 'a') as f:
+            f.write(f"\n--- STDOUT ---\n{result.stdout}\n")
+            if result.stderr:
+                f.write(f"\n--- STDERR ---\n{result.stderr}\n")
+
+        if result.returncode == 0:
+            main_logger.info("Execution completed successfully", {
+                "returncode": result.returncode,
+                "output_length": len(result.stdout)
+            })
+            return {"success": True, "output": result.stdout}
+        else:
+            main_logger.error(f"Execution failed with code {result.returncode}", {
+                "returncode": result.returncode,
+                "stderr": result.stderr[:500] if result.stderr else None
+            })
+            return {"success": False, "error": result.stderr or f"Exit code {result.returncode}"}
+
+    except subprocess.TimeoutExpired:
+        main_logger.error(f"Execution timed out after {timeout}s")
+        return {"success": False, "error": f"Timeout after {timeout} seconds"}
+    except Exception as e:
+        main_logger.error(f"Execution failed: {e}")
+        return {"success": False, "error": str(e)}

@@ -130,6 +130,7 @@ def process(
     stage: str = typer.Argument(..., help="Stage to process"),
     doc_id: Optional[int] = typer.Option(None, "--doc", "-d", help="Specific document ID"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be processed"),
+    sync: bool = typer.Option(False, "--sync", "-s", help="Wait for completion before advancing"),
 ):
     """Process one document at a stage.
 
@@ -197,20 +198,53 @@ def process(
         execution_id = cursor.lastrowid
 
     try:
-        # Execute with Claude
-        pid = execute_claude_detached(
-            task=prompt,
-            execution_id=execution_id,
-            log_file=log_file,
-            doc_id=str(doc_id),
-        )
+        if sync:
+            # Synchronous execution - wait for completion
+            from ..services.claude_executor import execute_claude_sync
+            console.print("[cyan]Running synchronously (waiting for completion)...[/cyan]")
 
-        # Update stage immediately (Claude will update content when done)
-        update_document_stage(doc_id, next_stage)
+            result = execute_claude_sync(
+                task=prompt,
+                execution_id=execution_id,
+                log_file=log_file,
+                doc_id=str(doc_id),
+            )
 
-        console.print(f"[green]✓[/green] Started processing (PID: {pid})")
-        console.print(f"  Execution #{execution_id}")
-        console.print(f"  Document moved to stage: {next_stage}")
+            if result.get("success"):
+                # Only advance on success
+                update_document_stage(doc_id, next_stage)
+                console.print(f"[green]✓[/green] Completed processing")
+                console.print(f"  Document moved to stage: {next_stage}")
+
+                # Mark execution as completed
+                with db_connection.get_connection() as conn:
+                    conn.execute(
+                        "UPDATE executions SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (execution_id,),
+                    )
+                    conn.commit()
+            else:
+                console.print(f"[red]Processing failed - document stays at '{stage}'[/red]")
+                with db_connection.get_connection() as conn:
+                    conn.execute(
+                        "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (execution_id,),
+                    )
+                    conn.commit()
+        else:
+            # Async execution - start and return immediately
+            # Document stays at current stage until manually advanced
+            pid = execute_claude_detached(
+                task=prompt,
+                execution_id=execution_id,
+                log_file=log_file,
+                doc_id=str(doc_id),
+            )
+
+            console.print(f"[green]✓[/green] Started processing (PID: {pid})")
+            console.print(f"  Execution #{execution_id}")
+            console.print(f"  [yellow]Document stays at '{stage}' until manually advanced[/yellow]")
+            console.print(f"  Use 'emdx pipeline advance {doc_id}' after completion")
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
