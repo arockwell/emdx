@@ -275,7 +275,7 @@ class WorkflowBrowser(HelpMixin, Widget):
             table.add_column("Pipeline", width=12)
             table.add_column("Name", width=24)
             table.add_column("Task", width=5)
-            table.add_column("Runs", width=5)
+            table.add_column("Uses", width=5)
 
             workflows = workflow_registry.list_workflows(include_inactive=False)
             # Sort by usage
