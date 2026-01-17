@@ -243,6 +243,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "pipeline":
+                try:
+                    from .pipeline_browser import PipelineBrowser
+                    self.browsers[browser_type] = PipelineBrowser()
+                    logger.info("PipelineBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create PipelineBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Pipeline browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             elif browser_type == "document":
                 try:
                     from .document_browser import DocumentBrowser
@@ -320,7 +329,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents)
+        # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents, 4=Pipeline)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -333,9 +342,13 @@ class BrowserContainer(App):
             await self.switch_browser("document")
             event.stop()
             return
+        elif key == "4":
+            await self.switch_browser("pipeline")
+            event.stop()
+            return
 
-        # Q to quit from activity or document browser
-        if key == "q" and self.current_browser in ["activity", "document"]:
+        # Q to quit from activity, document, or pipeline browser
+        if key == "q" and self.current_browser in ["activity", "document", "pipeline"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()

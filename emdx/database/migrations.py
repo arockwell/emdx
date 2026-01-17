@@ -1525,6 +1525,30 @@ def migration_026_add_embeddings(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_027_add_document_stage(conn: sqlite3.Connection):
+    """Add stage column to documents for streaming pipeline processing.
+
+    The stage column enables a status-as-queue pattern where documents
+    flow through stages: idea → prompt → analyzed → planned → done.
+    Each stage is watched by a patrol that processes items and advances them.
+    """
+    cursor = conn.cursor()
+
+    # Add stage column with default 'idea' for new pipeline items
+    # NULL means the document is not part of the pipeline
+    cursor.execute("""
+        ALTER TABLE documents ADD COLUMN stage TEXT DEFAULT NULL
+    """)
+
+    # Index for efficient stage-based queries (the core of the patrol system)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_stage
+        ON documents(stage) WHERE stage IS NOT NULL
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1554,6 +1578,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (24, "Remove agent system tables", migration_024_remove_agent_tables),
     (25, "Add standalone presets", migration_025_add_standalone_presets),
     (26, "Add embeddings for semantic search", migration_026_add_embeddings),
+    (27, "Add document stage for pipeline", migration_027_add_document_stage),
 ]
 
 

@@ -882,3 +882,162 @@ def list_non_workflow_documents(
 
         cursor = conn.execute(query, (cutoff.isoformat(), limit))
         return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]
+
+
+# =============================================================================
+# Pipeline Stage Operations (for streaming document processing)
+# =============================================================================
+
+
+def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
+    """Get the oldest document at a given pipeline stage.
+
+    This is the core primitive for the patrol system - each patrol watches
+    a stage and picks up the oldest unprocessed document.
+
+    Args:
+        stage: The stage to query (e.g., 'idea', 'prompt', 'analyzed', 'planned')
+
+    Returns:
+        The oldest document at that stage, or None if no documents are waiting
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT * FROM documents
+            WHERE stage = ? AND is_deleted = FALSE
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (stage,),
+        )
+        row = cursor.fetchone()
+        return _parse_doc_datetimes(dict(row)) if row else None
+
+
+def update_document_stage(doc_id: int, stage: str | None) -> bool:
+    """Update a document's pipeline stage.
+
+    Args:
+        doc_id: Document ID
+        stage: New stage (or None to remove from pipeline)
+
+    Returns:
+        True if update was successful
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE documents
+            SET stage = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_deleted = FALSE
+            """,
+            (stage, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]:
+    """List all documents at a given pipeline stage.
+
+    Args:
+        stage: The stage to query
+        limit: Maximum documents to return
+
+    Returns:
+        List of documents at that stage, oldest first
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, title, project, stage, created_at, updated_at
+            FROM documents
+            WHERE stage = ? AND is_deleted = FALSE
+            ORDER BY created_at ASC
+            LIMIT ?
+            """,
+            (stage, limit),
+        )
+        return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]
+
+
+def count_documents_at_stage(stage: str) -> int:
+    """Count documents at a given pipeline stage.
+
+    Args:
+        stage: The stage to query
+
+    Returns:
+        Number of documents at that stage
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*) FROM documents
+            WHERE stage = ? AND is_deleted = FALSE
+            """,
+            (stage,),
+        )
+        return cursor.fetchone()[0]
+
+
+def get_pipeline_stats() -> dict[str, int]:
+    """Get counts of documents at each pipeline stage.
+
+    Returns:
+        Dictionary mapping stage name to document count
+    """
+    stages = ["idea", "prompt", "analyzed", "planned", "done"]
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT stage, COUNT(*) as count
+            FROM documents
+            WHERE stage IS NOT NULL AND is_deleted = FALSE
+            GROUP BY stage
+            """
+        )
+        results = {stage: 0 for stage in stages}
+        for row in cursor.fetchall():
+            results[row["stage"]] = row["count"]
+        return results
+
+
+def save_document_to_pipeline(
+    title: str,
+    content: str,
+    stage: str = "idea",
+    project: str | None = None,
+    tags: list[str] | None = None,
+    parent_id: int | None = None,
+) -> int:
+    """Save a document directly into the pipeline at a given stage.
+
+    Args:
+        title: Document title
+        content: Document content
+        stage: Initial pipeline stage (default: 'idea')
+        project: Optional project name
+        tags: Optional list of tags
+        parent_id: Optional parent document ID
+
+    Returns:
+        The new document's ID
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO documents (title, content, project, parent_id, stage)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (title, content, project, parent_id, stage),
+        )
+        conn.commit()
+        doc_id = cursor.lastrowid
+
+        if tags:
+            from emdx.models.tags import add_tags_to_document
+            add_tags_to_document(doc_id, tags)
+
+        return doc_id
