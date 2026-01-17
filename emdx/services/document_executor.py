@@ -250,6 +250,7 @@ def execute_document_background(
             'context': context,
         }
     except Exception as e:
+        logger.warning("Failed to execute document %s: %s", doc_id, e, exc_info=True)
         return {
             'success': False,
             'execution_id': execution_id,
