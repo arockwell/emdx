@@ -4,199 +4,312 @@
 [![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**A terminal-native knowledge base with full-text search, emoji tags, and AI agent integration.**
+**Parallel task orchestration and knowledge capture for Claude Code.**
 
-Stop losing notes in scattered markdown files. EMDX gives you instant search across all your documents, smart tagging with emoji aliases, and deep integration with Claude Code for AI-powered workflows.
+Run multiple Claude agents in parallel, discover tasks dynamically, and automatically capture everything to a searchable knowledge base.
 
-## Key Features
+## What Makes EMDX Different
 
-- **Instant Search** - SQLite FTS5 full-text search with ranking
-- **Emoji Tags** - Type `gameplan` and get 🎯, type `active` and get 🚀
-- **Rich TUI** - Vim-style navigation across documents, files, git diffs, and logs
-- **AI Agents** - Create custom agents for code review, research, and automation
-- **Claude Integration** - Execute documents directly with Claude Code
-- **Git Aware** - Auto-detects projects, visual diff browser, worktree switching
-- **Zero Config** - SQLite backend, no server required
+EMDX is designed for one workflow: **using Claude Code to get things done at scale**.
 
-## Quick Start
+- Run 10 tasks in parallel with 5 worker slots
+- Discover tasks from shell commands at runtime
+- Save configurations as presets for one-command execution
+- Every output automatically indexed and searchable
+- Semantic search across your entire history
 
 ```bash
-# Install
-git clone https://github.com/arockwell/emdx.git
-cd emdx && pip install -e .
+# Run parallel code analysis
+emdx run "Review auth module" "Check error handling" "Audit SQL queries" -j 3
 
-# Save your first document
-echo "Remember to refactor the auth module" | emdx save --title "Auth TODO" --tags "bug,active"
+# Discover tasks dynamically from git branches
+emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
 
-# Search
-emdx find "auth"
-emdx find --tags "active"
-
-# Browse in TUI
-emdx gui
+# Use a saved preset
+emdx run -p security-audit
 ```
 
-## Core Concepts
-
-### Documents
-Every piece of content is a **document** with a unique ID. Documents belong to **projects** (auto-detected from git repos).
+## Installation
 
 ```bash
-emdx save notes.md                    # Save a file
-echo "quick note" | emdx save --title "Note"  # Save from stdin
-emdx view 42                          # View document #42
-emdx edit 42                          # Edit in $EDITOR
+git clone https://github.com/arockwell/emdx.git
+cd emdx && pip install -e .
+```
+
+## Quick Start: Parallel Tasks
+
+The `emdx run` command is the fastest way to execute parallel tasks with Claude:
+
+```bash
+# Run multiple tasks in parallel
+emdx run "task one" "task two" "task three"
+
+# Control concurrency (10 tasks, 5 slots)
+emdx run "t1" "t2" "t3" "t4" "t5" "t6" "t7" "t8" "t9" "t10" -j 5
+
+# Add synthesis to combine outputs
+emdx run --synthesize "analyze auth" "analyze api" "analyze database"
+
+# Set a title for tracking
+emdx run -T "Security Audit" "check XSS" "check SQL injection" "check CSRF"
+```
+
+### Dynamic Task Discovery
+
+Discover tasks at runtime from shell commands:
+
+```bash
+# Review all feature branches
+emdx run -d "git branch -r | grep feature" -t "Review branch {{task}}"
+
+# Analyze all Python files in a directory
+emdx run -d "find src -name '*.py' -type f" -t "Analyze {{task}}"
+
+# Process all open PRs
+emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{task}}"
+
+# Run on document IDs from previous work
+emdx run 5350 5351 5352
+```
+
+### Presets
+
+Save configurations for common workflows:
+
+```bash
+# Create a preset
+emdx preset create security-audit \
+  --discover "find . -name '*.py'" \
+  --template "Security review {{task}}" \
+  --jobs 5 \
+  --synthesize
+
+# Use it
+emdx run -p security-audit
+
+# List presets
+emdx preset list
+```
+
+## Workflow System
+
+For complex multi-stage execution, use the workflow system:
+
+```bash
+# List available workflows
+emdx workflow list
+
+# Run with inline tasks
+emdx workflow run parallel_analysis \
+  -t "Analyze authentication" \
+  -t "Analyze authorization" \
+  -t "Analyze data flow"
+
+# Use worktree isolation (each task gets its own git worktree)
+emdx workflow run parallel_fix \
+  -t "Fix auth bug" \
+  -t "Fix validation bug" \
+  --worktree --base-branch main
+
+# Control concurrency
+emdx workflow run task_parallel -t "t1" -t "t2" -t "t3" -j 2
+```
+
+### Execution Modes
+
+| Mode | Use Case |
+|------|----------|
+| `single` | One task, full attention |
+| `parallel` | Multiple independent tasks |
+| `iterative` | Sequential refinement |
+| `adversarial` | Multiple perspectives, then synthesis |
+| `dynamic` | Discover tasks at runtime |
+
+### Workflow Presets
+
+Save workflow configurations for reuse:
+
+```bash
+# Create from variables
+emdx workflow preset create parallel_analysis my-preset \
+  -v topic="API Security"
+
+# Create from a successful run
+emdx workflow preset from-run parallel_analysis my-preset --run 42
+
+# Use a preset
+emdx workflow run parallel_analysis --preset my-preset
+```
+
+## Monitoring Executions
+
+```bash
+# List running executions
+emdx exec running
+
+# Follow logs
+emdx exec show 42
+
+# Health check
+emdx exec health
+
+# Kill a stuck execution
+emdx exec kill 42
+
+# Kill all running
+emdx exec killall
+```
+
+## Finding Information
+
+EMDX provides multiple ways to locate information, from quick keyword searches to semantic AI-powered discovery.
+
+### Quick Reference
+
+| I want to... | Command |
+|--------------|---------|
+| Search by keywords | `emdx find "auth bug"` |
+| Filter by tags | `emdx find --tags "active,gameplan"` |
+| Find by meaning/concept | `emdx ai search "rate limiting strategies"` |
+| Find docs similar to one | `emdx similar 42` |
+| Find docs matching text | `emdx similar-text "error handling pattern"` |
+| See recent work | `emdx recent` |
+| List all docs | `emdx list` |
+| List by project | `emdx list --project myapp` |
+| Read a specific doc | `emdx view 42` |
+| Ask a question | `emdx ai context "how does auth work?" \| claude` |
+| Browse interactively | `emdx gui` |
+
+### Keyword Search
+
+Fast full-text search using SQLite FTS5:
+
+```bash
+emdx find "authentication"           # Search for terms
+emdx find --tags "active"            # Filter by tags
+emdx find "security" --tags "analysis"  # Combine text and tags
+emdx find "api" --project myapp      # Filter by project
+```
+
+### Semantic Search
+
+Find documents by meaning, not just keywords:
+
+```bash
+# Build the index first (one-time)
+emdx ai index
+
+# Search by concept
+emdx ai search "how we handle rate limiting"
+emdx ai search "authentication flow"
+
+# Adjust threshold (lower = more results)
+emdx ai search "caching" --threshold 0.3
+```
+
+### Similar Documents
+
+Find related content:
+
+```bash
+emdx similar 42                      # Docs similar to #42
+emdx similar-text "retry logic with exponential backoff"
+```
+
+### Q&A Over Your Knowledge Base
+
+```bash
+# Using Claude CLI (recommended - uses Claude Max subscription)
+emdx ai context "How does the workflow system work?" | claude
+
+# Using Claude API (requires ANTHROPIC_API_KEY)
+emdx ai ask "How did we solve the auth bug?"
+```
+
+### Browsing
+
+```bash
+emdx recent                          # Recently accessed
+emdx recent 20                       # Last 20
+emdx list                            # All documents
+emdx list --project myapp            # By project
+emdx view 42                         # Read specific doc
+emdx gui                             # Interactive TUI
+```
+
+### For AI Agents
+
+Recommended search strategy for Claude Code and other AI agents:
+
+```bash
+# 1. Start with semantic search for open-ended questions
+emdx ai search "authentication implementation"
+
+# 2. Use keyword search for specific terms or IDs
+emdx find "AUTH-123"
+
+# 3. Use tag filtering to narrow by status/type
+emdx find --tags "gameplan,active"    # Current plans
+emdx find --tags "analysis,done"      # Completed analyses
+
+# 4. Expand from a known good doc
+emdx similar 42
+
+# 5. Get synthesized answers
+emdx ai context "What patterns do we use for error handling?" | claude
 ```
 
 ### Emoji Tags
-Tags use emoji for visual density. Type text aliases instead of hunting for emoji:
 
-| Type this | Get this | Use for |
-|-----------|----------|---------|
-| `gameplan`, `plan` | 🎯 | Strategic documents |
-| `analysis`, `research` | 🔍 | Investigations |
-| `notes`, `memo` | 📝 | General notes |
-| `docs` | 📚 | Documentation |
-| `active`, `working` | 🚀 | Currently in progress |
-| `done`, `complete` | ✅ | Finished work |
-| `blocked`, `stuck` | 🚧 | Waiting on something |
-| `success`, `win` | 🎉 | Positive outcome |
-| `failed` | ❌ | Negative outcome |
-| `bug`, `issue` | 🐛 | Problems to fix |
-| `feature` | ✨ | New functionality |
-| `urgent`, `critical` | 🚨 | High priority |
-| `refactor` | 🔧 | Code improvements |
+Type text aliases instead of emoji:
+
+| Type | Get | Use for |
+|------|-----|---------|
+| `gameplan` | 🎯 | Strategic plans |
+| `analysis` | 🔍 | Investigations |
+| `active` | 🚀 | In progress |
+| `done` | ✅ | Completed |
+| `blocked` | 🚧 | Waiting |
+| `success` | 🎉 | Worked |
+| `failed` | ❌ | Didn't work |
 
 ```bash
-# Add tags when saving
-emdx save plan.md --tags "gameplan,active"
-
-# Add tags to existing document
-emdx tag 42 analysis done success
-
-# Search by tags
-emdx find --tags "active"
-emdx find --tags "gameplan,done"
+emdx tag 42 gameplan active
+emdx find --tags "gameplan,success"
+emdx legend  # Full alias reference
 ```
 
-## Essential Commands
+## When to Use What
 
-```bash
-# Save content
-emdx save file.md                         # Save file (title from filename)
-emdx save file.md --title "Custom Title"  # Save with custom title
-echo "text" | emdx save --title "Title"   # Save from stdin (CORRECT)
-
-# Search
-emdx find "search terms"                  # Full-text search
-emdx find --tags "tag1,tag2"              # Search by tags
-
-# Browse
-emdx list                                 # List all documents
-emdx recent                               # Recently accessed
-emdx view <id>                            # View document
-emdx edit <id>                            # Edit in $EDITOR
-
-# Tags
-emdx tag <id> tag1 tag2                   # Add tags
-emdx untag <id> tag1                      # Remove tag
-emdx tags                                 # List all tags with counts
-emdx legend                               # Show emoji alias reference
-
-# TUI
-emdx gui                                  # Launch interactive browser
-```
-
-## AI Integration
-
-EMDX is designed to work with Claude Code and other AI assistants.
-
-### For AI Agents: Critical Syntax
-
-```bash
-# CORRECT: Save text via stdin
-echo "My content here" | emdx save --title "Title"
-
-# WRONG: This looks for a FILE named "My content here"
-emdx save "My content here"
-```
-
-### Using with Claude Code
-
-Documents can be executed directly with Claude:
-
-```bash
-# In TUI: press 'x' on any document to execute with Claude
-# Or run agents on documents:
-emdx agent run code-reviewer --doc 123
-```
-
-### Custom Agents
-
-Create AI agents for repeatable tasks:
-
-```bash
-emdx agent list                           # List available agents
-emdx agent run <name> --doc <id>          # Run agent on document
-emdx agent run <name> --query "text"      # Run agent with query
-```
-
-See [AI Agents Guide](docs/ai-agents.md) for creating custom agents.
-
-## TUI Browser
-
-Launch with `emdx gui`. Vim-style keybindings:
-
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate down/up |
-| `Enter` | Select/open |
-| `e` | Edit with vim |
-| `f` | File browser mode |
-| `d` | Git diff browser |
-| `l` | Log browser |
-| `a` | Agent browser |
-| `x` | Execute with Claude |
-| `/` | Search |
-| `q` | Quit/back |
-
-### Browser Modes
-
-- **Documents** (default) - Browse and manage your knowledge base
-- **Files** (`f`) - Browse filesystem with preview
-- **Git** (`d`) - Visual diff viewer, worktree switching
-- **Logs** (`l`) - Execution monitoring
-- **Agents** (`a`) - AI agent management
-
-## Configuration
-
-| Setting | Location | Notes |
-|---------|----------|-------|
-| Database | `~/.emdx/emdx.db` | Created automatically |
-| Editor | `$EDITOR` env var | For external editing |
-| GitHub | `GITHUB_TOKEN` or `gh auth login` | For GitHub integration |
+| I want to... | Use this |
+|--------------|----------|
+| Run quick parallel tasks | `emdx run "t1" "t2" "t3"` |
+| Discover tasks dynamically | `emdx run -d "command" -t "template"` |
+| Save a task configuration | `emdx preset create name` |
+| Run complex multi-stage work | `emdx workflow run workflow_name` |
+| Search by keywords | `emdx find "query"` |
+| Search by meaning | `emdx ai search "concept"` |
+| Find similar docs | `emdx similar 42` |
+| Ask questions | `emdx ai context "question" \| claude` |
+| Check running tasks | `emdx exec running` |
+| Kill stuck work | `emdx exec kill id` |
 
 ## Documentation
 
-- [AI Agents Guide](docs/ai-agents.md) - Create and run custom AI agents
 - [CLI Reference](docs/cli-api.md) - Complete command documentation
-- [Architecture](docs/architecture.md) - System design and code structure
-- [UI Guide](docs/ui-architecture.md) - TUI components and theming
+- [Workflow System](docs/workflows.md) - Multi-stage execution patterns
+- [AI System](docs/ai-system.md) - Semantic search and Q&A
+- [Architecture](docs/architecture.md) - System design
 - [Development Setup](docs/development-setup.md) - Contributing guide
-- [Database Design](docs/database-design.md) - Schema and migrations
 
-## Contributing
+## Development
 
 ```bash
-# Development install
-git clone https://github.com/arockwell/emdx.git
-cd emdx
 poetry install
 poetry run emdx --help
+poetry run pytest
 ```
-
-See [Development Setup](docs/development-setup.md) for testing and code quality guidelines.
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see LICENSE file.
