@@ -1190,6 +1190,35 @@ class ActivityView(HelpMixin, Widget):
                     icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
                     content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
 
+            # Show prompt from first individual run (gives context for what the workflow is doing)
+            for sr in stage_runs:
+                ind_runs = wf_db.list_individual_runs(sr["id"])
+                if ind_runs:
+                    first_run = ind_runs[0]
+                    prompt = first_run.get("prompt_used", "")
+                    if prompt:
+                        # Extract just the task part
+                        task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
+                        if task_match:
+                            task_text = task_match.group(1).strip()
+                        else:
+                            task_text = prompt.split("\n")[0]
+
+                        content.write("")
+                        label = "Current Prompt" if status == "running" else "Prompt"
+                        content.write(f"[bold cyan]─── {label} ───[/bold cyan]")
+                        try:
+                            context_section = self.query_one("#context-section")
+                            wrap_width = max(context_section.size.width - 4, 40)
+                        except Exception:
+                            wrap_width = 50
+
+                        import textwrap
+                        wrapped = textwrap.fill(task_text, width=wrap_width)
+                        for line in wrapped.split("\n"):
+                            content.write(f"[dim]{line}[/dim]")
+                        break  # Only show first prompt
+
         # Error if any
         if run.get("error_message"):
             content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
