@@ -546,49 +546,40 @@ async def _execute_each(
 ):
     """Execute the each operation using workflow executor."""
     from ..workflows import database as wf_db
+    from .workflows import create_worktree_for_workflow, cleanup_worktree
 
     # Check if we should use worktree
     use_worktree = _should_auto_enable_worktree(from_cmd)
 
     console.print(f"[cyan]Processing {len(item_list)} item(s) ({parallel} parallel)[/cyan]")
+
+    working_dir = None
+    worktree_path = None
+
     if use_worktree:
-        console.print(f"[dim]Using worktree isolation[/dim]")
+        try:
+            worktree_path, worktree_branch = create_worktree_for_workflow("main")
+            working_dir = worktree_path
+            console.print(f"[dim]Using worktree: {worktree_path}[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not create worktree: {e}[/yellow]")
+            console.print("[dim]Continuing without worktree isolation[/dim]")
 
-    # For now, we'll use the dynamic workflow pattern directly
-    # Build the stage config on the fly
-    stage_config = {
-        "name": "main",
-        "mode": "dynamic",
-        "discovery_command": "echo 'pre-discovered'",  # Items already discovered
-        "item_variable": "item",
-        "max_concurrent": parallel,
-        "continue_on_failure": True,
-        "prompt": do_prompt,
-    }
+    # Convert to task-based execution
+    # Replace {{item}} in prompt with actual items
+    tasks = [do_prompt.replace("{{item}}", item) for item in item_list]
 
-    if synthesize:
-        stage_config["synthesis_prompt"] = synthesize
-
-    # Prepare input variables with pre-discovered items
+    # Prepare input variables
     variables = {
-        "_discovered_items": item_list,
-        "_use_worktree": use_worktree,
+        "tasks": tasks,
+        "_max_concurrent_override": parallel,
     }
 
     try:
-        # Use task_parallel workflow as base but with our items
-        # This is a simplification - in a full implementation we'd
-        # execute the dynamic stage directly
-
-        # For now, convert to task-based execution
-        tasks = [do_prompt.replace("{{item}}", item) for item in item_list]
-        variables["tasks"] = tasks
-        variables["_max_concurrent_override"] = parallel
-
         result = await workflow_executor.execute_workflow(
             workflow_name_or_id="task_parallel",
             input_variables=variables,
-            use_worktree=use_worktree,
+            working_dir=working_dir,
         )
 
         if result.status == "completed":
@@ -600,7 +591,7 @@ async def _execute_each(
 
             # Update usage count if this was a saved command
             if workflow_id:
-                wf_db.update_workflow_usage(workflow_id)
+                wf_db.increment_workflow_usage(workflow_id, success=True)
         else:
             console.print(f"[red]Failed[/red]")
             if result.error_message:
@@ -610,3 +601,9 @@ async def _execute_each(
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
+
+    finally:
+        # Clean up worktree if we created one
+        if worktree_path:
+            console.print(f"[dim]Cleaning up worktree: {worktree_path}[/dim]")
+            cleanup_worktree(worktree_path)
