@@ -5,13 +5,13 @@ AI-powered Q&A and semantic search commands for EMDX.
 from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from ..utils.output import console
+
 app = typer.Typer(help="AI-powered knowledge base features")
-console = Console()
 
 
 @app.command("ask")
