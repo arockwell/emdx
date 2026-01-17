@@ -211,10 +211,32 @@ def process(
             )
 
             if result.get("success"):
-                # Only advance on success
-                update_document_stage(doc_id, next_stage)
-                console.print(f"[green]✓[/green] Completed processing")
-                console.print(f"  Document moved to stage: {next_stage}")
+                # Create a new child document with Claude's output
+                output = result.get("output", "")
+                if output:
+                    from ..database.documents import save_document
+                    # Create child doc with stage info in title
+                    child_title = f"{doc['title']} [{stage}→{next_stage}]"
+                    child_id = save_document(
+                        title=child_title,
+                        content=output,
+                        project=doc.get("project"),
+                        parent_id=doc_id,
+                    )
+                    # Set the child's stage to the next stage
+                    update_document_stage(child_id, next_stage)
+                    console.print(f"[green]✓[/green] Created child document #{child_id} ({len(output)} chars)")
+
+                    # Mark original as done (it spawned a child)
+                    update_document_stage(doc_id, "done")
+                    console.print(f"[green]✓[/green] Completed processing")
+                    console.print(f"  Original #{doc_id} → done")
+                    console.print(f"  Child #{child_id} → {next_stage}")
+                else:
+                    # No output - just advance the original
+                    update_document_stage(doc_id, next_stage)
+                    console.print(f"[green]✓[/green] Completed (no output)")
+                    console.print(f"  Document #{doc_id} → {next_stage}")
 
                 # Mark execution as completed
                 with db_connection.get_connection() as conn:
