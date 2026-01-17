@@ -1110,6 +1110,13 @@ class ActivityView(HelpMixin, Widget):
 
         header.update(f"⚡ #{run['id']} [{status_color}]{status}[/{status_color}]")
 
+        # For running workflows, show progress prominently
+        if status == "running" and item.progress_total:
+            progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
+            content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
+            if item.progress_stage:
+                content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
+
         # Timing info as compact line
         timing_parts = []
         if run.get("total_execution_time_ms"):
@@ -1339,6 +1346,32 @@ class ActivityView(HelpMixin, Widget):
 
         if run.get("error_message"):
             content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
+
+        # Show the prompt (extract task portion)
+        prompt = run.get("prompt_used", "")
+        if prompt:
+            # Extract just the task part (before ## Instructions)
+            task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
+            if task_match:
+                task_text = task_match.group(1).strip()
+            else:
+                task_text = prompt.split("\n")[0]  # First line as fallback
+
+            content.write("")
+            content.write("[bold cyan]─── Prompt ───[/bold cyan]")
+            # Wrap the prompt text
+            try:
+                context_section = self.query_one("#context-section")
+                wrap_width = max(context_section.size.width - 4, 40)
+            except Exception:
+                wrap_width = 50
+
+            import textwrap
+            wrapped = textwrap.fill(task_text, width=wrap_width)
+            for line in wrapped.split("\n")[:6]:  # Limit to 6 lines
+                content.write(f"[dim]{line}[/dim]")
+            if len(wrapped.split("\n")) > 6:
+                content.write("[dim]...[/dim]")
 
     async def _show_workflow_summary(self, item: ActivityItem) -> None:
         """Show workflow summary in preview."""
