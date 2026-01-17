@@ -160,22 +160,35 @@ emdx exec kill 42
 emdx exec killall
 ```
 
-## Knowledge Base
+## Finding Information
 
-All outputs are automatically saved and indexed. Search your entire history:
+EMDX provides multiple ways to locate information, from quick keyword searches to semantic AI-powered discovery.
+
+### Quick Reference
+
+| I want to... | Command |
+|--------------|---------|
+| Search by keywords | `emdx find "auth bug"` |
+| Filter by tags | `emdx find --tags "active,gameplan"` |
+| Find by meaning/concept | `emdx ai search "rate limiting strategies"` |
+| Find docs similar to one | `emdx similar 42` |
+| Find docs matching text | `emdx similar-text "error handling pattern"` |
+| See recent work | `emdx recent` |
+| List all docs | `emdx list` |
+| List by project | `emdx list --project myapp` |
+| Read a specific doc | `emdx view 42` |
+| Ask a question | `emdx ai context "how does auth work?" \| claude` |
+| Browse interactively | `emdx gui` |
+
+### Keyword Search
+
+Fast full-text search using SQLite FTS5:
 
 ```bash
-# Full-text search
-emdx find "authentication bug"
-
-# Search by tags
-emdx find --tags "gameplan,active"
-
-# Combined
-emdx find "security" --tags "analysis"
-
-# View a document
-emdx view 42
+emdx find "authentication"           # Search for terms
+emdx find --tags "active"            # Filter by tags
+emdx find "security" --tags "analysis"  # Combine text and tags
+emdx find "api" --project myapp      # Filter by project
 ```
 
 ### Semantic Search
@@ -183,20 +196,67 @@ emdx view 42
 Find documents by meaning, not just keywords:
 
 ```bash
-# Build the index (one-time)
+# Build the index first (one-time)
 emdx ai index
 
-# Semantic search
+# Search by concept
 emdx ai search "how we handle rate limiting"
+emdx ai search "authentication flow"
 
-# Find similar documents
-emdx ai similar 42
+# Adjust threshold (lower = more results)
+emdx ai search "caching" --threshold 0.3
+```
 
-# Q&A with Claude API
-emdx ai ask "What was our caching strategy?"
+### Similar Documents
 
-# Q&A with Claude CLI (no API cost)
-emdx ai context "error handling patterns" | claude
+Find related content:
+
+```bash
+emdx similar 42                      # Docs similar to #42
+emdx similar-text "retry logic with exponential backoff"
+```
+
+### Q&A Over Your Knowledge Base
+
+```bash
+# Using Claude CLI (recommended - uses Claude Max subscription)
+emdx ai context "How does the workflow system work?" | claude
+
+# Using Claude API (requires ANTHROPIC_API_KEY)
+emdx ai ask "How did we solve the auth bug?"
+```
+
+### Browsing
+
+```bash
+emdx recent                          # Recently accessed
+emdx recent 20                       # Last 20
+emdx list                            # All documents
+emdx list --project myapp            # By project
+emdx view 42                         # Read specific doc
+emdx gui                             # Interactive TUI
+```
+
+### For AI Agents
+
+Recommended search strategy for Claude Code and other AI agents:
+
+```bash
+# 1. Start with semantic search for open-ended questions
+emdx ai search "authentication implementation"
+
+# 2. Use keyword search for specific terms or IDs
+emdx find "AUTH-123"
+
+# 3. Use tag filtering to narrow by status/type
+emdx find --tags "gameplan,active"    # Current plans
+emdx find --tags "analysis,done"      # Completed analyses
+
+# 4. Expand from a known good doc
+emdx similar 42
+
+# 5. Get synthesized answers
+emdx ai context "What patterns do we use for error handling?" | claude
 ```
 
 ### Emoji Tags
@@ -227,8 +287,10 @@ emdx legend  # Full alias reference
 | Discover tasks dynamically | `emdx run -d "command" -t "template"` |
 | Save a task configuration | `emdx preset create name` |
 | Run complex multi-stage work | `emdx workflow run workflow_name` |
-| Search my history | `emdx find "query"` |
-| Semantic search | `emdx ai search "concept"` |
+| Search by keywords | `emdx find "query"` |
+| Search by meaning | `emdx ai search "concept"` |
+| Find similar docs | `emdx similar 42` |
+| Ask questions | `emdx ai context "question" \| claude` |
 | Check running tasks | `emdx exec running` |
 | Kill stuck work | `emdx exec kill id` |
 
