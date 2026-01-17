@@ -272,8 +272,11 @@ def run_workflow(
     ),
     max_concurrent: Optional[int] = typer.Option(
         None,
-        "--max-concurrent",
         "-j",
+        "--jobs",
+        "-P",
+        "--parallel",
+        "--max-concurrent",
         help="Override max concurrent executions for parallel/dynamic stages",
     ),
 ):

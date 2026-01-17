@@ -22,7 +22,7 @@ def run(
         help="Title for this run (shows in Activity)"
     ),
     jobs: int = typer.Option(
-        None, "-j", "--jobs",
+        None, "-j", "--jobs", "-P", "--parallel",
         help="Max parallel tasks (default: auto)"
     ),
     synthesize: bool = typer.Option(
