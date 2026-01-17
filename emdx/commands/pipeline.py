@@ -179,9 +179,9 @@ def process(
     # Create execution record
     from datetime import datetime
     from pathlib import Path
-    from ..config.settings import get_logs_dir
 
-    log_dir = get_logs_dir()
+    log_dir = Path.home() / ".config" / "emdx" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"pipeline_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
     # Record execution in database
