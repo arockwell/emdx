@@ -45,11 +45,11 @@ except Exception as e:
 
 # Mode icons and colors for visual pipeline display
 MODE_INFO = {
-    "single": {"icon": "1", "color": "dim", "name": "single"},
+    "single": {"icon": "•", "color": "dim", "name": "single"},
     "parallel": {"icon": "||", "color": "cyan", "name": "parallel"},
-    "iterative": {"icon": "→", "color": "yellow", "name": "iterative"},
+    "iterative": {"icon": "⟳", "color": "yellow", "name": "iterative"},
     "adversarial": {"icon": "⚔", "color": "red", "name": "adversarial"},
-    "dynamic": {"icon": "*", "color": "magenta", "name": "dynamic"},
+    "dynamic": {"icon": "◈", "color": "magenta", "name": "dynamic"},
 }
 
 
