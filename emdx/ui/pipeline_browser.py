@@ -752,8 +752,12 @@ class PipelineView(Widget):
             self.doc_list.clear_selection()
 
     def action_synthesize(self) -> None:
-        """Synthesize selected docs (or all if none selected)."""
+        """Synthesize selected docs through Claude (or all if none selected)."""
         stage = STAGES[self.current_stage_idx]
+
+        if stage == "done":
+            self._update_status("[yellow]Cannot synthesize from 'done' stage[/yellow]")
+            return
 
         # Get selected doc IDs, or all docs if none selected
         selected_ids = self.doc_list.get_selected_ids() if self.doc_list else []
@@ -769,35 +773,39 @@ class PipelineView(Widget):
             self._update_status(f"[yellow]Need 2+ docs to synthesize (selected: {len(doc_ids)})[/yellow]")
             return
 
-        # Synthesize the selected documents
-        from ..database.documents import get_document, save_document_to_pipeline, update_document_stage
+        # Build combined content for Claude to synthesize
+        from ..database.documents import get_document, save_document_to_pipeline
 
-        # Build combined content
-        combined_content = f"# Synthesized from {len(doc_ids)} documents\n\n"
+        combined_parts = []
         for doc_id in doc_ids:
             doc = get_document(str(doc_id))
             if doc:
-                combined_content += f"## From: {doc['title']}\n\n"
-                combined_content += doc["content"]
-                combined_content += "\n\n---\n\n"
+                combined_parts.append(f"=== Document #{doc_id}: {doc['title']} ===\n{doc['content']}")
 
-        # Determine next stage
-        next_stage = NEXT_STAGE.get(stage, "planned")
+        combined_content = "\n\n---\n\n".join(combined_parts)
 
-        # Create the synthesized document
+        # Create a synthesis input document (keeps sources intact for now)
         title = f"Synthesis: {len(doc_ids)} {stage} documents"
-        new_doc_id = save_document_to_pipeline(
+        synthesis_doc_id = save_document_to_pipeline(
             title=title,
             content=combined_content,
-            stage=next_stage,
+            stage=stage,  # Same stage - will be processed by Claude
         )
 
-        # Move source docs to done
-        for doc_id in doc_ids:
-            update_document_stage(doc_id, "done")
+        self._update_status(f"[cyan]Synthesizing {len(doc_ids)} docs via Claude...[/cyan]")
 
-        self._update_status(f"[green]Synthesized {len(doc_ids)} docs → #{new_doc_id} at '{next_stage}'[/green]")
-        self.refresh_all()
+        # Now process it through Claude (same as 'p' key but automatic)
+        import subprocess
+        cmd = ["poetry", "run", "emdx", "pipeline", "process", stage, "--sync", "--doc", str(synthesis_doc_id)]
+
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._update_status(f"[green]Started synthesis #{synthesis_doc_id} through Claude[/green]")
+        except Exception as e:
+            self._update_status(f"[red]Error starting synthesis: {e}[/red]")
+
+        # Refresh after delay to show results
+        self.set_timer(5.0, self.refresh_all)
 
     def action_refresh(self) -> None:
         """Refresh all data."""
