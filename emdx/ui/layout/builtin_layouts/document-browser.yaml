@@ -1,0 +1,62 @@
+# Document Browser Layout
+#
+# Classic document browser layout with:
+# - Left sidebar (40%) containing document list and details
+# - Right panel (60%) for document preview
+#
+# The sidebar is split vertically:
+# - Document table (66%) - the main document list
+# - Details panel (34%) - document metadata
+#
+# All panels are focusable and the preview supports
+# editing and selection modes.
+
+name: document-browser
+description: Classic document browser layout with list, details, and preview
+version: "1.0"
+theme: null
+
+root:
+  type: split
+  direction: horizontal
+  sizes: ["40%", "60%"]
+  children:
+    # Left sidebar with list and details
+    - type: split
+      id: sidebar
+      direction: vertical
+      sizes: ["66%", "34%"]
+      classes:
+        - sidebar
+      children:
+        # Document list table
+        - type: table
+          id: doc-table
+          classes:
+            - table-section
+          config:
+            cursor_type: row
+            show_header: true
+            cell_padding: 0
+          collapsible: false
+
+        # Document details panel
+        - type: richlog
+          id: details-panel
+          classes:
+            - details-section
+            - details-richlog
+          config:
+            wrap: true
+            highlight: true
+            markup: true
+            auto_scroll: false
+          collapsible: true
+          min_size: "8"
+
+    # Right preview panel
+    - type: container
+      id: preview-container
+      classes:
+        - preview-section
+      collapsible: true

@@ -122,20 +122,20 @@ class BrowserContainer(App):
         logger.info(f"Container widget size: {self.container_widget.size}")
         logger.info(f"Container widget region: {self.container_widget.region}")
 
-        # Create and mount Activity browser as the default (Mission Control)
+        # Create and mount Activity browser V2 as the default (Mission Control)
         try:
-            from .activity_browser import ActivityBrowser
-            browser = ActivityBrowser()
-            self.browsers["activity"] = browser
-            self.current_browser = "activity"
-            logger.info("ActivityBrowser created successfully as default")
+            from .browsers.activity_browser_v2 import ActivityBrowserV2
+            browser = ActivityBrowserV2()
+            self.browsers["activityv2"] = browser
+            self.current_browser = "activityv2"
+            logger.info("ActivityBrowserV2 created successfully as default")
         except Exception as e:
             # Fallback to document browser if activity fails
-            logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
-            from .document_browser import DocumentBrowser
-            browser = DocumentBrowser()
-            self.browsers["document"] = browser
-            self.current_browser = "document"
+            logger.error(f"Failed to create ActivityBrowserV2: {e}", exc_info=True)
+            from .browsers.document_browser_v2 import DocumentBrowserV2
+            browser = DocumentBrowserV2()
+            self.browsers["documentv2"] = browser
+            self.current_browser = "documentv2"
 
         mount_point = self.container_widget.query_one("#browser-mount", Container)
         logger.info(f"Mount point size before mount: {mount_point.size}")
@@ -252,6 +252,78 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Document browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "example":
+                try:
+                    from .browsers.example_browser import ExampleBrowser
+                    self.browsers[browser_type] = ExampleBrowser()
+                    logger.info("ExampleBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create ExampleBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Example browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "logv2":
+                try:
+                    from .browsers.log_browser_v2 import LogBrowserV2
+                    self.browsers[browser_type] = LogBrowserV2()
+                    logger.info("LogBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create LogBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"LogBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "filev2":
+                try:
+                    from .browsers.file_browser_v2 import FileBrowserV2
+                    self.browsers[browser_type] = FileBrowserV2()
+                    logger.info("FileBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create FileBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"FileBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "gitv2":
+                try:
+                    from .browsers.git_browser_v2 import GitBrowserV2
+                    self.browsers[browser_type] = GitBrowserV2()
+                    logger.info("GitBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create GitBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"GitBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "taskv2":
+                try:
+                    from .browsers.task_browser_v2 import TaskBrowserV2
+                    self.browsers[browser_type] = TaskBrowserV2()
+                    logger.info("TaskBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create TaskBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"TaskBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "workflowv2":
+                try:
+                    from .browsers.workflow_browser_v2 import WorkflowBrowserV2
+                    self.browsers[browser_type] = WorkflowBrowserV2()
+                    logger.info("WorkflowBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create WorkflowBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"WorkflowBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "documentv2":
+                try:
+                    from .browsers.document_browser_v2 import DocumentBrowserV2
+                    self.browsers[browser_type] = DocumentBrowserV2()
+                    logger.info("DocumentBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create DocumentBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"DocumentBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "activityv2":
+                try:
+                    from .browsers.activity_browser_v2 import ActivityBrowserV2
+                    self.browsers[browser_type] = ActivityBrowserV2()
+                    logger.info("ActivityBrowserV2 created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create ActivityBrowserV2: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"ActivityBrowserV2 failed to load:\n{str(e)}\n\nCheck logs for details.")
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
@@ -290,18 +362,22 @@ class BrowserContainer(App):
         await self._view_document(event.doc_id)
 
     async def on_activity_view_view_document(self, event) -> None:
-        """Handle ViewDocument message from ActivityView - switch to document browser."""
+        """Handle ViewDocument message from ActivityView V1 - switch to document browser."""
+        await self._view_document(event.doc_id)
+
+    async def on_activity_browser_v2_view_document(self, event) -> None:
+        """Handle ViewDocument message from ActivityBrowserV2 - switch to document browser."""
         await self._view_document(event.doc_id)
 
     async def _view_document(self, doc_id: int) -> None:
         """Switch to document browser and view a specific document."""
-        logger.info(f"Switching to document browser to view doc #{doc_id}")
+        logger.info(f"Switching to document browser V2 to view doc #{doc_id}")
 
-        # Switch to document browser
-        await self.switch_browser("document")
+        # Switch to document browser V2
+        await self.switch_browser("documentv2")
 
         # Try to select the document in the browser
-        doc_browser = self.browsers.get("document")
+        doc_browser = self.browsers.get("documentv2")
         if doc_browser and hasattr(doc_browser, 'select_document_by_id'):
             await doc_browser.select_document_by_id(doc_id)
         elif doc_browser:
@@ -321,38 +397,45 @@ class BrowserContainer(App):
             return
 
         # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents)
+        # All now point to V2 browsers by default
         if key == "1":
-            await self.switch_browser("activity")
+            await self.switch_browser("activityv2")
             event.stop()
             return
         elif key == "2":
-            await self.switch_browser("workflow")
+            await self.switch_browser("workflowv2")
             event.stop()
             return
         elif key == "3":
-            await self.switch_browser("document")
+            await self.switch_browser("documentv2")
+            event.stop()
+            return
+        elif key == "exclamation_mark":
+            # Shift+1 -> Legacy ActivityBrowser (V1)
+            await self.switch_browser("activity")
             event.stop()
             return
 
-        # Q to quit from activity or document browser
-        if key == "q" and self.current_browser in ["activity", "document"]:
+        # Q to quit from activity or document browser (V1 or V2)
+        if key == "q" and self.current_browser in ["activity", "activityv2", "document", "documentv2"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()
             return
 
-        # Browser-specific keys from document browser
-        if self.current_browser == "document":
+        # Browser-specific keys from document browser (V1 or V2)
+        # Lowercase keys now point to V2, uppercase keys point to V1 (legacy)
+        if self.current_browser in ["document", "documentv2"]:
             if key == "f":
-                await self.switch_browser("file")
+                await self.switch_browser("filev2")
                 event.stop()
                 return
             elif key == "g":
-                await self.switch_browser("git")
+                await self.switch_browser("gitv2")
                 event.stop()
                 return
             elif key == "l":
-                await self.switch_browser("log")
+                await self.switch_browser("logv2")
                 event.stop()
                 return
             elif key == "c":
@@ -360,17 +443,46 @@ class BrowserContainer(App):
                 event.stop()
                 return
             elif key == "w":
-                await self.switch_browser("workflow")
+                await self.switch_browser("workflowv2")
                 event.stop()
                 return
             elif key == "t":
+                await self.switch_browser("taskv2")
+                event.stop()
+                return
+            elif key == "e":
+                await self.switch_browser("example")
+                event.stop()
+                return
+            # Legacy V1 browsers (Shift + key to access old versions)
+            elif key == "F":
+                await self.switch_browser("file")
+                event.stop()
+                return
+            elif key == "G":
+                await self.switch_browser("git")
+                event.stop()
+                return
+            elif key == "L":
+                await self.switch_browser("log")
+                event.stop()
+                return
+            elif key == "T":
                 await self.switch_browser("tasks")
                 event.stop()
                 return
+            elif key == "W":
+                await self.switch_browser("workflow")
+                event.stop()
+                return
+            elif key == "D":
+                await self.switch_browser("document")
+                event.stop()
+                return
 
-        # Q from sub-browsers goes back to activity (the new default)
-        if key == "q" and self.current_browser in ["file", "git", "log", "control", "workflow", "tasks"]:
-            await self.switch_browser("activity")
+        # Q from sub-browsers goes back to activity V2 (the new default)
+        if key == "q" and self.current_browser in ["file", "git", "log", "logv2", "filev2", "gitv2", "taskv2", "workflowv2", "control", "workflow", "tasks", "example"]:
+            await self.switch_browser("activityv2")
             event.stop()
             return
 

@@ -1,0 +1,519 @@
+/* =============================================================================
+ * EMDX Panel System - Unified Stylesheet
+ * =============================================================================
+ *
+ * This stylesheet consolidates styles for all panel components in the EMDX
+ * browser system. It provides consistent styling across:
+ *   - ListPanel: DataTable-based lists with vim navigation and search
+ *   - PreviewPanel: Content preview with markdown rendering and edit modes
+ *   - StatusPanel: Configurable status bar with sections
+ *   - InputPanel: Modal input for search, tags, and prompts
+ *
+ * CSS Variable Reference (Textual built-ins):
+ *   - $primary: Primary accent color
+ *   - $secondary: Secondary accent color
+ *   - $accent: Highlight/accent color
+ *   - $surface: Surface/card background
+ *   - $boost: Elevated surface (status bars, etc.)
+ *   - $text: Primary text color
+ *   - $text-muted: Subdued text color
+ *   - $error: Error/warning color
+ *   - $success: Success/confirmation color
+ *
+ * The stylesheet is organized into sections:
+ *   1. Common Panel Base Styles
+ *   2. ListPanel Styles
+ *   3. PreviewPanel Styles
+ *   4. StatusPanel Styles
+ *   5. InputPanel Styles
+ *   6. Theme-Specific Overrides
+ *
+ * =========================================================================== */
+
+
+/* =============================================================================
+ * 1. COMMON PANEL BASE STYLES
+ * =============================================================================
+ * Base styles shared across all panel types. These establish consistent
+ * layout, layering, and sizing behavior.
+ * =========================================================================== */
+
+/* Base panel container - vertical layout with layer support */
+.panel-base {
+    layout: vertical;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+/* Panels that support overlay content (search inputs, modals, etc.) */
+.panel-with-overlay {
+    layers: base overlay;
+}
+
+/* Full-height content container within panels */
+.panel-content {
+    height: 1fr;
+    layer: base;
+}
+
+/* Overlay elements (inputs, selectors, etc.) */
+.panel-overlay {
+    layer: overlay;
+    display: none;
+}
+
+.panel-overlay.visible {
+    display: block;
+}
+
+
+/* =============================================================================
+ * 2. LIST PANEL STYLES
+ * =============================================================================
+ * Styles for ListPanel - a reusable DataTable-based list with vim-style
+ * navigation and search capabilities.
+ *
+ * Structure:
+ *   ListPanel
+ *     #list-search-input (overlay, hidden by default)
+ *     #list-table-container
+ *       #list-table (DataTable)
+ *     #list-status (optional status bar)
+ * =========================================================================== */
+
+ListPanel {
+    layout: vertical;
+    height: 100%;
+    layers: base overlay;
+}
+
+/* Search input - appears as overlay when / is pressed */
+ListPanel #list-search-input {
+    layer: overlay;
+    display: none;
+    height: 3;
+    margin: 1;
+    border: solid $primary;
+    dock: top;
+}
+
+ListPanel #list-search-input.visible {
+    display: block;
+}
+
+/* Table container - holds the main DataTable */
+ListPanel #list-table-container {
+    height: 1fr;
+    layer: base;
+}
+
+/* Main data table - fills container */
+ListPanel #list-table {
+    height: 100%;
+}
+
+/* Optional status bar at bottom */
+ListPanel #list-status {
+    height: 1;
+    background: $boost;
+    color: $text;
+    padding: 0 1;
+    text-align: right;
+    layer: base;
+    display: none;
+}
+
+ListPanel #list-status.visible {
+    display: block;
+}
+
+
+/* =============================================================================
+ * 3. PREVIEW PANEL STYLES
+ * =============================================================================
+ * Styles for PreviewPanel - a content display area that supports multiple
+ * modes: viewing (markdown), editing (vim), and text selection.
+ *
+ * Structure:
+ *   PreviewPanel
+ *     #preview-scroll (ScrollableContainer, visible in VIEWING mode)
+ *       #preview-content (RichLog for markdown)
+ *     #preview-empty (shown when no content)
+ *     #edit-container (dynamically mounted in EDITING mode)
+ *       #title-input (TitleInput)
+ *       #vim-editor-container (VimEditor)
+ *     #selection-area (dynamically mounted in SELECTING mode)
+ * =========================================================================== */
+
+PreviewPanel {
+    layout: vertical;
+    height: 100%;
+    layers: base overlay;
+}
+
+/* Scrollable container for preview content */
+PreviewPanel #preview-scroll {
+    height: 1fr;
+    layer: base;
+}
+
+/* RichLog content area with padding for readability */
+PreviewPanel #preview-content {
+    padding: 0 1;
+}
+
+/* Empty state message - centered */
+PreviewPanel #preview-empty {
+    height: 100%;
+    content-align: center middle;
+    color: $text-muted;
+}
+
+/* Edit mode container */
+PreviewPanel #edit-container {
+    height: 100%;
+    layer: base;
+}
+
+/* Title input in edit mode */
+PreviewPanel #title-input {
+    height: 3;
+    margin: 0 0 1 0;
+}
+
+/* Vim editor container */
+PreviewPanel #vim-editor-container {
+    height: 1fr;
+}
+
+/* Selection mode text area */
+PreviewPanel #selection-area {
+    height: 100%;
+}
+
+
+/* =============================================================================
+ * 4. STATUS PANEL STYLES
+ * =============================================================================
+ * Styles for StatusPanel - a flexible status bar with configurable sections
+ * for displaying mode, messages, and key hints.
+ *
+ * Structure:
+ *   StatusPanel
+ *     Horizontal
+ *       .status-section (multiple, named by key)
+ *         #status-mode
+ *         #status-message
+ *         #status-hints
+ * =========================================================================== */
+
+StatusPanel {
+    layout: horizontal;
+    height: 1;
+    background: $boost;
+    color: $text;
+    padding: 0;
+    width: 100%;
+}
+
+/* Individual status sections */
+StatusPanel .status-section {
+    height: 100%;
+    padding: 0 1;
+}
+
+/* Section alignment classes */
+StatusPanel .status-section.left {
+    text-align: left;
+}
+
+StatusPanel .status-section.center {
+    text-align: center;
+}
+
+StatusPanel .status-section.right {
+    text-align: right;
+}
+
+/* Auto-width section (fills remaining space) */
+StatusPanel .status-section.auto {
+    width: 1fr;
+}
+
+/* Mode indicator section - highlighted */
+StatusPanel .status-section.mode {
+    color: $accent;
+    text-style: bold;
+}
+
+/* Key hints section - subdued */
+StatusPanel .status-section.hints {
+    color: $text-muted;
+}
+
+/* Error message styling */
+StatusPanel .status-section.error {
+    color: $error;
+}
+
+/* Success message styling */
+StatusPanel .status-section.success {
+    color: $success;
+}
+
+
+/* =============================================================================
+ * 5. INPUT PANEL STYLES
+ * =============================================================================
+ * Styles for InputPanel - a modal input mechanism that supports multiple
+ * modes (search, tag entry, prompts, confirmations).
+ *
+ * Structure:
+ *   InputPanel
+ *     Vertical
+ *       #input-container (Horizontal)
+ *         #input-label (Label, optional)
+ *         #input-field (Input)
+ *       #input-hints (Static, optional)
+ *       #input-error (Static, shown on validation failure)
+ * =========================================================================== */
+
+InputPanel {
+    layout: vertical;
+    height: auto;
+    display: none;
+    padding: 0;
+    margin: 0;
+    layer: overlay;
+}
+
+/* Show panel when active */
+InputPanel.visible {
+    display: block;
+}
+
+/* Overlay mode - floats above content with border */
+InputPanel.overlay {
+    dock: top;
+    margin: 1;
+    border: solid $primary;
+    background: $surface;
+    padding: 1;
+}
+
+/* Inline mode - integrated into layout */
+InputPanel.inline {
+    height: 3;
+    border-bottom: solid $primary;
+    background: $boost;
+}
+
+/* Input row container */
+InputPanel #input-container {
+    layout: horizontal;
+    height: auto;
+}
+
+/* Input label (e.g., "Search:", "Tags:") */
+InputPanel #input-label {
+    width: auto;
+    padding: 0 1 0 0;
+    color: $accent;
+}
+
+/* Main input field */
+InputPanel #input-field {
+    width: 1fr;
+}
+
+/* Key hints below input */
+InputPanel #input-hints {
+    height: 1;
+    color: $text-muted;
+    padding: 0;
+    text-align: right;
+}
+
+/* Validation error message */
+InputPanel #input-error {
+    height: 1;
+    color: $error;
+    padding: 0;
+    display: none;
+}
+
+InputPanel #input-error.visible {
+    display: block;
+}
+
+
+/* =============================================================================
+ * 6. CONVENIENCE SUBCLASS STYLES
+ * =============================================================================
+ * Styles for convenience subclasses of the main panels.
+ * =========================================================================== */
+
+/* SimpleBrowser - example ListPanel consumer */
+SimpleBrowser {
+    layout: horizontal;
+    height: 100%;
+}
+
+SimpleBrowser #simple-list {
+    width: 1fr;
+    min-width: 40;
+}
+
+SimpleBrowser #simple-preview {
+    width: 1fr;
+    min-width: 40;
+    padding: 1;
+    border-left: solid $primary;
+}
+
+/* DocumentListBrowser - example with lazy loading */
+DocumentListBrowser {
+    layout: horizontal;
+    height: 100%;
+}
+
+DocumentListBrowser #doc-list {
+    width: 50%;
+}
+
+DocumentListBrowser #doc-detail {
+    width: 50%;
+    padding: 1 2;
+}
+
+
+/* =============================================================================
+ * 7. THEME-SPECIFIC OVERRIDES
+ * =============================================================================
+ * Light and dark theme adjustments. Textual automatically switches between
+ * themes based on the app's theme setting. These overrides ensure proper
+ * contrast and visibility in both modes.
+ * =========================================================================== */
+
+/* -----------------------------------------------------------------------------
+ * Dark Theme Overrides (default)
+ * -------------------------------------------------------------------------- */
+
+/* In dark mode, boost surfaces should have subtle elevation */
+StatusPanel,
+InputPanel.inline,
+ListPanel #list-status,
+.panel-status-bar {
+    background: $boost;
+}
+
+/* Ensure borders are visible in dark mode */
+InputPanel.overlay,
+ListPanel #list-search-input {
+    border: solid $primary;
+}
+
+/* Muted text should be readable but subdued */
+StatusPanel .status-section.hints,
+InputPanel #input-hints,
+PreviewPanel #preview-empty {
+    color: $text-muted;
+}
+
+
+/* -----------------------------------------------------------------------------
+ * Light Theme Overrides
+ * Activated when the app uses a light theme. Textual CSS doesn't have a
+ * built-in :light pseudo-class, but these rules demonstrate the pattern
+ * for apps that implement custom light theme handling.
+ * -------------------------------------------------------------------------- */
+
+/* Light theme adjustments would go here, such as:
+ *
+ * :root.light-theme StatusPanel {
+ *     background: $surface;
+ *     border-top: solid $primary-lighten-2;
+ * }
+ *
+ * :root.light-theme .status-section.mode {
+ *     color: $primary-darken-1;
+ * }
+ */
+
+
+/* =============================================================================
+ * 8. UTILITY CLASSES
+ * =============================================================================
+ * Reusable utility classes that can be applied to any panel element.
+ * =========================================================================== */
+
+/* Hidden by default, shown when .visible class is added */
+.hidden-toggle {
+    display: none;
+}
+
+.hidden-toggle.visible {
+    display: block;
+}
+
+/* Full-height element */
+.full-height {
+    height: 100%;
+}
+
+/* Flexible width (fills remaining space) */
+.flex-width {
+    width: 1fr;
+}
+
+/* Status bar style (for any element) */
+.status-bar-style {
+    height: 1;
+    background: $boost;
+    color: $text;
+    padding: 0 1;
+}
+
+/* Bordered overlay style */
+.bordered-overlay {
+    border: solid $primary;
+    background: $surface;
+    padding: 1;
+    margin: 1;
+}
+
+/* Text alignment utilities */
+.text-left {
+    text-align: left;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+/* Text color utilities */
+.text-muted {
+    color: $text-muted;
+}
+
+.text-accent {
+    color: $accent;
+}
+
+.text-error {
+    color: $error;
+}
+
+.text-success {
+    color: $success;
+}
+
+/* Bold text */
+.text-bold {
+    text-style: bold;
+}
