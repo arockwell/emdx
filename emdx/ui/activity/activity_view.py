@@ -29,6 +29,8 @@ from .activity_items import (
     SynthesisItem,
     IndividualRunItem,
     ExplorationItem,
+    CascadeRunItem,
+    CascadeStageItem,
 )
 from .group_picker import GroupPicker
 from ..modals import HelpMixin
@@ -740,24 +742,74 @@ class ActivityView(HelpMixin, Widget):
 
         Cascade executions are Claude runs that process documents through
         the cascade stages (idea → prompt → analyzed → planned → done).
+
+        If cascade_runs table exists, group executions by run.
+        Otherwise, show individual executions (backward compatibility).
         """
         try:
             from emdx.database.connection import db_connection
+            from emdx.database import cascade as cascade_db
             from datetime import datetime, timedelta
 
             cutoff = datetime.now() - timedelta(days=7)
+            seen_run_ids = set()
 
+            # Try to load cascade runs first (new grouped view)
+            try:
+                runs = cascade_db.list_cascade_runs(limit=30)
+
+                for run in runs:
+                    run_id = run.get("id")
+                    if not run_id:
+                        continue
+
+                    seen_run_ids.add(run_id)
+
+                    # Parse timestamp
+                    started_at = run.get("started_at")
+                    if started_at:
+                        if isinstance(started_at, str):
+                            timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                        else:
+                            timestamp = started_at
+                    else:
+                        timestamp = datetime.now()
+
+                    # Build title
+                    title = run.get("initial_doc_title", f"Cascade Run #{run_id}")[:40]
+
+                    # Get execution count for this run
+                    executions = cascade_db.get_cascade_run_executions(run_id)
+                    exec_count = len(executions)
+
+                    item = CascadeRunItem(
+                        item_id=run_id,
+                        title=title,
+                        timestamp=timestamp,
+                        cascade_run=run,
+                        status=run.get("status", "running"),
+                        pipeline_name=run.get("pipeline_name", "default"),
+                        current_stage=run.get("current_stage", ""),
+                        execution_count=exec_count,
+                    )
+
+                    self.activity_items.append(item)
+
+            except Exception as e:
+                logger.debug(f"Could not load cascade runs (may not exist yet): {e}")
+
+            # Also load individual executions not part of any run (backward compat)
             with db_connection.get_connection() as conn:
-                # Get cascade executions (those with doc_id set)
-                # Only show the most recent execution per document
+                # Get cascade executions not linked to a run
                 cursor = conn.execute(
                     """
                     SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at, e.completed_at,
-                           d.stage, d.pr_url
+                           d.stage, d.pr_url, e.cascade_run_id
                     FROM executions e
                     LEFT JOIN documents d ON e.doc_id = d.id
                     WHERE e.doc_id IS NOT NULL
                       AND e.started_at > ?
+                      AND (e.cascade_run_id IS NULL OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
                       AND e.id = (
                           SELECT MAX(e2.id) FROM executions e2
                           WHERE e2.doc_id = e.doc_id
@@ -770,7 +822,11 @@ class ActivityView(HelpMixin, Widget):
                 rows = cursor.fetchall()
 
             for row in rows:
-                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url = row
+                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url, run_id = row
+
+                # Skip if already shown as part of a cascade run
+                if run_id and run_id in seen_run_ids:
+                    continue
 
                 # Parse timestamp
                 if started_at:

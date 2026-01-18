@@ -1663,6 +1663,39 @@ def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_031_add_cascade_runs(conn: sqlite3.Connection):
+    """Add cascade_runs table for tracking end-to-end cascade executions.
+
+    This enables grouping of cascade stage executions in the activity view.
+    When a user runs `emdx cascade add "idea" --auto`, all the stage
+    executions are linked to a single cascade_run for easy tracking.
+    """
+    cursor = conn.cursor()
+
+    # Create cascade_runs table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cascade_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            initial_doc_id INTEGER NOT NULL REFERENCES documents(id),
+            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+            current_stage TEXT,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_message TEXT
+        )
+    """)
+
+    # Add cascade_run_id to executions to link them to runs
+    cursor.execute("ALTER TABLE executions ADD COLUMN cascade_run_id INTEGER REFERENCES cascade_runs(id)")
+
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_status ON cascade_runs(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_started ON cascade_runs(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_cascade_run ON executions(cascade_run_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1696,6 +1729,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (28, "Add document stage for cascade", migration_028_add_document_stage),
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
+    (31, "Add cascade runs table for activity grouping", migration_031_add_cascade_runs),
 ]
 
 
