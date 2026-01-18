@@ -13,7 +13,7 @@ from textual.widgets import Static
 from textual.message import Message
 from textual.binding import Binding
 
-from ...utils.logging import get_logger
+from ...utils.logging_utils import get_logger
 from .base import OverlayStage
 
 logger = get_logger(__name__)

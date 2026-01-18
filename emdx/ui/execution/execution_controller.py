@@ -8,7 +8,7 @@ This module provides execution control logic separated from UI display concerns.
 from typing import Dict, Any, List, Callable, Optional, TYPE_CHECKING
 from enum import Enum
 
-from ...utils.logging import get_logger
+from ...utils.logging_utils import get_logger
 
 if TYPE_CHECKING:
     from .selection_state import SelectionState

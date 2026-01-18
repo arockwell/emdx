@@ -961,8 +961,9 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
                 update_execution_status(exec.id, "failed", exit_code)
                 updated += 1
             except Exception as e:
+                logger.warning("Failed to update execution %s status: %s", exec.id, e)
                 failed_updates += 1
-                
+
             progress.update(task, advance=1)
     
     # Report results

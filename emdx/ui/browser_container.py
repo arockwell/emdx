@@ -12,7 +12,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 
 from emdx.config.ui_config import get_theme, set_theme
-from emdx.ui.themes import register_all_themes, get_theme_names
+from emdx.ui.themes import register_all_themes, get_theme_names, get_opposite_theme, is_dark_theme
 
 logger = logging.getLogger(__name__)
 
@@ -69,17 +69,19 @@ class BrowserContainer(App):
         Binding("backslash", "cycle_theme", "Theme", show=True),
         Binding("ctrl+k", "open_command_palette", "Search", show=True),
         Binding("ctrl+p", "open_command_palette", "Search", show=False),
+        Binding("ctrl+t", "toggle_theme", "Toggle Dark/Light", show=True),
     ]
 
     # No CSS needed here - it's all in the widget
 
     current_browser = reactive("document")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, initial_theme: str | None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.browsers = {}  # Will store browser instances
         self.browser_states = {}  # Quick and dirty state storage
         self.container_widget = None  # Will be set in compose
+        self._initial_theme = initial_theme  # Theme override from CLI
 
     def exit(self, *args, **kwargs):
         """Override exit to log when it's called."""
@@ -110,14 +112,20 @@ class BrowserContainer(App):
 
         # Register and apply theme
         register_all_themes(self)
-        saved_theme = get_theme()
-        if saved_theme in get_theme_names() or saved_theme in self.available_themes:
-            self.theme = saved_theme
-            logger.info(f"Applied theme: {saved_theme}")
+
+        # Use CLI theme if provided, otherwise load from config
+        if self._initial_theme and (self._initial_theme in get_theme_names() or self._initial_theme in self.available_themes):
+            self.theme = self._initial_theme
+            logger.info(f"Applied theme from CLI: {self._initial_theme}")
         else:
-            # Fallback to default
-            self.theme = "emdx-dark"
-            logger.warning(f"Unknown theme '{saved_theme}', using emdx-dark")
+            saved_theme = get_theme()
+            if saved_theme in get_theme_names() or saved_theme in self.available_themes:
+                self.theme = saved_theme
+                logger.info(f"Applied theme: {saved_theme}")
+            else:
+                # Fallback to default
+                self.theme = "emdx-dark"
+                logger.warning(f"Unknown theme '{saved_theme}', using emdx-dark")
 
         logger.info(f"Screen size: {self.screen.size}")
         logger.info(f"Screen region: {self.screen.region}")
@@ -247,6 +255,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "cascade":
+                try:
+                    from .cascade_browser import CascadeBrowser
+                    self.browsers[browser_type] = CascadeBrowser()
+                    logger.info("CascadeBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             elif browser_type == "document":
                 try:
                     from .document_browser import DocumentBrowser
@@ -589,3 +606,16 @@ class BrowserContainer(App):
         else:
             logger.warning(f"Unknown command: {command_id}")
 
+    def action_toggle_theme(self) -> None:
+        """Quick toggle between dark and light theme."""
+        current_theme = self.theme
+        new_theme = get_opposite_theme(current_theme)
+
+        # Apply the new theme
+        self.theme = new_theme
+        set_theme(new_theme)
+
+        # Show indicator
+        mode = "🌙 Dark" if is_dark_theme(new_theme) else "☀️ Light"
+        logger.info(f"Theme toggled: {current_theme} -> {new_theme}")
+        self.notify(f"{mode} mode", timeout=1.5)

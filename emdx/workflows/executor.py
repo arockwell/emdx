@@ -25,6 +25,7 @@ from .output_parser import extract_output_doc_id, extract_token_usage_detailed
 from .agent_runner import run_agent
 from .synthesis import synthesize_outputs
 from emdx.database import groups as groups_db
+from emdx.config import DEFAULT_MAX_CONCURRENT_WORKFLOWS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class WorkflowExecutor:
     - adversarial: Advocate -> Critic -> Synthesizer pattern
     """
 
-    def __init__(self, max_concurrent: int = 10):
+    def __init__(self, max_concurrent: int = DEFAULT_MAX_CONCURRENT_WORKFLOWS):
         """Initialize executor.
 
         Args:
@@ -545,6 +546,9 @@ class WorkflowExecutor:
         # Synthesize results (skip for single task - nothing to synthesize)
         synthesis_doc_id = None
         if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+            # Emit synthesis phase status for UI display
+            wf_db.update_stage_run(stage_run_id, status='synthesizing')
+
             synthesis_result = await synthesize_outputs(
                 stage_run_id=stage_run_id,
                 output_doc_ids=output_doc_ids,
@@ -589,11 +593,6 @@ class WorkflowExecutor:
         Returns:
             StageResult
         """
-        # Load iteration strategy if specified
-        strategy = None
-        if stage.iteration_strategy:
-            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
-
         previous_outputs: List[str] = []
         output_doc_ids: List[int] = []
         total_tokens = 0
@@ -603,9 +602,7 @@ class WorkflowExecutor:
             run_number = i + 1
 
             # Build prompt for this iteration
-            if strategy:
-                prompt_template = strategy.get_prompt_for_run(run_number)
-            elif stage.prompts and i < len(stage.prompts):
+            if stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
             else:
                 prompt_template = stage.prompt or ""
@@ -680,12 +677,7 @@ class WorkflowExecutor:
         Returns:
             StageResult
         """
-        # Load iteration strategy (adversarial uses same mechanism)
-        strategy = None
-        if stage.iteration_strategy:
-            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
-
-        # Default adversarial prompts if no strategy
+        # Default adversarial prompts
         default_prompts = [
             "ADVOCATE: Argue FOR this approach: {{input}}\n\nWhat are its strengths?",
             "CRITIC: Given this advocacy: {{prev}}\n\nArgue AGAINST. What are the weaknesses?",
@@ -703,9 +695,7 @@ class WorkflowExecutor:
             run_number = i + 1
 
             # Get prompt for this role
-            if strategy:
-                prompt_template = strategy.get_prompt_for_run(run_number)
-            elif stage.prompts and i < len(stage.prompts):
+            if stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
             else:
                 prompt_template = default_prompts[min(i, len(default_prompts) - 1)]
@@ -958,6 +948,9 @@ class WorkflowExecutor:
             # Step 4: Optional synthesis (skip for single task - nothing to synthesize)
             synthesis_doc_id = None
             if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+                # Emit synthesis phase status for UI display
+                wf_db.update_stage_run(stage_run_id, status='synthesizing')
+
                 synthesis_result = await synthesize_outputs(
                     stage_run_id=stage_run_id,
                     output_doc_ids=output_doc_ids,

@@ -168,6 +168,8 @@ class ActivityItem:
     def status_icon(self) -> str:
         if self.status == "running":
             return "🔄"
+        elif self.status == "synthesizing":
+            return "🔮"
         elif self.status == "completed":
             return "✅"
         elif self.status == "failed":
@@ -202,6 +204,8 @@ class ActivityItem:
                 "custom": "🏷️",
             }
             return icons.get(group_type, "📁")
+        elif self.item_type == "cascade":
+            return "📋"  # Cascade processing
         else:
             return ""
 
@@ -452,6 +456,9 @@ class ActivityView(HelpMixin, Widget):
         if HAS_DOCS and doc_db:
             await self._load_direct_saves()
 
+        # Load cascade executions
+        await self._load_cascade_executions()
+
         # Sort: running workflows first (pinned), then by timestamp descending
         # Running workflows should always be at the top for visibility
         def sort_key(item):
@@ -482,7 +489,7 @@ class ActivityView(HelpMixin, Widget):
                 # Parse timestamp
                 started = run.get("started_at")
                 if isinstance(started, str):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     started = parse_datetime(started)
                 if not started:
                     started = datetime.now()
@@ -553,6 +560,7 @@ class ActivityView(HelpMixin, Widget):
                     total_target = 0
                     total_completed = 0
                     current_stage = ""
+                    is_synthesizing = False
                     # Token tracking (input/output separately)
                     total_input_tokens = 0
                     total_output_tokens = 0
@@ -562,9 +570,12 @@ class ActivityView(HelpMixin, Widget):
                         completed = sr.get("runs_completed", 0)
                         total_target += target
                         total_completed += completed
-                        # Track current running stage
+                        # Track current running or synthesizing stage
                         if sr.get("status") == "running":
                             current_stage = sr.get("stage_name", "")
+                        elif sr.get("status") == "synthesizing":
+                            current_stage = sr.get("stage_name", "")
+                            is_synthesizing = True
                         # Check synthesis FIRST (prefer over individual outputs)
                         if sr.get("synthesis_doc_id"):
                             output_count += 1
@@ -592,6 +603,7 @@ class ActivityView(HelpMixin, Widget):
                         item.progress_completed = total_completed
                         item.progress_total = total_target
                         item.progress_stage = current_stage
+                        item._is_synthesizing = is_synthesizing
                     # For completed workflows, set doc_id to the output document
                     # Also use the output document's timestamp for consistent sorting
                     if output_doc_id and run.get("status") in ("completed", "failed"):
@@ -603,7 +615,7 @@ class ActivityView(HelpMixin, Widget):
                                 if out_doc:
                                     doc_created = out_doc.get("created_at")
                                     if isinstance(doc_created, str):
-                                        from emdx.utils.datetime import parse_datetime
+                                        from emdx.utils.datetime_utils import parse_datetime
                                         doc_created = parse_datetime(doc_created)
                                     if doc_created:
                                         item.timestamp = doc_created
@@ -645,7 +657,7 @@ class ActivityView(HelpMixin, Widget):
                 group_id = group["id"]
                 created = group.get("created_at")
                 if isinstance(created, str):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     created = parse_datetime(created)
                 if not created:
                     created = datetime.now()
@@ -722,6 +734,77 @@ class ActivityView(HelpMixin, Widget):
 
         except Exception as e:
             logger.error(f"Error loading direct saves: {e}", exc_info=True)
+
+    async def _load_cascade_executions(self) -> None:
+        """Load cascade executions into activity items.
+
+        Cascade executions are Claude runs that process documents through
+        the cascade stages (idea → prompt → analyzed → planned → done).
+        """
+        try:
+            from emdx.database.connection import db_connection
+            from datetime import datetime, timedelta
+
+            cutoff = datetime.now() - timedelta(days=7)
+
+            with db_connection.get_connection() as conn:
+                # Get cascade executions (those with doc_id set)
+                # Only show the most recent execution per document
+                cursor = conn.execute(
+                    """
+                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at, e.completed_at,
+                           d.stage, d.pr_url
+                    FROM executions e
+                    LEFT JOIN documents d ON e.doc_id = d.id
+                    WHERE e.doc_id IS NOT NULL
+                      AND e.started_at > ?
+                      AND e.id = (
+                          SELECT MAX(e2.id) FROM executions e2
+                          WHERE e2.doc_id = e.doc_id
+                      )
+                    ORDER BY e.started_at DESC
+                    LIMIT 50
+                    """,
+                    (cutoff.isoformat(),),
+                )
+                rows = cursor.fetchall()
+
+            for row in rows:
+                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url = row
+
+                # Parse timestamp
+                if started_at:
+                    if isinstance(started_at, str):
+                        timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    else:
+                        timestamp = started_at
+                else:
+                    timestamp = datetime.now()
+
+                # Build title with stage info
+                title = doc_title or f"Document #{doc_id}"
+                if stage:
+                    title = f"📋 {title}"  # Cascade indicator
+                if pr_url:
+                    title = f"🔗 {title}"  # Has PR
+
+                item = ActivityItem(
+                    item_type="cascade",
+                    item_id=exec_id,
+                    title=title,
+                    status=status or "unknown",
+                    timestamp=timestamp,
+                    doc_id=doc_id,
+                )
+
+                # Store extra info for preview
+                item.stage = stage
+                item.pr_url = pr_url
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading cascade executions: {e}", exc_info=True)
 
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
@@ -801,21 +884,25 @@ class ActivityView(HelpMixin, Widget):
             # For running workflows, show progress bar + stage instead of badge
             progress_str = ""
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
-                # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
-                # Width=10 gives perfect accuracy for 4 and 5 task workflows
-                pct = item.progress_completed / item.progress_total
-                bar_width = 10
-                filled_exact = pct * bar_width
-                filled_full = int(filled_exact)
-                remainder = filled_exact - filled_full
-                # Partial block characters for the fractional part
-                partial_chars = " ▏▎▍▌▋▊▉█"
-                partial_idx = int(remainder * 8)
-                partial = partial_chars[partial_idx] if partial_idx > 0 else ""
-                empty = bar_width - filled_full - (1 if partial else 0)
-                bar = "█" * filled_full + partial + "░" * empty
-                progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
+                # Check if in synthesis phase
+                if getattr(item, '_is_synthesizing', False):
+                    progress_str = " 🔮 Synthesizing..."
+                else:
+                    # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
+                    # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
+                    # Width=10 gives perfect accuracy for 4 and 5 task workflows
+                    pct = item.progress_completed / item.progress_total
+                    bar_width = 10
+                    filled_exact = pct * bar_width
+                    filled_full = int(filled_exact)
+                    remainder = filled_exact - filled_full
+                    # Partial block characters for the fractional part
+                    partial_chars = " ▏▎▍▌▋▊▉█"
+                    partial_idx = int(remainder * 8)
+                    partial = partial_chars[partial_idx] if partial_idx > 0 else ""
+                    empty = bar_width - filled_full - (1 if partial else 0)
+                    bar = "█" * filled_full + partial + "░" * empty
+                    progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
 
             # Build title with prefix and suffix (progress bar or badge)
             prefix = f"{indent}{expand}"
@@ -828,7 +915,7 @@ class ActivityView(HelpMixin, Widget):
             # - Individual runs: show individual run ID or doc_id if completed
             if item.item_type in ("workflow", "group"):
                 id_str = f"#{item.item_id}" if item.item_id else "—"
-            elif item.item_type in ("document", "exploration", "synthesis"):
+            elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
                 id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
             elif item.item_type == "individual_run":
                 # Show doc_id if has output, otherwise show run ID if exists
@@ -905,6 +992,10 @@ class ActivityView(HelpMixin, Widget):
         week_data = self._get_week_activity_data()
         spark = sparkline(week_data, width=7)
 
+        # Get theme indicator
+        from emdx.ui.themes import get_theme_indicator
+        theme_indicator = get_theme_indicator(self.app.theme)
+
         # Format status bar
         parts = []
         if active > 0:
@@ -924,6 +1015,7 @@ class ActivityView(HelpMixin, Widget):
 
         parts.append(f"[dim]{spark}[/dim]")
         parts.append(datetime.now().strftime("%H:%M"))
+        parts.append(f"[dim]{theme_indicator}[/dim]")
 
         status_bar.update(" │ ".join(parts))
 
@@ -1112,10 +1204,15 @@ class ActivityView(HelpMixin, Widget):
 
         # For running workflows, show progress prominently
         if status == "running" and item.progress_total:
-            progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
-            content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
-            if item.progress_stage:
-                content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
+            # Check if in synthesis phase
+            if getattr(item, '_is_synthesizing', False):
+                content.write(f"[magenta bold]🔮 Synthesizing...[/magenta bold]")
+                content.write(f"[dim]Combining outputs from {item.progress_completed} runs[/dim]")
+            else:
+                progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
+                content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
+                if item.progress_stage:
+                    content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
 
         # Timing info as compact line
         timing_parts = []
@@ -1187,8 +1284,9 @@ class ActivityView(HelpMixin, Widget):
                 content.write("")
                 content.write(f"[bold cyan]─── Stages ───[/bold cyan]")
                 for sr in stage_runs:
-                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
-                    content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
+                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "synthesizing": "[magenta]🔮[/magenta]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
+                    stage_suffix = " 🔮 Synthesizing..." if sr["status"] == "synthesizing" else f" {sr['runs_completed']}/{sr['target_runs']}"
+                    content.write(f"  {icon} {sr['stage_name']}{stage_suffix}")
 
             # Show prompt from first individual run (gives context for what the workflow is doing)
             for sr in stage_runs:
@@ -1311,7 +1409,7 @@ class ActivityView(HelpMixin, Widget):
                 if doc.get("project"):
                     meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
                 if doc.get("created_at"):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     created_dt = parse_datetime(doc["created_at"])
                     if created_dt:
                         meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")

@@ -889,7 +889,17 @@ emdx find --tags "gameplan" --project "myproject"
 
 ## 🚀 Quick Task Execution
 
-The `emdx run` command provides a streamlined interface for running tasks in parallel. It's syntactic sugar for the `task_parallel` workflow.
+The `emdx run` command is the first rung on EMDX's "execution ladder" - the fastest way to run tasks.
+
+**The Execution Ladder:**
+| Level | Command | Use When |
+|-------|---------|----------|
+| 1 | `emdx run` | Quick one-off or parallel tasks |
+| 2 | `emdx each` | Reusable "for each X, do Y" patterns |
+| 3 | `emdx workflow` | Complex multi-stage workflows |
+| 4 | `emdx cascade` | Ideas → code through stages |
+
+Start with `emdx run`. Graduate down only when you need more power.
 
 ### Basic Usage
 
@@ -919,46 +929,96 @@ Discover tasks at runtime using shell commands:
 
 ```bash
 # Discover from git branches
-emdx run -d "git branch -r | grep feature" -t "Review branch {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
 
 # Discover from PR list
-emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{task}}"
+emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{item}}"
 
 # Discover from file patterns
-emdx run -d "fd -e py -d 1 src/" -t "Analyze {{task}}"
+emdx run -d "fd -e py -d 1 src/" -t "Analyze {{item}}"
 ```
 
-### Presets
-
-Save common configurations for reuse:
-
-```bash
-# Use a preset
-emdx run -p fix-conflicts
-
-# Presets can include discovery commands, templates, and synthesis settings
-# Manage presets via: emdx workflow preset
-```
+**Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
 
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--title` | `-T` | Title for this run (shows in Activity) |
-| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--jobs` | `-j`, `-P` | Max parallel tasks (default: auto) |
 | `--synthesize` | `-s` | Combine outputs with synthesis stage |
-| `--preset` | `-p` | Use a saved preset |
 | `--discover` | `-d` | Shell command to discover tasks |
-| `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
+| `--template` | `-t` | Template for discovered tasks (use `{{item}}`) |
+| `--worktree` | `-w` | Create isolated git worktree (recommended for code fixes) |
+| `--base-branch` | | Base branch for worktree (default: main) |
 
-### When to Use `emdx run` vs `emdx each` vs `emdx workflow`
+### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
-| Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|-------------------------|----------------------------|
-| Quick, ad-hoc parallel tasks | Reusable discovery+action commands | Complex multi-stage workflows |
-| Simple task lists | Same operation on many items | Need iterative or adversarial modes |
-| One-off execution | Save commands for future use | Custom stage configurations |
-| Just want tasks done fast | "For each X, do Y" patterns | Need detailed run monitoring |
+| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------|--------------------------|-------------------------|----------------------------|
+| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
+| Simple task lists | Need tracked output | Same operation on many items | Need iterative or adversarial modes |
+| One-off execution | Human or AI caller | Save commands for future use | Custom stage configurations |
+| Just want tasks done fast | Consistent metadata | "For each X, do Y" patterns | Need detailed run monitoring |
+
+---
+
+## 🤖 Sub-Agent Execution (`emdx agent`)
+
+Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata.
+
+Works the same whether called by a human or another AI agent.
+
+### Basic Usage
+
+```bash
+# Run an agent with tags
+emdx agent "Analyze the auth module for security issues" --tags analysis,security
+
+# With custom title and group
+emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
+
+# Verbose mode to see output in real-time
+emdx agent "Deep dive on caching strategy" -t analysis -v
+
+# Have the agent create a PR if it makes code changes
+emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
+```
+
+### How It Works
+
+1. Takes your prompt and appends instructions telling the agent how to save its output
+2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
+3. Runs Claude Code and streams output to a log file
+4. Extracts the created document ID and prints `doc_id:123` for easy parsing
+
+### Options Reference
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--tags` | `-t` | Tags to apply (comma-separated or multiple flags) |
+| `--title` | `-T` | Title for the output document |
+| `--group` | `-g` | Group ID to add output to |
+| `--group-role` | | Role in group (default: `exploration`) |
+| `--verbose` | `-v` | Show agent output in real-time |
+| `--pr` | | Instruct agent to create a PR if it makes code changes |
+
+### Use Cases
+
+- **Humans**: Kick off analysis tasks with proper tagging and grouping
+- **AI agents**: Spawn sub-agents that save results to EMDX with consistent metadata
+- **Workflows**: Ensure outputs from any source are tracked the same way
+
+### Parsing Output
+
+The command prints `doc_id:123` on completion for easy parsing:
+
+```bash
+# Capture the document ID
+output=$(emdx agent "Analyze X" -t analysis)
+doc_id=$(echo "$output" | grep "^doc_id:" | cut -d: -f2)
+echo "Created document: $doc_id"
+```
 
 ---
 
@@ -972,7 +1032,7 @@ Ever find yourself running the same parallel discovery task repeatedly?
 
 ```bash
 # Tedious to retype every time
-emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{task}}, resolve conflicts"
+emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{item}}, resolve conflicts"
 ```
 
 Save it once, run it forever:
