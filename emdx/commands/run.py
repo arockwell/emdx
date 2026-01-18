@@ -40,10 +40,6 @@ def run(
         False, "--synthesize", "-s",
         help="Combine outputs with synthesis stage"
     ),
-    preset: str = typer.Option(
-        None, "-p", "--preset",
-        help="Use a saved preset (prefix with @)"
-    ),
     discover: str = typer.Option(
         None, "-d", "--discover",
         help="Shell command to discover tasks"
@@ -75,7 +71,6 @@ def run(
         emdx run "task1" "task2" "task3"
         emdx run 5350 5351 5352
         emdx run --synthesize "analyze" "review" "plan"
-        emdx run -p fix-conflicts
         emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{task}}"
 
     Pattern examples:
@@ -84,6 +79,8 @@ def run(
         emdx run "analyze X" "analyze Y" -P analyze    # Uses parallel_analysis (auto-synthesize)
         emdx run --list-patterns                       # Show available patterns
         emdx run "task" --pattern some_workflow        # Use workflow directly by name
+
+    Note: For reusable commands with saved discovery+templates, use `emdx each` instead.
     """
     # Handle --list-patterns flag
     if list_patterns:
@@ -107,30 +104,6 @@ def run(
         console.print(f"[dim]Using workflow directly: {workflow_name}[/dim]")
 
     task_list = list(tasks) if tasks else []
-
-    # Handle preset if specified
-    if preset:
-        from ..presets import get_preset, increment_usage
-
-        preset_name = preset.lstrip('@')
-        preset_config = get_preset(preset_name)
-
-        if not preset_config:
-            console.print(f"[red]Preset '{preset_name}' not found[/red]")
-            raise typer.Exit(1)
-
-        # Apply preset settings
-        if preset_config.discover_command and not task_list:
-            discover = preset_config.discover_command
-        if preset_config.task_template and not template:
-            template = preset_config.task_template
-        if preset_config.synthesize:
-            synthesize = True
-        if preset_config.max_jobs and not jobs:
-            jobs = preset_config.max_jobs
-
-        # Track usage
-        increment_usage(preset_name)
 
     # Handle discovery if specified
     if discover and not task_list:
