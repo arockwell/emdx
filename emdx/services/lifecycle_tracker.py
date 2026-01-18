@@ -19,7 +19,7 @@ from ..models.tags import (
     get_tags_for_documents,
     remove_tags_from_document,
 )
-from ..utils.datetime import parse_datetime
+from ..utils.datetime_utils import parse_datetime
 
 logger = logging.getLogger(__name__)
 

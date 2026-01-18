@@ -951,14 +951,69 @@ emdx run -p fix-conflicts
 | `--discover` | `-d` | Shell command to discover tasks |
 | `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
 
-### When to Use `emdx run` vs `emdx each` vs `emdx workflow`
+### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
-| Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|-------------------------|----------------------------|
-| Quick, ad-hoc parallel tasks | Reusable discovery+action commands | Complex multi-stage workflows |
-| Simple task lists | Same operation on many items | Need iterative or adversarial modes |
-| One-off execution | Save commands for future use | Custom stage configurations |
-| Just want tasks done fast | "For each X, do Y" patterns | Need detailed run monitoring |
+| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------|--------------------------|-------------------------|----------------------------|
+| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
+| Simple task lists | Need tracked output | Same operation on many items | Need iterative or adversarial modes |
+| One-off execution | Human or AI caller | Save commands for future use | Custom stage configurations |
+| Just want tasks done fast | Consistent metadata | "For each X, do Y" patterns | Need detailed run monitoring |
+
+---
+
+## 🤖 Sub-Agent Execution (`emdx agent`)
+
+Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata.
+
+Works the same whether called by a human or another AI agent.
+
+### Basic Usage
+
+```bash
+# Run an agent with tags
+emdx agent "Analyze the auth module for security issues" --tags analysis,security
+
+# With custom title and group
+emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
+
+# Verbose mode to see output in real-time
+emdx agent "Deep dive on caching strategy" -t analysis -v
+```
+
+### How It Works
+
+1. Takes your prompt and appends instructions telling the agent how to save its output
+2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
+3. Runs Claude Code and streams output to a log file
+4. Extracts the created document ID and prints `doc_id:123` for easy parsing
+
+### Options Reference
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--tags` | `-t` | Tags to apply (comma-separated or multiple flags) |
+| `--title` | `-T` | Title for the output document |
+| `--group` | `-g` | Group ID to add output to |
+| `--group-role` | | Role in group (default: `exploration`) |
+| `--verbose` | `-v` | Show agent output in real-time |
+
+### Use Cases
+
+- **Humans**: Kick off analysis tasks with proper tagging and grouping
+- **AI agents**: Spawn sub-agents that save results to EMDX with consistent metadata
+- **Workflows**: Ensure outputs from any source are tracked the same way
+
+### Parsing Output
+
+The command prints `doc_id:123` on completion for easy parsing:
+
+```bash
+# Capture the document ID
+output=$(emdx agent "Analyze X" -t analysis)
+doc_id=$(echo "$output" | grep "^doc_id:" | cut -d: -f2)
+echo "Created document: $doc_id"
+```
 
 ---
 
