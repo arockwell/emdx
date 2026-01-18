@@ -19,10 +19,14 @@ Each transition is handled by Claude, transforming the document at one stage int
 ## Quick Start
 
 ```bash
-# Add an idea
-emdx cascade add "Add keyboard shortcuts help overlay"
+# Add an idea and run it all the way to done (creates PR!)
+emdx cascade add "Add keyboard shortcuts help overlay" --auto
 
-# Process through stages (each uses Claude)
+# Add an idea and stop before implementation (no PR)
+emdx cascade add "Add dark mode toggle" --auto --stop planned
+
+# Manual step-by-step processing (alternative approach)
+emdx cascade add "Another idea"
 emdx cascade process idea --sync
 emdx cascade process prompt --sync
 emdx cascade process analyzed --sync
@@ -30,19 +34,37 @@ emdx cascade process planned --sync  # Creates actual PR!
 
 # Check status
 emdx cascade status
+
+# View cascade run history
+emdx cascade runs
 ```
 
 ## Commands Reference
 
 ### `emdx cascade add`
 
-Add a new idea to the cascade.
+Add a new idea to the cascade and optionally run it automatically.
 
 ```bash
+# Basic usage
 emdx cascade add "Build a REST API for user management"
 emdx cascade add "Add dark mode" --title "Dark Mode Feature"
 emdx cascade add "Refactor auth" --stage prompt  # Start at different stage
+
+# Auto mode - run through all stages automatically
+emdx cascade add "My feature idea" --auto              # Runs to done, creates PR
+emdx cascade add "My idea" --auto --stop planned       # Stops at planned (no PR)
+emdx cascade add "My idea" --auto --stop analyzed      # Stops at analyzed
+
+# Start at a later stage with auto
+emdx cascade add "My gameplan" --stage planned --auto  # Just implement and PR
 ```
+
+**Options:**
+- `--title TEXT` - Custom document title
+- `--stage TEXT` - Starting stage (default: idea)
+- `--auto` / `-a` - Run through stages automatically without manual intervention
+- `--stop TEXT` - Stage to stop at when using --auto (default: done)
 
 ### `emdx cascade status`
 
@@ -89,20 +111,40 @@ This stage has a 30-minute timeout (vs 5 minutes for others) due to the complexi
 
 ### `emdx cascade run`
 
-Run the cascade continuously as a daemon.
+Run the cascade continuously or in auto mode.
 
 ```bash
-# Process all stages continuously
-emdx cascade run
+# Auto mode - process all queued documents end-to-end
+emdx cascade run --auto                    # Process all ideas to done
+emdx cascade run --auto --stop planned     # Process all ideas to planned (no PRs)
 
-# Single iteration
-emdx cascade run --once
+# Continuous daemon mode (checks periodically)
+emdx cascade run                           # Process all stages continuously
+emdx cascade run --once                    # Single iteration then exit
+emdx cascade run --interval 10             # Check every 10 seconds
+```
 
-# Only process specific stages
-emdx cascade run --stages idea,prompt
+**Options:**
+- `--auto` / `-a` - Process documents end-to-end automatically
+- `--stop TEXT` - Stage to stop at with --auto (default: done)
+- `--once` - Run one iteration then exit
+- `--interval FLOAT` - Seconds between checks (default: 5.0)
 
-# Custom check interval
-emdx cascade run --interval 10
+### `emdx cascade runs`
+
+Show cascade run history. Each run represents an end-to-end cascade journey.
+
+```bash
+# Show recent cascade runs
+emdx cascade runs
+
+# Limit number of runs shown
+emdx cascade runs --limit 5
+
+# Filter by status
+emdx cascade runs --status running
+emdx cascade runs --status completed
+emdx cascade runs --status failed
 ```
 
 ### `emdx cascade advance`
@@ -153,6 +195,7 @@ Press `4` in the emdx GUI to access the Cascade browser.
 | `s` | Synthesize selected documents |
 | `Space` | Toggle selection (for multi-select synthesis) |
 | `r` | Refresh |
+| `v` | Toggle activity view (runs vs executions) |
 
 ### Layout
 
@@ -167,11 +210,26 @@ Press `4` in the emdx GUI to access the Cascade browser.
 │   User avatars                │ Add a dark mode toggle...   │
 │                               │                             │
 ├───────────────────────────────┴─────────────────────────────┤
-│ Recent Activity:                                            │
-│ ✅ 12:34 Dark mode → done                                   │
-│ 🔄 12:30 Keyboard shortcuts processing...                   │
+│ Cascade Runs:                  (v to toggle view)           │
+│ #1  💡idea → ✅done ✓   ✓ PR    #42 Dark mode toggle        │
+│ #2  💡idea → 📋planned  ⟳ run   #45 Keyboard shortcuts      │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Activity Panel
+
+The activity panel shows cascade runs (press `v` to toggle between views):
+
+**Runs View (default):**
+- Shows end-to-end cascade journeys as grouped runs
+- Progress indicator: `💡idea → 📋planned → ✅done`
+- Status: running, completed, failed, paused
+- PR indicator when a pull request was created
+
+**Executions View:**
+- Shows individual stage executions
+- Links executions to their parent cascade run
+- More granular view of what's happening
 
 ### Done Stage Indicators
 
@@ -218,23 +276,41 @@ ALTER TABLE documents ADD COLUMN pr_url TEXT; -- PR link for done stage
 -- Indexes for efficient stage queries
 CREATE INDEX idx_documents_stage ON documents(stage);
 CREATE INDEX idx_documents_pr_url ON documents(pr_url) WHERE pr_url IS NOT NULL;
+
+-- Cascade runs table for tracking end-to-end cascade journeys
+CREATE TABLE cascade_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_doc_id INTEGER NOT NULL,      -- Original document
+    current_doc_id INTEGER,              -- Current document being processed
+    start_stage TEXT NOT NULL,           -- Where cascade started
+    stop_stage TEXT NOT NULL DEFAULT 'done',  -- Where to stop
+    current_stage TEXT NOT NULL,         -- Current progress
+    status TEXT NOT NULL DEFAULT 'running',   -- running/completed/failed/paused
+    pr_url TEXT,                         -- PR URL if created
+    started_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP,
+    error_message TEXT
+);
+
+-- Executions link to cascade runs
+ALTER TABLE executions ADD COLUMN cascade_run_id INTEGER REFERENCES cascade_runs(id);
 ```
 
 ## Integration with Activity View
 
-Cascade executions appear in the Activity view (screen `1`) with:
-- `📋` icon for cascade items
-- Document title and current stage
-- `🔗` prefix if PR was created
-- Deduplication (only shows latest execution per document)
+The Cascade browser's activity panel shows cascade runs grouped together:
+- **Runs view**: Shows end-to-end cascade journeys with progress indicators
+- **Executions view**: Shows individual stage executions linked to their runs
+- Press `v` to toggle between views
 
 ## Best Practices
 
 1. **Start small** - Add simple, focused ideas rather than complex multi-feature requests
-2. **Use --sync** - Wait for completion to see results immediately
-3. **Review at planned** - Check the gameplan before letting it create a PR
+2. **Use --auto for hands-off** - Let cascade run end-to-end without manual intervention
+3. **Use --stop planned to review** - Stop before implementation to review the gameplan
 4. **Use synthesize** - Combine related analyses into cohesive plans
 5. **Check the PR** - The autonomous implementation may need tweaks
+6. **Monitor with `cascade runs`** - Track your cascade journeys and their status
 
 ## Comparison with Other Systems
 
