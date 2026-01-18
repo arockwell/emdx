@@ -10,8 +10,12 @@ Key concepts:
 - Inevitable flow: Once an idea enters, it cascades through to completion
 - Stage transformation: Each stage adds structure and refinement
 - Autonomous execution: Claude handles the heavy lifting at each stage
+
+Uses the UnifiedExecutor service for consistent execution behavior
+across all EMDX execution paths (agent, workflow, cascade).
 """
 
+import re
 import time
 from typing import Optional
 
@@ -24,11 +28,15 @@ from ..database.documents import (
     get_oldest_at_stage,
     get_cascade_stats,
     list_documents_at_stage,
+    save_document,
     save_document_to_cascade,
     update_document_stage,
+    update_document_pr_url,
 )
-from ..services.claude_executor import execute_claude_detached
-from ..database.connection import db_connection
+from ..services.unified_executor import (
+    UnifiedExecutor,
+    ExecutionConfig,
+)
 
 console = Console()
 
@@ -196,61 +204,40 @@ def process(
         return
 
     # Build the prompt - special handling for planned stage (implementation)
-    if stage == "planned":
+    is_implementation = (stage == "planned")
+    if is_implementation:
         prompt = IMPLEMENTATION_PROMPT.format(content=doc["content"])
         console.print("[bold yellow]⚡ Implementation mode - Claude will write code and create a PR[/bold yellow]")
         console.print("[dim]Note: This may take up to 30 minutes[/dim]")
+        timeout = 1800  # 30 minutes for implementation
     else:
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
-
-    # Create execution record
-    from datetime import datetime
-    from pathlib import Path
-
-    log_dir = Path.home() / ".config" / "emdx" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-
-    # Record execution in database
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO executions (doc_id, doc_title, status, started_at, log_file)
-            VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?)
-            """,
-            (doc_id, doc["title"], str(log_file)),
-        )
-        conn.commit()
-        execution_id = cursor.lastrowid
+        timeout = 300  # 5 minutes for other stages
 
     try:
         if sync:
-            # Synchronous execution - wait for completion
-            from ..services.claude_executor import execute_claude_sync
+            # Synchronous execution using UnifiedExecutor
             console.print("[cyan]Running synchronously (waiting for completion)...[/cyan]")
 
-            # Implementation stage needs much longer timeout (30 min vs 5 min default)
-            timeout = 1800 if stage == "planned" else 300
-
-            result = execute_claude_sync(
-                task=prompt,
-                execution_id=execution_id,
-                log_file=log_file,
-                doc_id=str(doc_id),
-                timeout=timeout,
+            config = ExecutionConfig(
+                prompt=prompt,
+                doc_id=doc_id,
+                title=f"Cascade: {doc['title'][:50]} [{stage}→{next_stage}]",
+                timeout_seconds=timeout,
+                sync=True,
             )
 
-            if result.get("success"):
-                # Create a new child document with Claude's output
-                output = result.get("output", "")
-                if output:
-                    from ..database.documents import save_document, update_document_pr_url
-                    import re
+            executor = UnifiedExecutor()
+            result = executor.execute(config)
 
+            if result.success:
+                # Get output content from the log file or result
+                output = result.output_content or ""
+
+                if output:
                     # For planned stage, extract PR URL from output
                     pr_url = None
-                    if stage == "planned":
-                        # Look for PR_URL: pattern in the output
+                    if is_implementation:
                         pr_match = re.search(r'PR_URL:\s*(https://github\.com/[^\s]+)', output)
                         if pr_match:
                             pr_url = pr_match.group(1)
@@ -285,45 +272,34 @@ def process(
                     console.print(f"[green]✓[/green] Completed (no output)")
                     console.print(f"  Document #{doc_id} → {next_stage}")
 
-                # Mark execution as completed
-                with db_connection.get_connection() as conn:
-                    conn.execute(
-                        "UPDATE executions SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (execution_id,),
-                    )
-                    conn.commit()
+                # Show execution stats
+                console.print(f"  Duration: {result.execution_time_ms / 1000:.1f}s")
+                console.print(f"  Tokens: {result.tokens_used:,}")
             else:
-                console.print(f"[red]Processing failed - document stays at '{stage}'[/red]")
-                with db_connection.get_connection() as conn:
-                    conn.execute(
-                        "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (execution_id,),
-                    )
-                    conn.commit()
+                console.print(f"[red]Processing failed: {result.error_message}[/red]")
+                console.print(f"[dim]Log: {result.log_file}[/dim]")
+                console.print(f"[yellow]Document stays at '{stage}'[/yellow]")
         else:
             # Async execution - start and return immediately
-            # Document stays at current stage until manually advanced
-            pid = execute_claude_detached(
-                task=prompt,
-                execution_id=execution_id,
-                log_file=log_file,
-                doc_id=str(doc_id),
+            config = ExecutionConfig(
+                prompt=prompt,
+                doc_id=doc_id,
+                title=f"Cascade: {doc['title'][:50]} [{stage}→{next_stage}]",
+                timeout_seconds=timeout,
+                sync=False,  # Detached mode
             )
 
-            console.print(f"[green]✓[/green] Started processing (PID: {pid})")
-            console.print(f"  Execution #{execution_id}")
+            executor = UnifiedExecutor()
+            result = executor.execute(config)
+
+            console.print(f"[green]✓[/green] Started processing")
+            console.print(f"  Execution #{result.execution_id}")
+            console.print(f"  Log: {result.log_file}")
             console.print(f"  [yellow]Document stays at '{stage}' until manually advanced[/yellow]")
             console.print(f"  Use 'emdx cascade advance {doc_id}' after completion")
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        # Mark execution as failed
-        with db_connection.get_connection() as conn:
-            conn.execute(
-                "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (execution_id,),
-            )
-            conn.commit()
         raise typer.Exit(1)
 
 
