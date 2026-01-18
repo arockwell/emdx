@@ -1,5 +1,5 @@
 """
-WorkflowBrowserV2 - Workflow browser using the panel-based architecture.
+WorkflowBrowser - Workflow browser using the panel-based architecture.
 
 A simplified reimplementation of WorkflowBrowser using ListPanel and PreviewPanel
 for template listing and run history.
@@ -58,7 +58,7 @@ MODE_INFO = {
 }
 
 
-class WorkflowBrowserV2(Widget):
+class WorkflowBrowser(Widget):
     """Workflow browser using panel components.
 
     A simplified workflow browser that displays templates with visual
@@ -66,35 +66,35 @@ class WorkflowBrowserV2(Widget):
     """
 
     DEFAULT_CSS = """
-    WorkflowBrowserV2 {
+    WorkflowBrowser {
         layout: vertical;
         height: 100%;
     }
 
-    WorkflowBrowserV2 #workflow-main {
+    WorkflowBrowser #workflow-main {
         height: 1fr;
     }
 
-    WorkflowBrowserV2 #workflow-list {
+    WorkflowBrowser #workflow-list {
         width: 45%;
         min-width: 40;
     }
 
-    WorkflowBrowserV2 #workflow-preview {
+    WorkflowBrowser #workflow-preview {
         width: 55%;
         min-width: 40;
         border-left: solid $primary;
     }
 
-    WorkflowBrowserV2 #workflow-status {
+    WorkflowBrowser #workflow-status {
         dock: bottom;
     }
 
-    WorkflowBrowserV2 #task-input-panel {
+    WorkflowBrowser #task-input-panel {
         dock: top;
     }
 
-    WorkflowBrowserV2 #help-bar {
+    WorkflowBrowser #help-bar {
         height: 1;
         background: $surface;
         padding: 0 1;

@@ -1,5 +1,5 @@
 """
-ActivityBrowserV2 - Activity browser matching the original ActivityView exactly.
+ActivityBrowser - Activity browser matching the original ActivityView exactly.
 
 This browser provides a view of EMDX activity:
 - Status bar with active count, tokens (today), docs today, cost, errors, sparkline
@@ -69,7 +69,7 @@ except ImportError:
 class AgentLogSubscriber:
     """Forwards log content to the activity browser."""
 
-    def __init__(self, browser: "ActivityBrowserV2"):
+    def __init__(self, browser: "ActivityBrowser"):
         self.browser = browser
 
     def on_log_content(self, new_content: str) -> None:
@@ -208,7 +208,7 @@ class ActivityItem:
         return "⚪"
 
 
-class ActivityBrowserV2(HelpMixin, Widget):
+class ActivityBrowser(HelpMixin, Widget):
     """Activity browser matching original ActivityView behavior."""
 
     HELP_TITLE = "Activity View"
@@ -221,87 +221,87 @@ class ActivityBrowserV2(HelpMixin, Widget):
             super().__init__()
 
     DEFAULT_CSS = """
-    ActivityBrowserV2 {
+    ActivityBrowser {
         layout: vertical;
         height: 100%;
     }
 
-    ActivityBrowserV2 #status-bar {
+    ActivityBrowser #status-bar {
         height: 1;
         background: $boost;
         padding: 0 1;
         dock: top;
     }
 
-    ActivityBrowserV2 #main-content {
+    ActivityBrowser #main-content {
         height: 1fr;
     }
 
-    ActivityBrowserV2 #activity-panel {
+    ActivityBrowser #activity-panel {
         width: 40%;
         height: 100%;
     }
 
-    ActivityBrowserV2 #activity-list-section {
+    ActivityBrowser #activity-list-section {
         height: 70%;
     }
 
-    ActivityBrowserV2 #activity-header {
+    ActivityBrowser #activity-header {
         height: 1;
         background: $surface;
         padding: 0 1;
     }
 
-    ActivityBrowserV2 #activity-table {
+    ActivityBrowser #activity-table {
         height: 1fr;
     }
 
-    ActivityBrowserV2 #context-section {
+    ActivityBrowser #context-section {
         height: 30%;
         border-top: solid $secondary;
     }
 
-    ActivityBrowserV2 #context-header {
+    ActivityBrowser #context-header {
         height: 1;
         background: $surface;
         padding: 0 1;
     }
 
-    ActivityBrowserV2 #context-scroll {
+    ActivityBrowser #context-scroll {
         height: 1fr;
     }
 
-    ActivityBrowserV2 #context-content {
+    ActivityBrowser #context-content {
         padding: 0 1;
     }
 
-    ActivityBrowserV2 #preview-panel {
+    ActivityBrowser #preview-panel {
         width: 60%;
         height: 100%;
         border-left: solid $primary;
     }
 
-    ActivityBrowserV2 #preview-header {
+    ActivityBrowser #preview-header {
         height: 1;
         background: $surface;
         padding: 0 1;
     }
 
-    ActivityBrowserV2 #preview-scroll {
+    ActivityBrowser #preview-scroll {
         height: 1fr;
     }
 
-    ActivityBrowserV2 #preview-content {
+    ActivityBrowser #preview-content {
         padding: 0 1;
     }
 
-    ActivityBrowserV2 #preview-log {
+    ActivityBrowser #preview-log {
         height: 1fr;
         padding: 0 1;
         display: none;
     }
 
-    ActivityBrowserV2 #help-bar {
+    ActivityBrowser #help-bar {
         height: 1;
         background: $surface;
         padding: 0 1;

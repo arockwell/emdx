@@ -1,5 +1,5 @@
 """
-DocumentBrowserV2 - Document browser using the panel-based architecture.
+DocumentBrowser - Document browser using the panel-based architecture.
 
 This browser replaces the original document_browser.py with a simpler
 implementation using ListPanel, PreviewPanel, and InputPanel components.
@@ -48,7 +48,7 @@ from ..viewmodels import DocumentDetailVM, DocumentListItem, DocumentListVM
 logger = logging.getLogger(__name__)
 
 
-class DocumentBrowserV2(HelpMixin, Widget):
+class DocumentBrowser(HelpMixin, Widget):
     """Document browser using the panel-based architecture.
 
     This is a simplified reimplementation of DocumentBrowser using
@@ -67,41 +67,41 @@ class DocumentBrowserV2(HelpMixin, Widget):
     HELP_TITLE = "Document Browser V2"
 
     DEFAULT_CSS = """
-    DocumentBrowserV2 {
+    DocumentBrowser {
         layout: horizontal;
         height: 100%;
         layers: base overlay;
     }
 
-    DocumentBrowserV2 #doc-sidebar {
+    DocumentBrowser #doc-sidebar {
         width: 40%;
         min-width: 40;
         height: 100%;
         layer: base;
     }
 
-    DocumentBrowserV2 #doc-list {
+    DocumentBrowser #doc-list {
         height: 2fr;
     }
 
-    DocumentBrowserV2 #doc-details {
+    DocumentBrowser #doc-details {
         height: 1fr;
         border-top: solid $primary;
         padding: 0 1;
     }
 
-    DocumentBrowserV2 #doc-preview {
+    DocumentBrowser #doc-preview {
         width: 60%;
         min-width: 40;
         border-left: solid $primary;
         layer: base;
     }
 
-    DocumentBrowserV2 #tag-input-panel {
+    DocumentBrowser #tag-input-panel {
         layer: overlay;
     }
 
-    DocumentBrowserV2 #browser-status {
+    DocumentBrowser #browser-status {
         height: 1;
         background: $boost;
         color: $text;
@@ -109,7 +109,7 @@ class DocumentBrowserV2(HelpMixin, Widget):
         dock: bottom;
     }
 
-    DocumentBrowserV2 #help-bar {
+    DocumentBrowser #help-bar {
         height: 1;
         background: $surface;
         padding: 0 1;
@@ -218,7 +218,7 @@ class DocumentBrowserV2(HelpMixin, Widget):
 
     async def on_mount(self) -> None:
         """Initialize the document browser."""
-        logger.info("DocumentBrowserV2 mounted")
+        logger.info("DocumentBrowser mounted")
 
         # Disable focus on details panel
         try:

@@ -1,5 +1,5 @@
 """
-FileBrowserV2 - File browser using the panel system.
+FileBrowser - File browser using the panel system.
 
 A simplified file browser that demonstrates the panel architecture:
 - ListPanel for directory listing with vim navigation
@@ -18,6 +18,7 @@ from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal
 from textual.reactive import reactive
 from textual.widget import Widget
 
@@ -33,7 +34,7 @@ from ..panels import (
 )
 
 
-class FileBrowserV2(Widget):
+class FileBrowser(Widget):
     """File browser using panel components.
 
     A clean, minimal file browser implementation:
@@ -45,29 +46,29 @@ class FileBrowserV2(Widget):
     """
 
     DEFAULT_CSS = """
-    FileBrowserV2 {
+    FileBrowser {
         layout: vertical;
         height: 100%;
     }
 
-    FileBrowserV2 #fb-path {
+    FileBrowser #fb-path {
         height: 1;
         background: $primary;
         color: $text;
         padding: 0 1;
     }
 
-    FileBrowserV2 #fb-content {
+    FileBrowser #fb-content {
         height: 1fr;
         layout: horizontal;
     }
 
-    FileBrowserV2 #fb-list {
+    FileBrowser #fb-list {
         width: 50%;
         min-width: 30;
     }
 
-    FileBrowserV2 #fb-preview {
+    FileBrowser #fb-preview {
         width: 50%;
         min-width: 30;
         border-left: solid $primary;
@@ -104,31 +105,32 @@ class FileBrowserV2(Widget):
             id="fb-path",
         )
 
-        # List panel for files
-        yield ListPanel(
-            columns=[
-                ColumnDef("Type", width=4),
-                ColumnDef("Name", width=40),
-                ColumnDef("Size", width=10),
-            ],
-            config=ListPanelConfig(
-                show_search=True,
-                search_placeholder="Search files...",
-                status_format="{filtered}/{total} items",
-            ),
-            show_status=True,
-            id="fb-list",
-        )
+        with Horizontal(id="fb-content"):
+            # List panel for files
+            yield ListPanel(
+                columns=[
+                    ColumnDef("Type", width=4),
+                    ColumnDef("Name", width=40),
+                    ColumnDef("Size", width=10),
+                ],
+                config=ListPanelConfig(
+                    show_search=True,
+                    search_placeholder="Search files...",
+                    status_format="{filtered}/{total} items",
+                ),
+                show_status=True,
+                id="fb-list",
+            )
 
-        # Preview panel for file content
-        yield PreviewPanel(
-            config=PreviewPanelConfig(
-                enable_editing=False,
-                enable_selection=True,
-                empty_message="Select a file to preview",
-            ),
-            id="fb-preview",
-        )
+            # Preview panel for file content
+            yield PreviewPanel(
+                config=PreviewPanelConfig(
+                    enable_editing=False,
+                    enable_selection=True,
+                    empty_message="Select a file to preview",
+                ),
+                id="fb-preview",
+            )
 
     async def on_mount(self) -> None:
         """Initialize with the start path."""

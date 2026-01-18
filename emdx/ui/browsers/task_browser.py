@@ -1,5 +1,5 @@
 """
-TaskBrowserV2 - Task browser using the panel-based architecture.
+TaskBrowser - Task browser using the panel-based architecture.
 
 A simplified reimplementation of TaskBrowser using ListPanel and PreviewPanel
 for task listing with status indicators and task details display.
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 ICONS = {"open": "○", "active": "●", "blocked": "⚠", "done": "✓", "failed": "✗"}
 
 
-class TaskBrowserV2(Widget):
+class TaskBrowser(Widget):
     """Task browser using panel components.
 
     A simplified task browser that displays tasks with their status,
@@ -43,27 +43,27 @@ class TaskBrowserV2(Widget):
     """
 
     DEFAULT_CSS = """
-    TaskBrowserV2 {
+    TaskBrowser {
         layout: vertical;
         height: 100%;
     }
 
-    TaskBrowserV2 #task-main {
+    TaskBrowser #task-main {
         height: 1fr;
     }
 
-    TaskBrowserV2 #task-list {
+    TaskBrowser #task-list {
         width: 55%;
         min-width: 40;
     }
 
-    TaskBrowserV2 #task-preview {
+    TaskBrowser #task-preview {
         width: 45%;
         min-width: 30;
         border-left: solid $primary;
     }
 
-    TaskBrowserV2 #task-status {
+    TaskBrowser #task-status {
         dock: bottom;
     }
     """

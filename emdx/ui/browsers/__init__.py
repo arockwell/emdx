@@ -7,23 +7,22 @@ components (ListPanel, PreviewPanel, etc.).
 For documentation, see: docs/browser-dx-design.md
 """
 
-from .activity_browser_v2 import ActivityBrowserV2
-from .document_browser_v2 import DocumentBrowserV2
+from .activity_browser import ActivityBrowser
+from .document_browser import DocumentBrowser
 from .example_browser import ExampleBrowser
-from .file_browser_v2 import FileBrowserV2
-from .git_browser_v2 import GitBrowserV2
-from .log_browser_v2 import LogBrowserV2
-from .task_browser_v2 import TaskBrowserV2
-from .workflow_browser_v2 import WorkflowBrowserV2
+from .file_browser import FileBrowser
+from .git_browser import GitBrowser
+from .log_browser import LogBrowser
+from .task_browser import TaskBrowser
+from .workflow_browser import WorkflowBrowser
 
 __all__ = [
-    "ActivityBrowserV2",
-    "DocumentBrowserV2",
+    "ActivityBrowser",
+    "DocumentBrowser",
     "ExampleBrowser",
-    "FileBrowserV2",
-    "GitBrowserV2",
-    "LogBrowserV2",
-    "TaskBrowserV2",
-    "WorkflowBrowserV2",
+    "FileBrowser",
+    "GitBrowser",
+    "LogBrowser",
+    "TaskBrowser",
+    "WorkflowBrowser",
 ]
-

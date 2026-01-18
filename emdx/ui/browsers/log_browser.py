@@ -1,5 +1,5 @@
 """
-LogBrowserV2 - Panel-based log browser demonstrating the new architecture.
+LogBrowser - Panel-based log browser demonstrating the new architecture.
 
 This browser shows execution logs using the reusable panel components,
 achieving the same functionality as LogBrowser in ~100 lines of code.
@@ -34,24 +34,24 @@ from ..panels import (
 logger = logging.getLogger(__name__)
 
 
-class LogBrowserV2(Widget):
+class LogBrowser(Widget):
     """Panel-based log browser for viewing execution logs.
 
     Uses ListPanel and PreviewPanel for a clean, maintainable implementation.
     """
 
     DEFAULT_CSS = """
-    LogBrowserV2 {
+    LogBrowser {
         layout: horizontal;
         height: 100%;
     }
 
-    LogBrowserV2 #log-list {
+    LogBrowser #log-list {
         width: 40%;
         min-width: 40;
     }
 
-    LogBrowserV2 #log-preview {
+    LogBrowser #log-preview {
         width: 60%;
         min-width: 50;
         border-left: solid $primary;
@@ -220,7 +220,7 @@ class LogBrowserV2(Widget):
 class _LogStreamHandler(LogStreamSubscriber):
     """Internal handler for log stream events."""
 
-    def __init__(self, browser: LogBrowserV2):
+    def __init__(self, browser: LogBrowser):
         self.browser = browser
 
     def on_log_content(self, new_content: str) -> None:

@@ -1,5 +1,5 @@
 """
-GitBrowserV2 - Git diff browser using the panel system.
+GitBrowser - Git diff browser using the panel system.
 
 Uses ListPanel for file listing and PreviewPanel for colorized diff display.
 Provides stage/unstage/commit/discard operations with vim-style navigation.
@@ -33,13 +33,13 @@ logger = logging.getLogger(__name__)
 STATUS_ICONS = {"M": "M", "A": "A", "D": "D", "R": "R", "C": "C", "U": "?", "??": "?"}
 
 
-class GitBrowserV2(Widget):
+class GitBrowser(Widget):
     """Git diff browser with file list and colorized diff preview."""
 
     DEFAULT_CSS = """
-    GitBrowserV2 { layout: horizontal; height: 100%; }
-    GitBrowserV2 #git-list { width: 45%; min-width: 30; }
-    GitBrowserV2 #git-preview { width: 55%; min-width: 40; border-left: solid $primary; }
+    GitBrowser { layout: horizontal; height: 100%; }
+    GitBrowser #git-list { width: 45%; min-width: 30; }
+    GitBrowser #git-preview { width: 55%; min-width: 40; border-left: solid $primary; }
     """
 
     BINDINGS = [
