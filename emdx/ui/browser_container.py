@@ -251,15 +251,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
-            elif browser_type == "pipeline":
+            elif browser_type == "cascade":
                 try:
-                    from .pipeline_browser import PipelineBrowser
-                    self.browsers[browser_type] = PipelineBrowser()
-                    logger.info("PipelineBrowser created successfully")
+                    from .cascade_browser import CascadeBrowser
+                    self.browsers[browser_type] = CascadeBrowser()
+                    logger.info("CascadeBrowser created successfully")
                 except Exception as e:
-                    logger.error(f"Failed to create PipelineBrowser: {e}", exc_info=True)
+                    logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Pipeline browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{str(e)}\n\nCheck logs for details.")
             elif browser_type == "document":
                 try:
                     from .document_browser import DocumentBrowser
@@ -351,12 +351,12 @@ class BrowserContainer(App):
             event.stop()
             return
         elif key == "4":
-            await self.switch_browser("pipeline")
+            await self.switch_browser("cascade")
             event.stop()
             return
 
-        # Q to quit from activity, document, or pipeline browser
-        if key == "q" and self.current_browser in ["activity", "document", "pipeline"]:
+        # Q to quit from activity, document, or cascade browser
+        if key == "q" and self.current_browser in ["activity", "document", "cascade"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()

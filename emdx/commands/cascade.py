@@ -1,12 +1,15 @@
-"""Streaming pipeline commands for emdx.
+"""Cascade - autonomous document transformation pipeline.
 
-This module implements the minimal Gas Town-style streaming pipeline where
-documents flow through stages: idea → prompt → analyzed → planned → done.
+Cascade transforms raw ideas into working code through a series of stages:
+idea → prompt → analyzed → planned → done
+
+Each stage refines the document using Claude, with the final stage
+actually implementing the code and creating a pull request.
 
 Key concepts:
-- Status-as-queue: The stage column acts as a queue indicator
-- Streaming: Items flow independently through stages (concurrency, not batch)
-- Sessionless: Python owns the loop, Claude sessions are disposable compute
+- Inevitable flow: Once an idea enters, it cascades through to completion
+- Stage transformation: Each stage adds structure and refinement
+- Autonomous execution: Claude handles the heavy lifting at each stage
 """
 
 import time
@@ -19,9 +22,9 @@ from rich.table import Table
 from ..database.documents import (
     get_document,
     get_oldest_at_stage,
-    get_pipeline_stats,
+    get_cascade_stats,
     list_documents_at_stage,
-    save_document_to_pipeline,
+    save_document_to_cascade,
     update_document_stage,
 )
 from ..services.claude_executor import execute_claude_detached
@@ -29,7 +32,7 @@ from ..database.connection import db_connection
 
 console = Console()
 
-app = typer.Typer(help="Streaming document pipeline")
+app = typer.Typer(help="Cascade ideas through stages to working code")
 
 # Stage configuration
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
@@ -65,22 +68,22 @@ Here is the gameplan to implement:
 
 @app.command()
 def add(
-    content: str = typer.Argument(..., help="The idea content to add to the pipeline"),
+    content: str = typer.Argument(..., help="The idea content to add to the cascade"),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title"),
     stage: str = typer.Option("idea", "--stage", "-s", help="Starting stage"),
 ):
-    """Add a new document to the pipeline.
+    """Add a new document to the cascade.
 
     Examples:
-        emdx pipeline add "Build a REST API for user management"
-        emdx pipeline add "Add dark mode to the app" --title "Dark Mode Feature"
+        emdx cascade add "Build a REST API for user management"
+        emdx cascade add "Add dark mode to the app" --title "Dark Mode Feature"
     """
     if stage not in STAGES:
         console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
         raise typer.Exit(1)
 
-    doc_title = title or f"Pipeline: {content[:50]}..."
-    doc_id = save_document_to_pipeline(
+    doc_title = title or f"Cascade: {content[:50]}..."
+    doc_id = save_document_to_cascade(
         title=doc_title,
         content=content,
         stage=stage,
@@ -90,10 +93,10 @@ def add(
 
 @app.command()
 def status():
-    """Show pipeline status - documents at each stage."""
-    stats = get_pipeline_stats()
+    """Show cascade status - documents at each stage."""
+    stats = get_cascade_stats()
 
-    table = Table(title="Pipeline Status")
+    table = Table(title="Cascade Status")
     table.add_column("Stage", style="cyan")
     table.add_column("Count", justify="right")
     table.add_column("→", justify="center")
@@ -108,9 +111,9 @@ def status():
 
     total = sum(stats.values())
     if total > 0:
-        console.print(f"\nTotal documents in pipeline: {total}")
+        console.print(f"\nTotal documents in cascade: {total}")
     else:
-        console.print("\n[dim]Pipeline is empty. Add ideas with: emdx pipeline add \"your idea\"[/dim]")
+        console.print("\n[dim]Cascade is empty. Add ideas with: emdx cascade add \"your idea\"[/dim]")
 
 
 @app.command()
@@ -154,9 +157,9 @@ def process(
     and advances it to the next stage.
 
     Examples:
-        emdx pipeline process idea
-        emdx pipeline process prompt --doc 123
-        emdx pipeline process analyzed --dry-run
+        emdx cascade process idea
+        emdx cascade process prompt --doc 123
+        emdx cascade process analyzed --dry-run
     """
     # Validate stage - planned uses IMPLEMENTATION_PROMPT, others use STAGE_PROMPTS
     processable_stages = list(STAGE_PROMPTS.keys()) + ["planned"]
@@ -206,7 +209,7 @@ def process(
 
     log_dir = Path.home() / ".config" / "emdx" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"pipeline_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_file = log_dir / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
     # Record execution in database
     with db_connection.get_connection() as conn:
@@ -310,7 +313,7 @@ def process(
             console.print(f"[green]✓[/green] Started processing (PID: {pid})")
             console.print(f"  Execution #{execution_id}")
             console.print(f"  [yellow]Document stays at '{stage}' until manually advanced[/yellow]")
-            console.print(f"  Use 'emdx pipeline advance {doc_id}' after completion")
+            console.print(f"  Use 'emdx cascade advance {doc_id}' after completion")
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -330,15 +333,15 @@ def run(
     stages: Optional[str] = typer.Option(None, "--stages", help="Comma-separated stages to process"),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between checks"),
 ):
-    """Run the streaming pipeline continuously.
+    """Run the cascade continuously.
 
     Watches all stages and processes documents as they become available.
     This is the minimal daemon - just a simple loop.
 
     Examples:
-        emdx pipeline run --once
-        emdx pipeline run --stages idea,prompt
-        emdx pipeline run --interval 10
+        emdx cascade run --once
+        emdx cascade run --stages idea,prompt
+        emdx cascade run --interval 10
     """
     active_stages = stages.split(",") if stages else list(STAGE_PROMPTS.keys())
 
@@ -348,7 +351,7 @@ def run(
             console.print(f"[red]Invalid stage: {stage}[/red]")
             raise typer.Exit(1)
 
-    console.print(f"[cyan]Starting pipeline for stages: {active_stages}[/cyan]")
+    console.print(f"[cyan]Starting cascade for stages: {active_stages}[/cyan]")
     if not once:
         console.print(f"[dim]Checking every {interval}s. Press Ctrl+C to stop.[/dim]")
 
@@ -388,8 +391,8 @@ def advance(
     Useful for testing or when you want to skip processing.
 
     Examples:
-        emdx pipeline advance 123
-        emdx pipeline advance 123 --to done
+        emdx cascade advance 123
+        emdx cascade advance 123 --to done
     """
     doc = get_document(str(doc_id))
     if not doc:
@@ -398,7 +401,7 @@ def advance(
 
     current_stage = doc.get("stage")
     if not current_stage:
-        console.print(f"[red]Document #{doc_id} is not in the pipeline[/red]")
+        console.print(f"[red]Document #{doc_id} is not in the cascade[/red]")
         raise typer.Exit(1)
 
     if to_stage:
@@ -418,11 +421,11 @@ def advance(
 
 @app.command()
 def remove(
-    doc_id: int = typer.Argument(..., help="Document ID to remove from pipeline"),
+    doc_id: int = typer.Argument(..., help="Document ID to remove from cascade"),
 ):
-    """Remove a document from the pipeline (keeps the document).
+    """Remove a document from the cascade (keeps the document).
 
-    Sets the stage to NULL, removing it from pipeline processing
+    Sets the stage to NULL, removing it from cascade processing
     but keeping the document in the knowledge base.
     """
     doc = get_document(str(doc_id))
@@ -431,11 +434,11 @@ def remove(
         raise typer.Exit(1)
 
     if not doc.get("stage"):
-        console.print(f"[yellow]Document #{doc_id} is not in the pipeline[/yellow]")
+        console.print(f"[yellow]Document #{doc_id} is not in the cascade[/yellow]")
         return
 
     update_document_stage(doc_id, None)
-    console.print(f"[green]✓[/green] Removed document #{doc_id} from pipeline")
+    console.print(f"[green]✓[/green] Removed document #{doc_id} from cascade")
 
 
 @app.command()
@@ -452,13 +455,13 @@ def synthesize(
 
     Examples:
         # Combine all analyzed docs into one planned doc
-        emdx pipeline synthesize analyzed
+        emdx cascade synthesize analyzed
 
         # Combine with custom title
-        emdx pipeline synthesize analyzed --title "Combined Analysis"
+        emdx cascade synthesize analyzed --title "Combined Analysis"
 
         # Keep source docs (don't advance them to done)
-        emdx pipeline synthesize analyzed --keep
+        emdx cascade synthesize analyzed --keep
     """
     docs = list_documents_at_stage(stage)
 
@@ -485,7 +488,7 @@ def synthesize(
 
     # Create the synthesized document
     doc_title = title or f"Synthesis: {len(docs)} {stage} documents"
-    new_doc_id = save_document_to_pipeline(
+    new_doc_id = save_document_to_cascade(
         title=doc_title,
         content=combined_content,
         stage=next_stage,

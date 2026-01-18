@@ -202,8 +202,8 @@ class ActivityItem:
                 "custom": "🏷️",
             }
             return icons.get(group_type, "📁")
-        elif self.item_type == "pipeline":
-            return "📋"  # Pipeline processing
+        elif self.item_type == "cascade":
+            return "📋"  # Cascade processing
         else:
             return ""
 
@@ -454,8 +454,8 @@ class ActivityView(HelpMixin, Widget):
         if HAS_DOCS and doc_db:
             await self._load_direct_saves()
 
-        # Load pipeline executions
-        await self._load_pipeline_executions()
+        # Load cascade executions
+        await self._load_cascade_executions()
 
         # Sort: running workflows first (pinned), then by timestamp descending
         # Running workflows should always be at the top for visibility
@@ -728,11 +728,11 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error loading direct saves: {e}", exc_info=True)
 
-    async def _load_pipeline_executions(self) -> None:
-        """Load pipeline executions into activity items.
+    async def _load_cascade_executions(self) -> None:
+        """Load cascade executions into activity items.
 
-        Pipeline executions are Claude runs that process documents through
-        the streaming pipeline (idea → prompt → analyzed → planned → done).
+        Cascade executions are Claude runs that process documents through
+        the cascade stages (idea → prompt → analyzed → planned → done).
         """
         try:
             from emdx.database.connection import db_connection
@@ -741,7 +741,7 @@ class ActivityView(HelpMixin, Widget):
             cutoff = datetime.now() - timedelta(days=7)
 
             with db_connection.get_connection() as conn:
-                # Get pipeline executions (those with doc_id set)
+                # Get cascade executions (those with doc_id set)
                 # Only show the most recent execution per document
                 cursor = conn.execute(
                     """
@@ -777,12 +777,12 @@ class ActivityView(HelpMixin, Widget):
                 # Build title with stage info
                 title = doc_title or f"Document #{doc_id}"
                 if stage:
-                    title = f"📋 {title}"  # Pipeline indicator
+                    title = f"📋 {title}"  # Cascade indicator
                 if pr_url:
                     title = f"🔗 {title}"  # Has PR
 
                 item = ActivityItem(
-                    item_type="pipeline",
+                    item_type="cascade",
                     item_id=exec_id,
                     title=title,
                     status=status or "unknown",
@@ -797,7 +797,7 @@ class ActivityView(HelpMixin, Widget):
                 self.activity_items.append(item)
 
         except Exception as e:
-            logger.error(f"Error loading pipeline executions: {e}", exc_info=True)
+            logger.error(f"Error loading cascade executions: {e}", exc_info=True)
 
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
@@ -904,7 +904,7 @@ class ActivityView(HelpMixin, Widget):
             # - Individual runs: show individual run ID or doc_id if completed
             if item.item_type in ("workflow", "group"):
                 id_str = f"#{item.item_id}" if item.item_id else "—"
-            elif item.item_type in ("document", "exploration", "synthesis", "pipeline"):
+            elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
                 id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
             elif item.item_type == "individual_run":
                 # Show doc_id if has output, otherwise show run ID if exists
