@@ -27,9 +27,9 @@ class TestWorkflowExecutorInit:
     """Test WorkflowExecutor initialization."""
 
     def test_default_max_concurrent(self):
-        """Default max_concurrent is 10."""
+        """Default max_concurrent is 5."""
         executor = WorkflowExecutor()
-        assert executor.max_concurrent == 10
+        assert executor.max_concurrent == 5
 
     def test_custom_max_concurrent(self):
         """Custom max_concurrent is respected."""
