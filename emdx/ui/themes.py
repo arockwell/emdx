@@ -229,3 +229,41 @@ def get_theme_display_info() -> list[dict[str, str]]:
             "description": "Classic Solarized light theme",
         },
     ]
+
+
+# Theme pairs for quick toggle (dark <-> light)
+THEME_PAIRS: dict[str, str] = {
+    "emdx-dark": "emdx-light",
+    "emdx-light": "emdx-dark",
+    "emdx-nord": "emdx-light",  # Nord (dark) -> Light
+    "emdx-solarized-dark": "emdx-solarized-light",
+    "emdx-solarized-light": "emdx-solarized-dark",
+}
+
+
+def get_opposite_theme(theme_name: str) -> str:
+    """
+    Get the opposite (dark/light) theme for quick toggle.
+
+    Args:
+        theme_name: Current theme name
+
+    Returns:
+        Paired theme name for toggle, or emdx-dark as fallback
+    """
+    return THEME_PAIRS.get(theme_name, "emdx-dark")
+
+
+def get_theme_indicator(theme_name: str) -> str:
+    """
+    Get a short theme indicator for status bars.
+
+    Args:
+        theme_name: Current theme name
+
+    Returns:
+        Short string like "🌙" for dark or "☀️" for light
+    """
+    if is_dark_theme(theme_name):
+        return "🌙"
+    return "☀️"

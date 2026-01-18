@@ -142,6 +142,58 @@ poetry run emdx tag 123 done success
 poetry run emdx untag 123 blocked
 ```
 
+## 🌊 Cascade - Ideas to Code (`emdx cascade`)
+
+Transform raw ideas into working code through autonomous stage transformations. Cascade takes an idea and flows it through: **idea → prompt → analyzed → planned → done** — with the final stage creating an actual PR.
+
+```bash
+# Add an idea to the cascade
+emdx cascade add "Add dark mode toggle to the settings page"
+
+# Check cascade status
+emdx cascade status
+
+# Process the next item at a stage (sync waits for completion)
+emdx cascade process idea --sync
+emdx cascade process prompt --sync
+emdx cascade process analyzed --sync
+emdx cascade process planned --sync  # This creates actual code and PR!
+
+# Or run continuously
+emdx cascade run
+```
+
+### Stage Flow
+
+| Stage | What Happens |
+|-------|--------------|
+| `idea` | Raw idea text enters the cascade |
+| `prompt` | Claude transforms idea into a well-formed prompt |
+| `analyzed` | Claude analyzes the prompt thoroughly |
+| `planned` | Claude creates a detailed implementation gameplan |
+| `done` | Claude implements the code and creates a PR |
+
+### Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `emdx cascade add "idea"` | Add new idea to cascade |
+| `emdx cascade status` | Show documents at each stage |
+| `emdx cascade process <stage> --sync` | Process next doc at stage |
+| `emdx cascade advance <id>` | Manually advance a document |
+| `emdx cascade remove <id>` | Remove from cascade (keeps doc) |
+| `emdx cascade synthesize <stage>` | Combine multiple docs into one |
+
+### TUI Access
+
+Press `4` in the GUI to access the Cascade browser. Navigate with:
+- `h/l` - Switch stages
+- `j/k` - Navigate documents
+- `a` - Advance document
+- `p` - Process through Claude
+- `s` - Synthesize selected docs
+- `Space` - Toggle selection (for synthesis)
+
 ## 🚀 Quick Task Execution (`emdx run`)
 
 The fastest way to run parallel tasks. This is the first rung on EMDX's "execution ladder" - start here and graduate to `emdx each` or `emdx workflow` only when you need more power.
@@ -183,6 +235,9 @@ emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 
 
 # Verbose mode to see agent output in real-time
 emdx agent "Deep dive on caching strategy" -t analysis -v
+
+# Have the agent create a PR if it makes code changes
+emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
 ```
 
 **Options:**
@@ -191,6 +246,7 @@ emdx agent "Deep dive on caching strategy" -t analysis -v
 - `--group, -g` - Group ID to add output to
 - `--group-role` - Role in group (default: `exploration`)
 - `--verbose, -v` - Show agent output in real-time
+- `--pr` - Instruct agent to create a PR if it makes code changes
 
 **How it works:**
 1. Takes your prompt and appends instructions telling the agent how to save its output

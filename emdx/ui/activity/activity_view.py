@@ -204,6 +204,8 @@ class ActivityItem:
                 "custom": "🏷️",
             }
             return icons.get(group_type, "📁")
+        elif self.item_type == "cascade":
+            return "📋"  # Cascade processing
         else:
             return ""
 
@@ -453,6 +455,9 @@ class ActivityView(HelpMixin, Widget):
         # Load recent direct saves (documents not from workflows or groups)
         if HAS_DOCS and doc_db:
             await self._load_direct_saves()
+
+        # Load cascade executions
+        await self._load_cascade_executions()
 
         # Sort: running workflows first (pinned), then by timestamp descending
         # Running workflows should always be at the top for visibility
@@ -730,6 +735,77 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error loading direct saves: {e}", exc_info=True)
 
+    async def _load_cascade_executions(self) -> None:
+        """Load cascade executions into activity items.
+
+        Cascade executions are Claude runs that process documents through
+        the cascade stages (idea → prompt → analyzed → planned → done).
+        """
+        try:
+            from emdx.database.connection import db_connection
+            from datetime import datetime, timedelta
+
+            cutoff = datetime.now() - timedelta(days=7)
+
+            with db_connection.get_connection() as conn:
+                # Get cascade executions (those with doc_id set)
+                # Only show the most recent execution per document
+                cursor = conn.execute(
+                    """
+                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at, e.completed_at,
+                           d.stage, d.pr_url
+                    FROM executions e
+                    LEFT JOIN documents d ON e.doc_id = d.id
+                    WHERE e.doc_id IS NOT NULL
+                      AND e.started_at > ?
+                      AND e.id = (
+                          SELECT MAX(e2.id) FROM executions e2
+                          WHERE e2.doc_id = e.doc_id
+                      )
+                    ORDER BY e.started_at DESC
+                    LIMIT 50
+                    """,
+                    (cutoff.isoformat(),),
+                )
+                rows = cursor.fetchall()
+
+            for row in rows:
+                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url = row
+
+                # Parse timestamp
+                if started_at:
+                    if isinstance(started_at, str):
+                        timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    else:
+                        timestamp = started_at
+                else:
+                    timestamp = datetime.now()
+
+                # Build title with stage info
+                title = doc_title or f"Document #{doc_id}"
+                if stage:
+                    title = f"📋 {title}"  # Cascade indicator
+                if pr_url:
+                    title = f"🔗 {title}"  # Has PR
+
+                item = ActivityItem(
+                    item_type="cascade",
+                    item_id=exec_id,
+                    title=title,
+                    status=status or "unknown",
+                    timestamp=timestamp,
+                    doc_id=doc_id,
+                )
+
+                # Store extra info for preview
+                item.stage = stage
+                item.pr_url = pr_url
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading cascade executions: {e}", exc_info=True)
+
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
         self.flat_items = []
@@ -839,7 +915,7 @@ class ActivityView(HelpMixin, Widget):
             # - Individual runs: show individual run ID or doc_id if completed
             if item.item_type in ("workflow", "group"):
                 id_str = f"#{item.item_id}" if item.item_id else "—"
-            elif item.item_type in ("document", "exploration", "synthesis"):
+            elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
                 id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
             elif item.item_type == "individual_run":
                 # Show doc_id if has output, otherwise show run ID if exists
@@ -916,6 +992,10 @@ class ActivityView(HelpMixin, Widget):
         week_data = self._get_week_activity_data()
         spark = sparkline(week_data, width=7)
 
+        # Get theme indicator
+        from emdx.ui.themes import get_theme_indicator
+        theme_indicator = get_theme_indicator(self.app.theme)
+
         # Format status bar
         parts = []
         if active > 0:
@@ -935,6 +1015,7 @@ class ActivityView(HelpMixin, Widget):
 
         parts.append(f"[dim]{spark}[/dim]")
         parts.append(datetime.now().strftime("%H:%M"))
+        parts.append(f"[dim]{theme_indicator}[/dim]")
 
         status_bar.update(" │ ".join(parts))
 

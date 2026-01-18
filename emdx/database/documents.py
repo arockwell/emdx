@@ -885,12 +885,12 @@ def list_non_workflow_documents(
 
 
 # =============================================================================
-# Pipeline Stage Operations (for streaming document processing)
+# Cascade Stage Operations (for autonomous document transformation)
 # =============================================================================
 
 
 def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
-    """Get the oldest document at a given pipeline stage.
+    """Get the oldest document at a given cascade stage.
 
     This is the core primitive for the patrol system - each patrol watches
     a stage and picks up the oldest unprocessed document.
@@ -916,11 +916,11 @@ def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
 
 
 def update_document_stage(doc_id: int, stage: str | None) -> bool:
-    """Update a document's pipeline stage.
+    """Update a document's cascade stage.
 
     Args:
         doc_id: Document ID
-        stage: New stage (or None to remove from pipeline)
+        stage: New stage (or None to remove from cascade)
 
     Returns:
         True if update was successful
@@ -939,7 +939,7 @@ def update_document_stage(doc_id: int, stage: str | None) -> bool:
 
 
 def update_document_pr_url(doc_id: int, pr_url: str) -> bool:
-    """Update a document's PR URL (for pipeline done stage).
+    """Update a document's PR URL (for cascade done stage).
 
     Args:
         doc_id: Document ID
@@ -980,7 +980,7 @@ def get_document_pr_url(doc_id: int) -> str | None:
 
 
 def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]:
-    """List all documents at a given pipeline stage.
+    """List all documents at a given cascade stage.
 
     Args:
         stage: The stage to query
@@ -992,7 +992,7 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT id, title, project, stage, created_at, updated_at
+            SELECT id, title, project, stage, created_at, updated_at, parent_id, pr_url
             FROM documents
             WHERE stage = ? AND is_deleted = FALSE
             ORDER BY created_at ASC
@@ -1004,7 +1004,7 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]
 
 
 def count_documents_at_stage(stage: str) -> int:
-    """Count documents at a given pipeline stage.
+    """Count documents at a given cascade stage.
 
     Args:
         stage: The stage to query
@@ -1023,8 +1023,8 @@ def count_documents_at_stage(stage: str) -> int:
         return cursor.fetchone()[0]
 
 
-def get_pipeline_stats() -> dict[str, int]:
-    """Get counts of documents at each pipeline stage.
+def get_cascade_stats() -> dict[str, int]:
+    """Get counts of documents at each cascade stage.
 
     Returns:
         Dictionary mapping stage name to document count
@@ -1045,7 +1045,7 @@ def get_pipeline_stats() -> dict[str, int]:
         return results
 
 
-def save_document_to_pipeline(
+def save_document_to_cascade(
     title: str,
     content: str,
     stage: str = "idea",
@@ -1053,12 +1053,12 @@ def save_document_to_pipeline(
     tags: list[str] | None = None,
     parent_id: int | None = None,
 ) -> int:
-    """Save a document directly into the pipeline at a given stage.
+    """Save a document directly into the cascade at a given stage.
 
     Args:
         title: Document title
         content: Document content
-        stage: Initial pipeline stage (default: 'idea')
+        stage: Initial cascade stage (default: 'idea')
         project: Optional project name
         tags: Optional list of tags
         parent_id: Optional parent document ID

@@ -1,4 +1,4 @@
-"""Pipeline Browser - TUI for viewing and managing the streaming pipeline."""
+"""Cascade Browser - TUI for viewing and managing the cascade transformation pipeline."""
 
 import logging
 from datetime import datetime
@@ -14,7 +14,7 @@ from textual.widgets import DataTable, Static, MarkdownViewer
 
 from emdx.database.documents import (
     get_document,
-    get_pipeline_stats,
+    get_cascade_stats,
     list_documents_at_stage,
     update_document_stage,
 )
@@ -22,7 +22,7 @@ from emdx.database.connection import db_connection
 
 logger = logging.getLogger(__name__)
 
-# Pipeline stages in order
+# Cascade stages in order
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
 STAGE_EMOJI = {
     "idea": "💡",
@@ -39,10 +39,10 @@ NEXT_STAGE = {
 }
 
 
-def get_recent_pipeline_activity(limit: int = 20) -> List[Dict[str, Any]]:
-    """Get recent pipeline activity from executions and document changes."""
+def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
+    """Get recent cascade activity from executions and document changes."""
     with db_connection.get_connection() as conn:
-        # Get recent executions related to pipeline
+        # Get recent executions related to cascade
         cursor = conn.execute(
             """
             SELECT
@@ -56,7 +56,7 @@ def get_recent_pipeline_activity(limit: int = 20) -> List[Dict[str, Any]]:
                 d.parent_id
             FROM executions e
             LEFT JOIN documents d ON e.doc_id = d.id
-            WHERE e.doc_title LIKE 'Pipeline:%' OR d.stage IS NOT NULL
+            WHERE e.doc_title LIKE 'Cascade:%' OR e.doc_title LIKE 'Pipeline:%' OR d.stage IS NOT NULL
             ORDER BY e.started_at DESC
             LIMIT ?
             """,
@@ -113,7 +113,7 @@ class StageSummaryBar(Widget):
 
     def refresh_stats(self) -> None:
         """Refresh stage statistics."""
-        self.stats = get_pipeline_stats()
+        self.stats = get_cascade_stats()
         self._update_display()
 
     def _update_display(self) -> None:
@@ -224,12 +224,15 @@ class DocumentList(Widget):
 
             # Title - show more of it
             title = doc["title"]
-            if title.startswith("Pipeline: "):
-                title = title[10:]  # Remove "Pipeline: " prefix
+            # Remove prefix from title display
+            if title.startswith("Cascade: "):
+                title = title[9:]  # Remove "Cascade: " prefix
+            elif title.startswith("Pipeline: "):
+                title = title[10:]  # Remove legacy "Pipeline: " prefix
 
             # For done stage, check for PR URL or children
             if self.current_stage == "done":
-                pr_url = self._get_doc_pr_url(doc_id)
+                pr_url = doc.get("pr_url")  # Now included in list query
                 child_info = self._get_child_info(doc_id)
                 if pr_url:
                     title = f"🔗 {title}"  # Has PR
@@ -420,7 +423,7 @@ class DocumentPreview(Widget):
                 children = self._get_document_children(doc_id)
                 pr_url = doc.get("pr_url")
 
-                lineage = "## 📊 Pipeline Results\n\n"
+                lineage = "## 📊 Cascade Results\n\n"
 
                 # Show PR link prominently if available
                 if pr_url:
@@ -502,7 +505,7 @@ class ActivityFeed(Widget):
         table = self.query_one("#activity-table", DataTable)
         table.clear()
 
-        activities = get_recent_pipeline_activity(limit=10)
+        activities = get_recent_cascade_activity(limit=10)
 
         for act in activities:
             # Time
@@ -536,8 +539,10 @@ class ActivityFeed(Widget):
 
             # Details
             title = act.get("doc_title", "")
-            if title.startswith("Pipeline: "):
-                title = title[10:]
+            if title.startswith("Cascade: "):
+                title = title[9:]
+            elif title.startswith("Pipeline: "):
+                title = title[10:]  # Legacy support
             stage = act.get("stage") or ""
             parent = act.get("parent_id")
 
@@ -550,7 +555,7 @@ class ActivityFeed(Widget):
             table.add_row(time_str, doc_id, status_display, details)
 
 
-class PipelineView(Widget):
+class CascadeView(Widget):
     """Main pipeline view with stage navigation and preview."""
 
     class ViewDocument(Message):
@@ -586,7 +591,7 @@ class PipelineView(Widget):
     ]
 
     DEFAULT_CSS = """
-    PipelineView {
+    CascadeView {
         layout: vertical;
         height: 100%;
     }
@@ -797,7 +802,7 @@ class PipelineView(Widget):
             return
 
         # Build combined content for Claude to synthesize
-        from ..database.documents import get_document, save_document_to_pipeline
+        from ..database.documents import get_document, save_document_to_cascade
 
         combined_parts = []
         for doc_id in doc_ids:
@@ -809,7 +814,7 @@ class PipelineView(Widget):
 
         # Create a synthesis input document (keeps sources intact for now)
         title = f"Synthesis: {len(doc_ids)} {stage} documents"
-        synthesis_doc_id = save_document_to_pipeline(
+        synthesis_doc_id = save_document_to_cascade(
             title=title,
             content=combined_content,
             stage=stage,  # Same stage - will be processed by Claude
@@ -819,7 +824,7 @@ class PipelineView(Widget):
 
         # Now process it through Claude (same as 'p' key but automatic)
         import subprocess
-        cmd = ["poetry", "run", "emdx", "pipeline", "process", stage, "--sync", "--doc", str(synthesis_doc_id)]
+        cmd = ["poetry", "run", "emdx", "cascade", "process", stage, "--sync", "--doc", str(synthesis_doc_id)]
 
         try:
             subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -840,24 +845,24 @@ class PipelineView(Widget):
         status.update(text)
 
 
-class PipelineBrowser(Widget):
-    """Browser wrapper for PipelineView."""
+class CascadeBrowser(Widget):
+    """Browser wrapper for CascadeView."""
 
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
         ("2", "switch_workflow", "Workflows"),
         ("3", "switch_documents", "Documents"),
-        ("4", "switch_pipeline", "Pipeline"),
+        ("4", "switch_cascade", "Cascade"),
         ("?", "show_help", "Help"),
     ]
 
     DEFAULT_CSS = """
-    PipelineBrowser {
+    CascadeBrowser {
         layout: vertical;
         height: 100%;
     }
 
-    #pipeline-view {
+    #cascade-view {
         height: 1fr;
     }
 
@@ -870,30 +875,30 @@ class PipelineBrowser(Widget):
 
     def __init__(self):
         super().__init__()
-        self.pipeline_view: Optional[PipelineView] = None
+        self.cascade_view: Optional[CascadeView] = None
 
     def compose(self) -> ComposeResult:
-        self.pipeline_view = PipelineView(id="pipeline-view")
-        yield self.pipeline_view
+        self.cascade_view = CascadeView(id="cascade-view")
+        yield self.cascade_view
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ [bold]4[/bold] Pipeline │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ [bold]4[/bold] Cascade │ "
             "[dim]Enter[/dim] view │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize",
             id="help-bar",
         )
 
-    def on_pipeline_view_view_document(self, event: PipelineView.ViewDocument) -> None:
+    def on_cascade_view_view_document(self, event: CascadeView.ViewDocument) -> None:
         """Handle request to view document."""
         logger.info(f"Would view document #{event.doc_id}")
         if hasattr(self.app, "_view_document"):
             self.call_later(lambda: self.app._view_document(event.doc_id))
 
-    def on_pipeline_view_process_stage(self, event: PipelineView.ProcessStage) -> None:
+    def on_cascade_view_process_stage(self, event: CascadeView.ProcessStage) -> None:
         """Handle request to process a stage."""
         import subprocess
         stage = event.stage
         doc_id = event.doc_id
 
-        cmd = ["poetry", "run", "emdx", "pipeline", "process", stage, "--sync"]
+        cmd = ["poetry", "run", "emdx", "cascade", "process", stage, "--sync"]
         if doc_id:
             cmd.extend(["--doc", str(doc_id)])
 
@@ -907,14 +912,14 @@ class PipelineBrowser(Widget):
         self.set_timer(3.0, self._refresh)
 
     def _refresh(self) -> None:
-        """Refresh the pipeline view."""
-        if self.pipeline_view:
-            self.pipeline_view.refresh_all()
+        """Refresh the cascade view."""
+        if self.cascade_view:
+            self.cascade_view.refresh_all()
 
     def _update_status(self, text: str) -> None:
         """Update status."""
-        if self.pipeline_view:
-            self.pipeline_view._update_status(text)
+        if self.cascade_view:
+            self.cascade_view._update_status(text)
 
     async def action_switch_activity(self) -> None:
         """Switch to activity browser."""
@@ -931,8 +936,8 @@ class PipelineBrowser(Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("document")
 
-    async def action_switch_pipeline(self) -> None:
-        """Already on pipeline, do nothing."""
+    async def action_switch_cascade(self) -> None:
+        """Already on cascade, do nothing."""
         pass
 
     def action_show_help(self) -> None:
@@ -944,6 +949,6 @@ class PipelineBrowser(Widget):
         pass
 
     def focus(self, scroll_visible: bool = True) -> None:
-        """Focus the pipeline view."""
-        if self.pipeline_view:
-            self.pipeline_view.focus()
+        """Focus the cascade view."""
+        if self.cascade_view:
+            self.cascade_view.focus()
