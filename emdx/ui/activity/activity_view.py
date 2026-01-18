@@ -2468,3 +2468,90 @@ class ActivityView(HelpMixin, Widget):
         # Refocus the table
         table = self.query_one("#activity-table", DataTable)
         table.focus()
+
+    async def select_document_by_id(self, doc_id: int) -> bool:
+        """Select and show a document by its ID.
+
+        Finds which workflow contains this doc, expands it, and selects the doc.
+        Returns True if found and selected, False otherwise.
+        """
+        # Debug file
+        from pathlib import Path
+        debug_log = Path.home() / ".config" / "emdx" / "palette_debug.log"
+        def _debug(msg):
+            with open(debug_log, "a") as f:
+                f.write(f"[select_doc] {msg}\n")
+
+        _debug(f"select_document_by_id({doc_id}) called")
+
+        # First check if already visible in flat_items as a DOCUMENT item (not workflow)
+        # Workflows also have doc_id set to their output doc, but we want the actual document
+        for idx, item in enumerate(self.flat_items):
+            item_doc_id = getattr(item, 'doc_id', None)
+            # Skip workflows - they have doc_id but we want the actual document child
+            if item.item_type == "workflow":
+                continue
+            if item_doc_id == doc_id:
+                _debug(f"Found document in flat_items at idx={idx}, type={item.item_type}")
+                self.selected_idx = idx
+                table = self.query_one("#activity-table", DataTable)
+                table.move_cursor(row=idx)
+                await self._update_preview(force=True)
+                return True
+
+        _debug("Not visible in flat_items, checking if doc is inside a collapsed workflow...")
+
+        # Check if any workflow in activity_items has this doc_id (workflows store their output doc_id)
+        # If so, expand that workflow and then find the actual document child
+        parent_workflow = None
+        for parent in self.activity_items:
+            if parent.item_type == "workflow":
+                # Workflows have doc_id set to their primary output document
+                if getattr(parent, 'doc_id', None) == doc_id:
+                    _debug(f"Found workflow with doc_id={doc_id}: {parent.title}")
+                    parent_workflow = parent
+                    break
+
+        if parent_workflow:
+            _debug(f"Expanding workflow to find document child...")
+            # Expand the workflow if not already
+            if not parent_workflow.expanded:
+                await self._expand_workflow(parent_workflow)
+                self._flatten_items()
+                await self._update_table()
+            else:
+                _debug("Workflow already expanded")
+
+            # Now find the actual document in the expanded children
+            _debug(f"Searching for doc_id={doc_id} in {len(self.flat_items)} flat_items after expand")
+            for idx, item in enumerate(self.flat_items):
+                if item.item_type == "workflow":
+                    continue
+                item_doc_id = getattr(item, 'doc_id', None)
+                if item_doc_id is not None:
+                    _debug(f"  [{idx}] doc_id={item_doc_id}, type={item.item_type}")
+                if item_doc_id == doc_id:
+                    _debug(f"Found doc at idx={idx} after expand, type={item.item_type}")
+                    self.selected_idx = idx
+                    table = self.query_one("#activity-table", DataTable)
+                    table.move_cursor(row=idx)
+                    await self._update_preview(force=True)
+                    return True
+            _debug("Doc NOT found in flat_items after expand - this is unexpected!")
+
+        _debug("Not found via workflow parent, trying direct load as fallback")
+
+        # Fallback - just show doc in preview
+        if HAS_DOCS and doc_db:
+            doc = doc_db.get_document(doc_id)
+            if doc:
+                content = doc.get("content", "")
+                title = doc.get("title", "Untitled")
+                self._render_markdown_preview(f"# {title}\n\n{content}")
+                header = self.query_one("#preview-header", Static)
+                header.update(f"📄 #{doc_id}")
+                self._show_notification(f"Showing: {title[:40]}")
+                return True
+
+        self._show_notification(f"Document #{doc_id} not found", is_error=True)
+        return False

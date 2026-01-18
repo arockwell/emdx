@@ -32,30 +32,32 @@ class BrowserContainerWidget(Widget):
     BrowserContainerWidget {
         layout: vertical;
         height: 100%;
+        padding: 0;
+        margin: 0;
     }
 
     #browser-mount {
-        height: 1fr;
+        height: 100%;
         padding: 0;
         margin: 0;
     }
 
-
-    Container {
+    BrowserContainerWidget Container {
         padding: 0;
         margin: 0;
+        height: 100%;
     }
 
-    Vertical {
+    BrowserContainerWidget Vertical {
         padding: 0;
         margin: 0;
+        height: 100%;
     }
     """
 
     def compose(self) -> ComposeResult:
         """Just a mount point - browsers handle their own status."""
-        with Vertical():
-            yield Container(id="browser-mount")
+        yield Container(id="browser-mount")
 
 
 class BrowserContainer(App):
@@ -65,6 +67,8 @@ class BrowserContainer(App):
 
     BINDINGS = [
         Binding("backslash", "cycle_theme", "Theme", show=True),
+        Binding("ctrl+k", "open_command_palette", "Search", show=True),
+        Binding("ctrl+p", "open_command_palette", "Search", show=False),
     ]
 
     # No CSS needed here - it's all in the widget
@@ -252,6 +256,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Document browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+            elif browser_type == "search":
+                try:
+                    from .search import SearchScreen
+                    self.browsers[browser_type] = SearchScreen()
+                    logger.info("SearchScreen created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Search screen failed to load:\n{str(e)}\n\nCheck logs for details.")
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
@@ -320,7 +333,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents)
+        # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents, 4=Search)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -333,9 +346,13 @@ class BrowserContainer(App):
             await self.switch_browser("document")
             event.stop()
             return
+        elif key == "4":
+            await self.switch_browser("search")
+            event.stop()
+            return
 
-        # Q to quit from activity or document browser
-        if key == "q" and self.current_browser in ["activity", "document"]:
+        # Q to quit from activity, document, or search browser
+        if key == "q" and self.current_browser in ["activity", "document", "search"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()
@@ -380,6 +397,29 @@ class BrowserContainer(App):
         """View a document fullscreen - switch to document browser and open it."""
         await self._view_document(doc_id)
 
+    async def _show_document_preview(self, doc_id: int) -> None:
+        """Show document in a modal preview overlay."""
+        from emdx.ui.modals import DocumentPreviewModal
+
+        def on_preview_result(result: dict | None) -> None:
+            if result:
+                import asyncio
+                asyncio.create_task(self._handle_preview_result(result))
+
+        self.push_screen(DocumentPreviewModal(doc_id), on_preview_result)
+
+    async def _handle_preview_result(self, result: dict) -> None:
+        """Handle result from document preview modal."""
+        action = result.get("action")
+        doc_id = result.get("doc_id")
+
+        if action == "edit" and doc_id:
+            # Open in document browser for editing
+            await self._view_document(doc_id)
+        elif action == "open_full" and doc_id:
+            # Open in document browser
+            await self._view_document(doc_id)
+
     def _dump_widget_tree(self) -> None:
         """Debug function to dump the widget tree and regions."""
         logger.info("=== WIDGET TREE DUMP ===")
@@ -418,3 +458,134 @@ class BrowserContainer(App):
                 self.notify(f"Theme: {theme_name}", timeout=2)
 
         self.push_screen(ThemeSelectorScreen(), on_theme_selected)
+
+    def action_open_command_palette(self) -> None:
+        """Open the command palette modal."""
+        import asyncio
+        from pathlib import Path
+
+        # Debug log
+        debug_log = Path.home() / ".config" / "emdx" / "palette_debug.log"
+        debug_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(debug_log, "a") as f:
+            f.write("=== action_open_command_palette called ===\n")
+
+        try:
+            from emdx.ui.command_palette import CommandPaletteScreen
+
+            with open(debug_log, "a") as f:
+                f.write("CommandPaletteScreen imported OK\n")
+
+            def on_palette_result(result: dict | None) -> None:
+                if result:
+                    asyncio.create_task(self._handle_palette_result(result))
+
+            screen = CommandPaletteScreen()
+            with open(debug_log, "a") as f:
+                f.write(f"CommandPaletteScreen created: {screen}\n")
+
+            self.push_screen(screen, on_palette_result)
+            with open(debug_log, "a") as f:
+                f.write("push_screen called successfully\n")
+
+        except Exception as e:
+            import traceback
+            with open(debug_log, "a") as f:
+                f.write(f"ERROR: {e}\n{traceback.format_exc()}\n")
+            raise
+
+    async def _handle_palette_result(self, result: dict) -> None:
+        """Handle a result from the command palette."""
+        action = result.get("action")
+        logger.info(f"Command palette result: {result}")
+
+        if action == "view_document":
+            doc_id = result.get("doc_id")
+            # Debug to file
+            from pathlib import Path
+            debug_log = Path.home() / ".config" / "emdx" / "palette_debug.log"
+            with open(debug_log, "a") as f:
+                f.write(f"=== _handle_palette_result view_document ===\n")
+                f.write(f"doc_id={doc_id}, current_browser={self.current_browser}\n")
+
+            if doc_id:
+                # Show document in current browser's preview pane (stay on current screen)
+                current = self.browsers.get(self.current_browser)
+                with open(debug_log, "a") as f:
+                    f.write(f"current={current}, has method={hasattr(current, 'select_document_by_id') if current else False}\n")
+
+                if current and hasattr(current, "select_document_by_id"):
+                    with open(debug_log, "a") as f:
+                        f.write(f"Calling select_document_by_id({doc_id})\n")
+                    select_result = await current.select_document_by_id(doc_id)
+                    with open(debug_log, "a") as f:
+                        f.write(f"select_document_by_id returned: {select_result}\n")
+                else:
+                    # Fall back to document browser if current screen can't show docs
+                    with open(debug_log, "a") as f:
+                        f.write("Falling back to _view_document\n")
+                    await self._view_document(doc_id)
+
+        elif action == "command":
+            command_id = result.get("command_id")
+            if command_id:
+                await self._execute_palette_command(command_id)
+
+        elif action == "search_tag":
+            tag = result.get("tag")
+            if tag:
+                # Switch to search screen with tag query
+                await self.switch_browser("search")
+                search_browser = self.browsers.get("search")
+                if search_browser and hasattr(search_browser, "set_query"):
+                    search_browser.set_query(f"@{tag}")
+
+    async def _execute_palette_command(self, command_id: str) -> None:
+        """Execute a command from the palette by ID."""
+        logger.info(f"Executing palette command: {command_id}")
+
+        # Navigation commands
+        if command_id == "nav.activity":
+            await self.switch_browser("activity")
+        elif command_id == "nav.workflows":
+            await self.switch_browser("workflow")
+        elif command_id == "nav.documents":
+            await self.switch_browser("document")
+        elif command_id == "nav.search":
+            await self.switch_browser("search")
+        elif command_id == "nav.files":
+            await self.switch_browser("file")
+        elif command_id == "nav.git":
+            await self.switch_browser("git")
+        elif command_id == "nav.logs":
+            await self.switch_browser("log")
+
+        # Theme command
+        elif command_id == "theme.select":
+            self.action_cycle_theme()
+
+        # App commands
+        elif command_id == "app.refresh":
+            current = self.browsers.get(self.current_browser)
+            if current and hasattr(current, "action_refresh"):
+                await current.action_refresh()
+        elif command_id == "app.help":
+            current = self.browsers.get(self.current_browser)
+            if current and hasattr(current, "action_show_help"):
+                current.action_show_help()
+        elif command_id == "app.quit":
+            self.exit()
+
+        # Document commands - delegate to current browser
+        elif command_id.startswith("doc."):
+            current = self.browsers.get(self.current_browser)
+            if command_id == "doc.new" and hasattr(current, "action_new_document"):
+                await current.action_new_document()
+            elif command_id == "doc.edit" and hasattr(current, "action_edit_document"):
+                await current.action_edit_document()
+            elif command_id == "doc.tag" and hasattr(current, "action_add_tags"):
+                current.action_add_tags()
+
+        else:
+            logger.warning(f"Unknown command: {command_id}")
+
