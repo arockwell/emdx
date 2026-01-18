@@ -1,13 +1,4 @@
-"""Run a Claude Code sub-agent with EMDX tracking.
-
-This command bridges the gap between human-initiated and AI-initiated work
-by ensuring all sub-agent outputs are properly tagged and tracked.
-
-Works the same whether called by a human or an AI agent.
-
-Uses the UnifiedExecutor service for consistent execution behavior
-across all EMDX execution paths (agent, workflow, cascade).
-"""
+"""Run a Claude Code sub-agent with EMDX tracking."""
 
 from pathlib import Path
 from typing import List, Optional
@@ -15,7 +6,7 @@ from typing import List, Optional
 import typer
 from rich.console import Console
 
-from ..services.unified_executor import execute_with_output_tracking
+from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
 console = Console()
 
@@ -51,43 +42,55 @@ def agent(
         help="Timeout in seconds (default 5 minutes)"
     ),
 ):
-    """Run a Claude Code sub-agent with automatic EMDX tracking.
-
-    This ensures outputs are properly tagged and grouped, whether
-    called by a human or another AI agent. The agent is instructed
-    to save its output with the specified metadata.
-
-    Examples:
-        emdx agent "Analyze the auth module" --tags analysis,security
-        emdx agent "Review error handling" -t refactor -g 123
-        emdx agent "Deep dive on caching" -T "Cache Analysis" -t analysis
-        emdx agent "Fix the bug in auth" -t bugfix --pr
-    """
+    """Run a Claude Code sub-agent with automatic EMDX tracking."""
     # Flatten tags (handle both comma-separated and multiple -t flags)
     flat_tags = []
     if tags:
         for t in tags:
             flat_tags.extend(t.split(','))
 
-    # Determine title
     doc_title = title or f"Agent: {prompt[:50]}..."
 
     console.print(f"[cyan]Running agent task...[/cyan]")
     if verbose:
         console.print(f"[dim]Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}[/dim]")
 
-    # Use the unified executor
-    result = execute_with_output_tracking(
+    # Build the save command
+    cmd_parts = [f'emdx save --title "{doc_title}"']
+    if flat_tags:
+        cmd_parts.append(f'--tags "{",".join(flat_tags)}"')
+    if group is not None:
+        cmd_parts.append(f'--group {group}')
+        if group_role != "member":
+            cmd_parts.append(f'--group-role {group_role}')
+
+    save_cmd = " ".join(cmd_parts)
+
+    output_instruction = f'''
+
+IMPORTANT: When you complete this task, save your final output/analysis using:
+echo "YOUR OUTPUT HERE" | {save_cmd}
+
+Report the document ID that was created.'''
+
+    if create_pr:
+        output_instruction += '''
+
+After saving your output, if you made any code changes, create a pull request:
+1. Create a new branch with a descriptive name
+2. Commit your changes with a clear message
+3. Push and create a PR using: gh pr create --title "..." --body "..."
+4. Report the PR URL that was created.'''
+
+    config = ExecutionConfig(
         prompt=prompt,
         title=doc_title,
-        tags=flat_tags if flat_tags else None,
-        group_id=group,
-        group_role=group_role,
-        create_pr=create_pr,
+        output_instruction=output_instruction,
         working_dir=str(Path.cwd()),
-        timeout=timeout,
-        verbose=verbose,
+        timeout_seconds=timeout,
     )
+
+    result = UnifiedExecutor().execute(config)
 
     if not result.success:
         console.print(f"[red]Agent failed: {result.error_message}[/red]")
@@ -103,8 +106,6 @@ def agent(
             console.print(f"  Group: #{group} (as {group_role})")
         console.print(f"  Duration: {result.execution_time_ms / 1000:.1f}s")
         console.print(f"  Tokens: {result.tokens_used:,}")
-
-        # Print doc ID on its own line for easy parsing by other agents
         print(f"doc_id:{result.output_doc_id}")
     else:
         console.print(f"[yellow]Agent completed but no output document found[/yellow]")
