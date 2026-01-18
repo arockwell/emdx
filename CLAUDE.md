@@ -235,6 +235,9 @@ emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 
 
 # Verbose mode to see agent output in real-time
 emdx agent "Deep dive on caching strategy" -t analysis -v
+
+# Have the agent create a PR if it makes code changes
+emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
 ```
 
 **Options:**
@@ -243,6 +246,7 @@ emdx agent "Deep dive on caching strategy" -t analysis -v
 - `--group, -g` - Group ID to add output to
 - `--group-role` - Role in group (default: `exploration`)
 - `--verbose, -v` - Show agent output in real-time
+- `--pr` - Instruct agent to create a PR if it makes code changes
 
 **How it works:**
 1. Takes your prompt and appends instructions telling the agent how to save its output
