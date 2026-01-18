@@ -209,18 +209,13 @@ emdx run "analyze auth" "review tests" "check docs"
 emdx run --synthesize "task1" "task2" "task3"
 
 # Dynamic discovery from shell commands
-emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 
 # Control concurrency
 emdx run -j 3 "task1" "task2" "task3" "task4"
 
-# Use a saved preset
-emdx run -p security-audit
-
-# Use workflow patterns (shortcuts with auto-settings)
-emdx run "fix X" "fix Y" --pattern fix       # Auto-enables worktree
-emdx run "analyze X" -P analyze              # Auto-enables synthesis
-emdx run --list-patterns                     # Show available patterns
+# With worktree isolation (for parallel code fixes)
+emdx run --worktree "fix X" "fix Y"
 ```
 
 For the full execution ladder (run → each → workflow → pipeline), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
@@ -284,11 +279,20 @@ emdx each delete fix-conflicts    # Delete command
 ```
 
 **Key features:**
-- `--from`: Shell command that outputs items (one per line)
+- `--from`: Shell command that outputs items (one per line), or `@discovery-name` for built-ins
 - `--do`: What to do with each `{{item}}`
 - `-j`: Max parallel executions (default: 3)
 - `--synthesize`: Combine results at the end
+- `--pr`: Create a PR for each item processed
+- `--pr-single`: Create one combined PR for all items
 - Worktree isolation is auto-enabled for git/gh commands
+
+**Built-in discoveries** (use with `--from @name`):
+```bash
+emdx each discover list              # List all built-in discoveries
+emdx each --from @prs-with-conflicts --do "Fix {{item}}"
+emdx each --from @python-files --do "Review {{item}}"
+```
 
 ## 🔄 Workflow System for Multi-Agent Tasks
 

@@ -952,41 +952,17 @@ emdx run -p fix-conflicts
 
 **Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
 
-### Workflow Patterns
-
-Patterns are shortcuts that select a workflow with sensible auto-settings:
-
-```bash
-# Use the fix pattern (auto-enables worktree)
-emdx run "fix auth bug" "fix api bug" --pattern fix
-
-# Use the analyze pattern (auto-enables synthesis)
-emdx run "analyze X" "analyze Y" -P analyze
-
-# List available patterns
-emdx run --list-patterns
-```
-
-| Pattern | Workflow | Auto-Settings | Description |
-|---------|----------|---------------|-------------|
-| `parallel` | task_parallel | - | Default parallel execution |
-| `fix` | parallel_fix | worktree | Code fixes with branch isolation |
-| `analyze` | parallel_analysis | synthesize | Analysis with combined output |
-
-Unknown pattern names are treated as direct workflow names, so `--pattern deep_analysis` uses the `deep_analysis` workflow.
-
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--title` | `-T` | Title for this run (shows in Activity) |
-| `--pattern` | `-P` | Workflow pattern: parallel, fix, analyze (or workflow name) |
-| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--jobs` | `-j`, `-P` | Max parallel tasks (default: auto) |
 | `--synthesize` | `-s` | Combine outputs with synthesis stage |
-| `--preset` | `-p` | Use a saved preset |
 | `--discover` | `-d` | Shell command to discover tasks |
-| `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
-| `--list-patterns` | | Show available patterns and exit |
+| `--template` | `-t` | Template for discovered tasks (use `{{item}}`) |
+| `--worktree` | `-w` | Create isolated git worktree (recommended for code fixes) |
+| `--base-branch` | | Base branch for worktree (default: main) |
 
 ### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
