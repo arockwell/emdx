@@ -232,11 +232,20 @@ emdx each delete fix-conflicts    # Delete command
 ```
 
 **Key features:**
-- `--from`: Shell command that outputs items (one per line)
+- `--from`: Shell command that outputs items (one per line), or `@discovery-name` for built-ins
 - `--do`: What to do with each `{{item}}`
 - `-j`: Max parallel executions (default: 3)
 - `--synthesize`: Combine results at the end
+- `--pr`: Create a PR for each item processed
+- `--pr-single`: Create one combined PR for all items
 - Worktree isolation is auto-enabled for git/gh commands
+
+**Built-in discoveries** (use with `--from @name`):
+```bash
+emdx each discover list              # List all built-in discoveries
+emdx each --from @prs-with-conflicts --do "Fix {{item}}"
+emdx each --from @python-files --do "Review {{item}}"
+```
 
 ## 🔄 Workflow System for Multi-Agent Tasks
 
