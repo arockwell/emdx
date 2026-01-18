@@ -142,11 +142,66 @@ poetry run emdx tag 123 done success
 poetry run emdx untag 123 blocked
 ```
 
-## 🚀 Quick Task Execution (`emdx run`)
+## 🌊 Cascade - Ideas to Code (`emdx cascade`)
 
-The fastest way to run parallel tasks:
+Transform raw ideas into working code through autonomous stage transformations. Cascade takes an idea and flows it through: **idea → prompt → analyzed → planned → done** — with the final stage creating an actual PR.
 
 ```bash
+# Add an idea to the cascade
+emdx cascade add "Add dark mode toggle to the settings page"
+
+# Check cascade status
+emdx cascade status
+
+# Process the next item at a stage (sync waits for completion)
+emdx cascade process idea --sync
+emdx cascade process prompt --sync
+emdx cascade process analyzed --sync
+emdx cascade process planned --sync  # This creates actual code and PR!
+
+# Or run continuously
+emdx cascade run
+```
+
+### Stage Flow
+
+| Stage | What Happens |
+|-------|--------------|
+| `idea` | Raw idea text enters the cascade |
+| `prompt` | Claude transforms idea into a well-formed prompt |
+| `analyzed` | Claude analyzes the prompt thoroughly |
+| `planned` | Claude creates a detailed implementation gameplan |
+| `done` | Claude implements the code and creates a PR |
+
+### Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `emdx cascade add "idea"` | Add new idea to cascade |
+| `emdx cascade status` | Show documents at each stage |
+| `emdx cascade process <stage> --sync` | Process next doc at stage |
+| `emdx cascade advance <id>` | Manually advance a document |
+| `emdx cascade remove <id>` | Remove from cascade (keeps doc) |
+| `emdx cascade synthesize <stage>` | Combine multiple docs into one |
+
+### TUI Access
+
+Press `4` in the GUI to access the Cascade browser. Navigate with:
+- `h/l` - Switch stages
+- `j/k` - Navigate documents
+- `a` - Advance document
+- `p` - Process through Claude
+- `s` - Synthesize selected docs
+- `Space` - Toggle selection (for synthesis)
+
+## 🚀 Quick Task Execution (`emdx run`)
+
+The fastest way to run parallel tasks. This is the first rung on EMDX's "execution ladder" - start here and graduate to `emdx each` or `emdx workflow` only when you need more power.
+
+```bash
+# Run a single task
+emdx run "analyze the auth module"
+
 # Run multiple tasks in parallel
 emdx run "analyze auth" "review tests" "check docs"
 
@@ -154,11 +209,16 @@ emdx run "analyze auth" "review tests" "check docs"
 emdx run --synthesize "task1" "task2" "task3"
 
 # Dynamic discovery from shell commands
-emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 
 # Control concurrency
 emdx run -j 3 "task1" "task2" "task3" "task4"
+
+# With worktree isolation (for parallel code fixes)
+emdx run --worktree "fix X" "fix Y"
 ```
+
+For the full execution ladder (run → each → workflow → cascade), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
 
 ## 🤖 Sub-Agent Execution (`emdx agent`)
 
@@ -223,11 +283,20 @@ emdx each delete fix-conflicts    # Delete command
 ```
 
 **Key features:**
-- `--from`: Shell command that outputs items (one per line)
+- `--from`: Shell command that outputs items (one per line), or `@discovery-name` for built-ins
 - `--do`: What to do with each `{{item}}`
 - `-j`: Max parallel executions (default: 3)
 - `--synthesize`: Combine results at the end
+- `--pr`: Create a PR for each item processed
+- `--pr-single`: Create one combined PR for all items
 - Worktree isolation is auto-enabled for git/gh commands
+
+**Built-in discoveries** (use with `--from @name`):
+```bash
+emdx each discover list              # List all built-in discoveries
+emdx each --from @prs-with-conflicts --do "Fix {{item}}"
+emdx each --from @python-files --do "Review {{item}}"
+```
 
 ## 🔄 Workflow System for Multi-Agent Tasks
 

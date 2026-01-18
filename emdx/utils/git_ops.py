@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .logging import get_logger
+from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 

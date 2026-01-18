@@ -889,7 +889,17 @@ emdx find --tags "gameplan" --project "myproject"
 
 ## 🚀 Quick Task Execution
 
-The `emdx run` command provides a streamlined interface for running tasks in parallel. It's syntactic sugar for the `task_parallel` workflow.
+The `emdx run` command is the first rung on EMDX's "execution ladder" - the fastest way to run tasks.
+
+**The Execution Ladder:**
+| Level | Command | Use When |
+|-------|---------|----------|
+| 1 | `emdx run` | Quick one-off or parallel tasks |
+| 2 | `emdx each` | Reusable "for each X, do Y" patterns |
+| 3 | `emdx workflow` | Complex multi-stage workflows |
+| 4 | `emdx cascade` | Ideas → code through stages |
+
+Start with `emdx run`. Graduate down only when you need more power.
 
 ### Basic Usage
 
@@ -919,37 +929,28 @@ Discover tasks at runtime using shell commands:
 
 ```bash
 # Discover from git branches
-emdx run -d "git branch -r | grep feature" -t "Review branch {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
 
 # Discover from PR list
-emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{task}}"
+emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{item}}"
 
 # Discover from file patterns
-emdx run -d "fd -e py -d 1 src/" -t "Analyze {{task}}"
+emdx run -d "fd -e py -d 1 src/" -t "Analyze {{item}}"
 ```
 
-### Presets
-
-Save common configurations for reuse:
-
-```bash
-# Use a preset
-emdx run -p fix-conflicts
-
-# Presets can include discovery commands, templates, and synthesis settings
-# Manage presets via: emdx workflow preset
-```
+**Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
 
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--title` | `-T` | Title for this run (shows in Activity) |
-| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--jobs` | `-j`, `-P` | Max parallel tasks (default: auto) |
 | `--synthesize` | `-s` | Combine outputs with synthesis stage |
-| `--preset` | `-p` | Use a saved preset |
 | `--discover` | `-d` | Shell command to discover tasks |
-| `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
+| `--template` | `-t` | Template for discovered tasks (use `{{item}}`) |
+| `--worktree` | `-w` | Create isolated git worktree (recommended for code fixes) |
+| `--base-branch` | | Base branch for worktree (default: main) |
 
 ### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
@@ -1031,7 +1032,7 @@ Ever find yourself running the same parallel discovery task repeatedly?
 
 ```bash
 # Tedious to retype every time
-emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{task}}, resolve conflicts"
+emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{item}}, resolve conflicts"
 ```
 
 Save it once, run it forever:

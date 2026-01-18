@@ -109,8 +109,12 @@ def secure_remove(path: str) -> bool:
     return False
 
 
-def run_textual_with_nvim_wrapper():
-    """Run textual browser with external nvim wrapper."""
+def run_textual_with_nvim_wrapper(theme: str | None = None):
+    """Run textual browser with external nvim wrapper.
+
+    Args:
+        theme: Optional theme name to use (overrides saved preference for this session)
+    """
 
     # Save initial terminal state
     initial_state = save_terminal_state()
@@ -188,7 +192,7 @@ def run_textual_with_nvim_wrapper():
             from emdx.ui.run_browser import run_browser
 
             # For now, just run the browser - no special exit codes yet
-            run_browser()
+            run_browser(theme=theme)
             exit_code = 0
 
             # Check exit code to see if we should continue
