@@ -19,7 +19,7 @@ from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.lifecycle_tracker import LifecycleTracker
-from ..utils.datetime import parse_datetime
+from ..utils.datetime_utils import parse_datetime
 from ..utils.output import console
 
 

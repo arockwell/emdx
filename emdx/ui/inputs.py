@@ -7,7 +7,7 @@ from textual import events
 from textual.widgets import Input
 
 # Set up logging using shared utility
-from ..utils.logging import setup_tui_logging
+from ..utils.logging_utils import setup_tui_logging
 logger, key_logger = setup_tui_logging(__name__)
 
 

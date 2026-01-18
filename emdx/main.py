@@ -31,6 +31,7 @@ from emdx.commands.agent import agent as agent_command
 from emdx.commands.groups import app as groups_app
 from emdx.commands.ask import app as ask_app
 from emdx.commands.each import app as each_app
+from emdx.commands.pipeline import app as pipeline_app
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -110,6 +111,9 @@ app.command(name="agent")(agent_command)
 
 # Add each command for reusable parallel commands
 app.add_typer(each_app, name="each", help="Create and run reusable parallel commands")
+
+# Add pipeline command for streaming document processing
+app.add_typer(pipeline_app, name="pipeline", help="Streaming document pipeline (Gas Town style)")
 
 # Add the gui command
 app.command()(gui)

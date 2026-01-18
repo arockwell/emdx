@@ -103,6 +103,7 @@ def agent(
     Examples:
         emdx agent "Analyze the auth module" --tags analysis,security
         emdx agent "Review error handling" -t refactor -g 123
+        emdx agent "Deep dive on caching" -T "Cache Analysis" -t analysis
         emdx agent "Fix the bug in auth" -t bugfix --pr
     """
     ensure_claude_in_path()
