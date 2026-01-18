@@ -29,6 +29,7 @@ def _build_output_instruction(
     tags: Optional[List[str]],
     group_id: Optional[int],
     group_role: str,
+    create_pr: bool = False,
 ) -> str:
     """Build the output instruction with user's metadata injected."""
     title_str = title or "Agent Output"
@@ -47,12 +48,23 @@ def _build_output_instruction(
 
     save_cmd = " ".join(cmd_parts)
 
-    return f'''
+    instruction = f'''
 
 IMPORTANT: When you complete this task, save your final output/analysis using:
 echo "YOUR OUTPUT HERE" | {save_cmd}
 
 Report the document ID that was created.'''
+
+    if create_pr:
+        instruction += '''
+
+After saving your output, if you made any code changes, create a pull request:
+1. Create a new branch with a descriptive name
+2. Commit your changes with a clear message
+3. Push and create a PR using: gh pr create --title "..." --body "..."
+4. Report the PR URL that was created.'''
+
+    return instruction
 
 
 def agent(
@@ -77,6 +89,10 @@ def agent(
         False, "--verbose", "-v",
         help="Show agent output in real-time"
     ),
+    create_pr: bool = typer.Option(
+        False, "--pr",
+        help="Instruct agent to create a PR if it makes code changes"
+    ),
 ):
     """Run a Claude Code sub-agent with automatic EMDX tracking.
 
@@ -87,7 +103,7 @@ def agent(
     Examples:
         emdx agent "Analyze the auth module" --tags analysis,security
         emdx agent "Review error handling" -t refactor -g 123
-        emdx agent "Deep dive on caching" -T "Cache Analysis" -t analysis
+        emdx agent "Fix the bug in auth" -t bugfix --pr
     """
     ensure_claude_in_path()
 
@@ -112,7 +128,7 @@ def agent(
     )
 
     # Build full prompt with output instruction (metadata injected)
-    output_instruction = _build_output_instruction(title, flat_tags, group, group_role)
+    output_instruction = _build_output_instruction(title, flat_tags, group, group_role, create_pr)
     full_prompt = prompt + output_instruction
 
     # Build command
