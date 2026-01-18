@@ -37,7 +37,7 @@ STAGE_PROMPTS = {
     "idea": "Convert this idea into a well-formed prompt that could be given to an AI assistant: {content}",
     "prompt": "Analyze this prompt and provide a thorough analysis: {content}",
     "analyzed": "Based on this analysis, create a detailed implementation gameplan: {content}",
-    "planned": "Implement this gameplan: {content}",
+    # planned stage uses a special implementation prompt - see process command
 }
 NEXT_STAGE = {
     "idea": "prompt",
@@ -45,6 +45,22 @@ NEXT_STAGE = {
     "analyzed": "planned",
     "planned": "done",
 }
+
+# Special prompt for planned→done that actually implements and creates a PR
+IMPLEMENTATION_PROMPT = """You are implementing a feature based on the gameplan below.
+
+IMPORTANT INSTRUCTIONS:
+1. Implement the gameplan by writing actual code
+2. Create a new git branch for this work
+3. Make commits as you go
+4. When done, create a Pull Request using `gh pr create`
+5. At the very end of your response, output the PR URL on its own line in this exact format:
+   PR_URL: https://github.com/...
+
+Here is the gameplan to implement:
+
+{content}
+"""
 
 
 @app.command()
@@ -174,8 +190,12 @@ def process(
         console.print("[yellow]Dry run - skipping execution[/yellow]")
         return
 
-    # Build the prompt
-    prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
+    # Build the prompt - special handling for planned stage (implementation)
+    if stage == "planned":
+        prompt = IMPLEMENTATION_PROMPT.format(content=doc["content"])
+        console.print("[bold yellow]⚡ Implementation mode - Claude will write code and create a PR[/bold yellow]")
+    else:
+        prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
     # Create execution record
     from datetime import datetime
@@ -214,7 +234,18 @@ def process(
                 # Create a new child document with Claude's output
                 output = result.get("output", "")
                 if output:
-                    from ..database.documents import save_document
+                    from ..database.documents import save_document, update_document_pr_url
+                    import re
+
+                    # For planned stage, extract PR URL from output
+                    pr_url = None
+                    if stage == "planned":
+                        # Look for PR_URL: pattern in the output
+                        pr_match = re.search(r'PR_URL:\s*(https://github\.com/[^\s]+)', output)
+                        if pr_match:
+                            pr_url = pr_match.group(1)
+                            console.print(f"[bold green]🔗 PR Created: {pr_url}[/bold green]")
+
                     # Create child doc with stage info in title
                     child_title = f"{doc['title']} [{stage}→{next_stage}]"
                     child_id = save_document(
@@ -226,6 +257,12 @@ def process(
                     # Set the child's stage to the next stage
                     update_document_stage(child_id, next_stage)
                     console.print(f"[green]✓[/green] Created child document #{child_id} ({len(output)} chars)")
+
+                    # If we have a PR URL, store it on both the child and original doc
+                    if pr_url:
+                        update_document_pr_url(child_id, pr_url)
+                        update_document_pr_url(doc_id, pr_url)
+                        console.print(f"[green]✓[/green] Linked PR URL to documents")
 
                     # Mark original as done (it spawned a child)
                     update_document_stage(doc_id, "done")

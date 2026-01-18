@@ -227,12 +227,14 @@ class DocumentList(Widget):
             if title.startswith("Pipeline: "):
                 title = title[10:]  # Remove "Pipeline: " prefix
 
-            # For done stage, check if there's a child (output) doc
+            # For done stage, check for PR URL or children
             if self.current_stage == "done":
-                # Check for children that indicate completion
+                pr_url = self._get_doc_pr_url(doc_id)
                 child_info = self._get_child_info(doc_id)
-                if child_info:
-                    title = f"✓ {title}"
+                if pr_url:
+                    title = f"🔗 {title}"  # Has PR
+                elif child_info:
+                    title = f"✓ {title}"  # Has outputs but no PR
                 if len(title) > 36:
                     title = title[:33] + "..."
             else:
@@ -260,6 +262,16 @@ class DocumentList(Widget):
             if row:
                 return {"id": row[0], "title": row[1], "stage": row[2]}
         return None
+
+    def _get_doc_pr_url(self, doc_id: int) -> Optional[str]:
+        """Get PR URL for a document."""
+        with db_connection.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT pr_url FROM documents WHERE id = ?",
+                (doc_id,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row and row[0] else None
 
     def _update_selection_status(self) -> None:
         """Update the selection status bar."""
@@ -403,17 +415,28 @@ class DocumentPreview(Widget):
             content_widget = self.query_one("#preview-content", MarkdownViewer)
             content = doc["content"]
 
-            # For done stage, show a summary with lineage
+            # For done stage, show a summary with lineage and PR link
             if stage == "done":
                 children = self._get_document_children(doc_id)
+                pr_url = doc.get("pr_url")
+
+                lineage = "## 📊 Pipeline Results\n\n"
+
+                # Show PR link prominently if available
+                if pr_url:
+                    lineage += f"### 🔗 Pull Request\n\n**[{pr_url}]({pr_url})**\n\n"
+
+                lineage += f"**Input:** #{doc_id}\n\n"
+
                 if children:
-                    lineage = "## 📊 Pipeline Results\n\n"
-                    lineage += f"**Input:** #{doc_id}\n\n"
                     lineage += "**Outputs:**\n"
                     for child in children:
-                        lineage += f"- #{child['id']} → {child['stage']}: {child['title'][:50]}\n"
-                    lineage += "\n---\n\n## Original Input\n\n"
-                    content = lineage + content
+                        child_pr = child.get('pr_url')
+                        pr_indicator = " 🔗" if child_pr else ""
+                        lineage += f"- #{child['id']} → {child['stage']}: {child['title'][:50]}{pr_indicator}\n"
+
+                lineage += "\n---\n\n## Original Input\n\n"
+                content = lineage + content
 
             if len(content) > 8000:
                 content = content[:8000] + "\n\n[...truncated...]"
@@ -424,11 +447,11 @@ class DocumentPreview(Widget):
         children = []
         with db_connection.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, title, stage FROM documents WHERE parent_id = ? ORDER BY id",
+                "SELECT id, title, stage, pr_url FROM documents WHERE parent_id = ? ORDER BY id",
                 (parent_id,)
             )
             for row in cursor.fetchall():
-                child = {"id": row[0], "title": row[1], "stage": row[2]}
+                child = {"id": row[0], "title": row[1], "stage": row[2], "pr_url": row[3]}
                 children.append(child)
                 # Recursively get grandchildren
                 children.extend(self._get_document_children(row[0]))

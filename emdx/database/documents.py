@@ -938,6 +938,47 @@ def update_document_stage(doc_id: int, stage: str | None) -> bool:
         return cursor.rowcount > 0
 
 
+def update_document_pr_url(doc_id: int, pr_url: str) -> bool:
+    """Update a document's PR URL (for pipeline done stage).
+
+    Args:
+        doc_id: Document ID
+        pr_url: The PR URL (e.g., https://github.com/user/repo/pull/123)
+
+    Returns:
+        True if update was successful
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE documents
+            SET pr_url = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_deleted = FALSE
+            """,
+            (pr_url, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_document_pr_url(doc_id: int) -> str | None:
+    """Get a document's PR URL.
+
+    Args:
+        doc_id: Document ID
+
+    Returns:
+        PR URL or None if not set
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT pr_url FROM documents WHERE id = ? AND is_deleted = FALSE",
+            (doc_id,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+
 def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]:
     """List all documents at a given pipeline stage.
 

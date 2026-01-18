@@ -1549,6 +1549,29 @@ def migration_027_add_document_stage(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_028_add_document_pr_url(conn: sqlite3.Connection):
+    """Add pr_url column to documents for tracking pipeline outputs.
+
+    When a pipeline document reaches 'done' through actual implementation,
+    this column stores the PR URL that was created. This links the pipeline
+    journey (idea → prompt → analyzed → planned → done) to real code changes.
+    """
+    cursor = conn.cursor()
+
+    # Add pr_url column - NULL for most docs, set when implementation creates a PR
+    cursor.execute("""
+        ALTER TABLE documents ADD COLUMN pr_url TEXT DEFAULT NULL
+    """)
+
+    # Index for finding docs with PRs
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_pr_url
+        ON documents(pr_url) WHERE pr_url IS NOT NULL
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1579,6 +1602,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (25, "Add standalone presets", migration_025_add_standalone_presets),
     (26, "Add embeddings for semantic search", migration_026_add_embeddings),
     (27, "Add document stage for pipeline", migration_027_add_document_stage),
+    (28, "Add document PR URL for pipeline", migration_028_add_document_pr_url),
 ]
 
 
