@@ -1693,8 +1693,8 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (25, "Add standalone presets", migration_025_add_standalone_presets),
     (26, "Add embeddings for semantic search", migration_026_add_embeddings),
     (27, "Add synthesizing status to stage runs", migration_027_add_synthesizing_status),
-    (28, "Add document stage for pipeline", migration_028_add_document_stage),
-    (29, "Add document PR URL for pipeline", migration_029_add_document_pr_url),
+    (28, "Add document stage for cascade", migration_028_add_document_stage),
+    (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
 ]
 
