@@ -905,6 +905,10 @@ class ActivityView(HelpMixin, Widget):
         week_data = self._get_week_activity_data()
         spark = sparkline(week_data, width=7)
 
+        # Get theme indicator
+        from emdx.ui.themes import get_theme_indicator
+        theme_indicator = get_theme_indicator(self.app.theme)
+
         # Format status bar
         parts = []
         if active > 0:
@@ -924,6 +928,7 @@ class ActivityView(HelpMixin, Widget):
 
         parts.append(f"[dim]{spark}[/dim]")
         parts.append(datetime.now().strftime("%H:%M"))
+        parts.append(f"[dim]{theme_indicator}[/dim]")
 
         status_bar.update(" │ ".join(parts))
 
