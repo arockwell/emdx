@@ -229,7 +229,7 @@ class DocumentList(Widget):
 
             # For done stage, check for PR URL or children
             if self.current_stage == "done":
-                pr_url = self._get_doc_pr_url(doc_id)
+                pr_url = doc.get("pr_url")  # Now included in list query
                 child_info = self._get_child_info(doc_id)
                 if pr_url:
                     title = f"🔗 {title}"  # Has PR

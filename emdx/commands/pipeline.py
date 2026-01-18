@@ -158,11 +158,13 @@ def process(
         emdx pipeline process prompt --doc 123
         emdx pipeline process analyzed --dry-run
     """
-    if stage not in STAGE_PROMPTS:
+    # Validate stage - planned uses IMPLEMENTATION_PROMPT, others use STAGE_PROMPTS
+    processable_stages = list(STAGE_PROMPTS.keys()) + ["planned"]
+    if stage not in processable_stages:
         if stage == "done":
             console.print("[yellow]'done' is a terminal stage - nothing to process[/yellow]")
         else:
-            console.print(f"[red]Invalid stage: {stage}. Processable stages: {list(STAGE_PROMPTS.keys())}[/red]")
+            console.print(f"[red]Invalid stage: {stage}. Processable stages: {processable_stages}[/red]")
         raise typer.Exit(1)
 
     # Get document to process
@@ -194,6 +196,7 @@ def process(
     if stage == "planned":
         prompt = IMPLEMENTATION_PROMPT.format(content=doc["content"])
         console.print("[bold yellow]⚡ Implementation mode - Claude will write code and create a PR[/bold yellow]")
+        console.print("[dim]Note: This may take up to 30 minutes[/dim]")
     else:
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
@@ -223,11 +226,15 @@ def process(
             from ..services.claude_executor import execute_claude_sync
             console.print("[cyan]Running synchronously (waiting for completion)...[/cyan]")
 
+            # Implementation stage needs much longer timeout (30 min vs 5 min default)
+            timeout = 1800 if stage == "planned" else 300
+
             result = execute_claude_sync(
                 task=prompt,
                 execution_id=execution_id,
                 log_file=log_file,
                 doc_id=str(doc_id),
+                timeout=timeout,
             )
 
             if result.get("success"):

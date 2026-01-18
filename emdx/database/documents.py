@@ -992,7 +992,7 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT id, title, project, stage, created_at, updated_at
+            SELECT id, title, project, stage, created_at, updated_at, parent_id, pr_url
             FROM documents
             WHERE stage = ? AND is_deleted = FALSE
             ORDER BY created_at ASC
