@@ -1630,6 +1630,39 @@ def migration_029_add_document_pr_url(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
+    """Remove unused tables and features identified in cruft audit.
+
+    Removes:
+    - agent_pipelines (orphaned, 0 rows)
+    - agent_templates (orphaned, 0 rows)
+    - iteration_strategies (0 usage)
+    - run_presets (superseded by emdx each)
+
+    Also deactivates dynamic_items workflow (0 recent uses).
+    """
+    cursor = conn.cursor()
+
+    # Drop orphaned agent tables
+    cursor.execute("DROP TABLE IF EXISTS agent_pipelines")
+    cursor.execute("DROP TABLE IF EXISTS agent_templates")
+
+    # Drop iteration strategies (never used)
+    cursor.execute("DROP TABLE IF EXISTS iteration_strategies")
+
+    # Drop run_presets (superseded by emdx each)
+    cursor.execute("DROP TABLE IF EXISTS run_presets")
+
+    # Deactivate unused workflows
+    cursor.execute("""
+        UPDATE workflows
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE name = 'dynamic_items' AND usage_count = 0
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1662,6 +1695,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (27, "Add synthesizing status to stage runs", migration_027_add_synthesizing_status),
     (28, "Add document stage for cascade", migration_028_add_document_stage),
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
+    (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
 ]
 
 

@@ -593,67 +593,6 @@ def update_individual_run(
         return cursor.rowcount > 0
 
 
-# =============================================================================
-# Iteration Strategy operations
-# =============================================================================
-
-def get_iteration_strategy(strategy_id: int) -> Optional[Dict[str, Any]]:
-    """Get an iteration strategy by ID."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM iteration_strategies WHERE id = ?",
-            (strategy_id,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def get_iteration_strategy_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Get an iteration strategy by name."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM iteration_strategies WHERE name = ?",
-            (name,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def list_iteration_strategies(category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List iteration strategies with optional category filter."""
-    with db_connection.get_connection() as conn:
-        if category:
-            cursor = conn.execute(
-                "SELECT * FROM iteration_strategies WHERE category = ? ORDER BY name",
-                (category,),
-            )
-        else:
-            cursor = conn.execute("SELECT * FROM iteration_strategies ORDER BY name")
-        return [dict(row) for row in cursor.fetchall()]
-
-
-def create_iteration_strategy(
-    name: str,
-    display_name: str,
-    prompts: List[str],
-    description: Optional[str] = None,
-    recommended_runs: int = 5,
-    category: str = 'general',
-) -> int:
-    """Create a new iteration strategy."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO iteration_strategies
-            (name, display_name, description, prompts_json, recommended_runs, category)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (name, display_name, description, json.dumps(prompts), recommended_runs, category),
-        )
-        conn.commit()
-        return cursor.lastrowid
-
-
 def get_active_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any]]:
     """Get the currently running execution (log file) for a workflow run.
 

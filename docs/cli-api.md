@@ -889,7 +889,17 @@ emdx find --tags "gameplan" --project "myproject"
 
 ## 🚀 Quick Task Execution
 
-The `emdx run` command provides a streamlined interface for running tasks in parallel. It's syntactic sugar for the `task_parallel` workflow.
+The `emdx run` command is the first rung on EMDX's "execution ladder" - the fastest way to run tasks.
+
+**The Execution Ladder:**
+| Level | Command | Use When |
+|-------|---------|----------|
+| 1 | `emdx run` | Quick one-off or parallel tasks |
+| 2 | `emdx each` | Reusable "for each X, do Y" patterns |
+| 3 | `emdx workflow` | Complex multi-stage workflows |
+| 4 | `emdx pipeline` | Idea refinement through stages |
+
+Start with `emdx run`. Graduate down only when you need more power.
 
 ### Basic Usage
 
@@ -940,16 +950,43 @@ emdx run -p fix-conflicts
 # Manage presets via: emdx workflow preset
 ```
 
+**Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
+
+### Workflow Patterns
+
+Patterns are shortcuts that select a workflow with sensible auto-settings:
+
+```bash
+# Use the fix pattern (auto-enables worktree)
+emdx run "fix auth bug" "fix api bug" --pattern fix
+
+# Use the analyze pattern (auto-enables synthesis)
+emdx run "analyze X" "analyze Y" -P analyze
+
+# List available patterns
+emdx run --list-patterns
+```
+
+| Pattern | Workflow | Auto-Settings | Description |
+|---------|----------|---------------|-------------|
+| `parallel` | task_parallel | - | Default parallel execution |
+| `fix` | parallel_fix | worktree | Code fixes with branch isolation |
+| `analyze` | parallel_analysis | synthesize | Analysis with combined output |
+
+Unknown pattern names are treated as direct workflow names, so `--pattern deep_analysis` uses the `deep_analysis` workflow.
+
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--title` | `-T` | Title for this run (shows in Activity) |
+| `--pattern` | `-P` | Workflow pattern: parallel, fix, analyze (or workflow name) |
 | `--jobs` | `-j` | Max parallel tasks (default: auto) |
 | `--synthesize` | `-s` | Combine outputs with synthesis stage |
 | `--preset` | `-p` | Use a saved preset |
 | `--discover` | `-d` | Shell command to discover tasks |
 | `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
+| `--list-patterns` | | Show available patterns and exit |
 
 ### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 

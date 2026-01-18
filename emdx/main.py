@@ -25,7 +25,6 @@ from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.workflows import app as workflows_app
 from emdx.commands.keybindings import app as keybindings_app
-from emdx.commands.preset import app as preset_app
 from emdx.commands.run import run as run_command
 from emdx.commands.agent import agent as agent_command
 from emdx.commands.groups import app as groups_app
@@ -96,9 +95,6 @@ app.add_typer(export_app, name="export", help="Export documents using profiles")
 
 # Add keybindings as a subcommand group
 app.add_typer(keybindings_app, name="keybindings", help="Manage TUI keybindings")
-
-# Add preset management as a subcommand group
-app.add_typer(preset_app, name="preset", help="Manage run presets")
 
 # Add AI-powered features (ask, semantic search, embeddings)
 app.add_typer(ask_app, name="ai", help="AI-powered Q&A and semantic search")
