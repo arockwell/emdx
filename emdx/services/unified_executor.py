@@ -252,7 +252,6 @@ class UnifiedExecutor:
             working_dir=config.working_dir,
             doc_id=str(config.doc_id) if config.doc_id else None,
             timeout=config.timeout_seconds,
-            verbose=config.verbose,
         )
 
         success = result_data.get('success', False)
