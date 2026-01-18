@@ -1,6 +1,6 @@
-"""Activity view - Mission Control for EMDX."""
+"""Activity components - sparkline and group picker."""
 
-from .activity_view import ActivityView
 from .sparkline import sparkline
+from .group_picker import GroupPicker
 
-__all__ = ["ActivityView", "sparkline"]
+__all__ = ["sparkline", "GroupPicker"]

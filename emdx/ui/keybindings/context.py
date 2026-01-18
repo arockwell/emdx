@@ -220,7 +220,7 @@ class Context(Enum):
             # Main app
             "BrowserContainer": cls.GLOBAL,
             # Activity browser
-            "ActivityView": cls.ACTIVITY_NORMAL,
+            "ActivityBrowser": cls.ACTIVITY_NORMAL,
             # Document browser and related
             "DocumentBrowser": cls.DOCUMENT_NORMAL,
             "FullScreenView": cls.MODAL_FULLSCREEN,
