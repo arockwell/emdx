@@ -262,6 +262,8 @@ def add(
     stage: str = typer.Option("idea", "--stage", "-s", help="Starting stage"),
     auto: bool = typer.Option(False, "--auto", "-a", help="Automatically run through stages"),
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (default: done)"),
+    analyze: bool = typer.Option(False, "--analyze", help="Shortcut for --auto --stop analyzed"),
+    plan: bool = typer.Option(False, "--plan", help="Shortcut for --auto --stop planned"),
 ):
     """Add a new document to the cascade and optionally run it.
 
@@ -269,8 +271,17 @@ def add(
         emdx cascade add "Build a REST API for user management"
         emdx cascade add "Add dark mode" --auto
         emdx cascade add "Add dark mode" --auto --stop planned
+        emdx cascade add "Add dark mode" --analyze    # idea → analyzed
+        emdx cascade add "Add dark mode" --plan       # idea → planned
         emdx cascade add "My gameplan" --stage planned --auto
     """
+    # Handle shortcuts
+    if analyze:
+        auto = True
+        stop = "analyzed"
+    elif plan:
+        auto = True
+        stop = "planned"
     if stage not in STAGES:
         console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
         raise typer.Exit(1)
