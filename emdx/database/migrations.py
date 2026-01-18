@@ -1537,9 +1537,12 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
     # Disable foreign key checks during schema change
     cursor.execute("PRAGMA foreign_keys = OFF")
 
+    # Drop any leftover _new table from previous failed run
+    cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs_new")
+
     # Create new table with updated status constraint including 'synthesizing'
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
+        CREATE TABLE workflow_stage_runs_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workflow_run_id INTEGER NOT NULL,
             stage_name TEXT NOT NULL,
