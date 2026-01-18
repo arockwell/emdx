@@ -1537,9 +1537,12 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
     # Disable foreign key checks during schema change
     cursor.execute("PRAGMA foreign_keys = OFF")
 
+    # Drop any leftover _new table from previous failed run
+    cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs_new")
+
     # Create new table with updated status constraint including 'synthesizing'
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
+        CREATE TABLE workflow_stage_runs_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workflow_run_id INTEGER NOT NULL,
             stage_name TEXT NOT NULL,
@@ -1664,11 +1667,13 @@ def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
 
 
 def migration_031_add_cascade_runs(conn: sqlite3.Connection):
-    """Add cascade_runs table for tracking end-to-end cascade executions.
+    """Add cascade_runs table to track end-to-end cascade executions.
 
-    This enables grouping of cascade stage executions in the activity view.
-    When a user runs `emdx cascade add "idea" --auto`, all the stage
-    executions are linked to a single cascade_run for easy tracking.
+    This enables:
+    - Tracking a document through its entire cascade journey
+    - Grouping related executions in the activity view
+    - Supporting --auto mode with stop stage
+    - Showing cascade progress as a unit
     """
     cursor = conn.cursor()
 
@@ -1676,22 +1681,39 @@ def migration_031_add_cascade_runs(conn: sqlite3.Connection):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS cascade_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            initial_doc_id INTEGER NOT NULL REFERENCES documents(id),
-            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
-            current_stage TEXT,
-            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            start_doc_id INTEGER NOT NULL,
+            current_doc_id INTEGER,
+            start_stage TEXT NOT NULL,
+            stop_stage TEXT NOT NULL DEFAULT 'done',
+            current_stage TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'running'
+                CHECK (status IN ('running', 'completed', 'failed', 'paused')),
+            pr_url TEXT,
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             completed_at TIMESTAMP,
-            error_message TEXT
+            error_message TEXT,
+            FOREIGN KEY (start_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (current_doc_id) REFERENCES documents(id)
         )
     """)
 
-    # Add cascade_run_id to executions to link them to runs
-    cursor.execute("ALTER TABLE executions ADD COLUMN cascade_run_id INTEGER REFERENCES cascade_runs(id)")
+    # Index for finding active runs
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_runs_status
+        ON cascade_runs(status)
+    """)
 
-    # Create indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_status ON cascade_runs(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_started ON cascade_runs(started_at)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_cascade_run ON executions(cascade_run_id)")
+    # Index for finding runs by document
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc
+        ON cascade_runs(start_doc_id)
+    """)
+
+    # Add cascade_run_id to executions table to link executions to runs
+    cursor.execute("""
+        ALTER TABLE executions ADD COLUMN cascade_run_id INTEGER
+        REFERENCES cascade_runs(id)
+    """)
 
     conn.commit()
 
@@ -1729,7 +1751,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (28, "Add document stage for cascade", migration_028_add_document_stage),
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
-    (31, "Add cascade runs table for activity grouping", migration_031_add_cascade_runs),
+    (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
 ]
 
 

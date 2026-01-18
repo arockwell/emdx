@@ -97,49 +97,138 @@ poetry run emdx tags  # List all tags
 poetry run emdx legend  # View emoji legend and aliases
 ```
 
-## 🎯 Claude Code Integration Workflow
+## 🎯 Claude Code Integration
 
-### Auto-Tagging for Project Management
+This section tells Claude when and how to use EMDX tools. The goal: Claude should automatically leverage EMDX to track work, spawn sub-agents with proper metadata, and choose the right execution method for each task.
 
-When working with EMDX through Claude Code, automatically apply tags based on content patterns:
+### Decision Tree: Which EMDX Command to Use
 
-**Document Types:**
-- `gameplan` - Strategic plans → 🎯
-- `analysis` - Investigation results → 🔍  
-- `notes` - General notes → 📝
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   What are you doing?                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+   Single task?        Multiple tasks?      Idea → working code?
+        │                     │                     │
+        ▼                     ▼                     ▼
+   emdx agent            emdx run             emdx cascade add
+   (tracked output)      (quick parallel)     (autonomous pipeline)
+        │                     │
+        │              Need to repeat?
+        │                     │
+        │              ┌──────┴──────┐
+        │              ▼             ▼
+        │          One-off?    Save for later?
+        │              │             │
+        │              ▼             ▼
+        │          emdx run    emdx each create
+        │
+   Need worktree     Need custom stages
+   isolation?        or adversarial mode?
+        │                     │
+        ▼                     ▼
+   emdx run --worktree   emdx workflow run
+```
 
-**Workflow Status:**
-- `active` - Currently working on → 🚀
-- `done` - Completed → ✅
-- `blocked` - Stuck/waiting → 🚧
+### Quick Reference
 
-**Outcomes (Success Tracking):**
-- `success` - Worked as intended → 🎉
-- `failed` - Didn't work → ❌
-- `partial` - Mixed results → ⚡
+| Situation | Command | Why |
+|-----------|---------|-----|
+| Spawning a sub-agent that should save output | `emdx agent "task" --tags ...` | Ensures tracked output with metadata |
+| Running 2-5 independent tasks in parallel | `emdx run "task1" "task2" ...` | Fast, simple, no setup |
+| Same operation on many discovered items | `emdx each --from "discovery" --do "action"` | Discovery + parallel action |
+| Repeatable "for each X do Y" pattern | `emdx each create name --from ... --do ...` | Save it, run it anytime |
+| Parallel code fixes (may touch same files) | `emdx run --worktree "fix1" "fix2"` | Git isolation per task |
+| Transform an idea to a PR autonomously | `emdx cascade add "idea"` | Full autonomous pipeline |
+| Complex multi-stage with synthesis | `emdx workflow run task_parallel -t ...` | Full workflow system |
 
-### Integration Guidelines
+### When Claude Should Use EMDX Automatically
 
-When Claude Code helps with EMDX:
-
-1. **Suggest tags** during save operations based on content
-2. **Ask permission** before applying tags: "I detected this looks like a gameplan, should I tag it as `gameplan, active`?"
-3. **Update tags** when project status changes
-4. **Generate progress reports** from tag analytics
-5. **Use consistent workflows** for project tracking
-
-### Example Workflow
+**Always track significant outputs:**
 ```bash
-# Create gameplan with Claude Code assistance
-echo "Gameplan: Implement user authentication system" | poetry run emdx save --title "Auth Gameplan" --tags "gameplan,active"
+# After completing analysis or research
+emdx agent "Analyze the auth module for security issues" --tags analysis,security
 
-# Update status as work progresses
-poetry run emdx tag 123 blocked
-poetry run emdx untag 123 active
+# When spawning sub-agents from a parent Claude session
+emdx agent "Deep dive on caching strategy" -T "Cache Analysis" -t analysis -g 456
+```
 
-# Mark complete with outcome
-poetry run emdx tag 123 done success
-poetry run emdx untag 123 blocked
+**Use parallel execution for multiple independent tasks:**
+```bash
+# User asks: "Check auth, review tests, and look at the docs"
+emdx run "Check auth module" "Review test coverage" "Analyze documentation"
+```
+
+**Use worktree isolation when tasks might conflict:**
+```bash
+# User asks: "Fix these three bugs"
+emdx run --worktree "Fix null pointer in auth" "Fix race condition in cache" "Fix validation bug"
+```
+
+**Use cascade for ideas that need full implementation:**
+```bash
+# User describes a feature idea
+emdx cascade add "Add a dark mode toggle to settings"
+# Then let cascade run: idea → prompt → analyzed → planned → done (PR)
+```
+
+### Auto-Tagging Guidelines
+
+When saving outputs, apply tags based on content:
+
+| Content Type | Tags to Apply |
+|--------------|---------------|
+| Strategic plans, gameplans | `gameplan, active` |
+| Investigation results | `analysis` |
+| General notes | `notes` |
+| Bug fixes | `bugfix` |
+| Security-related | `security` |
+
+**Workflow status tags:**
+- `active` → 🚀 Currently working on
+- `done` → ✅ Completed
+- `blocked` → 🚧 Stuck/waiting
+
+**Outcome tags (add when work completes):**
+- `success` → 🎉 Worked as intended
+- `failed` → ❌ Didn't work
+- `partial` → ⚡ Mixed results
+
+### Sub-Agent Metadata Propagation
+
+When Claude spawns sub-agents via Task tool, use `emdx agent` to ensure outputs are tracked:
+
+```bash
+# Parent agent spawns child with proper tracking
+emdx agent "Investigate memory leak in worker pool" \
+  --tags "analysis,performance" \
+  --group 789 \
+  --title "Memory Leak Investigation"
+
+# Child agent's output will:
+# 1. Be saved with the specified tags
+# 2. Be linked to group 789
+# 3. Have proper title for easy discovery
+# 4. Print doc_id for parent to capture
+```
+
+### PR Creation Flow
+
+When implementing code changes:
+
+```bash
+# For single implementation tasks with PR
+emdx agent "Implement the feature from doc #123" --tags feature --pr
+
+# For parallel fixes with individual PRs
+emdx each --from "emdx find --tags bugfix,active | head -5" \
+  --do "Fix {{item}}" --pr
+
+# For idea-to-PR pipeline (fully autonomous)
+emdx cascade add "Add user preferences page"
+emdx cascade run  # Runs through all stages to PR
 ```
 
 ## 🌊 Cascade - Ideas to Code (`emdx cascade`)
@@ -218,7 +307,7 @@ emdx run -j 3 "task1" "task2" "task3" "task4"
 emdx run --worktree "fix X" "fix Y"
 ```
 
-For the full execution ladder (run → each → workflow → pipeline), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
+For the full execution ladder (run → each → workflow → cascade), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
 
 ## 🤖 Sub-Agent Execution (`emdx agent`)
 

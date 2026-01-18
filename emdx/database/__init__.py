@@ -26,7 +26,6 @@ from .documents import (
 )
 from .search import search_documents
 from . import groups
-from . import cascade
 
 
 class SQLiteDatabase:
