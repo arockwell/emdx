@@ -218,7 +218,7 @@ emdx run -j 3 "task1" "task2" "task3" "task4"
 emdx run --worktree "fix X" "fix Y"
 ```
 
-For the full execution ladder (run → each → workflow → pipeline), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
+For the full execution ladder (run → each → workflow → cascade), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
 
 ## 🤖 Sub-Agent Execution (`emdx agent`)
 
