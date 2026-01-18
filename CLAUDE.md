@@ -157,18 +157,13 @@ emdx run "analyze auth" "review tests" "check docs"
 emdx run --synthesize "task1" "task2" "task3"
 
 # Dynamic discovery from shell commands
-emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 
 # Control concurrency
 emdx run -j 3 "task1" "task2" "task3" "task4"
 
-# Use a saved preset
-emdx run -p security-audit
-
-# Use workflow patterns (shortcuts with auto-settings)
-emdx run "fix X" "fix Y" --pattern fix       # Auto-enables worktree
-emdx run "analyze X" -P analyze              # Auto-enables synthesis
-emdx run --list-patterns                     # Show available patterns
+# With worktree isolation (for parallel code fixes)
+emdx run --worktree "fix X" "fix Y"
 ```
 
 For the full execution ladder (run → each → workflow → pipeline), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
