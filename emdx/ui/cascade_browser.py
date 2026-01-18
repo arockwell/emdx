@@ -53,10 +53,11 @@ def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
                 e.started_at,
                 e.completed_at,
                 d.stage,
-                d.parent_id
+                d.parent_id,
+                e.cascade_run_id
             FROM executions e
             LEFT JOIN documents d ON e.doc_id = d.id
-            WHERE e.doc_title LIKE 'Cascade:%' OR e.doc_title LIKE 'Pipeline:%' OR d.stage IS NOT NULL
+            WHERE e.doc_title LIKE 'Cascade:%' OR e.doc_title LIKE 'Pipeline:%' OR d.stage IS NOT NULL OR e.cascade_run_id IS NOT NULL
             ORDER BY e.started_at DESC
             LIMIT ?
             """,
@@ -75,6 +76,53 @@ def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
                 "completed_at": row[5],
                 "stage": row[6],
                 "parent_id": row[7],
+                "cascade_run_id": row[8],
+            })
+        return results
+
+
+def get_recent_cascade_runs(limit: int = 5) -> List[Dict[str, Any]]:
+    """Get recent cascade runs with their status and progress."""
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                cr.id,
+                cr.start_doc_id,
+                cr.current_doc_id,
+                cr.start_stage,
+                cr.stop_stage,
+                cr.current_stage,
+                cr.status,
+                cr.pr_url,
+                cr.started_at,
+                cr.completed_at,
+                cr.error_message,
+                d.title as start_doc_title
+            FROM cascade_runs cr
+            LEFT JOIN documents d ON cr.start_doc_id = d.id
+            ORDER BY cr.started_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            results.append({
+                "run_id": row[0],
+                "start_doc_id": row[1],
+                "current_doc_id": row[2],
+                "start_stage": row[3],
+                "stop_stage": row[4],
+                "current_stage": row[5],
+                "status": row[6],
+                "pr_url": row[7],
+                "started_at": row[8],
+                "completed_at": row[9],
+                "error_message": row[10],
+                "start_doc_title": row[11],
             })
         return results
 
@@ -470,11 +518,11 @@ class DocumentPreview(Widget):
 
 
 class ActivityFeed(Widget):
-    """Shows recent pipeline activity."""
+    """Shows recent pipeline activity with cascade run grouping."""
 
     DEFAULT_CSS = """
     ActivityFeed {
-        height: 8;
+        height: 10;
         border: solid $primary;
     }
 
@@ -489,13 +537,11 @@ class ActivityFeed(Widget):
     }
     """
 
+    show_runs = reactive(True)  # Toggle between runs view and executions view
+
     def compose(self) -> ComposeResult:
-        yield Static("[bold]Recent Activity[/bold]", id="activity-header")
+        yield Static("[bold]Cascade Runs[/bold] [dim](r to toggle view)[/dim]", id="activity-header")
         table = DataTable(id="activity-table")
-        table.add_column("Time", width=8)
-        table.add_column("Doc", width=6)
-        table.add_column("Status", width=10)
-        table.add_column("Details", width=50)
         table.cursor_type = "none"
         table.show_cursor = False
         yield table
@@ -504,6 +550,93 @@ class ActivityFeed(Widget):
         """Refresh the activity feed."""
         table = self.query_one("#activity-table", DataTable)
         table.clear()
+
+        # Clear existing columns
+        while table.columns:
+            table.remove_column(table.columns[0].key)
+
+        if self.show_runs:
+            self._show_cascade_runs(table)
+        else:
+            self._show_executions(table)
+
+    def _show_cascade_runs(self, table: DataTable) -> None:
+        """Show cascade runs grouped view."""
+        header = self.query_one("#activity-header", Static)
+        header.update("[bold]Cascade Runs[/bold] [dim](r to toggle view)[/dim]")
+
+        table.add_column("Time", width=8)
+        table.add_column("Run", width=5)
+        table.add_column("Progress", width=22)
+        table.add_column("Status", width=10)
+        table.add_column("Document", width=35)
+
+        runs = get_recent_cascade_runs(limit=8)
+
+        for run in runs:
+            # Time
+            time_str = ""
+            if run.get("started_at"):
+                try:
+                    dt = datetime.fromisoformat(run["started_at"])
+                    time_str = dt.strftime("%H:%M:%S")
+                except:
+                    time_str = "?"
+
+            # Run ID
+            run_id = f"#{run.get('run_id', '?')}"
+
+            # Progress: start_stage → current_stage → stop_stage
+            start = run.get("start_stage", "?")
+            current = run.get("current_stage", "?")
+            stop = run.get("stop_stage", "done")
+            start_emoji = STAGE_EMOJI.get(start, "")
+            current_emoji = STAGE_EMOJI.get(current, "")
+            stop_emoji = STAGE_EMOJI.get(stop, "")
+
+            if run.get("status") == "completed":
+                progress = f"{start_emoji}{start} → {stop_emoji}{stop} ✓"
+            elif run.get("status") == "running":
+                progress = f"{start_emoji}{start} → {current_emoji}[bold]{current}[/] → {stop_emoji}{stop}"
+            else:
+                progress = f"{start_emoji}{start} → {current_emoji}{current}"
+
+            # Status with color
+            status = run.get("status", "?")
+            if status == "completed":
+                if run.get("pr_url"):
+                    status_display = "[green]✓ PR[/green]"
+                else:
+                    status_display = "[green]✓ done[/green]"
+            elif status == "running":
+                status_display = "[yellow]⟳ running[/yellow]"
+            elif status == "failed":
+                status_display = "[red]✗ failed[/red]"
+            elif status == "paused":
+                status_display = "[cyan]⏸ paused[/cyan]"
+            else:
+                status_display = f"[dim]{status}[/dim]"
+
+            # Document title
+            title = run.get("start_doc_title", "")[:35]
+            doc_id = run.get("start_doc_id", "?")
+            doc_info = f"#{doc_id} {title}"
+
+            table.add_row(time_str, run_id, progress, status_display, doc_info)
+
+        if not runs:
+            table.add_row("", "", "[dim]No cascade runs yet[/dim]", "", "")
+
+    def _show_executions(self, table: DataTable) -> None:
+        """Show individual executions view."""
+        header = self.query_one("#activity-header", Static)
+        header.update("[bold]Recent Executions[/bold] [dim](r to toggle view)[/dim]")
+
+        table.add_column("Time", width=8)
+        table.add_column("Doc", width=6)
+        table.add_column("Run", width=5)
+        table.add_column("Status", width=10)
+        table.add_column("Details", width=45)
 
         activities = get_recent_cascade_activity(limit=10)
 
@@ -526,6 +659,10 @@ class ActivityFeed(Widget):
             # Doc ID
             doc_id = str(act.get("doc_id") or "?")
 
+            # Cascade run ID (if part of a run)
+            run_id = act.get("cascade_run_id")
+            run_str = f"#{run_id}" if run_id else "[dim]-[/dim]"
+
             # Status with color
             status = act.get("status", "?")
             if status == "completed":
@@ -546,13 +683,18 @@ class ActivityFeed(Widget):
             stage = act.get("stage") or ""
             parent = act.get("parent_id")
 
-            details = title[:35]
+            details = title[:30]
             if stage:
                 details += f" → {stage}"
             if parent:
-                details += f" (from #{parent})"
+                details += f" (#{parent})"
 
-            table.add_row(time_str, doc_id, status_display, details)
+            table.add_row(time_str, doc_id, run_str, status_display, details)
+
+    def toggle_view(self) -> None:
+        """Toggle between runs view and executions view."""
+        self.show_runs = not self.show_runs
+        self.refresh_activity()
 
 
 class CascadeView(Widget):
@@ -588,6 +730,7 @@ class CascadeView(Widget):
         Binding("ctrl+a", "select_all", "Select All", show=False),
         Binding("escape", "clear_selection", "Clear", show=False),
         Binding("r", "refresh", "Refresh", show=True),
+        Binding("v", "toggle_activity_view", "Toggle View", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -615,7 +758,7 @@ class CascadeView(Widget):
     }
 
     #pv-activity {
-        height: 8;
+        height: 10;
     }
 
     #pv-status {
@@ -838,6 +981,11 @@ class CascadeView(Widget):
     def action_refresh(self) -> None:
         """Refresh all data."""
         self.refresh_all()
+
+    def action_toggle_activity_view(self) -> None:
+        """Toggle between cascade runs view and executions view."""
+        if self.activity:
+            self.activity.toggle_view()
 
     def _update_status(self, text: str) -> None:
         """Update status bar."""
