@@ -889,7 +889,17 @@ emdx find --tags "gameplan" --project "myproject"
 
 ## 🚀 Quick Task Execution
 
-The `emdx run` command provides a streamlined interface for running tasks in parallel. It's syntactic sugar for the `task_parallel` workflow.
+The `emdx run` command is the first rung on EMDX's "execution ladder" - the fastest way to run tasks.
+
+**The Execution Ladder:**
+| Level | Command | Use When |
+|-------|---------|----------|
+| 1 | `emdx run` | Quick one-off or parallel tasks |
+| 2 | `emdx each` | Reusable "for each X, do Y" patterns |
+| 3 | `emdx workflow` | Complex multi-stage workflows |
+| 4 | `emdx pipeline` | Idea refinement through stages |
+
+Start with `emdx run`. Graduate down only when you need more power.
 
 ### Basic Usage
 
@@ -940,16 +950,19 @@ emdx run -p fix-conflicts
 # Manage presets via: emdx workflow preset
 ```
 
+**Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
+
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--title` | `-T` | Title for this run (shows in Activity) |
-| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--jobs` | `-j`, `-P` | Max parallel tasks (default: auto) |
 | `--synthesize` | `-s` | Combine outputs with synthesis stage |
-| `--preset` | `-p` | Use a saved preset |
 | `--discover` | `-d` | Shell command to discover tasks |
-| `--template` | `-t` | Template for discovered tasks (use `{{task}}`) |
+| `--template` | `-t` | Template for discovered tasks (use `{{item}}`) |
+| `--worktree` | `-w` | Create isolated git worktree (recommended for code fixes) |
+| `--base-branch` | | Base branch for worktree (default: main) |
 
 ### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
@@ -979,6 +992,9 @@ emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 
 
 # Verbose mode to see output in real-time
 emdx agent "Deep dive on caching strategy" -t analysis -v
+
+# Have the agent create a PR if it makes code changes
+emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
 ```
 
 ### How It Works
@@ -997,6 +1013,7 @@ emdx agent "Deep dive on caching strategy" -t analysis -v
 | `--group` | `-g` | Group ID to add output to |
 | `--group-role` | | Role in group (default: `exploration`) |
 | `--verbose` | `-v` | Show agent output in real-time |
+| `--pr` | | Instruct agent to create a PR if it makes code changes |
 
 ### Use Cases
 

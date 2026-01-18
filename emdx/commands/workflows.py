@@ -629,48 +629,6 @@ def show_run_status(
         raise typer.Exit(1)
 
 
-@app.command("strategies")
-def list_strategies(
-    category: Optional[str] = typer.Option(
-        None, "--category", "-c", help="Filter by category"
-    ),
-):
-    """List available iteration strategies."""
-    try:
-        strategies = workflow_registry.list_iteration_strategies(category=category)
-
-        if not strategies:
-            console.print("[yellow]No iteration strategies found[/yellow]")
-            return
-
-        table = Table(
-            title="Iteration Strategies", show_header=True, header_style="bold magenta"
-        )
-        table.add_column("Name", style="green")
-        table.add_column("Category", style="yellow")
-        table.add_column("Runs", justify="center", style="cyan")
-        table.add_column("Description", style="white")
-        table.add_column("Builtin", style="blue")
-
-        for strategy in strategies:
-            builtin = "🏛️" if strategy.is_builtin else ""
-            description = truncate_title(strategy.description or "")
-
-            table.add_row(
-                strategy.display_name,
-                strategy.category,
-                str(strategy.recommended_runs),
-                description,
-                builtin,
-            )
-
-        console.print(table)
-
-    except Exception as e:
-        console.print(f"[red]Error listing strategies: {e}[/red]")
-        raise typer.Exit(1)
-
-
 @app.command("create")
 def create_workflow(
     name: str = typer.Argument(..., help="Unique workflow name"),

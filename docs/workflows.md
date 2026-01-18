@@ -2,6 +2,29 @@
 
 The EMDX workflow system provides powerful orchestration for multi-agent executions. Workflows are **execution patterns** that define *how* to process tasks, while tasks are provided at runtime.
 
+## When to Use What
+
+EMDX has multiple ways to execute tasks, forming a "complexity ladder":
+
+| Command | Use When | Example |
+|---------|----------|---------|
+| `emdx run "task"` | Single quick task | `emdx run "analyze auth module"` |
+| `emdx run "t1" "t2"` | Multiple parallel tasks | `emdx run "fix X" "fix Y" -j 3` |
+| `emdx each run <name>` | Reusable "for each X, do Y" | `emdx each run fix-conflicts` |
+| `emdx workflow run <wf>` | Complex multi-stage workflows | `emdx workflow run deep_analysis` |
+| `emdx pipeline` | Idea refinement through stages | `emdx pipeline add "idea"` |
+
+### The Execution Ladder
+
+Think of these tools as rungs on a ladder, from simplest to most powerful:
+
+1. **`emdx run`** - The fastest path. Just describe what you want done. Great for one-off tasks.
+2. **`emdx each`** - When you have a reusable pattern: "for each X from this command, do Y."
+3. **`emdx workflow`** - When you need multi-stage processing, iteration, or adversarial modes.
+4. **`emdx pipeline`** - When refining ideas through structured stages over time.
+
+Start at the top. Graduate down only when you need more power.
+
 ## Recommended Workflows
 
 These are the core dynamic workflows designed for reuse with `--task` flags:

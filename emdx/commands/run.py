@@ -30,22 +30,18 @@ def run(
         False, "--synthesize", "-s",
         help="Combine outputs with synthesis stage"
     ),
-    preset: str = typer.Option(
-        None, "-p", "--preset",
-        help="Use a saved preset (prefix with @)"
-    ),
     discover: str = typer.Option(
         None, "-d", "--discover",
         help="Shell command to discover tasks"
     ),
     template: str = typer.Option(
         None, "-t", "--template",
-        help="Template for discovered tasks (use {{task}})"
+        help="Template for discovered tasks (use {{item}})"
     ),
     worktree: bool = typer.Option(
         False,
         "--worktree", "-w",
-        help="Create isolated git worktree for execution (recommended for parallel runs)",
+        help="Create isolated git worktree for execution (recommended for parallel fixes)",
     ),
     base_branch: str = typer.Option(
         "main",
@@ -58,41 +54,19 @@ def run(
         help="Don't cleanup worktree after completion (for debugging)",
     ),
 ):
-    """Run tasks in parallel with worktree isolation.
+    """Run tasks in parallel.
 
     Examples:
         emdx run "analyze auth module"
         emdx run "task1" "task2" "task3"
         emdx run 5350 5351 5352
         emdx run --synthesize "analyze" "review" "plan"
-        emdx run -p fix-conflicts
-        emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{task}}"
+        emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{item}}"
+        emdx run --worktree "fix X" "fix Y"   # Isolated git worktree
+
+    For reusable commands with saved discovery+templates, use `emdx each` instead.
     """
     task_list = list(tasks) if tasks else []
-
-    # Handle preset if specified
-    if preset:
-        from ..presets import get_preset, increment_usage
-
-        preset_name = preset.lstrip('@')
-        preset_config = get_preset(preset_name)
-
-        if not preset_config:
-            console.print(f"[red]Preset '{preset_name}' not found[/red]")
-            raise typer.Exit(1)
-
-        # Apply preset settings
-        if preset_config.discover_command and not task_list:
-            discover = preset_config.discover_command
-        if preset_config.task_template and not template:
-            template = preset_config.task_template
-        if preset_config.synthesize:
-            synthesize = True
-        if preset_config.max_jobs and not jobs:
-            jobs = preset_config.max_jobs
-
-        # Track usage
-        increment_usage(preset_name)
 
     # Handle discovery if specified
     if discover and not task_list:
@@ -102,12 +76,16 @@ def run(
     if not task_list:
         console.print("[red]Error: No tasks provided[/red]")
         console.print('Usage: emdx run "task description"')
-        console.print('       emdx run -d "discovery command" -t "template {{task}}"')
+        console.print('       emdx run -d "discovery command" -t "template {{item}}"')
         raise typer.Exit(1)
 
     # Apply template if specified
     if template:
-        task_list = [template.replace("{{task}}", t) for t in task_list]
+        # Support both {{item}} (preferred) and {{task}} (deprecated)
+        task_list = [
+            template.replace("{{item}}", t).replace("{{task}}", t)
+            for t in task_list
+        ]
 
     # Create worktree if requested
     worktree_path = None
@@ -178,9 +156,6 @@ async def _execute_run(
     if title:
         variables["task_title"] = title
 
-    # Use task_parallel workflow
-    workflow_name = "task_parallel"
-
     # Override max_concurrent if specified
     if jobs:
         variables["_max_concurrent_override"] = jobs
@@ -192,7 +167,7 @@ async def _execute_run(
 
     try:
         result = await workflow_executor.execute_workflow(
-            workflow_name_or_id=workflow_name,
+            workflow_name_or_id="task_parallel",
             input_variables=variables,
             working_dir=working_dir,
         )
