@@ -1,31 +1,43 @@
 """
-ActivityBrowser - Activity browser matching the original ActivityView exactly.
+ActivityBrowser - Mission Control for EMDX using panel components.
 
-This browser provides a view of EMDX activity:
-- Status bar with active count, tokens (today), docs today, cost, errors, sparkline
-- Activity stream showing groups, workflows, and direct saves
-- Hierarchical expansion (workflows show stage runs, groups show docs)
-- Context panel (bottom left) with detailed metadata
-- Preview pane for document content
+Provides a view of EMDX activity using reusable panels:
+- ListPanel for activity stream with hierarchical expansion
+- PreviewPanel for document content and live logs
+- Status bar with tokens, cost, errors, sparkline
+
+Key features:
+- Hierarchical items (groups → workflows → documents)
+- Live log streaming for running workflows
+- GroupPicker integration for organization
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Static, RichLog, DataTable
+from textual.widgets import Static, RichLog
 
 from ..activity.sparkline import sparkline
 from ..activity.group_picker import GroupPicker
 from ..modals import HelpMixin
+from ..panels import (
+    ListPanel,
+    PreviewPanel,
+    ColumnDef,
+    ListItem,
+    ListPanelConfig,
+    PreviewPanelConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +46,6 @@ logger = logging.getLogger(__name__)
 try:
     from emdx.workflows import database as wf_db
     from emdx.workflows.registry import workflow_registry
-
     HAS_WORKFLOWS = True
 except ImportError:
     wf_db = None
@@ -45,7 +56,6 @@ try:
     from emdx.database import documents as doc_db
     from emdx.database import groups as groups_db
     from emdx.database.documents import list_non_workflow_documents
-
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
@@ -53,7 +63,6 @@ except ImportError:
     groups_db = None
     HAS_DOCS = False
     HAS_GROUPS = False
-
     def list_non_workflow_documents(**kwargs):
         return []
 
@@ -66,9 +75,31 @@ except ImportError:
     HAS_LOG_STREAM = False
 
 
+# =============================================================================
+# Data Classes
+# =============================================================================
+
+@dataclass
+class ActivityItem:
+    """Represents an item in the activity list."""
+    item_type: str  # "group", "workflow", "document", "stage_run"
+    item_id: int
+    title: str
+    time_ago: str
+    icon: str = ""
+    doc_id: Optional[int] = None
+    workflow_run: Optional[Dict] = None
+    group: Optional[Dict] = None
+    stage_run: Optional[Dict] = None
+    depth: int = 0
+    expanded: bool = False
+    children: List["ActivityItem"] = field(default_factory=list)
+    parent: Optional["ActivityItem"] = None
+    _has_workflow_outputs: bool = False
+
+
 class AgentLogSubscriber:
     """Forwards log content to the activity browser."""
-
     def __init__(self, browser: "ActivityBrowser"):
         self.browser = browser
 
@@ -79,41 +110,32 @@ class AgentLogSubscriber:
         logger.error(f"Log stream error: {error}")
 
 
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
 def format_time_ago(dt: datetime) -> str:
     """Format datetime as relative time."""
     if not dt:
         return "—"
-
     from datetime import timezone
-
     now = datetime.now()
     diff = now - dt
     seconds = diff.total_seconds()
-
     if seconds < -60:
         dt_utc = dt.replace(tzinfo=timezone.utc)
         dt_local = dt_utc.astimezone().replace(tzinfo=None)
         diff = now - dt_local
         seconds = diff.total_seconds()
-
     if seconds < 0:
         return "now"
     if seconds < 60:
         return "now"
     if seconds < 3600:
-        return f"{int(seconds / 60)}m"
+        return f"{int(seconds // 60)}m"
     if seconds < 86400:
-        return f"{int(seconds / 3600)}h"
-    return f"{int(seconds / 86400)}d"
-
-
-def format_cost(cost: float) -> str:
-    """Format cost in dollars."""
-    if not cost or cost == 0:
-        return "—"
-    if cost < 0.01:
-        return f"${cost:.3f}"
-    return f"${cost:.2f}"
+        return f"{int(seconds // 3600)}h"
+    return f"{int(seconds // 86400)}d"
 
 
 def format_tokens(tokens: int) -> str:
@@ -127,95 +149,26 @@ def format_tokens(tokens: int) -> str:
     return str(tokens)
 
 
-class ActivityItem:
-    """Represents an item in the activity stream - matches original ActivityView."""
+def format_cost(cost: float) -> str:
+    """Format cost in dollars."""
+    if not cost or cost == 0:
+        return "—"
+    if cost < 0.01:
+        return f"${cost:.3f}"
+    return f"${cost:.2f}"
 
-    def __init__(
-        self,
-        item_type: str,  # 'workflow', 'document', 'group', 'synthesis', 'exploration', 'individual_run'
-        item_id: int,
-        title: str,
-        status: str,
-        timestamp: datetime,
-        cost: float = 0,
-        tokens: int = 0,
-        children: Optional[List["ActivityItem"]] = None,
-        doc_id: Optional[int] = None,
-        workflow_run: Optional[Dict] = None,
-        individual_run: Optional[Dict] = None,
-        depth: int = 0,
-    ):
-        self.item_type = item_type
-        self.item_id = item_id
-        self.title = title
-        self.status = status
-        self.timestamp = timestamp
-        self.cost = cost
-        self.tokens = tokens
-        self.children = children or []
-        self.doc_id = doc_id
-        self.workflow_run = workflow_run
-        self.individual_run = individual_run
-        self.depth = depth
-        self.expanded = False
-        # Progress tracking for running workflows
-        self.progress_completed = 0
-        self.progress_total = 0
-        self.progress_stage = ""
-        # These will be set during load
-        self._input_tokens = 0
-        self._output_tokens = 0
-        self._has_workflow_outputs = False
-        self._output_count = 0
-        self._has_group_children = False
-        self._has_doc_children = False
-        self.group_type = "batch"
-        self.doc_count = 0
 
-    @property
-    def status_icon(self) -> str:
-        if self.status == "running":
-            return "🔄"
-        elif self.status == "completed":
-            return "✅"
-        elif self.status == "failed":
-            return "❌"
-        elif self.status == "queued":
-            return "⏸️"
-        elif self.status == "pending":
-            return "⏳"
-        return "⚪"
-
-    @property
-    def type_icon(self) -> str:
-        if self.item_type == "workflow":
-            return "⚡"
-        elif self.item_type == "synthesis":
-            return "📝"
-        elif self.item_type == "exploration":
-            return "◇"
-        elif self.item_type == "individual_run":
-            return "🤖"
-        elif self.item_type == "document":
-            return "📄"
-        elif self.item_type == "group":
-            icons = {
-                "initiative": "📋",
-                "round": "🔄",
-                "batch": "📦",
-            }
-            return icons.get(self.group_type, "📦")
-        return "⚪"
-
+# =============================================================================
+# ActivityBrowser
+# =============================================================================
 
 class ActivityBrowser(HelpMixin, Widget):
-    """Activity browser matching original ActivityView behavior."""
+    """Mission Control browser using panel components."""
 
     HELP_TITLE = "Activity View"
-    """Help title for the keybindings modal."""
 
     class ViewDocument(Message):
-        """Request to view a document fullscreen."""
+        """Request to view a document in the document browser."""
         def __init__(self, doc_id: int) -> None:
             self.doc_id = doc_id
             super().__init__()
@@ -228,77 +181,32 @@ class ActivityBrowser(HelpMixin, Widget):
 
     ActivityBrowser #status-bar {
         height: 1;
-        background: $boost;
+        background: $primary;
+        color: $text;
         padding: 0 1;
-        dock: top;
     }
 
     ActivityBrowser #main-content {
         height: 1fr;
     }
 
-    ActivityBrowser #activity-panel {
-        width: 40%;
-        height: 100%;
+    ActivityBrowser #left-panel {
+        width: 45%;
+        min-width: 40;
     }
 
-    ActivityBrowser #activity-list-section {
-        height: 70%;
+    ActivityBrowser #activity-list {
+        height: 2fr;
     }
 
-    ActivityBrowser #activity-header {
-        height: 1;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    ActivityBrowser #activity-table {
+    ActivityBrowser #context-panel {
         height: 1fr;
-    }
-
-    ActivityBrowser #context-section {
-        height: 30%;
-        border-top: solid $secondary;
-    }
-
-    ActivityBrowser #context-header {
-        height: 1;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    ActivityBrowser #context-scroll {
-        height: 1fr;
-    }
-
-    ActivityBrowser #context-content {
-        padding: 0 1;
+        border-top: solid $primary;
     }
 
     ActivityBrowser #preview-panel {
-        width: 60%;
-        height: 100%;
+        width: 55%;
         border-left: solid $primary;
-    }
-
-    ActivityBrowser #preview-header {
-        height: 1;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    ActivityBrowser #preview-scroll {
-        height: 1fr;
-    }
-
-    ActivityBrowser #preview-content {
-        padding: 0 1;
-    }
-
-    ActivityBrowser #preview-log {
-        height: 1fr;
-        padding: 0 1;
-        display: none;
     }
 
     ActivityBrowser #help-bar {
@@ -310,8 +218,8 @@ class ActivityBrowser(HelpMixin, Widget):
     """
 
     BINDINGS = [
-        Binding("j", "cursor_down", "Down"),
-        Binding("k", "cursor_up", "Up"),
+        Binding("j", "cursor_down", "Down", show=False),
+        Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select", "Select/Expand"),
         Binding("l", "expand", "Expand"),
         Binding("h", "collapse", "Collapse"),
@@ -328,48 +236,54 @@ class ActivityBrowser(HelpMixin, Widget):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.activity_items: List[ActivityItem] = []  # Top-level items
-        self.flat_items: List[ActivityItem] = []  # Flattened for display
+        # Data
+        self.groups: List[ActivityItem] = []
+        self.workflows: List[ActivityItem] = []
+        self.direct_saves: List[ActivityItem] = []
+        self.flat_items: List[ActivityItem] = []
         self.selected_idx: int = 0
-        self._zombies_cleaned = False
-        self._last_preview_key: Optional[tuple] = None
         # Log streaming
-        self.log_stream: Optional[Any] = None
-        self.log_subscriber = AgentLogSubscriber(self)
-        self.streaming_item_id: Optional[int] = None
+        self._log_stream: Optional[Any] = None
+        self._log_subscriber: Optional[AgentLogSubscriber] = None
+        self._streaming_item: Optional[ActivityItem] = None
 
     def compose(self) -> ComposeResult:
-        """Compose the browser layout."""
+        """Compose the activity browser layout."""
         yield Static("Loading...", id="status-bar")
 
         with Horizontal(id="main-content"):
-            with Vertical(id="activity-panel"):
-                with Vertical(id="activity-list-section"):
-                    yield Static("ACTIVITY", id="activity-header")
-                    yield DataTable(id="activity-table", cursor_type="row")
+            with Vertical(id="left-panel"):
+                yield ListPanel(
+                    columns=[
+                        ColumnDef("", width=2),   # Icon
+                        ColumnDef("Time", width=4),
+                        ColumnDef("Title", width=50),
+                        ColumnDef("ID", width=6),
+                    ],
+                    config=ListPanelConfig(
+                        show_search=True,
+                        search_placeholder="Search activity...",
+                        status_format="{filtered}/{total} items",
+                    ),
+                    show_status=True,
+                    id="activity-list",
+                )
+                yield RichLog(
+                    id="context-panel",
+                    wrap=True,
+                    highlight=True,
+                    markup=True,
+                    auto_scroll=False,
+                )
 
-                with Vertical(id="context-section"):
-                    yield Static("DETAILS", id="context-header")
-                    with ScrollableContainer(id="context-scroll"):
-                        yield RichLog(
-                            id="context-content",
-                            highlight=True,
-                            markup=True,
-                            wrap=True,
-                            auto_scroll=False,
-                        )
-
-            with Vertical(id="preview-panel"):
-                yield Static("PREVIEW", id="preview-header")
-                with ScrollableContainer(id="preview-scroll"):
-                    yield RichLog(
-                        id="preview-content",
-                        highlight=True,
-                        markup=True,
-                        wrap=True,
-                        auto_scroll=False,
-                    )
-                yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
+            yield PreviewPanel(
+                config=PreviewPanelConfig(
+                    enable_editing=False,
+                    enable_selection=True,
+                    empty_message="Select an item to preview",
+                ),
+                id="preview-panel",
+            )
 
         yield Static(
             "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ "
@@ -377,1211 +291,462 @@ class ActivityBrowser(HelpMixin, Widget):
             id="help-bar",
         )
 
-        # Group picker overlay
         yield GroupPicker(id="group-picker")
 
     async def on_mount(self) -> None:
         """Initialize the browser."""
-        table = self.query_one("#activity-table", DataTable)
-        table.add_column("", width=2)  # Icon
-        table.add_column("Time", width=4)
-        table.add_column("Title")  # Dynamic width
-        table.add_column("ID", width=6)
+        # Disable focus on context panel
+        try:
+            context = self.query_one("#context-panel", RichLog)
+            context.can_focus = False
+        except Exception:
+            pass
 
-        await self.load_data()
-        table.focus()
+        await self._refresh_data()
 
-        self.set_interval(5.0, self._refresh_data)
+    # =========================================================================
+    # Data Loading
+    # =========================================================================
 
-    async def load_data(self, update_preview: bool = True) -> None:
-        """Load activity data - matches original ActivityView algorithm."""
-        self.activity_items = []
+    async def _refresh_data(self) -> None:
+        """Load all activity data."""
+        self.groups = []
+        self.workflows = []
+        self.direct_saves = []
 
-        # Clean up zombie workflow runs only once on first load
-        if HAS_WORKFLOWS and wf_db and not self._zombies_cleaned:
-            try:
-                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=24.0)
-                if cleaned > 0:
-                    logger.info(f"Cleaned up {cleaned} zombie workflow runs")
-                self._zombies_cleaned = True
-            except Exception as e:
-                logger.debug(f"Could not cleanup zombies: {e}")
-
-        # Load document groups first (they contain documents)
-        if HAS_GROUPS and groups_db:
-            await self._load_groups()
-
-        # Load workflows
-        if HAS_WORKFLOWS and wf_db:
-            await self._load_workflows()
-
-        # Load recent direct saves (documents not from workflows or groups)
-        if HAS_DOCS and doc_db:
-            await self._load_direct_saves()
-
-        # Sort: running workflows first (pinned), then by timestamp descending
-        def sort_key(item):
-            is_running = item.item_type == "workflow" and item.status == "running"
-            return (0 if is_running else 1, -item.timestamp.timestamp() if item.timestamp else 0)
-
-        self.activity_items.sort(key=sort_key)
-
-        # Flatten for display
+        await self._load_groups()
+        await self._load_workflows()
+        await self._load_direct_saves()
         self._flatten_items()
-
-        # Update UI
-        await self._update_table()
+        await self._update_list()
         await self._update_status_bar()
-        if update_preview:
-            await self._update_preview()
-            await self._update_context()
 
     async def _load_groups(self) -> None:
-        """Load document groups into activity items."""
+        """Load groups from database."""
+        if not HAS_GROUPS or not groups_db:
+            return
         try:
-            top_groups = groups_db.list_groups(top_level_only=True)
-
-            for group in top_groups:
-                group_id = group["id"]
-                created = group.get("created_at")
+            raw_groups = groups_db.list_groups(include_archived=False)
+            for g in raw_groups:
+                if g.get("parent_group_id"):
+                    continue
+                created = g.get("created_at")
                 if isinstance(created, str):
-                    from emdx.utils.datetime import parse_datetime
-                    created = parse_datetime(created)
-                if not created:
-                    created = datetime.now()
-
-                # Count child groups for expansion indicator
-                child_groups = groups_db.get_child_groups(group_id)
-
+                    created = datetime.fromisoformat(created.replace("Z", "+00:00"))
                 item = ActivityItem(
                     item_type="group",
-                    item_id=group_id,
-                    title=group["name"],
-                    status="completed",
-                    timestamp=created,
-                    cost=group.get("total_cost_usd", 0) or 0,
-                    tokens=group.get("total_tokens", 0) or 0,
+                    item_id=g["id"],
+                    title=g.get("name", f"Group {g['id']}"),
+                    time_ago=format_time_ago(created),
+                    icon="📁",
+                    group=g,
                 )
-
-                # Store group metadata for display
-                item.group_type = group.get("group_type", "batch")
-                # Use recursive count to include nested groups' docs
-                item.doc_count = groups_db.get_recursive_doc_count(group_id)
-                item._has_group_children = len(child_groups) > 0 or item.doc_count > 0
-
-                self.activity_items.append(item)
-
+                self.groups.append(item)
         except Exception as e:
-            logger.error(f"Error loading groups: {e}", exc_info=True)
+            logger.error(f"Error loading groups: {e}")
 
     async def _load_workflows(self) -> None:
-        """Load workflow runs into activity items."""
+        """Load workflow runs from database."""
+        if not HAS_WORKFLOWS or not wf_db:
+            return
         try:
             runs = wf_db.list_workflow_runs(limit=50)
-
             for run in runs:
-                # Parse timestamp
                 started = run.get("started_at")
                 if isinstance(started, str):
-                    from emdx.utils.datetime import parse_datetime
-                    started = parse_datetime(started)
-                if not started:
-                    started = datetime.now()
+                    started = datetime.fromisoformat(started.replace("Z", "+00:00"))
 
-                # Skip zombie running workflows (running for > 2 hours)
-                if run.get("status") == "running":
-                    age_hours = (datetime.now() - started).total_seconds() / 3600
-                    if age_hours > 2:
-                        continue
+                status = run.get("status", "unknown")
+                icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(status, "⚙️")
 
-                # Get workflow name
-                wf_name = "Workflow"
-                if workflow_registry:
-                    try:
-                        wf = workflow_registry.get_workflow(run["workflow_id"])
-                        if wf:
-                            wf_name = wf.display_name
-                    except Exception:
-                        pass
-
-                # Get task title from input variables
-                task_title = ""
-                try:
-                    input_vars = run.get("input_variables")
-                    if isinstance(input_vars, str):
-                        input_vars = json.loads(input_vars)
-                    if input_vars:
-                        task_title = input_vars.get("task_title", "")
-                except Exception:
-                    pass
-
-                title = task_title or wf_name
-
-                # Calculate cost - check top-level, then sum from individual runs
-                cost = run.get("total_cost_usd", 0) or 0
-                if not cost:
-                    try:
-                        stage_runs = wf_db.list_stage_runs(run["id"])
-                        for sr in stage_runs:
-                            ind_runs = wf_db.list_individual_runs(sr["id"])
-                            for ir in ind_runs:
-                                ir_cost = ir.get("cost_usd", 0) or 0
-                                cost += ir_cost
-                    except Exception:
-                        pass
+                wf_id = run.get("workflow_id")
+                wf = wf_db.get_workflow(wf_id) if wf_id else None
+                wf_name = wf.get("name", "Workflow") if wf else "Workflow"
 
                 item = ActivityItem(
                     item_type="workflow",
                     item_id=run["id"],
-                    title=title,
-                    status=run.get("status", "unknown"),
-                    timestamp=started,
-                    cost=cost,
+                    title=f"{wf_name} #{run['id']}",
+                    time_ago=format_time_ago(started),
+                    icon=icon,
                     workflow_run=run,
                 )
 
-                # Check if workflow has any outputs and gather stats
-                try:
-                    stage_runs = wf_db.list_stage_runs(run["id"])
-                    has_outputs = False
-                    output_doc_id = None
-                    output_count = 0
-                    total_target = 0
-                    total_completed = 0
-                    current_stage = ""
-                    total_input_tokens = 0
-                    total_output_tokens = 0
+                # Check for outputs
+                output_ids = wf_db.get_workflow_output_doc_ids(run["id"])
+                item._has_workflow_outputs = len(output_ids) > 0
 
-                    for sr in stage_runs:
-                        # Track progress
-                        target = sr.get("target_runs", 1)
-                        completed = sr.get("runs_completed", 0)
-                        total_target += target
-                        total_completed += completed
-                        # Track current running stage
-                        if sr.get("status") == "running":
-                            current_stage = sr.get("stage_name", "")
-                        # Check synthesis FIRST (prefer over individual outputs)
-                        if sr.get("synthesis_doc_id"):
-                            output_count += 1
-                            has_outputs = True
-                            if not output_doc_id:
-                                output_doc_id = sr["synthesis_doc_id"]
-                        ind_runs = wf_db.list_individual_runs(sr["id"])
-                        # Count individual outputs and sum tokens
-                        for ir in ind_runs:
-                            total_input_tokens += ir.get("input_tokens", 0) or 0
-                            total_output_tokens += ir.get("output_tokens", 0) or 0
-                            if ir.get("output_doc_id"):
-                                output_count += 1
-                                has_outputs = True
-                                if not output_doc_id:
-                                    output_doc_id = ir["output_doc_id"]
-
-                    if has_outputs:
-                        item._has_workflow_outputs = True
-                        item._output_count = output_count
-                    # Store token counts for status bar
-                    item._input_tokens = total_input_tokens
-                    item._output_tokens = total_output_tokens
-                    # Store progress info for running workflows
-                    if run.get("status") == "running":
-                        item.progress_completed = total_completed
-                        item.progress_total = total_target
-                        item.progress_stage = current_stage
-                    # For completed workflows, set doc_id to the output document
-                    if output_doc_id and run.get("status") in ("completed", "failed"):
-                        item.doc_id = output_doc_id
-                        # Get the output document's timestamp for consistent timezone handling
-                        if HAS_DOCS:
-                            try:
-                                out_doc = doc_db.get_document(output_doc_id)
-                                if out_doc:
-                                    doc_created = out_doc.get("created_at")
-                                    if isinstance(doc_created, str):
-                                        from emdx.utils.datetime import parse_datetime
-                                        doc_created = parse_datetime(doc_created)
-                                    if doc_created:
-                                        item.timestamp = doc_created
-                            except Exception:
-                                pass
-                except Exception as e:
-                    logger.debug(f"Error checking workflow outputs for run {run['id']}: {e}")
-
-                self.activity_items.append(item)
-
+                self.workflows.append(item)
         except Exception as e:
-            logger.error(f"Error loading workflows: {e}", exc_info=True)
+            logger.error(f"Error loading workflows: {e}")
 
     async def _load_direct_saves(self) -> None:
-        """Load documents that weren't created by workflows or added to groups."""
+        """Load direct saves (documents not from workflows)."""
+        if not HAS_DOCS:
+            return
         try:
-            # Get documents that are in groups (to exclude them)
-            grouped_doc_ids = set()
-            if HAS_GROUPS and groups_db:
-                try:
-                    grouped_doc_ids = groups_db.get_all_grouped_document_ids()
-                except Exception as e:
-                    logger.debug(f"Error getting grouped doc IDs: {e}")
-
-            # Use efficient single-query function that excludes workflow docs via LEFT JOIN
-            docs = list_non_workflow_documents(limit=100, days=7, include_archived=False)
-
+            docs = list_non_workflow_documents(limit=30)
             for doc in docs:
-                doc_id = doc["id"]
-
-                # Skip documents that are in groups (they'll show under their group)
-                if doc_id in grouped_doc_ids:
-                    continue
-
                 created = doc.get("created_at")
-                title = doc.get("title", "")
-
-                # Check if this document has children
-                children_docs = doc_db.get_children(doc_id, include_archived=False)
-                has_children = len(children_docs) > 0
-
+                if isinstance(created, str):
+                    created = datetime.fromisoformat(created.replace("Z", "+00:00"))
                 item = ActivityItem(
                     item_type="document",
-                    item_id=doc_id,
-                    title=title or "Untitled",
-                    status="completed",
-                    timestamp=created,
-                    doc_id=doc_id,
+                    item_id=doc["id"],
+                    title=doc.get("title", f"Doc {doc['id']}"),
+                    time_ago=format_time_ago(created),
+                    icon="📄",
+                    doc_id=doc["id"],
                 )
-
-                # Mark that this document can be expanded
-                if has_children:
-                    item._has_doc_children = True
-
-                self.activity_items.append(item)
-
+                self.direct_saves.append(item)
         except Exception as e:
-            logger.error(f"Error loading direct saves: {e}", exc_info=True)
+            logger.error(f"Error loading direct saves: {e}")
 
     def _flatten_items(self) -> None:
-        """Flatten activity items for display, respecting expansion state."""
+        """Flatten hierarchical items for display."""
         self.flat_items = []
 
-        for item in self.activity_items:
+        def add_item(item: ActivityItem, depth: int = 0):
+            item.depth = depth
             self.flat_items.append(item)
-            if item.expanded and item.children:
+            if item.expanded:
                 for child in item.children:
-                    child.depth = 1
-                    self.flat_items.append(child)
-                    if child.expanded and child.children:
-                        for grandchild in child.children:
-                            grandchild.depth = 2
-                            self.flat_items.append(grandchild)
+                    add_item(child, depth + 1)
 
-    async def _update_table(self) -> None:
-        """Update the activity table."""
-        table = self.query_one("#activity-table", DataTable)
-        table.clear()
+        for group in self.groups:
+            add_item(group)
+        for workflow in self.workflows:
+            add_item(workflow)
+        for doc in self.direct_saves:
+            add_item(doc)
 
+    async def _update_list(self) -> None:
+        """Update the ListPanel with current items."""
+        list_panel = self.query_one("#activity-list", ListPanel)
+
+        items = []
         for item in self.flat_items:
-            # Indentation based on depth
             indent = "  " * item.depth
+            expand_indicator = ""
+            if item.item_type == "workflow" and item._has_workflow_outputs:
+                expand_indicator = "▼ " if item.expanded else "▶ "
+            elif item.item_type == "group":
+                expand_indicator = "▼ " if item.expanded else "▶ "
 
-            # Expand indicator for items that can have children
-            has_doc_children = item._has_doc_children
-            has_workflow_outputs = item._has_workflow_outputs
-            has_group_children = item._has_group_children
-            # All completed/failed workflows should be expandable
-            is_completed_workflow = (
-                item.item_type == "workflow" and
-                item.status in ("completed", "failed")
-            )
-            output_count = item._output_count
-            doc_count = item.doc_count
-            is_running_workflow = item.item_type == "workflow" and item.status == "running"
+            display_title = f"{indent}{expand_indicator}{item.title}"
+            id_str = str(item.doc_id or item.item_id) if item.doc_id else str(item.item_id)
 
-            if item.expanded and item.children:
-                expand = "▼ "
-                badge = ""
-            elif is_running_workflow or \
-                 (item.item_type == "workflow" and (has_workflow_outputs or is_completed_workflow)) or \
-                 (item.item_type == "group" and has_group_children) or \
-                 (item.item_type == "document" and has_doc_children):
-                expand = "▶ "
-                # Show count badge for collapsed items
-                if item.item_type == "workflow" and output_count > 0:
-                    badge = f" [{output_count}]"
-                elif item.item_type == "group" and doc_count > 0:
-                    badge = f" [{doc_count}]"
-                else:
-                    badge = ""
-            else:
-                expand = "  "
-                badge = ""
+            items.append(ListItem(
+                id=f"{item.item_type}:{item.item_id}",
+                values=[item.icon, item.time_ago, display_title, id_str],
+                data=item,
+            ))
 
-            # Icon based on status/type
-            if item.status in ("running", "failed", "pending", "queued"):
-                icon = item.status_icon
-            else:
-                icon = item.type_icon
-
-            time_str = format_time_ago(item.timestamp)
-
-            # Progress bar for running workflows
-            progress_str = ""
-            if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                pct = item.progress_completed / item.progress_total
-                bar_width = 10
-                filled = int(pct * bar_width)
-                bar = "█" * filled + "░" * (bar_width - filled)
-                progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
-
-            title = f"{indent}{expand}{item.title[:40]}{progress_str or badge}"
-
-            if item.item_type in ("workflow", "group"):
-                id_str = f"#{item.item_id}" if item.item_id else "—"
-            else:
-                id_str = f"#{item.doc_id}" if item.doc_id else "—"
-
-            table.add_row(icon, time_str, title, id_str)
-
-        # Restore selection
-        if self.flat_items and self.selected_idx < len(self.flat_items):
-            table.move_cursor(row=self.selected_idx)
+        list_panel.set_items(items)
 
     async def _update_status_bar(self) -> None:
-        """Update the status bar with current stats - matches original."""
+        """Update the status bar with stats."""
+        parts = []
+
+        # Active workflows
+        active = sum(1 for w in self.workflows if w.workflow_run and w.workflow_run.get("status") == "running")
+        if active > 0:
+            parts.append(f"[green]● {active} active[/green]")
+
+        # Today's stats
+        if HAS_WORKFLOWS and wf_db:
+            try:
+                today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                runs = wf_db.list_workflow_runs(limit=100)
+                today_runs = [r for r in runs if r.get("started_at") and
+                             datetime.fromisoformat(r["started_at"].replace("Z", "+00:00")).replace(tzinfo=None) >= today]
+
+                total_input = sum(r.get("input_tokens", 0) or 0 for r in today_runs)
+                total_output = sum(r.get("output_tokens", 0) or 0 for r in today_runs)
+                total_cost = sum(r.get("total_cost", 0) or 0 for r in today_runs)
+                errors = sum(1 for r in today_runs if r.get("status") == "failed")
+
+                parts.append(f"In: {format_tokens(total_input)}")
+                parts.append(f"Out: {format_tokens(total_output)}")
+                parts.append(f"Cost: {format_cost(total_cost)}")
+                if errors > 0:
+                    parts.append(f"[red]Errors: {errors}[/red]")
+
+                # Sparkline
+                week_data = self._get_week_activity_data()
+                if any(week_data):
+                    spark = sparkline(week_data)
+                    parts.append(f"[dim]{spark}[/dim]")
+            except Exception as e:
+                logger.error(f"Error calculating stats: {e}")
+
+        status_text = " │ ".join(parts) if parts else "Activity"
         try:
             status_bar = self.query_one("#status-bar", Static)
+            status_bar.update(status_text)
         except Exception:
-            return
-
-        # Count active workflows
-        active = sum(
-            1
-            for item in self.activity_items
-            if item.item_type == "workflow" and item.status == "running"
-        )
-
-        # Count docs today
-        today = datetime.now().date()
-        docs_today = sum(
-            1
-            for item in self.activity_items
-            if item.timestamp and item.timestamp.date() == today
-        )
-
-        # Total cost today
-        cost_today = sum(
-            item.cost
-            for item in self.activity_items
-            if item.timestamp
-            and item.timestamp.date() == today
-            and item.cost
-        )
-
-        # Count errors (today only)
-        errors = sum(
-            1
-            for item in self.activity_items
-            if item.status == "failed"
-            and item.timestamp
-            and item.timestamp.date() == today
-        )
-
-        # Total tokens today (input/output) - from workflows only
-        input_tokens_today = sum(
-            item._input_tokens or 0
-            for item in self.activity_items
-            if item.timestamp
-            and item.timestamp.date() == today
-            and item.item_type == "workflow"
-        )
-        output_tokens_today = sum(
-            item._output_tokens or 0
-            for item in self.activity_items
-            if item.timestamp
-            and item.timestamp.date() == today
-            and item.item_type == "workflow"
-        )
-
-        # Generate sparkline for the week
-        week_data = self._get_week_activity_data()
-        spark = sparkline(week_data, width=7)
-
-        # Format status bar
-        parts = []
-        if active > 0:
-            parts.append(f"[green]🟢 {active} Active[/green]")
-        else:
-            parts.append("[dim]⚪ 0 Active[/dim]")
-
-        # Tokens: in↓ / out↑
-        if input_tokens_today > 0 or output_tokens_today > 0:
-            parts.append(f"↓{format_tokens(input_tokens_today)} ↑{format_tokens(output_tokens_today)}")
-
-        parts.append(f"📄 {docs_today} today")
-        parts.append(format_cost(cost_today))
-
-        if errors > 0:
-            parts.append(f"[red]⚠️ {errors}[/red]")
-
-        parts.append(f"[dim]{spark}[/dim]")
-        parts.append(datetime.now().strftime("%H:%M"))
-
-        status_bar.update(" │ ".join(parts))
+            pass
 
     def _get_week_activity_data(self) -> List[int]:
-        """Get activity counts for each day of the past week."""
-        today = datetime.now().date()
-        counts = []
+        """Get activity counts for the last 7 days."""
+        if not HAS_WORKFLOWS or not wf_db:
+            return [0] * 7
+        try:
+            counts = [0] * 7
+            now = datetime.now()
+            runs = wf_db.list_workflow_runs(limit=200)
+            for run in runs:
+                started = run.get("started_at")
+                if not started:
+                    continue
+                if isinstance(started, str):
+                    started = datetime.fromisoformat(started.replace("Z", "+00:00")).replace(tzinfo=None)
+                days_ago = (now - started).days
+                if 0 <= days_ago < 7:
+                    counts[6 - days_ago] += 1
+            return counts
+        except Exception:
+            return [0] * 7
 
-        for i in range(6, -1, -1):  # 6 days ago to today
-            day = today - timedelta(days=i)
-            count = sum(
-                1
-                for item in self.activity_items
-                if item.timestamp and item.timestamp.date() == day
-            )
-            counts.append(count)
+    # =========================================================================
+    # Panel Event Handlers
+    # =========================================================================
 
-        return counts
+    async def on_list_panel_item_selected(self, event: ListPanel.ItemSelected) -> None:
+        """Handle item selection - update preview and context."""
+        item: ActivityItem = event.item.data
+        if not item:
+            return
 
-    async def _refresh_data(self) -> None:
-        """Periodic refresh - preserve expansion state."""
-        # Remember expanded state
-        expanded_ids = {
-            (item.item_type, item.item_id)
-            for item in self.flat_items
-            if item.expanded
-        }
-        selected_id = None
-        if self.flat_items and self.selected_idx < len(self.flat_items):
-            item = self.flat_items[self.selected_idx]
-            selected_id = (item.item_type, item.item_id)
+        # Track selection
+        for i, flat_item in enumerate(self.flat_items):
+            if flat_item.item_id == item.item_id and flat_item.item_type == item.item_type:
+                self.selected_idx = i
+                break
 
-        await self.load_data(update_preview=False)
+        # Stop any existing log stream
+        self._stop_stream()
 
-        # Restore expansions
-        for item in self.activity_items:
-            if (item.item_type, item.item_id) in expanded_ids:
-                if item.item_type == "workflow":
-                    await self._expand_workflow(item)
-                elif item.item_type == "group":
-                    await self._expand_group(item)
+        # Update preview
+        await self._update_preview(item)
 
-        self._flatten_items()
-        await self._update_table()
+        # Update context panel
+        await self._update_context(item)
 
-        # Restore selection
-        if selected_id:
-            for i, item in enumerate(self.flat_items):
-                if (item.item_type, item.item_id) == selected_id:
-                    self.selected_idx = i
-                    break
+    async def on_list_panel_item_activated(self, event: ListPanel.ItemActivated) -> None:
+        """Handle Enter key - expand/collapse or view document."""
+        item: ActivityItem = event.item.data
+        if not item:
+            return
+        await self._toggle_expand(item)
 
-    async def _expand_workflow(self, item: ActivityItem) -> None:
-        """Expand a workflow to show stage runs and outputs."""
-        if not item.workflow_run or item.expanded:
+    async def _update_preview(self, item: ActivityItem) -> None:
+        """Update the preview panel for selected item."""
+        preview = self.query_one("#preview-panel", PreviewPanel)
+
+        # Check for running workflow - show live log
+        if item.item_type == "workflow" and item.workflow_run:
+            status = item.workflow_run.get("status")
+            if status == "running":
+                await self._show_live_log(item)
+                return
+
+        # Show document content
+        if item.doc_id and HAS_DOCS and doc_db:
+            try:
+                doc = doc_db.get_document(item.doc_id)
+                if doc:
+                    content = doc.get("content", "")
+                    await preview.show_content(content, title=item.title)
+                    return
+            except Exception as e:
+                logger.error(f"Error loading document: {e}")
+
+        # Show workflow summary
+        if item.item_type == "workflow" and item.workflow_run:
+            run = item.workflow_run
+            lines = [
+                f"# {item.title}",
+                "",
+                f"**Status:** {run.get('status', 'unknown')}",
+                f"**Started:** {run.get('started_at', 'unknown')}",
+            ]
+            if run.get("input_tokens"):
+                lines.append(f"**Input tokens:** {format_tokens(run['input_tokens'])}")
+            if run.get("output_tokens"):
+                lines.append(f"**Output tokens:** {format_tokens(run['output_tokens'])}")
+            if run.get("total_cost"):
+                lines.append(f"**Cost:** {format_cost(run['total_cost'])}")
+            await preview.show_content("\n".join(lines), title=item.title)
+            return
+
+        # Show group summary
+        if item.item_type == "group" and item.group:
+            lines = [
+                f"# {item.title}",
+                "",
+                f"**Type:** {item.group.get('group_type', 'unknown')}",
+                f"**Created:** {item.group.get('created_at', 'unknown')}",
+            ]
+            await preview.show_content("\n".join(lines), title=item.title)
+            return
+
+        await preview.show_empty(f"No preview available for {item.title}")
+
+    async def _show_live_log(self, item: ActivityItem) -> None:
+        """Show live log for a running workflow."""
+        if not HAS_LOG_STREAM or not LogStream:
             return
 
         run = item.workflow_run
-        children = []
+        if not run:
+            return
+
+        log_path = run.get("log_path")
+        if not log_path:
+            return
+
+        self._streaming_item = item
+        preview = self.query_one("#preview-panel", PreviewPanel)
+        await preview.show_content(f"# Live Log: {item.title}\n\nConnecting...", title=f"Live: {item.title}")
 
         try:
-            if HAS_WORKFLOWS and wf_db:
-                stage_runs = wf_db.list_stage_runs(run["id"])
-                for sr in stage_runs:
-                    stage_status = sr.get("status", "pending")
-                    ind_runs = wf_db.list_individual_runs(sr["id"])
-
-                    # For running workflows, show individual runs with status
-                    if stage_status in ("running", "pending") or run.get("status") == "running":
-                        for ir in ind_runs:
-                            ir_status = ir.get("status", "pending")
-                            run_num = ir.get("run_number", 0)
-
-                            if ir_status == "completed" and ir.get("output_doc_id"):
-                                doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
-                                title = doc.get("title", f"Run {run_num}")[:25] if doc else f"Run {run_num}"
-                            elif ir_status == "running":
-                                title = f"Run {run_num} (running...)"
-                            elif ir_status == "pending":
-                                title = f"Run {run_num} (pending)"
-                            elif ir_status == "failed":
-                                title = f"Run {run_num} (failed)"
-                            else:
-                                title = f"Run {run_num}"
-
-                            child = ActivityItem(
-                                item_type="individual_run",
-                                item_id=ir.get("id"),
-                                title=title,
-                                status=ir_status,
-                                timestamp=item.timestamp,
-                                doc_id=ir.get("output_doc_id"),
-                                cost=ir.get("cost_usd", 0) or 0,
-                                individual_run=ir,
-                                depth=1,
-                            )
-                            children.append(child)
-                    else:
-                        # Completed: show synthesis first, then outputs
-                        if sr.get("synthesis_doc_id"):
-                            doc = doc_db.get_document(sr["synthesis_doc_id"]) if HAS_DOCS else None
-                            title = doc.get("title", "Synthesis") if doc else "Synthesis"
-                            synth = ActivityItem(
-                                item_type="synthesis",
-                                item_id=sr["synthesis_doc_id"],
-                                title=title[:30],
-                                status="completed",
-                                timestamp=item.timestamp,
-                                doc_id=sr["synthesis_doc_id"],
-                                depth=1,
-                            )
-                            children.append(synth)
-
-                            # Individual outputs
-                            for ir in ind_runs:
-                                if ir.get("output_doc_id") and ir["output_doc_id"] != sr.get("synthesis_doc_id"):
-                                    out_doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
-                                    out_title = out_doc.get("title", f"Output #{ir['run_number']}")[:25] if out_doc else f"Output #{ir['run_number']}"
-                                    out = ActivityItem(
-                                        item_type="exploration",
-                                        item_id=ir["output_doc_id"],
-                                        title=out_title,
-                                        status="completed",
-                                        timestamp=item.timestamp,
-                                        doc_id=ir["output_doc_id"],
-                                        individual_run=ir,
-                                        depth=1,
-                                    )
-                                    children.append(out)
-                        else:
-                            # No synthesis - show outputs directly
-                            for ir in ind_runs:
-                                ir_status = ir.get("status", "completed")
-                                run_num = ir.get("run_number", 0)
-                                if ir.get("output_doc_id"):
-                                    doc = doc_db.get_document(ir["output_doc_id"]) if HAS_DOCS else None
-                                    title = doc.get("title", f"Output #{run_num}")[:25] if doc else f"Output #{run_num}"
-                                    child = ActivityItem(
-                                        item_type="exploration",
-                                        item_id=ir["output_doc_id"],
-                                        title=title,
-                                        status=ir_status,
-                                        timestamp=item.timestamp,
-                                        doc_id=ir["output_doc_id"],
-                                        individual_run=ir,
-                                        depth=1,
-                                    )
-                                else:
-                                    child = ActivityItem(
-                                        item_type="individual_run",
-                                        item_id=ir.get("id"),
-                                        title=f"Run {run_num} ({ir_status})",
-                                        status=ir_status,
-                                        timestamp=item.timestamp,
-                                        individual_run=ir,
-                                        depth=1,
-                                    )
-                                children.append(child)
+            self._log_subscriber = AgentLogSubscriber(self)
+            self._log_stream = LogStream(log_path, self._log_subscriber)
+            self._log_stream.start()
         except Exception as e:
-            logger.error(f"Error expanding workflow: {e}")
+            logger.error(f"Error starting log stream: {e}")
 
-        item.children = children
-        item.expanded = True
+    def _handle_log_content(self, content: str) -> None:
+        """Handle new log content from the stream."""
+        if not self._streaming_item:
+            return
+        try:
+            preview = self.query_one("#preview-panel", PreviewPanel)
+            # Append content (PreviewPanel should handle this)
+            import asyncio
+            asyncio.create_task(preview.show_content(
+                f"# Live Log: {self._streaming_item.title}\n\n```\n{content}\n```",
+                title=f"Live: {self._streaming_item.title}"
+            ))
+        except Exception as e:
+            logger.error(f"Error updating log content: {e}")
+
+    def _stop_stream(self) -> None:
+        """Stop any active log stream."""
+        if self._log_stream:
+            try:
+                self._log_stream.stop()
+            except Exception:
+                pass
+            self._log_stream = None
+        self._log_subscriber = None
+        self._streaming_item = None
+
+    async def _update_context(self, item: ActivityItem) -> None:
+        """Update the context panel with item details."""
+        context = self.query_one("#context-panel", RichLog)
+        context.clear()
+
+        if item.item_type == "workflow" and item.workflow_run:
+            run = item.workflow_run
+            context.write(f"[bold]Workflow Run #{run['id']}[/bold]")
+            context.write(f"Status: {run.get('status', 'unknown')}")
+            context.write(f"Started: {run.get('started_at', 'unknown')}")
+            if run.get("completed_at"):
+                context.write(f"Completed: {run['completed_at']}")
+            if run.get("input_tokens"):
+                context.write(f"Input: {format_tokens(run['input_tokens'])}")
+            if run.get("output_tokens"):
+                context.write(f"Output: {format_tokens(run['output_tokens'])}")
+        elif item.item_type == "document" and item.doc_id:
+            context.write(f"[bold]Document #{item.doc_id}[/bold]")
+            context.write(f"Title: {item.title}")
+        elif item.item_type == "group" and item.group:
+            context.write(f"[bold]Group: {item.title}[/bold]")
+            context.write(f"Type: {item.group.get('group_type', 'unknown')}")
+
+    # =========================================================================
+    # Expansion/Collapse
+    # =========================================================================
+
+    async def _toggle_expand(self, item: ActivityItem) -> None:
+        """Toggle expansion of an item."""
+        if item.expanded:
+            self._collapse_item(item)
+        else:
+            await self._expand_item(item)
+
         self._flatten_items()
-        await self._update_table()
+        await self._update_list()
+
+    async def _expand_item(self, item: ActivityItem) -> None:
+        """Expand an item to show children."""
+        if item.item_type == "workflow":
+            await self._expand_workflow(item)
+        elif item.item_type == "group":
+            await self._expand_group(item)
+        item.expanded = True
+
+    async def _expand_workflow(self, item: ActivityItem) -> None:
+        """Expand a workflow to show outputs."""
+        if not HAS_WORKFLOWS or not wf_db:
+            return
+
+        run_id = item.item_id
+        output_ids = wf_db.get_workflow_output_doc_ids(run_id)
+
+        item.children = []
+        for doc_id in output_ids:
+            if HAS_DOCS and doc_db:
+                try:
+                    doc = doc_db.get_document(doc_id)
+                    if doc:
+                        child = ActivityItem(
+                            item_type="document",
+                            item_id=doc_id,
+                            title=doc.get("title", f"Doc {doc_id}"),
+                            time_ago="",
+                            icon="📄",
+                            doc_id=doc_id,
+                            parent=item,
+                        )
+                        item.children.append(child)
+                except Exception:
+                    pass
 
     async def _expand_group(self, item: ActivityItem) -> None:
-        """Expand a group to show its documents."""
-        if item.expanded:
+        """Expand a group to show members."""
+        if not HAS_GROUPS or not groups_db:
             return
 
-        children = []
-        try:
-            if HAS_GROUPS and groups_db:
-                # Get child groups first
-                child_groups = groups_db.get_child_groups(item.item_id)
-                for cg in child_groups:
-                    created = cg.get("created_at")
-                    if isinstance(created, str):
-                        from emdx.utils.datetime import parse_datetime
-                        created = parse_datetime(created)
+        group_id = item.item_id
+        members = groups_db.get_group_documents(group_id)
 
-                    child = ActivityItem(
-                        item_type="group",
-                        item_id=cg["id"],
-                        title=cg["name"][:35],
-                        status="completed",
-                        timestamp=created or item.timestamp,
-                        depth=1,
-                    )
-                    child.group_type = cg.get("group_type", "batch")
-                    child.doc_count = groups_db.get_recursive_doc_count(cg["id"])
-                    child._has_group_children = child.doc_count > 0
-                    children.append(child)
-
-                # Get direct member documents
-                members = groups_db.get_group_members(item.item_id)
-                for member in members:
-                    doc_id = member.get("document_id")
-                    if doc_id and HAS_DOCS:
-                        doc = doc_db.get_document(doc_id)
-                        if doc:
-                            child = ActivityItem(
-                                item_type="document",
-                                item_id=doc_id,
-                                title=doc.get("title", "Untitled")[:35],
-                                status="completed",
-                                timestamp=item.timestamp,
-                                doc_id=doc_id,
-                                depth=1,
-                            )
-                            children.append(child)
-        except Exception as e:
-            logger.error(f"Error expanding group: {e}")
-
-        item.children = children
-        item.expanded = True
-        self._flatten_items()
-        await self._update_table()
-
-    async def _expand_document(self, item: ActivityItem) -> None:
-        """Expand a document to show its children."""
-        if item.expanded or not item._has_doc_children:
-            return
-
-        children = []
-        try:
-            if HAS_DOCS and doc_db:
-                child_docs = doc_db.get_children(item.doc_id, include_archived=False)
-                for doc in child_docs:
-                    created = doc.get("created_at")
-                    child = ActivityItem(
-                        item_type="document",
-                        item_id=doc["id"],
-                        title=doc.get("title", "Untitled")[:35],
-                        status="completed",
-                        timestamp=created or item.timestamp,
-                        doc_id=doc["id"],
-                        depth=1,
-                    )
-                    children.append(child)
-        except Exception as e:
-            logger.error(f"Error expanding document: {e}")
-
-        item.children = children
-        item.expanded = True
-        self._flatten_items()
-        await self._update_table()
+        item.children = []
+        for member in members:
+            doc_id = member.get("document_id")
+            if doc_id and HAS_DOCS and doc_db:
+                try:
+                    doc = doc_db.get_document(doc_id)
+                    if doc:
+                        child = ActivityItem(
+                            item_type="document",
+                            item_id=doc_id,
+                            title=doc.get("title", f"Doc {doc_id}"),
+                            time_ago="",
+                            icon="📄",
+                            doc_id=doc_id,
+                            parent=item,
+                        )
+                        item.children.append(child)
+                except Exception:
+                    pass
 
     def _collapse_item(self, item: ActivityItem) -> None:
         """Collapse an item."""
         item.expanded = False
         item.children = []
-
-    async def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Handle row selection."""
-        if event.row_key is not None:
-            self.selected_idx = event.cursor_row
-            await self._update_preview()
-            await self._update_context()
-
-    async def _update_preview(self, force: bool = False) -> None:
-        """Update preview pane."""
-        from pathlib import Path
-        from rich.markup import escape as escape_markup
-
-        try:
-            preview = self.query_one("#preview-content", RichLog)
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-            preview_log = self.query_one("#preview-log", RichLog)
-            header = self.query_one("#preview-header", Static)
-        except Exception:
-            return
-
-        def show_markdown():
-            preview_scroll.display = True
-            preview_log.display = False
-
-        def show_log():
-            preview_scroll.display = False
-            preview_log.display = True
-
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            preview.clear()
-            preview.write("[dim]Select an item to preview[/dim]")
-            show_markdown()
-            header.update("PREVIEW")
-            self._last_preview_key = None
-            return
-
-        item = self.flat_items[self.selected_idx]
-        current_key = (item.item_type, item.item_id, item.status)
-
-        # Skip update if same item and not forced (prevents flickering during refresh)
-        # Always update for running items (logs change) or if explicitly forced
-        if not force and item.status != "running" and self._last_preview_key == current_key:
-            return
-
-        self._last_preview_key = current_key
-
-        # Stop any existing stream
-        self._stop_stream()
-
-        # For running workflows or individual runs, show live log
-        if item.status == "running" and item.item_type in ("workflow", "individual_run"):
-            await self._show_live_log(item)
-            return
-
-        # For documents, show content
-        preview.clear()
-        if item.doc_id and HAS_DOCS:
-            try:
-                doc = doc_db.get_document(item.doc_id)
-                if doc:
-                    content = doc.get("content", "")
-                    title = doc.get("title", "Untitled")
-                    header.update(f"📄 #{item.doc_id}")
-
-                    if content.strip():
-                        from emdx.ui.markdown_config import MarkdownConfig
-                        if len(content) > 50000:
-                            content = content[:50000] + "\n\n[dim]... (truncated)[/dim]"
-                        try:
-                            md = MarkdownConfig.create_markdown(content)
-                            preview.write(md)
-                        except Exception:
-                            preview.write(content)
-                    else:
-                        preview.write("[dim]Empty document[/dim]")
-                    show_markdown()
-                    return
-            except Exception as e:
-                logger.debug(f"Error loading preview: {e}")
-
-        # Default
-        show_markdown()
-        header.update("PREVIEW")
-        preview.write(f"[dim]{item.title}[/dim]\n\n[dim]No content available[/dim]")
-
-    async def _show_live_log(self, item: ActivityItem) -> None:
-        """Show live log for running workflow or individual run."""
-        from pathlib import Path
-        from rich.markup import escape as escape_markup
-
-        try:
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-            preview_log = self.query_one("#preview-log", RichLog)
-            header = self.query_one("#preview-header", Static)
-        except Exception as e:
-            logger.debug(f"Preview widgets not ready for live log: {e}")
-            return
-
-        preview_scroll.display = False
-        preview_log.display = True
-        preview_log.clear()
-
-        header.update(f"[green]● LIVE[/green] {item.title[:40]}")
-
-        if not HAS_WORKFLOWS or not wf_db:
-            preview_log.write("[dim]Workflow system not available[/dim]")
-            return
-
-        if not HAS_LOG_STREAM or not LogStream:
-            preview_log.write("[dim]Log streaming not available[/dim]")
-            return
-
-        try:
-            log_path = None
-
-            # For individual runs, get log file from the execution record
-            if item.item_type == "individual_run" and item.item_id:
-                try:
-                    from emdx.models.executions import get_execution
-                    ir = wf_db.get_individual_run(item.item_id)
-                    if ir and ir.get("agent_execution_id"):
-                        exec_record = get_execution(ir["agent_execution_id"])
-                        if exec_record and exec_record.log_file:
-                            log_path = Path(exec_record.log_file)
-                except Exception as e:
-                    logger.debug(f"Could not get individual run log: {e}")
-
-            # For workflow runs, find active execution
-            elif item.item_type == "workflow" and item.workflow_run:
-                run = item.workflow_run
-                active_exec = wf_db.get_active_execution_for_run(run["id"])
-                if active_exec and active_exec.get("log_file"):
-                    log_path = Path(active_exec["log_file"])
-
-            if not log_path:
-                preview_log.write(f"[yellow]⏳ Waiting for log...[/yellow]")
-                return
-
-            if not log_path.exists():
-                preview_log.write(f"[yellow]⏳ Log file pending...[/yellow]")
-                return
-
-            # Start streaming
-            self.log_stream = LogStream(log_path)
-            self.streaming_item_id = item.item_id
-
-            # Show initial content
-            initial = self.log_stream.get_initial_content()
-            if initial:
-                for line in initial.strip().split("\n")[-50:]:
-                    preview_log.write(escape_markup(line))
-                preview_log.scroll_end(animate=False)
-
-            self.log_stream.subscribe(self.log_subscriber)
-
-        except Exception as e:
-            logger.error(f"Error setting up live log: {e}", exc_info=True)
-            preview_log.write(f"[red]Error: {e}[/red]")
-
-    def _handle_log_content(self, content: str) -> None:
-        """Handle new log content from stream."""
-        from rich.markup import escape as escape_markup
-
-        try:
-            preview_log = self.query_one("#preview-log", RichLog)
-            for line in content.splitlines():
-                preview_log.write(escape_markup(line))
-            preview_log.scroll_end(animate=False)
-        except Exception as e:
-            logger.error(f"Error handling log content: {e}")
-
-    def _stop_stream(self) -> None:
-        """Stop any active log stream."""
-        if self.log_stream:
-            self.log_stream.unsubscribe(self.log_subscriber)
-            self.log_stream = None
-        self.streaming_item_id = None
-
-    async def _update_context(self) -> None:
-        """Update the context panel with details about selected item."""
-        try:
-            context = self.query_one("#context-content", RichLog)
-            header = self.query_one("#context-header", Static)
-        except Exception:
-            return
-
-        context.clear()
-
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            header.update("DETAILS")
-            context.write("[dim]Select an item to see details[/dim]")
-            return
-
-        item = self.flat_items[self.selected_idx]
-
-        # Workflow run details
-        if item.item_type == "workflow" and item.workflow_run:
-            await self._show_workflow_context(item, context, header)
-        # Document details
-        elif item.doc_id:
-            await self._show_document_context(item, context, header)
-        # Group details
-        elif item.item_type == "group":
-            await self._show_group_context(item, context, header)
-        # Individual run details
-        elif item.item_type == "individual_run" or item.individual_run:
-            await self._show_individual_run_context(item, context, header)
-        else:
-            header.update("DETAILS")
-            context.write(f"[dim]{item.item_type}: {item.title}[/dim]")
-
-    async def _show_workflow_context(
-        self, item: ActivityItem, content: RichLog, header: Static
-    ) -> None:
-        """Show workflow run details in context panel."""
-        import re
-        import textwrap
-
-        run = item.workflow_run
-        if not run:
-            return
-
-        status = run.get("status", "unknown")
-        status_colors = {"completed": "green", "failed": "red", "running": "yellow"}
-        status_color = status_colors.get(status, "white")
-
-        header.update(f"⚡ #{run['id']} [{status_color}]{status}[/{status_color}]")
-
-        # For running workflows, show progress prominently
-        if status == "running" and item.progress_total:
-            progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
-            content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
-            if item.progress_stage:
-                content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
-
-        # Timing info as compact line
-        timing_parts = []
-        if run.get("total_execution_time_ms"):
-            secs = run["total_execution_time_ms"] / 1000
-            timing_parts.append(f"{secs:.1f}s" if secs < 60 else f"{secs/60:.1f}m")
-        if run.get("total_tokens_used"):
-            timing_parts.append(f"{format_tokens(run['total_tokens_used'])}")
-        if item.cost:
-            timing_parts.append(format_cost(item.cost))
-        if timing_parts:
-            content.write(f"[dim]{' · '.join(timing_parts)}[/dim]")
-
-        # Tasks from input variables
-        if run.get("input_variables"):
-            try:
-                vars_data = run["input_variables"]
-                if isinstance(vars_data, str):
-                    vars_data = json.loads(vars_data)
-                tasks = vars_data.get("tasks", [])
-                if tasks:
-                    content.write("")
-                    content.write(f"[bold cyan]─── Tasks ({len(tasks)}) ───[/bold cyan]")
-                    wrap_width = 50
-                    max_num_width = len(str(len(tasks))) + 2
-                    indent = " " * max_num_width
-                    for i, task in enumerate(tasks):
-                        num_str = f"{i+1}.".rjust(max_num_width - 1) + " "
-                        if isinstance(task, int):
-                            task_str = f"#{task}"
-                            if HAS_DOCS:
-                                try:
-                                    doc = doc_db.get_document(task)
-                                    if doc and doc.get("title"):
-                                        task_str = f"#{task}: {doc['title']}"
-                                except Exception:
-                                    pass
-                            wrapped = textwrap.fill(
-                                task_str,
-                                width=wrap_width,
-                                initial_indent=num_str,
-                                subsequent_indent=indent,
-                            )
-                            content.write(f"[cyan]{wrapped}[/cyan]")
-                        else:
-                            task_str = str(task)
-                            wrapped = textwrap.fill(
-                                task_str,
-                                width=wrap_width,
-                                initial_indent=num_str,
-                                subsequent_indent=indent,
-                            )
-                            content.write(wrapped)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-        # Stages
-        if HAS_WORKFLOWS and wf_db:
-            stage_runs = wf_db.list_stage_runs(run["id"])
-            if stage_runs:
-                content.write("")
-                content.write(f"[bold cyan]─── Stages ───[/bold cyan]")
-                for sr in stage_runs:
-                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
-                    content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
-
-                # Show prompt from first individual run
-                for sr in stage_runs:
-                    ind_runs = wf_db.list_individual_runs(sr["id"])
-                    if ind_runs:
-                        first_run = ind_runs[0]
-                        prompt = first_run.get("prompt_used", "")
-                        if prompt:
-                            task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
-                            if task_match:
-                                task_text = task_match.group(1).strip()
-                            else:
-                                task_text = prompt.split("\n")[0]
-
-                            content.write("")
-                            label = "Current Prompt" if status == "running" else "Prompt"
-                            content.write(f"[bold cyan]─── {label} ───[/bold cyan]")
-                            wrap_width = 50
-                            wrapped = textwrap.fill(task_text, width=wrap_width)
-                            for line in wrapped.split("\n"):
-                                content.write(f"[dim]{line}[/dim]")
-                            break
-
-        # Error if any
-        if run.get("error_message"):
-            content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
-
-    async def _show_document_context(
-        self, item: ActivityItem, content: RichLog, header: Static
-    ) -> None:
-        """Show document metadata in context panel."""
-        import re
-        import textwrap
-
-        if not HAS_DOCS or not item.doc_id:
-            header.update("DOCUMENT")
-            return
-
-        try:
-            doc = doc_db.get_document(item.doc_id)
-            if not doc:
-                header.update(f"📄 #{item.doc_id}")
-                return
-
-            header.update(f"📄 #{doc['id']}")
-
-            # Get tags for this document
-            tags = []
-            try:
-                from emdx.models.tags import get_document_tags
-                tags = get_document_tags(item.doc_id)
-            except ImportError:
-                pass
-
-            # Check if this doc came from a workflow
-            source = doc_db.get_document_source(item.doc_id)
-            if source and HAS_WORKFLOWS:
-                run_id = source.get("workflow_run_id")
-                ind_run_id = source.get("workflow_individual_run_id")
-
-                if run_id:
-                    run = wf_db.get_workflow_run(run_id)
-                    if run:
-                        wf = wf_db.get_workflow(run.get("workflow_id"))
-                        wf_name = wf.get("name", "workflow") if wf else "workflow"
-                        content.write(f"[dim]Source:[/dim] {wf_name} [cyan]#w{run_id}[/cyan]")
-
-                # Get the prompt that created this doc
-                if ind_run_id:
-                    ind_run = wf_db.get_individual_run(ind_run_id)
-                    if ind_run:
-                        # Show cost/time for this specific run
-                        meta_parts = []
-                        if ind_run.get("cost_usd"):
-                            meta_parts.append(format_cost(ind_run["cost_usd"]))
-                        if ind_run.get("execution_time_ms"):
-                            secs = ind_run["execution_time_ms"] / 1000
-                            meta_parts.append(f"{secs:.0f}s" if secs < 60 else f"{secs/60:.1f}m")
-                        if ind_run.get("tokens_used"):
-                            meta_parts.append(format_tokens(ind_run["tokens_used"]))
-                        if meta_parts:
-                            content.write(f"[dim]{' · '.join(meta_parts)}[/dim]")
-
-                        # Show the prompt (extract task portion)
-                        prompt = ind_run.get("prompt_used", "")
-                        if prompt:
-                            task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
-                            if task_match:
-                                task_text = task_match.group(1).strip()
-                            else:
-                                task_text = prompt.split("\n")[0]
-
-                            content.write("")
-                            content.write("[bold cyan]─── Prompt ───[/bold cyan]")
-                            wrap_width = 50
-                            wrapped = textwrap.fill(task_text, width=wrap_width)
-                            for line in wrapped.split("\n"):
-                                content.write(f"[dim]{line}[/dim]")
-
-                # Show tags at the end for workflow docs
-                if tags:
-                    content.write("")
-                    content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
-            else:
-                # Not from workflow - show richer metadata
-                meta_line1 = []
-                if doc.get("project"):
-                    meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
-                if doc.get("created_at"):
-                    from emdx.utils.datetime import parse_datetime
-                    created_dt = parse_datetime(doc["created_at"])
-                    if created_dt:
-                        meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
-                if meta_line1:
-                    content.write(" · ".join(meta_line1))
-
-                # Word count and access count
-                meta_line2 = []
-                doc_content = doc.get("content", "")
-                word_count = len(doc_content.split())
-                meta_line2.append(f"{word_count} words")
-                access_count = doc.get("access_count", 0)
-                if access_count and access_count > 1:
-                    meta_line2.append(f"{access_count} views")
-                content.write(f"[dim]{' · '.join(meta_line2)}[/dim]")
-
-                # Tags
-                if tags:
-                    content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
-
-        except Exception as e:
-            logger.error(f"Error showing document context: {e}")
-
-    async def _show_group_context(
-        self, item: ActivityItem, content: RichLog, header: Static
-    ) -> None:
-        """Show group details in context panel."""
-        if not HAS_GROUPS:
-            header.update("GROUP")
-            return
-
-        try:
-            group = groups_db.get_group(item.item_id)
-            if not group:
-                header.update(f"📦 #{item.item_id}")
-                return
-
-            header.update(f"📦 {group['name']}")
-            content.write(f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]")
-
-            if group.get("description"):
-                content.write(f"{group['description'][:100]}")
-
-        except Exception as e:
-            logger.error(f"Error showing group context: {e}")
-
-    async def _show_individual_run_context(
-        self, item: ActivityItem, content: RichLog, header: Static
-    ) -> None:
-        """Show individual run details in context panel."""
-        import re
-        import textwrap
-
-        run = item.individual_run or item.workflow_run
-        if not run:
-            header.update("RUN")
-            return
-
-        status = run.get("status", item.status or "unknown")
-        status_colors = {"completed": "green", "failed": "red", "running": "yellow"}
-        status_color = status_colors.get(status, "white")
-
-        run_num = run.get("run_number", "?")
-        header.update(f"🤖 Run {run_num} [{status_color}]{status}[/{status_color}]")
-
-        # Stats
-        stats_parts = []
-        if run.get("execution_time_ms"):
-            secs = run["execution_time_ms"] / 1000
-            stats_parts.append(f"{secs:.1f}s")
-        if run.get("input_tokens") or run.get("output_tokens"):
-            stats_parts.append(f"{format_tokens(run.get('input_tokens', 0))}↓ {format_tokens(run.get('output_tokens', 0))}↑")
-        if run.get("cost_usd"):
-            stats_parts.append(f"${run['cost_usd']:.2f}")
-        if stats_parts:
-            content.write(f"[dim]{' · '.join(stats_parts)}[/dim]")
-
-        if run.get("error_message"):
-            content.write(f"[red]Error: {run['error_message'][:100]}[/red]")
-
-        # Show the prompt (extract task portion)
-        prompt = run.get("prompt_used", "")
-        if prompt:
-            task_match = re.search(r"## Task\s*\n(.+?)(?=\n## |\Z)", prompt, re.DOTALL)
-            if task_match:
-                task_text = task_match.group(1).strip()
-            else:
-                task_text = prompt.split("\n")[0]
-
-            content.write("")
-            content.write("[bold cyan]─── Prompt ───[/bold cyan]")
-            wrap_width = 50
-            wrapped = textwrap.fill(task_text, width=wrap_width)
-            for line in wrapped.split("\n"):
-                content.write(f"[dim]{line}[/dim]")
 
     # =========================================================================
     # Actions
@@ -1589,241 +754,122 @@ class ActivityBrowser(HelpMixin, Widget):
 
     def action_cursor_down(self) -> None:
         """Move cursor down."""
-        table = self.query_one("#activity-table", DataTable)
-        table.action_cursor_down()
+        list_panel = self.query_one("#activity-list", ListPanel)
+        list_panel.action_cursor_down()
 
     def action_cursor_up(self) -> None:
         """Move cursor up."""
-        table = self.query_one("#activity-table", DataTable)
-        table.action_cursor_up()
+        list_panel = self.query_one("#activity-list", ListPanel)
+        list_panel.action_cursor_up()
 
     async def action_select(self) -> None:
-        """Select/expand current item - matches original behavior."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            return
-
-        item = self.flat_items[self.selected_idx]
-
-        if item.item_type == "workflow" and not item.expanded:
-            await self._expand_workflow(item)
-        elif item.item_type == "group" and not item.expanded and item._has_group_children:
-            await self._expand_group(item)
-        elif item.item_type == "document" and not item.expanded and item._has_doc_children:
-            await self._expand_document(item)
-        elif item.expanded:
-            self._collapse_item(item)
-            self._flatten_items()
-            await self._update_table()
-        # No action for leaf items - preview is already visible on the right
+        """Select/expand current item."""
+        if self.selected_idx < len(self.flat_items):
+            item = self.flat_items[self.selected_idx]
+            await self._toggle_expand(item)
 
     async def action_expand(self) -> None:
         """Expand current item."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            return
-
-        item = self.flat_items[self.selected_idx]
-        if item.item_type == "workflow" and not item.expanded:
-            await self._expand_workflow(item)
-        elif item.item_type == "group" and not item.expanded and item._has_group_children:
-            await self._expand_group(item)
-        elif item.item_type == "document" and not item.expanded and item._has_doc_children:
-            await self._expand_document(item)
+        if self.selected_idx < len(self.flat_items):
+            item = self.flat_items[self.selected_idx]
+            if not item.expanded:
+                await self._expand_item(item)
+                self._flatten_items()
+                await self._update_list()
 
     async def action_collapse(self) -> None:
         """Collapse current item or go to parent."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            return
-
-        item = self.flat_items[self.selected_idx]
-
-        if item.expanded:
-            self._collapse_item(item)
-            self._flatten_items()
-            await self._update_table()
-        elif item.depth > 0:
-            # Navigate to parent
-            for idx in range(self.selected_idx - 1, -1, -1):
-                if self.flat_items[idx].depth < item.depth:
-                    self.selected_idx = idx
-                    table = self.query_one("#activity-table", DataTable)
-                    table.move_cursor(row=idx)
-                    break
+        if self.selected_idx < len(self.flat_items):
+            item = self.flat_items[self.selected_idx]
+            if item.expanded:
+                self._collapse_item(item)
+                self._flatten_items()
+                await self._update_list()
+            elif item.parent:
+                # Move to parent
+                for i, flat_item in enumerate(self.flat_items):
+                    if flat_item is item.parent:
+                        self.selected_idx = i
+                        list_panel = self.query_one("#activity-list", ListPanel)
+                        list_panel.select_item_by_index(i)
+                        break
 
     def action_fullscreen(self) -> None:
-        """View selected item fullscreen."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            return
-        item = self.flat_items[self.selected_idx]
-        if item.doc_id:
-            self.post_message(self.ViewDocument(item.doc_id))
+        """View selected document fullscreen."""
+        if self.selected_idx < len(self.flat_items):
+            item = self.flat_items[self.selected_idx]
+            if item.doc_id:
+                self.post_message(self.ViewDocument(item.doc_id))
 
     def action_refresh(self) -> None:
-        """Refresh data."""
+        """Refresh the activity list."""
         import asyncio
-        asyncio.create_task(self.load_data())
+        asyncio.create_task(self._refresh_data())
         self.notify("Refreshed")
 
     def action_add_to_group(self) -> None:
-        """Show group picker to add selected document, group, or workflow to another group."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+        """Show group picker to add item to group."""
+        if self.selected_idx >= len(self.flat_items):
             return
-
         item = self.flat_items[self.selected_idx]
         picker = self.query_one("#group-picker", GroupPicker)
 
-        # Handle groups - nest under another group
         if item.item_type == "group":
             picker.show(source_group_id=item.item_id)
-            return
-
-        # Handle workflows - group all outputs under a parent group
-        if item.item_type == "workflow" and item.workflow_run:
+        elif item.item_type == "workflow" and item.workflow_run:
             picker.show(workflow_run_id=item.workflow_run.get("id"))
-            return
-
-        # Handle documents
-        if item.doc_id:
+        elif item.doc_id:
             picker.show(doc_id=item.doc_id)
-            return
-
-        self.notify("Select a document, group, or workflow")
+        else:
+            self.notify("Select a document, group, or workflow")
 
     async def action_create_group(self) -> None:
-        """Create a new group from the selected document."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            return
-
-        item = self.flat_items[self.selected_idx]
-
-        if not item.doc_id:
-            self.notify("Select a document to create a group from")
-            return
-
-        if not HAS_GROUPS or not groups_db:
-            self.notify("Groups not available")
-            return
-
-        try:
-            doc = doc_db.get_document(item.doc_id) if HAS_DOCS else None
-            doc_title = doc.get("title", "Untitled") if doc else "Untitled"
-
-            # Create group named after the document
-            group_name = f"{doc_title[:30]} Group"
-            group_id = groups_db.create_group(
-                name=group_name,
-                group_type="batch",
-            )
-
-            # Add the document to it
-            groups_db.add_document_to_group(group_id, item.doc_id, role="primary")
-
-            self.notify(f"Created group '{group_name}'")
-            await self._refresh_data()
-
-        except Exception as e:
-            logger.error(f"Error creating group: {e}")
-            self.notify(f"Error: {e}")
+        """Create a new group."""
+        picker = self.query_one("#group-picker", GroupPicker)
+        picker.show(create_mode=True)
 
     async def action_create_gist(self) -> None:
-        """Create a copy of the currently selected document."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
-            self.notify("No item selected")
-            return
-
-        item = self.flat_items[self.selected_idx]
-
-        if not item.doc_id:
-            self.notify("Select a document to gist")
-            return
-
+        """Create a new gist document."""
         if not HAS_DOCS or not doc_db:
             self.notify("Documents not available")
             return
-
         try:
-            doc = doc_db.get_document(item.doc_id)
-            if not doc:
-                self.notify("Document not found")
-                return
-
-            title = doc.get("title", "Untitled")
-            content = doc.get("content", "")
-
             from emdx.database.documents import save_document
             from emdx.utils.git import get_git_project
-
             project = get_git_project()
-            new_doc_id = save_document(
-                title=f"{title} (copy)",
-                content=content,
-                project=project,
-            )
-
-            self.notify(f"Created gist #{new_doc_id}")
+            doc_id = save_document(title="New Gist", content="", project=project)
+            self.notify(f"Created gist #{doc_id}")
             await self._refresh_data()
-
         except Exception as e:
-            logger.error(f"Error creating gist: {e}")
             self.notify(f"Error: {e}")
 
     async def action_ungroup(self) -> None:
-        """Remove selected item from its parent group."""
-        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+        """Remove item from its group."""
+        if self.selected_idx >= len(self.flat_items):
             return
-
         item = self.flat_items[self.selected_idx]
-
-        if not HAS_GROUPS or not groups_db:
-            self.notify("Groups not available")
-            return
-
-        try:
-            # Handle ungrouping a group (remove from parent)
-            if item.item_type == "group":
-                group = groups_db.get_group(item.item_id)
-                if not group or not group.get("parent_group_id"):
-                    self.notify("Group has no parent")
-                    return
-                groups_db.update_group(item.item_id, parent_group_id=None)
-                self.notify(f"Removed '{group['name']}' from parent")
-                await self._refresh_data()
-                return
-
-            # Handle ungrouping a document
-            if item.doc_id:
-                doc_groups = groups_db.get_document_groups(item.doc_id)
-                if not doc_groups:
-                    self.notify("Document is not in any group")
-                    return
-
-                # Remove from all groups
-                for group in doc_groups:
-                    groups_db.remove_document_from_group(group["id"], item.doc_id)
-
-                group_names = ", ".join(g["name"][:20] for g in doc_groups)
-                self.notify(f"Removed from: {group_names}")
-                await self._refresh_data()
-                return
-
-            self.notify("Select a document or group to ungroup")
-
-        except Exception as e:
-            logger.error(f"Error ungrouping: {e}")
-            self.notify(f"Error: {e}")
+        if item.parent and item.parent.item_type == "group" and item.doc_id:
+            if HAS_GROUPS and groups_db:
+                try:
+                    groups_db.remove_document_from_group(item.parent.item_id, item.doc_id)
+                    self.notify(f"Removed from group")
+                    await self._refresh_data()
+                except Exception as e:
+                    self.notify(f"Error: {e}")
 
     def action_focus_next(self) -> None:
-        """Focus next pane."""
-        self.focus_next()
+        """Focus next panel."""
+        try:
+            preview = self.query_one("#preview-panel", PreviewPanel)
+            preview.focus()
+        except Exception:
+            pass
 
     def action_focus_prev(self) -> None:
-        """Focus previous pane."""
-        self.focus_previous()
-
-    def focus(self, scroll_visible: bool = True) -> None:
-        """Focus the table."""
+        """Focus previous panel."""
         try:
-            table = self.query_one("#activity-table", DataTable)
-            table.focus()
+            list_panel = self.query_one("#activity-list", ListPanel)
+            list_panel.focus()
         except Exception:
             pass
 
@@ -1832,112 +878,90 @@ class ActivityBrowser(HelpMixin, Widget):
     # =========================================================================
 
     async def on_group_picker_group_selected(self, event: GroupPicker.GroupSelected) -> None:
-        """Handle group selection from picker."""
+        """Handle group selection."""
         if not HAS_GROUPS or not groups_db:
             return
-
         try:
             if event.workflow_run_id:
-                # Grouping a workflow - find/create group for workflow and nest under selected
                 await self._group_workflow_under(event.workflow_run_id, event.group_id, event.group_name)
             elif event.source_group_id:
-                # Nesting a group under another group
                 groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
                 self.notify(f"Moved group under '{event.group_name}'")
             elif event.doc_id:
-                # Adding a document to a group
                 groups_db.add_document_to_group(event.group_id, event.doc_id)
                 self.notify(f"Added to '{event.group_name}'")
             await self._refresh_data()
         except Exception as e:
-            logger.error(f"Error in group operation: {e}")
             self.notify(f"Error: {e}")
 
-        # Refocus the table
-        table = self.query_one("#activity-table", DataTable)
-        table.focus()
+        list_panel = self.query_one("#activity-list", ListPanel)
+        list_panel.focus()
 
     async def on_group_picker_group_created(self, event: GroupPicker.GroupCreated) -> None:
-        """Handle new group creation from picker."""
+        """Handle new group creation."""
         if not HAS_GROUPS or not groups_db:
             return
-
         try:
             if event.workflow_run_id:
-                # Grouping a workflow under a new group
                 await self._group_workflow_under(event.workflow_run_id, event.group_id, event.group_name)
             elif event.source_group_id:
-                # Move source group under the new group
                 groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
                 self.notify(f"Created '{event.group_name}' and moved group under it")
             elif event.doc_id:
-                # Add document to the new group
                 groups_db.add_document_to_group(event.group_id, event.doc_id)
                 self.notify(f"Created '{event.group_name}' and added document")
             await self._refresh_data()
         except Exception as e:
-            logger.error(f"Error in group operation: {e}")
             self.notify(f"Error: {e}")
 
-        # Refocus the table
-        table = self.query_one("#activity-table", DataTable)
-        table.focus()
+        list_panel = self.query_one("#activity-list", ListPanel)
+        list_panel.focus()
 
     async def _group_workflow_under(self, workflow_run_id: int, parent_group_id: int, parent_name: str) -> None:
-        """Group a workflow's outputs under a parent group.
-
-        Finds or creates a group for the workflow run and nests it under the parent.
-        """
+        """Group a workflow's outputs under a parent group."""
         if not HAS_WORKFLOWS or not wf_db:
             return
 
-        # Get workflow run info
         run = wf_db.get_workflow_run(workflow_run_id)
         if not run:
             self.notify("Workflow run not found")
             return
 
-        # Get workflow name from the workflow definition
-        workflow_id = run.get("workflow_id")
-        workflow = wf_db.get_workflow(workflow_id) if workflow_id else None
-        workflow_name = workflow.get("name", "Workflow") if workflow else "Workflow"
+        wf_id = run.get("workflow_id")
+        wf = wf_db.get_workflow(wf_id) if wf_id else None
+        wf_name = wf.get("name", "Workflow") if wf else "Workflow"
 
-        # Check if workflow already has a group
         existing_groups = groups_db.list_groups(workflow_run_id=workflow_run_id)
-
         if existing_groups:
-            # Move existing group(s) under the parent
             for grp in existing_groups:
                 if grp.get("parent_group_id") != parent_group_id:
                     groups_db.update_group(grp["id"], parent_group_id=parent_group_id)
             self.notify(f"Moved workflow under '{parent_name}'")
         else:
-            # Create a new group for this workflow's outputs
             wf_group_id = groups_db.create_group(
-                name=f"{workflow_name} #{workflow_run_id}",
+                name=f"{wf_name} #{workflow_run_id}",
                 group_type="batch",
                 parent_group_id=parent_group_id,
                 workflow_run_id=workflow_run_id,
                 created_by="user",
             )
-
-            # Add all workflow output documents to this group
-            output_doc_ids = wf_db.get_workflow_output_doc_ids(workflow_run_id)
-            added_count = 0
-            for doc_id in output_doc_ids:
+            output_ids = wf_db.get_workflow_output_doc_ids(workflow_run_id)
+            for doc_id in output_ids:
                 try:
-                    if groups_db.add_document_to_group(wf_group_id, doc_id, role="member"):
-                        added_count += 1
-                except Exception as e:
-                    logger.warning(f"Failed to add doc {doc_id} to group: {e}")
-
-            if added_count > 0:
-                self.notify(f"Grouped {added_count} docs under '{parent_name}'")
-            else:
-                self.notify(f"Created group under '{parent_name}' (no docs found)")
+                    groups_db.add_document_to_group(wf_group_id, doc_id, role="member")
+                except Exception:
+                    pass
+            self.notify(f"Grouped under '{parent_name}'")
 
     def on_group_picker_cancelled(self, event: GroupPicker.Cancelled) -> None:
         """Handle picker cancellation."""
-        # Refocus the table
-        table = self.query_one("#activity-table", DataTable)
-        table.focus()
+        list_panel = self.query_one("#activity-list", ListPanel)
+        list_panel.focus()
+
+    def focus(self, scroll_visible: bool = True) -> None:
+        """Focus the list panel."""
+        try:
+            list_panel = self.query_one("#activity-list", ListPanel)
+            list_panel.focus()
+        except Exception:
+            pass
