@@ -102,3 +102,9 @@ class ActivityBrowser(Widget):
             except Exception:
                 # Widget not mounted yet, will focus on mount
                 pass
+
+    async def select_document_by_id(self, doc_id: int) -> bool:
+        """Select and show a document by its ID in the activity view."""
+        if self.activity_view:
+            return await self.activity_view.select_document_by_id(doc_id)
+        return False

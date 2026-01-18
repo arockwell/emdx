@@ -1666,6 +1666,58 @@ def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_031_add_cascade_runs(conn: sqlite3.Connection):
+    """Add cascade_runs table to track end-to-end cascade executions.
+
+    This enables:
+    - Tracking a document through its entire cascade journey
+    - Grouping related executions in the activity view
+    - Supporting --auto mode with stop stage
+    - Showing cascade progress as a unit
+    """
+    cursor = conn.cursor()
+
+    # Create cascade_runs table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cascade_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            start_doc_id INTEGER NOT NULL,
+            current_doc_id INTEGER,
+            start_stage TEXT NOT NULL,
+            stop_stage TEXT NOT NULL DEFAULT 'done',
+            current_stage TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'running'
+                CHECK (status IN ('running', 'completed', 'failed', 'paused')),
+            pr_url TEXT,
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_message TEXT,
+            FOREIGN KEY (start_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (current_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Index for finding active runs
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_runs_status
+        ON cascade_runs(status)
+    """)
+
+    # Index for finding runs by document
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc
+        ON cascade_runs(start_doc_id)
+    """)
+
+    # Add cascade_run_id to executions table to link executions to runs
+    cursor.execute("""
+        ALTER TABLE executions ADD COLUMN cascade_run_id INTEGER
+        REFERENCES cascade_runs(id)
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1699,6 +1751,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (28, "Add document stage for cascade", migration_028_add_document_stage),
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
+    (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
 ]
 
 
