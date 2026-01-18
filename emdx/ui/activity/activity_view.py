@@ -168,6 +168,8 @@ class ActivityItem:
     def status_icon(self) -> str:
         if self.status == "running":
             return "🔄"
+        elif self.status == "synthesizing":
+            return "🔮"
         elif self.status == "completed":
             return "✅"
         elif self.status == "failed":
@@ -558,6 +560,7 @@ class ActivityView(HelpMixin, Widget):
                     total_target = 0
                     total_completed = 0
                     current_stage = ""
+                    is_synthesizing = False
                     # Token tracking (input/output separately)
                     total_input_tokens = 0
                     total_output_tokens = 0
@@ -567,9 +570,12 @@ class ActivityView(HelpMixin, Widget):
                         completed = sr.get("runs_completed", 0)
                         total_target += target
                         total_completed += completed
-                        # Track current running stage
+                        # Track current running or synthesizing stage
                         if sr.get("status") == "running":
                             current_stage = sr.get("stage_name", "")
+                        elif sr.get("status") == "synthesizing":
+                            current_stage = sr.get("stage_name", "")
+                            is_synthesizing = True
                         # Check synthesis FIRST (prefer over individual outputs)
                         if sr.get("synthesis_doc_id"):
                             output_count += 1
@@ -597,6 +603,7 @@ class ActivityView(HelpMixin, Widget):
                         item.progress_completed = total_completed
                         item.progress_total = total_target
                         item.progress_stage = current_stage
+                        item._is_synthesizing = is_synthesizing
                     # For completed workflows, set doc_id to the output document
                     # Also use the output document's timestamp for consistent sorting
                     if output_doc_id and run.get("status") in ("completed", "failed"):
@@ -877,21 +884,25 @@ class ActivityView(HelpMixin, Widget):
             # For running workflows, show progress bar + stage instead of badge
             progress_str = ""
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
-                # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
-                # Width=10 gives perfect accuracy for 4 and 5 task workflows
-                pct = item.progress_completed / item.progress_total
-                bar_width = 10
-                filled_exact = pct * bar_width
-                filled_full = int(filled_exact)
-                remainder = filled_exact - filled_full
-                # Partial block characters for the fractional part
-                partial_chars = " ▏▎▍▌▋▊▉█"
-                partial_idx = int(remainder * 8)
-                partial = partial_chars[partial_idx] if partial_idx > 0 else ""
-                empty = bar_width - filled_full - (1 if partial else 0)
-                bar = "█" * filled_full + partial + "░" * empty
-                progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
+                # Check if in synthesis phase
+                if getattr(item, '_is_synthesizing', False):
+                    progress_str = " 🔮 Synthesizing..."
+                else:
+                    # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
+                    # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
+                    # Width=10 gives perfect accuracy for 4 and 5 task workflows
+                    pct = item.progress_completed / item.progress_total
+                    bar_width = 10
+                    filled_exact = pct * bar_width
+                    filled_full = int(filled_exact)
+                    remainder = filled_exact - filled_full
+                    # Partial block characters for the fractional part
+                    partial_chars = " ▏▎▍▌▋▊▉█"
+                    partial_idx = int(remainder * 8)
+                    partial = partial_chars[partial_idx] if partial_idx > 0 else ""
+                    empty = bar_width - filled_full - (1 if partial else 0)
+                    bar = "█" * filled_full + partial + "░" * empty
+                    progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
 
             # Build title with prefix and suffix (progress bar or badge)
             prefix = f"{indent}{expand}"
@@ -1193,10 +1204,15 @@ class ActivityView(HelpMixin, Widget):
 
         # For running workflows, show progress prominently
         if status == "running" and item.progress_total:
-            progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
-            content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
-            if item.progress_stage:
-                content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
+            # Check if in synthesis phase
+            if getattr(item, '_is_synthesizing', False):
+                content.write(f"[magenta bold]🔮 Synthesizing...[/magenta bold]")
+                content.write(f"[dim]Combining outputs from {item.progress_completed} runs[/dim]")
+            else:
+                progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
+                content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
+                if item.progress_stage:
+                    content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
 
         # Timing info as compact line
         timing_parts = []
@@ -1268,8 +1284,9 @@ class ActivityView(HelpMixin, Widget):
                 content.write("")
                 content.write(f"[bold cyan]─── Stages ───[/bold cyan]")
                 for sr in stage_runs:
-                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
-                    content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
+                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "synthesizing": "[magenta]🔮[/magenta]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
+                    stage_suffix = " 🔮 Synthesizing..." if sr["status"] == "synthesizing" else f" {sr['runs_completed']}/{sr['target_runs']}"
+                    content.write(f"  {icon} {sr['stage_name']}{stage_suffix}")
 
             # Show prompt from first individual run (gives context for what the workflow is doing)
             for sr in stage_runs:

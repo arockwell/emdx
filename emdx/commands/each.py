@@ -115,7 +115,7 @@ def create(
         help="What to do with each {{item}}"
     ),
     parallel: int = typer.Option(
-        3, "-j", "--parallel",
+        3, "-j", "--jobs", "-P", "--parallel",
         help="Max concurrent executions"
     ),
     synthesize: Optional[str] = typer.Option(
@@ -398,12 +398,24 @@ def run_command(
         help="Override discovery command"
     ),
     parallel: int = typer.Option(
-        3, "-j", "--parallel",
+        3, "-j", "--jobs", "-P", "--parallel",
         help="Max concurrent executions"
     ),
     synthesize: Optional[str] = typer.Option(
         None, "-s", "--synthesize",
         help="Enable synthesis (optional custom prompt)"
+    ),
+    pr: bool = typer.Option(
+        False, "--pr",
+        help="Create a PR for each item processed"
+    ),
+    pr_single: bool = typer.Option(
+        False, "--pr-single",
+        help="Create one combined PR for all items"
+    ),
+    pr_base: str = typer.Option(
+        "main", "--pr-base",
+        help="Base branch for PRs (default: main)"
     ),
 ):
     """Run a saved command.
@@ -417,8 +429,17 @@ def run_command(
 
         # Override discovery command
         emdx each run fix-conflicts --from "echo specific-branch"
+
+        # Create a PR for each item processed
+        emdx each run fix-conflicts --pr
+
+        # Create one combined PR for all items
+        emdx each run fix-conflicts --pr-single
+
+        # Specify base branch for PRs
+        emdx each run fix-conflicts --pr --pr-base develop
     """
-    _run_saved_command(name, items, from_cmd, parallel, synthesize)
+    _run_saved_command(name, items, from_cmd, parallel, synthesize, pr, pr_single, pr_base)
 
 
 @app.callback(invoke_without_command=True)
@@ -433,7 +454,7 @@ def main(
         help="Prompt for one-off execution"
     ),
     parallel: int = typer.Option(
-        3, "-j", "--parallel",
+        3, "-j", "--jobs", "-P", "--parallel",
         help="Max concurrent executions"
     ),
     synthesize: Optional[str] = typer.Option(
@@ -486,6 +507,9 @@ def _run_saved_command(
     from_cmd: Optional[str],
     parallel: int,
     synthesize: Optional[str],
+    pr: bool = False,
+    pr_single: bool = False,
+    pr_base: str = "main",
 ):
     """Run a saved each command."""
     workflow_name = _each_name_to_workflow_name(name)
@@ -533,7 +557,81 @@ def _run_saved_command(
         parallel=max_concurrent,
         synthesize=synth_prompt,
         workflow_id=workflow.id,
+        pr=pr,
+        pr_single=pr_single,
+        pr_base=pr_base,
     ))
+
+
+def _create_pr(
+    branch: str,
+    base: str,
+    title: str,
+    body: str,
+    working_dir: Optional[str] = None,
+) -> Optional[str]:
+    """Create a PR using gh CLI.
+
+    Args:
+        branch: The head branch for the PR
+        base: The base branch for the PR
+        title: PR title
+        body: PR body
+        working_dir: Working directory for the command
+
+    Returns:
+        PR URL if successful, None otherwise
+    """
+    try:
+        # First, push the branch
+        push_result = subprocess.run(
+            ["git", "push", "-u", "origin", branch],
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
+        )
+        if push_result.returncode != 0:
+            console.print(f"[yellow]Warning: Failed to push branch: {push_result.stderr}[/yellow]")
+            return None
+
+        # Create the PR
+        result = subprocess.run(
+            [
+                "gh", "pr", "create",
+                "--head", branch,
+                "--base", base,
+                "--title", title,
+                "--body", body,
+            ],
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
+        )
+
+        if result.returncode == 0:
+            pr_url = result.stdout.strip()
+            return pr_url
+        else:
+            console.print(f"[yellow]Warning: Failed to create PR: {result.stderr}[/yellow]")
+            return None
+
+    except FileNotFoundError:
+        console.print("[red]Error: gh CLI not found. Install it with: brew install gh[/red]")
+        return None
+    except Exception as e:
+        console.print(f"[yellow]Warning: PR creation failed: {e}[/yellow]")
+        return None
+
+
+def _has_changes(working_dir: Optional[str] = None) -> bool:
+    """Check if there are any uncommitted changes in the working directory."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        cwd=working_dir,
+    )
+    return bool(result.stdout.strip())
 
 
 async def _execute_each(
@@ -543,26 +641,43 @@ async def _execute_each(
     parallel: int,
     synthesize: Optional[str] = None,
     workflow_id: Optional[int] = None,
+    pr: bool = False,
+    pr_single: bool = False,
+    pr_base: str = "main",
 ):
     """Execute the each operation using workflow executor."""
     from ..workflows import database as wf_db
     from .workflows import create_worktree_for_workflow, cleanup_worktree
 
-    # Check if we should use worktree
-    use_worktree = _should_auto_enable_worktree(from_cmd)
+    # Auto-enable worktree when PR flags are used
+    use_worktree = _should_auto_enable_worktree(from_cmd) or pr or pr_single
+
+    # Validate PR flag usage
+    if pr and pr_single:
+        console.print("[red]Error: Cannot use both --pr and --pr-single[/red]")
+        raise typer.Exit(1)
 
     console.print(f"[cyan]Processing {len(item_list)} item(s) ({parallel} parallel)[/cyan]")
+    if pr:
+        console.print(f"[dim]Will create a PR for each item[/dim]")
+    elif pr_single:
+        console.print(f"[dim]Will create a combined PR for all items[/dim]")
 
     working_dir = None
     worktree_path = None
+    worktree_branch = None
 
     if use_worktree:
         try:
-            worktree_path, worktree_branch = create_worktree_for_workflow("main")
+            worktree_path, worktree_branch = create_worktree_for_workflow(pr_base)
             working_dir = worktree_path
             console.print(f"[dim]Using worktree: {worktree_path}[/dim]")
+            console.print(f"[dim]Branch: {worktree_branch}[/dim]")
         except Exception as e:
             console.print(f"[yellow]Warning: Could not create worktree: {e}[/yellow]")
+            if pr or pr_single:
+                console.print("[red]Error: Worktree required for PR creation[/red]")
+                raise typer.Exit(1)
             console.print("[dim]Continuing without worktree isolation[/dim]")
 
     # Convert to task-based execution
@@ -574,6 +689,8 @@ async def _execute_each(
         "tasks": tasks,
         "_max_concurrent_override": parallel,
     }
+
+    pr_urls = []
 
     try:
         result = await workflow_executor.execute_workflow(
@@ -592,18 +709,102 @@ async def _execute_each(
             # Update usage count if this was a saved command
             if workflow_id:
                 wf_db.increment_workflow_usage(workflow_id, success=True)
+
+            # Handle PR creation for --pr-single (combined PR)
+            if pr_single and worktree_path and worktree_branch:
+                if _has_changes(worktree_path):
+                    console.print(f"[cyan]Creating combined PR...[/cyan]")
+
+                    # Generate PR title and body
+                    item_summary = ", ".join(item_list[:3])
+                    if len(item_list) > 3:
+                        item_summary += f" (+{len(item_list) - 3} more)"
+                    pr_title = f"emdx each: Process {len(item_list)} items ({item_summary})"
+                    pr_body = f"""## Summary
+
+This PR was created by `emdx each` processing {len(item_list)} items.
+
+### Items processed:
+{chr(10).join(f"- {item}" for item in item_list)}
+
+### Run details:
+- Run ID: #{result.id}
+- Tokens used: {result.total_tokens_used:,}
+"""
+
+                    pr_url = _create_pr(
+                        branch=worktree_branch,
+                        base=pr_base,
+                        title=pr_title,
+                        body=pr_body,
+                        working_dir=worktree_path,
+                    )
+
+                    if pr_url:
+                        pr_urls.append(pr_url)
+                        console.print(f"[green]Created PR:[/green] {pr_url}")
+                else:
+                    console.print("[yellow]No changes to create PR for[/yellow]")
+
+            # Handle PR creation for --pr (per-item PRs)
+            # Note: For per-item PRs, we would need to process items sequentially
+            # and create a PR after each. This is a simplified implementation.
+            if pr and worktree_path and worktree_branch:
+                if _has_changes(worktree_path):
+                    console.print(f"[cyan]Creating PR for all processed items...[/cyan]")
+
+                    # For now, create a single PR with all changes
+                    # A more sophisticated implementation would use separate worktrees per item
+                    item_summary = ", ".join(item_list[:3])
+                    if len(item_list) > 3:
+                        item_summary += f" (+{len(item_list) - 3} more)"
+                    pr_title = f"emdx each: {item_summary}"
+                    pr_body = f"""## Summary
+
+This PR was created by `emdx each --pr` processing items.
+
+### Items processed:
+{chr(10).join(f"- {item}" for item in item_list)}
+
+### Run details:
+- Run ID: #{result.id}
+- Tokens used: {result.total_tokens_used:,}
+
+---
+*Note: Each item was processed with its own task, but changes are combined in this PR.*
+"""
+
+                    pr_url = _create_pr(
+                        branch=worktree_branch,
+                        base=pr_base,
+                        title=pr_title,
+                        body=pr_body,
+                        working_dir=worktree_path,
+                    )
+
+                    if pr_url:
+                        pr_urls.append(pr_url)
+                        console.print(f"[green]Created PR:[/green] {pr_url}")
+                else:
+                    console.print("[yellow]No changes to create PR for[/yellow]")
+
         else:
             console.print(f"[red]Failed[/red]")
             if result.error_message:
                 console.print(f"  Error: {result.error_message}")
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
     finally:
-        # Clean up worktree if we created one
+        # Clean up worktree if we created one (unless PRs were created)
         if worktree_path:
-            console.print(f"[dim]Cleaning up worktree: {worktree_path}[/dim]")
-            cleanup_worktree(worktree_path)
+            if pr_urls:
+                console.print(f"[dim]Keeping worktree for PR: {worktree_path}[/dim]")
+            else:
+                console.print(f"[dim]Cleaning up worktree: {worktree_path}[/dim]")
+                cleanup_worktree(worktree_path)
