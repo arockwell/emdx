@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional
 
-from .base import WorkflowConfig, IterationStrategy
+from .base import WorkflowConfig
 from . import database as db
 
 
@@ -15,7 +15,6 @@ class WorkflowRegistry:
 
     def __init__(self):
         self._cache: Dict[str, WorkflowConfig] = {}
-        self._strategy_cache: Dict[str, IterationStrategy] = {}
 
     def get_workflow(self, name_or_id: str | int) -> Optional[WorkflowConfig]:
         """Get a workflow by name or ID.
@@ -176,45 +175,9 @@ class WorkflowRegistry:
 
         return success
 
-    def get_iteration_strategy(self, name: str) -> Optional[IterationStrategy]:
-        """Get an iteration strategy by name.
-
-        Args:
-            name: Strategy name
-
-        Returns:
-            IterationStrategy if found, None otherwise
-        """
-        if name in self._strategy_cache:
-            return self._strategy_cache[name]
-
-        row = db.get_iteration_strategy_by_name(name)
-        if row:
-            strategy = IterationStrategy.from_db_row(row)
-            self._strategy_cache[name] = strategy
-            return strategy
-
-        return None
-
-    def list_iteration_strategies(
-        self,
-        category: Optional[str] = None,
-    ) -> List[IterationStrategy]:
-        """List all iteration strategies.
-
-        Args:
-            category: Filter by category
-
-        Returns:
-            List of IterationStrategy objects
-        """
-        rows = db.list_iteration_strategies(category=category)
-        return [IterationStrategy.from_db_row(row) for row in rows]
-
     def clear_cache(self) -> None:
         """Clear the workflow cache."""
         self._cache.clear()
-        self._strategy_cache.clear()
 
 
 # Global singleton instance

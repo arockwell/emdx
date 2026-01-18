@@ -593,11 +593,6 @@ class WorkflowExecutor:
         Returns:
             StageResult
         """
-        # Load iteration strategy if specified
-        strategy = None
-        if stage.iteration_strategy:
-            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
-
         previous_outputs: List[str] = []
         output_doc_ids: List[int] = []
         total_tokens = 0
@@ -607,9 +602,7 @@ class WorkflowExecutor:
             run_number = i + 1
 
             # Build prompt for this iteration
-            if strategy:
-                prompt_template = strategy.get_prompt_for_run(run_number)
-            elif stage.prompts and i < len(stage.prompts):
+            if stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
             else:
                 prompt_template = stage.prompt or ""
@@ -684,12 +677,7 @@ class WorkflowExecutor:
         Returns:
             StageResult
         """
-        # Load iteration strategy (adversarial uses same mechanism)
-        strategy = None
-        if stage.iteration_strategy:
-            strategy = workflow_registry.get_iteration_strategy(stage.iteration_strategy)
-
-        # Default adversarial prompts if no strategy
+        # Default adversarial prompts
         default_prompts = [
             "ADVOCATE: Argue FOR this approach: {{input}}\n\nWhat are its strengths?",
             "CRITIC: Given this advocacy: {{prev}}\n\nArgue AGAINST. What are the weaknesses?",
@@ -707,9 +695,7 @@ class WorkflowExecutor:
             run_number = i + 1
 
             # Get prompt for this role
-            if strategy:
-                prompt_template = strategy.get_prompt_for_run(run_number)
-            elif stage.prompts and i < len(stage.prompts):
+            if stage.prompts and i < len(stage.prompts):
                 prompt_template = stage.prompts[i]
             else:
                 prompt_template = default_prompts[min(i, len(default_prompts) - 1)]
