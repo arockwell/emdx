@@ -48,6 +48,7 @@ def extract_output_doc_id(log_file: Path) -> Optional[int]:
             r'saved as document #(\d+)',  # Agent natural language
             r'Saved as #(\d+)',           # CLI output
             r'Created document #(\d+)',
+            r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',  # Agent output (with optional "created" and markdown bold)
             r'document ID[:\s]+#?(\d+)',
             r'doc_id[:\s]+(\d+)',
             r'✅ Saved as\s*#(\d+)',      # With emoji

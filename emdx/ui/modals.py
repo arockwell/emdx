@@ -4,12 +4,13 @@ Modal screens for EMDX TUI.
 """
 
 import logging
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from textual.app import ComposeResult
-from textual.containers import Grid, Vertical
+from textual.binding import Binding
+from textual.containers import Grid, ScrollableContainer, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, Static
+from textual.widgets import Button, Label, RichLog, Static
 
 # Set up logging for debugging
 logger = logging.getLogger(__name__)
@@ -353,3 +354,162 @@ class HelpMixin:
         bindings = self.get_help_bindings()
         title = getattr(self, 'HELP_TITLE', 'Keybindings')
         self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title=title))
+
+
+class DocumentPreviewModal(ModalScreen):
+    """Modal for previewing a document without leaving the current screen."""
+
+    CSS = """
+    DocumentPreviewModal {
+        align: center middle;
+    }
+
+    #preview-dialog {
+        width: 90%;
+        height: 90%;
+        max-width: 120;
+        max-height: 50;
+        background: $surface;
+        border: solid $primary;
+    }
+
+    #preview-header {
+        height: 3;
+        padding: 0 2;
+        background: $surface-darken-1;
+    }
+
+    #preview-title {
+        text-style: bold;
+    }
+
+    #preview-meta {
+        color: $text-muted;
+    }
+
+    #preview-content-scroll {
+        height: 1fr;
+        padding: 1 2;
+    }
+
+    #preview-content {
+        height: 1fr;
+    }
+
+    #preview-footer {
+        height: 1;
+        background: $surface-darken-1;
+        padding: 0 2;
+        color: $text-muted;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "close", "Close"),
+        Binding("q", "close", "Close"),
+        Binding("e", "edit", "Edit"),
+        Binding("o", "open_full", "Open Full"),
+        Binding("j", "scroll_down", "Down", show=False),
+        Binding("k", "scroll_up", "Up", show=False),
+        Binding("g", "scroll_top", "Top", show=False),
+        Binding("G", "scroll_bottom", "Bottom", show=False),
+    ]
+
+    def __init__(self, doc_id: int, **kwargs):
+        super().__init__(**kwargs)
+        self.doc_id = doc_id
+        self._doc_data: Optional[dict] = None
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="preview-dialog"):
+            with Vertical(id="preview-header"):
+                yield Static("Loading...", id="preview-title")
+                yield Static("", id="preview-meta")
+            with ScrollableContainer(id="preview-content-scroll"):
+                yield RichLog(
+                    id="preview-content",
+                    wrap=True,
+                    highlight=True,
+                    markup=True,
+                    auto_scroll=False,
+                )
+            yield Static(
+                "Esc/q=Close │ e=Edit │ o=Open Full │ j/k=Scroll",
+                id="preview-footer",
+            )
+
+    async def on_mount(self) -> None:
+        """Load and display the document."""
+        try:
+            from emdx.models.documents import get_document
+
+            self._doc_data = get_document(self.doc_id)
+            if not self._doc_data:
+                self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")
+                return
+
+            # Update header
+            title = self._doc_data.get("title", "Untitled")
+            self.query_one("#preview-title", Static).update(title)
+
+            # Build meta info
+            meta_parts = []
+            if self._doc_data.get("project"):
+                meta_parts.append(f"Project: {self._doc_data['project']}")
+            meta_parts.append(f"ID: #{self.doc_id}")
+            self.query_one("#preview-meta", Static).update(" │ ".join(meta_parts))
+
+            # Render content
+            content = self._doc_data.get("content", "")
+            preview = self.query_one("#preview-content", RichLog)
+            preview.can_focus = False
+
+            if content.strip():
+                # Truncate very long content
+                if len(content) > 50000:
+                    content = content[:50000] + "\n\n[dim]... (truncated)[/dim]"
+
+                try:
+                    from .markdown_config import MarkdownConfig
+                    markdown = MarkdownConfig.create_markdown(content)
+                    preview.write(markdown)
+                except Exception:
+                    preview.write(content)
+            else:
+                preview.write("[dim]Empty document[/dim]")
+
+        except Exception as e:
+            logger.error(f"Error loading document preview: {e}")
+            self.query_one("#preview-title", Static).update(f"Error: {e}")
+
+    def action_close(self) -> None:
+        """Close the preview."""
+        self.dismiss(None)
+
+    def action_edit(self) -> None:
+        """Edit the document."""
+        self.dismiss({"action": "edit", "doc_id": self.doc_id})
+
+    def action_open_full(self) -> None:
+        """Open in document browser."""
+        self.dismiss({"action": "open_full", "doc_id": self.doc_id})
+
+    def action_scroll_down(self) -> None:
+        """Scroll content down."""
+        scroll = self.query_one("#preview-content-scroll", ScrollableContainer)
+        scroll.scroll_down()
+
+    def action_scroll_up(self) -> None:
+        """Scroll content up."""
+        scroll = self.query_one("#preview-content-scroll", ScrollableContainer)
+        scroll.scroll_up()
+
+    def action_scroll_top(self) -> None:
+        """Scroll to top."""
+        scroll = self.query_one("#preview-content-scroll", ScrollableContainer)
+        scroll.scroll_home()
+
+    def action_scroll_bottom(self) -> None:
+        """Scroll to bottom."""
+        scroll = self.query_one("#preview-content-scroll", ScrollableContainer)
+        scroll.scroll_end()

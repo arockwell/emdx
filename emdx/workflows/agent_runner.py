@@ -1,10 +1,8 @@
 """Agent execution for workflow runs.
 
-Handles running Claude agents as part of workflow execution, including:
-- Setting up log files
-- Creating execution records
-- Calling Claude via execute_with_claude
-- Extracting results and updating records
+Handles running Claude agents as part of workflow execution.
+Uses the UnifiedExecutor service for consistent execution behavior
+across all EMDX execution paths (agent, workflow, cascade).
 """
 
 import asyncio
@@ -13,8 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .output_parser import extract_output_doc_id, extract_token_usage_detailed
-from .services import document_service, execution_service, claude_service
+from ..services.unified_executor import (
+    UnifiedExecutor,
+    ExecutionConfig,
+    ExecutionResult,
+    DEFAULT_ALLOWED_TOOLS,
+)
 from . import database as wf_db
 from emdx.database.documents import record_document_source
 
@@ -35,10 +37,7 @@ async def run_agent(
     prompt: str,
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Run an agent with the given prompt using the existing execution system.
-
-    Uses execute_with_claude() from the existing exec system to actually
-    call Claude and get results.
+    """Run an agent with the given prompt using the UnifiedExecutor.
 
     Args:
         individual_run_id: Individual run ID for tracking
@@ -65,73 +64,42 @@ async def run_agent(
     )
 
     try:
-        # Set up log file for this agent run
-        log_dir = Path.home() / ".config" / "emdx" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        log_file = log_dir / f"workflow-agent-{individual_run_id}-{timestamp}.log"
-
         # Get working directory from context (set by execute_workflow)
         working_dir = context.get('_working_dir', str(Path.cwd()))
 
-        # Create execution record
-        exec_id = execution_service.create_execution(
-            doc_id=context.get('input_doc_id'),
-            doc_title=f"Workflow Agent Run #{individual_run_id}",
-            log_file=str(log_file),
+        # Configure execution
+        config = ExecutionConfig(
+            prompt=prompt,
+            output_instruction=OUTPUT_INSTRUCTION,
             working_dir=working_dir,
+            title=f"Workflow Agent Run #{individual_run_id}",
+            doc_id=context.get('input_doc_id'),
+            allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"],
+            sync=True,
+            verbose=False,
         )
 
-        # Link execution to individual run immediately so TUI can show logs
+        # Run execution in thread pool to not block async
+        executor = UnifiedExecutor()
+        loop = asyncio.get_event_loop()
+        result: ExecutionResult = await loop.run_in_executor(
+            None,
+            lambda: executor.execute(config)
+        )
+
+        # Link execution to individual run so TUI can show logs
         wf_db.update_individual_run(
             individual_run_id,
-            agent_execution_id=exec_id,
+            agent_execution_id=result.execution_id,
         )
 
-        # Build the full prompt with instructions to save output
-        full_prompt = prompt + OUTPUT_INSTRUCTION
-
-        # Track execution start time
-        exec_start_time = datetime.now()
-
-        # Run Claude synchronously (in thread pool to not block async)
-        loop = asyncio.get_event_loop()
-        exit_code = await loop.run_in_executor(
-            None,
-            lambda: claude_service.execute_with_claude(
-                task=full_prompt,
-                execution_id=exec_id,
-                log_file=log_file,
-                allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"],
-                verbose=False,
-                working_dir=working_dir,
-                doc_id=str(context.get('input_doc_id', 0)),
-                context=None,
-            )
-        )
-
-        # Calculate execution time
-        exec_end_time = datetime.now()
-        execution_time_ms = int((exec_end_time - exec_start_time).total_seconds() * 1000)
-
-        # Update execution status
-        status = 'completed' if exit_code == 0 else 'failed'
-        execution_service.update_execution_status(exec_id, status, exit_code)
-
-        # Extract token usage from the log file
-        token_usage = extract_token_usage_detailed(log_file)
-        tokens_used = token_usage.get('total', 0)
-        input_tokens = token_usage.get('input', 0) + token_usage.get('cache_in', 0) + token_usage.get('cache_create', 0)
-        output_tokens = token_usage.get('output', 0)
-        cost_usd = token_usage.get('cost_usd', 0.0)
-
-        if exit_code == 0:
-            # Try to extract output document ID from log
-            output_doc_id = extract_output_doc_id(log_file)
+        if result.success:
+            output_doc_id = result.output_doc_id
 
             if not output_doc_id:
                 # If no document was created, save the log content as output
-                log_content = log_file.read_text() if log_file.exists() else "No output captured"
+                from .services import document_service
+                log_content = result.log_file.read_text() if result.log_file.exists() else "No output captured"
                 output_doc_id = document_service.save_document(
                     title=f"Workflow Agent Output - {datetime.now().isoformat()}",
                     content=f"# Agent Execution Log\n\n{log_content}",
@@ -145,42 +113,42 @@ async def run_agent(
                 individual_run_id,
                 status='completed',
                 output_doc_id=output_doc_id,
-                agent_execution_id=exec_id,
-                tokens_used=tokens_used,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_usd=cost_usd,
-                execution_time_ms=execution_time_ms,
-                completed_at=exec_end_time,
+                agent_execution_id=result.execution_id,
+                tokens_used=result.tokens_used,
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+                cost_usd=result.cost_usd,
+                execution_time_ms=result.execution_time_ms,
+                completed_at=datetime.now(),
             )
 
             return {
                 'success': True,
                 'output_doc_id': output_doc_id,
-                'tokens_used': tokens_used,
-                'input_tokens': input_tokens,
-                'output_tokens': output_tokens,
-                'cost_usd': cost_usd,
-                'execution_time_ms': execution_time_ms,
-                'execution_id': exec_id,
+                'tokens_used': result.tokens_used,
+                'input_tokens': result.input_tokens,
+                'output_tokens': result.output_tokens,
+                'cost_usd': result.cost_usd,
+                'execution_time_ms': result.execution_time_ms,
+                'execution_id': result.execution_id,
             }
         else:
-            error_msg = f"Claude execution failed with exit code {exit_code}"
+            error_msg = result.error_message or f"Claude execution failed with exit code {result.exit_code}"
             wf_db.update_individual_run(
                 individual_run_id,
                 status='failed',
-                agent_execution_id=exec_id,
+                agent_execution_id=result.execution_id,
                 error_message=error_msg,
-                tokens_used=tokens_used,
-                execution_time_ms=execution_time_ms,
-                completed_at=exec_end_time,
+                tokens_used=result.tokens_used,
+                execution_time_ms=result.execution_time_ms,
+                completed_at=datetime.now(),
             )
             return {
                 'success': False,
                 'error_message': error_msg,
-                'tokens_used': tokens_used,
-                'execution_time_ms': execution_time_ms,
-                'execution_id': exec_id,
+                'tokens_used': result.tokens_used,
+                'execution_time_ms': result.execution_time_ms,
+                'execution_id': result.execution_id,
             }
 
     except Exception as e:
