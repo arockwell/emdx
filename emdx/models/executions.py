@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from ..database.connection import db_connection
-from ..utils.datetime import parse_timestamp
+from ..utils.datetime_utils import parse_timestamp
 
 
 @dataclass

@@ -12,7 +12,7 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Static, RichLog, Markdown
 
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
-from emdx.utils.datetime import parse_datetime
+from emdx.utils.datetime_utils import parse_datetime
 
 logger = logging.getLogger(__name__)
 

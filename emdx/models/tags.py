@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any, Optional
 
 from emdx.database import db
-from emdx.utils.datetime import parse_datetime
+from emdx.utils.datetime_utils import parse_datetime
 from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
 
