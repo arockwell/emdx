@@ -23,7 +23,7 @@ from emdx.database.connection import db_connection
 
 logger = logging.getLogger(__name__)
 
-# Cascade stages in order
+# Fixed cascade stages
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
 STAGE_EMOJI = {
     "idea": "💡",
@@ -881,11 +881,12 @@ class CascadeView(Widget):
         """Refresh all components."""
         # Update summary bar
         if self.summary:
-            self.summary.current_stage = STAGES[self.current_stage_idx]
+            if self.current_stage_idx < len(STAGES):
+                self.summary.current_stage = STAGES[self.current_stage_idx]
             self.summary.refresh_stats()
 
         # Load documents for current stage
-        if self.doc_list:
+        if self.doc_list and self.current_stage_idx < len(STAGES):
             stage = STAGES[self.current_stage_idx]
             self.doc_list.load_stage(stage)
 
@@ -905,6 +906,8 @@ class CascadeView(Widget):
 
     def watch_current_stage_idx(self, idx: int) -> None:
         """React to stage change."""
+        if idx >= len(STAGES):
+            return
         if self.summary:
             self.summary.current_stage = STAGES[idx]
             self.summary._update_display()
@@ -957,8 +960,10 @@ class CascadeView(Widget):
 
     def action_advance_doc(self) -> None:
         """Advance selected document to next stage."""
+        if self.current_stage_idx >= len(STAGES):
+            return
         stage = STAGES[self.current_stage_idx]
-        if stage == "done":
+        if stage == "done" or NEXT_STAGE.get(stage) is None:
             self._update_status("[yellow]Already at final stage[/yellow]")
             return
 
@@ -997,8 +1002,10 @@ class CascadeView(Widget):
 
     def action_process(self) -> None:
         """Process the current stage."""
+        if self.current_stage_idx >= len(STAGES):
+            return
         stage = STAGES[self.current_stage_idx]
-        if stage == "done":
+        if stage == "done" or NEXT_STAGE.get(stage) is None:
             self._update_status("[yellow]'done' is terminal - nothing to process[/yellow]")
             return
 
@@ -1022,10 +1029,12 @@ class CascadeView(Widget):
 
     def action_synthesize(self) -> None:
         """Synthesize selected docs through Claude (or all if none selected)."""
+        if self.current_stage_idx >= len(STAGES):
+            return
         stage = STAGES[self.current_stage_idx]
 
-        if stage == "done":
-            self._update_status("[yellow]Cannot synthesize from 'done' stage[/yellow]")
+        if stage == "done" or NEXT_STAGE.get(stage) is None:
+            self._update_status("[yellow]Cannot synthesize from terminal stage[/yellow]")
             return
 
         # Get selected doc IDs, or all docs if none selected
