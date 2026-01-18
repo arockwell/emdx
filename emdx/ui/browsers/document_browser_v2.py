@@ -108,6 +108,13 @@ class DocumentBrowserV2(HelpMixin, Widget):
         padding: 0 1;
         dock: bottom;
     }
+
+    DocumentBrowserV2 #help-bar {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+        dock: bottom;
+    }
     """
 
     BINDINGS = [
@@ -201,6 +208,13 @@ class DocumentBrowserV2(HelpMixin, Widget):
 
         # Status bar
         yield Static("Ready", id="browser-status", classes="browser-status")
+
+        # Navigation help bar
+        yield Static(
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ "
+            "[dim]j/k[/dim] nav │ [dim]e[/dim] edit │ [dim]n[/dim] new │ [dim]t[/dim] tag │ [dim]/[/dim] search │ [dim]?[/dim] help",
+            id="help-bar",
+        )
 
     async def on_mount(self) -> None:
         """Initialize the document browser."""

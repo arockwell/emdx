@@ -21,7 +21,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 from ..panels import (
     ListPanel,
@@ -93,6 +93,13 @@ class WorkflowBrowserV2(Widget):
     WorkflowBrowserV2 #task-input-panel {
         dock: top;
     }
+
+    WorkflowBrowserV2 #help-bar {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+        dock: bottom;
+    }
     """
 
     BINDINGS = [
@@ -142,6 +149,11 @@ class WorkflowBrowserV2(Widget):
                 id="workflow-preview",
             )
         yield SimpleStatusBar(id="workflow-status")
+        yield Static(
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ "
+            "[dim]j/k[/dim] nav │ [dim]Enter[/dim] run │ [dim]t[/dim] add task │ [dim]r[/dim] toggle runs │ [dim]?[/dim] help",
+            id="help-bar",
+        )
 
     async def on_mount(self) -> None:
         # Configure task input panel
