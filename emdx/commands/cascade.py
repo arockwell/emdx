@@ -712,7 +712,10 @@ def runs(
         }.get(status, "white")
 
         pr_display = "🔗" if pr_url else ""
-        started_str = started[:16] if started else ""
+        if started:
+            started_str = started.strftime("%Y-%m-%d %H:%M") if hasattr(started, 'strftime') else str(started)[:16]
+        else:
+            started_str = ""
 
         table.add_row(
             str(run_id),
