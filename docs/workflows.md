@@ -39,6 +39,75 @@ emdx workflow run dynamic_items \
   -j 5
 ```
 
+## Choosing the Right Tool: Decision Flowchart
+
+EMDX offers three ways to run parallel tasks. Use this flowchart to pick the right one:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Do you have a task to run?                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│        Is it a one-time or ad-hoc execution?                │
+│                                                             │
+│  YES → Will you run it again with same discovery pattern?   │
+│        │                                                    │
+│        ├─ NO  → Use `emdx run`                              │
+│        │        (Quick parallel tasks, simple task lists)   │
+│        │                                                    │
+│        └─ YES → Use `emdx each`                             │
+│                 (Save discovery + action for reuse)         │
+│                                                             │
+│  NO (Complex/multi-stage) → Use `emdx workflow run`         │
+│     (Iterative, adversarial, presets, stage chaining)       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Quick Reference Table
+
+| Scenario | Tool | Example |
+|----------|------|---------|
+| Run 3 analysis tasks right now | `emdx run` | `emdx run "analyze auth" "review tests" "check docs"` |
+| Process all Python files once | `emdx run` | `emdx run -d "fd -e py" -t "Review {{task}}"` |
+| Repeatedly fix merge conflicts | `emdx each` | `emdx each create fix-conflicts --from "..." --do "..."` |
+| For-each pattern you'll reuse | `emdx each` | `emdx each run fix-conflicts` |
+| Multi-perspective code review | `emdx workflow` | `emdx workflow run parallel_analysis -t "review X"` |
+| Progressive refinement (draft→polish) | `emdx workflow` | `emdx workflow run iterative_refine --doc 123` |
+| Debate-style analysis | `emdx workflow` | `emdx workflow run adversarial_review -t "..." ` |
+| Need synthesis of outputs | Both | `emdx run --synthesize` or workflow with synthesis_prompt |
+| Using presets/saved configs | `emdx workflow` | `emdx workflow run X --preset security_audit` |
+| Worktree isolation needed | Both | `emdx workflow run X --worktree` or `emdx each --worktree` |
+
+### Detailed Comparison
+
+| Feature | `emdx run` | `emdx each` | `emdx workflow run` |
+|---------|------------|-------------|---------------------|
+| **Purpose** | Quick parallel execution | Reusable discovery+action | Complex orchestration |
+| **Task Source** | CLI arguments or `-d` discovery | Saved `--from` command | CLI `-t` flags or doc ID |
+| **Persistence** | None (one-shot) | Commands saved to DB | Workflows defined in DB |
+| **Execution Modes** | Parallel only | Parallel only | Single, Parallel, Iterative, Adversarial, Dynamic |
+| **Synthesis** | `--synthesize` flag | `--synthesize` flag | `synthesis_prompt` in config |
+| **Variables/Presets** | None | None | Full template system + presets |
+| **Stage Chaining** | No | No | Yes (multi-stage pipelines) |
+| **Worktree Isolation** | Auto when needed | `--worktree` flag | `--worktree` flag |
+| **Best For** | Ad-hoc tasks | Repeated patterns | Production workflows |
+
+### When to Graduate
+
+**From `emdx run` to `emdx each`:**
+- You're running the same discovery command repeatedly
+- You want to share a pattern with your team
+- The discovery logic is complex and worth saving
+
+**From `emdx run`/`emdx each` to `emdx workflow`:**
+- You need iterative refinement (draft → improve → polish)
+- You want adversarial review (advocate → critic → synthesis)
+- You're chaining multiple stages together
+- You need presets for different configurations
+- You want detailed run tracking in the Activity view
+
 ## Core Concept: Execution Patterns vs Runtime Tasks
 
 **Key Mental Model**: Workflows define the *shape* of execution. Tasks are the *data* you feed in.
@@ -279,6 +348,47 @@ Workflows use `{{variable}}` syntax for dynamic content.
 | `{{task}}` | Task content (string or loaded document content) |
 | `{{task_title}}` | Document title (if task was a doc ID) |
 | `{{task_id}}` | Document ID (if task was a doc ID) |
+
+### Auto-Loaded Document Variables
+
+When you pass a variable like `doc_1=123` (where 123 is a document ID), the workflow system **automatically** creates three additional variables:
+
+| Variable Pattern | Description |
+|-----------------|-------------|
+| `{{doc_N}}` | The original value (document ID) |
+| `{{doc_N_content}}` | Full content of the referenced document |
+| `{{doc_N_title}}` | Title of the referenced document |
+| `{{doc_N_id}}` | Document ID (same as doc_N, for explicit reference) |
+
+**Example Usage:**
+
+```bash
+# Pass two documents as variables
+emdx workflow run my_workflow \
+  --var doc_1=5182 \
+  --var doc_2=5183
+
+# In your workflow prompt template:
+# "Compare {{doc_1_title}} with {{doc_2_title}}:
+#
+#  Document 1:
+#  {{doc_1_content}}
+#
+#  Document 2:
+#  {{doc_2_content}}"
+```
+
+**How It Works:**
+1. Any variable matching the pattern `doc_N` (e.g., `doc_1`, `doc_2`, `doc_99`) is detected
+2. If the value is an integer, it's treated as a document ID
+3. The document is loaded from the database
+4. Three derived variables are automatically created: `doc_N_content`, `doc_N_title`, `doc_N_id`
+5. If the document doesn't exist, `doc_N_content` will contain an error message
+
+**Use Cases:**
+- Multi-document comparison workflows
+- Parameterized analysis across document sets
+- Template-based document processing
 
 ### Dynamic Mode Variables
 | Variable | Description |

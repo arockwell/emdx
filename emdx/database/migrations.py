@@ -1525,7 +1525,65 @@ def migration_026_add_embeddings(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_027_add_document_stage(conn: sqlite3.Connection):
+def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
+    """Add 'synthesizing' status to workflow_stage_runs.
+
+    When a parallel or dynamic workflow enters the synthesis phase
+    (combining outputs from multiple runs), this status is used to
+    indicate the phase in the UI with a "🔮 Synthesizing..." indicator.
+    """
+    cursor = conn.cursor()
+
+    # Disable foreign key checks during schema change
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # Create new table with updated status constraint including 'synthesizing'
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_run_id INTEGER NOT NULL,
+            stage_name TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
+            target_runs INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'synthesizing', 'completed', 'failed', 'cancelled')),
+            runs_completed INTEGER DEFAULT 0,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            output_doc_id INTEGER,
+            synthesis_doc_id INTEGER,
+            error_message TEXT,
+            tokens_used INTEGER DEFAULT 0,
+            execution_time_ms INTEGER DEFAULT 0,
+            synthesis_cost_usd REAL DEFAULT 0.0,
+            synthesis_input_tokens INTEGER DEFAULT 0,
+            synthesis_output_tokens INTEGER DEFAULT 0,
+            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id),
+            FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
+        )
+    """)
+
+    # Copy existing data
+    cursor.execute("""
+        INSERT INTO workflow_stage_runs_new
+        SELECT * FROM workflow_stage_runs
+    """)
+
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE workflow_stage_runs")
+    cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+
+    # Re-enable foreign key checks
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    conn.commit()
+
+
+def migration_028_add_document_stage(conn: sqlite3.Connection):
     """Add stage column to documents for streaming pipeline processing.
 
     The stage column enables a status-as-queue pattern where documents
@@ -1549,7 +1607,7 @@ def migration_027_add_document_stage(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_028_add_document_pr_url(conn: sqlite3.Connection):
+def migration_029_add_document_pr_url(conn: sqlite3.Connection):
     """Add pr_url column to documents for tracking pipeline outputs.
 
     When a pipeline document reaches 'done' through actual implementation,
@@ -1601,8 +1659,9 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (24, "Remove agent system tables", migration_024_remove_agent_tables),
     (25, "Add standalone presets", migration_025_add_standalone_presets),
     (26, "Add embeddings for semantic search", migration_026_add_embeddings),
-    (27, "Add document stage for pipeline", migration_027_add_document_stage),
-    (28, "Add document PR URL for pipeline", migration_028_add_document_pr_url),
+    (27, "Add synthesizing status to stage runs", migration_027_add_synthesizing_status),
+    (28, "Add document stage for pipeline", migration_028_add_document_stage),
+    (29, "Add document PR URL for pipeline", migration_029_add_document_pr_url),
 ]
 
 

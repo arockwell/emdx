@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 
 from ..workflows.executor import workflow_executor
+from .workflows import create_worktree_for_workflow, cleanup_worktree
 
 console = Console()
 
@@ -22,7 +23,7 @@ def run(
         help="Title for this run (shows in Activity)"
     ),
     jobs: int = typer.Option(
-        None, "-j", "--jobs",
+        None, "-j", "--jobs", "-P", "--parallel",
         help="Max parallel tasks (default: auto)"
     ),
     synthesize: bool = typer.Option(
@@ -40,6 +41,21 @@ def run(
     template: str = typer.Option(
         None, "-t", "--template",
         help="Template for discovered tasks (use {{task}})"
+    ),
+    worktree: bool = typer.Option(
+        False,
+        "--worktree", "-w",
+        help="Create isolated git worktree for execution (recommended for parallel runs)",
+    ),
+    base_branch: str = typer.Option(
+        "main",
+        "--base-branch",
+        help="Base branch for worktree (only used with --worktree)",
+    ),
+    keep_worktree: bool = typer.Option(
+        False,
+        "--keep-worktree",
+        help="Don't cleanup worktree after completion (for debugging)",
     ),
 ):
     """Run tasks in parallel with worktree isolation.
@@ -93,13 +109,34 @@ def run(
     if template:
         task_list = [template.replace("{{task}}", t) for t in task_list]
 
+    # Create worktree if requested
+    worktree_path = None
+    working_dir = None
+
+    if worktree:
+        try:
+            worktree_path, worktree_branch = create_worktree_for_workflow(base_branch)
+            working_dir = worktree_path
+            console.print(f"[cyan]Created worktree:[/cyan] {worktree_path}")
+            console.print(f"  Branch: {worktree_branch}")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]Failed to create worktree: {e.stderr}[/red]")
+            raise typer.Exit(1)
+
     # Execute
-    asyncio.run(_execute_run(
-        tasks=task_list,
-        title=title,
-        jobs=jobs,
-        synthesize=synthesize,
-    ))
+    try:
+        asyncio.run(_execute_run(
+            tasks=task_list,
+            title=title,
+            jobs=jobs,
+            synthesize=synthesize,
+            working_dir=working_dir,
+        ))
+    finally:
+        # Cleanup worktree unless told to keep it
+        if worktree_path and not keep_worktree:
+            console.print(f"[dim]Cleaning up worktree: {worktree_path}[/dim]")
+            cleanup_worktree(worktree_path)
 
 
 def _run_discovery(command: str) -> List[str]:
@@ -133,6 +170,7 @@ async def _execute_run(
     title: Optional[str],
     jobs: Optional[int],
     synthesize: bool,
+    working_dir: Optional[str] = None,
 ):
     """Execute the run using workflow executor."""
     # Prepare variables
@@ -149,11 +187,14 @@ async def _execute_run(
 
     # Execute
     console.print(f"[cyan]Running {len(tasks)} task(s)...[/cyan]")
+    if working_dir:
+        console.print(f"  Working dir: {working_dir}")
 
     try:
         result = await workflow_executor.execute_workflow(
             workflow_name_or_id=workflow_name,
             input_variables=variables,
+            working_dir=working_dir,
         )
 
         if result.status == "completed":

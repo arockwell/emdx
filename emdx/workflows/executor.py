@@ -25,6 +25,7 @@ from .output_parser import extract_output_doc_id, extract_token_usage_detailed
 from .agent_runner import run_agent
 from .synthesis import synthesize_outputs
 from emdx.database import groups as groups_db
+from emdx.config import DEFAULT_MAX_CONCURRENT_WORKFLOWS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class WorkflowExecutor:
     - adversarial: Advocate -> Critic -> Synthesizer pattern
     """
 
-    def __init__(self, max_concurrent: int = 10):
+    def __init__(self, max_concurrent: int = DEFAULT_MAX_CONCURRENT_WORKFLOWS):
         """Initialize executor.
 
         Args:
@@ -545,6 +546,9 @@ class WorkflowExecutor:
         # Synthesize results (skip for single task - nothing to synthesize)
         synthesis_doc_id = None
         if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+            # Emit synthesis phase status for UI display
+            wf_db.update_stage_run(stage_run_id, status='synthesizing')
+
             synthesis_result = await synthesize_outputs(
                 stage_run_id=stage_run_id,
                 output_doc_ids=output_doc_ids,
@@ -958,6 +962,9 @@ class WorkflowExecutor:
             # Step 4: Optional synthesis (skip for single task - nothing to synthesize)
             synthesis_doc_id = None
             if len(output_doc_ids) > 1 and stage.synthesis_prompt:
+                # Emit synthesis phase status for UI display
+                wf_db.update_stage_run(stage_run_id, status='synthesizing')
+
                 synthesis_result = await synthesize_outputs(
                     stage_run_id=stage_run_id,
                     output_doc_ids=output_doc_ids,

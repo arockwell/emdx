@@ -160,6 +160,41 @@ emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
 emdx run -j 3 "task1" "task2" "task3" "task4"
 ```
 
+## 🤖 Sub-Agent Execution (`emdx agent`)
+
+Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata (tags, title, group).
+
+Works the same whether called by a human or another AI agent.
+
+```bash
+# Basic usage - agent saves output with specified tags
+emdx agent "Analyze the auth module for security issues" --tags analysis,security
+
+# With title and group
+emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
+
+# Verbose mode to see agent output in real-time
+emdx agent "Deep dive on caching strategy" -t analysis -v
+```
+
+**Options:**
+- `--tags, -t` - Tags to apply to output (comma-separated or multiple flags)
+- `--title, -T` - Title for the output document
+- `--group, -g` - Group ID to add output to
+- `--group-role` - Role in group (default: `exploration`)
+- `--verbose, -v` - Show agent output in real-time
+
+**How it works:**
+1. Takes your prompt and appends instructions telling the agent how to save its output
+2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
+3. Runs Claude Code and streams output to a log file
+4. Extracts the created document ID and prints `doc_id:123` for easy parsing
+
+**Use cases:**
+- Humans kicking off analysis tasks with proper tracking
+- AI agents spawning sub-agents that need to save results to EMDX
+- Ensuring consistent metadata across human and AI-initiated work
+
 ## 🔁 Reusable Parallel Commands (`emdx each`)
 
 Create saved commands that discover items and process them in parallel. Perfect for repeatable "for each X, do Y" patterns.
@@ -223,14 +258,14 @@ emdx workflow run parallel_fix \
 emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
 ```
 
-### When to Use `emdx run` vs `emdx each` vs `emdx workflow`
+### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
-| Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|-------------------------|----------------------------|
-| Quick, ad-hoc parallel tasks | Reusable discovery+action | Complex multi-stage workflows |
-| Simple task lists | "For each X, do Y" patterns | Need iterative or adversarial modes |
-| One-off execution | Save for future use | Custom stage configurations |
-| Just want tasks done fast | Same operation on many items | Need detailed run monitoring |
+| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------|--------------------------|-------------------------|----------------------------|
+| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
+| Simple task lists | Need tracked output | "For each X, do Y" patterns | Need iterative or adversarial modes |
+| One-off execution | Human or AI caller | Save for future use | Custom stage configurations |
+| Just want tasks done fast | Consistent metadata | Same operation on many items | Need detailed run monitoring |
 
 For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
 
