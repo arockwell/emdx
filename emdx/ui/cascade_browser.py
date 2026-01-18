@@ -6,11 +6,12 @@ from typing import Optional, List, Dict, Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Grid, Horizontal, Vertical
 from textual.message import Message
 from textual.reactive import reactive
+from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import DataTable, Static, MarkdownViewer
+from textual.widgets import Button, DataTable, Input, Label, MarkdownViewer, Static
 
 from emdx.database.documents import (
     get_document,
@@ -37,6 +38,83 @@ NEXT_STAGE = {
     "analyzed": "planned",
     "planned": "done",
 }
+
+
+class NewIdeaScreen(ModalScreen):
+    """Modal screen for entering a new cascade idea."""
+
+    CSS = """
+    NewIdeaScreen {
+        align: center middle;
+    }
+    #idea-dialog {
+        width: 70;
+        height: auto;
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+    }
+    #idea-label {
+        width: 100%;
+        padding-bottom: 1;
+    }
+    #idea-input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    #idea-buttons {
+        width: 100%;
+        height: 3;
+        align: center middle;
+    }
+    #idea-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self):
+        super().__init__()
+        self.idea_text = ""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="idea-dialog"):
+            yield Label("💡 Enter new idea for the cascade:", id="idea-label")
+            yield Input(placeholder="Describe your idea...", id="idea-input")
+            with Horizontal(id="idea-buttons"):
+                yield Button("Add Idea", variant="primary", id="add-btn")
+                yield Button("Cancel", variant="default", id="cancel-btn")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-btn":
+            idea_input = self.query_one("#idea-input", Input)
+            self.idea_text = idea_input.value.strip()
+            if self.idea_text:
+                self.dismiss(self.idea_text)
+            else:
+                label = self.query_one("#idea-label", Label)
+                label.update("[red]⚠️ Idea cannot be empty[/red]")
+        else:
+            self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in the input field."""
+        self.idea_text = event.value.strip()
+        if self.idea_text:
+            self.dismiss(self.idea_text)
+        else:
+            label = self.query_one("#idea-label", Label)
+            label.update("[red]⚠️ Idea cannot be empty[/red]")
+
+    def on_mount(self) -> None:
+        idea_input = self.query_one("#idea-input", Input)
+        idea_input.focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
@@ -582,6 +660,7 @@ class CascadeView(Widget):
         Binding("up", "move_up", "Up", show=False),
         Binding("space", "toggle_select", "Select", show=True),
         Binding("enter", "view_doc", "View Full", show=True),
+        Binding("n", "new_idea", "New Idea", show=True),
         Binding("a", "advance_doc", "Advance", show=True),
         Binding("p", "process", "Process", show=True),
         Binding("s", "synthesize", "Synthesize", show=True),
@@ -754,6 +833,25 @@ class CascadeView(Widget):
             self._update_status(f"[green]Moved #{doc_id}: {stage} → {next_stage}[/green]")
             self.refresh_all()
 
+    def action_new_idea(self) -> None:
+        """Open modal to create a new cascade idea."""
+        from emdx.database.documents import save_document_to_cascade
+
+        def handle_idea_result(idea_text: str | None) -> None:
+            if idea_text:
+                # Save the idea to cascade at 'idea' stage
+                doc_id = save_document_to_cascade(
+                    title=f"Cascade: {idea_text[:50]}{'...' if len(idea_text) > 50 else ''}",
+                    content=idea_text,
+                    stage="idea",
+                )
+                self._update_status(f"[green]Created idea #{doc_id}[/green]")
+                # Navigate to idea stage and refresh
+                self.current_stage_idx = 0  # idea is index 0
+                self.refresh_all()
+
+        self.app.push_screen(NewIdeaScreen(), handle_idea_result)
+
     def action_process(self) -> None:
         """Process the current stage."""
         stage = STAGES[self.current_stage_idx]
@@ -882,7 +980,7 @@ class CascadeBrowser(Widget):
         yield self.cascade_view
         yield Static(
             "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ [bold]4[/bold] Cascade │ "
-            "[dim]Enter[/dim] view │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize",
+            "[dim]n[/dim] new idea │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize",
             id="help-bar",
         )
 

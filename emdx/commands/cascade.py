@@ -37,9 +37,33 @@ app = typer.Typer(help="Cascade ideas through stages to working code")
 # Stage configuration
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
 STAGE_PROMPTS = {
-    "idea": "Convert this idea into a well-formed prompt that could be given to an AI assistant: {content}",
-    "prompt": "Analyze this prompt and provide a thorough analysis: {content}",
-    "analyzed": "Based on this analysis, create a detailed implementation gameplan: {content}",
+    "idea": """Convert this idea into a well-formed prompt that could be given to an AI assistant.
+
+IMPORTANT: Do NOT create any files. Just output the prompt text directly - your output will be captured automatically.
+
+Idea to convert:
+{content}""",
+    "prompt": """Analyze this prompt thoroughly. Consider:
+- What is being asked?
+- What are the requirements (explicit and implicit)?
+- What are potential challenges or edge cases?
+- What context or information is needed?
+
+IMPORTANT: Do NOT create any files. Just output your analysis directly - your output will be captured automatically.
+
+Prompt to analyze:
+{content}""",
+    "analyzed": """Based on this analysis, create a detailed implementation gameplan. Include:
+- Step-by-step implementation plan
+- Files that need to be modified
+- Key design decisions
+- Testing approach
+- Potential risks
+
+IMPORTANT: Do NOT create any files (no GAMEPLAN.md, no markdown files). Just output the gameplan directly as text - your output will be captured automatically and saved to the knowledge base.
+
+Analysis to plan from:
+{content}""",
     # planned stage uses a special implementation prompt - see process command
 }
 NEXT_STAGE = {
