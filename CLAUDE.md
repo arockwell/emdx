@@ -144,9 +144,12 @@ poetry run emdx untag 123 blocked
 
 ## 🚀 Quick Task Execution (`emdx run`)
 
-The fastest way to run parallel tasks:
+The fastest way to run parallel tasks. This is the first rung on EMDX's "execution ladder" - start here and graduate to `emdx each` or `emdx workflow` only when you need more power.
 
 ```bash
+# Run a single task
+emdx run "analyze the auth module"
+
 # Run multiple tasks in parallel
 emdx run "analyze auth" "review tests" "check docs"
 
@@ -158,7 +161,17 @@ emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
 
 # Control concurrency
 emdx run -j 3 "task1" "task2" "task3" "task4"
+
+# Use a saved preset
+emdx run -p security-audit
+
+# Use workflow patterns (shortcuts with auto-settings)
+emdx run "fix X" "fix Y" --pattern fix       # Auto-enables worktree
+emdx run "analyze X" -P analyze              # Auto-enables synthesis
+emdx run --list-patterns                     # Show available patterns
 ```
+
+For the full execution ladder (run → each → workflow → pipeline), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
 
 ## 🤖 Sub-Agent Execution (`emdx agent`)
 
