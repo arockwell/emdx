@@ -1718,6 +1718,52 @@ def migration_031_add_cascade_runs(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_032_add_cascade_stage_timings(conn: sqlite3.Connection):
+    """Add cascade_stage_timings table for tracking stage transition performance.
+
+    This table enables:
+    - Progress indicators with historical timing estimates
+    - "Why stuck" detection for documents exceeding expected times
+    - Performance analytics for cascade stages
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cascade_stage_timings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id INTEGER NOT NULL,
+            from_stage TEXT NOT NULL,
+            to_stage TEXT NOT NULL,
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            duration_seconds REAL,
+            success BOOLEAN DEFAULT TRUE,
+            error_message TEXT,
+            execution_id INTEGER,
+            FOREIGN KEY (doc_id) REFERENCES documents(id),
+            FOREIGN KEY (execution_id) REFERENCES executions(id)
+        )
+    """)
+
+    # Indexes for efficient queries
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cst_stages
+        ON cascade_stage_timings(from_stage, to_stage)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cst_completed
+        ON cascade_stage_timings(completed_at)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cst_doc_id
+        ON cascade_stage_timings(doc_id)
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1752,6 +1798,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
     (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
+    (32, "Add cascade stage timings for progress tracking", migration_032_add_cascade_stage_timings),
 ]
 
 

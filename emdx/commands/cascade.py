@@ -32,6 +32,7 @@ from ..database.documents import (
     update_document_stage,
     update_document_pr_url,
 )
+from ..database.cascade_timing import record_timing_start, record_timing_end
 from ..services.claude_executor import execute_claude_detached, execute_claude_sync
 from ..database.connection import db_connection
 
@@ -178,6 +179,9 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
         conn.commit()
         execution_id = cursor.lastrowid
 
+    # Record timing start
+    timing_id = record_timing_start(doc_id, stage, next_stage, execution_id)
+
     # Implementation stage needs longer timeout
     timeout = 1800 if stage == "planned" else 300
 
@@ -233,6 +237,9 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
                 )
                 conn.commit()
 
+            # Record timing success
+            record_timing_end(timing_id, success=True)
+
             return True, new_doc_id, pr_url
         else:
             console.print(f"[red]✗ Processing failed[/red]")
@@ -242,6 +249,8 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
                     (execution_id,),
                 )
                 conn.commit()
+            # Record timing failure
+            record_timing_end(timing_id, success=False, error_message="Processing failed")
             return False, doc_id, None
 
     except Exception as e:
@@ -252,6 +261,8 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
                 (execution_id,),
             )
             conn.commit()
+        # Record timing failure with exception message
+        record_timing_end(timing_id, success=False, error_message=str(e))
         return False, doc_id, None
 
 

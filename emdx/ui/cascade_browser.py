@@ -13,6 +13,8 @@ from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label, MarkdownViewer, Static
 
+from emdx.ui.widgets.processing_progress import ProcessingProgress
+
 from emdx.database.documents import (
     get_document,
     get_cascade_stats,
@@ -20,8 +22,21 @@ from emdx.database.documents import (
     update_document_stage,
 )
 from emdx.database.connection import db_connection
+from emdx.database.cascade_timing import (
+    get_all_stage_timing_stats,
+    get_expected_timing,
+    get_stuck_documents,
+    get_processing_status,
+)
+from emdx.services.cascade_progress import (
+    CascadeProgressTracker,
+    format_progress,
+)
 
 logger = logging.getLogger(__name__)
+
+# Module-level progress tracker instance
+_progress_tracker = CascadeProgressTracker()
 
 # Fixed cascade stages
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
@@ -117,6 +132,132 @@ class NewIdeaScreen(ModalScreen):
         self.dismiss(None)
 
 
+class StuckDiagnosticScreen(ModalScreen):
+    """Modal screen for diagnosing stuck documents."""
+
+    CSS = """
+    StuckDiagnosticScreen {
+        align: center middle;
+    }
+    #diag-dialog {
+        width: 80;
+        height: auto;
+        max-height: 30;
+        background: $surface;
+        border: thick $warning;
+        padding: 1 2;
+    }
+    #diag-title {
+        width: 100%;
+        text-align: center;
+        padding-bottom: 1;
+    }
+    #diag-content {
+        width: 100%;
+        height: auto;
+        max-height: 20;
+        overflow-y: auto;
+        padding: 1;
+        background: $panel;
+        margin-bottom: 1;
+    }
+    #diag-buttons {
+        width: 100%;
+        height: 3;
+        align: center middle;
+    }
+    #diag-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "dismiss_screen", "Close"),
+    ]
+
+    def __init__(self, doc_id: int, title: str, stuck_info: Optional[Dict[str, Any]] = None):
+        super().__init__()
+        self.doc_id = doc_id
+        self.doc_title = title
+        self.stuck_info = stuck_info
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="diag-dialog"):
+            yield Label(f"🔍 Diagnostic: Document #{self.doc_id}", id="diag-title")
+            yield Static(self._build_diagnostic_content(), id="diag-content")
+            with Horizontal(id="diag-buttons"):
+                yield Button("Retry Processing", variant="primary", id="retry-btn")
+                yield Button("Close", variant="default", id="close-btn")
+
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds into a human-readable string."""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:
+            mins = int(seconds / 60)
+            secs = int(seconds % 60)
+            return f"{mins}m {secs}s"
+        else:
+            hours = int(seconds / 3600)
+            mins = int((seconds % 3600) / 60)
+            return f"{hours}h {mins}m"
+
+    def _build_diagnostic_content(self) -> str:
+        """Build the diagnostic content display."""
+        lines = []
+        lines.append(f"[bold]Title:[/bold] {self.doc_title[:60]}")
+        lines.append("")
+
+        if self.stuck_info:
+            # Time information
+            time_at_stage = self.stuck_info.get("time_at_stage", 0)
+            expected_time = self.stuck_info.get("expected_time", 0)
+            threshold = self.stuck_info.get("threshold", 0)
+
+            lines.append(f"[bold]Stage:[/bold] {self.stuck_info.get('stage', '?')}")
+            lines.append(f"[bold]Time at stage:[/bold] {self._format_time(time_at_stage)}")
+            lines.append(f"[bold]Expected time:[/bold] {self._format_time(expected_time)}")
+            lines.append(f"[bold]Threshold:[/bold] {self._format_time(threshold)}")
+            lines.append("")
+
+            # Status indicators
+            if self.stuck_info.get("has_failed_execution"):
+                lines.append("[bold red]❌ FAILED EXECUTION[/bold red]")
+                error_msg = self.stuck_info.get("error_message")
+                if error_msg:
+                    lines.append(f"[red]Error: {error_msg}[/red]")
+            elif self.stuck_info.get("is_stuck"):
+                ratio = time_at_stage / expected_time if expected_time > 0 else 0
+                lines.append(f"[bold yellow]⚠️ STUCK[/bold yellow] ({ratio:.1f}x expected time)")
+            else:
+                lines.append("[green]✓ Normal - no issues detected[/green]")
+
+            lines.append("")
+            lines.append("[dim]Suggested actions:[/dim]")
+            if self.stuck_info.get("has_failed_execution"):
+                lines.append("• Retry processing with 'p' key")
+                lines.append("• Check logs for detailed error info")
+            else:
+                lines.append("• Wait longer (processing may be complex)")
+                lines.append("• Retry processing with 'p' key")
+                lines.append("• Manually advance with 'a' key")
+        else:
+            lines.append("[green]✓ This document appears healthy[/green]")
+            lines.append("")
+            lines.append("[dim]No stuck indicators detected.[/dim]")
+
+        return "\n".join(lines)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "retry-btn":
+            self.dismiss("retry")
+        else:
+            self.dismiss(None)
+
+    def action_dismiss_screen(self) -> None:
+        self.dismiss(None)
+
+
 def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
     """Get recent cascade activity from executions and document changes."""
     with db_connection.get_connection() as conn:
@@ -206,7 +347,7 @@ def get_recent_cascade_runs(limit: int = 5) -> List[Dict[str, Any]]:
 
 
 class StageSummaryBar(Widget):
-    """Compact bar showing all stages with counts and current selection."""
+    """Compact bar showing all stages with counts, timing info, and current selection."""
 
     DEFAULT_CSS = """
     StageSummaryBar {
@@ -232,43 +373,75 @@ class StageSummaryBar(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.stats: Dict[str, int] = {}
+        self.timing_stats: Dict[str, Dict[str, Any]] = {}
 
     def compose(self) -> ComposeResult:
         yield Static("", id="stage-bar")
         yield Static("", id="stage-detail")
 
     def refresh_stats(self) -> None:
-        """Refresh stage statistics."""
+        """Refresh stage statistics and timing data."""
         self.stats = get_cascade_stats()
+        self.timing_stats = get_all_stage_timing_stats()
         self._update_display()
+
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds into a human-readable string."""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:
+            return f"{int(seconds / 60)}m"
+        else:
+            return f"{int(seconds / 3600)}h"
 
     def _update_display(self) -> None:
         """Update the display."""
         bar = self.query_one("#stage-bar", Static)
         detail = self.query_one("#stage-detail", Static)
 
-        # Build stage bar with arrows
+        # Build stage bar with arrows and timing hints
         parts = []
         for stage in STAGES:
             count = self.stats.get(stage, 0)
             emoji = STAGE_EMOJI.get(stage, "")
 
+            # Get timing hint for this stage transition
+            timing_hint = ""
+            if stage != "done":
+                timing_key = f"{stage}→{NEXT_STAGE.get(stage, '')}"
+                timing_info = self.timing_stats.get(timing_key, {})
+                avg = timing_info.get("avg")
+                if avg is not None:
+                    timing_hint = f" ~{self._format_time(avg)}"
+
             if stage == self.current_stage:
                 # Highlighted current stage
-                parts.append(f"[bold reverse] {emoji} {stage.upper()} ({count}) [/]")
+                parts.append(f"[bold reverse] {emoji} {stage.upper()} ({count}){timing_hint} [/]")
             elif count > 0:
-                parts.append(f"[bold]{emoji} {stage}[/bold] ({count})")
+                parts.append(f"[bold]{emoji} {stage}[/bold] ({count}){timing_hint}")
             else:
-                parts.append(f"[dim]{emoji} {stage} (0)[/dim]")
+                parts.append(f"[dim]{emoji} {stage} (0){timing_hint}[/dim]")
 
         bar.update(" → ".join(parts))
 
-        # Show detail for current stage
+        # Show detail for current stage with timing info
         count = self.stats.get(self.current_stage, 0)
+        timing_detail = ""
+        if self.current_stage != "done":
+            timing_key = f"{self.current_stage}→{NEXT_STAGE.get(self.current_stage, '')}"
+            timing_info = self.timing_stats.get(timing_key, {})
+            avg = timing_info.get("avg")
+            p95 = timing_info.get("p95")
+            hist_count = timing_info.get("count", 0)
+            if hist_count > 0:
+                avg_str = self._format_time(avg) if avg else "?"
+                p95_str = self._format_time(p95) if p95 else "?"
+                timing_detail = f" │ avg: {avg_str}, p95: {p95_str} ({hist_count} samples)"
+
         if count > 0:
-            detail.update(f"[bold]← h[/bold] prev stage │ [bold]l →[/bold] next stage │ {count} document{'s' if count != 1 else ''} at {self.current_stage}")
+            detail.update(f"[bold]← h[/bold] prev │ [bold]l →[/bold] next │ {count} doc{'s' if count != 1 else ''}{timing_detail}")
         else:
-            detail.update(f"[bold]← h[/bold] prev stage │ [bold]l →[/bold] next stage │ No documents at {self.current_stage}")
+            detail.update(f"[bold]← h[/bold] prev │ [bold]l →[/bold] next │ No documents at {self.current_stage}")
 
 
 class DocumentList(Widget):
@@ -313,12 +486,13 @@ class DocumentList(Widget):
         self.docs: List[Dict[str, Any]] = []
         self.current_stage = "idea"
         self.selected_ids: set[int] = set()  # Multi-select tracking
+        self.stuck_docs: Dict[int, Dict[str, Any]] = {}  # doc_id -> stuck info
 
     def compose(self) -> ComposeResult:
         table = DataTable(id="doc-table")
-        table.add_column("", width=2)  # Selection marker column
+        table.add_column("", width=3)  # Selection + stuck marker column
         table.add_column("ID", width=6)
-        table.add_column("Title", width=38)
+        table.add_column("Title", width=36)
         table.add_column("Parent", width=8)
         table.add_column("Created", width=12)
         table.cursor_type = "row"
@@ -330,6 +504,13 @@ class DocumentList(Widget):
         self.current_stage = stage
         self.docs = list_documents_at_stage(stage, limit=50)
         self.selected_ids.clear()  # Clear selection when changing stages
+
+        # Load stuck document info for this stage
+        self.stuck_docs = {}
+        if stage != "done":
+            stuck_list = get_stuck_documents(stage)
+            self.stuck_docs = {d["doc_id"]: d for d in stuck_list}
+
         self._refresh_table()
         self._update_selection_status()
 
@@ -345,8 +526,18 @@ class DocumentList(Widget):
             doc_id = doc["id"]
             doc_id_str = str(doc_id)
 
-            # Selection marker
+            # Selection marker with stuck indicator
             marker = "●" if doc_id in self.selected_ids else " "
+
+            # Add stuck indicator
+            stuck_info = self.stuck_docs.get(doc_id)
+            if stuck_info:
+                if stuck_info.get("has_failed_execution"):
+                    marker = f"{marker}❌"  # Failed execution
+                elif stuck_info.get("is_stuck"):
+                    marker = f"{marker}⚠️"  # Stuck (taking too long)
+            else:
+                marker = f"{marker} "  # Pad for alignment
 
             # Title - show more of it
             title = doc["title"]
@@ -364,11 +555,11 @@ class DocumentList(Widget):
                     title = f"🔗 {title}"  # Has PR
                 elif child_info:
                     title = f"✓ {title}"  # Has outputs but no PR
-                if len(title) > 36:
-                    title = title[:33] + "..."
+                if len(title) > 34:
+                    title = title[:31] + "..."
             else:
-                if len(title) > 36:
-                    title = title[:33] + "..."
+                if len(title) > 34:
+                    title = title[:31] + "..."
 
             # Parent ID
             parent = str(doc.get("parent_id") or "-")
@@ -379,6 +570,10 @@ class DocumentList(Widget):
                 created = doc["created_at"].strftime("%m/%d %H:%M")
 
             table.add_row(marker, doc_id_str, title, parent, created, key=doc_id_str)
+
+    def get_stuck_info(self, doc_id: int) -> Optional[Dict[str, Any]]:
+        """Get stuck info for a document if available."""
+        return self.stuck_docs.get(doc_id)
 
     def _get_child_info(self, parent_id: int) -> Optional[Dict[str, Any]]:
         """Get info about child documents (outputs from processing)."""
@@ -806,6 +1001,7 @@ class CascadeView(Widget):
         Binding("a", "advance_doc", "Advance", show=True),
         Binding("p", "process", "Process", show=True),
         Binding("s", "synthesize", "Synthesize", show=True),
+        Binding("d", "diagnose", "Diagnose", show=True),
         Binding("ctrl+a", "select_all", "Select All", show=False),
         Binding("escape", "clear_selection", "Clear", show=False),
         Binding("r", "refresh", "Refresh", show=True),
@@ -848,6 +1044,10 @@ class CascadeView(Widget):
     """
 
     current_stage_idx = reactive(0)
+    # Processing state tracking
+    processing_doc_id: reactive[Optional[int]] = reactive(None)
+    processing_started_at: reactive[Optional[datetime]] = reactive(None)
+    processing_stage: reactive[Optional[str]] = reactive(None)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -855,10 +1055,16 @@ class CascadeView(Widget):
         self.doc_list: Optional[DocumentList] = None
         self.preview: Optional[DocumentPreview] = None
         self.activity: Optional[ActivityFeed] = None
+        self.progress_widget: Optional[ProcessingProgress] = None
+        self._progress_timer = None
 
     def compose(self) -> ComposeResult:
         self.summary = StageSummaryBar(id="pv-summary")
         yield self.summary
+
+        # Processing progress widget (hidden by default, shown when processing)
+        self.progress_widget = ProcessingProgress(id="pv-progress")
+        yield self.progress_widget
 
         with Horizontal(id="pv-main"):
             with Vertical(id="pv-list-container"):
@@ -876,6 +1082,87 @@ class CascadeView(Widget):
     def on_mount(self) -> None:
         """Initialize on mount."""
         self.refresh_all()
+        # Start polling timer to check for processing status
+        self._progress_timer = self.set_interval(2.0, self._check_processing_status)
+
+    def _check_processing_status(self) -> None:
+        """Check for any running processing and update progress display."""
+        # Check if we're tracking a processing operation
+        if self.processing_doc_id:
+            status = get_processing_status(self.processing_doc_id)
+            if status:
+                if status.get("execution_status") == "completed":
+                    # Processing finished successfully
+                    if self.progress_widget:
+                        self.progress_widget.stop_processing(success=True)
+                    self.processing_doc_id = None
+                    self.processing_started_at = None
+                    self.processing_stage = None
+                    self.refresh_all()
+                elif status.get("execution_status") == "failed":
+                    # Processing failed
+                    if self.progress_widget:
+                        self.progress_widget.stop_processing(success=False)
+                    self._update_status(f"[red]❌ Processing failed for #{self.processing_doc_id}[/red]")
+                    self.processing_doc_id = None
+                    self.processing_started_at = None
+                    self.processing_stage = None
+                    self.refresh_all()
+                else:
+                    # Still running - update elapsed time display and widget
+                    elapsed = status.get("elapsed_seconds", 0)
+                    self._update_progress_display(elapsed)
+
+                    # Check if stuck based on timing
+                    if self.progress_widget and self.processing_stage:
+                        expected = get_expected_timing(
+                            self.processing_stage,
+                            NEXT_STAGE.get(self.processing_stage, "done")
+                        )
+                        if elapsed > expected * 2:
+                            self.progress_widget.mark_stuck(True)
+            else:
+                # No timing record found - might have completed without our tracking
+                if self.progress_widget:
+                    self.progress_widget.stop_processing()
+                self.processing_doc_id = None
+                self.processing_started_at = None
+                self.processing_stage = None
+
+    def _update_progress_display(self, elapsed_seconds: float) -> None:
+        """Update the status bar with processing progress."""
+        if not self.processing_doc_id:
+            return
+
+        # Format elapsed time
+        if elapsed_seconds < 60:
+            time_str = f"{int(elapsed_seconds)}s"
+        elif elapsed_seconds < 3600:
+            mins = int(elapsed_seconds / 60)
+            secs = int(elapsed_seconds % 60)
+            time_str = f"{mins}m {secs}s"
+        else:
+            hours = int(elapsed_seconds / 3600)
+            mins = int((elapsed_seconds % 3600) / 60)
+            time_str = f"{hours}h {mins}m"
+
+        # Get expected timing for this transition
+        if self.processing_stage and NEXT_STAGE.get(self.processing_stage):
+            expected = get_expected_timing(self.processing_stage, NEXT_STAGE[self.processing_stage])
+            expected_str = f"~{int(expected)}s" if expected < 60 else f"~{int(expected/60)}m"
+
+            # Show progress with spinner animation
+            spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            spinner_idx = int(elapsed_seconds) % len(spinner_frames)
+            spinner = spinner_frames[spinner_idx]
+
+            self._update_status(
+                f"[cyan]{spinner} Processing #{self.processing_doc_id}...[/cyan] "
+                f"[bold]{time_str}[/bold] (expected: {expected_str}) │ "
+                f"{self.processing_stage} → {NEXT_STAGE.get(self.processing_stage, '?')}"
+            )
+        else:
+            self._update_status(f"[cyan]⟳ Processing #{self.processing_doc_id}...[/cyan] {time_str}")
 
     def refresh_all(self) -> None:
         """Refresh all components."""
@@ -901,8 +1188,9 @@ class CascadeView(Widget):
         if self.activity:
             self.activity.refresh_activity()
 
-        # Update status
-        self._update_status("[dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize │ [dim]r[/dim] refresh")
+        # Update status (only if not currently processing)
+        if not self.processing_doc_id:
+            self._update_status("[dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]d[/dim] diagnose │ [dim]r[/dim] refresh")
 
     def watch_current_stage_idx(self, idx: int) -> None:
         """React to stage change."""
@@ -1094,6 +1382,39 @@ class CascadeView(Widget):
         if self.activity:
             self.activity.toggle_view()
 
+    def action_diagnose(self) -> None:
+        """Show diagnostic info for selected document."""
+        if not self.doc_list:
+            return
+
+        doc_id = self.doc_list.get_selected_doc_id()
+        if not doc_id:
+            self._update_status("[yellow]No document selected[/yellow]")
+            return
+
+        # Get document info
+        doc = get_document(str(doc_id))
+        if not doc:
+            self._update_status(f"[red]Document #{doc_id} not found[/red]")
+            return
+
+        # Get stuck info if available
+        stuck_info = self.doc_list.get_stuck_info(doc_id)
+
+        def handle_diagnostic_result(result: str | None) -> None:
+            if result == "retry":
+                # Trigger a reprocess of this document
+                if self.current_stage_idx < len(STAGES):
+                    stage = STAGES[self.current_stage_idx]
+                    if stage != "done":
+                        self.post_message(self.ProcessStage(stage, doc_id))
+                        self._update_status(f"[cyan]Retrying processing for #{doc_id}...[/cyan]")
+
+        self.app.push_screen(
+            StuckDiagnosticScreen(doc_id, doc["title"], stuck_info),
+            handle_diagnostic_result,
+        )
+
     def _update_status(self, text: str) -> None:
         """Update status bar."""
         status = self.query_one("#pv-status", Static)
@@ -1137,7 +1458,7 @@ class CascadeBrowser(Widget):
         yield self.cascade_view
         yield Static(
             "[dim]1[/dim] Activity │ [bold]2[/bold] Cascade │ [dim]3[/dim] Documents │ [dim]4[/dim] Search │ "
-            "[dim]n[/dim] new idea │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize",
+            "[dim]n[/dim] new │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]d[/dim] diagnose │ [dim]s[/dim] synth",
             id="help-bar",
         )
 
@@ -1160,6 +1481,12 @@ class CascadeBrowser(Widget):
         try:
             subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self._update_status(f"[green]Started processing {stage} (sync mode)[/green]")
+
+            # Track processing state in the CascadeView for progress display
+            if self.cascade_view and doc_id:
+                self.cascade_view.processing_doc_id = doc_id
+                self.cascade_view.processing_started_at = datetime.now()
+                self.cascade_view.processing_stage = stage
         except Exception as e:
             self._update_status(f"[red]Error: {e}[/red]")
 
