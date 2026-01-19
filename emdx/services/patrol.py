@@ -99,9 +99,7 @@ class PatrolRunner:
         exec_id = create_execution(
             doc_id=None,  # Work items don't have doc_id
             doc_title=f"Patrol: {item.title}",
-            prompt=full_prompt[:500],  # Truncate for DB
             log_file=str(log_file),
-            execution_type="patrol",
             working_dir=working_dir,
         )
 
@@ -117,13 +115,13 @@ class PatrolRunner:
             )
         except Exception as e:
             logger.error(f"Claude execution failed: {e}")
-            update_execution_status(exec_id, "failed", error=str(e))
+            update_execution_status(exec_id, "failed", exit_code=1)
             return False
 
         if not result.get("success"):
             error = result.get("error", "Unknown error")
             logger.error(f"Processing failed for {item.id}: {error}")
-            update_execution_status(exec_id, "failed", error=error)
+            update_execution_status(exec_id, "failed", exit_code=1)
             self.stats.errors.append(f"{item.id}: {error}")
             return False
 
@@ -154,7 +152,7 @@ class PatrolRunner:
 
         except ValueError as e:
             logger.error(f"Failed to advance {item.id}: {e}")
-            update_execution_status(exec_id, "failed", error=str(e))
+            update_execution_status(exec_id, "failed", exit_code=1)
             return False
 
     def _get_timeout(self, stage: str) -> int:
