@@ -32,6 +32,7 @@ from emdx.commands.ask import app as ask_app
 from emdx.commands.each import app as each_app
 from emdx.commands.cascade import app as cascade_app
 from emdx.commands.work import app as work_app
+from emdx.commands.patrol import app as patrol_app
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -114,6 +115,9 @@ app.add_typer(cascade_app, name="cascade", help="Cascade ideas through stages to
 
 # Add unified work system for managing work items through cascade stages
 app.add_typer(work_app, name="work", help="Unified work system - manage work items through cascade stages")
+
+# Add patrol commands for autonomous work processing
+app.add_typer(patrol_app, name="patrol", help="Autonomous work item processing through stages")
 
 # Add the gui command
 app.command()(gui)
