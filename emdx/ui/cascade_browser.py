@@ -1036,6 +1036,10 @@ class CascadeView(Widget):
         height: 10;
     }
 
+    #pv-progress {
+        margin: 0;
+    }
+
     #pv-status {
         height: 1;
         background: $surface;
@@ -1473,6 +1477,7 @@ class CascadeBrowser(Widget):
         import subprocess
         stage = event.stage
         doc_id = event.doc_id
+        next_stage = NEXT_STAGE.get(stage, "done")
 
         cmd = ["poetry", "run", "emdx", "cascade", "process", stage, "--sync"]
         if doc_id:
@@ -1487,6 +1492,17 @@ class CascadeBrowser(Widget):
                 self.cascade_view.processing_doc_id = doc_id
                 self.cascade_view.processing_started_at = datetime.now()
                 self.cascade_view.processing_stage = stage
+
+                # Start the ProcessingProgress widget
+                if self.cascade_view.progress_widget:
+                    # Get expected timing for ETA
+                    expected = get_expected_timing(stage, next_stage)
+                    self.cascade_view.progress_widget.start_processing(
+                        doc_id=doc_id,
+                        from_stage=stage,
+                        to_stage=next_stage,
+                        estimated_seconds=expected,
+                    )
         except Exception as e:
             self._update_status(f"[red]Error: {e}[/red]")
 
