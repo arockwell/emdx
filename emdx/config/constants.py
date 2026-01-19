@@ -184,3 +184,30 @@ RECOMMENDED_WORKFLOW_RUNS = 5  # Recommended runs for workflow stats
 # =============================================================================
 
 DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+
+# =============================================================================
+# CASCADE PROGRESS TRACKING
+# =============================================================================
+
+# Stuck detection threshold multiplier
+# A document is considered stuck if time_at_stage > expected_time * multiplier
+CASCADE_STUCK_THRESHOLD_MULTIPLIER = 2.0
+
+# Rolling window for timing statistics (days)
+CASCADE_TIMING_WINDOW_DAYS = 30
+
+# Default stage timing thresholds (seconds) when no historical data available
+CASCADE_DEFAULT_TIMINGS = {
+    "idea→prompt": 30,
+    "prompt→analyzed": 60,
+    "analyzed→planned": 120,
+    "planned→done": 300,
+}
+
+# Maximum time before a document is definitely considered stuck (seconds)
+CASCADE_STAGE_MAX_TIMEOUTS = {
+    "idea": 300,  # 5 minutes
+    "prompt": 600,  # 10 minutes
+    "analyzed": 1800,  # 30 minutes
+    "planned": 3600,  # 1 hour
+}
