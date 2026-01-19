@@ -14,7 +14,6 @@ EMDX is designed for one workflow: **using Claude Code to get things done at sca
 
 - Run 10 tasks in parallel with 5 worker slots
 - Discover tasks from shell commands at runtime
-- Save configurations as presets for one-command execution
 - Every output automatically indexed and searchable
 - Semantic search across your entire history
 
@@ -23,18 +22,14 @@ EMDX is designed for one workflow: **using Claude Code to get things done at sca
 emdx run "Review auth module" "Check error handling" "Audit SQL queries" -j 3
 
 # Discover tasks dynamically from git branches
-emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 
-# Use a saved preset
-emdx run -p security-audit
-```
 
 ## Installation
 
 ```bash
 git clone https://github.com/arockwell/emdx.git
 cd emdx && pip install -e .
-```
 
 ## Quick Start: Parallel Tasks
 
@@ -52,7 +47,6 @@ emdx run --synthesize "analyze auth" "analyze api" "analyze database"
 
 # Set a title for tracking
 emdx run -T "Security Audit" "check XSS" "check SQL injection" "check CSRF"
-```
 
 ### Dynamic Task Discovery
 
@@ -60,36 +54,17 @@ Discover tasks at runtime from shell commands:
 
 ```bash
 # Review all feature branches
-emdx run -d "git branch -r | grep feature" -t "Review branch {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
 
 # Analyze all Python files in a directory
-emdx run -d "find src -name '*.py' -type f" -t "Analyze {{task}}"
+emdx run -d "find src -name '*.py' -type f" -t "Analyze {{item}}"
 
 # Process all open PRs
-emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{task}}"
+emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{item}}"
 
 # Run on document IDs from previous work
 emdx run 5350 5351 5352
-```
 
-### Presets
-
-Save configurations for common workflows:
-
-```bash
-# Create a preset
-emdx preset create security-audit \
-  --discover "find . -name '*.py'" \
-  --template "Security review {{task}}" \
-  --jobs 5 \
-  --synthesize
-
-# Use it
-emdx run -p security-audit
-
-# List presets
-emdx preset list
-```
 
 ## Workflow System
 
@@ -113,7 +88,6 @@ emdx workflow run parallel_fix \
 
 # Control concurrency
 emdx workflow run task_parallel -t "t1" -t "t2" -t "t3" -j 2
-```
 
 ### Execution Modes
 
@@ -125,21 +99,6 @@ emdx workflow run task_parallel -t "t1" -t "t2" -t "t3" -j 2
 | `adversarial` | Multiple perspectives, then synthesis |
 | `dynamic` | Discover tasks at runtime |
 
-### Workflow Presets
-
-Save workflow configurations for reuse:
-
-```bash
-# Create from variables
-emdx workflow preset create parallel_analysis my-preset \
-  -v topic="API Security"
-
-# Create from a successful run
-emdx workflow preset from-run parallel_analysis my-preset --run 42
-
-# Use a preset
-emdx workflow run parallel_analysis --preset my-preset
-```
 
 ## Monitoring Executions
 
@@ -158,7 +117,6 @@ emdx exec kill 42
 
 # Kill all running
 emdx exec killall
-```
 
 ## Finding Information
 
@@ -189,7 +147,6 @@ emdx find "authentication"           # Search for terms
 emdx find --tags "active"            # Filter by tags
 emdx find "security" --tags "analysis"  # Combine text and tags
 emdx find "api" --project myapp      # Filter by project
-```
 
 ### Semantic Search
 
@@ -205,7 +162,6 @@ emdx ai search "authentication flow"
 
 # Adjust threshold (lower = more results)
 emdx ai search "caching" --threshold 0.3
-```
 
 ### Similar Documents
 
@@ -214,7 +170,6 @@ Find related content:
 ```bash
 emdx similar 42                      # Docs similar to #42
 emdx similar-text "retry logic with exponential backoff"
-```
 
 ### Q&A Over Your Knowledge Base
 
@@ -224,7 +179,6 @@ emdx ai context "How does the workflow system work?" | claude
 
 # Using Claude API (requires ANTHROPIC_API_KEY)
 emdx ai ask "How did we solve the auth bug?"
-```
 
 ### Browsing
 
@@ -235,7 +189,6 @@ emdx list                            # All documents
 emdx list --project myapp            # By project
 emdx view 42                         # Read specific doc
 emdx gui                             # Interactive TUI
-```
 
 ### For AI Agents
 
@@ -257,7 +210,6 @@ emdx similar 42
 
 # 5. Get synthesized answers
 emdx ai context "What patterns do we use for error handling?" | claude
-```
 
 ### Emoji Tags
 
@@ -277,7 +229,6 @@ Type text aliases instead of emoji:
 emdx tag 42 gameplan active
 emdx find --tags "gameplan,success"
 emdx legend  # Full alias reference
-```
 
 ## When to Use What
 
@@ -285,7 +236,6 @@ emdx legend  # Full alias reference
 |--------------|----------|
 | Run quick parallel tasks | `emdx run "t1" "t2" "t3"` |
 | Discover tasks dynamically | `emdx run -d "command" -t "template"` |
-| Save a task configuration | `emdx preset create name` |
 | Run complex multi-stage work | `emdx workflow run workflow_name` |
 | Search by keywords | `emdx find "query"` |
 | Search by meaning | `emdx ai search "concept"` |
@@ -308,7 +258,6 @@ emdx legend  # Full alias reference
 poetry install
 poetry run emdx --help
 poetry run pytest
-```
 
 ## License
 
