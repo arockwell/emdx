@@ -350,13 +350,13 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Workflows, 3=Documents, 4=Search)
+        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Documents, 4=Search)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
             return
         elif key == "2":
-            await self.switch_browser("workflow")
+            await self.switch_browser("cascade")
             event.stop()
             return
         elif key == "3":
@@ -368,8 +368,8 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Q to quit from activity, document, or search browser
-        if key == "q" and self.current_browser in ["activity", "document", "search"]:
+        # Q to quit from activity, document, cascade, or search browser
+        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()

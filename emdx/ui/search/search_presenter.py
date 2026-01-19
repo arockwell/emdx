@@ -310,11 +310,27 @@ class SearchPresenter:
         self._cache.clear()
 
     def cycle_mode(self) -> SearchMode:
-        """Cycle to the next search mode."""
+        """Cycle to the next search mode, skipping semantic if no embeddings."""
         modes = list(SearchMode)
         current_idx = modes.index(self._state.mode)
-        next_idx = (current_idx + 1) % len(modes)
-        self._state.mode = modes[next_idx]
+
+        # Try up to len(modes) times to find a valid mode
+        for _ in range(len(modes)):
+            next_idx = (current_idx + 1) % len(modes)
+            next_mode = modes[next_idx]
+
+            # Skip semantic modes if no embeddings available
+            if next_mode in (SearchMode.SEMANTIC, SearchMode.COMBINED):
+                if not self.search_service.has_embeddings():
+                    current_idx = next_idx
+                    continue
+
+            self._state.mode = next_mode
+            self._cache.clear()
+            return self._state.mode
+
+        # Fallback to FTS if nothing else works
+        self._state.mode = SearchMode.FTS
         self._cache.clear()
         return self._state.mode
 
