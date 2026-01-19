@@ -1002,6 +1002,7 @@ emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
 | `--group-role` | | Role in group (default: `exploration`) |
 | `--verbose` | `-v` | Show agent output in real-time |
 | `--pr` | | Instruct agent to create a PR if it makes code changes |
+| `--timeout` | | Timeout in seconds (default: 300 / 5 minutes) |
 
 ### Use Cases
 
