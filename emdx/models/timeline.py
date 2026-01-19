@@ -56,6 +56,17 @@ class TimelineTask:
         """Check if task failed."""
         return self.status == "failed"
 
+    @property
+    def status_icon(self) -> str:
+        """Get status icon for display."""
+        return {
+            "running": "⟳",
+            "completed": "✓",
+            "failed": "✗",
+            "pending": "○",
+            "queued": "◷",
+        }.get(self.status, "?")
+
 
 @dataclass
 class RunGroup:
