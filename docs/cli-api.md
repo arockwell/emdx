@@ -412,9 +412,6 @@ emdx workflow run task_parallel \
 # Run with document IDs as tasks
 emdx workflow run task_parallel -t 5182 -t 5183
 
-# Use a preset for saved configurations
-emdx workflow run parallel_analysis --preset security_audit
-
 # Control concurrency
 emdx workflow run task_parallel -t "Task 1" -t "Task 2" -j 3  # max 3 concurrent
 
@@ -427,7 +424,6 @@ emdx workflow run task_parallel -t "Task 1" -t "Task 2" --worktree
 
 **Options:**
 - `--task/-t TEXT` - Task to run (string or doc ID). Can be repeated.
-- `--preset/-p TEXT` - Use saved preset for variables
 - `--var/-v TEXT` - Override variables (key=value)
 - `--max-concurrent/-j INTEGER` - Max parallel executions
 - `--background/--foreground` - Run mode
@@ -447,22 +443,6 @@ emdx workflow runs --status completed
 # Show run details
 emdx workflow status 123
 ```
-
-### **emdx workflow preset**
-Manage workflow presets (saved configurations).
-
-```bash
-# List presets
-emdx workflow presets
-
-# Create a preset
-emdx workflow preset create parallel_analysis security_audit \
-  --var topic="Security Review"
-
-# Use a preset
-emdx workflow run parallel_analysis --preset security_audit
-```
-
 
 ## 🔄 **Lifecycle Management**
 

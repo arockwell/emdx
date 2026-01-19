@@ -380,11 +380,12 @@ emdx each delete fix-conflicts    # Delete command
 - `--pr-single`: Create one combined PR for all items
 - Worktree isolation is auto-enabled for git/gh commands
 
-**Built-in discoveries** (use with `--from @name`):
+**Built-in discoveries** (Coming Soon - use shell commands for now):
 ```bash
-emdx each discover list              # List all built-in discoveries
-emdx each --from @prs-with-conflicts --do "Fix {{item}}"
-emdx each --from @python-files --do "Review {{item}}"
+# Built-in discoveries like @prs-with-conflicts, @python-files are planned
+# For now, use shell commands directly:
+emdx each --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" --do "Fix {{item}}"
+emdx each --from "fd -e py src/" --do "Review {{item}}"
 ```
 
 ## 🔄 Workflow System for Multi-Agent Tasks
