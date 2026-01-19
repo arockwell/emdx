@@ -1105,9 +1105,9 @@ class CascadeBrowser(Widget):
 
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
-        ("2", "switch_workflow", "Workflows"),
+        ("2", "switch_cascade", "Cascade"),
         ("3", "switch_documents", "Documents"),
-        ("4", "switch_cascade", "Cascade"),
+        ("4", "switch_search", "Search"),
         ("?", "show_help", "Help"),
     ]
 
@@ -1136,7 +1136,7 @@ class CascadeBrowser(Widget):
         self.cascade_view = CascadeView(id="cascade-view")
         yield self.cascade_view
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ [bold]4[/bold] Cascade │ "
+            "[dim]1[/dim] Activity │ [bold]2[/bold] Cascade │ [dim]3[/dim] Documents │ [dim]4[/dim] Search │ "
             "[dim]n[/dim] new idea │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize",
             id="help-bar",
         )
@@ -1181,19 +1181,19 @@ class CascadeBrowser(Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
 
-    async def action_switch_workflow(self) -> None:
-        """Switch to workflow browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("workflow")
+    async def action_switch_cascade(self) -> None:
+        """Already on cascade, do nothing."""
+        pass
 
     async def action_switch_documents(self) -> None:
         """Switch to document browser."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("document")
 
-    async def action_switch_cascade(self) -> None:
-        """Already on cascade, do nothing."""
-        pass
+    async def action_switch_search(self) -> None:
+        """Switch to search screen."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("search")
 
     def action_show_help(self) -> None:
         """Show help."""

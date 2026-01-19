@@ -202,6 +202,12 @@ class EmbeddingService:
         self, query: str, limit: int = 10, threshold: float = 0.3
     ) -> List[SemanticMatch]:
         """Semantic search across all documents."""
+        return self._search_sync(query, limit, threshold)
+
+    def _search_sync(
+        self, query: str, limit: int = 10, threshold: float = 0.3
+    ) -> List[SemanticMatch]:
+        """Internal synchronous search implementation."""
         query_embedding = self.embed_text(query)
 
         # Load all embeddings from database
@@ -245,6 +251,16 @@ class EmbeddingService:
         # Sort by similarity descending
         results.sort(key=lambda x: x.similarity, reverse=True)
         return results[:limit]
+
+    async def search_async(
+        self, query: str, limit: int = 10, threshold: float = 0.3
+    ) -> List[SemanticMatch]:
+        """Async semantic search - runs embedding in thread pool to avoid blocking."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, lambda: self._search_sync(query, limit, threshold)
+        )
 
     def find_similar(self, doc_id: int, limit: int = 5) -> List[SemanticMatch]:
         """Find documents similar to a given document."""
