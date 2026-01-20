@@ -1200,8 +1200,8 @@ class ActivityView(HelpMixin, Widget):
         # Stop any existing stream
         self._stop_stream()
 
-        # For running workflows or individual runs, show live log
-        if item.status == "running" and item.item_type in ("workflow", "individual_run"):
+        # For running workflows, individual runs, or patrols, show live log
+        if item.status == "running" and item.item_type in ("workflow", "individual_run", "patrol"):
             await self._show_live_log(item)
             return
 
@@ -1805,8 +1805,18 @@ class ActivityView(HelpMixin, Widget):
         try:
             log_path = None
 
+            # For patrol runs, get log file from the execution record
+            if item.item_type == "patrol" and item.item_id:
+                try:
+                    from emdx.models.executions import get_execution
+                    exec_record = get_execution(item.item_id)
+                    if exec_record and exec_record.log_file:
+                        log_path = Path(exec_record.log_file)
+                except Exception as e:
+                    logger.debug(f"Could not get patrol log: {e}")
+
             # For individual runs, get log file from the execution record
-            if item.item_type == "individual_run" and item.item_id:
+            elif item.item_type == "individual_run" and item.item_id:
                 try:
                     from emdx.models.executions import get_execution
                     # Get the individual run to find its execution ID
