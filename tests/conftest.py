@@ -96,6 +96,26 @@ def isolate_test_database(tmp_path_factory):
         os.environ["EMDX_TEST_DB"] = old_env
 
 
+@pytest.fixture(scope="function", autouse=True)
+def clear_caches():
+    """Clear all caches before each test to ensure test isolation.
+
+    This prevents cached search results from bleeding across tests.
+    """
+    try:
+        from emdx.services.cache import CacheManager
+        CacheManager.instance().clear_all()
+    except ImportError:
+        pass  # Cache module not available
+    yield
+    # Clear again after test
+    try:
+        from emdx.services.cache import CacheManager
+        CacheManager.instance().clear_all()
+    except ImportError:
+        pass
+
+
 @pytest.fixture(scope="function")
 def temp_db():
     """Create a temporary in-memory SQLite database for testing."""

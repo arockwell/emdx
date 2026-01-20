@@ -1,5 +1,7 @@
 """
 Document CRUD operations for emdx knowledge base
+
+Includes cache integration for improved performance.
 """
 
 import logging
@@ -10,6 +12,31 @@ from .connection import db_connection
 from .exceptions import CycleDetectedError, DocumentNotFoundError, InvalidStageError
 
 logger = logging.getLogger(__name__)
+
+
+def _invalidate_document_caches(doc_id: int | None = None) -> None:
+    """Invalidate caches after document changes.
+
+    Args:
+        doc_id: Specific document ID to invalidate, or None to clear search cache only
+    """
+    try:
+        from emdx.services.cache import CacheManager
+
+        cache_manager = CacheManager.instance()
+        if not cache_manager.enabled:
+            return
+
+        # Always invalidate search cache on document changes
+        # since search results may include the modified document
+        cache_manager.invalidate("search")
+
+        # Invalidate specific document from document cache
+        if doc_id is not None:
+            cache_manager.invalidate("documents", doc_id)
+
+    except Exception as e:
+        logger.debug("Cache invalidation skipped: %s", e)
 
 
 # Valid cascade stages - used for validation
@@ -52,12 +79,15 @@ def save_document(
 
         conn.commit()
         doc_id = cursor.lastrowid
-        
+
         # Add tags if provided
         if tags:
             from emdx.models.tags import add_tags_to_document
             add_tags_to_document(doc_id, tags)
-        
+
+        # Invalidate search cache since new document may match existing searches
+        _invalidate_document_caches(doc_id)
+
         return doc_id
 
 
@@ -348,7 +378,13 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
         )
 
         conn.commit()
-        return cursor.rowcount > 0
+        success = cursor.rowcount > 0
+
+        if success:
+            # Invalidate caches for this document
+            _invalidate_document_caches(doc_id)
+
+        return success
 
 
 def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> bool:
@@ -356,7 +392,7 @@ def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> b
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
-        
+
         if hard_delete:
             # Permanent deletion
             if identifier_str.isdigit():
@@ -395,7 +431,14 @@ def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> b
                 )
 
         conn.commit()
-        return cursor.rowcount > 0
+        success = cursor.rowcount > 0
+
+        if success:
+            # Invalidate caches - document removed from search results
+            doc_id = int(identifier_str) if identifier_str.isdigit() else None
+            _invalidate_document_caches(doc_id)
+
+        return success
 
 
 def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
