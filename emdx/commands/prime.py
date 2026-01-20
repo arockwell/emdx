@@ -35,6 +35,11 @@ def prime(
         "--quiet", "-q",
         help="Minimal output - just ready tasks"
     ),
+    execution: bool = typer.Option(
+        True,
+        "--execution/--no-execution",
+        help="Include execution method guidance"
+    ),
 ):
     """
     Output priming context for Claude Code session injection.
@@ -59,12 +64,92 @@ def prime(
     project = get_git_project()
 
     if format == "json":
-        _output_json(project, verbose, quiet)
+        _output_json(project, verbose, quiet, execution)
     else:
-        _output_text(project, verbose, quiet, format == "markdown")
+        _output_text(project, verbose, quiet, format == "markdown", execution)
 
 
-def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: bool):
+def _get_execution_guidance() -> list[str]:
+    """Return execution method guidance with decision tree."""
+    return [
+        "EXECUTION METHODS - Decision Tree:",
+        "",
+        "  ┌─ Quick one-off tasks? ────────────────────────────────────┐",
+        "  │                                                           │",
+        "  │   Single task needing tracked output?                     │",
+        "  │     → emdx agent \"task\" --tags analysis                   │",
+        "  │     → emdx agent 123 --tags analysis  (use doc #123)      │",
+        "  │                                                           │",
+        "  │   Multiple independent tasks in parallel?                 │",
+        "  │     → emdx run \"task1\" \"task2\" \"task3\"                    │",
+        "  │     → emdx run 101 102 103  (use doc IDs as tasks)        │",
+        "  │     → emdx run --worktree \"fix1\" \"fix2\"  (code changes)   │",
+        "  │                                                           │",
+        "  ├─ Reusable patterns? ──────────────────────────────────────┤",
+        "  │                                                           │",
+        "  │   \"For each X discovered, do Y\" (save for later)?         │",
+        "  │     → emdx each create name --from \"discovery\" --do \"Y\"   │",
+        "  │     → emdx each run name                                  │",
+        "  │                                                           │",
+        "  │   Complex multi-stage with synthesis?                     │",
+        "  │     → emdx workflow run task_parallel -t \"t1\" -t \"t2\"     │",
+        "  │     → emdx workflow run task_parallel -t 101 -t 102       │",
+        "  │                                                           │",
+        "  ├─ Autonomous pipeline? ────────────────────────────────────┤",
+        "  │                                                           │",
+        "  │   Transform idea → working code with PR?                  │",
+        "  │     → emdx cascade add \"feature idea\" --auto              │",
+        "  │                                                           │",
+        "  └───────────────────────────────────────────────────────────┘",
+        "",
+        "  Tasks can be text prompts OR document IDs (e.g., 123, #123)",
+        "",
+        "  Key flags:",
+        "    --worktree    Isolate in git worktree (parallel code changes)",
+        "    --tags/-t     Tag output for searchability",
+        "    --pr          Create PR after completion",
+        "    --synthesize  Combine outputs from parallel tasks",
+        "",
+    ]
+
+
+def _get_execution_methods_json() -> list[dict]:
+    """Return execution methods as structured data for JSON output."""
+    return [
+        {
+            "command": "emdx agent",
+            "usage": 'emdx agent "task" --tags analysis',
+            "when": "Single task needing tracked output with metadata",
+            "key_flags": ["--tags", "--title", "--group", "--pr", "--verbose"],
+        },
+        {
+            "command": "emdx run",
+            "usage": 'emdx run "task1" "task2"',
+            "when": "Multiple independent tasks to run in parallel",
+            "key_flags": ["--worktree", "--synthesize", "-j", "--discover"],
+        },
+        {
+            "command": "emdx each",
+            "usage": 'emdx each create name --from "cmd" --do "action"',
+            "when": "Reusable 'for each X, do Y' patterns you'll run again",
+            "key_flags": ["--from", "--do", "--pr", "--pr-single"],
+        },
+        {
+            "command": "emdx workflow",
+            "usage": "emdx workflow run task_parallel -t task1 -t task2",
+            "when": "Complex multi-stage orchestration with synthesis",
+            "key_flags": ["--worktree", "-t", "--preset", "-j"],
+        },
+        {
+            "command": "emdx cascade",
+            "usage": 'emdx cascade add "idea" --auto',
+            "when": "Transform idea into working code with PR autonomously",
+            "key_flags": ["--auto", "--stop", "--sync"],
+        },
+    ]
+
+
+def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: bool, execution: bool):
     """Output priming context as text."""
 
     lines = []
@@ -90,6 +175,10 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
         lines.append("")
         lines.append("-" * 60)
         lines.append("")
+
+    # Execution guidance (after instructions, before tasks)
+    if execution and not quiet:
+        lines.extend(_get_execution_guidance())
 
     # Project context
     if project:
@@ -154,7 +243,7 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
     print("\n".join(lines))
 
 
-def _output_json(project: Optional[str], verbose: bool, quiet: bool):
+def _output_json(project: Optional[str], verbose: bool, quiet: bool, execution: bool):
     """Output priming context as JSON."""
     import json
 
@@ -164,6 +253,9 @@ def _output_json(project: Optional[str], verbose: bool, quiet: bool):
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
     }
+
+    if execution:
+        data["execution_methods"] = _get_execution_methods_json()
 
     if verbose:
         data["recent_docs"] = _get_recent_docs()
