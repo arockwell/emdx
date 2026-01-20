@@ -1106,8 +1106,9 @@ class CascadeBrowser(Widget):
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
         ("2", "switch_cascade", "Cascade"),
-        ("3", "switch_documents", "Documents"),
-        ("4", "switch_search", "Search"),
+        ("3", "switch_search", "Search"),
+        ("4", "switch_github", "GitHub"),
+        ("5", "switch_documents", "Documents"),
         ("?", "show_help", "Help"),
     ]
 
@@ -1136,7 +1137,7 @@ class CascadeBrowser(Widget):
         self.cascade_view = CascadeView(id="cascade-view")
         yield self.cascade_view
         yield Static(
-            "[dim]1[/dim] Activity │ [bold]2[/bold] Cascade │ [dim]3[/dim] Documents │ [dim]4[/dim] Search │ "
+            "[dim]1[/dim] Activity │ [bold]2[/bold] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] GitHub │ [dim]5[/dim] Docs │ "
             "[dim]n[/dim] new idea │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize",
             id="help-bar",
         )
@@ -1194,6 +1195,11 @@ class CascadeBrowser(Widget):
         """Switch to search screen."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("search")
+
+    async def action_switch_github(self) -> None:
+        """Switch to GitHub browser."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("github")
 
     def action_show_help(self) -> None:
         """Show help."""
