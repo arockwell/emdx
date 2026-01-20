@@ -33,6 +33,7 @@ from emdx.commands.each import app as each_app
 from emdx.commands.cascade import app as cascade_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.commands.health import health as health_command
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -118,6 +119,9 @@ app.command(name="prime")(prime_command)
 
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
+
+# Add the health command for quick health checks with CI/CD-friendly exit codes
+app.command(name="health")(health_command)
 
 # Add the gui command
 app.command()(gui)
