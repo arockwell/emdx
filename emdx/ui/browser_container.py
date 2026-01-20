@@ -367,7 +367,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Documents, 4=Search, 5=GitHub)
+        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Search, 4=GitHub, 5=Documents)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -377,15 +377,15 @@ class BrowserContainer(App):
             event.stop()
             return
         elif key == "3":
-            await self.switch_browser("document")
-            event.stop()
-            return
-        elif key == "4":
             await self.switch_browser("search")
             event.stop()
             return
-        elif key == "5":
+        elif key == "4":
             await self.switch_browser("github")
+            event.stop()
+            return
+        elif key == "5":
+            await self.switch_browser("document")
             event.stop()
             return
 
