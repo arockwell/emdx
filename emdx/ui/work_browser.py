@@ -14,6 +14,7 @@ from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label, RichLog, Static
 
 from emdx.work import WorkService, WorkItem, Cascade, WorkTransition
+from emdx.models.executions import get_running_executions
 
 logger = logging.getLogger(__name__)
 
@@ -229,11 +230,11 @@ class WorkItemDetails(Widget):
 
 
 class WorkActivityFeed(Widget):
-    """Activity feed showing recent work transitions."""
+    """Activity feed showing running executions and recent work transitions."""
 
     DEFAULT_CSS = """
     WorkActivityFeed {
-        height: 10;
+        height: 12;
         border: solid $primary;
     }
     WorkActivityFeed #activity-header {
@@ -251,23 +252,44 @@ class WorkActivityFeed(Widget):
         self.service = WorkService()
 
     def compose(self) -> ComposeResult:
-        yield Static("[bold]Recent Activity[/bold]", id="activity-header")
+        yield Static("[bold]Activity & Running[/bold]", id="activity-header")
         table = DataTable(id="activity-table")
         table.add_column("Time", width=8)
         table.add_column("Item", width=12)
-        table.add_column("Transition", width=25)
+        table.add_column("Status", width=25)
         table.add_column("By", width=12)
         table.add_column("Title", width=30)
         table.cursor_type = "row"
         yield table
 
     def refresh_activity(self) -> None:
-        """Refresh the activity feed."""
+        """Refresh the activity feed with running executions and transitions."""
         table = self.query_one("#activity-table", DataTable)
         table.clear()
 
-        # Get recent transitions
-        transitions = self.service.get_recent_transitions(limit=15)
+        # First show running executions (patrol jobs)
+        running = get_running_executions()
+        patrol_running = [e for e in running if e.doc_title.startswith("Patrol:")]
+
+        for exec in patrol_running:
+            # Time running
+            elapsed = (datetime.now() - exec.started_at).total_seconds()
+            if elapsed < 60:
+                time_str = f"{int(elapsed)}s"
+            else:
+                time_str = f"{int(elapsed // 60)}m{int(elapsed % 60)}s"
+
+            # Extract work item ID from title "Patrol: <title>"
+            item_id = ""
+            title = exec.doc_title.replace("Patrol: ", "")
+
+            status = "[bold yellow]⚡ RUNNING[/bold yellow]"
+            by = "patrol"
+
+            table.add_row(time_str, item_id, status, by, title[:28])
+
+        # Then show recent transitions
+        transitions = self.service.get_recent_transitions(limit=12)
 
         for trans in transitions:
             # Time
@@ -290,7 +312,7 @@ class WorkActivityFeed(Widget):
 
             table.add_row(time_str, trans.work_id, transition, by, title)
 
-        if not transitions:
+        if not patrol_running and not transitions:
             table.add_row("", "", "[dim]No activity yet[/dim]", "", "")
 
 
@@ -593,7 +615,7 @@ class WorkView(Widget):
         width: 45%;
     }
     WorkView #activity-feed {
-        height: 10;
+        height: 12;
     }
     """
 
@@ -636,6 +658,8 @@ class WorkView(Widget):
     async def on_mount(self) -> None:
         """Initialize on mount."""
         await self.refresh_data()
+        # Auto-refresh activity feed every 5 seconds to show running processes
+        self.set_interval(5.0, self._refresh_activity_only)
 
     async def refresh_data(self) -> None:
         """Refresh all data."""
@@ -653,6 +677,11 @@ class WorkView(Widget):
         await self._load_cascade(tabs.current_cascade)
 
         # Refresh activity feed
+        if self.activity_feed:
+            self.activity_feed.refresh_activity()
+
+    def _refresh_activity_only(self) -> None:
+        """Refresh just the activity feed (for auto-refresh timer)."""
         if self.activity_feed:
             self.activity_feed.refresh_activity()
 

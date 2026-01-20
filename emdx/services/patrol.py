@@ -18,7 +18,6 @@ from typing import Optional, List, Dict, Any, Callable
 from ..database import connection as db
 from ..models.executions import create_execution, update_execution_status
 from ..work import WorkService, WorkItem, Cascade
-from ..utils.git import get_git_project
 from .claude_executor import execute_claude_sync, DEFAULT_ALLOWED_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -91,7 +90,7 @@ class PatrolRunner:
             return True
 
         # Create execution record
-        working_dir = get_git_project() or os.getcwd()
+        working_dir = os.getcwd()
         log_dir = Path(working_dir) / ".emdx" / "logs" / "patrols"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"{item.id}_{item.stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
