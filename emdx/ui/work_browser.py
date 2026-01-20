@@ -272,8 +272,10 @@ class WorkActivityFeed(Widget):
         patrol_running = [e for e in running if e.doc_title.startswith("Patrol:")]
 
         for exec in patrol_running:
-            # Time running
-            elapsed = (datetime.now() - exec.started_at).total_seconds()
+            # Time running (handle timezone-aware datetimes)
+            now = datetime.now()
+            started = exec.started_at.replace(tzinfo=None) if exec.started_at.tzinfo else exec.started_at
+            elapsed = (now - started).total_seconds()
             if elapsed < 60:
                 time_str = f"{int(elapsed)}s"
             else:
