@@ -209,7 +209,7 @@ class ActivityItem:
         elif self.item_type == "cascade":
             return "📋"  # Cascade processing
         elif self.item_type == "patrol":
-            return "🚨"  # Patrol worker
+            return "🤖"  # Patrol worker (autonomous agent)
         else:
             return ""
 
@@ -1881,6 +1881,15 @@ class ActivityView(HelpMixin, Widget):
 
             if not log_path.exists():
                 preview_log.write(f"[yellow]⏳ Log file pending...[/yellow]")
+                return
+
+            # For patrol items, show a processing message since logs are only
+            # written after completion (synchronous execution)
+            if item.item_type == "patrol":
+                preview_log.write("[bold yellow]⚡ Patrol Processing[/bold yellow]\n")
+                preview_log.write(f"[dim]Working on: {item.title.replace('⚡ ', '')}[/dim]\n")
+                preview_log.write("\n[dim]Claude is executing... output will appear when complete.[/dim]\n")
+                preview_log.write(f"[dim]Log: {log_path}[/dim]")
                 return
 
             # Start streaming
