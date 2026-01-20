@@ -5,6 +5,7 @@ Minimal browser container - just swaps browsers, no fancy shit.
 
 import logging
 
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
@@ -224,13 +225,29 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{str(e)}")
+                    self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{escape(str(e))}")
             elif browser_type == "file":
                 from .file_browser import FileBrowser
                 self.browsers[browser_type] = FileBrowser()
             elif browser_type == "git":
-                from .git_browser_standalone import GitBrowser
-                self.browsers[browser_type] = GitBrowser()
+                try:
+                    from .git_browser_enhanced import GitBrowserEnhanced
+                    self.browsers[browser_type] = GitBrowserEnhanced()
+                    logger.info("GitBrowserEnhanced created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create GitBrowserEnhanced: {e}", exc_info=True)
+                    # Fallback to standalone version
+                    from .git_browser_standalone import GitBrowser
+                    self.browsers[browser_type] = GitBrowser()
+            elif browser_type == "github":
+                try:
+                    from .github import GitHubBrowser
+                    self.browsers[browser_type] = GitHubBrowser()
+                    logger.info("GitHubBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create GitHubBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"GitHub browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
@@ -245,7 +262,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create WorkflowBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Workflow browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Workflow browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "tasks":
                 try:
                     from .task_browser import TaskBrowser
@@ -254,7 +271,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "cascade":
                 try:
                     from .cascade_browser import CascadeBrowser
@@ -263,7 +280,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "document":
                 try:
                     from .document_browser import DocumentBrowser
@@ -272,7 +289,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "search":
                 try:
                     from .search import SearchScreen
@@ -281,7 +298,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Search screen failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Search screen failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "work":
                 try:
                     from .work_browser import WorkBrowser
@@ -290,7 +307,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create WorkBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Work browser failed to load:\n{str(e)}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Work browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
@@ -359,7 +376,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Work, 3=Documents, 4=Search)
+        # Global number keys for screen switching (1=Activity, 2=Work, 3=Documents, 4=Search, 5=Cascade, 6=GitHub)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -380,9 +397,13 @@ class BrowserContainer(App):
             await self.switch_browser("cascade")  # Old cascade still available on 5
             event.stop()
             return
+        elif key == "6":
+            await self.switch_browser("github")
+            event.stop()
+            return
 
         # Q to quit from main browsers
-        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search", "work"]:
+        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search", "work", "github"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()

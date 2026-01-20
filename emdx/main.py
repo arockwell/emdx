@@ -33,6 +33,8 @@ from emdx.commands.each import app as each_app
 from emdx.commands.cascade import app as cascade_app
 from emdx.commands.work import app as work_app
 from emdx.commands.patrol import app as patrol_app
+from emdx.commands.prime import prime as prime_command
+from emdx.commands.status import status as status_command
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -118,6 +120,12 @@ app.add_typer(work_app, name="work", help="Unified work system - manage work ite
 
 # Add patrol commands for autonomous work processing
 app.add_typer(patrol_app, name="patrol", help="Autonomous work item processing through stages")
+
+# Add the prime command for Claude session priming
+app.command(name="prime")(prime_command)
+
+# Add the status command for consolidated project overview
+app.command(name="status")(status_command)
 
 # Add the gui command
 app.command()(gui)
