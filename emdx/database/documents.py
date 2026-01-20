@@ -7,8 +7,20 @@ from typing import Any, Optional, Union
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
+from .exceptions import CycleDetectedError, DocumentNotFoundError, InvalidStageError
 
 logger = logging.getLogger(__name__)
+
+
+# Valid cascade stages - used for validation
+VALID_CASCADE_STAGES = frozenset({
+    # Default cascade
+    "idea", "prompt", "analyzed", "planned", "implementing", "done",
+    # Review cascade
+    "draft", "reviewed", "revised", "approved", "merged",
+    # Research cascade
+    "question", "sources", "synthesis", "conclusion",
+})
 
 
 def _parse_doc_datetimes(doc: dict[str, Any], fields: list[str] | None = None) -> dict[str, Any]:
@@ -49,41 +61,33 @@ def save_document(
         return doc_id
 
 
-def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
-    """Get a document by ID or title"""
+def get_document(
+    identifier: Union[str, int],
+    update_access: bool = True,
+) -> Optional[dict[str, Any]]:
+    """Get a document by ID or title.
+
+    Args:
+        identifier: Document ID (int or string) or title (string)
+        update_access: Whether to update access count (default True).
+                      Set to False for batch operations or read-only access.
+
+    Returns:
+        Document dict or None if not found
+    """
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
-        
-        # Update access tracking
-        if identifier_str.isdigit():
-            conn.execute(
-                """
-                UPDATE documents
-                SET accessed_at = CURRENT_TIMESTAMP,
-                    access_count = access_count + 1
-                WHERE id = ? AND is_deleted = FALSE
-            """,
-                (int(identifier_str),),
-            )
 
+        if identifier_str.isdigit():
+            doc_id = int(identifier_str)
             cursor = conn.execute(
                 """
                 SELECT * FROM documents WHERE id = ? AND is_deleted = FALSE
             """,
-                (int(identifier_str),),
+                (doc_id,),
             )
         else:
-            conn.execute(
-                """
-                UPDATE documents
-                SET accessed_at = CURRENT_TIMESTAMP,
-                    access_count = access_count + 1
-                WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
-            """,
-                (identifier_str,),
-            )
-
             cursor = conn.execute(
                 """
                 SELECT * FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
@@ -91,14 +95,67 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
                 (identifier_str,),
             )
 
-        conn.commit()
         row = cursor.fetchone()
 
         if row:
             # Convert Row to dict and parse datetime strings
             doc = dict(row)
-            return _parse_doc_datetimes(doc)
+            doc = _parse_doc_datetimes(doc)
+
+            # Use debounced access tracking
+            if update_access:
+                from emdx.services.cache import get_access_buffer
+                get_access_buffer().record_access(doc["id"])
+
+            return doc
         return None
+
+
+def get_documents_batch(
+    doc_ids: list[int],
+    update_access: bool = False,
+) -> dict[int, dict[str, Any]]:
+    """Fetch multiple documents in a single query.
+
+    This is optimized for batch operations like rendering activity views
+    where we need multiple documents at once. It eliminates N+1 query patterns.
+
+    Args:
+        doc_ids: List of document IDs to fetch
+        update_access: Whether to update access counts (default False for batch)
+
+    Returns:
+        Dictionary mapping doc_id to document dict.
+        Missing documents are not included in the result.
+    """
+    if not doc_ids:
+        return {}
+
+    with db_connection.get_connection() as conn:
+        # Build query with placeholders
+        placeholders = ",".join("?" * len(doc_ids))
+        cursor = conn.execute(
+            f"""
+            SELECT * FROM documents
+            WHERE id IN ({placeholders}) AND is_deleted = FALSE
+            """,
+            doc_ids,
+        )
+
+        results: dict[int, dict[str, Any]] = {}
+        for row in cursor.fetchall():
+            doc = dict(row)
+            doc = _parse_doc_datetimes(doc)
+            results[doc["id"]] = doc
+
+        # Optionally record access for all fetched documents
+        if update_access and results:
+            from emdx.services.cache import get_access_buffer
+            buffer = get_access_buffer()
+            for doc_id in results:
+                buffer.record_access(doc_id)
+
+        return results
 
 
 def list_documents(
@@ -610,8 +667,42 @@ def find_supersede_candidate(
         return None
 
 
+def _would_create_document_cycle(conn, doc_id: int, proposed_parent_id: int) -> bool:
+    """Check if setting parent_id would create a cycle.
+
+    Walks up the parent chain from proposed_parent_id.
+    If we find doc_id, it would create a cycle.
+
+    Args:
+        conn: Database connection
+        doc_id: Document that would get a new parent
+        proposed_parent_id: The proposed parent document
+
+    Returns:
+        True if this would create a cycle
+    """
+    current = proposed_parent_id
+    visited = set()
+
+    while current is not None:
+        if current == doc_id:
+            return True
+        if current in visited:
+            return True  # Already a cycle in data
+        visited.add(current)
+
+        cursor = conn.execute(
+            "SELECT parent_id FROM documents WHERE id = ? AND is_deleted = FALSE",
+            (current,),
+        )
+        row = cursor.fetchone()
+        current = row[0] if row else None
+
+    return False
+
+
 def set_parent(doc_id: int, parent_id: int, relationship: str = "supersedes") -> bool:
-    """Set the parent of a document.
+    """Set the parent of a document with cycle detection.
 
     Args:
         doc_id: ID of the child document
@@ -620,8 +711,27 @@ def set_parent(doc_id: int, parent_id: int, relationship: str = "supersedes") ->
 
     Returns:
         True if update was successful
+
+    Raises:
+        CycleDetectedError: If setting this parent would create a cycle
+        DocumentNotFoundError: If either document doesn't exist
     """
     with db_connection.get_connection() as conn:
+        # Verify both documents exist
+        for check_id, name in [(doc_id, "child"), (parent_id, "parent")]:
+            cursor = conn.execute(
+                "SELECT 1 FROM documents WHERE id = ? AND is_deleted = FALSE",
+                (check_id,),
+            )
+            if not cursor.fetchone():
+                raise DocumentNotFoundError(check_id)
+
+        # Check for cycles
+        if _would_create_document_cycle(conn, doc_id, parent_id):
+            raise CycleDetectedError(
+                f"Setting document {parent_id} as parent of {doc_id} would create a cycle"
+            )
+
         cursor = conn.execute(
             """
             UPDATE documents
@@ -717,35 +827,54 @@ def get_children(doc_id: int, include_archived: bool = False) -> list[dict[str, 
         return docs
 
 
-def get_descendants(doc_id: int) -> list[dict[str, Any]]:
-    """Get all descendants of a document (children, grandchildren, etc).
+def get_descendants(doc_id: int, include_archived: bool = True) -> list[dict[str, Any]]:
+    """Get all descendants of a document using recursive CTE.
+
+    This is optimized to fetch all descendants in a single query rather than
+    iteratively fetching children, which avoids N+1 query patterns.
 
     Args:
         doc_id: ID of root document
+        include_archived: Whether to include archived descendants (default True)
 
     Returns:
-        List of all descendant documents
+        List of all descendant documents (children, grandchildren, etc.)
     """
-    descendants = []
-    to_visit = [doc_id]
-    visited = set()
+    with db_connection.get_connection() as conn:
+        archived_filter = "" if include_archived else "AND d.archived_at IS NULL"
 
-    while to_visit:
-        current_id = to_visit.pop(0)
-        if current_id in visited:
-            continue
-        visited.add(current_id)
+        cursor = conn.execute(
+            f"""
+            WITH RECURSIVE descendants AS (
+                -- Base case: direct children
+                SELECT id, title, project, created_at, parent_id,
+                       relationship, archived_at, 1 as depth
+                FROM documents
+                WHERE parent_id = ? AND is_deleted = FALSE {archived_filter}
 
-        children = get_children(current_id, include_archived=True)
-        for child in children:
-            descendants.append(child)
-            to_visit.append(child["id"])
+                UNION ALL
 
-    return descendants
+                -- Recursive case: children of children
+                SELECT d.id, d.title, d.project, d.created_at, d.parent_id,
+                       d.relationship, d.archived_at, desc.depth + 1
+                FROM documents d
+                JOIN descendants desc ON d.parent_id = desc.id
+                WHERE d.is_deleted = FALSE {archived_filter}
+            )
+            SELECT * FROM descendants
+            ORDER BY depth, created_at DESC
+            """,
+            (doc_id,),
+        )
+
+        return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]
 
 
 def archive_descendants(doc_id: int) -> int:
-    """Archive all descendants of a document.
+    """Archive all descendants of a document using recursive CTE.
+
+    This is optimized to update all descendants in a batch operation
+    rather than iteratively archiving each document.
 
     Args:
         doc_id: ID of root document (not archived, only descendants)
@@ -753,13 +882,40 @@ def archive_descendants(doc_id: int) -> int:
     Returns:
         Number of documents archived
     """
-    descendants = get_descendants(doc_id)
-    count = 0
-    for desc in descendants:
-        if desc.get("archived_at") is None:
-            if archive_document(desc["id"]):
-                count += 1
-    return count
+    with db_connection.get_connection() as conn:
+        # First, get all descendant IDs using CTE
+        cursor = conn.execute(
+            """
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM documents
+                WHERE parent_id = ? AND is_deleted = FALSE
+                UNION ALL
+                SELECT d.id FROM documents d
+                JOIN descendants desc ON d.parent_id = desc.id
+                WHERE d.is_deleted = FALSE
+            )
+            SELECT id FROM descendants
+            """,
+            (doc_id,),
+        )
+        descendant_ids = [row[0] for row in cursor.fetchall()]
+
+        if not descendant_ids:
+            return 0
+
+        # Then update all non-archived descendants in one batch
+        placeholders = ",".join("?" * len(descendant_ids))
+        cursor = conn.execute(
+            f"""
+            UPDATE documents
+            SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id IN ({placeholders})
+              AND archived_at IS NULL
+            """,
+            descendant_ids,
+        )
+        conn.commit()
+        return cursor.rowcount
 
 
 # =============================================================================
@@ -916,7 +1072,7 @@ def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
 
 
 def update_document_stage(doc_id: int, stage: str | None) -> bool:
-    """Update a document's cascade stage.
+    """Update a document's cascade stage with validation.
 
     Args:
         doc_id: Document ID
@@ -924,7 +1080,13 @@ def update_document_stage(doc_id: int, stage: str | None) -> bool:
 
     Returns:
         True if update was successful
+
+    Raises:
+        InvalidStageError: If stage is not a valid cascade stage
     """
+    if stage is not None and stage not in VALID_CASCADE_STAGES:
+        raise InvalidStageError(stage, VALID_CASCADE_STAGES)
+
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """

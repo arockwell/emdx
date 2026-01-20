@@ -7,6 +7,8 @@ Organized database operations split into focused modules:
 - groups: Document group operations
 - search: Full-text search operations
 - migrations: Database schema migrations
+- exceptions: Custom database exceptions
+- path: Database path resolution
 
 This package maintains backward compatibility with the original sqlite_database.py API.
 """
@@ -24,6 +26,16 @@ from .documents import (
     save_document,
     update_document,
 )
+from .exceptions import (
+    CycleDetectedError,
+    DatabaseError,
+    DocumentNotFoundError,
+    DuplicateDocumentError,
+    GroupNotFoundError,
+    IntegrityError,
+    InvalidStageError,
+)
+from .path import get_db_path
 from .search import search_documents
 from . import groups
 
@@ -104,32 +116,13 @@ class SQLiteDatabase:
             conn.commit()
             doc_id = cursor.lastrowid
 
-            # Add tags if provided (only for global db, not test dbs)
-            if tags and not self._uses_custom_path:
-                from emdx.models.tags import add_tags_to_document
-                add_tags_to_document(doc_id, tags)
-            elif tags and self._uses_custom_path:
-                # For test databases, add tags directly via SQL
-                for tag_name in tags:
-                    tag_name = tag_name.lower().strip()
-                    # Get or create tag
-                    cursor = conn.execute(
-                        "SELECT id FROM tags WHERE name = ?", (tag_name,)
-                    )
-                    result = cursor.fetchone()
-                    if result:
-                        tag_id = result[0]
-                    else:
-                        cursor = conn.execute(
-                            "INSERT INTO tags (name, usage_count) VALUES (?, 0)",
-                            (tag_name,),
-                        )
-                        tag_id = cursor.lastrowid
-                    # Link tag to document
-                    conn.execute(
-                        "INSERT OR IGNORE INTO document_tags (document_id, tag_id) VALUES (?, ?)",
-                        (doc_id, tag_id),
-                    )
+            # Add tags if provided
+            if tags:
+                from .tags import add_tags_with_conn
+                # Expand aliases (converts text like "gameplan" to emojis)
+                from emdx.utils.emoji_aliases import expand_aliases
+                expanded_tags = expand_aliases(tags)
+                add_tags_with_conn(conn, doc_id, expanded_tags)
                 conn.commit()
 
             return doc_id
@@ -435,10 +428,12 @@ db = SQLiteDatabase()
 
 # Export the individual functions for direct use
 __all__ = [
+    # Core classes
     "db",
     "SQLiteDatabase",
     "db_connection",
     "groups",
+    # Document operations
     "save_document",
     "get_document",
     "list_documents",
@@ -450,4 +445,14 @@ __all__ = [
     "restore_document",
     "purge_deleted_documents",
     "search_documents",
+    # Exceptions
+    "DatabaseError",
+    "DocumentNotFoundError",
+    "DuplicateDocumentError",
+    "GroupNotFoundError",
+    "CycleDetectedError",
+    "IntegrityError",
+    "InvalidStageError",
+    # Path utilities
+    "get_db_path",
 ]

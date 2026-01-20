@@ -2,7 +2,6 @@
 Database connection management for emdx
 """
 
-import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -10,21 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from . import migrations
-
-
-def get_db_path() -> Path:
-    """Get the database path, respecting EMDX_TEST_DB environment variable.
-
-    When running tests, set EMDX_TEST_DB to a temp file path to prevent
-    tests from polluting the real database.
-    """
-    test_db = os.environ.get("EMDX_TEST_DB")
-    if test_db:
-        return Path(test_db)
-
-    config_dir = Path.home() / ".config" / "emdx"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "knowledge.db"
+from .path import get_db_path
 
 
 class DatabaseConnection:
