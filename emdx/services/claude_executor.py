@@ -1,7 +1,7 @@
-"""Claude execution service - handles spawning and managing Claude processes.
+"""CLI execution service - handles spawning and managing CLI agent processes.
 
-This module provides the core execution logic for running Claude Code processes.
-It is used by both:
+This module provides the core execution logic for running CLI agent processes.
+It supports multiple CLI tools (Claude, Cursor) and is used by both:
 - commands/claude_execute.py (CLI interface)
 - services/task_runner.py (programmatic task execution)
 
@@ -18,9 +18,11 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
+from ..config.cli_config import CliTool, get_cli_config
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
+from .cli_executor import get_cli_executor
 
 
 # Default allowed tools for Claude
@@ -207,6 +209,120 @@ def execute_claude_detached(
             raise
 
 
+def execute_cli_sync(
+    task: str,
+    execution_id: int,
+    log_file: Path,
+    cli_tool: str = "claude",
+    model: Optional[str] = None,
+    allowed_tools: Optional[List[str]] = None,
+    working_dir: Optional[str] = None,
+    doc_id: Optional[str] = None,
+    timeout: int = 300,
+) -> dict:
+    """Execute a task with specified CLI tool synchronously, waiting for completion.
+
+    This is the new unified function that supports both Claude and Cursor CLIs.
+
+    Args:
+        task: The task prompt to execute
+        execution_id: Numeric database execution ID
+        log_file: Path to the log file
+        cli_tool: Which CLI to use ("claude" or "cursor")
+        model: Model to use (None = default for the CLI)
+        allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
+        working_dir: Working directory for execution
+        doc_id: Document ID (for logging)
+        timeout: Maximum seconds to wait (default 300 = 5 minutes)
+
+    Returns:
+        Dict with 'success' (bool), 'output' (str) or 'error' (str), and 'exit_code' (int)
+    """
+    if allowed_tools is None:
+        allowed_tools = DEFAULT_ALLOWED_TOOLS
+
+    # Get the appropriate executor
+    executor = get_cli_executor(cli_tool)
+
+    # Validate environment
+    is_valid, env_info = executor.validate_environment()
+    if not is_valid:
+        errors = env_info.get('errors', ['Unknown error'])
+        return {"success": False, "error": f"Environment validation failed: {'; '.join(errors)}"}
+
+    # Expand @filename references
+    expanded_task = parse_task_content(task)
+
+    # Build command using the executor
+    cmd = executor.build_command(
+        prompt=expanded_task,
+        model=model,
+        allowed_tools=allowed_tools,
+        output_format="text",
+        working_dir=working_dir,
+    )
+
+    # Ensure log directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Initialize structured logger
+    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
+    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {
+        "doc_id": doc_id,
+        "cli_tool": cli_tool,
+        "working_dir": working_dir,
+        "allowed_tools": allowed_tools,
+        "mode": "synchronous"
+    })
+
+    try:
+        # Run synchronously with timeout
+        result = subprocess.run(
+            cmd.args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=cmd.cwd or working_dir,
+        )
+
+        # Log the output
+        with open(log_file, 'a') as f:
+            f.write(f"\n--- STDOUT ---\n{result.stdout}\n")
+            if result.stderr:
+                f.write(f"\n--- STDERR ---\n{result.stderr}\n")
+
+        # Parse the result
+        cli_result = executor.parse_output(result.stdout, result.stderr, result.returncode)
+
+        if cli_result.success:
+            main_logger.info("Execution completed successfully", {
+                "returncode": result.returncode,
+                "output_length": len(cli_result.output)
+            })
+            return {
+                "success": True,
+                "output": cli_result.output,
+                "exit_code": cli_result.exit_code,
+            }
+        else:
+            main_logger.error(f"Execution failed with code {result.returncode}", {
+                "returncode": result.returncode,
+                "stderr": result.stderr[:500] if result.stderr else None
+            })
+            return {
+                "success": False,
+                "error": cli_result.error or f"Exit code {result.returncode}",
+                "exit_code": cli_result.exit_code,
+            }
+
+    except subprocess.TimeoutExpired:
+        main_logger.error(f"Execution timed out after {timeout}s")
+        return {"success": False, "error": f"Timeout after {timeout} seconds", "exit_code": -1}
+    except Exception as e:
+        main_logger.error(f"Execution failed: {e}")
+        return {"success": False, "error": str(e), "exit_code": -1}
+
+
 def execute_claude_sync(
     task: str,
     execution_id: int,
@@ -217,6 +333,8 @@ def execute_claude_sync(
     timeout: int = 300,
 ) -> dict:
     """Execute a task with Claude synchronously, waiting for completion.
+
+    This is a backward-compatible wrapper around execute_cli_sync for Claude.
 
     Args:
         task: The task prompt to execute
@@ -230,74 +348,14 @@ def execute_claude_sync(
     Returns:
         Dict with 'success' (bool) and 'output' (str) or 'error' (str)
     """
-    if allowed_tools is None:
-        allowed_tools = DEFAULT_ALLOWED_TOOLS
-
-    # Validate environment first
-    is_valid, env_info = validate_execution_environment(verbose=False)
-    if not is_valid:
-        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
-        return {"success": False, "error": f"Environment validation failed: {error_msg}"}
-
-    # Ensure claude is in PATH
-    ensure_claude_in_path()
-
-    # Expand @filename references
-    expanded_task = parse_task_content(task)
-
-    # Build Claude command - simpler for sync execution
-    cmd = [
-        "claude",
-        "--print", expanded_task,
-        "--allowedTools", ",".join(allowed_tools),
-        "--output-format", "text",
-        "--model", DEFAULT_CLAUDE_MODEL,
-    ]
-
-    # Ensure log directory exists
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Initialize structured logger
-    main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
-    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {
-        "doc_id": doc_id,
-        "working_dir": working_dir,
-        "allowed_tools": allowed_tools,
-        "mode": "synchronous"
-    })
-
-    try:
-        # Run synchronously with timeout
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=working_dir,
-        )
-
-        # Log the output
-        with open(log_file, 'a') as f:
-            f.write(f"\n--- STDOUT ---\n{result.stdout}\n")
-            if result.stderr:
-                f.write(f"\n--- STDERR ---\n{result.stderr}\n")
-
-        if result.returncode == 0:
-            main_logger.info("Execution completed successfully", {
-                "returncode": result.returncode,
-                "output_length": len(result.stdout)
-            })
-            return {"success": True, "output": result.stdout}
-        else:
-            main_logger.error(f"Execution failed with code {result.returncode}", {
-                "returncode": result.returncode,
-                "stderr": result.stderr[:500] if result.stderr else None
-            })
-            return {"success": False, "error": result.stderr or f"Exit code {result.returncode}"}
-
-    except subprocess.TimeoutExpired:
-        main_logger.error(f"Execution timed out after {timeout}s")
-        return {"success": False, "error": f"Timeout after {timeout} seconds"}
-    except Exception as e:
-        main_logger.error(f"Execution failed: {e}")
-        return {"success": False, "error": str(e)}
+    return execute_cli_sync(
+        task=task,
+        execution_id=execution_id,
+        log_file=log_file,
+        cli_tool="claude",
+        model=None,  # Use default Claude model
+        allowed_tools=allowed_tools,
+        working_dir=working_dir,
+        doc_id=doc_id,
+        timeout=timeout,
+    )

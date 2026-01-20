@@ -11,19 +11,44 @@ from emdx.utils.output import console
 
 
 class EnvironmentValidator:
-    """Validates execution environment before running Claude."""
-    
-    REQUIRED_COMMANDS = ["claude", "git"]
+    """Validates execution environment before running CLI tools.
+
+    Supports validation for multiple CLI tools (Claude, Cursor).
+    """
+
+    # Base required commands (always needed)
+    BASE_REQUIRED_COMMANDS = ["git"]
+
+    # CLI-specific commands
+    CLI_COMMANDS = {
+        "claude": "claude",
+        "cursor": "cursor",
+    }
+
     REQUIRED_PYTHON_PACKAGES = ["emdx", "typer", "rich"]
-    
-    def __init__(self):
+
+    def __init__(self, cli_tool: str = "claude"):
+        """Initialize validator for a specific CLI tool.
+
+        Args:
+            cli_tool: Which CLI to validate ("claude" or "cursor")
+        """
+        self.cli_tool = cli_tool
         self.errors: List[str] = []
         self.warnings: List[str] = []
         self.info: Dict[str, str] = {}
+
+    @property
+    def required_commands(self) -> List[str]:
+        """Get required commands for the configured CLI tool."""
+        commands = list(self.BASE_REQUIRED_COMMANDS)
+        if self.cli_tool in self.CLI_COMMANDS:
+            commands.append(self.CLI_COMMANDS[self.cli_tool])
+        return commands
     
     def validate_all(self) -> bool:
         """Run all validation checks.
-        
+
         Returns:
             True if environment is valid, False otherwise
         """
@@ -31,8 +56,8 @@ class EnvironmentValidator:
         self.check_commands()
         self.check_python_packages()
         self.check_paths()
-        self.check_claude_config()
-        
+        self.check_cli_config()
+
         return len(self.errors) == 0
     
     def check_python_version(self) -> None:
@@ -45,25 +70,17 @@ class EnvironmentValidator:
     
     def check_commands(self) -> None:
         """Check if required commands are available."""
-        for cmd in self.REQUIRED_COMMANDS:
+        for cmd in self.required_commands:
             path = shutil.which(cmd)
             if path:
                 self.info[f"{cmd}_path"] = path
-                
+
                 # Get version info if possible
                 try:
-                    if cmd == "claude":
+                    version_cmd = self._get_version_command(cmd)
+                    if version_cmd:
                         result = subprocess.run(
-                            ["claude", "--version"],
-                            capture_output=True,
-                            text=True,
-                            timeout=5
-                        )
-                        if result.returncode == 0:
-                            self.info[f"{cmd}_version"] = result.stdout.strip()
-                    elif cmd == "git":
-                        result = subprocess.run(
-                            ["git", "--version"],
+                            version_cmd,
                             capture_output=True,
                             text=True,
                             timeout=5
@@ -75,6 +92,16 @@ class EnvironmentValidator:
                     self.warnings.append(f"Could not get version for {cmd}: {str(e)}")
             else:
                 self.errors.append(f"Required command '{cmd}' not found in PATH")
+
+    def _get_version_command(self, cmd: str) -> Optional[List[str]]:
+        """Get the version command for a CLI tool."""
+        if cmd == "claude":
+            return ["claude", "--version"]
+        elif cmd == "cursor":
+            return ["cursor", "agent", "--version"]
+        elif cmd == "git":
+            return ["git", "--version"]
+        return None
     
     def check_python_packages(self) -> None:
         """Check if required Python packages are installed."""
@@ -123,7 +150,14 @@ class EnvironmentValidator:
             except Exception as e:
                 self.warnings.append(f"Cannot create log directory: {e}")
     
-    def check_claude_config(self) -> None:
+    def check_cli_config(self) -> None:
+        """Check CLI-specific configuration."""
+        if self.cli_tool == "claude":
+            self._check_claude_config()
+        elif self.cli_tool == "cursor":
+            self._check_cursor_config()
+
+    def _check_claude_config(self) -> None:
         """Check Claude-specific configuration."""
         # Check for Claude config file
         claude_config = Path.home() / ".claude" / "claude_cli.json"
@@ -131,7 +165,7 @@ class EnvironmentValidator:
             self.info["claude_config"] = str(claude_config)
         else:
             self.warnings.append("Claude config file not found - claude might not be properly configured")
-        
+
         # Check ANTHROPIC_API_KEY
         if os.environ.get("ANTHROPIC_API_KEY"):
             self.info["api_key"] = "set"
@@ -148,6 +182,30 @@ class EnvironmentValidator:
                     self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
             except Exception as e:
                 self.warnings.append(f"Cannot verify claude installation: {e}")
+
+    def _check_cursor_config(self) -> None:
+        """Check Cursor-specific configuration."""
+        # Check CURSOR_API_KEY
+        if os.environ.get("CURSOR_API_KEY"):
+            self.info["cursor_api_key"] = "set"
+
+        # Check authentication status
+        try:
+            result = subprocess.run(
+                ["cursor", "agent", "status"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if "Not logged in" in result.stdout:
+                self.warnings.append(
+                    "Cursor not authenticated. Run 'cursor agent login' to authenticate."
+                )
+                self.info["cursor_authenticated"] = "no"
+            else:
+                self.info["cursor_authenticated"] = "yes"
+        except Exception as e:
+            self.warnings.append(f"Cannot verify cursor authentication: {e}")
     
     def print_report(self, verbose: bool = False) -> None:
         """Print validation report."""
@@ -179,21 +237,25 @@ class EnvironmentValidator:
         }
 
 
-def validate_execution_environment(verbose: bool = False) -> Tuple[bool, Optional[Dict[str, any]]]:
+def validate_execution_environment(
+    verbose: bool = False,
+    cli_tool: str = "claude"
+) -> Tuple[bool, Optional[Dict[str, any]]]:
     """Validate the execution environment.
-    
+
     Args:
         verbose: Whether to print detailed output
-        
+        cli_tool: Which CLI to validate ("claude" or "cursor")
+
     Returns:
         Tuple of (is_valid, environment_info)
     """
-    validator = EnvironmentValidator()
+    validator = EnvironmentValidator(cli_tool=cli_tool)
     is_valid = validator.validate_all()
-    
+
     if verbose or not is_valid:
         validator.print_report(verbose)
-    
+
     return is_valid, validator.get_environment_info()
 
 
