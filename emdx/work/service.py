@@ -7,6 +7,7 @@ Handles all database operations and business logic for work items.
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 
@@ -15,6 +16,9 @@ from ..utils.git import get_git_project
 from .models import WorkItem, WorkDep, Cascade, WorkTransition
 
 logger = logging.getLogger(__name__)
+
+# Default cache TTL for cascades (60 seconds)
+_DEFAULT_CASCADE_CACHE_TTL = 60.0
 
 
 def generate_work_id(title: str, timestamp: Optional[datetime] = None) -> str:
@@ -28,12 +32,41 @@ def generate_work_id(title: str, timestamp: Optional[datetime] = None) -> str:
 class WorkService:
     """Service for managing work items."""
 
+    def __init__(self):
+        """Initialize the work service with cascade caching."""
+        self._cascade_cache: Dict[str, Cascade] = {}
+        self._cascade_cache_time: float = 0.0
+        self._cascade_cache_ttl: float = _DEFAULT_CASCADE_CACHE_TTL
+
+    def _invalidate_cascade_cache(self) -> None:
+        """Invalidate the cascade cache (call after cascade modifications)."""
+        self._cascade_cache.clear()
+        self._cascade_cache_time = 0.0
+
+    def _is_cascade_cache_valid(self) -> bool:
+        """Check if the cascade cache is still valid."""
+        return (time.time() - self._cascade_cache_time) < self._cascade_cache_ttl
+
     # ==========================================================================
     # CASCADE OPERATIONS
     # ==========================================================================
 
     def get_cascade(self, name: str) -> Optional[Cascade]:
-        """Get a cascade definition by name."""
+        """Get a cascade definition by name (with caching).
+
+        Cascades are cached to reduce database queries and object allocations
+        when checking blocker status in get() and list() methods.
+        """
+        # Check cache validity
+        if not self._is_cascade_cache_valid():
+            self._cascade_cache.clear()
+            self._cascade_cache_time = time.time()
+
+        # Return from cache if available
+        if name in self._cascade_cache:
+            return self._cascade_cache[name]
+
+        # Load from database
         with db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -41,7 +74,13 @@ class WorkService:
                 (name,)
             )
             row = cursor.fetchone()
-            return Cascade.from_row(row) if row else None
+            cascade = Cascade.from_row(row) if row else None
+
+        # Store in cache (even None results to avoid repeated DB queries)
+        if cascade is not None:
+            self._cascade_cache[name] = cascade
+
+        return cascade
 
     def list_cascades(self) -> List[Cascade]:
         """List all cascade definitions."""
@@ -70,6 +109,10 @@ class WorkService:
                 (name, json.dumps(stages), json.dumps(processors or {}), description)
             )
             conn.commit()
+
+        # Invalidate cascade cache after modification
+        self._invalidate_cascade_cache()
+
         return Cascade(
             name=name,
             stages=stages,

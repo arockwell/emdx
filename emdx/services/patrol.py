@@ -10,10 +10,11 @@ import re
 import signal
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Callable
+from typing import Deque, Optional, List, Dict, Any, Callable
 
 from ..database import connection as db
 from ..models.executions import create_execution, update_execution_status
@@ -33,6 +34,7 @@ class PatrolConfig:
     max_items: int = 1  # max items to process per poll
     timeout: int = 300  # Claude execution timeout
     dry_run: bool = False  # If True, don't execute Claude
+    max_errors_retained: int = 100  # Max errors to keep in memory
 
 
 @dataclass
@@ -44,7 +46,8 @@ class PatrolStats:
     total_time: float = 0.0
     started_at: Optional[datetime] = None
     stopped_at: Optional[datetime] = None
-    errors: List[str] = field(default_factory=list)
+    # Use deque with maxlen to prevent unbounded memory growth during long runs
+    errors: Deque[str] = field(default_factory=lambda: deque(maxlen=100))
 
 
 class PatrolRunner:
@@ -53,7 +56,10 @@ class PatrolRunner:
     def __init__(self, config: PatrolConfig):
         self.config = config
         self.service = WorkService()
-        self.stats = PatrolStats()
+        # Initialize stats with bounded error deque from config
+        self.stats = PatrolStats(
+            errors=deque(maxlen=config.max_errors_retained)
+        )
         self._running = False
         self._stop_requested = False
 
@@ -224,7 +230,10 @@ class PatrolRunner:
         """
         self._running = True
         self._stop_requested = False
-        self.stats = PatrolStats(started_at=datetime.now())
+        self.stats = PatrolStats(
+            started_at=datetime.now(),
+            errors=deque(maxlen=self.config.max_errors_retained),
+        )
 
         # Set up signal handlers
         def handle_stop(signum, frame):
