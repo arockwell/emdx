@@ -208,6 +208,8 @@ class ActivityItem:
             return icons.get(group_type, "📁")
         elif self.item_type == "cascade":
             return "📋"  # Cascade processing
+        elif self.item_type == "patrol":
+            return "🚨"  # Patrol worker
         else:
             return ""
 
@@ -461,14 +463,17 @@ class ActivityView(HelpMixin, Widget):
         # Load cascade executions
         await self._load_cascade_executions()
 
-        # Sort: running workflows first (pinned), then by timestamp descending
-        # Running workflows should always be at the top for visibility
+        # Load running patrol executions
+        await self._load_patrol_executions()
+
+        # Sort: running items first (patrols, workflows), then by timestamp descending
         def sort_key(item):
-            is_running = item.item_type == "workflow" and item.status == "running"
+            is_running_workflow = item.item_type == "workflow" and item.status == "running"
+            is_running_patrol = item.item_type == "patrol" and item.status == "running"
             # Running items get priority 0 (will be first after sort)
             # Non-running items get priority 1
             # Within each group, sort by timestamp descending (negate for descending)
-            return (0 if is_running else 1, -item.timestamp.timestamp() if item.timestamp else 0)
+            return (0 if (is_running_workflow or is_running_patrol) else 1, -item.timestamp.timestamp() if item.timestamp else 0)
 
         self.activity_items.sort(key=sort_key)
 
@@ -862,6 +867,44 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error loading cascade executions: {e}", exc_info=True)
 
+    async def _load_patrol_executions(self) -> None:
+        """Load running patrol executions into activity items.
+
+        Patrols are autonomous workers that process work items through
+        cascade stages. Running patrols are shown prominently at the top.
+        """
+        try:
+            from emdx.models.executions import get_running_executions
+
+            running = get_running_executions()
+            patrol_running = [e for e in running if e.doc_title.startswith("Patrol:")]
+
+            for exec in patrol_running:
+                # Parse timestamp (handle timezone)
+                started = exec.started_at
+                if started and started.tzinfo:
+                    started = started.replace(tzinfo=None)
+
+                # Extract title from "Patrol: <title>"
+                title = exec.doc_title.replace("Patrol: ", "")
+
+                item = ActivityItem(
+                    item_type="patrol",
+                    item_id=exec.id,
+                    title=f"⚡ {title}",
+                    status="running",
+                    timestamp=started or datetime.now(),
+                )
+
+                # Store execution info for preview
+                item.log_file = exec.log_file
+                item.working_dir = exec.working_dir
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.debug(f"Error loading patrol executions: {e}")
+
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
         self.flat_items = []
@@ -971,6 +1014,8 @@ class ActivityView(HelpMixin, Widget):
             # - Individual runs: show individual run ID or doc_id if completed
             if item.item_type in ("workflow", "group"):
                 id_str = f"#{item.item_id}" if item.item_id else "—"
+            elif item.item_type == "patrol":
+                id_str = f"e{item.item_id}" if item.item_id else "—"  # 'e' for execution ID
             elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
                 id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
             elif item.item_type == "individual_run":
@@ -995,11 +1040,11 @@ class ActivityView(HelpMixin, Widget):
         """Update the status bar with current stats."""
         status_bar = self.query_one("#status-bar", Static)
 
-        # Count active workflows
+        # Count active workflows and patrols
         active = sum(
             1
             for item in self.activity_items
-            if item.item_type == "workflow" and item.status == "running"
+            if (item.item_type == "workflow" or item.item_type == "patrol") and item.status == "running"
         )
 
         # Count docs today
