@@ -1908,11 +1908,16 @@ class ActivityView(HelpMixin, Widget):
             self.log_stream = LogStream(log_path)
             self.streaming_item_id = item.item_id
 
-            # Show initial content
+            # Show initial content - use LIVE LOGS formatting
             initial = self.log_stream.get_initial_content()
             if initial:
-                for line in initial.strip().split("\n")[-50:]:
-                    preview_log.write(escape_markup(line))
+                from emdx.ui.live_log_writer import LiveLogWriter
+                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                # Only show last ~50 events worth
+                from emdx.utils.stream_json_parser import parse_and_format_live_logs
+                formatted = parse_and_format_live_logs(initial)
+                for line in formatted[-50:]:
+                    preview_log.write(line)
                 preview_log.scroll_end(animate=False)
 
             self.log_stream.subscribe(self.log_subscriber)
@@ -1922,22 +1927,24 @@ class ActivityView(HelpMixin, Widget):
             preview_log.write(f"[red]Error: {e}[/red]")
 
     def _handle_log_content(self, content: str) -> None:
-        """Handle new log content from stream.
+        """Handle new log content from stream - LIVE LOGS formatted.
 
         This is called from a background thread (file watcher), so we must
         use call_from_thread to safely update the UI.
         """
         def update_ui():
             try:
+                from emdx.ui.live_log_writer import LiveLogWriter
+
                 preview_log = self.query_one("#preview-log", RichLog)
-                for line in content.splitlines():
-                    preview_log.write(escape_markup(line))
-                preview_log.scroll_end(animate=False)
+                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                writer.write(content)
             except Exception as e:
                 logger.error(f"Error handling log content: {e}")
 
         # Schedule UI update on the main thread
-        self.call_from_thread(update_ui)
+        # Note: call_from_thread is on App, not Widget
+        self.app.call_from_thread(update_ui)
 
     def _stop_stream(self) -> None:
         """Stop any active log stream."""

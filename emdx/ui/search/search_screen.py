@@ -58,15 +58,16 @@ class SearchScreen(HelpMixin, Widget):
         Binding("question_mark", "show_help", "Help"),
         Binding("1", "switch_activity", "Activity"),
         Binding("2", "switch_cascade", "Cascade"),
-        Binding("3", "switch_documents", "Documents"),
-        Binding("4", "switch_search", "Search"),
+        Binding("3", "switch_search", "Search"),
+        Binding("4", "switch_github", "GitHub"),
+        Binding("5", "switch_documents", "Documents"),
     ]
 
     DEFAULT_CSS = """
     SearchScreen {
         layout: grid;
         grid-size: 1;
-        grid-rows: 3 1fr 1;
+        grid-rows: 3 1fr 1 1;
     }
 
     #search-bar {
@@ -120,6 +121,12 @@ class SearchScreen(HelpMixin, Widget):
         background: $surface-darken-1;
         padding: 0 1;
     }
+
+    #search-nav {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
     """
 
     # Reactive state
@@ -147,8 +154,14 @@ class SearchScreen(HelpMixin, Widget):
         # Results list (Google-style with rich content)
         yield OptionList(id="results-list")
 
-        # Status bar
-        yield Static("Tab=mode | Enter=view | /=search | ?=help", id="search-status")
+        # Status bar (dynamic)
+        yield Static("Type to search...", id="search-status")
+        # Navigation bar (fixed)
+        yield Static(
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] GitHub │ [dim]5[/dim] Docs │ "
+            "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
+            id="search-nav"
+        )
 
     async def on_mount(self) -> None:
         """Initialize the search screen."""
@@ -540,3 +553,8 @@ class SearchScreen(HelpMixin, Widget):
     async def action_switch_search(self) -> None:
         """Already on search, do nothing."""
         pass
+
+    async def action_switch_github(self) -> None:
+        """Switch to GitHub browser."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("github")

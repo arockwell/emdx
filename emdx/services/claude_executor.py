@@ -6,6 +6,9 @@ It supports multiple CLI tools (Claude, Cursor) and is used by both:
 - services/task_runner.py (programmatic task execution)
 
 This separation breaks the bidirectional dependency between commands and services.
+
+IMPORTANT: All execution functions use stream-json output format by default.
+This enables real-time log streaming. The format is configured in cli_config.py.
 """
 
 import logging
@@ -18,18 +21,15 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-from ..config.cli_config import CliTool, get_cli_config
+from ..config.cli_config import CliTool, get_cli_config, DEFAULT_ALLOWED_TOOLS
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
 
 
-# Default allowed tools for Claude
-DEFAULT_ALLOWED_TOOLS = [
-    "Read", "Write", "Edit", "MultiEdit", "Bash",
-    "Glob", "Grep", "LS", "Task", "TodoWrite"
-]
+# Re-export for backward compatibility - prefer importing from cli_config
+__all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]
 
 
 def parse_task_content(task: str) -> str:
@@ -70,11 +70,15 @@ def execute_claude_detached(
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
     doc_id: Optional[str] = None,
+    cli_tool: str = "claude",
+    model: Optional[str] = None,
 ) -> int:
-    """Execute a task with Claude in a fully detached background process.
+    """Execute a task with a CLI tool in a fully detached background process.
 
-    This function starts Claude and returns immediately without waiting.
+    This function starts the CLI and returns immediately without waiting.
     The subprocess continues running independently of the parent process.
+
+    Uses stream-json output format by default for real-time log streaming.
 
     Args:
         task: The task prompt to execute
@@ -83,6 +87,8 @@ def execute_claude_detached(
         allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
         working_dir: Working directory for execution
         doc_id: Document ID (for logging)
+        cli_tool: Which CLI to use ("claude" or "cursor")
+        model: Model to use (None = default for the CLI)
 
     Returns:
         The process ID of the started subprocess.
@@ -91,29 +97,32 @@ def execute_claude_detached(
         RuntimeError: If environment validation fails.
     """
     if allowed_tools is None:
-        allowed_tools = DEFAULT_ALLOWED_TOOLS
+        allowed_tools = list(DEFAULT_ALLOWED_TOOLS)
+
+    # Get the appropriate executor
+    executor = get_cli_executor(cli_tool)
 
     # Validate environment first
-    is_valid, env_info = validate_execution_environment(verbose=False)
+    is_valid, env_info = executor.validate_environment()
     if not is_valid:
         error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
         raise RuntimeError(f"Environment validation failed: {error_msg}")
 
-    # Ensure claude is in PATH
-    ensure_claude_in_path()
+    # Ensure claude is in PATH (for Claude CLI)
+    if cli_tool == "claude":
+        ensure_claude_in_path()
 
     # Expand @filename references
     expanded_task = parse_task_content(task)
 
-    # Build Claude command
-    cmd = [
-        "claude",
-        "--print", expanded_task,
-        "--allowedTools", ",".join(allowed_tools),
-        "--output-format", "stream-json",
-        "--model", DEFAULT_CLAUDE_MODEL,
-        "--verbose"
-    ]
+    # Build command using the executor (uses stream-json by default from config)
+    cli_cmd = executor.build_command(
+        prompt=expanded_task,
+        model=model,
+        allowed_tools=allowed_tools,
+        working_dir=working_dir,
+    )
+    cmd = cli_cmd.args
 
     # Ensure log directory exists
     log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -122,6 +131,7 @@ def execute_claude_detached(
     main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
     main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'}", {
         "doc_id": doc_id,
+        "cli_tool": cli_tool,
         "working_dir": working_dir,
         "allowed_tools": allowed_tools
     })
@@ -222,7 +232,8 @@ def execute_cli_sync(
 ) -> dict:
     """Execute a task with specified CLI tool synchronously, waiting for completion.
 
-    This is the new unified function that supports both Claude and Cursor CLIs.
+    This is the unified function that supports both Claude and Cursor CLIs.
+    Uses stream-json output format by default for real-time log streaming.
 
     Args:
         task: The task prompt to execute
@@ -239,7 +250,7 @@ def execute_cli_sync(
         Dict with 'success' (bool), 'output' (str) or 'error' (str), and 'exit_code' (int)
     """
     if allowed_tools is None:
-        allowed_tools = DEFAULT_ALLOWED_TOOLS
+        allowed_tools = list(DEFAULT_ALLOWED_TOOLS)
 
     # Get the appropriate executor
     executor = get_cli_executor(cli_tool)
@@ -254,11 +265,11 @@ def execute_cli_sync(
     expanded_task = parse_task_content(task)
 
     # Build command using the executor
+    # stream-json is the default from config - enables real-time log streaming
     cmd = executor.build_command(
         prompt=expanded_task,
         model=model,
         allowed_tools=allowed_tools,
-        output_format="text",
         working_dir=working_dir,
     )
 
@@ -276,27 +287,72 @@ def execute_cli_sync(
     })
 
     try:
-        # Run synchronously with timeout
-        result = subprocess.run(
+        import select
+        import time
+
+        # Run with streaming output to log file for live viewing
+        # Use Popen to stream stdout to file in real-time
+        process = subprocess.Popen(
             cmd.args,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             cwd=cmd.cwd or working_dir,
         )
 
-        # Log the output
+        # Track PID so we can detect zombies if parent dies
+        from ..models.executions import update_execution_pid
+        update_execution_pid(execution_id, process.pid)
+
+        # Stream stdout to file and capture it with timeout protection
+        stdout_lines = []
+        start_time = time.time()
         with open(log_file, 'a') as f:
-            f.write(f"\n--- STDOUT ---\n{result.stdout}\n")
-            if result.stderr:
-                f.write(f"\n--- STDERR ---\n{result.stderr}\n")
+            f.write("\n--- STDOUT ---\n")
+            f.flush()
+
+            while True:
+                # Check timeout
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    process.kill()
+                    raise subprocess.TimeoutExpired(cmd.args, timeout)
+
+                # Check if process has finished
+                retcode = process.poll()
+
+                # Try to read a line (non-blocking check via select on Unix)
+                if process.stdout:
+                    # Use select for non-blocking read with timeout
+                    ready, _, _ = select.select([process.stdout], [], [], 1.0)
+                    if ready:
+                        line = process.stdout.readline()
+                        if line:
+                            f.write(line)
+                            f.flush()  # Flush immediately for live viewing
+                            stdout_lines.append(line)
+                        elif retcode is not None:
+                            # Empty line and process finished - we're done
+                            break
+                    elif retcode is not None:
+                        # No data ready and process finished - we're done
+                        break
+
+        # Get any remaining stderr
+        _, stderr = process.communicate(timeout=5)  # Short timeout since process should be done
+        stdout = ''.join(stdout_lines)
+
+        # Log stderr if any
+        if stderr:
+            with open(log_file, 'a') as f:
+                f.write(f"\n--- STDERR ---\n{stderr}\n")
 
         # Parse the result
-        cli_result = executor.parse_output(result.stdout, result.stderr, result.returncode)
+        cli_result = executor.parse_output(stdout, stderr, process.returncode)
 
         if cli_result.success:
             main_logger.info("Execution completed successfully", {
-                "returncode": result.returncode,
+                "returncode": process.returncode,
                 "output_length": len(cli_result.output)
             })
             return {
@@ -305,17 +361,18 @@ def execute_cli_sync(
                 "exit_code": cli_result.exit_code,
             }
         else:
-            main_logger.error(f"Execution failed with code {result.returncode}", {
-                "returncode": result.returncode,
-                "stderr": result.stderr[:500] if result.stderr else None
+            main_logger.error(f"Execution failed with code {process.returncode}", {
+                "returncode": process.returncode,
+                "stderr": stderr[:500] if stderr else None
             })
             return {
                 "success": False,
-                "error": cli_result.error or f"Exit code {result.returncode}",
+                "error": cli_result.error or f"Exit code {process.returncode}",
                 "exit_code": cli_result.exit_code,
             }
 
     except subprocess.TimeoutExpired:
+        process.kill()
         main_logger.error(f"Execution timed out after {timeout}s")
         return {"success": False, "error": f"Timeout after {timeout} seconds", "exit_code": -1}
     except Exception as e:
@@ -334,7 +391,8 @@ def execute_claude_sync(
 ) -> dict:
     """Execute a task with Claude synchronously, waiting for completion.
 
-    This is a backward-compatible wrapper around execute_cli_sync for Claude.
+    DEPRECATED: Use execute_cli_sync(cli_tool="claude", ...) instead.
+    This wrapper exists for backward compatibility only.
 
     Args:
         task: The task prompt to execute
@@ -348,6 +406,12 @@ def execute_claude_sync(
     Returns:
         Dict with 'success' (bool) and 'output' (str) or 'error' (str)
     """
+    import warnings
+    warnings.warn(
+        "execute_claude_sync is deprecated, use execute_cli_sync(cli_tool='claude', ...) instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return execute_cli_sync(
         task=task,
         execution_id=execution_id,
