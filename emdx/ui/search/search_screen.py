@@ -459,13 +459,66 @@ class SearchScreen(HelpMixin, Widget):
 
     def action_add_tags(self) -> None:
         """Add tags to selected document(s)."""
-        # TODO: Implement tag modal
-        self.notify("Tag editing coming soon", timeout=2)
+        self._show_tag_modal(mode="add")
 
     def action_remove_tags(self) -> None:
         """Remove tags from selected document(s)."""
-        # TODO: Implement tag modal
-        self.notify("Tag editing coming soon", timeout=2)
+        self._show_tag_modal(mode="remove")
+
+    def _show_tag_modal(self, mode: str) -> None:
+        """Show tag edit modal for the selected document(s)."""
+        from ..modals import TagEditModal
+        from ...models.tags import get_document_tags, add_tags_to_document, remove_tags_from_document
+
+        # Get selected item
+        item = self._get_selected_item()
+        if not item or not item.doc_id:
+            self.notify("No document selected", timeout=2)
+            return
+
+        doc_ids = [item.doc_id]
+        doc_titles = [item.title or f"Document #{item.doc_id}"]
+
+        # Get current tags for remove mode
+        current_tags = get_document_tags(item.doc_id) if mode == "remove" else []
+
+        def handle_result(result) -> None:
+            if result is None:
+                return  # Cancelled
+
+            tags = result.get("tags", [])
+            if not tags:
+                return
+
+            try:
+                if result["mode"] == "add":
+                    added = add_tags_to_document(item.doc_id, tags)
+                    if added:
+                        self.notify(f"Added tags: {', '.join(added)}", timeout=2)
+                    else:
+                        self.notify("Tags already exist", timeout=2)
+                else:
+                    removed = remove_tags_from_document(item.doc_id, tags)
+                    if removed:
+                        self.notify(f"Removed tags: {', '.join(removed)}", timeout=2)
+                    else:
+                        self.notify("No matching tags found", timeout=2)
+
+                # Refresh to show updated tags
+                asyncio.create_task(self.action_refresh())
+            except Exception as e:
+                self.notify(f"Error: {e}", timeout=3)
+                logger.error(f"Tag operation failed: {e}")
+
+        self.app.push_screen(
+            TagEditModal(
+                doc_ids=doc_ids,
+                doc_titles=doc_titles,
+                mode=mode,
+                current_tags=current_tags
+            ),
+            handle_result
+        )
 
     async def action_refresh(self) -> None:
         """Refresh search results."""

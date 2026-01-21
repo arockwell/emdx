@@ -421,11 +421,75 @@ class MaintenanceApplication:
                     details=preview,
                 )
 
-            # TODO: Actually merge using pairs data
-            # For now, fall through to old method for actual merging
-            pass
+            # Fast path: merge using pairs data directly
+            merged_count = 0
+            for doc1_id, doc2_id, title1, title2, sim in pairs:
+                try:
+                    # Get full document data for merging
+                    with self._db.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            """SELECT id, title, content, access_count
+                               FROM documents WHERE id IN (?, ?) AND is_deleted = 0""",
+                            (doc1_id, doc2_id)
+                        )
+                        docs = {row['id']: dict(row) for row in cursor.fetchall()}
 
-        # Fall back to old slow method
+                    if len(docs) != 2:
+                        # One doc may have been deleted/merged already
+                        continue
+
+                    doc1 = docs.get(doc1_id, {})
+                    doc2 = docs.get(doc2_id, {})
+
+                    # Determine which to keep (higher access count, then longer content)
+                    if doc1.get('access_count', 0) > doc2.get('access_count', 0):
+                        keep, remove = doc1, doc2
+                    elif doc2.get('access_count', 0) > doc1.get('access_count', 0):
+                        keep, remove = doc2, doc1
+                    elif len(doc1.get('content', '') or '') >= len(doc2.get('content', '') or ''):
+                        keep, remove = doc1, doc2
+                    else:
+                        keep, remove = doc2, doc1
+
+                    # Merge content
+                    merged_content = self.document_merger._merge_content(
+                        keep.get("content", "") or "",
+                        remove.get("content", "") or "",
+                        keep.get("title", ""),
+                        remove.get("title", "")
+                    )
+
+                    with self._db.get_connection() as conn:
+                        cursor = conn.cursor()
+
+                        # Update the kept document
+                        cursor.execute(
+                            """UPDATE documents SET content = ?, updated_at = ? WHERE id = ?""",
+                            (merged_content, datetime.now().isoformat(), keep["id"]),
+                        )
+
+                        # Soft-delete the other document
+                        cursor.execute(
+                            """UPDATE documents SET is_deleted = 1, deleted_at = ? WHERE id = ?""",
+                            (datetime.now().isoformat(), remove["id"]),
+                        )
+
+                        conn.commit()
+                    merged_count += 1
+                except Exception as e:
+                    logger.warning("Failed to merge documents %s and %s: %s", doc1_id, doc2_id, e)
+                    continue
+
+            return MaintenanceResult(
+                operation="merge",
+                success=True,
+                items_processed=len(pairs),
+                items_affected=merged_count,
+                message=f"Merged {merged_count} document pairs (fast path)",
+            )
+
+        # Fall back to old slow method (only when use_tfidf=False)
         candidates = self.document_merger.find_merge_candidates(
             similarity_threshold=threshold,
             progress_callback=progress_callback
