@@ -1008,9 +1008,9 @@ class CascadeView(Widget):
         """Setup the transitions table columns."""
         if self.transitions_table:
             self.transitions_table.add_column("Time", width=8)
-            self.transitions_table.add_column("From", width=12)
-            self.transitions_table.add_column("To", width=12)
-            self.transitions_table.add_column("Doc", width=20)
+            self.transitions_table.add_column("Parent", width=7)
+            self.transitions_table.add_column("→", width=12)
+            self.transitions_table.add_column("Child", width=20)
 
     def _setup_exec_table(self) -> None:
         """Setup the executions table columns."""
@@ -1067,23 +1067,23 @@ class CascadeView(Widget):
                 except:
                     time_str = "?"
 
-            # From stage with emoji
+            # Parent ID
+            parent_id = f"#{trans.get('parent_id', '?')}"
+
+            # Transition: from_stage → to_stage with emojis
             from_stage = trans.get("from_stage", "?")
-            from_emoji = STAGE_EMOJI.get(from_stage, "")
-            from_display = f"{from_emoji} {from_stage}"
-
-            # To stage with emoji
             to_stage = trans.get("to_stage", "?")
+            from_emoji = STAGE_EMOJI.get(from_stage, "")
             to_emoji = STAGE_EMOJI.get(to_stage, "")
-            to_display = f"{to_emoji} {to_stage}"
+            transition = f"{from_emoji}{from_stage}→{to_emoji}{to_stage}"
 
-            # Document title (truncated)
+            # Child document (truncated)
             title = trans.get("child_title", "?")
-            if len(title) > 18:
-                title = title[:15] + "..."
-            doc_display = f"#{trans.get('child_id', '?')} {title}"
+            if len(title) > 14:
+                title = title[:11] + "..."
+            child_display = f"#{trans.get('child_id', '?')} {title}"
 
-            self.transitions_table.add_row(time_str, from_display, to_display, doc_display)
+            self.transitions_table.add_row(time_str, parent_id, transition, child_display)
 
     def _refresh_exec_table(self) -> None:
         """Refresh the executions table."""
