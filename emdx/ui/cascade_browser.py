@@ -967,6 +967,7 @@ class CascadeView(Widget):
         self._selected_exec: Optional[Dict[str, Any]] = None
         self._pipeline_data: List[Dict[str, Any]] = []
         self._selected_pipeline_idx: Optional[int] = None
+        self._pipeline_view_mode: str = "output"  # "input" or "output"
         self._log_subscriber = None
 
     def compose(self) -> ComposeResult:
@@ -1269,6 +1270,23 @@ class CascadeView(Widget):
         if self.current_stage_idx < len(STAGES) - 1:
             self.current_stage_idx += 1
 
+    def _show_pipeline_preview(self, act: Dict[str, Any]) -> None:
+        """Show preview for pipeline activity based on current view mode."""
+        if self._pipeline_view_mode == "input":
+            input_id = act.get("input_id")
+            if input_id:
+                self._show_document_preview(input_id)
+            else:
+                self._update_status("[yellow]No input document[/yellow]")
+        else:
+            # Output mode (default)
+            output_id = act.get("output_id")
+            if output_id:
+                self._show_document_preview(output_id)
+            else:
+                # Still running or failed - show execution log
+                self._show_execution_preview(act)
+
     def action_move_down(self) -> None:
         """Move cursor down in focused table."""
         # Check if pipeline table is focused
@@ -1277,12 +1295,7 @@ class CascadeView(Widget):
             row_idx = self.pipeline_table.cursor_row
             if row_idx < len(self._pipeline_data):
                 self._selected_pipeline_idx = row_idx
-                act = self._pipeline_data[row_idx]
-                output_id = act.get("output_id")
-                if output_id:
-                    self._show_document_preview(output_id)
-                else:
-                    self._show_execution_preview(act)
+                self._show_pipeline_preview(self._pipeline_data[row_idx])
         elif self.doc_list:
             self.doc_list.move_cursor(1)
             doc_id = self.doc_list.get_selected_doc_id()
@@ -1297,12 +1310,7 @@ class CascadeView(Widget):
             row_idx = self.pipeline_table.cursor_row
             if row_idx < len(self._pipeline_data):
                 self._selected_pipeline_idx = row_idx
-                act = self._pipeline_data[row_idx]
-                output_id = act.get("output_id")
-                if output_id:
-                    self._show_document_preview(output_id)
-                else:
-                    self._show_execution_preview(act)
+                self._show_pipeline_preview(self._pipeline_data[row_idx])
         elif self.doc_list:
             self.doc_list.move_cursor(-1)
             doc_id = self.doc_list.get_selected_doc_id()
@@ -1318,6 +1326,8 @@ class CascadeView(Widget):
 
     def action_show_input(self) -> None:
         """Show input document for selected pipeline activity."""
+        self._pipeline_view_mode = "input"
+
         if self._selected_pipeline_idx is None:
             self._update_status("[yellow]Select a pipeline row first[/yellow]")
             return
@@ -1329,12 +1339,14 @@ class CascadeView(Widget):
         input_id = act.get("input_id")
         if input_id:
             self._show_document_preview(input_id)
-            self._update_status(f"[cyan]Showing input #{input_id}[/cyan] (press 'o' for output)")
+            self._update_status(f"[cyan]Input mode[/cyan] - showing #{input_id} (press 'o' for output)")
         else:
             self._update_status("[yellow]No input document[/yellow]")
 
     def action_show_output(self) -> None:
         """Show output document for selected pipeline activity."""
+        self._pipeline_view_mode = "output"
+
         if self._selected_pipeline_idx is None:
             self._update_status("[yellow]Select a pipeline row first[/yellow]")
             return
@@ -1346,7 +1358,7 @@ class CascadeView(Widget):
         output_id = act.get("output_id")
         if output_id:
             self._show_document_preview(output_id)
-            self._update_status(f"[cyan]Showing output #{output_id}[/cyan] (press 'i' for input)")
+            self._update_status(f"[cyan]Output mode[/cyan] - showing #{output_id} (press 'i' for input)")
         else:
             # No output yet - show execution log
             self._show_execution_preview(act)
