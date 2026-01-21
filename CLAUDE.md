@@ -97,56 +97,236 @@ poetry run emdx tags  # List all tags
 poetry run emdx legend  # View emoji legend and aliases
 ```
 
-## 🎯 Claude Code Integration Workflow
+## 🎯 Claude Code Integration - MANDATORY INSTRUCTIONS
 
-### Auto-Tagging for Project Management
+**⚠️ YOU MUST FOLLOW THESE RULES WHEN WORKING IN THIS CODEBASE:**
 
-When working with EMDX through Claude Code, automatically apply tags based on content patterns:
+### Session Start Protocol
+At the start of every session, run `emdx prime` to get current work context. This shows:
+- Ready tasks you can work on immediately
+- In-progress work that may need attention
+- Recent documents for context
 
-**Document Types:**
-- `gameplan` - Strategic plans → 🎯
-- `analysis` - Investigation results → 🔍  
-- `notes` - General notes → 📝
-
-**Workflow Status:**
-- `active` - Currently working on → 🚀
-- `done` - Completed → ✅
-- `blocked` - Stuck/waiting → 🚧
-
-**Outcomes (Success Tracking):**
-- `success` - Worked as intended → 🎉
-- `failed` - Didn't work → ❌
-- `partial` - Mixed results → ⚡
-
-### Integration Guidelines
-
-When Claude Code helps with EMDX:
-
-1. **Suggest tags** during save operations based on content
-2. **Ask permission** before applying tags: "I detected this looks like a gameplan, should I tag it as `gameplan, active`?"
-3. **Update tags** when project status changes
-4. **Generate progress reports** from tag analytics
-5. **Use consistent workflows** for project tracking
-
-### Example Workflow
 ```bash
-# Create gameplan with Claude Code assistance
-echo "Gameplan: Implement user authentication system" | poetry run emdx save --title "Auth Gameplan" --tags "gameplan,active"
+# Run this first to understand the current state
+emdx prime
 
-# Update status as work progresses
-poetry run emdx tag 123 blocked
-poetry run emdx untag 123 active
-
-# Mark complete with outcome
-poetry run emdx tag 123 done success
-poetry run emdx untag 123 blocked
+# Or for a quick overview
+emdx status
 ```
+
+### Mandatory Behaviors
+
+1. **ALWAYS check ready tasks before starting work:**
+   ```bash
+   emdx task ready
+   ```
+
+2. **ALWAYS save significant outputs to emdx:**
+   ```bash
+   echo "analysis results" | emdx save --title "Title" --tags "analysis,active"
+   ```
+
+3. **ALWAYS create tasks for discovered work:**
+   ```bash
+   emdx task create "Title" --description "Details"
+   ```
+
+4. **NEVER end session without:**
+   - Updating task status (complete/in-progress)
+   - Creating tasks for remaining work
+   - Running `emdx prime` to verify state
+
+### Decision Tree: Which EMDX Command to Use
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   What are you doing?                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+   Single task?        Multiple tasks?      Idea → working code?
+        │                     │                     │
+        ▼                     ▼                     ▼
+   emdx agent            emdx run             emdx cascade add
+   (tracked output)      (quick parallel)     (autonomous pipeline)
+        │                     │
+        │              Need to repeat?
+        │                     │
+        │              ┌──────┴──────┐
+        │              ▼             ▼
+        │          One-off?    Save for later?
+        │              │             │
+        │              ▼             ▼
+        │          emdx run    emdx each create
+        │
+   Need worktree     Need custom stages
+   isolation?        or adversarial mode?
+        │                     │
+        ▼                     ▼
+   emdx run --worktree   emdx workflow run
+```
+
+### Quick Reference
+
+| Situation | Command | Why |
+|-----------|---------|-----|
+| Spawning a sub-agent that should save output | `emdx agent "task" --tags ...` | Ensures tracked output with metadata |
+| Running 2-5 independent tasks in parallel | `emdx run "task1" "task2" ...` | Fast, simple, no setup |
+| Same operation on many discovered items | `emdx each --from "discovery" --do "action"` | Discovery + parallel action |
+| Repeatable "for each X do Y" pattern | `emdx each create name --from ... --do ...` | Save it, run it anytime |
+| Parallel code fixes (may touch same files) | `emdx run --worktree "fix1" "fix2"` | Git isolation per task |
+| Transform an idea to a PR autonomously | `emdx cascade add "idea"` | Full autonomous pipeline |
+| Complex multi-stage with synthesis | `emdx workflow run task_parallel -t ...` | Full workflow system |
+
+### When Claude Should Use EMDX Automatically
+
+**Always track significant outputs:**
+```bash
+# After completing analysis or research
+emdx agent "Analyze the auth module for security issues" --tags analysis,security
+
+# When spawning sub-agents from a parent Claude session
+emdx agent "Deep dive on caching strategy" -T "Cache Analysis" -t analysis -g 456
+```
+
+**Use parallel execution for multiple independent tasks:**
+```bash
+# User asks: "Check auth, review tests, and look at the docs"
+emdx run "Check auth module" "Review test coverage" "Analyze documentation"
+```
+
+**Use worktree isolation when tasks might conflict:**
+```bash
+# User asks: "Fix these three bugs"
+emdx run --worktree "Fix null pointer in auth" "Fix race condition in cache" "Fix validation bug"
+```
+
+**Use cascade for ideas that need full implementation:**
+```bash
+# User describes a feature idea
+emdx cascade add "Add a dark mode toggle to settings"
+# Then let cascade run: idea → prompt → analyzed → planned → done (PR)
+```
+
+### Auto-Tagging Guidelines
+
+When saving outputs, apply tags based on content:
+
+| Content Type | Tags to Apply |
+|--------------|---------------|
+| Strategic plans, gameplans | `gameplan, active` |
+| Investigation results | `analysis` |
+| General notes | `notes` |
+| Bug fixes | `bugfix` |
+| Security-related | `security` |
+
+**Workflow status tags:**
+- `active` → 🚀 Currently working on
+- `done` → ✅ Completed
+- `blocked` → 🚧 Stuck/waiting
+
+**Outcome tags (add when work completes):**
+- `success` → 🎉 Worked as intended
+- `failed` → ❌ Didn't work
+- `partial` → ⚡ Mixed results
+
+### Sub-Agent Metadata Propagation
+
+When Claude spawns sub-agents via Task tool, use `emdx agent` to ensure outputs are tracked:
+
+```bash
+# Parent agent spawns child with proper tracking
+emdx agent "Investigate memory leak in worker pool" \
+  --tags "analysis,performance" \
+  --group 789 \
+  --title "Memory Leak Investigation"
+
+# Child agent's output will:
+# 1. Be saved with the specified tags
+# 2. Be linked to group 789
+# 3. Have proper title for easy discovery
+# 4. Print doc_id for parent to capture
+```
+
+### PR Creation Flow
+
+When implementing code changes:
+
+```bash
+# For single implementation tasks with PR
+emdx agent "Implement the feature from doc #123" --tags feature --pr
+
+# For parallel fixes with individual PRs
+emdx each --from "emdx find --tags bugfix,active | head -5" \
+  --do "Fix {{item}}" --pr
+
+# For idea-to-PR pipeline (fully autonomous)
+emdx cascade add "Add user preferences page"
+emdx cascade run  # Runs through all stages to PR
+```
+
+## 🌊 Cascade - Ideas to Code (`emdx cascade`)
+
+Transform raw ideas into working code through autonomous stage transformations. Cascade takes an idea and flows it through: **idea → prompt → analyzed → planned → done** — with the final stage creating an actual PR.
+
+```bash
+# Add an idea to the cascade
+emdx cascade add "Add dark mode toggle to the settings page"
+
+# Check cascade status
+emdx cascade status
+
+# Process the next item at a stage (sync waits for completion)
+emdx cascade process idea --sync
+emdx cascade process prompt --sync
+emdx cascade process analyzed --sync
+emdx cascade process planned --sync  # This creates actual code and PR!
+
+# Or run continuously
+emdx cascade run
+```
+
+### Stage Flow
+
+| Stage | What Happens |
+|-------|--------------|
+| `idea` | Raw idea text enters the cascade |
+| `prompt` | Claude transforms idea into a well-formed prompt |
+| `analyzed` | Claude analyzes the prompt thoroughly |
+| `planned` | Claude creates a detailed implementation gameplan |
+| `done` | Claude implements the code and creates a PR |
+
+### Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `emdx cascade add "idea"` | Add new idea to cascade |
+| `emdx cascade status` | Show documents at each stage |
+| `emdx cascade process <stage> --sync` | Process next doc at stage |
+| `emdx cascade advance <id>` | Manually advance a document |
+| `emdx cascade remove <id>` | Remove from cascade (keeps doc) |
+| `emdx cascade synthesize <stage>` | Combine multiple docs into one |
+
+### TUI Access
+
+Press `4` in the GUI to access the Cascade browser. Navigate with:
+- `h/l` - Switch stages
+- `j/k` - Navigate documents
+- `a` - Advance document
+- `p` - Process through Claude
+- `s` - Synthesize selected docs
+- `Space` - Toggle selection (for synthesis)
 
 ## 🚀 Quick Task Execution (`emdx run`)
 
-The fastest way to run parallel tasks:
+The fastest way to run parallel tasks. This is the first rung on EMDX's "execution ladder" - start here and graduate to `emdx each` or `emdx workflow` only when you need more power.
 
 ```bash
+# Run a single task
+emdx run "analyze the auth module"
+
 # Run multiple tasks in parallel
 emdx run "analyze auth" "review tests" "check docs"
 
@@ -154,11 +334,55 @@ emdx run "analyze auth" "review tests" "check docs"
 emdx run --synthesize "task1" "task2" "task3"
 
 # Dynamic discovery from shell commands
-emdx run -d "git branch -r | grep feature" -t "Review {{task}}"
+emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 
 # Control concurrency
 emdx run -j 3 "task1" "task2" "task3" "task4"
+
+# With worktree isolation (for parallel code fixes)
+emdx run --worktree "fix X" "fix Y"
 ```
+
+For the full execution ladder (run → each → workflow → cascade), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
+
+## 🤖 Sub-Agent Execution (`emdx agent`)
+
+Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata (tags, title, group).
+
+Works the same whether called by a human or another AI agent.
+
+```bash
+# Basic usage - agent saves output with specified tags
+emdx agent "Analyze the auth module for security issues" --tags analysis,security
+
+# With title and group
+emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
+
+# Verbose mode to see agent output in real-time
+emdx agent "Deep dive on caching strategy" -t analysis -v
+
+# Have the agent create a PR if it makes code changes
+emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
+```
+
+**Options:**
+- `--tags, -t` - Tags to apply to output (comma-separated or multiple flags)
+- `--title, -T` - Title for the output document
+- `--group, -g` - Group ID to add output to
+- `--group-role` - Role in group (default: `exploration`)
+- `--verbose, -v` - Show agent output in real-time
+- `--pr` - Instruct agent to create a PR if it makes code changes
+
+**How it works:**
+1. Takes your prompt and appends instructions telling the agent how to save its output
+2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
+3. Runs Claude Code and streams output to a log file
+4. Extracts the created document ID and prints `doc_id:123` for easy parsing
+
+**Use cases:**
+- Humans kicking off analysis tasks with proper tracking
+- AI agents spawning sub-agents that need to save results to EMDX
+- Ensuring consistent metadata across human and AI-initiated work
 
 ## 🔁 Reusable Parallel Commands (`emdx each`)
 
@@ -184,11 +408,20 @@ emdx each delete fix-conflicts    # Delete command
 ```
 
 **Key features:**
-- `--from`: Shell command that outputs items (one per line)
+- `--from`: Shell command that outputs items (one per line), or `@discovery-name` for built-ins
 - `--do`: What to do with each `{{item}}`
 - `-j`: Max parallel executions (default: 3)
 - `--synthesize`: Combine results at the end
+- `--pr`: Create a PR for each item processed
+- `--pr-single`: Create one combined PR for all items
 - Worktree isolation is auto-enabled for git/gh commands
+
+**Built-in discoveries** (use with `--from @name`):
+```bash
+emdx each discover list              # List all built-in discoveries
+emdx each --from @prs-with-conflicts --do "Fix {{item}}"
+emdx each --from @python-files --do "Review {{item}}"
+```
 
 ## 🔄 Workflow System for Multi-Agent Tasks
 
@@ -223,14 +456,14 @@ emdx workflow run parallel_fix \
 emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
 ```
 
-### When to Use `emdx run` vs `emdx each` vs `emdx workflow`
+### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
 
-| Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|-------------------------|----------------------------|
-| Quick, ad-hoc parallel tasks | Reusable discovery+action | Complex multi-stage workflows |
-| Simple task lists | "For each X, do Y" patterns | Need iterative or adversarial modes |
-| One-off execution | Save for future use | Custom stage configurations |
-| Just want tasks done fast | Same operation on many items | Need detailed run monitoring |
+| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------|--------------------------|-------------------------|----------------------------|
+| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
+| Simple task lists | Need tracked output | "For each X, do Y" patterns | Need iterative or adversarial modes |
+| One-off execution | Human or AI caller | Save for future use | Custom stage configurations |
+| Just want tasks done fast | Consistent metadata | Same operation on many items | Need detailed run monitoring |
 
 For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
 

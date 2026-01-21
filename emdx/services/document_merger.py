@@ -18,7 +18,7 @@ from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
 from ..models.documents import delete_document, get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags
-from ..utils.datetime import parse_datetime
+from ..utils.datetime_utils import parse_datetime
 from .similarity import SimilarityService
 
 logger = logging.getLogger(__name__)

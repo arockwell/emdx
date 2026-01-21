@@ -593,77 +593,17 @@ def update_individual_run(
         return cursor.rowcount > 0
 
 
-# =============================================================================
-# Iteration Strategy operations
-# =============================================================================
-
-def get_iteration_strategy(strategy_id: int) -> Optional[Dict[str, Any]]:
-    """Get an iteration strategy by ID."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM iteration_strategies WHERE id = ?",
-            (strategy_id,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def get_iteration_strategy_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Get an iteration strategy by name."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM iteration_strategies WHERE name = ?",
-            (name,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def list_iteration_strategies(category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List iteration strategies with optional category filter."""
-    with db_connection.get_connection() as conn:
-        if category:
-            cursor = conn.execute(
-                "SELECT * FROM iteration_strategies WHERE category = ? ORDER BY name",
-                (category,),
-            )
-        else:
-            cursor = conn.execute("SELECT * FROM iteration_strategies ORDER BY name")
-        return [dict(row) for row in cursor.fetchall()]
-
-
-def create_iteration_strategy(
-    name: str,
-    display_name: str,
-    prompts: List[str],
-    description: Optional[str] = None,
-    recommended_runs: int = 5,
-    category: str = 'general',
-) -> int:
-    """Create a new iteration strategy."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO iteration_strategies
-            (name, display_name, description, prompts_json, recommended_runs, category)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (name, display_name, description, json.dumps(prompts), recommended_runs, category),
-        )
-        conn.commit()
-        return cursor.lastrowid
-
-
 def get_active_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any]]:
     """Get the currently running execution (log file) for a workflow run.
 
-    Returns the execution record with log_file path if there's an active individual run.
+    Returns the execution record with log_file path if there's an active individual run
+    or synthesis execution.
     """
     with db_connection.get_connection() as conn:
         # Find any running individual run for this workflow
         cursor = conn.execute(
             """
-            SELECT ir.*, sr.stage_name
+            SELECT ir.*, sr.stage_name, sr.id as stage_run_id_ref
             FROM workflow_individual_runs ir
             JOIN workflow_stage_runs sr ON ir.stage_run_id = sr.id
             WHERE sr.workflow_run_id = ?
@@ -674,16 +614,33 @@ def get_active_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any
             (workflow_run_id,),
         )
         row = cursor.fetchone()
-        if not row:
-            return None
 
-        result = dict(row)
+        if row:
+            result = dict(row)
 
-        # Try to find execution by agent_execution_id first
-        if result.get('agent_execution_id'):
+            # Try to find execution by agent_execution_id first
+            if result.get('agent_execution_id'):
+                exec_cursor = conn.execute(
+                    "SELECT log_file, status as exec_status FROM executions WHERE id = ?",
+                    (result['agent_execution_id'],),
+                )
+                exec_row = exec_cursor.fetchone()
+                if exec_row:
+                    result['log_file'] = exec_row['log_file']
+                    result['exec_status'] = exec_row['exec_status']
+                    return result
+
+            # Fallback: find execution by title pattern "Workflow Agent Run #{individual_run_id}"
+            individual_run_id = result['id']
             exec_cursor = conn.execute(
-                "SELECT log_file, status as exec_status FROM executions WHERE id = ?",
-                (result['agent_execution_id'],),
+                """
+                SELECT log_file, status as exec_status FROM executions
+                WHERE doc_title LIKE ?
+                AND status = 'running'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (f"Workflow Agent Run #{individual_run_id}%",),
             )
             exec_row = exec_cursor.fetchone()
             if exec_row:
@@ -691,27 +648,42 @@ def get_active_execution_for_run(workflow_run_id: int) -> Optional[Dict[str, Any
                 result['exec_status'] = exec_row['exec_status']
                 return result
 
-        # Fallback: find execution by title pattern "Workflow Agent Run #{individual_run_id}"
-        individual_run_id = result['id']
-        exec_cursor = conn.execute(
+        # Check for synthesis execution (when stage is synthesizing)
+        cursor = conn.execute(
             """
-            SELECT log_file, status as exec_status FROM executions
-            WHERE doc_title LIKE ?
-            AND status = 'running'
-            ORDER BY id DESC
+            SELECT sr.id as stage_run_id, sr.stage_name
+            FROM workflow_stage_runs sr
+            WHERE sr.workflow_run_id = ?
+            AND sr.status = 'synthesizing'
+            ORDER BY sr.id DESC
             LIMIT 1
             """,
-            (f"Workflow Agent Run #{individual_run_id}%",),
+            (workflow_run_id,),
         )
-        exec_row = exec_cursor.fetchone()
-        if exec_row:
-            result['log_file'] = exec_row['log_file']
-            result['exec_status'] = exec_row['exec_status']
-        else:
-            result['log_file'] = None
-            result['exec_status'] = None
+        synth_row = cursor.fetchone()
+        if synth_row:
+            stage_run_id = synth_row['stage_run_id']
+            # Find synthesis execution by title pattern
+            exec_cursor = conn.execute(
+                """
+                SELECT log_file, status as exec_status FROM executions
+                WHERE doc_title LIKE ?
+                AND status = 'running'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (f"Workflow Synthesis #{stage_run_id}%",),
+            )
+            exec_row = exec_cursor.fetchone()
+            if exec_row:
+                return {
+                    'stage_name': synth_row['stage_name'],
+                    'log_file': exec_row['log_file'],
+                    'exec_status': exec_row['exec_status'],
+                    'is_synthesis': True,
+                }
 
-        return result
+        return None
 
 
 def get_agent_execution(execution_id: int) -> Optional[Dict[str, Any]]:

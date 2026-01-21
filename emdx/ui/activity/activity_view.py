@@ -29,6 +29,9 @@ from .activity_items import (
     SynthesisItem,
     IndividualRunItem,
     ExplorationItem,
+    CascadeRunItem,
+    CascadeStageItem,
+    AgentExecutionItem,
 )
 from .group_picker import GroupPicker
 from ..modals import HelpMixin
@@ -168,6 +171,8 @@ class ActivityItem:
     def status_icon(self) -> str:
         if self.status == "running":
             return "🔄"
+        elif self.status == "synthesizing":
+            return "🔮"
         elif self.status == "completed":
             return "✅"
         elif self.status == "failed":
@@ -202,6 +207,8 @@ class ActivityItem:
                 "custom": "🏷️",
             }
             return icons.get(group_type, "📁")
+        elif self.item_type == "cascade":
+            return "📋"  # Cascade processing
         else:
             return ""
 
@@ -452,10 +459,19 @@ class ActivityView(HelpMixin, Widget):
         if HAS_DOCS and doc_db:
             await self._load_direct_saves()
 
-        # Sort: running workflows first (pinned), then by timestamp descending
-        # Running workflows should always be at the top for visibility
+        # Load cascade executions
+        await self._load_cascade_executions()
+
+        # Load standalone agent executions
+        await self._load_agent_executions()
+
+        # Sort: running items first (pinned), then by timestamp descending
+        # Running workflows and agent executions should always be at the top for visibility
         def sort_key(item):
-            is_running = item.item_type == "workflow" and item.status == "running"
+            is_running = (
+                (item.item_type == "workflow" and item.status == "running") or
+                (item.item_type == "agent_execution" and item.status == "running")
+            )
             # Running items get priority 0 (will be first after sort)
             # Non-running items get priority 1
             # Within each group, sort by timestamp descending (negate for descending)
@@ -482,7 +498,7 @@ class ActivityView(HelpMixin, Widget):
                 # Parse timestamp
                 started = run.get("started_at")
                 if isinstance(started, str):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     started = parse_datetime(started)
                 if not started:
                     started = datetime.now()
@@ -553,6 +569,7 @@ class ActivityView(HelpMixin, Widget):
                     total_target = 0
                     total_completed = 0
                     current_stage = ""
+                    is_synthesizing = False
                     # Token tracking (input/output separately)
                     total_input_tokens = 0
                     total_output_tokens = 0
@@ -562,9 +579,12 @@ class ActivityView(HelpMixin, Widget):
                         completed = sr.get("runs_completed", 0)
                         total_target += target
                         total_completed += completed
-                        # Track current running stage
+                        # Track current running or synthesizing stage
                         if sr.get("status") == "running":
                             current_stage = sr.get("stage_name", "")
+                        elif sr.get("status") == "synthesizing":
+                            current_stage = sr.get("stage_name", "")
+                            is_synthesizing = True
                         # Check synthesis FIRST (prefer over individual outputs)
                         if sr.get("synthesis_doc_id"):
                             output_count += 1
@@ -592,6 +612,7 @@ class ActivityView(HelpMixin, Widget):
                         item.progress_completed = total_completed
                         item.progress_total = total_target
                         item.progress_stage = current_stage
+                        item._is_synthesizing = is_synthesizing
                     # For completed workflows, set doc_id to the output document
                     # Also use the output document's timestamp for consistent sorting
                     if output_doc_id and run.get("status") in ("completed", "failed"):
@@ -603,7 +624,7 @@ class ActivityView(HelpMixin, Widget):
                                 if out_doc:
                                     doc_created = out_doc.get("created_at")
                                     if isinstance(doc_created, str):
-                                        from emdx.utils.datetime import parse_datetime
+                                        from emdx.utils.datetime_utils import parse_datetime
                                         doc_created = parse_datetime(doc_created)
                                     if doc_created:
                                         item.timestamp = doc_created
@@ -645,7 +666,7 @@ class ActivityView(HelpMixin, Widget):
                 group_id = group["id"]
                 created = group.get("created_at")
                 if isinstance(created, str):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     created = parse_datetime(created)
                 if not created:
                     created = datetime.now()
@@ -723,6 +744,212 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error loading direct saves: {e}", exc_info=True)
 
+    async def _load_cascade_executions(self) -> None:
+        """Load cascade executions into activity items.
+
+        Cascade executions are Claude runs that process documents through
+        the cascade stages (idea → prompt → analyzed → planned → done).
+
+        If cascade_runs table exists, group executions by run.
+        Otherwise, show individual executions (backward compatibility).
+        """
+        try:
+            from emdx.database.connection import db_connection
+            from emdx.database import cascade as cascade_db
+            from datetime import datetime, timedelta
+
+            cutoff = datetime.now() - timedelta(days=7)
+            seen_run_ids = set()
+
+            # Try to load cascade runs first (new grouped view)
+            try:
+                runs = cascade_db.list_cascade_runs(limit=30)
+
+                for run in runs:
+                    run_id = run.get("id")
+                    if not run_id:
+                        continue
+
+                    seen_run_ids.add(run_id)
+
+                    # Parse timestamp
+                    started_at = run.get("started_at")
+                    if started_at:
+                        if isinstance(started_at, str):
+                            timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                        else:
+                            timestamp = started_at
+                    else:
+                        timestamp = datetime.now()
+
+                    # Build title
+                    title = run.get("initial_doc_title", f"Cascade Run #{run_id}")[:40]
+
+                    # Get execution count for this run
+                    executions = cascade_db.get_cascade_run_executions(run_id)
+                    exec_count = len(executions)
+
+                    item = CascadeRunItem(
+                        item_id=run_id,
+                        title=title,
+                        timestamp=timestamp,
+                        cascade_run=run,
+                        status=run.get("status", "running"),
+                        pipeline_name=run.get("pipeline_name", "default"),
+                        current_stage=run.get("current_stage", ""),
+                        execution_count=exec_count,
+                    )
+
+                    self.activity_items.append(item)
+
+            except Exception as e:
+                logger.debug(f"Could not load cascade runs (may not exist yet): {e}")
+
+            # Also load individual executions not part of any run (backward compat)
+            with db_connection.get_connection() as conn:
+                # Get cascade executions not linked to a run
+                cursor = conn.execute(
+                    """
+                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at, e.completed_at,
+                           d.stage, d.pr_url, e.cascade_run_id
+                    FROM executions e
+                    LEFT JOIN documents d ON e.doc_id = d.id
+                    WHERE e.doc_id IS NOT NULL
+                      AND e.started_at > ?
+                      AND (e.cascade_run_id IS NULL OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
+                      AND e.id = (
+                          SELECT MAX(e2.id) FROM executions e2
+                          WHERE e2.doc_id = e.doc_id
+                      )
+                    ORDER BY e.started_at DESC
+                    LIMIT 50
+                    """,
+                    (cutoff.isoformat(),),
+                )
+                rows = cursor.fetchall()
+
+            for row in rows:
+                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url, run_id = row
+
+                # Skip if already shown as part of a cascade run
+                if run_id and run_id in seen_run_ids:
+                    continue
+
+                # Parse timestamp
+                if started_at:
+                    if isinstance(started_at, str):
+                        timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    else:
+                        timestamp = started_at
+                else:
+                    timestamp = datetime.now()
+
+                # Build title with stage info
+                title = doc_title or f"Document #{doc_id}"
+                if stage:
+                    title = f"📋 {title}"  # Cascade indicator
+                if pr_url:
+                    title = f"🔗 {title}"  # Has PR
+
+                item = ActivityItem(
+                    item_type="cascade",
+                    item_id=exec_id,
+                    title=title,
+                    status=status or "unknown",
+                    timestamp=timestamp,
+                    doc_id=doc_id,
+                )
+
+                # Store extra info for preview
+                item.stage = stage
+                item.pr_url = pr_url
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading cascade executions: {e}", exc_info=True)
+
+    async def _load_agent_executions(self) -> None:
+        """Load standalone agent executions into activity items.
+
+        These are executions from `emdx agent` command that are not part of
+        any workflow or cascade. They show up as top-level items with their
+        log files available for preview.
+        """
+        try:
+            from emdx.database.connection import db_connection
+            from emdx.models.executions import get_recent_executions
+            from datetime import datetime, timedelta
+
+            cutoff = datetime.now() - timedelta(days=7)
+
+            # Get recent executions - filter for standalone agent runs
+            # (no workflow_run_id, and not part of cascade)
+            with db_connection.get_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at,
+                           e.completed_at, e.log_file, e.exit_code, e.working_dir
+                    FROM executions e
+                    WHERE e.started_at > ?
+                      AND e.doc_title LIKE 'Agent:%'
+                      AND e.cascade_run_id IS NULL
+                    ORDER BY e.started_at DESC
+                    LIMIT 30
+                    """,
+                    (cutoff.isoformat(),),
+                )
+                rows = cursor.fetchall()
+
+            for row in rows:
+                exec_id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir = row
+
+                # Parse timestamp
+                if started_at:
+                    if isinstance(started_at, str):
+                        timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    else:
+                        timestamp = started_at
+                else:
+                    timestamp = datetime.now()
+
+                # Detect CLI tool from log file name
+                cli_tool = "claude"
+                if log_file and "cursor" in log_file.lower():
+                    cli_tool = "cursor"
+
+                # Build title
+                title = doc_title or f"Execution #{exec_id}"
+                if title.startswith("Agent: "):
+                    title = title[7:]  # Strip "Agent: " prefix for cleaner display
+                title = title[:50]  # Truncate long titles
+
+                item = AgentExecutionItem(
+                    item_id=exec_id,
+                    title=title,
+                    timestamp=timestamp,
+                    execution={
+                        "id": exec_id,
+                        "doc_id": doc_id,
+                        "doc_title": doc_title,
+                        "status": status,
+                        "started_at": started_at,
+                        "completed_at": completed_at,
+                        "log_file": log_file,
+                        "exit_code": exit_code,
+                        "working_dir": working_dir,
+                    },
+                    status=status or "unknown",
+                    doc_id=doc_id,
+                    log_file=log_file or "",
+                    cli_tool=cli_tool,
+                )
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading agent executions: {e}", exc_info=True)
+
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
         self.flat_items = []
@@ -741,6 +968,10 @@ class ActivityView(HelpMixin, Widget):
     async def _update_table(self) -> None:
         """Update the activity table."""
         table = self.query_one("#activity-table", DataTable)
+
+        # Preserve scroll position to prevent visual flicker during refresh
+        saved_scroll_y = table.scroll_y
+
         table.clear()
 
         for item in self.flat_items:
@@ -801,21 +1032,25 @@ class ActivityView(HelpMixin, Widget):
             # For running workflows, show progress bar + stage instead of badge
             progress_str = ""
             if item.item_type == "workflow" and item.status == "running" and item.progress_total > 0:
-                # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
-                # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
-                # Width=10 gives perfect accuracy for 4 and 5 task workflows
-                pct = item.progress_completed / item.progress_total
-                bar_width = 10
-                filled_exact = pct * bar_width
-                filled_full = int(filled_exact)
-                remainder = filled_exact - filled_full
-                # Partial block characters for the fractional part
-                partial_chars = " ▏▎▍▌▋▊▉█"
-                partial_idx = int(remainder * 8)
-                partial = partial_chars[partial_idx] if partial_idx > 0 else ""
-                empty = bar_width - filled_full - (1 if partial else 0)
-                bar = "█" * filled_full + partial + "░" * empty
-                progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
+                # Check if in synthesis phase
+                if getattr(item, '_is_synthesizing', False):
+                    progress_str = " 🔮 Synthesizing..."
+                else:
+                    # Build mini progress bar using 8ths for accuracy: █████░░░░░ 2/4
+                    # Use Unicode block elements: █ (full), ▏▎▍▌▋▊▉ (1/8 to 7/8), space (empty)
+                    # Width=10 gives perfect accuracy for 4 and 5 task workflows
+                    pct = item.progress_completed / item.progress_total
+                    bar_width = 10
+                    filled_exact = pct * bar_width
+                    filled_full = int(filled_exact)
+                    remainder = filled_exact - filled_full
+                    # Partial block characters for the fractional part
+                    partial_chars = " ▏▎▍▌▋▊▉█"
+                    partial_idx = int(remainder * 8)
+                    partial = partial_chars[partial_idx] if partial_idx > 0 else ""
+                    empty = bar_width - filled_full - (1 if partial else 0)
+                    bar = "█" * filled_full + partial + "░" * empty
+                    progress_str = f" {bar} {item.progress_completed}/{item.progress_total}"
 
             # Build title with prefix and suffix (progress bar or badge)
             prefix = f"{indent}{expand}"
@@ -828,7 +1063,7 @@ class ActivityView(HelpMixin, Widget):
             # - Individual runs: show individual run ID or doc_id if completed
             if item.item_type in ("workflow", "group"):
                 id_str = f"#{item.item_id}" if item.item_id else "—"
-            elif item.item_type in ("document", "exploration", "synthesis"):
+            elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
                 id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
             elif item.item_type == "individual_run":
                 # Show doc_id if has output, otherwise show run ID if exists
@@ -844,9 +1079,16 @@ class ActivityView(HelpMixin, Widget):
 
             table.add_row(icon, time_str, title, id_str)
 
-        # Restore selection
+        # Restore selection without scrolling (we'll restore scroll position separately)
         if self.flat_items and self.selected_idx < len(self.flat_items):
-            table.move_cursor(row=self.selected_idx)
+            table.move_cursor(row=self.selected_idx, scroll=False)
+
+        # Restore scroll position to prevent flicker
+        # Use call_later to ensure rows are rendered before scrolling
+        def restore_scroll():
+            if saved_scroll_y > 0:
+                table.scroll_to(y=saved_scroll_y, animate=False)
+        self.call_later(restore_scroll)
 
     async def _update_status_bar(self) -> None:
         """Update the status bar with current stats."""
@@ -905,6 +1147,10 @@ class ActivityView(HelpMixin, Widget):
         week_data = self._get_week_activity_data()
         spark = sparkline(week_data, width=7)
 
+        # Get theme indicator
+        from emdx.ui.themes import get_theme_indicator
+        theme_indicator = get_theme_indicator(self.app.theme)
+
         # Format status bar
         parts = []
         if active > 0:
@@ -924,6 +1170,7 @@ class ActivityView(HelpMixin, Widget):
 
         parts.append(f"[dim]{spark}[/dim]")
         parts.append(datetime.now().strftime("%H:%M"))
+        parts.append(f"[dim]{theme_indicator}[/dim]")
 
         status_bar.update(" │ ".join(parts))
 
@@ -1007,8 +1254,8 @@ class ActivityView(HelpMixin, Widget):
         # Stop any existing stream
         self._stop_stream()
 
-        # For running workflows or individual runs, show live log
-        if item.status == "running" and item.item_type in ("workflow", "individual_run"):
+        # For running workflows, individual runs, or agent executions, show live log
+        if item.status == "running" and item.item_type in ("workflow", "individual_run", "agent_execution"):
             await self._show_live_log(item)
             return
 
@@ -1090,7 +1337,7 @@ class ActivityView(HelpMixin, Widget):
         elif item.item_type == "group":
             await self._show_group_context(item, context_content, context_header)
         # Individual run details
-        elif item.item_type == "individual_run" or item.individual_run:
+        elif item.item_type == "individual_run" or getattr(item, 'individual_run', None):
             await self._show_individual_run_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
@@ -1112,10 +1359,15 @@ class ActivityView(HelpMixin, Widget):
 
         # For running workflows, show progress prominently
         if status == "running" and item.progress_total:
-            progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
-            content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
-            if item.progress_stage:
-                content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
+            # Check if in synthesis phase
+            if getattr(item, '_is_synthesizing', False):
+                content.write(f"[magenta bold]🔮 Synthesizing...[/magenta bold]")
+                content.write(f"[dim]Combining outputs from {item.progress_completed} runs[/dim]")
+            else:
+                progress_pct = int(100 * item.progress_completed / item.progress_total) if item.progress_total else 0
+                content.write(f"[yellow bold]Progress: {item.progress_completed}/{item.progress_total} ({progress_pct}%)[/yellow bold]")
+                if item.progress_stage:
+                    content.write(f"[dim]Current stage: {item.progress_stage}[/dim]")
 
         # Timing info as compact line
         timing_parts = []
@@ -1187,8 +1439,9 @@ class ActivityView(HelpMixin, Widget):
                 content.write("")
                 content.write(f"[bold cyan]─── Stages ───[/bold cyan]")
                 for sr in stage_runs:
-                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
-                    content.write(f"  {icon} {sr['stage_name']} {sr['runs_completed']}/{sr['target_runs']}")
+                    icon = {"completed": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "[yellow]⟳[/yellow]", "synthesizing": "[magenta]🔮[/magenta]", "pending": "[dim]○[/dim]"}.get(sr["status"], "[dim]○[/dim]")
+                    stage_suffix = " 🔮 Synthesizing..." if sr["status"] == "synthesizing" else f" {sr['runs_completed']}/{sr['target_runs']}"
+                    content.write(f"  {icon} {sr['stage_name']}{stage_suffix}")
 
             # Show prompt from first individual run (gives context for what the workflow is doing)
             for sr in stage_runs:
@@ -1311,7 +1564,7 @@ class ActivityView(HelpMixin, Widget):
                 if doc.get("project"):
                     meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
                 if doc.get("created_at"):
-                    from emdx.utils.datetime import parse_datetime
+                    from emdx.utils.datetime_utils import parse_datetime
                     created_dt = parse_datetime(doc["created_at"])
                     if created_dt:
                         meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
@@ -1362,7 +1615,7 @@ class ActivityView(HelpMixin, Widget):
         self, item: ActivityItem, content: RichLog, header: Static
     ) -> None:
         """Show individual run details in context panel."""
-        run = item.individual_run or item.workflow_run
+        run = getattr(item, 'individual_run', None) or getattr(item, 'workflow_run', None)
         if not run:
             header.update("RUN")
             return
@@ -1606,21 +1859,47 @@ class ActivityView(HelpMixin, Widget):
         try:
             log_path = None
 
+            # For agent executions, get log file directly from the item
+            if item.item_type == "agent_execution":
+                log_file = getattr(item, 'log_file', None)
+                if log_file:
+                    log_path = Path(log_file)
+
             # For individual runs, get log file from the execution record
-            if item.item_type == "individual_run" and item.item_id:
+            elif item.item_type == "individual_run" and item.item_id:
                 try:
                     from emdx.models.executions import get_execution
+                    from emdx.database.connection import db_connection
+
                     # Get the individual run to find its execution ID
                     ir = wf_db.get_individual_run(item.item_id)
-                    if ir and ir.get("agent_execution_id"):
-                        exec_record = get_execution(ir["agent_execution_id"])
-                        if exec_record and exec_record.log_file:
-                            log_path = Path(exec_record.log_file)
+                    if ir:
+                        # Try agent_execution_id first (set after completion)
+                        if ir.get("agent_execution_id"):
+                            exec_record = get_execution(ir["agent_execution_id"])
+                            if exec_record and exec_record.log_file:
+                                log_path = Path(exec_record.log_file)
+
+                        # Fallback: find running execution by title pattern
+                        if not log_path:
+                            with db_connection.get_connection() as conn:
+                                cursor = conn.execute(
+                                    """
+                                    SELECT log_file FROM executions
+                                    WHERE doc_title LIKE ?
+                                    AND status = 'running'
+                                    ORDER BY id DESC LIMIT 1
+                                    """,
+                                    (f"Workflow Agent Run #{item.item_id}%",),
+                                )
+                                row = cursor.fetchone()
+                                if row and row['log_file']:
+                                    log_path = Path(row['log_file'])
                 except Exception as e:
                     logger.debug(f"Could not get individual run log: {e}")
 
             # For workflow runs, find active execution
-            elif item.item_type == "workflow" and item.workflow_run:
+            elif item.item_type == "workflow" and getattr(item, 'workflow_run', None):
                 run = item.workflow_run
                 active_exec = wf_db.get_active_execution_for_run(run["id"])
                 if active_exec and active_exec.get("log_file"):
@@ -1628,21 +1907,28 @@ class ActivityView(HelpMixin, Widget):
 
             if not log_path:
                 preview_log.write(f"[yellow]⏳ Waiting for log...[/yellow]")
+                preview_log.write(f"[dim]item_type={item.item_type}, has workflow_run={getattr(item, 'workflow_run', None) is not None}[/dim]")
                 return
 
             if not log_path.exists():
-                preview_log.write(f"[yellow]⏳ Log file pending...[/yellow]")
+                preview_log.write(f"[yellow]⏳ Log file pending: {log_path}[/yellow]")
                 return
 
             # Start streaming
+            preview_log.write(f"[green]● Streaming from: {log_path.name}[/green]")
             self.log_stream = LogStream(log_path)
             self.streaming_item_id = item.item_id
 
-            # Show initial content
+            # Show initial content - use LIVE LOGS formatting
             initial = self.log_stream.get_initial_content()
             if initial:
-                for line in initial.strip().split("\n")[-50:]:
-                    preview_log.write(escape_markup(line))
+                from emdx.ui.live_log_writer import LiveLogWriter
+                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                # Only show last ~50 events worth
+                from emdx.utils.stream_json_parser import parse_and_format_live_logs
+                formatted = parse_and_format_live_logs(initial)
+                for line in formatted[-50:]:
+                    preview_log.write(line)
                 preview_log.scroll_end(animate=False)
 
             self.log_stream.subscribe(self.log_subscriber)
@@ -1652,14 +1938,24 @@ class ActivityView(HelpMixin, Widget):
             preview_log.write(f"[red]Error: {e}[/red]")
 
     def _handle_log_content(self, content: str) -> None:
-        """Handle new log content from stream."""
-        try:
-            preview_log = self.query_one("#preview-log", RichLog)
-            for line in content.splitlines():
-                preview_log.write(escape_markup(line))
-            preview_log.scroll_end(animate=False)
-        except Exception as e:
-            logger.error(f"Error handling log content: {e}")
+        """Handle new log content from stream - LIVE LOGS formatted.
+
+        This is called from a background thread (file watcher), so we must
+        use call_from_thread to safely update the UI.
+        """
+        def update_ui():
+            try:
+                from emdx.ui.live_log_writer import LiveLogWriter
+
+                preview_log = self.query_one("#preview-log", RichLog)
+                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                writer.write(content)
+            except Exception as e:
+                logger.error(f"Error handling log content: {e}")
+
+        # Schedule UI update on the main thread
+        # Note: call_from_thread is on App, not Widget
+        self.app.call_from_thread(update_ui)
 
     def _stop_stream(self) -> None:
         """Stop any active log stream."""
@@ -2468,3 +2764,90 @@ class ActivityView(HelpMixin, Widget):
         # Refocus the table
         table = self.query_one("#activity-table", DataTable)
         table.focus()
+
+    async def select_document_by_id(self, doc_id: int) -> bool:
+        """Select and show a document by its ID.
+
+        Finds which workflow contains this doc, expands it, and selects the doc.
+        Returns True if found and selected, False otherwise.
+        """
+        # Debug file
+        from pathlib import Path
+        debug_log = Path.home() / ".config" / "emdx" / "palette_debug.log"
+        def _debug(msg):
+            with open(debug_log, "a") as f:
+                f.write(f"[select_doc] {msg}\n")
+
+        _debug(f"select_document_by_id({doc_id}) called")
+
+        # First check if already visible in flat_items as a DOCUMENT item (not workflow)
+        # Workflows also have doc_id set to their output doc, but we want the actual document
+        for idx, item in enumerate(self.flat_items):
+            item_doc_id = getattr(item, 'doc_id', None)
+            # Skip workflows - they have doc_id but we want the actual document child
+            if item.item_type == "workflow":
+                continue
+            if item_doc_id == doc_id:
+                _debug(f"Found document in flat_items at idx={idx}, type={item.item_type}")
+                self.selected_idx = idx
+                table = self.query_one("#activity-table", DataTable)
+                table.move_cursor(row=idx)
+                await self._update_preview(force=True)
+                return True
+
+        _debug("Not visible in flat_items, checking if doc is inside a collapsed workflow...")
+
+        # Check if any workflow in activity_items has this doc_id (workflows store their output doc_id)
+        # If so, expand that workflow and then find the actual document child
+        parent_workflow = None
+        for parent in self.activity_items:
+            if parent.item_type == "workflow":
+                # Workflows have doc_id set to their primary output document
+                if getattr(parent, 'doc_id', None) == doc_id:
+                    _debug(f"Found workflow with doc_id={doc_id}: {parent.title}")
+                    parent_workflow = parent
+                    break
+
+        if parent_workflow:
+            _debug(f"Expanding workflow to find document child...")
+            # Expand the workflow if not already
+            if not parent_workflow.expanded:
+                await self._expand_workflow(parent_workflow)
+                self._flatten_items()
+                await self._update_table()
+            else:
+                _debug("Workflow already expanded")
+
+            # Now find the actual document in the expanded children
+            _debug(f"Searching for doc_id={doc_id} in {len(self.flat_items)} flat_items after expand")
+            for idx, item in enumerate(self.flat_items):
+                if item.item_type == "workflow":
+                    continue
+                item_doc_id = getattr(item, 'doc_id', None)
+                if item_doc_id is not None:
+                    _debug(f"  [{idx}] doc_id={item_doc_id}, type={item.item_type}")
+                if item_doc_id == doc_id:
+                    _debug(f"Found doc at idx={idx} after expand, type={item.item_type}")
+                    self.selected_idx = idx
+                    table = self.query_one("#activity-table", DataTable)
+                    table.move_cursor(row=idx)
+                    await self._update_preview(force=True)
+                    return True
+            _debug("Doc NOT found in flat_items after expand - this is unexpected!")
+
+        _debug("Not found via workflow parent, trying direct load as fallback")
+
+        # Fallback - just show doc in preview
+        if HAS_DOCS and doc_db:
+            doc = doc_db.get_document(doc_id)
+            if doc:
+                content = doc.get("content", "")
+                title = doc.get("title", "Untitled")
+                self._render_markdown_preview(f"# {title}\n\n{content}")
+                header = self.query_one("#preview-header", Static)
+                header.update(f"📄 #{doc_id}")
+                self._show_notification(f"Showing: {title[:40]}")
+                return True
+
+        self._show_notification(f"Document #{doc_id} not found", is_error=True)
+        return False

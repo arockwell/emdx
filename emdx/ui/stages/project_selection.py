@@ -14,7 +14,7 @@ from textual.widgets import Static, ListView, ListItem, Label
 from textual.message import Message
 from textual.binding import Binding
 
-from ...utils.logging import get_logger
+from ...utils.logging_utils import get_logger
 from ...utils.git_ops import discover_projects_from_main_repos, GitProject, get_repository_root
 from .base import OverlayStage
 

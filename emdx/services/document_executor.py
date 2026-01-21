@@ -21,6 +21,7 @@ from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
+from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..models.documents import get_document
 from ..models.executions import (
@@ -41,13 +42,8 @@ class ExecutionType(Enum):
     GENERIC = "generic"
 
 
-# Default allowed tools for Claude
-DEFAULT_ALLOWED_TOOLS = [
-    "Read", "Write", "Edit", "MultiEdit", "Bash",
-    "Glob", "Grep", "LS", "Task", "TodoWrite"
-]
-
 # Stage-specific tool restrictions
+# DEFAULT_ALLOWED_TOOLS is imported from config.cli_config
 STAGE_TOOLS = {
     ExecutionType.NOTE: [
         "Read", "Grep", "Glob", "LS",
@@ -250,6 +246,7 @@ def execute_document_background(
             'context': context,
         }
     except Exception as e:
+        logger.warning("Failed to execute document %s: %s", doc_id, e, exc_info=True)
         return {
             'success': False,
             'execution_id': execution_id,

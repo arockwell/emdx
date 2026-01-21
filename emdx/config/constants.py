@@ -35,7 +35,7 @@ DEFAULT_REFRESH_INTERVAL_SECONDS = 5  # UI auto-refresh interval
 # CONCURRENCY & POOL SIZES
 # =============================================================================
 
-DEFAULT_MAX_CONCURRENT_WORKFLOWS = 10  # Workflow executor default
+DEFAULT_MAX_CONCURRENT_WORKFLOWS = 5  # Workflow executor default
 DEFAULT_MAX_CONCURRENT_STAGES = 5  # Stage config, worktree pool
 DEFAULT_MAX_AGENT_ITERATIONS = 10  # Max iterations for agent loops
 

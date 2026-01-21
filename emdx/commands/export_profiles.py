@@ -131,6 +131,7 @@ def create_profile(
         console.print(f"[green]✓ Created export profile '{name}' (ID: {profile_id})[/green]")
 
     except Exception as e:
+        logger.warning("Failed to create export profile: %s", e, exc_info=True)
         console.print(f"[red]Error creating profile: {e}[/red]")
         raise typer.Exit(1)
 
@@ -338,6 +339,7 @@ def edit_profile(
         console.print(f"[red]Invalid JSON: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
+        logger.warning("Failed to update export profile: %s", e, exc_info=True)
         console.print(f"[red]Error updating profile: {e}[/red]")
         raise typer.Exit(1)
     finally:
@@ -485,6 +487,7 @@ def import_profile_json(
         console.print(f"[green]✓ Imported profile '{data['name']}' (ID: {profile_id})[/green]")
 
     except Exception as e:
+        logger.warning("Failed to import export profile: %s", e, exc_info=True)
         console.print(f"[red]Error importing profile: {e}[/red]")
         raise typer.Exit(1)
 

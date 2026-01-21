@@ -48,9 +48,13 @@ def extract_output_doc_id(log_file: Path) -> Optional[int]:
             r'saved as document #(\d+)',  # Agent natural language
             r'Saved as #(\d+)',           # CLI output
             r'Created document #(\d+)',
+            r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',  # Agent output (with optional "created" and markdown bold)
+            r'\*\*Document ID:\*\*\s*(\d+)',  # Cursor markdown: **Document ID:** 5714
             r'document ID[:\s]+#?(\d+)',
             r'doc_id[:\s]+(\d+)',
             r'✅ Saved as\s*#(\d+)',      # With emoji
+            r'doc ID\s*`(\d+)`',          # Markdown backtick format: doc ID `123`
+            r'Saved to EMDX as.*?(\d+)',  # "Saved to EMDX as **doc ID `5704`**"
         ]
 
         # Find ALL matches and return the LAST one (most likely the final output)

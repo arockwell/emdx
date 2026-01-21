@@ -272,15 +272,59 @@ def run_workflow(
     ),
     max_concurrent: Optional[int] = typer.Option(
         None,
-        "--max-concurrent",
         "-j",
+        "--jobs",
+        "-P",
+        "--parallel",
+        "--max-concurrent",
         help="Override max concurrent executions for parallel/dynamic stages",
+    ),
+    cli_tool: str = typer.Option(
+        "claude",
+        "--cli", "-C",
+        help="CLI tool to use: claude or cursor",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model", "-m",
+        help="Model to use (overrides CLI default)",
     ),
 ):
     """Run a workflow.
 
     Use --worktree (-w) when running multiple workflows in parallel to avoid
     git conflicts. Each workflow will get its own isolated worktree.
+
+    Examples:
+        # Run multiple tasks in parallel with a workflow
+        emdx workflow run task_parallel -t "Analyze auth module" -t "Review tests" -t "Check docs"
+
+        # Use document IDs as tasks (from previous analysis)
+        emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184
+
+        # Specify a custom title for the Activity view
+        emdx workflow run task_parallel -t "Task 1" -t "Task 2" --title "My Analysis Run"
+
+        # Use worktree isolation for parallel runs that modify files
+        emdx workflow run parallel_fix -t "Add type hints" -t "Fix imports" --worktree
+
+        # Specify base branch for worktree
+        emdx workflow run parallel_fix -t "Fix bug" --worktree --base-branch develop
+
+        # Limit concurrent executions
+        emdx workflow run task_parallel -t "Task 1" -t "Task 2" -t "Task 3" -j 2
+
+        # Use a preset with custom variable overrides
+        emdx workflow run task_parallel --preset security_audit --var depth=deep
+
+        # Save current run variables as a new preset
+        emdx workflow run task_parallel -t "Review code" --var topic=Performance --save-as perf_review
+
+        # Use Cursor instead of Claude
+        emdx workflow run task_parallel -t "Analyze code" --cli cursor
+
+        # Specify a model
+        emdx workflow run task_parallel -t "Quick task" --cli cursor --model auto
     """
     worktree_path = None
 
@@ -335,11 +379,18 @@ def run_workflow(
             variables['_max_concurrent_override'] = max_concurrent
         variables['base_branch'] = base_branch
 
+        # Pass CLI tool and model to workflow
+        if cli_tool != "claude":
+            variables["_cli_tool"] = cli_tool
+        if model:
+            variables["_model"] = model
+
         # Store title in input_variables (used by Activity view)
         if title:
             variables['task_title'] = title
 
-        console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name}")
+        cli_name = "Cursor" if cli_tool == "cursor" else "Claude"
+        console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name} (using {cli_name})")
         if title:
             console.print(f"  Title: {title}")
         console.print(f"  Stages: {len(workflow.stages)}")
@@ -598,48 +649,6 @@ def show_run_status(
         raise
     except Exception as e:
         console.print(f"[red]Error showing run status: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command("strategies")
-def list_strategies(
-    category: Optional[str] = typer.Option(
-        None, "--category", "-c", help="Filter by category"
-    ),
-):
-    """List available iteration strategies."""
-    try:
-        strategies = workflow_registry.list_iteration_strategies(category=category)
-
-        if not strategies:
-            console.print("[yellow]No iteration strategies found[/yellow]")
-            return
-
-        table = Table(
-            title="Iteration Strategies", show_header=True, header_style="bold magenta"
-        )
-        table.add_column("Name", style="green")
-        table.add_column("Category", style="yellow")
-        table.add_column("Runs", justify="center", style="cyan")
-        table.add_column("Description", style="white")
-        table.add_column("Builtin", style="blue")
-
-        for strategy in strategies:
-            builtin = "🏛️" if strategy.is_builtin else ""
-            description = truncate_title(strategy.description or "")
-
-            table.add_row(
-                strategy.display_name,
-                strategy.category,
-                str(strategy.recommended_runs),
-                description,
-                builtin,
-            )
-
-        console.print(table)
-
-    except Exception as e:
-        console.print(f"[red]Error listing strategies: {e}[/red]")
         raise typer.Exit(1)
 
 

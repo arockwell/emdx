@@ -4,7 +4,7 @@ Search functionality for emdx documents using FTS5
 
 from typing import Any, Optional
 
-from ..utils.datetime import parse_datetime
+from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
 
 

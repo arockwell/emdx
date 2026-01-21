@@ -1,46 +1,58 @@
-"""Log content writer - handles writing content to RichLog with line numbers."""
+"""Log content writer - handles writing content to RichLog with line numbers.
+
+LIVE LOGS: Delegates to LiveLogWriter for proper timestamp and tool formatting.
+"""
 
 from textual.widgets import RichLog
 
 
 class LogContentWriter:
-    """Handles writing log content to a RichLog widget with line numbering."""
+    """Handles writing log content to a RichLog widget with line numbering.
+
+    LIVE LOGS: Delegates to LiveLogWriter for stream-json parsing and formatting.
+    """
 
     def __init__(self, log_output: RichLog):
+        from emdx.ui.live_log_writer import LiveLogWriter
+
         self.log_output = log_output
         self.line_count = 0
+        # Use LiveLogWriter with line numbers enabled
+        self._writer = LiveLogWriter(log_output, show_line_numbers=True, auto_scroll=False)
 
     def write_content(self, content: str) -> None:
-        """Write content to the log output with line numbers."""
-        for line in content.splitlines():
-            self.line_count += 1
-            self.log_output.write(f"[dim]{self.line_count:5}[/dim] {line}")
+        """Write content to the log output with LIVE LOGS formatting.
+
+        Delegates to LiveLogWriter for stream-json parsing and formatting.
+        """
+        self._writer.write(content)
+        self.line_count = self._writer.line_count
 
     def write_raw(self, content: str) -> None:
-        """Write content without line numbers."""
-        self.log_output.write(content)
-        self.line_count += 1
+        """Write content without parsing."""
+        self._writer.write_raw(content)
+        self.line_count = self._writer.line_count
 
     def write_header(self, header: str) -> None:
         """Write a styled header section."""
-        self.log_output.write(f"\n[bold cyan]═══ {header} ═══[/bold cyan]\n")
-        self.line_count += 2
+        self._writer.write_header(header)
+        self.line_count = self._writer.line_count
 
     def write_error(self, message: str) -> None:
         """Write an error message."""
-        self.log_output.write(f"[red]Error: {message}[/red]")
-        self.line_count += 1
+        self._writer.write_error(message)
+        self.line_count = self._writer.line_count
 
     def write_info(self, message: str) -> None:
         """Write an info/dim message."""
-        self.log_output.write(f"[dim]{message}[/dim]")
-        self.line_count += 1
+        self._writer.write_info(message)
+        self.line_count = self._writer.line_count
 
     def clear(self) -> None:
         """Clear the log output and reset line count."""
-        self.log_output.clear()
+        self._writer.clear()
         self.line_count = 0
 
     def scroll_end(self, animate: bool = False) -> None:
         """Scroll to the end of the log."""
-        self.log_output.scroll_end(animate=animate)
+        self._writer.scroll_end(animate=animate)
