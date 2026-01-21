@@ -1270,16 +1270,40 @@ class CascadeView(Widget):
             self.current_stage_idx += 1
 
     def action_move_down(self) -> None:
-        """Move cursor down."""
-        if self.doc_list:
+        """Move cursor down in focused table."""
+        # Check if pipeline table is focused
+        if self.pipeline_table and self.pipeline_table.has_focus:
+            self.pipeline_table.action_cursor_down()
+            row_idx = self.pipeline_table.cursor_row
+            if row_idx < len(self._pipeline_data):
+                self._selected_pipeline_idx = row_idx
+                act = self._pipeline_data[row_idx]
+                output_id = act.get("output_id")
+                if output_id:
+                    self._show_document_preview(output_id)
+                else:
+                    self._show_execution_preview(act)
+        elif self.doc_list:
             self.doc_list.move_cursor(1)
             doc_id = self.doc_list.get_selected_doc_id()
             if doc_id:
                 self._show_document_preview(doc_id)
 
     def action_move_up(self) -> None:
-        """Move cursor up."""
-        if self.doc_list:
+        """Move cursor up in focused table."""
+        # Check if pipeline table is focused
+        if self.pipeline_table and self.pipeline_table.has_focus:
+            self.pipeline_table.action_cursor_up()
+            row_idx = self.pipeline_table.cursor_row
+            if row_idx < len(self._pipeline_data):
+                self._selected_pipeline_idx = row_idx
+                act = self._pipeline_data[row_idx]
+                output_id = act.get("output_id")
+                if output_id:
+                    self._show_document_preview(output_id)
+                else:
+                    self._show_execution_preview(act)
+        elif self.doc_list:
             self.doc_list.move_cursor(-1)
             doc_id = self.doc_list.get_selected_doc_id()
             if doc_id:
