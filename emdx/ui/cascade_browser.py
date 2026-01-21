@@ -874,6 +874,8 @@ class CascadeView(Widget):
         Binding("a", "advance_doc", "Advance", show=True),
         Binding("p", "process", "Process", show=True),
         Binding("s", "synthesize", "Synthesize", show=True),
+        Binding("i", "show_input", "Input", show=True),
+        Binding("o", "show_output", "Output", show=True),
         Binding("ctrl+a", "select_all", "Select All", show=False),
         Binding("escape", "clear_selection", "Clear", show=False),
         Binding("r", "refresh", "Refresh", show=True),
@@ -964,6 +966,7 @@ class CascadeView(Widget):
         self.streaming_exec_id: Optional[int] = None
         self._selected_exec: Optional[Dict[str, Any]] = None
         self._pipeline_data: List[Dict[str, Any]] = []
+        self._selected_pipeline_idx: Optional[int] = None
         self._log_subscriber = None
 
     def compose(self) -> ComposeResult:
@@ -1246,6 +1249,7 @@ class CascadeView(Widget):
             # Pipeline activity selected - show output doc or live log
             row_idx = event.cursor_row
             if hasattr(self, '_pipeline_data') and row_idx < len(self._pipeline_data):
+                self._selected_pipeline_idx = row_idx
                 act = self._pipeline_data[row_idx]
                 # Show output doc if available, otherwise show execution log
                 output_id = act.get("output_id")
@@ -1287,6 +1291,42 @@ class CascadeView(Widget):
             doc_id = self.doc_list.get_selected_doc_id()
             if doc_id:
                 self.post_message(self.ViewDocument(doc_id))
+
+    def action_show_input(self) -> None:
+        """Show input document for selected pipeline activity."""
+        if self._selected_pipeline_idx is None:
+            self._update_status("[yellow]Select a pipeline row first[/yellow]")
+            return
+
+        if self._selected_pipeline_idx >= len(self._pipeline_data):
+            return
+
+        act = self._pipeline_data[self._selected_pipeline_idx]
+        input_id = act.get("input_id")
+        if input_id:
+            self._show_document_preview(input_id)
+            self._update_status(f"[cyan]Showing input #{input_id}[/cyan] (press 'o' for output)")
+        else:
+            self._update_status("[yellow]No input document[/yellow]")
+
+    def action_show_output(self) -> None:
+        """Show output document for selected pipeline activity."""
+        if self._selected_pipeline_idx is None:
+            self._update_status("[yellow]Select a pipeline row first[/yellow]")
+            return
+
+        if self._selected_pipeline_idx >= len(self._pipeline_data):
+            return
+
+        act = self._pipeline_data[self._selected_pipeline_idx]
+        output_id = act.get("output_id")
+        if output_id:
+            self._show_document_preview(output_id)
+            self._update_status(f"[cyan]Showing output #{output_id}[/cyan] (press 'i' for input)")
+        else:
+            # No output yet - show execution log
+            self._show_execution_preview(act)
+            self._update_status("[yellow]No output yet - showing execution log[/yellow]")
 
     def action_advance_doc(self) -> None:
         """Advance selected document to next stage."""
