@@ -18,8 +18,10 @@ class ActivityBrowser(Widget):
 
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
-        ("2", "switch_workflow", "Workflows"),
-        ("3", "switch_documents", "Documents"),
+        ("2", "switch_cascade", "Cascade"),
+        ("3", "switch_search", "Search"),
+        ("4", "switch_github", "GitHub"),
+        ("5", "switch_documents", "Documents"),
         ("?", "show_help", "Help"),
     ]
 
@@ -48,7 +50,7 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Activity │ [dim]2[/dim] Workflows │ [dim]3[/dim] Documents │ [dim]4[/dim] Cascade │ "
+            "[bold]1[/bold] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] GitHub │ [dim]5[/dim] Docs │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
             id="help-bar",
         )
@@ -73,15 +75,25 @@ class ActivityBrowser(Widget):
         """Already on activity, do nothing."""
         pass
 
-    async def action_switch_workflow(self) -> None:
-        """Switch to workflow browser."""
+    async def action_switch_cascade(self) -> None:
+        """Switch to cascade browser."""
         if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("workflow")
+            await self.app.switch_browser("cascade")
 
     async def action_switch_documents(self) -> None:
         """Switch to document browser."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("document")
+
+    async def action_switch_search(self) -> None:
+        """Switch to search screen."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("search")
+
+    async def action_switch_github(self) -> None:
+        """Switch to GitHub browser."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("github")
 
     def action_show_help(self) -> None:
         """Show help."""

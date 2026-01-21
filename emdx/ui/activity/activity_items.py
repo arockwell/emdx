@@ -23,6 +23,9 @@ class ActivityItem(ABC):
     depth: int = 0
     expanded: bool = False
     children: List["ActivityItem"] = field(default_factory=list)
+    status: str = "completed"  # Default status for items that don't track status
+    doc_id: Optional[int] = None  # Document ID if this item has associated content
+    cost: float = 0.0  # Cost in USD if tracked
 
     @property
     @abstractmethod
@@ -466,6 +469,162 @@ class ExplorationItem(ActivityItem):
 
 
 @dataclass
+class CascadeRunItem(ActivityItem):
+    """A cascade run in the activity stream.
+
+    Represents an end-to-end cascade execution (idea → prompt → analyzed → planned → done)
+    with all associated stage transitions shown as children.
+    """
+
+    cascade_run: Dict[str, Any] = field(default_factory=dict)
+    status: str = "running"
+    pipeline_name: str = "default"
+    current_stage: str = ""
+    execution_count: int = 0
+
+    @property
+    def item_type(self) -> str:
+        return "cascade_run"
+
+    @property
+    def type_icon(self) -> str:
+        return "🌊"  # Cascade wave emoji
+
+    @property
+    def status_icon(self) -> str:
+        icons = {
+            "running": "🔄",
+            "completed": "✅",
+            "failed": "❌",
+            "cancelled": "⏹️",
+        }
+        return icons.get(self.status, "⚪")
+
+    def can_expand(self) -> bool:
+        return self.execution_count > 0 or len(self.children) > 0
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        """Load cascade stage executions as children."""
+        from emdx.database import cascade as cascade_db
+
+        children = []
+
+        if not self.cascade_run:
+            return children
+
+        run_id = self.cascade_run.get("id")
+        if not run_id:
+            return children
+
+        try:
+            executions = cascade_db.get_cascade_run_executions(run_id)
+
+            for exec_data in executions:
+                exec_status = exec_data.get("status", "pending")
+                doc_stage = exec_data.get("doc_stage", "")
+
+                # Build title showing stage transition
+                title = exec_data.get("doc_title", "Stage execution")[:35]
+                if doc_stage:
+                    title = f"{doc_stage}: {title}"
+
+                children.append(
+                    CascadeStageItem(
+                        item_id=exec_data.get("id", 0),
+                        title=title,
+                        timestamp=self.timestamp,
+                        doc_id=exec_data.get("doc_id"),
+                        status=exec_status,
+                        stage=doc_stage,
+                        depth=self.depth + 1,
+                    )
+                )
+
+        except Exception:
+            pass
+
+        return children
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        """Get cascade run preview - status and stage info."""
+        run = self.cascade_run
+
+        content_parts = [f"# Cascade Run #{run.get('id', '?')}\n"]
+        content_parts.append(f"\n**Pipeline:** {run.get('pipeline_display_name', run.get('pipeline_name', 'default'))}")
+        content_parts.append(f"\n**Status:** {self.status}")
+
+        if self.current_stage:
+            content_parts.append(f"\n**Current Stage:** {self.current_stage}")
+
+        if run.get("initial_doc_title"):
+            content_parts.append(f"\n**Initial Document:** {run['initial_doc_title']}")
+
+        if run.get("started_at"):
+            content_parts.append(f"\n**Started:** {run['started_at']}")
+
+        if run.get("completed_at"):
+            content_parts.append(f"\n**Completed:** {run['completed_at']}")
+
+        if run.get("error_message"):
+            content_parts.append(f"\n\n**Error:** {run['error_message']}")
+
+        content = "".join(content_parts)
+        return content, f"🌊 Cascade #{run.get('id', '?')}"
+
+
+@dataclass
+class CascadeStageItem(ActivityItem):
+    """A single stage execution within a cascade run."""
+
+    doc_id: Optional[int] = None
+    status: str = "pending"
+    stage: str = ""
+
+    @property
+    def item_type(self) -> str:
+        return "cascade_stage"
+
+    @property
+    def type_icon(self) -> str:
+        # Stage-specific emojis
+        stage_icons = {
+            "idea": "💡",
+            "prompt": "📝",
+            "analyzed": "🔍",
+            "reviewed": "🔬",
+            "planned": "📋",
+            "done": "✅",
+        }
+        return stage_icons.get(self.stage, "⚙️")
+
+    @property
+    def status_icon(self) -> str:
+        icons = {
+            "running": "🔄",
+            "completed": "✅",
+            "failed": "❌",
+            "pending": "⏳",
+        }
+        return icons.get(self.status, "⚪")
+
+    def can_expand(self) -> bool:
+        return False
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        """Stage items don't have children."""
+        return []
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        """Get stage execution output."""
+        if self.doc_id and doc_db:
+            doc = doc_db.get_document(self.doc_id)
+            if doc:
+                return doc.get("content", ""), f"{self.type_icon} #{self.doc_id}"
+
+        return f"[italic]{self.title}[/italic]", "PREVIEW"
+
+
+@dataclass
 class GroupItem(ActivityItem):
     """A document group (batch, round, initiative) in the activity stream."""
 
@@ -594,3 +753,70 @@ class GroupItem(ActivityItem):
 
         content = "".join(content_parts)
         return content, f"{self.type_icon} Group #{self.group.get('id', '?')}"
+
+
+@dataclass
+class AgentExecutionItem(ActivityItem):
+    """A standalone agent execution (from `emdx agent` command).
+
+    These are direct CLI agent runs not part of any workflow or cascade.
+    """
+
+    execution: Dict[str, Any] = field(default_factory=dict)
+    status: str = "running"
+    doc_id: Optional[int] = None
+    log_file: str = ""
+    cli_tool: str = "claude"
+
+    @property
+    def item_type(self) -> str:
+        return "agent_execution"
+
+    @property
+    def type_icon(self) -> str:
+        # Show different icon based on CLI tool
+        if self.cli_tool == "cursor":
+            return "🖱️"  # Cursor icon
+        return "🤖"  # Claude icon
+
+    @property
+    def status_icon(self) -> str:
+        icons = {
+            "running": "🔄",
+            "completed": "✅",
+            "failed": "❌",
+        }
+        return icons.get(self.status, "⚪")
+
+    def can_expand(self) -> bool:
+        return False
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        """Agent executions don't have children."""
+        return []
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        """Show execution log content in preview."""
+        from pathlib import Path
+
+        # If we have an output doc, show it
+        if self.doc_id and doc_db:
+            doc = doc_db.get_document(self.doc_id)
+            if doc:
+                return doc.get("content", ""), f"{self.type_icon} #{self.doc_id}"
+
+        # Otherwise show the log file
+        if self.log_file:
+            log_path = Path(self.log_file)
+            if log_path.exists():
+                try:
+                    content = log_path.read_text()
+                    # Show last 100 lines max
+                    lines = content.split('\n')
+                    if len(lines) > 100:
+                        content = '\n'.join(lines[-100:])
+                    return f"```\n{content}\n```", f"{self.type_icon} Log"
+                except Exception:
+                    pass
+
+        return f"[italic]{self.title}[/italic]", "PREVIEW"

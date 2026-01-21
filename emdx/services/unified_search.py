@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from ..database import db
 from ..database.search import search_documents
 from ..models.tags import get_tags_for_documents, search_by_tags
-from ..utils.datetime import parse_datetime
+from ..utils.datetime_utils import parse_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,8 @@ class UnifiedSearchService:
                             break
 
         if query.semantic and query.text and self.embedding_service:
-            # Semantic search
+            # Semantic search - runs in same thread pool as rest of search
+            # (entire _search_sync runs via asyncio.to_thread, so this won't block UI)
             semantic_results = self._search_semantic(query)
             for result in semantic_results:
                 if result.doc_id not in seen_ids:
@@ -330,7 +331,7 @@ class UnifiedSearchService:
         return results
 
     def _search_semantic(self, query: SearchQuery) -> List[SearchResult]:
-        """Execute semantic similarity search."""
+        """Execute semantic similarity search (sync version)."""
         if not self.embedding_service:
             return []
 
@@ -341,23 +342,43 @@ class UnifiedSearchService:
                 threshold=0.3,
             )
 
-            results = []
-            for match in matches:
-                results.append(
-                    SearchResult(
-                        doc_id=match.doc_id,
-                        title=match.title,
-                        snippet=match.snippet,
-                        score=match.similarity,  # Already 0-1
-                        source="semantic",
-                        project=match.project,
-                    )
-                )
-
-            return results
+            return self._convert_semantic_matches(matches)
         except Exception as e:
             logger.warning(f"Semantic search failed: {e}")
             return []
+
+    async def _search_semantic_async(self, query: SearchQuery) -> List[SearchResult]:
+        """Execute semantic similarity search (async version - runs in thread pool)."""
+        if not self.embedding_service:
+            return []
+
+        try:
+            matches = await self.embedding_service.search_async(
+                query=query.text,
+                limit=query.limit,
+                threshold=0.3,
+            )
+
+            return self._convert_semantic_matches(matches)
+        except Exception as e:
+            logger.warning(f"Semantic search failed: {e}")
+            return []
+
+    def _convert_semantic_matches(self, matches) -> List[SearchResult]:
+        """Convert semantic matches to SearchResult objects."""
+        results = []
+        for match in matches:
+            results.append(
+                SearchResult(
+                    doc_id=match.doc_id,
+                    title=match.title,
+                    snippet=match.snippet,
+                    score=match.similarity,  # Already 0-1
+                    source="semantic",
+                    project=match.project,
+                )
+            )
+        return results
 
     def fuzzy_search_titles(
         self,
@@ -552,11 +573,14 @@ class UnifiedSearchService:
         return result
 
     def has_embeddings(self) -> bool:
-        """Check if semantic search is available."""
-        if not self.embedding_service:
-            return False
+        """Check if semantic search is available (without loading the model)."""
+        # Quick check: just query the database for embeddings count
+        # This avoids loading the embedding model just to check availability
         try:
-            stats = self.embedding_service.stats()
-            return stats.indexed_documents > 0
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
+                count = cursor.fetchone()[0]
+                return count > 0
         except Exception:
             return False

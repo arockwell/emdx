@@ -417,6 +417,16 @@ def run_command(
         "main", "--pr-base",
         help="Base branch for PRs (default: main)"
     ),
+    cli_tool: str = typer.Option(
+        "claude",
+        "--cli", "-C",
+        help="CLI tool to use: claude or cursor",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model", "-m",
+        help="Model to use (overrides CLI default)",
+    ),
 ):
     """Run a saved command.
 
@@ -438,8 +448,14 @@ def run_command(
 
         # Specify base branch for PRs
         emdx each run fix-conflicts --pr --pr-base develop
+
+        # Use Cursor instead of Claude
+        emdx each run fix-conflicts --cli cursor
+
+        # Specify a model
+        emdx each run fix-conflicts --cli cursor --model auto
     """
-    _run_saved_command(name, items, from_cmd, parallel, synthesize, pr, pr_single, pr_base)
+    _run_saved_command(name, items, from_cmd, parallel, synthesize, pr, pr_single, pr_base, cli_tool, model)
 
 
 @app.callback(invoke_without_command=True)
@@ -460,6 +476,16 @@ def main(
     synthesize: Optional[str] = typer.Option(
         None, "-s", "--synthesize",
         help="Enable synthesis (optional custom prompt)"
+    ),
+    cli_tool: str = typer.Option(
+        "claude",
+        "--cli", "-C",
+        help="CLI tool to use: claude or cursor",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model", "-m",
+        help="Model to use (overrides CLI default)",
     ),
 ):
     """Create and run reusable parallel commands.
@@ -490,6 +516,8 @@ def main(
             item_list=item_list,
             parallel=parallel,
             synthesize=synthesize,
+            cli_tool=cli_tool,
+            model=model,
         ))
         return
 
@@ -510,6 +538,8 @@ def _run_saved_command(
     pr: bool = False,
     pr_single: bool = False,
     pr_base: str = "main",
+    cli_tool: str = "claude",
+    model: Optional[str] = None,
 ):
     """Run a saved each command."""
     workflow_name = _each_name_to_workflow_name(name)
@@ -560,6 +590,8 @@ def _run_saved_command(
         pr=pr,
         pr_single=pr_single,
         pr_base=pr_base,
+        cli_tool=cli_tool,
+        model=model,
     ))
 
 
@@ -644,6 +676,8 @@ async def _execute_each(
     pr: bool = False,
     pr_single: bool = False,
     pr_base: str = "main",
+    cli_tool: str = "claude",
+    model: Optional[str] = None,
 ):
     """Execute the each operation using workflow executor."""
     from ..workflows import database as wf_db
@@ -657,7 +691,8 @@ async def _execute_each(
         console.print("[red]Error: Cannot use both --pr and --pr-single[/red]")
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Processing {len(item_list)} item(s) ({parallel} parallel)[/cyan]")
+    cli_name = "Cursor" if cli_tool == "cursor" else "Claude"
+    console.print(f"[cyan]Processing {len(item_list)} item(s) ({parallel} parallel) with {cli_name}[/cyan]")
     if pr:
         console.print(f"[dim]Will create a PR for each item[/dim]")
     elif pr_single:
@@ -689,6 +724,12 @@ async def _execute_each(
         "tasks": tasks,
         "_max_concurrent_override": parallel,
     }
+
+    # Pass CLI tool and model to workflow
+    if cli_tool != "claude":
+        variables["_cli_tool"] = cli_tool
+    if model:
+        variables["_model"] = model
 
     pr_urls = []
 

@@ -52,20 +52,22 @@ class SearchScreen(HelpMixin, Widget):
         Binding("ctrl+s", "toggle_semantic", "Semantic"),
         Binding("space", "toggle_select", "Select", show=False),
         Binding("ctrl+a", "select_all", "Select All", show=False),
-        Binding("escape", "clear_search", "Clear"),
+        Binding("escape", "exit_search", "Exit"),
         Binding("slash", "focus_search", "Search"),
         Binding("r", "refresh", "Refresh"),
         Binding("question_mark", "show_help", "Help"),
         Binding("1", "switch_activity", "Activity"),
-        Binding("2", "switch_workflow", "Workflows"),
-        Binding("3", "switch_documents", "Documents"),
+        Binding("2", "switch_cascade", "Cascade"),
+        Binding("3", "switch_search", "Search"),
+        Binding("4", "switch_github", "GitHub"),
+        Binding("5", "switch_documents", "Documents"),
     ]
 
     DEFAULT_CSS = """
     SearchScreen {
         layout: grid;
         grid-size: 1;
-        grid-rows: 3 1fr 1;
+        grid-rows: 3 1fr 1 1;
     }
 
     #search-bar {
@@ -119,6 +121,12 @@ class SearchScreen(HelpMixin, Widget):
         background: $surface-darken-1;
         padding: 0 1;
     }
+
+    #search-nav {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
     """
 
     # Reactive state
@@ -146,8 +154,14 @@ class SearchScreen(HelpMixin, Widget):
         # Results list (Google-style with rich content)
         yield OptionList(id="results-list")
 
-        # Status bar
-        yield Static("Tab=mode | Enter=view | /=search | ?=help", id="search-status")
+        # Status bar (dynamic)
+        yield Static("Type to search...", id="search-status")
+        # Navigation bar (fixed)
+        yield Static(
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] GitHub │ [dim]5[/dim] Docs │ "
+            "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
+            id="search-nav"
+        )
 
     async def on_mount(self) -> None:
         """Initialize the search screen."""
@@ -344,6 +358,13 @@ class SearchScreen(HelpMixin, Widget):
             logger.error(f"Search error: {e}")
             self.notify(f"Search error: {e}", severity="error", timeout=3)
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter press in search input - focus results list."""
+        if event.input.id == "search-input":
+            results_list = self.query_one("#results-list", OptionList)
+            if results_list.option_count > 0:
+                results_list.focus()
+
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Handle when an option is selected (Enter pressed on OptionList)."""
         if event.option_list.id == "results-list" and event.option.id:
@@ -352,13 +373,17 @@ class SearchScreen(HelpMixin, Widget):
             self.app.push_screen(DocumentPreviewModal(doc_id))
 
     def action_cursor_down(self) -> None:
-        """Move cursor down."""
+        """Move cursor down and focus results list."""
         results_list = self.query_one("#results-list", OptionList)
+        if not results_list.has_focus:
+            results_list.focus()
         results_list.action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        """Move cursor up."""
+        """Move cursor up and focus results list."""
         results_list = self.query_one("#results-list", OptionList)
+        if not results_list.has_focus:
+            results_list.focus()
         results_list.action_cursor_up()
 
     def action_cursor_top(self) -> None:
@@ -388,8 +413,13 @@ class SearchScreen(HelpMixin, Widget):
             self.presenter.set_mode(SearchMode.FTS)
             self.current_mode = SearchMode.FTS
         else:
+            # Check if embeddings are available before enabling semantic search
+            if not self.presenter.search_service.has_embeddings():
+                self.notify("No embeddings indexed. Run 'emdx ai index' first.", severity="warning", timeout=3)
+                return
             self.presenter.set_mode(SearchMode.SEMANTIC)
             self.current_mode = SearchMode.SEMANTIC
+            self.notify("Semantic search may be slow on first use", timeout=2)
 
         # Re-run search
         if self._current_vm and self._current_vm.query:
@@ -414,6 +444,11 @@ class SearchScreen(HelpMixin, Widget):
         self.presenter.clear_results()
         if self._current_vm:
             self._render_state_sync(self._current_vm)
+
+    async def action_exit_search(self) -> None:
+        """Exit search screen and go back to activity."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("activity")
 
     def action_focus_search(self) -> None:
         """Focus the search input."""
@@ -505,12 +540,21 @@ class SearchScreen(HelpMixin, Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
 
-    async def action_switch_workflow(self) -> None:
-        """Switch to workflow browser."""
+    async def action_switch_cascade(self) -> None:
+        """Switch to cascade browser."""
         if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("workflow")
+            await self.app.switch_browser("cascade")
 
     async def action_switch_documents(self) -> None:
         """Switch to document browser."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("document")
+
+    async def action_switch_search(self) -> None:
+        """Already on search, do nothing."""
+        pass
+
+    async def action_switch_github(self) -> None:
+        """Switch to GitHub browser."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("github")

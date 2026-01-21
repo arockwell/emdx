@@ -1,4 +1,4 @@
-"""Run a Claude Code sub-agent with EMDX tracking."""
+"""Run a CLI agent sub-process with EMDX tracking."""
 
 from pathlib import Path
 from typing import List, Optional
@@ -41,8 +41,26 @@ def agent(
         300, "--timeout",
         help="Timeout in seconds (default 5 minutes)"
     ),
+    cli_tool: str = typer.Option(
+        "claude",
+        "--cli", "-C",
+        help="CLI tool to use: claude or cursor",
+    ),
+    model: str = typer.Option(
+        None,
+        "--model", "-m",
+        help="Model to use (overrides CLI default)",
+    ),
 ):
-    """Run a Claude Code sub-agent with automatic EMDX tracking."""
+    """Run a CLI agent sub-process with automatic EMDX tracking.
+
+    Supports both Claude Code and Cursor Agent CLIs.
+
+    Examples:
+        emdx agent "analyze the auth module" --tags analysis
+        emdx agent --cli cursor "analyze the auth module"
+        emdx agent --cli cursor --model auto "quick task"
+    """
     # Flatten tags (handle both comma-separated and multiple -t flags)
     flat_tags = []
     if tags:
@@ -88,7 +106,13 @@ After saving your output, if you made any code changes, create a pull request:
         output_instruction=output_instruction,
         working_dir=str(Path.cwd()),
         timeout_seconds=timeout,
+        cli_tool=cli_tool,
+        model=model,
+        verbose=verbose,
     )
+
+    cli_name = "Cursor" if cli_tool == "cursor" else "Claude"
+    console.print(f"[dim]Using {cli_name}[/dim]")
 
     result = UnifiedExecutor().execute(config)
 
