@@ -145,7 +145,7 @@ def _get_execution_methods_json() -> list[dict]:
             "command": "emdx cascade",
             "usage": 'emdx cascade add "idea" --auto',
             "when": "Transform idea into working code with PR autonomously",
-            "key_flags": ["--auto", "--stop", "--sync"],
+            "key_flags": ["--auto", "--stop", "--analyze", "--plan"],
         },
     ]
 
@@ -325,40 +325,36 @@ def _get_in_progress_tasks() -> list:
 
 def _get_blocked_tasks() -> list[dict]:
     """Get tasks that are blocked (have incomplete dependencies)."""
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        # First, get all open tasks that have at least one incomplete dependency
-        cursor.execute("""
-            SELECT DISTINCT t.id, t.title
-            FROM tasks t
-            WHERE t.status = 'open'
-            AND EXISTS (
-                SELECT 1 FROM task_deps td
-                JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status != 'completed'
-            )
-            ORDER BY t.priority ASC, t.created_at ASC
-            LIMIT 20
-        """)
-        blocked_tasks = cursor.fetchall()
-
-        result = []
-        for task_id, title in blocked_tasks:
-            # Get the IDs of tasks blocking this one
+    try:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            # Single query to get all blocked tasks with their blockers (avoids N+1)
             cursor.execute("""
-                SELECT td.depends_on
-                FROM task_deps td
+                SELECT t.id, t.title, td.depends_on
+                FROM tasks t
+                JOIN task_deps td ON td.task_id = t.id
                 JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = ? AND blocker.status != 'completed'
-            """, (task_id,))
-            blocked_by = [row[0] for row in cursor.fetchall()]
-            result.append({
-                "id": task_id,
-                "title": title,
-                "blocked_by": blocked_by,
-            })
+                WHERE t.status = 'open' AND blocker.status != 'completed'
+                ORDER BY t.priority ASC, t.created_at ASC
+            """)
+            rows = cursor.fetchall()
 
-        return result
+            # Group by task_id
+            tasks_dict: dict[int, dict] = {}
+            for task_id, title, blocked_by_id in rows:
+                if task_id not in tasks_dict:
+                    tasks_dict[task_id] = {
+                        "id": task_id,
+                        "title": title,
+                        "blocked_by": [],
+                    }
+                tasks_dict[task_id]["blocked_by"].append(blocked_by_id)
+
+            # Return as list, limited to 20
+            return list(tasks_dict.values())[:20]
+    except Exception:
+        # tasks/task_deps tables may not exist in older databases
+        return []
 
 
 def _get_blocked_tasks_lines() -> list[str]:

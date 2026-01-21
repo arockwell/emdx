@@ -528,7 +528,7 @@ class SearchScreen(HelpMixin, Widget):
             if search_input.has_focus:
                 # When input is focused, don't let vim keys trigger actions
                 # Let them pass through to the input widget
-                vim_keys = {"j", "k", "g", "G", "e", "t", "T", "r", "space", "slash", "1", "2", "3", "4"}
+                vim_keys = {"j", "k", "g", "G", "e", "t", "T", "r", "space", "slash", "1", "2", "3", "4", "5"}
                 if event.key in vim_keys:
                     # Don't stop - let the input handle it
                     return
