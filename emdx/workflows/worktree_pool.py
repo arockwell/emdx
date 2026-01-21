@@ -1,6 +1,7 @@
 """Worktree pool for managing parallel git worktrees in dynamic workflows."""
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -9,9 +10,129 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
+
+# Registry file for tracking worktrees across process restarts
+REGISTRY_FILE = Path.home() / ".config" / "emdx" / "worktree_registry.json"
+
+
+def _load_registry() -> Dict[str, Dict]:
+    """Load worktree registry from disk."""
+    try:
+        if REGISTRY_FILE.exists():
+            return json.loads(REGISTRY_FILE.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        logger.debug("Could not load worktree registry: %s", e)
+    return {}
+
+
+def _save_registry(registry: Dict[str, Dict]) -> None:
+    """Save worktree registry to disk."""
+    try:
+        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        REGISTRY_FILE.write_text(json.dumps(registry, indent=2))
+    except OSError as e:
+        logger.debug("Could not save worktree registry: %s", e)
+
+
+def _register_worktree(worktree_path: str, branch: str, repo_root: str) -> None:
+    """Register a worktree in the persistent registry."""
+    registry = _load_registry()
+    registry[worktree_path] = {
+        "created_at": time.time(),
+        "pid": os.getpid(),
+        "branch": branch,
+        "repo_root": repo_root,
+    }
+    _save_registry(registry)
+
+
+def _unregister_worktree(worktree_path: str) -> None:
+    """Remove a worktree from the registry."""
+    registry = _load_registry()
+    registry.pop(worktree_path, None)
+    _save_registry(registry)
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is still running."""
+    try:
+        os.kill(pid, 0)  # Signal 0 = check existence only
+        return True
+    except OSError:
+        return False
+
+
+def cleanup_orphaned_worktrees(max_age_hours: int = 24) -> int:
+    """Clean up orphaned worktrees from previous crashed runs.
+
+    Worktrees are considered orphaned if:
+    - The PID that created them no longer exists
+    - They are older than max_age_hours
+
+    Args:
+        max_age_hours: Maximum age in hours before a worktree is considered orphaned
+
+    Returns:
+        Number of worktrees cleaned up
+    """
+    registry = _load_registry()
+    cleaned = 0
+    now = time.time()
+
+    for path, info in list(registry.items()):
+        should_remove = False
+        reason = ""
+
+        # Check if PID is dead
+        pid = info.get("pid", 0)
+        if pid and not _is_pid_alive(pid):
+            should_remove = True
+            reason = f"PID {pid} is dead"
+
+        # Check age
+        created_at = info.get("created_at", 0)
+        age_hours = (now - created_at) / 3600
+        if age_hours > max_age_hours:
+            should_remove = True
+            reason = f"older than {max_age_hours}h (age: {age_hours:.1f}h)"
+
+        if should_remove:
+            worktree_path = Path(path)
+            repo_root = info.get("repo_root", ".")
+
+            # Try to remove the worktree via git
+            if worktree_path.exists():
+                try:
+                    result = subprocess.run(
+                        ["git", "worktree", "remove", path, "--force"],
+                        cwd=repo_root,
+                        capture_output=True,
+                        check=False,
+                    )
+                    if result.returncode == 0:
+                        logger.info("Cleaned up orphaned worktree %s (%s)", path, reason)
+                        cleaned += 1
+                    else:
+                        logger.debug(
+                            "Could not remove worktree %s: %s",
+                            path,
+                            result.stderr.decode() if result.stderr else "unknown error"
+                        )
+                except Exception as e:
+                    logger.debug("Error removing worktree %s: %s", path, e)
+
+            # Remove from registry regardless of git success
+            registry.pop(path, None)
+
+    _save_registry(registry)
+    return cleaned
+
+
+# Track whether orphan cleanup has run this session
+_orphan_cleanup_done = False
 
 
 @dataclass
@@ -91,7 +212,7 @@ class Worktree:
         return result.returncode == 0
 
     async def remove(self):
-        """Remove this worktree."""
+        """Remove this worktree and unregister it."""
         try:
             await asyncio.to_thread(
                 subprocess.run,
@@ -100,6 +221,8 @@ class Worktree:
                 capture_output=True,
                 check=False,
             )
+            # Unregister from persistent registry
+            _unregister_worktree(self.path)
         except Exception as e:
             logger.debug("Best effort worktree cleanup failed for %s: %s", self.path, e)
 
@@ -133,6 +256,17 @@ class WorktreePool:
         self._condition = asyncio.Condition(self._lock)
         self._closed = False
 
+        # Run orphan cleanup once per session on first pool creation
+        global _orphan_cleanup_done
+        if not _orphan_cleanup_done:
+            _orphan_cleanup_done = True
+            try:
+                cleaned = cleanup_orphaned_worktrees()
+                if cleaned > 0:
+                    logger.info("Cleaned up %d orphaned worktrees from previous runs", cleaned)
+            except Exception as e:
+                logger.debug("Error during orphan worktree cleanup: %s", e)
+
     @property
     def repo_root(self) -> str:
         """Get the repository root, detecting it if needed."""
@@ -147,7 +281,7 @@ class WorktreePool:
         return self._repo_root
 
     async def _create_worktree(self) -> Worktree:
-        """Create a new worktree."""
+        """Create a new worktree and register it."""
         timestamp = int(time.time())
         random_suffix = random.randint(1000, 9999)
         pid = os.getpid()
@@ -164,8 +298,13 @@ class WorktreePool:
             check=True,
         )
 
+        worktree_path = str(worktree_dir)
+
+        # Register worktree in persistent registry for orphan cleanup
+        _register_worktree(worktree_path, branch_name, self.repo_root)
+
         return Worktree(
-            path=str(worktree_dir),
+            path=worktree_path,
             branch=branch_name,
             repo_root=self.repo_root,
         )
