@@ -462,6 +462,7 @@ def create_google_doc(title: str, markdown_content: str) -> Optional[dict]:
         }
 
     except Exception as e:
+        logger.warning("Failed to create Google Doc: %s", e, exc_info=True)
         console.print(f"[red]Error creating Google Doc: {e}[/red]")
         return None
 
@@ -512,6 +513,7 @@ def move_to_folder(doc_id: str, folder_name: str) -> bool:
         return True
 
     except Exception as e:
+        logger.warning("Failed to move Google Doc to folder: %s", e)
         console.print(f"[yellow]Warning: Could not move to folder: {e}[/yellow]")
         return False
 

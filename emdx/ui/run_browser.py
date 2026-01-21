@@ -4,17 +4,21 @@ Run the new browser container.
 """
 
 # Set up logging using shared utility
-from ..utils.logging import setup_tui_logging
+from ..utils.logging_utils import setup_tui_logging
 logger, key_logger = setup_tui_logging(__name__)
 
 
-def run_browser():
-    """Run the browser container."""
+def run_browser(theme: str | None = None):
+    """Run the browser container.
+
+    Args:
+        theme: Optional theme name to use (overrides saved preference for this session)
+    """
     from .browser_container import BrowserContainer
     import traceback
     import sys
 
-    app = BrowserContainer()
+    app = BrowserContainer(initial_theme=theme)
     try:
         logger.info("=== STARTING BROWSER APP ===")
         # Run with Textual devtools console enabled for debugging

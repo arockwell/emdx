@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any, Optional
 
 from emdx.database import db
-from emdx.utils.datetime import parse_datetime
+from emdx.utils.datetime_utils import parse_datetime
 from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
 
@@ -224,7 +224,8 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 
 
 def search_by_tags(
-    tag_names: list[str], mode: str = "all", project: Optional[str] = None, limit: int = 20
+    tag_names: list[str], mode: str = "all", project: Optional[str] = None, limit: int = 20,
+    prefix_match: bool = True
 ) -> list[dict[str, Any]]:
     """Search documents by tags.
 
@@ -233,15 +234,26 @@ def search_by_tags(
         mode: 'all' (must have all tags) or 'any' (has any of the tags)
         project: Optional project filter
         limit: Maximum results to return
+        prefix_match: If True, 'workflow' matches 'workflow-output' etc.
     """
     # Expand aliases before processing
     expanded_tags = expand_aliases(tag_names)
-    
-    with db.get_connection() as conn:
-        tag_names = [tag.lower().strip() for tag in expanded_tags]
 
-        if mode == "all":
-            # Documents must have ALL specified tags
+    with db.get_connection() as conn:
+        tag_names_lower = [tag.lower().strip() for tag in expanded_tags]
+
+        # Build tag matching conditions - use LIKE for prefix matching
+        if prefix_match:
+            # Use LIKE with % for prefix matching
+            tag_conditions = " OR ".join(["t.name LIKE ?" for _ in tag_names_lower])
+            tag_params = [f"{tag}%" for tag in tag_names_lower]
+        else:
+            # Exact match
+            tag_conditions = "t.name IN ({})".format(",".join("?" * len(tag_names_lower)))
+            tag_params = tag_names_lower
+
+        if mode == "all" and not prefix_match:
+            # Documents must have ALL specified tags (only works with exact match)
             query = """
                 SELECT DISTINCT
                     d.id, d.title, d.project, d.created_at, d.access_count,
@@ -259,12 +271,12 @@ def search_by_tags(
                     HAVING COUNT(DISTINCT t.name) = ?
                 )
             """.format(
-                ",".join("?" * len(tag_names))
+                ",".join("?" * len(tag_names_lower))
             )
 
-            params = tag_names + [len(tag_names)]
+            params = tag_names_lower + [len(tag_names_lower)]
         else:
-            # Documents with ANY of the specified tags
+            # Documents with ANY of the specified tags (or prefix matches)
             query = """
                 SELECT DISTINCT
                     d.id, d.title, d.project, d.created_at, d.access_count,
@@ -273,12 +285,10 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
-                AND t.name IN ({})
-            """.format(
-                ",".join("?" * len(tag_names))
-            )
+                AND ({})
+            """.format(tag_conditions)
 
-            params = tag_names
+            params = tag_params
 
         if project:
             query += " AND d.project = ?"

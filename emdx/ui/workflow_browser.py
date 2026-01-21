@@ -27,6 +27,7 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Input, Static
 
 from .modals import HelpMixin
+from ..models.documents import get_document
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +43,20 @@ except Exception as e:
     workflow_registry = None
     wf_db = None
 
+# Import document functions for title lookup
+try:
+    from ..database.documents import get_document
+except ImportError:
+    get_document = None
+
 
 # Mode icons and colors for visual pipeline display
 MODE_INFO = {
-    "single": {"icon": "1", "color": "dim", "name": "single"},
+    "single": {"icon": "•", "color": "dim", "name": "single"},
     "parallel": {"icon": "||", "color": "cyan", "name": "parallel"},
-    "iterative": {"icon": "→", "color": "yellow", "name": "iterative"},
+    "iterative": {"icon": "⟳", "color": "yellow", "name": "iterative"},
     "adversarial": {"icon": "⚔", "color": "red", "name": "adversarial"},
-    "dynamic": {"icon": "*", "color": "magenta", "name": "dynamic"},
+    "dynamic": {"icon": "◈", "color": "magenta", "name": "dynamic"},
 }
 
 
@@ -64,6 +71,7 @@ class WorkflowBrowser(HelpMixin, Widget):
     HELP_CATEGORIES = {
         "run_workflow": "Actions",
         "add_task": "Tasks",
+        "delete_task": "Tasks",
         "clear_tasks": "Tasks",
         "toggle_runs": "View",
         "view_outputs": "Actions",
@@ -77,6 +85,7 @@ class WorkflowBrowser(HelpMixin, Widget):
         Binding("G", "cursor_bottom", "Bottom"),
         Binding("enter", "run_workflow", "Run"),
         Binding("t", "add_task", "Add Task"),
+        Binding("d", "delete_task", "Delete Task"),
         Binding("T", "clear_tasks", "Clear Tasks"),
         Binding("r", "toggle_runs", "Toggle Runs"),
         Binding("o", "view_outputs", "View Outputs"),
@@ -180,9 +189,20 @@ class WorkflowBrowser(HelpMixin, Widget):
         try:
             self.load_templates()
             self._update_task_panel()
+            # Auto-refresh every 5 seconds
+            self.set_interval(5.0, self._auto_refresh)
         except Exception as e:
             logger.error(f"Error mounting workflow browser: {e}", exc_info=True)
             self._update_status(f"Error: {e}")
+
+    def _auto_refresh(self) -> None:
+        """Periodic refresh to update run statuses."""
+        try:
+            if self.view_mode == "runs":
+                # Refresh runs view to show updated statuses
+                self.load_runs()
+        except Exception as e:
+            logger.debug(f"Auto-refresh error: {e}")
 
     def focus(self, scroll_visible: bool = True) -> None:
         """Focus the workflow table."""
@@ -275,7 +295,7 @@ class WorkflowBrowser(HelpMixin, Widget):
             table.add_column("Pipeline", width=12)
             table.add_column("Name", width=24)
             table.add_column("Task", width=5)
-            table.add_column("Runs", width=5)
+            table.add_column("Uses", width=5)
 
             workflows = workflow_registry.list_workflows(include_inactive=False)
             # Sort by usage
@@ -400,9 +420,24 @@ class WorkflowBrowser(HelpMixin, Widget):
                 task_str = str(task)
                 if len(task_str) > 35:
                     task_str = task_str[:32] + "..."
-                # Show doc ID indicator
+                # Show doc ID with title if available
                 if isinstance(task, int):
-                    lines.append(f"  {i+1}. [cyan]doc:{task}[/cyan]")
+                    doc_title = None
+                    if get_document:
+                        try:
+                            doc = get_document(task)
+                            if doc:
+                                doc_title = doc.get("title")
+                        except Exception:
+                            pass
+                    if doc_title:
+                        # Truncate title if needed (leave room for "#ID: ")
+                        max_title_len = 30 - len(str(task))
+                        if len(doc_title) > max_title_len:
+                            doc_title = doc_title[: max_title_len - 3] + "..."
+                        lines.append(f"  {i+1}. [cyan]#{task}: {doc_title}[/cyan]")
+                    else:
+                        lines.append(f"  {i+1}. [cyan]#{task}[/cyan]")
                 else:
                     lines.append(f"  {i+1}. {task_str}")
 
@@ -410,7 +445,7 @@ class WorkflowBrowser(HelpMixin, Widget):
                 lines.append(f"  [dim]+{len(self.pending_tasks) - 5} more[/dim]")
 
             lines.append("")
-            lines.append("[dim]T=Clear | Enter=Run[/dim]")
+            lines.append("[dim]d=Delete | T=Clear | Enter=Run[/dim]")
 
         panel.update("\n".join(lines))
 
@@ -664,6 +699,26 @@ class WorkflowBrowser(HelpMixin, Widget):
         self._update_task_panel()
         self._update_status("Tasks cleared")
 
+    def action_delete_task(self) -> None:
+        """Delete the last task from the queue."""
+        if not self.pending_tasks:
+            self._update_status("No tasks to delete")
+            return
+
+        removed_task = self.pending_tasks.pop()
+        self._update_task_panel()
+
+        # Show what was removed (truncated if long)
+        task_str = str(removed_task)
+        if len(task_str) > 30:
+            task_str = task_str[:27] + "..."
+        remaining = len(self.pending_tasks)
+        self._update_status(f"Removed: {task_str} ({remaining} remaining)")
+
+        # Update preview if viewing a workflow
+        if self.current_selection and self.current_selection[0] == "workflow":
+            self._show_template_preview(self.current_selection[1])
+
     def action_cancel_input(self) -> None:
         """Cancel task input."""
         if self.task_input_active:
@@ -681,13 +736,26 @@ class WorkflowBrowser(HelpMixin, Widget):
             if task_value:
                 # Try as doc ID first
                 try:
-                    task = int(task_value)
+                    doc_id = int(task_value)
+                    # Validate document ID exists
+                    doc = get_document(str(doc_id))
+                    if doc is None:
+                        self._update_status(f"Error: Document #{doc_id} not found")
+                        event.input.value = ""
+                        return
+                    task = doc_id
+                    doc_title = doc.get("title", "Untitled")
+                    # Truncate long titles
+                    if len(doc_title) > 40:
+                        doc_title = doc_title[:37] + "..."
+                    status_msg = f"Added: #{doc_id} - {doc_title} ({len(self.pending_tasks) + 1} total)"
                 except ValueError:
                     task = task_value
+                    status_msg = f"Added task ({len(self.pending_tasks) + 1} total)"
 
                 self.pending_tasks.append(task)
                 self._update_task_panel()
-                self._update_status(f"Added task ({len(self.pending_tasks)} total)")
+                self._update_status(status_msg)
 
             event.input.value = ""
             event.input.remove_class("visible")
