@@ -214,9 +214,24 @@ def parse_stream_json_line_rich(line: str) -> StreamEvent:
                     elif block.get("type") == "tool_use":
                         tool_name = block.get("name", "unknown")
                         tool_input = block.get("input", {})
-                        # Summarize input
+                        # Summarize input based on tool type
                         if isinstance(tool_input, dict):
-                            if "file_path" in tool_input:
+                            if tool_name == "TodoWrite" and "todos" in tool_input:
+                                # Format todos nicely
+                                todos = tool_input["todos"]
+                                if isinstance(todos, list) and todos:
+                                    todo_lines = []
+                                    for t in todos[:5]:  # Show up to 5 todos
+                                        status = t.get("status", "pending")
+                                        content = t.get("content", "")[:40]
+                                        icon = "✅" if status == "completed" else "⏳" if status == "in_progress" else "○"
+                                        todo_lines.append(f"{icon} {content}")
+                                    summary = " | ".join(todo_lines)
+                                    if len(todos) > 5:
+                                        summary += f" (+{len(todos)-5} more)"
+                                else:
+                                    summary = "empty"
+                            elif "file_path" in tool_input:
                                 summary = tool_input["file_path"]
                             elif "command" in tool_input:
                                 cmd = tool_input["command"]

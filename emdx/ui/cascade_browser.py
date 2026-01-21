@@ -958,6 +958,9 @@ class CascadeView(Widget):
 
     current_stage_idx = reactive(0)
 
+    # Auto-refresh interval in seconds
+    AUTO_REFRESH_INTERVAL = 2.0
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.summary: Optional[StageSummaryBar] = None
@@ -971,6 +974,7 @@ class CascadeView(Widget):
         self._selected_pipeline_idx: Optional[int] = None
         self._pipeline_view_mode: str = "output"  # "input" or "output"
         self._log_subscriber = None
+        self._auto_refresh_timer = None
 
     def compose(self) -> ComposeResult:
         from textual.containers import ScrollableContainer
@@ -1004,10 +1008,63 @@ class CascadeView(Widget):
         # Setup tables
         self._setup_pipeline_table()
         self.refresh_all()
+        # Start auto-refresh timer
+        self._start_auto_refresh()
+
+    def on_unmount(self) -> None:
+        """Clean up on unmount."""
+        self._stop_auto_refresh()
+        self._stop_log_stream()
+
+    def _start_auto_refresh(self) -> None:
+        """Start the auto-refresh timer."""
+        if self._auto_refresh_timer is None:
+            self._auto_refresh_timer = self.set_interval(
+                self.AUTO_REFRESH_INTERVAL,
+                self._auto_refresh_tick,
+                name="cascade_auto_refresh"
+            )
+
+    def _stop_auto_refresh(self) -> None:
+        """Stop the auto-refresh timer."""
+        if self._auto_refresh_timer is not None:
+            self._auto_refresh_timer.stop()
+            self._auto_refresh_timer = None
+
+    def _auto_refresh_tick(self) -> None:
+        """Called periodically to refresh data."""
+        # Refresh pipeline activity (shows running executions)
+        self._refresh_pipeline_table()
+
+        # Refresh stage counts in summary bar
+        if self.summary:
+            self.summary.refresh_stats()
+
+        # Refresh document list for current stage
+        if self.doc_list:
+            # Remember current selection
+            current_doc_id = self.doc_list.get_selected_doc_id()
+            current_stage = STAGES[self.current_stage_idx] if self.current_stage_idx < len(STAGES) else "idea"
+            self.doc_list.load_stage(current_stage)
+            # Try to restore selection (table will reset to first row otherwise)
+            # Note: This is best-effort; if the doc moved stages it won't be found
+
+        # If we're viewing a pipeline item, refresh the preview if execution completed
+        if self._selected_pipeline_idx is not None and self._selected_pipeline_idx < len(self._pipeline_data):
+            act = self._pipeline_data[self._selected_pipeline_idx]
+            # If execution just completed (was running, now has output), update preview
+            if act.get("output_id") and self._pipeline_view_mode == "output":
+                # Check if we're still showing a live log but execution is done
+                if self._selected_exec and self._selected_exec.get("status") == "running":
+                    new_status = act.get("status")
+                    if new_status != "running":
+                        # Execution completed - refresh to show document instead of log
+                        self._show_pipeline_preview(act)
 
     def _setup_pipeline_table(self) -> None:
         """Setup the pipeline activity table columns."""
         if self.pipeline_table:
+            self.pipeline_table.add_column("Exec", width=6)
             self.pipeline_table.add_column("Time", width=8)
             self.pipeline_table.add_column("Input", width=7)
             self.pipeline_table.add_column("→", width=14)
@@ -1035,18 +1092,25 @@ class CascadeView(Widget):
         # Refresh pipeline activity table
         self._refresh_pipeline_table()
 
-        # Update status
-        self._update_status("[dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize │ [dim]r[/dim] refresh")
+        # Update status - show auto-refresh is active
+        self._update_status("[green]●[/green] Auto-refresh │ [dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize")
 
     def _refresh_pipeline_table(self) -> None:
         """Refresh the unified pipeline activity table."""
         if not self.pipeline_table:
             return
 
+        # Remember current selection to restore after refresh
+        old_cursor_row = self.pipeline_table.cursor_row if self.pipeline_table.row_count > 0 else 0
+
         self.pipeline_table.clear()
         self._pipeline_data = get_recent_pipeline_activity(limit=10)
 
         for act in self._pipeline_data:
+            # Execution ID
+            exec_id = act.get("exec_id")
+            exec_display = f"#{exec_id}" if exec_id else "-"
+
             # Time - handle both datetime objects and ISO strings
             time_str = ""
             ts = act.get("completed_at") or act.get("started_at")
@@ -1089,7 +1153,13 @@ class CascadeView(Widget):
             else:
                 status_display = f"[dim]{status}[/dim]"
 
-            self.pipeline_table.add_row(time_str, input_display, transition, output_display, status_display)
+            self.pipeline_table.add_row(exec_display, time_str, input_display, transition, output_display, status_display)
+
+        # Restore cursor position if possible
+        if self.pipeline_table.row_count > 0:
+            new_row = min(old_cursor_row, self.pipeline_table.row_count - 1)
+            # Move cursor to the desired row (cursor_row is read-only)
+            self.pipeline_table.move_cursor(row=new_row)
 
     def _show_document_preview(self, doc_id: int) -> None:
         """Show document content in preview pane."""
@@ -1149,10 +1219,18 @@ class CascadeView(Widget):
         status = exec_data.get("status", "")
         is_running = status == "running"
 
-        # Get log file path
-        from emdx.models.executions import get_execution
+        # Get log file path and check for zombie processes
+        from emdx.models.executions import get_execution, update_execution_status
         exec_record = get_execution(exec_id) if exec_id else None
         log_file = exec_record.log_file if exec_record else None
+
+        # Check for zombie (process died but status still "running")
+        if exec_record and exec_record.is_zombie:
+            # Auto-fix: mark as failed
+            update_execution_status(exec_id, 'failed', -1)
+            is_running = False
+            status = "failed"
+            exec_data["status"] = "failed"  # Update local data too
 
         if is_running and log_file:
             log_path = Path(log_file)
@@ -1165,15 +1243,16 @@ class CascadeView(Widget):
                 self._start_log_stream(log_path, preview_log)
             else:
                 # Log file doesn't exist - execution is stale/orphaned
+                # Auto-fix: mark as failed
+                update_execution_status(exec_id, 'failed', -1)
                 header.update(f"[red]● STALE[/red] [bold]#{exec_id}[/bold]")
                 preview_scroll.display = False
                 preview_log.display = True
                 preview_log.clear()
-                preview_log.write("[red]Execution appears stale - log file not found[/red]")
-                preview_log.write(f"[dim]Expected: {log_file}[/dim]")
+                preview_log.write("[red]Execution was stale - automatically marked as failed[/red]")
+                preview_log.write(f"[dim]Log file not found: {log_file}[/dim]")
                 preview_log.write("")
-                preview_log.write("[yellow]This execution may have been interrupted.[/yellow]")
-                preview_log.write("[dim]You can mark it as failed or remove it.[/dim]")
+                preview_log.write("[yellow]The process died without completing.[/yellow]")
         else:
             # Show static log content
             header.update(f"[bold]#{exec_id}[/bold] {exec_data.get('doc_title', '')[:30]}")
@@ -1214,15 +1293,28 @@ class CascadeView(Widget):
             def __init__(self, view: 'CascadeView', log_widget: 'RichLog'):
                 self.view = view
                 self.log_widget = log_widget
+                import logging
+                self.logger = logging.getLogger(__name__)
 
             def on_log_content(self, content: str) -> None:
+                self.logger.debug(f"LogSubscriber.on_log_content called with {len(content)} bytes")
                 def update():
+                    self.logger.debug("LogSubscriber update() running in main thread")
                     writer = LiveLogWriter(self.log_widget, auto_scroll=True)
                     writer.write(content)
-                self.view.call_from_thread(update)
+                    # Force refresh of the widget
+                    self.log_widget.refresh()
+                    self.logger.debug("LogSubscriber update() completed")
+                # Use app.call_from_thread since CascadeView is a Widget, not App
+                try:
+                    self.view.app.call_from_thread(update)
+                    self.logger.debug("call_from_thread succeeded")
+                except Exception as e:
+                    self.logger.error(f"call_from_thread failed: {e}")
 
             def on_log_error(self, error: Exception) -> None:
-                pass
+                import logging
+                logging.getLogger(__name__).error(f"LogSubscriber.on_log_error: {error}")
 
         self._log_subscriber = LogSubscriber(self, preview_log)
         self.log_stream.subscribe(self._log_subscriber)
@@ -1558,7 +1650,7 @@ class CascadeBrowser(Widget):
 
     def on_cascade_view_process_stage(self, event: CascadeView.ProcessStage) -> None:
         """Handle request to process a stage - runs Claude with live logs."""
-        import asyncio
+        import traceback
         from pathlib import Path
         from datetime import datetime
 
@@ -1582,98 +1674,178 @@ class CascadeBrowser(Widget):
 
         self._update_status(f"[cyan]Processing #{doc_id}: {doc.get('title', '')[:40]}...[/cyan]")
 
-        # Run in background thread to not block UI
-        def run_process():
-            from emdx.services.claude_executor import execute_claude_sync, DEFAULT_ALLOWED_TOOLS
-            from emdx.models.executions import create_execution, update_execution_status
-            from emdx.commands.cascade import STAGE_PROMPTS, NEXT_STAGE
+        # Use detached execution like the CLI does - much more reliable
+        from emdx.services.claude_executor import execute_claude_detached, DEFAULT_ALLOWED_TOOLS
+        from emdx.models.executions import create_execution, update_execution_pid
+        from emdx.commands.cascade import STAGE_PROMPTS
 
-            # Build prompt
-            prompt = STAGE_PROMPTS[stage].format(content=doc.get("content", ""))
+        # Build prompt
+        prompt = STAGE_PROMPTS[stage].format(content=doc.get("content", ""))
 
-            # Set up log file
-            log_dir = Path.cwd() / ".emdx" / "logs" / "cascade"
-            log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = log_dir / f"{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        # Set up log file
+        log_dir = Path.cwd() / ".emdx" / "logs" / "cascade"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
-            # Create execution record
-            exec_id = create_execution(
-                doc_id=doc_id,
-                doc_title=f"Cascade: {doc.get('title', '')}",
-                log_file=str(log_file),
+        # Create log file immediately so UI can show it
+        with open(log_file, 'w') as f:
+            f.write(f"# Cascade: {stage} processing for doc #{doc_id}\n")
+            f.write(f"# Started: {datetime.now().isoformat()}\n")
+
+        # Create execution record
+        exec_id = create_execution(
+            doc_id=doc_id,
+            doc_title=f"Cascade: {doc.get('title', '')}",
+            log_file=str(log_file),
+            working_dir=str(Path.cwd()),
+        )
+
+        logger.info(f"Created execution #{exec_id} with log file: {log_file}")
+
+        try:
+            # Start detached process - returns immediately with PID
+            pid = execute_claude_detached(
+                task=prompt,
+                execution_id=exec_id,
+                log_file=log_file,
+                allowed_tools=list(DEFAULT_ALLOWED_TOOLS),
                 working_dir=str(Path.cwd()),
+                doc_id=str(doc_id),
             )
 
-            # Update UI to show execution started
-            def update_started():
-                self._update_status(f"[green]● Running #{exec_id}[/green] Processing {stage}...")
-                if self.cascade_view:
-                    self.cascade_view.refresh_all()
-            self.call_from_thread(update_started)
+            # PID is tracked by execute_claude_detached via update_execution_pid
+            self._update_status(f"[green]● Started #{exec_id}[/green] (PID {pid}) - monitoring...")
 
-            # Execute Claude
-            timeout = 1800 if stage == "planned" else 300
-            try:
-                result = execute_claude_sync(
-                    task=prompt,
-                    execution_id=exec_id,
-                    log_file=log_file,
-                    allowed_tools=DEFAULT_ALLOWED_TOOLS,
-                    working_dir=str(Path.cwd()),
-                    doc_id=str(doc_id),
-                    timeout=timeout,
-                )
+            # Refresh UI to show the new execution
+            if self.cascade_view:
+                self.cascade_view.refresh_all()
 
-                if result.get("success"):
-                    output = result.get("output", "")
+            # Start monitoring for completion in background
+            self._start_completion_monitor(exec_id, doc_id, doc, stage, log_file)
 
-                    # Create child document with output
-                    if output:
-                        from emdx.database.documents import save_document, update_document_stage
-                        next_stage = NEXT_STAGE.get(stage, "done")
-                        child_title = f"{doc.get('title', '')} [{stage}→{next_stage}]"
-                        new_doc_id = save_document(
-                            title=child_title,
-                            content=output,
-                            project=doc.get("project"),
-                            parent_id=doc_id,
-                        )
-                        update_document_stage(new_doc_id, next_stage)
-                        update_document_stage(doc_id, "done")
+        except Exception as e:
+            from emdx.models.executions import update_execution_status
+            update_execution_status(exec_id, "failed", exit_code=1)
+            self._update_status(f"[red]✗ Failed to start:[/red] {str(e)[:50]}")
+            if self.cascade_view:
+                self.cascade_view.refresh_all()
 
-                        def update_success():
-                            self._update_status(f"[green]✓ Done![/green] Created #{new_doc_id} at {next_stage}")
-                            if self.cascade_view:
-                                self.cascade_view.refresh_all()
-                        self.call_from_thread(update_success)
-                    else:
-                        update_execution_status(exec_id, "completed")
-                        def update_done():
-                            self._update_status(f"[green]✓ Completed[/green] (no output)")
-                            if self.cascade_view:
-                                self.cascade_view.refresh_all()
-                        self.call_from_thread(update_done)
-                else:
-                    update_execution_status(exec_id, "failed", exit_code=1)
-                    error = result.get("error", "Unknown error")
-                    def update_failed():
-                        self._update_status(f"[red]✗ Failed:[/red] {error[:50]}")
+    def _start_completion_monitor(
+        self,
+        exec_id: int,
+        doc_id: int,
+        doc: dict,
+        stage: str,
+        log_file: "Path"
+    ) -> None:
+        """Monitor a detached execution for completion.
+
+        Watches the log file for a result JSON line, then processes the output.
+        This runs in a background thread to not block the UI.
+        """
+        import json
+        import os
+        import time
+
+        def monitor():
+            from emdx.models.executions import get_execution, update_execution_status
+            from emdx.commands.cascade import NEXT_STAGE
+
+            poll_interval = 2.0  # Check every 2 seconds
+            max_wait = 1800 if stage == "planned" else 300  # Same timeouts as before
+            start_time = time.time()
+
+            while True:
+                elapsed = time.time() - start_time
+
+                # Check timeout
+                if elapsed > max_wait:
+                    # Check if process is still alive
+                    exec_record = get_execution(exec_id)
+                    if exec_record and exec_record.pid:
+                        try:
+                            os.kill(exec_record.pid, 9)  # Force kill
+                        except ProcessLookupError:
+                            pass
+                    update_execution_status(exec_id, "failed", exit_code=-1)
+                    def update_timeout():
+                        self._update_status(f"[red]✗ Timeout[/red] after {max_wait}s")
                         if self.cascade_view:
                             self.cascade_view.refresh_all()
-                    self.call_from_thread(update_failed)
+                    self.app.call_from_thread(update_timeout)
+                    return
 
-            except Exception as e:
-                update_execution_status(exec_id, "failed", exit_code=1)
-                def update_error():
-                    self._update_status(f"[red]✗ Error:[/red] {str(e)[:50]}")
-                    if self.cascade_view:
-                        self.cascade_view.refresh_all()
-                self.call_from_thread(update_error)
+                # Check if log file has a result line
+                if log_file.exists():
+                    try:
+                        content = log_file.read_text()
+                        for line in content.splitlines():
+                            if line.startswith('{') and '"type":"result"' in line:
+                                # Found result - parse it
+                                try:
+                                    result_data = json.loads(line)
+                                    is_error = result_data.get("is_error", False)
+                                    output = result_data.get("result", "")
 
-        # Run in executor to not block event loop
+                                    if is_error:
+                                        update_execution_status(exec_id, "failed", exit_code=1)
+                                        def update_failed():
+                                            self._update_status(f"[red]✗ Failed[/red]")
+                                            if self.cascade_view:
+                                                self.cascade_view.refresh_all()
+                                        self.app.call_from_thread(update_failed)
+                                    else:
+                                        update_execution_status(exec_id, "completed", exit_code=0)
+
+                                        # Create child document with output
+                                        if output:
+                                            from emdx.database.documents import save_document, update_document_stage
+                                            next_stage = NEXT_STAGE.get(stage, "done")
+                                            child_title = f"{doc.get('title', '')} [{stage}→{next_stage}]"
+                                            new_doc_id = save_document(
+                                                title=child_title,
+                                                content=output,
+                                                project=doc.get("project"),
+                                                parent_id=doc_id,
+                                            )
+                                            update_document_stage(new_doc_id, next_stage)
+                                            update_document_stage(doc_id, "done")
+
+                                            def update_success():
+                                                self._update_status(f"[green]✓ Done![/green] Created #{new_doc_id} at {next_stage}")
+                                                if self.cascade_view:
+                                                    self.cascade_view.refresh_all()
+                                            self.app.call_from_thread(update_success)
+                                        else:
+                                            def update_done():
+                                                self._update_status(f"[green]✓ Completed[/green]")
+                                                if self.cascade_view:
+                                                    self.cascade_view.refresh_all()
+                                            self.app.call_from_thread(update_done)
+                                    return
+
+                                except json.JSONDecodeError:
+                                    pass  # Not valid JSON, keep looking
+                    except Exception as e:
+                        logger.debug(f"Error reading log file: {e}")
+
+                # Check if process died without result
+                exec_record = get_execution(exec_id)
+                if exec_record and exec_record.is_zombie:
+                    update_execution_status(exec_id, "failed", exit_code=-1)
+                    def update_zombie():
+                        self._update_status(f"[red]✗ Process died[/red]")
+                        if self.cascade_view:
+                            self.cascade_view.refresh_all()
+                    self.app.call_from_thread(update_zombie)
+                    return
+
+                time.sleep(poll_interval)
+
+        # Run monitor in background thread
         import concurrent.futures
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        executor.submit(run_process)
+        executor.submit(monitor)
 
     def _refresh(self) -> None:
         """Refresh the cascade view."""
