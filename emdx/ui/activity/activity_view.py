@@ -1943,7 +1943,8 @@ class ActivityView(HelpMixin, Widget):
                 logger.error(f"Error handling log content: {e}")
 
         # Schedule UI update on the main thread
-        self.call_from_thread(update_ui)
+        # Note: call_from_thread is on App, not Widget
+        self.app.call_from_thread(update_ui)
 
     def _stop_stream(self) -> None:
         """Stop any active log stream."""
