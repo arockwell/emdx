@@ -279,6 +279,16 @@ def run_workflow(
         "--max-concurrent",
         help="Override max concurrent executions for parallel/dynamic stages",
     ),
+    cli_tool: str = typer.Option(
+        "claude",
+        "--cli", "-C",
+        help="CLI tool to use: claude or cursor",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model", "-m",
+        help="Model to use (overrides CLI default)",
+    ),
 ):
     """Run a workflow.
 
@@ -309,6 +319,12 @@ def run_workflow(
 
         # Save current run variables as a new preset
         emdx workflow run task_parallel -t "Review code" --var topic=Performance --save-as perf_review
+
+        # Use Cursor instead of Claude
+        emdx workflow run task_parallel -t "Analyze code" --cli cursor
+
+        # Specify a model
+        emdx workflow run task_parallel -t "Quick task" --cli cursor --model auto
     """
     worktree_path = None
 
@@ -363,11 +379,18 @@ def run_workflow(
             variables['_max_concurrent_override'] = max_concurrent
         variables['base_branch'] = base_branch
 
+        # Pass CLI tool and model to workflow
+        if cli_tool != "claude":
+            variables["_cli_tool"] = cli_tool
+        if model:
+            variables["_model"] = model
+
         # Store title in input_variables (used by Activity view)
         if title:
             variables['task_title'] = title
 
-        console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name}")
+        cli_name = "Cursor" if cli_tool == "cursor" else "Claude"
+        console.print(f"[cyan]Starting workflow:[/cyan] {workflow.display_name} (using {cli_name})")
         if title:
             console.print(f"  Title: {title}")
         console.print(f"  Stages: {len(workflow.stages)}")

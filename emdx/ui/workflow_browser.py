@@ -189,9 +189,20 @@ class WorkflowBrowser(HelpMixin, Widget):
         try:
             self.load_templates()
             self._update_task_panel()
+            # Auto-refresh every 5 seconds
+            self.set_interval(5.0, self._auto_refresh)
         except Exception as e:
             logger.error(f"Error mounting workflow browser: {e}", exc_info=True)
             self._update_status(f"Error: {e}")
+
+    def _auto_refresh(self) -> None:
+        """Periodic refresh to update run statuses."""
+        try:
+            if self.view_mode == "runs":
+                # Refresh runs view to show updated statuses
+                self.load_runs()
+        except Exception as e:
+            logger.debug(f"Auto-refresh error: {e}")
 
     def focus(self, scroll_visible: bool = True) -> None:
         """Focus the workflow table."""
