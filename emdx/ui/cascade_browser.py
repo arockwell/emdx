@@ -159,6 +159,47 @@ def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
         return results
 
 
+def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
+    """Get recent stage transitions (documents created from parent documents).
+
+    A transition is when a document moves from one stage to the next,
+    tracked via the parent_id relationship.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                child.id as child_id,
+                child.title as child_title,
+                child.stage as to_stage,
+                child.created_at,
+                parent.id as parent_id,
+                parent.title as parent_title,
+                parent.stage as from_stage
+            FROM documents child
+            INNER JOIN documents parent ON child.parent_id = parent.id
+            WHERE child.stage IS NOT NULL
+            ORDER BY child.created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            results.append({
+                "child_id": row[0],
+                "child_title": row[1],
+                "to_stage": row[2],
+                "created_at": row[3],
+                "parent_id": row[4],
+                "parent_title": row[5],
+                "from_stage": row[6],
+            })
+        return results
+
+
 def get_recent_cascade_runs(limit: int = 5) -> List[Dict[str, Any]]:
     """Get recent cascade runs with their status and progress."""
     with db_connection.get_connection() as conn:
@@ -826,18 +867,70 @@ class CascadeView(Widget):
         height: 1fr;
     }
 
-    #pv-list-container {
+    /* Left column: stacked lists */
+    #pv-left-column {
         width: 45%;
         height: 100%;
     }
 
+    #pv-doc-list {
+        height: 40%;
+        border-bottom: solid $secondary;
+    }
+
+    #pv-runs-section {
+        height: 30%;
+        border-bottom: solid $secondary;
+    }
+
+    #pv-runs-header {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    #pv-runs-table {
+        height: 1fr;
+    }
+
+    #pv-exec-section {
+        height: 30%;
+    }
+
+    #pv-exec-header {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    #pv-exec-table {
+        height: 1fr;
+    }
+
+    /* Right column: preview pane */
     #pv-preview-container {
         width: 55%;
         height: 100%;
+        border-left: solid $primary;
     }
 
-    #pv-activity {
-        height: 10;
+    #pv-preview-header {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    #pv-preview-scroll {
+        height: 1fr;
+    }
+
+    #pv-preview-content {
+        padding: 0 1;
+    }
+
+    #pv-preview-log {
+        height: 1fr;
+        display: none;
     }
 
     #pv-status {
@@ -853,29 +946,69 @@ class CascadeView(Widget):
         super().__init__(**kwargs)
         self.summary: Optional[StageSummaryBar] = None
         self.doc_list: Optional[DocumentList] = None
-        self.preview: Optional[DocumentPreview] = None
-        self.activity: Optional[ActivityFeed] = None
+        self.transitions_table: Optional[DataTable] = None
+        self.exec_table: Optional[DataTable] = None
+        # For live log streaming
+        self.log_stream: Optional['LogStream'] = None
+        self.streaming_exec_id: Optional[int] = None
+        self._selected_exec: Optional[Dict[str, Any]] = None
+        self._exec_data: List[Dict[str, Any]] = []
+        self._log_subscriber = None
 
     def compose(self) -> ComposeResult:
+        from textual.containers import ScrollableContainer
+        from textual.widgets import RichLog
+
         self.summary = StageSummaryBar(id="pv-summary")
         yield self.summary
 
         with Horizontal(id="pv-main"):
-            with Vertical(id="pv-list-container"):
+            # Left column: Work Items, Runs, Executions
+            with Vertical(id="pv-left-column"):
                 self.doc_list = DocumentList(id="pv-doc-list")
                 yield self.doc_list
-            with Vertical(id="pv-preview-container"):
-                self.preview = DocumentPreview(id="pv-preview")
-                yield self.preview
 
-        self.activity = ActivityFeed(id="pv-activity")
-        yield self.activity
+                with Vertical(id="pv-runs-section"):
+                    yield Static("[bold]Transitions[/bold]", id="pv-runs-header")
+                    self.transitions_table = DataTable(id="pv-transitions-table", cursor_type="row")
+                    yield self.transitions_table
+
+                with Vertical(id="pv-exec-section"):
+                    yield Static("[bold]Recent Executions[/bold]", id="pv-exec-header")
+                    self.exec_table = DataTable(id="pv-exec-table", cursor_type="row")
+                    yield self.exec_table
+
+            # Right column: Preview (document or live log)
+            with Vertical(id="pv-preview-container"):
+                yield Static("[bold]Preview[/bold]", id="pv-preview-header")
+                with ScrollableContainer(id="pv-preview-scroll"):
+                    yield RichLog(id="pv-preview-content", highlight=True, markup=True)
+                yield RichLog(id="pv-preview-log", highlight=True, markup=True)
 
         yield Static("", id="pv-status")
 
     def on_mount(self) -> None:
         """Initialize on mount."""
+        # Setup tables
+        self._setup_transitions_table()
+        self._setup_exec_table()
         self.refresh_all()
+
+    def _setup_transitions_table(self) -> None:
+        """Setup the transitions table columns."""
+        if self.transitions_table:
+            self.transitions_table.add_column("Time", width=8)
+            self.transitions_table.add_column("From", width=12)
+            self.transitions_table.add_column("To", width=12)
+            self.transitions_table.add_column("Doc", width=20)
+
+    def _setup_exec_table(self) -> None:
+        """Setup the executions table columns."""
+        if self.exec_table:
+            self.exec_table.add_column("ID", width=6)
+            self.exec_table.add_column("Time", width=8)
+            self.exec_table.add_column("Status", width=10)
+            self.exec_table.add_column("Title", width=30)
 
     def refresh_all(self) -> None:
         """Refresh all components."""
@@ -892,17 +1025,227 @@ class CascadeView(Widget):
 
             # Update preview with first doc
             doc_id = self.doc_list.get_selected_doc_id()
-            if doc_id and self.preview:
-                self.preview.show_document(doc_id)
-            elif self.preview:
-                self.preview.clear()
+            if doc_id:
+                self._show_document_preview(doc_id)
 
-        # Refresh activity feed
-        if self.activity:
-            self.activity.refresh_activity()
+        # Refresh transitions and executions tables
+        self._refresh_transitions_table()
+        self._refresh_exec_table()
 
         # Update status
         self._update_status("[dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize │ [dim]r[/dim] refresh")
+
+    def _refresh_transitions_table(self) -> None:
+        """Refresh the stage transitions table."""
+        if not self.transitions_table:
+            return
+
+        self.transitions_table.clear()
+        transitions = get_recent_stage_transitions(limit=8)
+
+        for trans in transitions:
+            # Time
+            time_str = ""
+            if trans.get("created_at"):
+                try:
+                    dt = datetime.fromisoformat(trans["created_at"])
+                    time_str = dt.strftime("%H:%M:%S")
+                except:
+                    time_str = "?"
+
+            # From stage with emoji
+            from_stage = trans.get("from_stage", "?")
+            from_emoji = STAGE_EMOJI.get(from_stage, "")
+            from_display = f"{from_emoji} {from_stage}"
+
+            # To stage with emoji
+            to_stage = trans.get("to_stage", "?")
+            to_emoji = STAGE_EMOJI.get(to_stage, "")
+            to_display = f"{to_emoji} {to_stage}"
+
+            # Document title (truncated)
+            title = trans.get("child_title", "?")
+            if len(title) > 18:
+                title = title[:15] + "..."
+            doc_display = f"#{trans.get('child_id', '?')} {title}"
+
+            self.transitions_table.add_row(time_str, from_display, to_display, doc_display)
+
+    def _refresh_exec_table(self) -> None:
+        """Refresh the executions table."""
+        if not self.exec_table:
+            return
+
+        self.exec_table.clear()
+        self._exec_data = get_recent_cascade_activity(limit=8)
+
+        for act in self._exec_data:
+            # Exec ID
+            exec_id = f"#{act.get('exec_id', '?')}"
+
+            # Time
+            time_str = ""
+            ts = act.get("completed_at") or act.get("started_at")
+            if ts:
+                try:
+                    dt = datetime.fromisoformat(ts)
+                    time_str = dt.strftime("%H:%M:%S")
+                except:
+                    time_str = "?"
+
+            # Status
+            status = act.get("status", "?")
+            if status == "completed":
+                status_display = "[green]✓ done[/green]"
+            elif status == "running":
+                status_display = "[yellow]⟳ running[/yellow]"
+            elif status == "failed":
+                status_display = "[red]✗ failed[/red]"
+            else:
+                status_display = f"[dim]{status}[/dim]"
+
+            # Title
+            title = act.get("doc_title", "")
+            if title.startswith("Cascade: "):
+                title = title[9:]
+            title = title[:28]
+
+            self.exec_table.add_row(exec_id, time_str, status_display, title)
+
+    def _show_document_preview(self, doc_id: int) -> None:
+        """Show document content in preview pane."""
+        from textual.widgets import RichLog
+        from textual.containers import ScrollableContainer
+
+        self._stop_log_stream()
+
+        try:
+            header = self.query_one("#pv-preview-header", Static)
+            preview_scroll = self.query_one("#pv-preview-scroll", ScrollableContainer)
+            preview_content = self.query_one("#pv-preview-content", RichLog)
+            preview_log = self.query_one("#pv-preview-log", RichLog)
+        except Exception:
+            return
+
+        # Show scroll view, hide log view
+        preview_scroll.display = True
+        preview_log.display = False
+
+        preview_content.clear()
+
+        doc = get_document(doc_id)
+        if not doc:
+            header.update("[bold]Preview[/bold]")
+            preview_content.write("[dim]Document not found[/dim]")
+            return
+
+        header.update(f"[bold]#{doc_id}[/bold] {doc.get('title', '')[:40]}")
+
+        # Show document content
+        content = doc.get("content", "")
+        if content:
+            for line in content.split("\n")[:100]:
+                preview_content.write(line)
+        else:
+            preview_content.write("[dim]No content[/dim]")
+
+    def _show_execution_preview(self, exec_data: Dict[str, Any]) -> None:
+        """Show execution log in preview pane - live if running."""
+        from textual.widgets import RichLog
+        from textual.containers import ScrollableContainer
+        from pathlib import Path
+
+        self._stop_log_stream()
+        self._selected_exec = exec_data
+
+        try:
+            header = self.query_one("#pv-preview-header", Static)
+            preview_scroll = self.query_one("#pv-preview-scroll", ScrollableContainer)
+            preview_content = self.query_one("#pv-preview-content", RichLog)
+            preview_log = self.query_one("#pv-preview-log", RichLog)
+        except Exception:
+            return
+
+        exec_id = exec_data.get("exec_id")
+        status = exec_data.get("status", "")
+        is_running = status == "running"
+
+        # Get log file path
+        from emdx.models.executions import get_execution
+        exec_record = get_execution(exec_id) if exec_id else None
+        log_file = exec_record.log_file if exec_record else None
+
+        if is_running and log_file:
+            # Show live log
+            header.update(f"[green]● LIVE[/green] [bold]#{exec_id}[/bold]")
+            preview_scroll.display = False
+            preview_log.display = True
+            preview_log.clear()
+
+            log_path = Path(log_file)
+            if log_path.exists():
+                self._start_log_stream(log_path, preview_log)
+            else:
+                preview_log.write("[yellow]Waiting for log file...[/yellow]")
+        else:
+            # Show static log content
+            header.update(f"[bold]#{exec_id}[/bold] {exec_data.get('doc_title', '')[:30]}")
+            preview_scroll.display = False
+            preview_log.display = True
+            preview_log.clear()
+
+            if log_file:
+                log_path = Path(log_file)
+                if log_path.exists():
+                    content = log_path.read_text()
+                    from emdx.ui.live_log_writer import LiveLogWriter
+                    writer = LiveLogWriter(preview_log, auto_scroll=False)
+                    writer.write(content)
+                else:
+                    preview_log.write("[dim]Log file not found[/dim]")
+            else:
+                preview_log.write("[dim]No log file[/dim]")
+
+    def _start_log_stream(self, log_path: 'Path', preview_log: 'RichLog') -> None:
+        """Start streaming a log file to the preview."""
+        from emdx.services.log_stream import LogStream
+        from emdx.ui.live_log_writer import LiveLogWriter
+        from emdx.utils.stream_json_parser import parse_and_format_live_logs
+
+        self.log_stream = LogStream(log_path)
+
+        # Show initial content
+        initial = self.log_stream.get_initial_content()
+        if initial:
+            formatted = parse_and_format_live_logs(initial)
+            for line in formatted[-50:]:
+                preview_log.write(line)
+            preview_log.scroll_end(animate=False)
+
+        # Subscribe for updates
+        class LogSubscriber:
+            def __init__(self, view: 'CascadeView', log_widget: 'RichLog'):
+                self.view = view
+                self.log_widget = log_widget
+
+            def on_log_content(self, content: str) -> None:
+                def update():
+                    writer = LiveLogWriter(self.log_widget, auto_scroll=True)
+                    writer.write(content)
+                self.view.call_from_thread(update)
+
+            def on_log_error(self, error: Exception) -> None:
+                pass
+
+        self._log_subscriber = LogSubscriber(self, preview_log)
+        self.log_stream.subscribe(self._log_subscriber)
+
+    def _stop_log_stream(self) -> None:
+        """Stop any active log stream."""
+        if self.log_stream and hasattr(self, '_log_subscriber'):
+            self.log_stream.unsubscribe(self._log_subscriber)
+        self.log_stream = None
+        self.streaming_exec_id = None
 
     def watch_current_stage_idx(self, idx: int) -> None:
         """React to stage change."""
@@ -915,15 +1258,23 @@ class CascadeView(Widget):
             self.doc_list.load_stage(STAGES[idx])
             # Update preview
             doc_id = self.doc_list.get_selected_doc_id()
-            if doc_id and self.preview:
-                self.preview.show_document(doc_id)
-            elif self.preview:
-                self.preview.clear()
+            if doc_id:
+                self._show_document_preview(doc_id)
 
     def on_document_list_document_selected(self, event: DocumentList.DocumentSelected) -> None:
         """Handle document selection."""
-        if self.preview:
-            self.preview.show_document(event.doc_id)
+        self._show_document_preview(event.doc_id)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Handle row selection in runs or executions tables."""
+        table = event.data_table
+
+        if table.id == "pv-exec-table":
+            # Execution selected - show in preview
+            row_idx = event.cursor_row
+            if hasattr(self, '_exec_data') and row_idx < len(self._exec_data):
+                exec_data = self._exec_data[row_idx]
+                self._show_execution_preview(exec_data)
 
     def action_prev_stage(self) -> None:
         """Move to previous stage."""
@@ -940,16 +1291,16 @@ class CascadeView(Widget):
         if self.doc_list:
             self.doc_list.move_cursor(1)
             doc_id = self.doc_list.get_selected_doc_id()
-            if doc_id and self.preview:
-                self.preview.show_document(doc_id)
+            if doc_id:
+                self._show_document_preview(doc_id)
 
     def action_move_up(self) -> None:
         """Move cursor up."""
         if self.doc_list:
             self.doc_list.move_cursor(-1)
             doc_id = self.doc_list.get_selected_doc_id()
-            if doc_id and self.preview:
-                self.preview.show_document(doc_id)
+            if doc_id:
+                self._show_document_preview(doc_id)
 
     def action_view_doc(self) -> None:
         """View selected document fullscreen."""
@@ -1072,27 +1423,19 @@ class CascadeView(Widget):
 
         self._update_status(f"[cyan]Synthesizing {len(doc_ids)} docs via Claude...[/cyan]")
 
-        # Now process it through Claude (same as 'p' key but automatic)
-        import subprocess
-        cmd = ["poetry", "run", "emdx", "cascade", "process", stage, "--sync", "--doc", str(synthesis_doc_id)]
+        # Post a ProcessStage message so the proper handler runs it with live logs
+        self.post_message(self.ProcessStage(stage, synthesis_doc_id))
 
-        try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self._update_status(f"[green]Started synthesis #{synthesis_doc_id} through Claude[/green]")
-        except Exception as e:
-            self._update_status(f"[red]Error starting synthesis: {e}[/red]")
-
-        # Refresh after delay to show results
-        self.set_timer(5.0, self.refresh_all)
+        # Refresh to show the new synthesis document
+        self.refresh_all()
 
     def action_refresh(self) -> None:
         """Refresh all data."""
         self.refresh_all()
 
     def action_toggle_activity_view(self) -> None:
-        """Toggle between cascade runs view and executions view."""
-        if self.activity:
-            self.activity.toggle_view()
+        """Refresh all data (v key)."""
+        self.refresh_all()
 
     def _update_status(self, text: str) -> None:
         """Update status bar."""
@@ -1149,23 +1492,123 @@ class CascadeBrowser(Widget):
             self.call_later(lambda: self.app._view_document(event.doc_id))
 
     def on_cascade_view_process_stage(self, event: CascadeView.ProcessStage) -> None:
-        """Handle request to process a stage."""
-        import subprocess
+        """Handle request to process a stage - runs Claude with live logs."""
+        import asyncio
+        from pathlib import Path
+        from datetime import datetime
+
         stage = event.stage
         doc_id = event.doc_id
 
-        cmd = ["poetry", "run", "emdx", "cascade", "process", stage, "--sync"]
+        # Get the document to process
         if doc_id:
-            cmd.extend(["--doc", str(doc_id)])
+            doc = get_document(str(doc_id))
+            if not doc:
+                self._update_status(f"[red]Document #{doc_id} not found[/red]")
+                return
+        else:
+            # Get oldest at stage
+            docs = list_documents_at_stage(stage)
+            if not docs:
+                self._update_status(f"[yellow]No documents at stage '{stage}'[/yellow]")
+                return
+            doc = docs[0]
+            doc_id = doc["id"]
 
-        try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self._update_status(f"[green]Started processing {stage} (sync mode)[/green]")
-        except Exception as e:
-            self._update_status(f"[red]Error: {e}[/red]")
+        self._update_status(f"[cyan]Processing #{doc_id}: {doc.get('title', '')[:40]}...[/cyan]")
 
-        # Refresh after delay
-        self.set_timer(3.0, self._refresh)
+        # Run in background thread to not block UI
+        def run_process():
+            from emdx.services.claude_executor import execute_claude_sync, DEFAULT_ALLOWED_TOOLS
+            from emdx.models.executions import create_execution, update_execution_status
+            from emdx.commands.cascade import STAGE_PROMPTS, NEXT_STAGE
+
+            # Build prompt
+            prompt = STAGE_PROMPTS[stage].format(content=doc.get("content", ""))
+
+            # Set up log file
+            log_dir = Path.cwd() / ".emdx" / "logs" / "cascade"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / f"{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+            # Create execution record
+            exec_id = create_execution(
+                doc_id=doc_id,
+                doc_title=f"Cascade: {doc.get('title', '')}",
+                log_file=str(log_file),
+                working_dir=str(Path.cwd()),
+            )
+
+            # Update UI to show execution started
+            def update_started():
+                self._update_status(f"[green]● Running #{exec_id}[/green] Processing {stage}...")
+                if self.cascade_view:
+                    self.cascade_view.refresh_all()
+            self.call_from_thread(update_started)
+
+            # Execute Claude
+            timeout = 1800 if stage == "planned" else 300
+            try:
+                result = execute_claude_sync(
+                    task=prompt,
+                    execution_id=exec_id,
+                    log_file=log_file,
+                    allowed_tools=DEFAULT_ALLOWED_TOOLS,
+                    working_dir=str(Path.cwd()),
+                    doc_id=str(doc_id),
+                    timeout=timeout,
+                )
+
+                if result.get("success"):
+                    output = result.get("output", "")
+
+                    # Create child document with output
+                    if output:
+                        from emdx.database.documents import save_document, update_document_stage
+                        next_stage = NEXT_STAGE.get(stage, "done")
+                        child_title = f"{doc.get('title', '')} [{stage}→{next_stage}]"
+                        new_doc_id = save_document(
+                            title=child_title,
+                            content=output,
+                            project=doc.get("project"),
+                            parent_id=doc_id,
+                        )
+                        update_document_stage(new_doc_id, next_stage)
+                        update_document_stage(doc_id, "done")
+
+                        def update_success():
+                            self._update_status(f"[green]✓ Done![/green] Created #{new_doc_id} at {next_stage}")
+                            if self.cascade_view:
+                                self.cascade_view.refresh_all()
+                        self.call_from_thread(update_success)
+                    else:
+                        update_execution_status(exec_id, "completed")
+                        def update_done():
+                            self._update_status(f"[green]✓ Completed[/green] (no output)")
+                            if self.cascade_view:
+                                self.cascade_view.refresh_all()
+                        self.call_from_thread(update_done)
+                else:
+                    update_execution_status(exec_id, "failed", exit_code=1)
+                    error = result.get("error", "Unknown error")
+                    def update_failed():
+                        self._update_status(f"[red]✗ Failed:[/red] {error[:50]}")
+                        if self.cascade_view:
+                            self.cascade_view.refresh_all()
+                    self.call_from_thread(update_failed)
+
+            except Exception as e:
+                update_execution_status(exec_id, "failed", exit_code=1)
+                def update_error():
+                    self._update_status(f"[red]✗ Error:[/red] {str(e)[:50]}")
+                    if self.cascade_view:
+                        self.cascade_view.refresh_all()
+                self.call_from_thread(update_error)
+
+        # Run in executor to not block event loop
+        import concurrent.futures
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        executor.submit(run_process)
 
     def _refresh(self) -> None:
         """Refresh the cascade view."""
