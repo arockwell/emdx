@@ -1047,6 +1047,10 @@ class ActivityView(HelpMixin, Widget):
     async def _update_table(self) -> None:
         """Update the activity table."""
         table = self.query_one("#activity-table", DataTable)
+
+        # Preserve scroll position to prevent visual flicker during refresh
+        saved_scroll_y = table.scroll_y
+
         table.clear()
 
         for item in self.flat_items:
@@ -1156,9 +1160,16 @@ class ActivityView(HelpMixin, Widget):
 
             table.add_row(icon, time_str, title, id_str)
 
-        # Restore selection
+        # Restore selection without scrolling (we'll restore scroll position separately)
         if self.flat_items and self.selected_idx < len(self.flat_items):
-            table.move_cursor(row=self.selected_idx)
+            table.move_cursor(row=self.selected_idx, scroll=False)
+
+        # Restore scroll position to prevent flicker
+        # Use call_later to ensure rows are rendered before scrolling
+        def restore_scroll():
+            if saved_scroll_y > 0:
+                table.scroll_to(y=saved_scroll_y, animate=False)
+        self.call_later(restore_scroll)
 
     async def _update_status_bar(self) -> None:
         """Update the status bar with current stats."""
