@@ -10,6 +10,14 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 
+# Default allowed tools for Claude Code execution
+DEFAULT_ALLOWED_TOOLS: List[str] = [
+    "Read", "Write", "Edit", "MultiEdit", "Bash",
+    "Glob", "Grep", "LS", "Task", "TodoWrite",
+    "WebFetch", "WebSearch",
+]
+
+
 class CliTool(str, Enum):
     """Supported CLI tools."""
 
