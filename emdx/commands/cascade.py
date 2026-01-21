@@ -12,7 +12,6 @@ Key concepts:
 - Autonomous execution: Claude handles the heavy lifting at each stage
 """
 
-import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +21,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ..workflows.output_parser import extract_pr_url
 from ..database.documents import (
     get_document,
     get_oldest_at_stage,
@@ -196,11 +196,10 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
             new_doc_id = doc_id
 
             if output:
-                # For planned stage, extract PR URL
+                # For planned stage, extract PR URL using robust extraction
                 if stage == "planned":
-                    pr_match = re.search(r'PR_URL:\s*(https://github\.com/[^\s]+)', output)
-                    if pr_match:
-                        pr_url = pr_match.group(1)
+                    pr_url = extract_pr_url(output)
+                    if pr_url:
                         console.print(f"[bold green]🔗 PR Created: {pr_url}[/bold green]")
 
                 # Create child document
