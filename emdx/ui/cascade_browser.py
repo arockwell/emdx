@@ -11,7 +11,7 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Label, MarkdownViewer, Static
+from textual.widgets import Button, DataTable, Label, MarkdownViewer, Static, TextArea
 
 from emdx.database.documents import (
     get_document,
@@ -49,7 +49,7 @@ class NewIdeaScreen(ModalScreen):
     }
     #idea-dialog {
         width: 70;
-        height: auto;
+        max-height: 20;
         background: $surface;
         border: thick $primary;
         padding: 1 2;
@@ -60,6 +60,8 @@ class NewIdeaScreen(ModalScreen):
     }
     #idea-input {
         width: 100%;
+        height: 8;
+        min-height: 4;
         margin-bottom: 1;
     }
     #idea-buttons {
@@ -74,6 +76,7 @@ class NewIdeaScreen(ModalScreen):
 
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
+        ("ctrl+enter", "submit", "Submit"),
     ]
 
     def __init__(self):
@@ -82,35 +85,34 @@ class NewIdeaScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="idea-dialog"):
-            yield Label("💡 Enter new idea for the cascade:", id="idea-label")
-            yield Input(placeholder="Describe your idea...", id="idea-input")
+            yield Label("💡 Enter new idea for the cascade (Ctrl+Enter to submit):", id="idea-label")
+            yield TextArea(id="idea-input")
             with Horizontal(id="idea-buttons"):
                 yield Button("Add Idea", variant="primary", id="add-btn")
                 yield Button("Cancel", variant="default", id="cancel-btn")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "add-btn":
-            idea_input = self.query_one("#idea-input", Input)
-            self.idea_text = idea_input.value.strip()
-            if self.idea_text:
-                self.dismiss(self.idea_text)
-            else:
-                label = self.query_one("#idea-label", Label)
-                label.update("[red]⚠️ Idea cannot be empty[/red]")
-        else:
-            self.dismiss(None)
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle Enter key in the input field."""
-        self.idea_text = event.value.strip()
+    def _validate_and_submit(self) -> None:
+        """Validate input and submit if valid."""
+        idea_input = self.query_one("#idea-input", TextArea)
+        self.idea_text = idea_input.text.strip()
         if self.idea_text:
             self.dismiss(self.idea_text)
         else:
             label = self.query_one("#idea-label", Label)
             label.update("[red]⚠️ Idea cannot be empty[/red]")
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-btn":
+            self._validate_and_submit()
+        else:
+            self.dismiss(None)
+
+    def action_submit(self) -> None:
+        """Handle Ctrl+Enter to submit the idea."""
+        self._validate_and_submit()
+
     def on_mount(self) -> None:
-        idea_input = self.query_one("#idea-input", Input)
+        idea_input = self.query_one("#idea-input", TextArea)
         idea_input.focus()
 
     def action_cancel(self) -> None:
