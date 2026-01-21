@@ -276,27 +276,41 @@ def execute_cli_sync(
     })
 
     try:
-        # Run synchronously with timeout
-        result = subprocess.run(
+        # Run with streaming output to log file for live viewing
+        # Use Popen to stream stdout to file in real-time
+        process = subprocess.Popen(
             cmd.args,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             cwd=cmd.cwd or working_dir,
         )
 
-        # Log the output
+        # Stream stdout to file and capture it
+        stdout_lines = []
         with open(log_file, 'a') as f:
-            f.write(f"\n--- STDOUT ---\n{result.stdout}\n")
-            if result.stderr:
-                f.write(f"\n--- STDERR ---\n{result.stderr}\n")
+            f.write("\n--- STDOUT ---\n")
+            f.flush()
+            for line in iter(process.stdout.readline, ''):
+                f.write(line)
+                f.flush()  # Flush immediately for live viewing
+                stdout_lines.append(line)
+
+        # Wait for process and get remaining output
+        _, stderr = process.communicate(timeout=timeout)
+        stdout = ''.join(stdout_lines)
+
+        # Log stderr if any
+        if stderr:
+            with open(log_file, 'a') as f:
+                f.write(f"\n--- STDERR ---\n{stderr}\n")
 
         # Parse the result
-        cli_result = executor.parse_output(result.stdout, result.stderr, result.returncode)
+        cli_result = executor.parse_output(stdout, stderr, process.returncode)
 
         if cli_result.success:
             main_logger.info("Execution completed successfully", {
-                "returncode": result.returncode,
+                "returncode": process.returncode,
                 "output_length": len(cli_result.output)
             })
             return {
@@ -305,17 +319,18 @@ def execute_cli_sync(
                 "exit_code": cli_result.exit_code,
             }
         else:
-            main_logger.error(f"Execution failed with code {result.returncode}", {
-                "returncode": result.returncode,
-                "stderr": result.stderr[:500] if result.stderr else None
+            main_logger.error(f"Execution failed with code {process.returncode}", {
+                "returncode": process.returncode,
+                "stderr": stderr[:500] if stderr else None
             })
             return {
                 "success": False,
-                "error": cli_result.error or f"Exit code {result.returncode}",
+                "error": cli_result.error or f"Exit code {process.returncode}",
                 "exit_code": cli_result.exit_code,
             }
 
     except subprocess.TimeoutExpired:
+        process.kill()
         main_logger.error(f"Execution timed out after {timeout}s")
         return {"success": False, "error": f"Timeout after {timeout} seconds", "exit_code": -1}
     except Exception as e:

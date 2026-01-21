@@ -1153,17 +1153,25 @@ class CascadeView(Widget):
         log_file = exec_record.log_file if exec_record else None
 
         if is_running and log_file:
-            # Show live log
-            header.update(f"[green]● LIVE[/green] [bold]#{exec_id}[/bold]")
-            preview_scroll.display = False
-            preview_log.display = True
-            preview_log.clear()
-
             log_path = Path(log_file)
             if log_path.exists():
+                # Show live log
+                header.update(f"[green]● LIVE[/green] [bold]#{exec_id}[/bold]")
+                preview_scroll.display = False
+                preview_log.display = True
+                preview_log.clear()
                 self._start_log_stream(log_path, preview_log)
             else:
-                preview_log.write("[yellow]Waiting for log file...[/yellow]")
+                # Log file doesn't exist - execution is stale/orphaned
+                header.update(f"[red]● STALE[/red] [bold]#{exec_id}[/bold]")
+                preview_scroll.display = False
+                preview_log.display = True
+                preview_log.clear()
+                preview_log.write("[red]Execution appears stale - log file not found[/red]")
+                preview_log.write(f"[dim]Expected: {log_file}[/dim]")
+                preview_log.write("")
+                preview_log.write("[yellow]This execution may have been interrupted.[/yellow]")
+                preview_log.write("[dim]You can mark it as failed or remove it.[/dim]")
         else:
             # Show static log content
             header.update(f"[bold]#{exec_id}[/bold] {exec_data.get('doc_title', '')[:30]}")
