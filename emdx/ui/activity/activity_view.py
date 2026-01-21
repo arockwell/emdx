@@ -209,6 +209,8 @@ class ActivityItem:
             return icons.get(group_type, "📁")
         elif self.item_type == "cascade":
             return "📋"  # Cascade processing
+        elif self.item_type == "patrol":
+            return "🤖"  # Patrol worker (autonomous agent)
         else:
             return ""
 
@@ -462,14 +464,18 @@ class ActivityView(HelpMixin, Widget):
         # Load cascade executions
         await self._load_cascade_executions()
 
+        # Load running patrol executions
+        await self._load_patrol_executions()
+
         # Load standalone agent executions
         await self._load_agent_executions()
 
-        # Sort: running items first (pinned), then by timestamp descending
-        # Running workflows and agent executions should always be at the top for visibility
+        # Sort: running items first (patrols, workflows, agent executions), then by timestamp descending
+        # Running items should always be at the top for visibility
         def sort_key(item):
             is_running = (
                 (item.item_type == "workflow" and item.status == "running") or
+                (item.item_type == "patrol" and item.status == "running") or
                 (item.item_type == "agent_execution" and item.status == "running")
             )
             # Running items get priority 0 (will be first after sort)
@@ -869,6 +875,79 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error loading cascade executions: {e}", exc_info=True)
 
+    async def _load_patrol_executions(self) -> None:
+        """Load patrol executions into activity items.
+
+        Patrols are autonomous workers that process work items through
+        cascade stages. Running patrols are shown prominently at the top,
+        and recent completed patrols are also shown.
+        """
+        try:
+            from emdx.models.executions import get_running_executions, get_recent_executions
+
+            # Load running patrols
+            running = get_running_executions()
+            patrol_running = [e for e in running if e.doc_title.startswith("Patrol:")]
+
+            for exec in patrol_running:
+                # Parse timestamp (handle timezone)
+                started = exec.started_at
+                if started and started.tzinfo:
+                    started = started.replace(tzinfo=None)
+
+                # Extract title from "Patrol: <title>"
+                title = exec.doc_title.replace("Patrol: ", "")
+
+                item = ActivityItem(
+                    item_type="patrol",
+                    item_id=exec.id,
+                    title=f"⚡ {title}",
+                    status="running",
+                    timestamp=started or datetime.now(),
+                )
+
+                # Store execution info for preview
+                item.log_file = exec.log_file
+                item.working_dir = exec.working_dir
+
+                self.activity_items.append(item)
+
+            # Load recent completed patrols (last 20)
+            running_ids = {e.id for e in patrol_running}
+            recent = get_recent_executions(limit=50)
+            patrol_recent = [
+                e for e in recent
+                if e.doc_title.startswith("Patrol:")
+                and e.id not in running_ids
+                and e.status in ("completed", "failed")
+            ][:20]
+
+            for exec in patrol_recent:
+                # Parse timestamp (handle timezone)
+                started = exec.started_at
+                if started and started.tzinfo:
+                    started = started.replace(tzinfo=None)
+
+                # Extract title from "Patrol: <title>"
+                title = exec.doc_title.replace("Patrol: ", "")
+
+                item = ActivityItem(
+                    item_type="patrol",
+                    item_id=exec.id,
+                    title=f"⚡ {title}",
+                    status=exec.status,
+                    timestamp=started or datetime.now(),
+                )
+
+                # Store execution info for preview
+                item.log_file = exec.log_file
+                item.working_dir = exec.working_dir
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.debug(f"Error loading patrol executions: {e}")
+
     async def _load_agent_executions(self) -> None:
         """Load standalone agent executions into activity items.
 
@@ -1063,6 +1142,8 @@ class ActivityView(HelpMixin, Widget):
             # - Individual runs: show individual run ID or doc_id if completed
             if item.item_type in ("workflow", "group"):
                 id_str = f"#{item.item_id}" if item.item_id else "—"
+            elif item.item_type == "patrol":
+                id_str = f"e{item.item_id}" if item.item_id else "—"  # 'e' for execution ID
             elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
                 id_str = f"#{item.doc_id}" if getattr(item, 'doc_id', None) else "—"
             elif item.item_type == "individual_run":
@@ -1094,11 +1175,11 @@ class ActivityView(HelpMixin, Widget):
         """Update the status bar with current stats."""
         status_bar = self.query_one("#status-bar", Static)
 
-        # Count active workflows
+        # Count active workflows and patrols
         active = sum(
             1
             for item in self.activity_items
-            if item.item_type == "workflow" and item.status == "running"
+            if (item.item_type == "workflow" or item.item_type == "patrol") and item.status == "running"
         )
 
         # Count docs today
@@ -1254,9 +1335,14 @@ class ActivityView(HelpMixin, Widget):
         # Stop any existing stream
         self._stop_stream()
 
-        # For running workflows, individual runs, or agent executions, show live log
-        if item.status == "running" and item.item_type in ("workflow", "individual_run", "agent_execution"):
+        # For running workflows, individual runs, patrols, or agent executions, show live log
+        if item.status == "running" and item.item_type in ("workflow", "individual_run", "patrol", "agent_execution"):
             await self._show_live_log(item)
+            return
+
+        # For completed/failed patrols, show formatted log output
+        if item.item_type == "patrol" and item.status in ("completed", "failed"):
+            await self._show_patrol_log(item)
             return
 
         # For documents, show content
@@ -1859,8 +1945,18 @@ class ActivityView(HelpMixin, Widget):
         try:
             log_path = None
 
+            # For patrol runs, get log file from the execution record
+            if item.item_type == "patrol" and item.item_id:
+                try:
+                    from emdx.models.executions import get_execution
+                    exec_record = get_execution(item.item_id)
+                    if exec_record and exec_record.log_file:
+                        log_path = Path(exec_record.log_file)
+                except Exception as e:
+                    logger.debug(f"Could not get patrol log: {e}")
+
             # For agent executions, get log file directly from the item
-            if item.item_type == "agent_execution":
+            elif item.item_type == "agent_execution":
                 log_file = getattr(item, 'log_file', None)
                 if log_file:
                     log_path = Path(log_file)
@@ -1914,6 +2010,15 @@ class ActivityView(HelpMixin, Widget):
                 preview_log.write(f"[yellow]⏳ Log file pending: {log_path}[/yellow]")
                 return
 
+            # For patrol items, show a processing message since logs are only
+            # written after completion (synchronous execution)
+            if item.item_type == "patrol":
+                preview_log.write("[bold yellow]⚡ Patrol Processing[/bold yellow]\n")
+                preview_log.write(f"[dim]Working on: {item.title.replace('⚡ ', '')}[/dim]\n")
+                preview_log.write("\n[dim]Claude is executing... output will appear when complete.[/dim]\n")
+                preview_log.write(f"[dim]Log: {log_path}[/dim]")
+                return
+
             # Start streaming
             preview_log.write(f"[green]● Streaming from: {log_path.name}[/green]")
             self.log_stream = LogStream(log_path)
@@ -1963,6 +2068,61 @@ class ActivityView(HelpMixin, Widget):
             self.log_stream.unsubscribe(self.log_subscriber)
             self.log_stream = None
         self.streaming_item_id = None
+
+    async def _show_patrol_log(self, item: ActivityItem) -> None:
+        """Show formatted log for completed/failed patrol execution."""
+        try:
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview = self.query_one("#preview-content", RichLog)
+            header = self.query_one("#preview-header", Static)
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready: {e}")
+            return
+
+        preview_scroll.display = True
+        preview.clear()
+
+        status_icon = "✅" if item.status == "completed" else "❌"
+        header.update(f"{status_icon} Patrol: {item.title.replace('⚡ ', '')}")
+
+        log_file = getattr(item, 'log_file', None)
+        if not log_file:
+            preview.write("[dim]No log file available[/dim]")
+            return
+
+        log_path = Path(log_file)
+        if not log_path.exists():
+            preview.write(f"[dim]Log file not found: {log_file}[/dim]")
+            return
+
+        try:
+            content = log_path.read_text()
+
+            # Extract the STDOUT section which has the actual output
+            if "--- STDOUT ---" in content:
+                stdout_start = content.index("--- STDOUT ---") + len("--- STDOUT ---")
+                stdout_content = content[stdout_start:].strip()
+
+                # Also check for STDERR section
+                if "--- STDERR ---" in stdout_content:
+                    stderr_start = stdout_content.index("--- STDERR ---")
+                    stdout_content = stdout_content[:stderr_start].strip()
+
+                self._render_markdown_preview(stdout_content)
+            else:
+                # No STDOUT marker, try to show non-JSON lines
+                lines = []
+                for line in content.splitlines():
+                    if not line.startswith("{"):
+                        lines.append(line)
+                if lines:
+                    self._render_markdown_preview("\n".join(lines))
+                else:
+                    preview.write("[dim]Log contains only structured data[/dim]")
+
+        except Exception as e:
+            logger.error(f"Error reading patrol log: {e}")
+            preview.write(f"[red]Error reading log: {e}[/red]")
 
     def _notify_workflow_complete(self, workflow_id: int, success: bool) -> None:
         """Show notification and play sound for workflow completion."""

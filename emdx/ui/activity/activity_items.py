@@ -10,7 +10,25 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from emdx.database.documents import DocumentDB
+
+
+def _batch_fetch_documents(doc_db, doc_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+    """Helper to batch fetch documents, eliminating N+1 queries.
+
+    Args:
+        doc_db: Document database instance
+        doc_ids: List of document IDs to fetch
+
+    Returns:
+        Dict mapping doc_id to document dict
+    """
+    if not doc_db or not doc_ids:
+        return {}
+
+    # Use batch fetch if available (eliminates N+1 queries)
+    from emdx.database.documents import get_documents_batch
+    return get_documents_batch(doc_ids, update_access=False)
 
 
 @dataclass
@@ -109,7 +127,10 @@ class WorkflowItem(ActivityItem):
         )
 
     async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
-        """Load workflow children (individual runs or synthesis + explorations)."""
+        """Load workflow children (individual runs or synthesis + explorations).
+
+        Uses batch document fetching to eliminate N+1 query patterns.
+        """
         children = []
 
         if not self.workflow_run or not wf_db:
@@ -117,6 +138,19 @@ class WorkflowItem(ActivityItem):
 
         run = self.workflow_run
         stage_runs = wf_db.list_stage_runs(run["id"])
+
+        # Collect all doc_ids we'll need across all stages first
+        all_doc_ids: List[int] = []
+        for sr in stage_runs:
+            ind_runs = wf_db.list_individual_runs(sr["id"])
+            if sr.get("synthesis_doc_id"):
+                all_doc_ids.append(sr["synthesis_doc_id"])
+            for ir in ind_runs:
+                if ir.get("output_doc_id"):
+                    all_doc_ids.append(ir["output_doc_id"])
+
+        # Batch fetch all documents at once (eliminates N+1 queries)
+        docs = _batch_fetch_documents(doc_db, all_doc_ids)
 
         for sr in stage_runs:
             stage_status = sr.get("status", "pending")
@@ -129,11 +163,9 @@ class WorkflowItem(ActivityItem):
                     ir_status = ir.get("status", "pending")
                     run_num = ir.get("run_number", 0)
 
-                    # Build title based on status
+                    # Build title based on status - use pre-fetched doc
                     if ir_status == "completed" and ir.get("output_doc_id"):
-                        doc = (
-                            doc_db.get_document(ir["output_doc_id"]) if doc_db else None
-                        )
+                        doc = docs.get(ir["output_doc_id"])
                         title = (
                             doc.get("title", f"Run {run_num}")[:25]
                             if doc
@@ -178,9 +210,7 @@ class WorkflowItem(ActivityItem):
             # For completed workflows, show synthesis + explorations
             else:
                 if sr.get("synthesis_doc_id"):
-                    doc = (
-                        doc_db.get_document(sr["synthesis_doc_id"]) if doc_db else None
-                    )
+                    doc = docs.get(sr["synthesis_doc_id"])
                     title = doc.get("title", "Synthesis") if doc else "Synthesis"
 
                     children.append(
@@ -193,16 +223,12 @@ class WorkflowItem(ActivityItem):
                         )
                     )
 
-                    # Add individual outputs as explorations
+                    # Add individual outputs as explorations - use pre-fetched docs
                     for ir in ind_runs:
                         if ir.get("output_doc_id") and ir["output_doc_id"] != sr.get(
                             "synthesis_doc_id"
                         ):
-                            out_doc = (
-                                doc_db.get_document(ir["output_doc_id"])
-                                if doc_db
-                                else None
-                            )
+                            out_doc = docs.get(ir["output_doc_id"])
                             out_title = (
                                 out_doc.get("title", f"Output #{ir['run_number']}")[:25]
                                 if out_doc
@@ -221,15 +247,11 @@ class WorkflowItem(ActivityItem):
                                 )
                             )
 
-                # No synthesis - show outputs directly
+                # No synthesis - show outputs directly - use pre-fetched docs
                 elif not sr.get("synthesis_doc_id"):
                     for ir in ind_runs:
                         if ir.get("output_doc_id"):
-                            doc = (
-                                doc_db.get_document(ir["output_doc_id"])
-                                if doc_db
-                                else None
-                            )
+                            doc = docs.get(ir["output_doc_id"])
                             title = (
                                 doc.get("title", f"Output #{ir['run_number']}")[:25]
                                 if doc

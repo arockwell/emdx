@@ -299,6 +299,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Search screen failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
+            elif browser_type == "work":
+                try:
+                    from .work_browser import WorkBrowser
+                    self.browsers[browser_type] = WorkBrowser()
+                    logger.info("WorkBrowser created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create WorkBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+                    self.browsers[browser_type] = Static(f"Work browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
@@ -367,13 +376,13 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Search, 4=GitHub, 5=Documents)
+        # Global number keys for screen switching (1=Activity, 2=Work, 3=Search, 4=Cascade, 5=Documents, 6=GitHub)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
             return
         elif key == "2":
-            await self.switch_browser("cascade")
+            await self.switch_browser("work")  # Work browser replaces cascade as screen 2
             event.stop()
             return
         elif key == "3":
@@ -381,16 +390,20 @@ class BrowserContainer(App):
             event.stop()
             return
         elif key == "4":
-            await self.switch_browser("github")
+            await self.switch_browser("cascade")  # Cascade on 4
             event.stop()
             return
         elif key == "5":
             await self.switch_browser("document")
             event.stop()
             return
+        elif key == "6":
+            await self.switch_browser("github")
+            event.stop()
+            return
 
-        # Q to quit from activity, document, cascade, search, or github browser
-        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search", "github"]:
+        # Q to quit from main browsers
+        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search", "work", "github"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()

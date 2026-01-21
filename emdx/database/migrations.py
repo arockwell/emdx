@@ -3,7 +3,7 @@
 import sqlite3
 from typing import Callable
 
-from ..config.settings import get_db_path
+from .path import get_db_path
 
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
@@ -1718,6 +1718,136 @@ def migration_031_add_cascade_runs(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_032_add_unified_work_system(conn: sqlite3.Connection):
+    """Add unified work system tables - work_items, work_deps, cascades, work_transitions."""
+    cursor = conn.cursor()
+
+    # Create cascades table (pipeline definitions)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cascades (
+            name TEXT PRIMARY KEY,
+            stages TEXT NOT NULL,             -- JSON array: ["idea", "prompt", ...]
+            processors TEXT,                  -- JSON: {"idea": "prompt text", ...}
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Insert default cascades
+    cursor.execute("""
+        INSERT OR IGNORE INTO cascades (name, stages, processors, description) VALUES
+        ('default',
+         '["idea", "prompt", "analyzed", "planned", "implementing", "done"]',
+         '{
+           "idea": "Transform this vague idea into a clear, actionable prompt. Output ONLY the refined prompt, no explanations.",
+           "prompt": "Analyze the codebase to understand what is needed for this task. Output a thorough analysis.",
+           "analyzed": "Create a detailed implementation gameplan with specific steps, files to modify, and approach.",
+           "planned": "Implement this gameplan. Write the code, run tests, and create a PR if appropriate.",
+           "implementing": "Continue implementation until complete. Address any issues found."
+         }',
+         'Default cascade for ideas through implementation')
+    """)
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO cascades (name, stages, processors, description) VALUES
+        ('review',
+         '["draft", "reviewed", "revised", "approved", "merged"]',
+         '{
+           "draft": "Review this code for issues and improvements. Provide specific, actionable feedback.",
+           "reviewed": "Address all review feedback. Make the requested changes.",
+           "revised": "Final approval check - verify all feedback has been addressed properly.",
+           "approved": "Merge the PR to the target branch."
+         }',
+         'Code review cascade for PRs')
+    """)
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO cascades (name, stages, processors, description) VALUES
+        ('research',
+         '["question", "sources", "synthesis", "conclusion"]',
+         '{
+           "question": "Find relevant sources, documentation, and code for this research question.",
+           "sources": "Synthesize findings from the sources into a coherent analysis.",
+           "synthesis": "Draw actionable conclusions from the synthesis."
+         }',
+         'Research cascade for investigations')
+    """)
+
+    # Create work_items table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS work_items (
+            -- Identity
+            id TEXT PRIMARY KEY,              -- Hash ID: "emdx-a3f2dd"
+            title TEXT NOT NULL,
+            content TEXT,                     -- Markdown content (gameplan, analysis, etc.)
+
+            -- Pipeline position
+            cascade TEXT DEFAULT 'default' REFERENCES cascades(name),
+            stage TEXT NOT NULL,              -- Current stage in the cascade
+
+            -- Priority & classification
+            priority INTEGER DEFAULT 3,       -- 0=critical, 1=high, 2=medium, 3=low, 4=backlog
+            type TEXT DEFAULT 'task',         -- task, bug, feature, epic, research, review
+
+            -- Hierarchy
+            parent_id TEXT REFERENCES work_items(id) ON DELETE SET NULL,
+
+            -- Context
+            project TEXT,                     -- Git project name
+
+            -- Outputs
+            pr_number INTEGER,                -- If work resulted in a PR
+            output_doc_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+
+            -- Timestamps
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            started_at TIMESTAMP,             -- When moved to implementing
+            completed_at TIMESTAMP,
+
+            -- Execution tracking
+            claimed_by TEXT,                  -- Which patrol/agent is working on it
+            claimed_at TIMESTAMP
+        )
+    """)
+
+    # Create work_deps table for dependencies
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS work_deps (
+            work_id TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+            depends_on TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+            dep_type TEXT DEFAULT 'blocks' CHECK (dep_type IN ('blocks', 'related', 'discovered-from')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (work_id, depends_on)
+        )
+    """)
+
+    # Create work_transitions table for audit trail
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS work_transitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_id TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+            from_stage TEXT,
+            to_stage TEXT NOT NULL,
+            transitioned_by TEXT,             -- patrol name, "manual", agent id, etc.
+            content_snapshot TEXT,            -- Optional: content at time of transition
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Create indexes for common queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_items_cascade ON work_items(cascade)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_items_stage ON work_items(stage)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_items_priority ON work_items(priority)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_items_project ON work_items(project)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_items_parent ON work_items(parent_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_items_claimed ON work_items(claimed_by)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_deps_depends ON work_deps(depends_on)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_transitions_work ON work_transitions(work_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1752,6 +1882,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
     (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
+    (32, "Add unified work system", migration_032_add_unified_work_system),
 ]
 
 

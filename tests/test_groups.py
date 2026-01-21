@@ -303,15 +303,17 @@ class TestGroupHierarchy:
     def test_cycle_detection_direct(self, isolate_test_database):
         """Test that direct cycles are prevented."""
         from emdx.database import groups as groups_db
+        from emdx.database.exceptions import CycleDetectedError
 
         group_id = groups_db.create_group(name="Self")
 
-        with pytest.raises(ValueError, match="cycle"):
+        with pytest.raises(CycleDetectedError, match="cycle"):
             groups_db.update_group(group_id, parent_group_id=group_id)
 
     def test_cycle_detection_indirect(self, isolate_test_database):
         """Test that indirect cycles are prevented."""
         from emdx.database import groups as groups_db
+        from emdx.database.exceptions import CycleDetectedError
 
         # Create A -> B -> C hierarchy
         a_id = groups_db.create_group(name="A")
@@ -319,7 +321,7 @@ class TestGroupHierarchy:
         c_id = groups_db.create_group(name="C", parent_group_id=b_id)
 
         # Try to make A a child of C (would create C -> A -> B -> C cycle)
-        with pytest.raises(ValueError, match="cycle"):
+        with pytest.raises(CycleDetectedError, match="cycle"):
             groups_db.update_group(a_id, parent_group_id=c_id)
 
 

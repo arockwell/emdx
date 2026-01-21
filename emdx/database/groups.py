@@ -5,11 +5,16 @@ into batches, rounds, and initiatives - independent of how they were
 created (workflow, sub-agent, manual save).
 """
 
+import logging
 import os
+import sqlite3
 from datetime import datetime
 from typing import Any
 
 from .connection import db_connection
+from .exceptions import CycleDetectedError, GroupNotFoundError, IntegrityError
+
+logger = logging.getLogger(__name__)
 
 
 def create_group(
@@ -39,7 +44,7 @@ def create_group(
         ValueError: If parent would create a cycle
     """
     if parent_group_id is not None and _would_create_cycle(parent_group_id, None):
-        raise ValueError("Cannot set parent: would create a cycle")
+        raise CycleDetectedError("Cannot set parent: would create a cycle")
 
     if created_by is None:
         created_by = os.environ.get("USER", "system")
@@ -155,7 +160,9 @@ def update_group(group_id: int, **kwargs) -> bool:
     if "parent_group_id" in updates:
         new_parent = updates["parent_group_id"]
         if new_parent is not None and _would_create_cycle(new_parent, group_id):
-            raise ValueError("Cannot set parent: would create a cycle")
+            raise CycleDetectedError(
+                f"Cannot set group {new_parent} as parent of {group_id}: would create a cycle"
+            )
 
     updates["updated_at"] = datetime.now().isoformat()
 
@@ -208,7 +215,10 @@ def add_document_to_group(
         added_by: Who added the document (optional)
 
     Returns:
-        True if added successfully
+        True if added successfully, False if already in group
+
+    Raises:
+        IntegrityError: If a database integrity constraint is violated (other than duplicate)
     """
     if added_by is None:
         added_by = os.environ.get("USER", "system")
@@ -228,9 +238,13 @@ def add_document_to_group(
             _update_group_metrics(conn, group_id)
 
             return True
-        except Exception:
-            # Already in group (unique constraint)
+        except sqlite3.IntegrityError as e:
+            # Document already in group - this is expected in some flows
+            logger.debug(f"Document {document_id} already in group {group_id}")
             return False
+        except sqlite3.Error as e:
+            logger.error(f"Database error adding document to group: {e}")
+            raise IntegrityError(str(e)) from e
 
 
 def remove_document_from_group(group_id: int, document_id: int) -> bool:

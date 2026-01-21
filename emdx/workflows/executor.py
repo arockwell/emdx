@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .services import document_service
+
+# Maximum size for content stored in workflow context (prevents OOM in multi-stage workflows)
+MAX_CONTEXT_CONTENT_SIZE = 50000  # ~50KB per context entry
 from .base import (
     ExecutionMode,
     IterationStrategy,
@@ -48,6 +51,58 @@ class WorkflowExecutor:
         """
         self.max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
+
+    def _truncate_content(self, content: str, max_size: int = MAX_CONTEXT_CONTENT_SIZE) -> str:
+        """Truncate content to prevent context bloat in multi-stage workflows.
+
+        Preserves the beginning and end of the content to maintain context.
+
+        Args:
+            content: The content to truncate
+            max_size: Maximum allowed size
+
+        Returns:
+            Truncated content with indicator if truncation occurred
+        """
+        if len(content) <= max_size:
+            return content
+
+        # Keep first 80% and last 10%, leave 10% for truncation message
+        head_size = int(max_size * 0.8)
+        tail_size = int(max_size * 0.1)
+        truncated_chars = len(content) - head_size - tail_size
+
+        return (
+            content[:head_size] +
+            f"\n\n[... truncated {truncated_chars} chars ...]\n\n" +
+            content[-tail_size:]
+        )
+
+    async def _acquire_semaphore_with_timeout(
+        self,
+        semaphore: asyncio.Semaphore,
+        timeout: float = 300.0,
+    ) -> bool:
+        """Acquire semaphore with timeout to prevent deadlock.
+
+        Args:
+            semaphore: The semaphore to acquire
+            timeout: Maximum time to wait in seconds (default 5 minutes)
+
+        Returns:
+            True if acquired successfully
+
+        Raises:
+            RuntimeError: If acquisition times out
+        """
+        try:
+            await asyncio.wait_for(semaphore.acquire(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                f"Failed to acquire workflow execution slot within {timeout}s. "
+                "This may indicate a deadlock or resource exhaustion."
+            )
 
     async def execute_workflow(
         self,
@@ -178,26 +233,29 @@ class WorkflowExecutor:
                 # Update context with stage output
                 total_tokens += result.tokens_used
 
-                # Store stage output in context for later stages
+                # Store stage output in context for later stages (with size limits)
                 if result.output_doc_id:
                     doc = document_service.get_document(result.output_doc_id)
                     if doc:
-                        context[f"{stage.name}.output"] = doc.get('content', '')
+                        content = doc.get('content', '')
+                        context[f"{stage.name}.output"] = self._truncate_content(content)
                         context[f"{stage.name}.output_id"] = result.output_doc_id
 
                 if result.synthesis_doc_id:
                     doc = document_service.get_document(result.synthesis_doc_id)
                     if doc:
-                        context[f"{stage.name}.synthesis"] = doc.get('content', '')
+                        content = doc.get('content', '')
+                        context[f"{stage.name}.synthesis"] = self._truncate_content(content)
                         context[f"{stage.name}.synthesis_id"] = result.synthesis_doc_id
 
-                # Store individual outputs for parallel mode
+                # Store individual outputs for parallel mode (with size limits)
                 if result.individual_outputs:
                     outputs_content = []
                     for doc_id in result.individual_outputs:
                         doc = document_service.get_document(doc_id)
                         if doc:
-                            outputs_content.append(doc.get('content', ''))
+                            content = doc.get('content', '')
+                            outputs_content.append(self._truncate_content(content))
                     context[f"{stage.name}.outputs"] = outputs_content
 
                 # Update workflow run context
@@ -876,7 +934,9 @@ class WorkflowExecutor:
 
         async def process_item(item_index: int, item: str) -> Dict[str, Any]:
             """Process a single discovered item."""
-            async with semaphore:
+            # Use timeout-based acquisition to prevent deadlock
+            await self._acquire_semaphore_with_timeout(semaphore, timeout=600.0)
+            try:
                 async with pool.acquire(target_branch=item) as worktree:
                     # Build item-specific context
                     item_context = dict(context)
@@ -909,6 +969,9 @@ class WorkflowExecutor:
                         'index': item_index,
                         **result
                     }
+            finally:
+                # Always release semaphore to prevent deadlock
+                semaphore.release()
 
         try:
             # Step 3: Process all items in parallel

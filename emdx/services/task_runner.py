@@ -6,11 +6,53 @@ Supports two execution modes:
 """
 
 import asyncio
+import atexit
+import os
+import weakref
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from emdx.models import tasks
+
+# Track spawned subprocess references for cleanup
+_spawned_processes: List[weakref.ref] = []
+
+
+def _cleanup_processes() -> None:
+    """Clean up any zombie processes on exit.
+
+    Called at process exit via atexit to ensure spawned subprocesses
+    are properly reaped and don't become zombies.
+    """
+    for proc_ref in _spawned_processes:
+        proc = proc_ref()
+        if proc is not None:
+            try:
+                # poll() updates returncode and reaps zombie
+                proc.poll()
+            except Exception:
+                pass
+
+
+def cleanup_completed_processes() -> None:
+    """Remove references to completed processes from tracking list.
+
+    Call this periodically to prevent the weak reference list from growing
+    unboundedly with dead references.
+    """
+    global _spawned_processes
+    active = []
+    for proc_ref in _spawned_processes:
+        proc = proc_ref()
+        # Keep only refs to processes that are still alive
+        if proc is not None and proc.poll() is None:
+            active.append(proc_ref)
+    _spawned_processes = active
+
+
+# Register cleanup handler
+atexit.register(_cleanup_processes)
 from emdx.models.documents import get_document
 from emdx.models.executions import create_execution
 from emdx.models.task_executions import create_task_execution, complete_task_execution
@@ -263,14 +305,19 @@ asyncio.run(run())
     emdx_project_dir = Path(__file__).parent.parent.parent
 
     with open(log_file, 'w') as f:
-        subprocess.Popen(
+        proc = subprocess.Popen(
             ['poetry', 'run', 'python', '-c', runner_script],
             stdout=f,
             stderr=subprocess.STDOUT,
             start_new_session=True,  # Detach from parent process
             cwd=str(emdx_project_dir),  # Run from project dir for poetry
-            env={**dict(__import__('os').environ), 'PYTHONUNBUFFERED': '1'},
+            env={**os.environ, 'PYTHONUNBUFFERED': '1'},
         )
+        # Track process with weak reference for cleanup
+        _spawned_processes.append(weakref.ref(proc))
+
+    # Periodically clean up completed process references
+    cleanup_completed_processes()
 
     tasks.log_progress(task_id, f"Workflow subprocess started, log: {log_file}")
 

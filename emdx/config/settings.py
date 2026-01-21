@@ -1,13 +1,9 @@
 """Configuration utilities for emdx."""
 
-from pathlib import Path
-
 # Re-export constants for backward compatibility
 from .constants import DEFAULT_CLAUDE_MODEL
 
+# Re-export get_db_path from canonical source (supports EMDX_TEST_DB)
+from emdx.database.path import get_db_path
 
-def get_db_path() -> Path:
-    """Get the database path."""
-    config_dir = Path.home() / ".config" / "emdx"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "knowledge.db"
+__all__ = ["DEFAULT_CLAUDE_MODEL", "get_db_path"]
