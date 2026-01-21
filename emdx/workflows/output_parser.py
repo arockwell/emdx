@@ -233,6 +233,128 @@ def extract_all_pr_urls(content: str) -> List[str]:
     return list(urls)
 
 
+def extract_structured_output(content: str, task_description: str = "") -> str:
+    """Extract meaningful structured output from agent execution log.
+
+    Instead of saving the entire raw log, this extracts:
+    - Final summary/conclusion sections
+    - Key findings and results
+    - Code blocks (limited)
+    - Error messages if any
+
+    This produces cleaner, more searchable documents.
+
+    Args:
+        content: Raw log content
+        task_description: Optional task description to include as context
+
+    Returns:
+        Cleaned, structured output suitable for saving as a document
+    """
+    clean = _clean_content(content)
+    sections = []
+
+    if task_description:
+        sections.append(f"## Task\n{task_description}")
+
+    # Extract summary sections (Claude often uses these headers)
+    summary_patterns = [
+        r'(?:^|\n)#+\s*(?:Summary|Conclusion|Results?|Findings?|Overview)[^\n]*\n((?:(?!^#).)*)',
+        r'(?:^|\n)(?:Summary|Conclusion|Results?|Findings?|Key (?:Points?|Takeaways?)):\s*\n((?:(?!^#).)*)',
+    ]
+
+    for pattern in summary_patterns:
+        matches = re.findall(pattern, clean, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        for match in matches:
+            text = match.strip()
+            if text and len(text) > 50:  # Skip very short matches
+                sections.append(f"## Summary\n{text[:2000]}")  # Limit length
+                break
+        if sections:
+            break
+
+    # Extract code blocks (limit to first 3, max 100 lines each)
+    code_blocks = re.findall(r'```(\w*)\n(.*?)```', clean, re.DOTALL)
+    if code_blocks:
+        code_section = []
+        for i, (lang, code) in enumerate(code_blocks[:3]):
+            lines = code.strip().split('\n')
+            if len(lines) > 100:
+                lines = lines[:100] + ['... (truncated)']
+            code_section.append(f"```{lang}\n{chr(10).join(lines)}\n```")
+        if code_section:
+            sections.append("## Code\n" + "\n\n".join(code_section))
+
+    # Extract error messages (be more specific to avoid false positives)
+    error_patterns = [
+        r'(?:^|\n)(?:Error|Exception):\s*([^\n]+)',  # Error: message
+        r'(?:^|\n)(?:Failed|Failure):\s*([^\n]+)',   # Failed: message
+        r'(?:^|\n)✗\s+([^\n]+)',  # ✗ message (require space after)
+        r'(?:^|\n)❌\s+([^\n]+)',  # ❌ message
+    ]
+    errors = []
+    for pattern in error_patterns:
+        matches = re.findall(pattern, clean, re.MULTILINE)
+        for m in matches:
+            text = m.strip()
+            # Filter out false positives (too short or looks like code)
+            if text and len(text) > 10 and not text.startswith(('def ', 'class ', 'import ', 'from ')):
+                errors.append(text)
+
+    if errors:
+        unique_errors = list(dict.fromkeys(errors))[:5]  # Dedupe, limit to 5
+        sections.append("## Errors\n" + "\n".join(f"- {e}" for e in unique_errors))
+
+    # Extract PR URL if present
+    pr_url = extract_pr_url(content)
+    if pr_url:
+        sections.append(f"## PR Created\n{pr_url}")
+
+    # Extract doc ID if present
+    doc_id = extract_output_doc_id_from_content(content)
+    if doc_id:
+        sections.append(f"## Output Document\n#{doc_id}")
+
+    # If we couldn't extract anything meaningful, fall back to truncated raw output
+    if not sections or (len(sections) == 1 and task_description):
+        # Take the last 2000 characters (most likely to be the conclusion)
+        truncated = clean[-2000:] if len(clean) > 2000 else clean
+        if len(clean) > 2000:
+            truncated = "... (truncated)\n\n" + truncated
+        sections.append(f"## Raw Output\n{truncated}")
+
+    return "\n\n".join(sections)
+
+
+def extract_output_doc_id_from_content(content: str) -> Optional[int]:
+    """Extract output document ID from text content (not file).
+
+    Args:
+        content: Text content to search
+
+    Returns:
+        Document ID if found, None otherwise
+    """
+    clean_content = _clean_content(content)
+
+    patterns = [
+        r'saved as document #(\d+)',
+        r'Saved as #(\d+)',
+        r'Created document #(\d+)',
+        r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',
+        r'document ID[:\s]+#?(\d+)',
+        r'doc_id[:\s]+(\d+)',
+        r'✅ Saved as\s*#(\d+)',
+    ]
+
+    last_match = None
+    for pattern in patterns:
+        for match in re.finditer(pattern, clean_content, re.IGNORECASE):
+            last_match = int(match.group(1))
+
+    return last_match
+
+
 def extract_token_usage(log_file: Path) -> int:
     """Extract total token usage from Claude execution log.
 

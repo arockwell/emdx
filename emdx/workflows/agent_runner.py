@@ -97,12 +97,15 @@ async def run_agent(
             output_doc_id = result.output_doc_id
 
             if not output_doc_id:
-                # If no document was created, save the log content as output
+                # If no document was created, extract structured output from log
                 from .services import document_service
+                from .output_parser import extract_structured_output
+
                 log_content = result.log_file.read_text() if result.log_file.exists() else "No output captured"
+                structured_output = extract_structured_output(log_content, task_description=prompt[:500])
                 output_doc_id = document_service.save_document(
-                    title=f"Workflow Agent Output - {datetime.now().isoformat()}",
-                    content=f"# Agent Execution Log\n\n{log_content}",
+                    title=f"Workflow Output - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                    content=structured_output,
                     tags=['workflow-output'],
                 )
 
