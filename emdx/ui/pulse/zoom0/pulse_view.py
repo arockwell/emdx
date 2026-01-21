@@ -701,11 +701,15 @@ class PulseView(Widget):
             self.agent_stream = LogStream(log_path)
             self.streaming_agent_run_id = ind_run.get('id')
 
-            # Get initial content
+            # Get initial content - use LIVE LOGS formatting
             initial = self.agent_stream.get_initial_content()
             if initial:
-                lines = initial.strip().split('\n')
-                for line in lines[-30:]:
+                from emdx.ui.live_log_writer import LiveLogWriter
+                writer = LiveLogWriter(agent_log, auto_scroll=True)
+                # Parse and show last 30 events
+                from emdx.utils.stream_json_parser import parse_and_format_live_logs
+                formatted_lines = parse_and_format_live_logs(initial)
+                for line in formatted_lines[-30:]:
                     agent_log.write(line)
                 agent_log.scroll_end(animate=False)
 
@@ -736,8 +740,12 @@ class PulseView(Widget):
 
                 initial = self.agent_stream.get_initial_content()
                 if initial:
-                    lines = initial.strip().split('\n')
-                    for line in lines[-30:]:
+                    from emdx.ui.live_log_writer import LiveLogWriter
+                    writer = LiveLogWriter(agent_log, auto_scroll=True)
+                    # Parse and show last 30 events
+                    from emdx.utils.stream_json_parser import parse_and_format_live_logs
+                    formatted_lines = parse_and_format_live_logs(initial)
+                    for line in formatted_lines[-30:]:
                         agent_log.write(line)
                     agent_log.scroll_end(animate=False)
 
@@ -763,12 +771,13 @@ class PulseView(Widget):
         status_bar.update("[yellow]Waiting...[/yellow]")
 
     def _handle_agent_stream_content(self, new_content: str) -> None:
-        """Handle new content from the agent log stream."""
+        """Handle new content from the agent log stream - LIVE LOGS formatted."""
         try:
+            from emdx.ui.live_log_writer import LiveLogWriter
+
             agent_log = self.query_one("#agent-log", RichLog)
-            for line in new_content.splitlines():
-                agent_log.write(line)
-            agent_log.scroll_end(animate=False)
+            writer = LiveLogWriter(agent_log, auto_scroll=True)
+            writer.write(new_content)
         except Exception as e:
             logger.error(f"Error handling agent stream content: {e}")
 
