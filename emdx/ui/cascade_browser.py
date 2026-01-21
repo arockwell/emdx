@@ -165,6 +165,14 @@ def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
     A transition is when a document moves from one stage to the next,
     tracked via the parent_id relationship.
     """
+    # Reverse mapping: to_stage -> from_stage
+    PREV_STAGE = {
+        "prompt": "idea",
+        "analyzed": "prompt",
+        "planned": "analyzed",
+        "done": "planned",
+    }
+
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -174,8 +182,7 @@ def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
                 child.stage as to_stage,
                 child.created_at,
                 parent.id as parent_id,
-                parent.title as parent_title,
-                parent.stage as from_stage
+                parent.title as parent_title
             FROM documents child
             INNER JOIN documents parent ON child.parent_id = parent.id
             WHERE child.stage IS NOT NULL
@@ -188,14 +195,17 @@ def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
 
         results = []
         for row in rows:
+            to_stage = row[2]
+            # Derive from_stage from to_stage (parent was at previous stage)
+            from_stage = PREV_STAGE.get(to_stage, "?")
             results.append({
                 "child_id": row[0],
                 "child_title": row[1],
-                "to_stage": row[2],
+                "to_stage": to_stage,
                 "created_at": row[3],
                 "parent_id": row[4],
                 "parent_title": row[5],
-                "from_stage": row[6],
+                "from_stage": from_stage,
             })
         return results
 
@@ -1044,12 +1054,16 @@ class CascadeView(Widget):
         transitions = get_recent_stage_transitions(limit=8)
 
         for trans in transitions:
-            # Time
+            # Time - handle both datetime objects and ISO strings
             time_str = ""
-            if trans.get("created_at"):
+            created_at = trans.get("created_at")
+            if created_at:
                 try:
-                    dt = datetime.fromisoformat(trans["created_at"])
-                    time_str = dt.strftime("%H:%M:%S")
+                    if isinstance(created_at, datetime):
+                        time_str = created_at.strftime("%H:%M:%S")
+                    else:
+                        dt = datetime.fromisoformat(str(created_at))
+                        time_str = dt.strftime("%H:%M:%S")
                 except:
                     time_str = "?"
 
@@ -1083,13 +1097,16 @@ class CascadeView(Widget):
             # Exec ID
             exec_id = f"#{act.get('exec_id', '?')}"
 
-            # Time
+            # Time - handle both datetime objects and ISO strings
             time_str = ""
             ts = act.get("completed_at") or act.get("started_at")
             if ts:
                 try:
-                    dt = datetime.fromisoformat(ts)
-                    time_str = dt.strftime("%H:%M:%S")
+                    if isinstance(ts, datetime):
+                        time_str = ts.strftime("%H:%M:%S")
+                    else:
+                        dt = datetime.fromisoformat(str(ts))
+                        time_str = dt.strftime("%H:%M:%S")
                 except:
                     time_str = "?"
 
