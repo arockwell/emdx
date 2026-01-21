@@ -155,6 +155,12 @@ class GitHubView(Widget):
     GitHubView .pr-item-content {
         width: 100%;
     }
+
+    GitHubView #github-footer {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
     """
 
     class ViewDocument(Message):
@@ -176,6 +182,11 @@ class GitHubView(Widget):
             with Vertical(id="pr-list-container"):
                 yield ListView(id="pr-list")
             yield PRPreview(id="pr-preview")
+        yield Static(
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [bold]4[/bold] GitHub │ [dim]5[/dim] Docs │ "
+            "[dim]Enter[/dim] Diff │ [dim]M[/dim] Merge │ [dim]A[/dim] Approve │ [dim]r[/dim] Refresh",
+            id="github-footer"
+        )
 
     async def on_mount(self) -> None:
         """Initialize on mount."""

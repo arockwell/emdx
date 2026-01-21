@@ -75,8 +75,8 @@ async def run_agent(
             title=f"Workflow Agent Run #{individual_run_id}",
             doc_id=context.get('input_doc_id'),
             allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"],
-            sync=True,
-            verbose=False,
+            cli_tool=context.get('_cli_tool', 'claude'),
+            model=context.get('_model'),
         )
 
         # Run execution in thread pool to not block async

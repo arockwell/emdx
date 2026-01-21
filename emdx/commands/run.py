@@ -53,6 +53,16 @@ def run(
         "--keep-worktree",
         help="Don't cleanup worktree after completion (for debugging)",
     ),
+    cli_tool: str = typer.Option(
+        "claude",
+        "--cli", "-C",
+        help="CLI tool to use: claude or cursor",
+    ),
+    model: str = typer.Option(
+        None,
+        "--model", "-m",
+        help="Model to use (overrides CLI default)",
+    ),
 ):
     """Run tasks in parallel.
 
@@ -63,6 +73,7 @@ def run(
         emdx run --synthesize "analyze" "review" "plan"
         emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{item}}"
         emdx run --worktree "fix X" "fix Y"   # Isolated git worktree
+        emdx run --cli cursor "analyze code"  # Use Cursor instead of Claude
 
     For reusable commands with saved discovery+templates, use `emdx each` instead.
     """
@@ -109,6 +120,8 @@ def run(
             jobs=jobs,
             synthesize=synthesize,
             working_dir=working_dir,
+            cli_tool=cli_tool,
+            model=model,
         ))
     finally:
         # Cleanup worktree unless told to keep it
@@ -149,6 +162,8 @@ async def _execute_run(
     jobs: Optional[int],
     synthesize: bool,
     working_dir: Optional[str] = None,
+    cli_tool: str = "claude",
+    model: Optional[str] = None,
 ):
     """Execute the run using workflow executor."""
     # Prepare variables
@@ -160,8 +175,15 @@ async def _execute_run(
     if jobs:
         variables["_max_concurrent_override"] = jobs
 
+    # Pass CLI tool and model to workflow
+    if cli_tool != "claude":
+        variables["_cli_tool"] = cli_tool
+    if model:
+        variables["_model"] = model
+
     # Execute
-    console.print(f"[cyan]Running {len(tasks)} task(s)...[/cyan]")
+    cli_name = "Cursor" if cli_tool == "cursor" else "Claude"
+    console.print(f"[cyan]Running {len(tasks)} task(s) with {cli_name}...[/cyan]")
     if working_dir:
         console.print(f"  Working dir: {working_dir}")
 

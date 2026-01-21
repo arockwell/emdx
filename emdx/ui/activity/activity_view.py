@@ -31,6 +31,7 @@ from .activity_items import (
     ExplorationItem,
     CascadeRunItem,
     CascadeStageItem,
+    AgentExecutionItem,
 )
 from .group_picker import GroupPicker
 from ..modals import HelpMixin
@@ -466,14 +467,20 @@ class ActivityView(HelpMixin, Widget):
         # Load running patrol executions
         await self._load_patrol_executions()
 
-        # Sort: running items first (patrols, workflows), then by timestamp descending
+        # Load standalone agent executions
+        await self._load_agent_executions()
+
+        # Sort: running items first (patrols, workflows, agent executions), then by timestamp descending
         def sort_key(item):
-            is_running_workflow = item.item_type == "workflow" and item.status == "running"
-            is_running_patrol = item.item_type == "patrol" and item.status == "running"
+            is_running = (
+                (item.item_type == "workflow" and item.status == "running") or
+                (item.item_type == "patrol" and item.status == "running") or
+                (item.item_type == "agent_execution" and item.status == "running")
+            )
             # Running items get priority 0 (will be first after sort)
             # Non-running items get priority 1
             # Within each group, sort by timestamp descending (negate for descending)
-            return (0 if (is_running_workflow or is_running_patrol) else 1, -item.timestamp.timestamp() if item.timestamp else 0)
+            return (0 if is_running else 1, -item.timestamp.timestamp() if item.timestamp else 0)
 
         self.activity_items.sort(key=sort_key)
 
@@ -940,6 +947,87 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.debug(f"Error loading patrol executions: {e}")
 
+    async def _load_agent_executions(self) -> None:
+        """Load standalone agent executions into activity items.
+
+        These are executions from `emdx agent` command that are not part of
+        any workflow or cascade. They show up as top-level items with their
+        log files available for preview.
+        """
+        try:
+            from emdx.database.connection import db_connection
+            from emdx.models.executions import get_recent_executions
+            from datetime import datetime, timedelta
+
+            cutoff = datetime.now() - timedelta(days=7)
+
+            # Get recent executions - filter for standalone agent runs
+            # (no workflow_run_id, and not part of cascade)
+            with db_connection.get_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at,
+                           e.completed_at, e.log_file, e.exit_code, e.working_dir
+                    FROM executions e
+                    WHERE e.started_at > ?
+                      AND e.doc_title LIKE 'Agent:%'
+                      AND e.cascade_run_id IS NULL
+                    ORDER BY e.started_at DESC
+                    LIMIT 30
+                    """,
+                    (cutoff.isoformat(),),
+                )
+                rows = cursor.fetchall()
+
+            for row in rows:
+                exec_id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir = row
+
+                # Parse timestamp
+                if started_at:
+                    if isinstance(started_at, str):
+                        timestamp = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    else:
+                        timestamp = started_at
+                else:
+                    timestamp = datetime.now()
+
+                # Detect CLI tool from log file name
+                cli_tool = "claude"
+                if log_file and "cursor" in log_file.lower():
+                    cli_tool = "cursor"
+
+                # Build title
+                title = doc_title or f"Execution #{exec_id}"
+                if title.startswith("Agent: "):
+                    title = title[7:]  # Strip "Agent: " prefix for cleaner display
+                title = title[:50]  # Truncate long titles
+
+                item = AgentExecutionItem(
+                    item_id=exec_id,
+                    title=title,
+                    timestamp=timestamp,
+                    execution={
+                        "id": exec_id,
+                        "doc_id": doc_id,
+                        "doc_title": doc_title,
+                        "status": status,
+                        "started_at": started_at,
+                        "completed_at": completed_at,
+                        "log_file": log_file,
+                        "exit_code": exit_code,
+                        "working_dir": working_dir,
+                    },
+                    status=status or "unknown",
+                    doc_id=doc_id,
+                    log_file=log_file or "",
+                    cli_tool=cli_tool,
+                )
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading agent executions: {e}", exc_info=True)
+
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
         self.flat_items = []
@@ -1235,8 +1323,8 @@ class ActivityView(HelpMixin, Widget):
         # Stop any existing stream
         self._stop_stream()
 
-        # For running workflows, individual runs, or patrols, show live log
-        if item.status == "running" and item.item_type in ("workflow", "individual_run", "patrol"):
+        # For running workflows, individual runs, patrols, or agent executions, show live log
+        if item.status == "running" and item.item_type in ("workflow", "individual_run", "patrol", "agent_execution"):
             await self._show_live_log(item)
             return
 
@@ -1323,7 +1411,7 @@ class ActivityView(HelpMixin, Widget):
         elif item.item_type == "group":
             await self._show_group_context(item, context_content, context_header)
         # Individual run details
-        elif item.item_type == "individual_run" or item.individual_run:
+        elif item.item_type == "individual_run" or getattr(item, 'individual_run', None):
             await self._show_individual_run_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
@@ -1601,7 +1689,7 @@ class ActivityView(HelpMixin, Widget):
         self, item: ActivityItem, content: RichLog, header: Static
     ) -> None:
         """Show individual run details in context panel."""
-        run = item.individual_run or item.workflow_run
+        run = getattr(item, 'individual_run', None) or getattr(item, 'workflow_run', None)
         if not run:
             header.update("RUN")
             return
@@ -1855,21 +1943,47 @@ class ActivityView(HelpMixin, Widget):
                 except Exception as e:
                     logger.debug(f"Could not get patrol log: {e}")
 
+            # For agent executions, get log file directly from the item
+            elif item.item_type == "agent_execution":
+                log_file = getattr(item, 'log_file', None)
+                if log_file:
+                    log_path = Path(log_file)
+
             # For individual runs, get log file from the execution record
             elif item.item_type == "individual_run" and item.item_id:
                 try:
                     from emdx.models.executions import get_execution
+                    from emdx.database.connection import db_connection
+
                     # Get the individual run to find its execution ID
                     ir = wf_db.get_individual_run(item.item_id)
-                    if ir and ir.get("agent_execution_id"):
-                        exec_record = get_execution(ir["agent_execution_id"])
-                        if exec_record and exec_record.log_file:
-                            log_path = Path(exec_record.log_file)
+                    if ir:
+                        # Try agent_execution_id first (set after completion)
+                        if ir.get("agent_execution_id"):
+                            exec_record = get_execution(ir["agent_execution_id"])
+                            if exec_record and exec_record.log_file:
+                                log_path = Path(exec_record.log_file)
+
+                        # Fallback: find running execution by title pattern
+                        if not log_path:
+                            with db_connection.get_connection() as conn:
+                                cursor = conn.execute(
+                                    """
+                                    SELECT log_file FROM executions
+                                    WHERE doc_title LIKE ?
+                                    AND status = 'running'
+                                    ORDER BY id DESC LIMIT 1
+                                    """,
+                                    (f"Workflow Agent Run #{item.item_id}%",),
+                                )
+                                row = cursor.fetchone()
+                                if row and row['log_file']:
+                                    log_path = Path(row['log_file'])
                 except Exception as e:
                     logger.debug(f"Could not get individual run log: {e}")
 
             # For workflow runs, find active execution
-            elif item.item_type == "workflow" and item.workflow_run:
+            elif item.item_type == "workflow" and getattr(item, 'workflow_run', None):
                 run = item.workflow_run
                 active_exec = wf_db.get_active_execution_for_run(run["id"])
                 if active_exec and active_exec.get("log_file"):
@@ -1877,10 +1991,11 @@ class ActivityView(HelpMixin, Widget):
 
             if not log_path:
                 preview_log.write(f"[yellow]⏳ Waiting for log...[/yellow]")
+                preview_log.write(f"[dim]item_type={item.item_type}, has workflow_run={getattr(item, 'workflow_run', None) is not None}[/dim]")
                 return
 
             if not log_path.exists():
-                preview_log.write(f"[yellow]⏳ Log file pending...[/yellow]")
+                preview_log.write(f"[yellow]⏳ Log file pending: {log_path}[/yellow]")
                 return
 
             # For patrol items, show a processing message since logs are only
@@ -1893,14 +2008,20 @@ class ActivityView(HelpMixin, Widget):
                 return
 
             # Start streaming
+            preview_log.write(f"[green]● Streaming from: {log_path.name}[/green]")
             self.log_stream = LogStream(log_path)
             self.streaming_item_id = item.item_id
 
-            # Show initial content
+            # Show initial content - use LIVE LOGS formatting
             initial = self.log_stream.get_initial_content()
             if initial:
-                for line in initial.strip().split("\n")[-50:]:
-                    preview_log.write(escape_markup(line))
+                from emdx.ui.live_log_writer import LiveLogWriter
+                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                # Only show last ~50 events worth
+                from emdx.utils.stream_json_parser import parse_and_format_live_logs
+                formatted = parse_and_format_live_logs(initial)
+                for line in formatted[-50:]:
+                    preview_log.write(line)
                 preview_log.scroll_end(animate=False)
 
             self.log_stream.subscribe(self.log_subscriber)
@@ -1910,14 +2031,24 @@ class ActivityView(HelpMixin, Widget):
             preview_log.write(f"[red]Error: {e}[/red]")
 
     def _handle_log_content(self, content: str) -> None:
-        """Handle new log content from stream."""
-        try:
-            preview_log = self.query_one("#preview-log", RichLog)
-            for line in content.splitlines():
-                preview_log.write(escape_markup(line))
-            preview_log.scroll_end(animate=False)
-        except Exception as e:
-            logger.error(f"Error handling log content: {e}")
+        """Handle new log content from stream - LIVE LOGS formatted.
+
+        This is called from a background thread (file watcher), so we must
+        use call_from_thread to safely update the UI.
+        """
+        def update_ui():
+            try:
+                from emdx.ui.live_log_writer import LiveLogWriter
+
+                preview_log = self.query_one("#preview-log", RichLog)
+                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                writer.write(content)
+            except Exception as e:
+                logger.error(f"Error handling log content: {e}")
+
+        # Schedule UI update on the main thread
+        # Note: call_from_thread is on App, not Widget
+        self.app.call_from_thread(update_ui)
 
     def _stop_stream(self) -> None:
         """Stop any active log stream."""

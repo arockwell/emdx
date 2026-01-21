@@ -30,6 +30,14 @@ DocumentBrowser {
     layer: base;
 }
 
+.nav-bar {
+    height: 1;
+    background: $surface;
+    color: $text;
+    padding: 0 1;
+    layer: base;
+}
+
 #tag-selector {
     layer: overlay;
     display: none;
