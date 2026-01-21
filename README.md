@@ -27,9 +27,17 @@ emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 
 ## Installation
 
+**Requirements:** Python 3.13+
+
 ```bash
+# Development installation
 git clone https://github.com/arockwell/emdx.git
 cd emdx && pip install -e .
+
+# Or with Poetry (recommended for development)
+git clone https://github.com/arockwell/emdx.git
+cd emdx && poetry install
+```
 
 ## Quick Start: Parallel Tasks
 
@@ -57,7 +65,7 @@ Discover tasks at runtime from shell commands:
 emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
 
 # Analyze all Python files in a directory
-emdx run -d "find src -name '*.py' -type f" -t "Analyze {{item}}"
+emdx run -d "fd -e py src" -t "Analyze {{item}}"
 
 # Process all open PRs
 emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{item}}"
@@ -65,6 +73,83 @@ emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{item}}"
 # Run on document IDs from previous work
 emdx run 5350 5351 5352
 
+### Presets
+
+Save configurations for common workflows:
+
+```bash
+# Create a preset
+emdx preset create security-audit \
+  --discover "find . -name '*.py'" \
+  --template "Security review {{item}}" \
+  --jobs 5 \
+  --synthesize
+
+# Use it
+emdx run -p security-audit
+
+# List presets
+emdx preset list
+```
+
+## Agent Execution
+
+Run Claude Code sub-agents with automatic tracking:
+
+```bash
+# Run agent with tags for tracking
+emdx agent "Analyze auth module for security issues" --tags analysis,security
+
+# With title and group
+emdx agent "Review error handling" -t refactor -T "API Error Review" -g 456
+
+# Verbose mode to see output in real-time
+emdx agent "Deep dive on caching strategy" -t analysis -v
+
+# Have the agent create a PR
+emdx agent "Fix the null pointer bug" -t bugfix --pr
+```
+
+## Reusable Parallel Commands
+
+Create saved commands for repeatable "for each X, do Y" patterns:
+
+```bash
+# Create a reusable command
+emdx each create fix-conflicts \
+  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
+  --do "Merge origin/main into {{item}}, resolve conflicts, push"
+
+# Run it anytime
+emdx each run fix-conflicts
+
+# One-off execution (without saving)
+emdx each --from "fd -e py src/" --do "Review {{item}} for security issues"
+
+# List saved commands
+emdx each list
+```
+
+## Cascade: Ideas to Code
+
+Transform ideas through stages to working code: idea → prompt → analyzed → planned → done (PR).
+
+```bash
+# Add an idea to the cascade
+emdx cascade add "Add dark mode toggle to settings"
+
+# Check status
+emdx cascade status
+
+# Process stages (each advances the document)
+emdx cascade process idea --sync
+emdx cascade process prompt --sync
+emdx cascade process analyzed --sync
+emdx cascade process planned --sync  # Creates code and PR
+
+# Or run continuously
+emdx cascade run
+```
 
 ## Workflow System
 
@@ -75,7 +160,7 @@ For complex multi-stage execution, use the workflow system:
 emdx workflow list
 
 # Run with inline tasks
-emdx workflow run parallel_analysis \
+emdx workflow run task_parallel \
   -t "Analyze authentication" \
   -t "Analyze authorization" \
   -t "Analyze data flow"
@@ -99,6 +184,21 @@ emdx workflow run task_parallel -t "t1" -t "t2" -t "t3" -j 2
 | `adversarial` | Multiple perspectives, then synthesis |
 | `dynamic` | Discover tasks at runtime |
 
+### Workflow Presets
+
+Save workflow configurations for reuse:
+
+```bash
+# Create from variables
+emdx workflow preset create task_parallel my-preset \
+  -v topic="API Security"
+
+# Create from a successful run
+emdx workflow preset from-run task_parallel my-preset --run 42
+
+# Use a preset
+emdx workflow run task_parallel --preset my-preset
+```
 
 ## Monitoring Executions
 
@@ -136,7 +236,7 @@ EMDX provides multiple ways to locate information, from quick keyword searches t
 | List by project | `emdx list --project myapp` |
 | Read a specific doc | `emdx view 42` |
 | Ask a question | `emdx ai context "how does auth work?" \| claude` |
-| Browse interactively | `emdx gui` |
+| Browse interactively | `emdx gui` (interactive TUI - for human use, not AI agents) |
 
 ### Keyword Search
 
@@ -188,7 +288,8 @@ emdx recent 20                       # Last 20
 emdx list                            # All documents
 emdx list --project myapp            # By project
 emdx view 42                         # Read specific doc
-emdx gui                             # Interactive TUI
+emdx gui                             # Interactive TUI (for human use, not AI agents)
+```
 
 ### For AI Agents
 
@@ -211,6 +312,18 @@ emdx similar 42
 # 5. Get synthesized answers
 emdx ai context "What patterns do we use for error handling?" | claude
 
+### Session Start
+
+At the start of each session, get current work context:
+
+```bash
+# Full priming context
+emdx prime
+
+# Quick status overview
+emdx status
+```
+
 ### Emoji Tags
 
 Type text aliases instead of emoji:
@@ -231,6 +344,12 @@ emdx find --tags "gameplan,success"
 emdx legend  # Full alias reference
 
 ## When to Use What
+
+**Execution Ladder** (start simple, graduate when needed):
+1. `emdx run` - Quick parallel tasks
+2. `emdx each` - Reusable discovery + action patterns
+3. `emdx workflow` - Complex multi-stage with custom configurations
+4. `emdx cascade` - Autonomous idea-to-PR pipeline
 
 | I want to... | Use this |
 |--------------|----------|

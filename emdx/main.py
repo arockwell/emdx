@@ -31,6 +31,8 @@ from emdx.commands.groups import app as groups_app
 from emdx.commands.ask import app as ask_app
 from emdx.commands.each import app as each_app
 from emdx.commands.cascade import app as cascade_app
+from emdx.commands.prime import prime as prime_command
+from emdx.commands.status import status as status_command
 from emdx.ui.gui import gui
 from emdx.utils.output import console
 
@@ -110,6 +112,12 @@ app.add_typer(each_app, name="each", help="Create and run reusable parallel comm
 
 # Add cascade command for autonomous document transformation
 app.add_typer(cascade_app, name="cascade", help="Cascade ideas through stages to working code")
+
+# Add the prime command for Claude session priming
+app.command(name="prime")(prime_command)
+
+# Add the status command for consolidated project overview
+app.command(name="status")(status_command)
 
 # Add the gui command
 app.command()(gui)

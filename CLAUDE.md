@@ -97,9 +97,45 @@ poetry run emdx tags  # List all tags
 poetry run emdx legend  # View emoji legend and aliases
 ```
 
-## 🎯 Claude Code Integration
+## 🎯 Claude Code Integration - MANDATORY INSTRUCTIONS
 
-This section tells Claude when and how to use EMDX tools. The goal: Claude should automatically leverage EMDX to track work, spawn sub-agents with proper metadata, and choose the right execution method for each task.
+**⚠️ YOU MUST FOLLOW THESE RULES WHEN WORKING IN THIS CODEBASE:**
+
+### Session Start Protocol
+At the start of every session, run `emdx prime` to get current work context. This shows:
+- Ready tasks you can work on immediately
+- In-progress work that may need attention
+- Recent documents for context
+
+```bash
+# Run this first to understand the current state
+emdx prime
+
+# Or for a quick overview
+emdx status
+```
+
+### Mandatory Behaviors
+
+1. **ALWAYS check ready tasks before starting work:**
+   ```bash
+   emdx task ready
+   ```
+
+2. **ALWAYS save significant outputs to emdx:**
+   ```bash
+   echo "analysis results" | emdx save --title "Title" --tags "analysis,active"
+   ```
+
+3. **ALWAYS create tasks for discovered work:**
+   ```bash
+   emdx task create "Title" --description "Details"
+   ```
+
+4. **NEVER end session without:**
+   - Updating task status (complete/in-progress)
+   - Creating tasks for remaining work
+   - Running `emdx prime` to verify state
 
 ### Decision Tree: Which EMDX Command to Use
 
