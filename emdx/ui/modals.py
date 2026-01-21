@@ -513,3 +513,161 @@ class DocumentPreviewModal(ModalScreen):
         """Scroll to bottom."""
         scroll = self.query_one("#preview-content-scroll", ScrollableContainer)
         scroll.scroll_end()
+
+
+class TagEditModal(ModalScreen):
+    """Modal screen for adding or removing tags from documents."""
+
+    CSS = """
+    TagEditModal {
+        align: center middle;
+    }
+
+    #tag-dialog {
+        padding: 1 2;
+        width: 60;
+        height: auto;
+        max-height: 60%;
+        border: thick $background 80%;
+        background: $surface;
+    }
+
+    #tag-title {
+        text-align: center;
+        text-style: bold;
+        padding-bottom: 1;
+    }
+
+    #tag-docs {
+        padding-bottom: 1;
+        color: $text-muted;
+        text-align: center;
+    }
+
+    #tag-current {
+        padding-bottom: 1;
+        color: $accent;
+    }
+
+    #tag-input {
+        margin-bottom: 1;
+    }
+
+    #tag-hint {
+        color: $text-muted;
+        text-align: center;
+        padding-top: 1;
+    }
+
+    #tag-buttons {
+        padding-top: 1;
+    }
+
+    #tag-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+        ("enter", "submit", "Submit"),
+    ]
+
+    def __init__(
+        self,
+        doc_ids: List[int],
+        doc_titles: List[str],
+        mode: str = "add",
+        current_tags: Optional[List[str]] = None
+    ):
+        super().__init__()
+        self.doc_ids = doc_ids
+        self.doc_titles = doc_titles
+        self.mode = mode
+        self.current_tags = current_tags or []
+        logger.info(f"TagEditModal initialized: mode={mode}, docs={doc_ids}")
+
+    def compose(self) -> ComposeResult:
+        from textual.widgets import Input, Button
+
+        title = "Add Tags" if self.mode == "add" else "Remove Tags"
+        doc_count = len(self.doc_ids)
+        doc_display = (
+            f"Document: {self.doc_titles[0]}"
+            if doc_count == 1
+            else f"{doc_count} documents selected"
+        )
+
+        with Vertical(id="tag-dialog"):
+            yield Static(f"─── {title} ───", id="tag-title")
+            yield Static(doc_display, id="tag-docs")
+
+            if self.current_tags:
+                tags_str = " ".join(self.current_tags)
+                yield Static(f"Current tags: {tags_str}", id="tag-current")
+
+            placeholder = (
+                "e.g., gameplan active urgent"
+                if self.mode == "add"
+                else "Tags to remove (space-separated)"
+            )
+            yield Input(placeholder=placeholder, id="tag-input")
+            yield Static(
+                "Use text aliases: gameplan, active, done, bug, etc.",
+                id="tag-hint"
+            )
+
+            with Horizontal(id="tag-buttons"):
+                yield Button("Cancel", variant="default", id="cancel")
+                yield Button(
+                    "Add Tags" if self.mode == "add" else "Remove Tags",
+                    variant="primary",
+                    id="submit"
+                )
+
+    def on_mount(self) -> None:
+        """Focus the input when mounted."""
+        from textual.widgets import Input
+        input_widget = self.query_one("#tag-input", Input)
+        input_widget.focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "submit":
+            self._do_submit()
+        else:
+            self.dismiss(None)
+
+    def action_submit(self) -> None:
+        """Handle enter key submission."""
+        self._do_submit()
+
+    def action_cancel(self) -> None:
+        """Cancel and dismiss."""
+        self.dismiss(None)
+
+    def _do_submit(self) -> None:
+        """Process the tag input and dismiss with results."""
+        from textual.widgets import Input
+
+        input_widget = self.query_one("#tag-input", Input)
+        tags_input = input_widget.value.strip()
+
+        if not tags_input:
+            self.dismiss(None)
+            return
+
+        # Split by spaces and commas
+        tags = [t.strip() for t in tags_input.replace(",", " ").split()]
+        tags = [t for t in tags if t]
+
+        if not tags:
+            self.dismiss(None)
+            return
+
+        result = {
+            "mode": self.mode,
+            "doc_ids": self.doc_ids,
+            "tags": tags
+        }
+        logger.info(f"TagEditModal submitting: {result}")
+        self.dismiss(result)
