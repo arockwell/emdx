@@ -159,11 +159,10 @@ def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
         return results
 
 
-def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
-    """Get recent stage transitions (documents created from parent documents).
+def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
+    """Get recent pipeline activity - executions with their input/output docs.
 
-    A transition is when a document moves from one stage to the next,
-    tracked via the parent_id relationship.
+    Links executions to their input doc and output doc (if produced).
     """
     # Reverse mapping: to_stage -> from_stage
     PREV_STAGE = {
@@ -177,16 +176,25 @@ def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
         cursor = conn.execute(
             """
             SELECT
-                child.id as child_id,
-                child.title as child_title,
-                child.stage as to_stage,
-                child.created_at,
-                parent.id as parent_id,
-                parent.title as parent_title
-            FROM documents child
-            INNER JOIN documents parent ON child.parent_id = parent.id
-            WHERE child.stage IS NOT NULL
-            ORDER BY child.created_at DESC
+                e.id as exec_id,
+                e.doc_id as input_id,
+                e.doc_title as input_title,
+                e.status,
+                e.started_at,
+                e.completed_at,
+                e.log_file,
+                child.id as output_id,
+                child.title as output_title,
+                child.stage as output_stage,
+                input_doc.stage as input_stage
+            FROM executions e
+            LEFT JOIN documents child ON child.parent_id = e.doc_id
+            LEFT JOIN documents input_doc ON input_doc.id = e.doc_id
+            WHERE e.doc_title LIKE 'Cascade:%'
+               OR e.doc_title LIKE 'Pipeline:%'
+               OR input_doc.stage IS NOT NULL
+               OR e.cascade_run_id IS NOT NULL
+            ORDER BY e.started_at DESC
             LIMIT ?
             """,
             (limit,),
@@ -195,16 +203,25 @@ def get_recent_stage_transitions(limit: int = 10) -> List[Dict[str, Any]]:
 
         results = []
         for row in rows:
-            to_stage = row[2]
-            # Derive from_stage from to_stage (parent was at previous stage)
-            from_stage = PREV_STAGE.get(to_stage, "?")
+            output_stage = row[9]
+            input_stage = row[10]
+            # Derive from_stage from output stage, or use input_stage
+            if output_stage:
+                from_stage = PREV_STAGE.get(output_stage, input_stage or "?")
+            else:
+                from_stage = input_stage or "?"
+
             results.append({
-                "child_id": row[0],
-                "child_title": row[1],
-                "to_stage": to_stage,
-                "created_at": row[3],
-                "parent_id": row[4],
-                "parent_title": row[5],
+                "exec_id": row[0],
+                "input_id": row[1],
+                "input_title": row[2],
+                "status": row[3],
+                "started_at": row[4],
+                "completed_at": row[5],
+                "log_file": row[6],
+                "output_id": row[7],
+                "output_title": row[8],
+                "output_stage": output_stage,
                 "from_stage": from_stage,
             })
         return results
@@ -884,36 +901,21 @@ class CascadeView(Widget):
     }
 
     #pv-doc-list {
-        height: 40%;
+        height: 50%;
         border-bottom: solid $secondary;
     }
 
-    #pv-runs-section {
-        height: 30%;
-        border-bottom: solid $secondary;
+    #pv-pipeline-section {
+        height: 50%;
     }
 
-    #pv-runs-header {
+    #pv-pipeline-header {
         height: 1;
         background: $surface;
         padding: 0 1;
     }
 
-    #pv-runs-table {
-        height: 1fr;
-    }
-
-    #pv-exec-section {
-        height: 30%;
-    }
-
-    #pv-exec-header {
-        height: 1;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    #pv-exec-table {
+    #pv-pipeline-table {
         height: 1fr;
     }
 
@@ -956,13 +958,12 @@ class CascadeView(Widget):
         super().__init__(**kwargs)
         self.summary: Optional[StageSummaryBar] = None
         self.doc_list: Optional[DocumentList] = None
-        self.transitions_table: Optional[DataTable] = None
-        self.exec_table: Optional[DataTable] = None
+        self.pipeline_table: Optional[DataTable] = None
         # For live log streaming
         self.log_stream: Optional['LogStream'] = None
         self.streaming_exec_id: Optional[int] = None
         self._selected_exec: Optional[Dict[str, Any]] = None
-        self._exec_data: List[Dict[str, Any]] = []
+        self._pipeline_data: List[Dict[str, Any]] = []
         self._log_subscriber = None
 
     def compose(self) -> ComposeResult:
@@ -973,20 +974,15 @@ class CascadeView(Widget):
         yield self.summary
 
         with Horizontal(id="pv-main"):
-            # Left column: Work Items, Runs, Executions
+            # Left column: Work Items, Pipeline Activity
             with Vertical(id="pv-left-column"):
                 self.doc_list = DocumentList(id="pv-doc-list")
                 yield self.doc_list
 
-                with Vertical(id="pv-runs-section"):
-                    yield Static("[bold]Transitions[/bold]", id="pv-runs-header")
-                    self.transitions_table = DataTable(id="pv-transitions-table", cursor_type="row")
-                    yield self.transitions_table
-
-                with Vertical(id="pv-exec-section"):
-                    yield Static("[bold]Recent Executions[/bold]", id="pv-exec-header")
-                    self.exec_table = DataTable(id="pv-exec-table", cursor_type="row")
-                    yield self.exec_table
+                with Vertical(id="pv-pipeline-section"):
+                    yield Static("[bold]Pipeline Activity[/bold]", id="pv-pipeline-header")
+                    self.pipeline_table = DataTable(id="pv-pipeline-table", cursor_type="row")
+                    yield self.pipeline_table
 
             # Right column: Preview (document or live log)
             with Vertical(id="pv-preview-container"):
@@ -1000,25 +996,17 @@ class CascadeView(Widget):
     def on_mount(self) -> None:
         """Initialize on mount."""
         # Setup tables
-        self._setup_transitions_table()
-        self._setup_exec_table()
+        self._setup_pipeline_table()
         self.refresh_all()
 
-    def _setup_transitions_table(self) -> None:
-        """Setup the transitions table columns."""
-        if self.transitions_table:
-            self.transitions_table.add_column("Time", width=8)
-            self.transitions_table.add_column("Input", width=7)
-            self.transitions_table.add_column("→", width=12)
-            self.transitions_table.add_column("Output", width=20)
-
-    def _setup_exec_table(self) -> None:
-        """Setup the executions table columns."""
-        if self.exec_table:
-            self.exec_table.add_column("ID", width=6)
-            self.exec_table.add_column("Time", width=8)
-            self.exec_table.add_column("Status", width=10)
-            self.exec_table.add_column("Title", width=30)
+    def _setup_pipeline_table(self) -> None:
+        """Setup the pipeline activity table columns."""
+        if self.pipeline_table:
+            self.pipeline_table.add_column("Time", width=8)
+            self.pipeline_table.add_column("Input", width=7)
+            self.pipeline_table.add_column("→", width=14)
+            self.pipeline_table.add_column("Output", width=7)
+            self.pipeline_table.add_column("Status", width=10)
 
     def refresh_all(self) -> None:
         """Refresh all components."""
@@ -1038,65 +1026,21 @@ class CascadeView(Widget):
             if doc_id:
                 self._show_document_preview(doc_id)
 
-        # Refresh transitions and executions tables
-        self._refresh_transitions_table()
-        self._refresh_exec_table()
+        # Refresh pipeline activity table
+        self._refresh_pipeline_table()
 
         # Update status
         self._update_status("[dim]h/l[/dim] stages │ [dim]j/k[/dim] docs │ [dim]a[/dim] advance │ [dim]p[/dim] process │ [dim]s[/dim] synthesize │ [dim]r[/dim] refresh")
 
-    def _refresh_transitions_table(self) -> None:
-        """Refresh the stage transitions table."""
-        if not self.transitions_table:
+    def _refresh_pipeline_table(self) -> None:
+        """Refresh the unified pipeline activity table."""
+        if not self.pipeline_table:
             return
 
-        self.transitions_table.clear()
-        transitions = get_recent_stage_transitions(limit=8)
+        self.pipeline_table.clear()
+        self._pipeline_data = get_recent_pipeline_activity(limit=10)
 
-        for trans in transitions:
-            # Time - handle both datetime objects and ISO strings
-            time_str = ""
-            created_at = trans.get("created_at")
-            if created_at:
-                try:
-                    if isinstance(created_at, datetime):
-                        time_str = created_at.strftime("%H:%M:%S")
-                    else:
-                        dt = datetime.fromisoformat(str(created_at))
-                        time_str = dt.strftime("%H:%M:%S")
-                except:
-                    time_str = "?"
-
-            # Input doc ID (the document fed to Claude)
-            input_id = f"#{trans.get('parent_id', '?')}"
-
-            # Transition: from_stage → to_stage with emojis
-            from_stage = trans.get("from_stage", "?")
-            to_stage = trans.get("to_stage", "?")
-            from_emoji = STAGE_EMOJI.get(from_stage, "")
-            to_emoji = STAGE_EMOJI.get(to_stage, "")
-            transition = f"{from_emoji}{from_stage}→{to_emoji}{to_stage}"
-
-            # Output doc (Claude's result)
-            title = trans.get("child_title", "?")
-            if len(title) > 14:
-                title = title[:11] + "..."
-            output_display = f"#{trans.get('child_id', '?')} {title}"
-
-            self.transitions_table.add_row(time_str, input_id, transition, output_display)
-
-    def _refresh_exec_table(self) -> None:
-        """Refresh the executions table."""
-        if not self.exec_table:
-            return
-
-        self.exec_table.clear()
-        self._exec_data = get_recent_cascade_activity(limit=8)
-
-        for act in self._exec_data:
-            # Exec ID
-            exec_id = f"#{act.get('exec_id', '?')}"
-
+        for act in self._pipeline_data:
             # Time - handle both datetime objects and ISO strings
             time_str = ""
             ts = act.get("completed_at") or act.get("started_at")
@@ -1110,24 +1054,36 @@ class CascadeView(Widget):
                 except:
                     time_str = "?"
 
+            # Input doc ID
+            input_id = act.get("input_id")
+            input_display = f"#{input_id}" if input_id else "-"
+
+            # Transition: from_stage → to_stage with emojis
+            from_stage = act.get("from_stage", "?")
+            to_stage = act.get("output_stage", "?")
+            from_emoji = STAGE_EMOJI.get(from_stage, "")
+            to_emoji = STAGE_EMOJI.get(to_stage, "")
+            if to_stage and to_stage != "?":
+                transition = f"{from_emoji}{from_stage}→{to_emoji}{to_stage}"
+            else:
+                transition = f"{from_emoji}{from_stage}→..."
+
+            # Output doc ID (if produced)
+            output_id = act.get("output_id")
+            output_display = f"#{output_id}" if output_id else "[dim]-[/dim]"
+
             # Status
             status = act.get("status", "?")
             if status == "completed":
                 status_display = "[green]✓ done[/green]"
             elif status == "running":
-                status_display = "[yellow]⟳ running[/yellow]"
+                status_display = "[yellow]⟳ run[/yellow]"
             elif status == "failed":
-                status_display = "[red]✗ failed[/red]"
+                status_display = "[red]✗ fail[/red]"
             else:
                 status_display = f"[dim]{status}[/dim]"
 
-            # Title
-            title = act.get("doc_title", "")
-            if title.startswith("Cascade: "):
-                title = title[9:]
-            title = title[:28]
-
-            self.exec_table.add_row(exec_id, time_str, status_display, title)
+            self.pipeline_table.add_row(time_str, input_display, transition, output_display, status_display)
 
     def _show_document_preview(self, doc_id: int) -> None:
         """Show document content in preview pane."""
@@ -1283,15 +1239,21 @@ class CascadeView(Widget):
         self._show_document_preview(event.doc_id)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Handle row selection in runs or executions tables."""
+        """Handle row selection in pipeline table."""
         table = event.data_table
 
-        if table.id == "pv-exec-table":
-            # Execution selected - show in preview
+        if table.id == "pv-pipeline-table":
+            # Pipeline activity selected - show output doc or live log
             row_idx = event.cursor_row
-            if hasattr(self, '_exec_data') and row_idx < len(self._exec_data):
-                exec_data = self._exec_data[row_idx]
-                self._show_execution_preview(exec_data)
+            if hasattr(self, '_pipeline_data') and row_idx < len(self._pipeline_data):
+                act = self._pipeline_data[row_idx]
+                # Show output doc if available, otherwise show execution log
+                output_id = act.get("output_id")
+                if output_id:
+                    self._show_document_preview(output_id)
+                else:
+                    # Still running or failed - show execution preview
+                    self._show_execution_preview(act)
 
     def action_prev_stage(self) -> None:
         """Move to previous stage."""
