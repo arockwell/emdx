@@ -3,6 +3,8 @@
 This module provides a unified interface for executing tasks with different
 CLI tools (Claude, Cursor). It abstracts the differences between CLIs and
 provides consistent execution tracking and result handling.
+
+Uses stream-json output format by default for real-time log streaming.
 """
 
 import json
@@ -13,17 +15,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..config.cli_config import CliTool, get_default_cli_tool
+from ..config.cli_config import CliTool, get_default_cli_tool, DEFAULT_ALLOWED_TOOLS
 from ..models.executions import create_execution, update_execution_status
 from .cli_executor import get_cli_executor
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_ALLOWED_TOOLS = [
-    "Read", "Write", "Edit", "MultiEdit", "Bash",
-    "Glob", "Grep", "LS", "Task", "TodoWrite",
-    "WebFetch", "WebSearch"
-]
 
 # Tool emojis for log formatting
 TOOL_EMOJIS = {
@@ -243,11 +239,11 @@ class UnifiedExecutor:
 
         try:
             # Build command using the CLI executor
+            # stream-json is the default from config - enables real-time log streaming
             cmd = executor.build_command(
                 prompt=full_prompt,
                 model=config.model,
                 allowed_tools=config.allowed_tools,
-                output_format="stream-json",  # Use stream-json for consistent parsing
                 working_dir=config.working_dir,
             )
 
