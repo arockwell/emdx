@@ -15,6 +15,7 @@ from rich.text import Text
 
 from ..database import db
 from ..utils.git import get_git_project
+from ..utils.git_ops import get_current_branch, get_git_status
 
 console = Console()
 
@@ -185,6 +186,10 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
         lines.append(f"Project: {project}")
         lines.append("")
 
+    # Git context
+    lines.extend(_get_git_context_lines())
+    lines.append("")
+
     # Ready tasks (the most important section)
     ready_tasks = _get_ready_tasks()
     if ready_tasks:
@@ -212,6 +217,11 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
             lines.append(f"  #{task['id']} {task['title']}")
         lines.append("")
 
+    # Blocked tasks
+    blocked_lines = _get_blocked_tasks_lines()
+    if blocked_lines:
+        lines.extend(blocked_lines)
+
     # Verbose additions
     if verbose and not quiet:
         # Recent documents
@@ -233,6 +243,11 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
                     lines.append(f"  {stage}: {count} item(s)")
             lines.append("")
 
+        # Recent executions
+        recent_exec_lines = _get_recent_executions_lines()
+        if recent_exec_lines:
+            lines.extend(recent_exec_lines)
+
     # Footer reminder
     if not quiet:
         lines.append("-" * 60)
@@ -250,8 +265,10 @@ def _output_json(project: Optional[str], verbose: bool, quiet: bool, execution: 
     data = {
         "project": project,
         "timestamp": datetime.now().isoformat(),
+        "git": _get_git_context(),
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "blocked_tasks": _get_blocked_tasks(),
     }
 
     if execution:
@@ -260,6 +277,7 @@ def _output_json(project: Optional[str], verbose: bool, quiet: bool, execution: 
     if verbose:
         data["recent_docs"] = _get_recent_docs()
         data["cascade_status"] = _get_cascade_status()
+        data["recent_executions"] = _get_recent_executions()
 
     print(json.dumps(data, indent=2, default=str))
 
@@ -305,22 +323,87 @@ def _get_in_progress_tasks() -> list:
         ]
 
 
-def _get_recent_docs() -> list:
-    """Get recently accessed documents."""
+def _get_blocked_tasks() -> list[dict]:
+    """Get tasks that are blocked (have incomplete dependencies)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
+        # First, get all open tasks that have at least one incomplete dependency
         cursor.execute("""
-            SELECT id, title, project
-            FROM documents
-            WHERE is_deleted = 0
-            ORDER BY last_accessed_at DESC
-            LIMIT 10
+            SELECT DISTINCT t.id, t.title
+            FROM tasks t
+            WHERE t.status = 'open'
+            AND EXISTS (
+                SELECT 1 FROM task_deps td
+                JOIN tasks blocker ON td.depends_on = blocker.id
+                WHERE td.task_id = t.id AND blocker.status != 'completed'
+            )
+            ORDER BY t.priority ASC, t.created_at ASC
+            LIMIT 20
         """)
-        rows = cursor.fetchall()
-        return [
-            {"id": r[0], "title": r[1], "project": r[2]}
-            for r in rows
-        ]
+        blocked_tasks = cursor.fetchall()
+
+        result = []
+        for task_id, title in blocked_tasks:
+            # Get the IDs of tasks blocking this one
+            cursor.execute("""
+                SELECT td.depends_on
+                FROM task_deps td
+                JOIN tasks blocker ON td.depends_on = blocker.id
+                WHERE td.task_id = ? AND blocker.status != 'completed'
+            """, (task_id,))
+            blocked_by = [row[0] for row in cursor.fetchall()]
+            result.append({
+                "id": task_id,
+                "title": title,
+                "blocked_by": blocked_by,
+            })
+
+        return result
+
+
+def _get_blocked_tasks_lines() -> list[str]:
+    """Return formatted lines for blocked tasks section."""
+    blocked_tasks = _get_blocked_tasks()
+    if not blocked_tasks:
+        return []
+
+    lines = ["BLOCKED TASKS (waiting on dependencies):", ""]
+    for task in blocked_tasks:
+        blocked_by_str = ", ".join(f"#{bid}" for bid in task["blocked_by"])
+        lines.append(f"  #{task['id']} {task['title']} (blocked by {blocked_by_str})")
+    lines.append("")
+    return lines
+
+
+def _get_recent_docs() -> list:
+    """Get recently accessed documents."""
+    try:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            # Try with last_accessed_at first, fall back to created_at
+            try:
+                cursor.execute("""
+                    SELECT id, title, project
+                    FROM documents
+                    WHERE is_deleted = 0
+                    ORDER BY last_accessed_at DESC
+                    LIMIT 10
+                """)
+            except Exception:
+                cursor.execute("""
+                    SELECT id, title, project
+                    FROM documents
+                    WHERE is_deleted = 0
+                    ORDER BY created_at DESC
+                    LIMIT 10
+                """)
+            rows = cursor.fetchall()
+            return [
+                {"id": r[0], "title": r[1], "project": r[2]}
+                for r in rows
+            ]
+    except Exception:
+        return []
 
 
 def _get_cascade_status() -> dict:
@@ -346,6 +429,99 @@ def _get_cascade_status() -> dict:
         pass
 
     return status
+
+
+def _get_git_context() -> dict:
+    """Get git session context information."""
+    branch = get_current_branch()
+    changed_files = get_git_status()
+    is_dirty = len(changed_files) > 0
+
+    return {
+        "branch": branch,
+        "is_dirty": is_dirty,
+        "changed_files_count": len(changed_files),
+    }
+
+
+def _get_git_context_lines() -> list[str]:
+    """Return lines for git context text output."""
+    context = _get_git_context()
+    branch = context["branch"]
+    changed_count = context["changed_files_count"]
+
+    if context["is_dirty"]:
+        status_text = f"{changed_count} uncommitted change{'s' if changed_count != 1 else ''}"
+    else:
+        status_text = "clean"
+
+    return [f"Git: {branch} ({status_text})"]
+
+
+def _get_recent_executions() -> list[dict]:
+    """Get the last 5 workflow runs from the database.
+
+    Returns a list of dicts with: id, status, started_at, error_message (if failed).
+    """
+    try:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, status, started_at, error_message
+                FROM workflow_runs
+                ORDER BY started_at DESC
+                LIMIT 5
+            """)
+            rows = cursor.fetchall()
+            result = []
+            for row in rows:
+                execution = {
+                    "id": row[0],
+                    "status": row[1],
+                    "started_at": row[2],
+                }
+                # Only include error_message if status is failed
+                if row[1] == "failed" and row[3]:
+                    execution["error_message"] = row[3]
+                result.append(execution)
+            return result
+    except Exception:
+        # workflow_runs table may not exist in older databases
+        return []
+
+
+def _get_recent_executions_lines() -> list[str]:
+    """Get formatted lines showing recent execution status.
+
+    Returns lines like:
+      RECENT EXECUTIONS:
+        ✓ Run #42 completed
+        ✗ Run #41 failed: Error message here
+        ○ Run #40 running
+    """
+    executions = _get_recent_executions()
+    if not executions:
+        return []
+
+    lines = ["RECENT EXECUTIONS:"]
+    for ex in executions:
+        run_id = ex["id"]
+        status = ex["status"]
+
+        if status == "completed":
+            lines.append(f"  ✓ Run #{run_id} completed")
+        elif status == "failed":
+            error_msg = ex.get("error_message", "Unknown error")
+            # Truncate long error messages
+            if len(error_msg) > 50:
+                error_msg = error_msg[:47] + "..."
+            lines.append(f"  ✗ Run #{run_id} failed: {error_msg}")
+        else:
+            # running, pending, paused, cancelled
+            lines.append(f"  ○ Run #{run_id} {status}")
+
+    lines.append("")
+    return lines
 
 
 # Create typer app for the command
