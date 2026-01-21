@@ -7,12 +7,12 @@ enabling semantic search without API costs.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 
 from ..database import db
+from ..utils.datetime_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ class EmbeddingService:
                     self.MODEL_NAME,
                     embedding.tobytes(),
                     self.EMBEDDING_DIM,
-                    datetime.utcnow().isoformat(),
+                    utc_now_iso(),
                 ),
             )
             conn.commit()
@@ -188,7 +188,7 @@ class EmbeddingService:
                             self.MODEL_NAME,
                             embedding.tobytes(),
                             self.EMBEDDING_DIM,
-                            datetime.utcnow().isoformat(),
+                            utc_now_iso(),
                         ),
                     )
                 conn.commit()

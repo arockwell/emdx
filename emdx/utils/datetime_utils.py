@@ -9,6 +9,44 @@ from datetime import datetime, timezone
 from typing import Optional, Union
 
 
+# ============================================================================
+# Standard Format Constants
+# ============================================================================
+# Use these constants instead of hardcoded format strings throughout the codebase
+
+DISPLAY_FORMAT = "%Y-%m-%d %H:%M"        # Human-readable: "2024-01-15 10:30"
+DATE_ONLY_FORMAT = "%Y-%m-%d"            # Date only: "2024-01-15"
+TIME_ONLY_FORMAT = "%H:%M:%S"            # Time only: "10:30:00"
+LOG_TIMESTAMP_FORMAT = "%Y%m%d%H%M%S"    # Log filenames: "20240115103000"
+ISO_FORMAT = "%Y-%m-%dT%H:%M:%S"         # ISO 8601 (no timezone)
+SQLITE_FORMAT = "%Y-%m-%d %H:%M:%S"      # SQLite default format
+
+
+def utc_now() -> datetime:
+    """
+    Get current UTC time with timezone awareness.
+
+    This replaces the deprecated datetime.utcnow() which returns naive datetime.
+    Always use this function for UTC timestamps.
+
+    Returns:
+        Current datetime with UTC timezone attached
+    """
+    return datetime.now(timezone.utc)
+
+
+def utc_now_iso() -> str:
+    """
+    Get current UTC time as ISO format string.
+
+    Useful for database timestamps.
+
+    Returns:
+        ISO format string like "2024-01-15T10:30:00+00:00"
+    """
+    return utc_now().isoformat()
+
+
 def parse_datetime(value: Union[str, datetime, None],
                    default: Optional[datetime] = None,
                    assume_utc: bool = False) -> Optional[datetime]:
@@ -135,3 +173,76 @@ def format_datetime(dt: Union[str, datetime, None],
             return "N/A"
 
     return dt.strftime(format_str)
+
+
+def format_relative_time(dt: Union[str, datetime, None]) -> str:
+    """
+    Format a datetime as relative time (e.g., "2 hours ago", "3 days ago").
+
+    Args:
+        dt: Datetime value to format
+
+    Returns:
+        Human-readable relative time string, or "N/A" if unparseable
+    """
+    if dt is None:
+        return "N/A"
+
+    if isinstance(dt, str):
+        dt = parse_datetime(dt)
+        if dt is None:
+            return "N/A"
+
+    now = utc_now()
+    # Make dt timezone-aware if needed for comparison
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    diff = now - dt
+    seconds = int(diff.total_seconds())
+
+    if seconds < 0:
+        return "in the future"
+    elif seconds < 60:
+        return "just now"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    elif seconds < 86400:
+        hours = seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    elif seconds < 604800:
+        days = seconds // 86400
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    elif seconds < 2592000:
+        weeks = seconds // 604800
+        return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+    else:
+        months = seconds // 2592000
+        return f"{months} month{'s' if months != 1 else ''} ago"
+
+
+def get_age_days(dt: Union[str, datetime, None]) -> int:
+    """
+    Get the age in days of a datetime value.
+
+    Args:
+        dt: Datetime value
+
+    Returns:
+        Number of days since the datetime, or -1 if unparseable
+    """
+    if dt is None:
+        return -1
+
+    if isinstance(dt, str):
+        dt = parse_datetime(dt)
+        if dt is None:
+            return -1
+
+    now = utc_now()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    diff = now - dt
+    return max(0, int(diff.total_seconds() / 86400))
