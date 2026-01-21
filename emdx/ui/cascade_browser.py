@@ -1008,9 +1008,9 @@ class CascadeView(Widget):
         """Setup the transitions table columns."""
         if self.transitions_table:
             self.transitions_table.add_column("Time", width=8)
-            self.transitions_table.add_column("Parent", width=7)
+            self.transitions_table.add_column("Input", width=7)
             self.transitions_table.add_column("→", width=12)
-            self.transitions_table.add_column("Child", width=20)
+            self.transitions_table.add_column("Output", width=20)
 
     def _setup_exec_table(self) -> None:
         """Setup the executions table columns."""
@@ -1067,8 +1067,8 @@ class CascadeView(Widget):
                 except:
                     time_str = "?"
 
-            # Parent ID
-            parent_id = f"#{trans.get('parent_id', '?')}"
+            # Input doc ID (the document fed to Claude)
+            input_id = f"#{trans.get('parent_id', '?')}"
 
             # Transition: from_stage → to_stage with emojis
             from_stage = trans.get("from_stage", "?")
@@ -1077,13 +1077,13 @@ class CascadeView(Widget):
             to_emoji = STAGE_EMOJI.get(to_stage, "")
             transition = f"{from_emoji}{from_stage}→{to_emoji}{to_stage}"
 
-            # Child document (truncated)
+            # Output doc (Claude's result)
             title = trans.get("child_title", "?")
             if len(title) > 14:
                 title = title[:11] + "..."
-            child_display = f"#{trans.get('child_id', '?')} {title}"
+            output_display = f"#{trans.get('child_id', '?')} {title}"
 
-            self.transitions_table.add_row(time_str, parent_id, transition, child_display)
+            self.transitions_table.add_row(time_str, input_id, transition, output_display)
 
     def _refresh_exec_table(self) -> None:
         """Refresh the executions table."""
