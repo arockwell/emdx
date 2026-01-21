@@ -148,8 +148,14 @@ class DocumentBrowser(HelpMixin, Widget):
                         wrap=True, highlight=True, markup=True, auto_scroll=False
                     )
         
-        # Status bar at the bottom
+        # Status bar at the bottom (for dynamic messages)
         yield Static("Ready", id="browser-status", classes="browser-status")
+        # Navigation bar (fixed)
+        yield Static(
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] GitHub │ [bold]5[/bold] Docs │ "
+            "[dim]j/k[/dim] nav │ [dim]Enter[/dim] view │ [dim]e[/dim] edit",
+            id="nav-bar", classes="nav-bar"
+        )
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""

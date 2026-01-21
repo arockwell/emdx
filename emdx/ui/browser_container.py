@@ -376,7 +376,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Work, 3=Documents, 4=Search, 5=Cascade, 6=GitHub)
+        # Global number keys for screen switching (1=Activity, 2=Work, 3=Search, 4=Cascade, 5=Documents, 6=GitHub)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -386,15 +386,15 @@ class BrowserContainer(App):
             event.stop()
             return
         elif key == "3":
-            await self.switch_browser("document")
-            event.stop()
-            return
-        elif key == "4":
             await self.switch_browser("search")
             event.stop()
             return
+        elif key == "4":
+            await self.switch_browser("cascade")  # Cascade on 4
+            event.stop()
+            return
         elif key == "5":
-            await self.switch_browser("cascade")  # Old cascade still available on 5
+            await self.switch_browser("document")
             event.stop()
             return
         elif key == "6":

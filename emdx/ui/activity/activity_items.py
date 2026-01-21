@@ -41,6 +41,9 @@ class ActivityItem(ABC):
     depth: int = 0
     expanded: bool = False
     children: List["ActivityItem"] = field(default_factory=list)
+    status: str = "completed"  # Default status for items that don't track status
+    doc_id: Optional[int] = None  # Document ID if this item has associated content
+    cost: float = 0.0  # Cost in USD if tracked
 
     @property
     @abstractmethod
@@ -772,3 +775,70 @@ class GroupItem(ActivityItem):
 
         content = "".join(content_parts)
         return content, f"{self.type_icon} Group #{self.group.get('id', '?')}"
+
+
+@dataclass
+class AgentExecutionItem(ActivityItem):
+    """A standalone agent execution (from `emdx agent` command).
+
+    These are direct CLI agent runs not part of any workflow or cascade.
+    """
+
+    execution: Dict[str, Any] = field(default_factory=dict)
+    status: str = "running"
+    doc_id: Optional[int] = None
+    log_file: str = ""
+    cli_tool: str = "claude"
+
+    @property
+    def item_type(self) -> str:
+        return "agent_execution"
+
+    @property
+    def type_icon(self) -> str:
+        # Show different icon based on CLI tool
+        if self.cli_tool == "cursor":
+            return "🖱️"  # Cursor icon
+        return "🤖"  # Claude icon
+
+    @property
+    def status_icon(self) -> str:
+        icons = {
+            "running": "🔄",
+            "completed": "✅",
+            "failed": "❌",
+        }
+        return icons.get(self.status, "⚪")
+
+    def can_expand(self) -> bool:
+        return False
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        """Agent executions don't have children."""
+        return []
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        """Show execution log content in preview."""
+        from pathlib import Path
+
+        # If we have an output doc, show it
+        if self.doc_id and doc_db:
+            doc = doc_db.get_document(self.doc_id)
+            if doc:
+                return doc.get("content", ""), f"{self.type_icon} #{self.doc_id}"
+
+        # Otherwise show the log file
+        if self.log_file:
+            log_path = Path(self.log_file)
+            if log_path.exists():
+                try:
+                    content = log_path.read_text()
+                    # Show last 100 lines max
+                    lines = content.split('\n')
+                    if len(lines) > 100:
+                        content = '\n'.join(lines[-100:])
+                    return f"```\n{content}\n```", f"{self.type_icon} Log"
+                except Exception:
+                    pass
+
+        return f"[italic]{self.title}[/italic]", "PREVIEW"
