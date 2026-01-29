@@ -1718,6 +1718,63 @@ def migration_031_add_cascade_runs(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_032_extract_cascade_metadata(conn: sqlite3.Connection):
+    """Extract cascade metadata (stage, pr_url) to a dedicated table.
+
+    This migration:
+    1. Creates document_cascade_metadata table with stage and pr_url columns
+    2. Creates partial indexes for efficient stage/pr_url queries
+    3. Backfills data from documents table where cascade data exists
+
+    The documents.stage and documents.pr_url columns are kept for backward
+    compatibility during the transition period. The new cascade.py module
+    reads from the new table while documents.py dual-writes to both.
+    """
+    cursor = conn.cursor()
+
+    # Create the cascade metadata table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_cascade_metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL UNIQUE,
+            stage TEXT,
+            pr_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Create partial indexes for efficient queries
+    # Index on stage for documents currently in cascade (stage IS NOT NULL)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_meta_stage
+        ON document_cascade_metadata(stage) WHERE stage IS NOT NULL
+    """)
+
+    # Index on pr_url for documents with PRs
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_meta_pr_url
+        ON document_cascade_metadata(pr_url) WHERE pr_url IS NOT NULL
+    """)
+
+    # Index for efficient lookups by document_id (already UNIQUE but explicit index helps)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_cascade_meta_document_id
+        ON document_cascade_metadata(document_id)
+    """)
+
+    # Backfill existing cascade data from documents table
+    cursor.execute("""
+        INSERT OR IGNORE INTO document_cascade_metadata (document_id, stage, pr_url)
+        SELECT id, stage, pr_url
+        FROM documents
+        WHERE stage IS NOT NULL OR pr_url IS NOT NULL
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1752,6 +1809,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
     (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
+    (32, "Extract cascade metadata to dedicated table", migration_032_extract_cascade_metadata),
 ]
 
 
