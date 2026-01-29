@@ -8,10 +8,7 @@ import typer
 
 from emdx.utils.output import console
 
-app = typer.Typer()
 
-
-@app.command()
 def gui(
     theme: Optional[str] = typer.Option(
         None,

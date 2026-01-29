@@ -7,6 +7,7 @@ Organized database operations split into focused modules:
 - groups: Document group operations
 - search: Full-text search operations
 - migrations: Database schema migrations
+- cascade: Cascade-specific operations (stage management, PR URLs)
 
 This package maintains backward compatibility with the original sqlite_database.py API.
 """
@@ -26,6 +27,7 @@ from .documents import (
 )
 from .search import search_documents
 from . import groups
+from . import cascade
 
 
 class SQLiteDatabase:
@@ -440,6 +442,7 @@ __all__ = [
     "SQLiteDatabase",
     "db_connection",
     "groups",
+    "cascade",
     "save_document",
     "get_document",
     "list_documents",
