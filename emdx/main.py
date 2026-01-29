@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
 Main CLI entry point for emdx
+
+This module uses lazy loading for heavy commands to improve startup performance.
+Core KB commands (save, find, view, tag, list) are imported eagerly since they're
+fast. Heavy commands (workflow, cascade, each, ai, gui) are only imported when
+actually invoked.
 """
 
 import os
@@ -8,30 +13,45 @@ from typing import Optional
 
 import typer
 from emdx import __build_id__, __version__
-from emdx.commands.analyze import app as analyze_app
-from emdx.commands.browse import app as browse_app
-from emdx.commands.claude_execute import app as claude_app
-from emdx.commands.core import app as core_app
-from emdx.commands.executions import app as executions_app
-from emdx.commands.export import app as export_app
-from emdx.commands.export_profiles import app as export_profiles_app
-from emdx.commands.gdoc import app as gdoc_app
-from emdx.commands.gist import app as gist_app
-from emdx.commands.lifecycle import app as lifecycle_app
-from emdx.commands.maintain import app as maintain_app
-from emdx.commands.tags import app as tag_app
-from emdx.commands.tasks import app as tasks_app
-from emdx.commands.workflows import app as workflows_app
-from emdx.commands.keybindings import app as keybindings_app
-from emdx.commands.run import run as run_command
-from emdx.commands.agent import agent as agent_command
-from emdx.commands.groups import app as groups_app
-from emdx.commands.ask import app as ask_app
-from emdx.commands.each import app as each_app
-from emdx.commands.cascade import app as cascade_app
-from emdx.commands.prime import prime as prime_command
-from emdx.commands.status import status as status_command
-from emdx.ui.gui import gui
+from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
+from emdx.utils.output import console
+
+# =============================================================================
+# LAZY COMMANDS - Heavy features (defer import until invoked)
+# =============================================================================
+# Format: "command_name": "module.path:object_name"
+# IMPORTANT: Register BEFORE any Typer app creation
+LAZY_SUBCOMMANDS = {
+    # Execution/orchestration (imports subprocess, async, executor)
+    "workflow": "emdx.commands.workflows:app",
+    "cascade": "emdx.commands.cascade:app",
+    "each": "emdx.commands.each:app",
+    "run": "emdx.commands.run:run",
+    "agent": "emdx.commands.agent:agent",
+    "claude": "emdx.commands.claude_execute:app",
+    # AI features (imports ML libraries, can be slow)
+    "ai": "emdx.commands.ask:app",
+    # Similarity (imports scikit-learn)
+    "similar": "emdx.commands.similarity:app",
+    # External services (imports google API libs)
+    "gdoc": "emdx.commands.gdoc:app",
+    # TUI (imports textual, can be slow)
+    "gui": "emdx.ui.gui:gui",
+}
+
+# Pre-computed help strings so --help doesn't trigger imports
+LAZY_HELP = {
+    "workflow": "Manage and run multi-stage workflows",
+    "cascade": "Cascade ideas through stages to working code",
+    "each": "Create and run reusable parallel commands",
+    "run": "Quick task execution (parallel, worktree isolation)",
+    "agent": "Run Claude sub-agent with EMDX tracking",
+    "claude": "Execute documents with Claude",
+    "ai": "AI-powered Q&A and semantic search",
+    "similar": "Find similar documents using TF-IDF",
+    "gdoc": "Google Docs integration",
+    "gui": "Launch interactive TUI browser",
+}
 
 
 def is_safe_mode() -> bool:
@@ -47,6 +67,22 @@ def is_safe_mode() -> bool:
 UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "workflow", "claude"}
 
 
+def get_lazy_subcommands() -> dict[str, str]:
+    """Get lazy subcommands, with safe mode commands excluded."""
+    if is_safe_mode():
+        # In safe mode, exclude unsafe commands from lazy loading
+        # They'll be added as disabled commands eagerly instead
+        return {k: v for k, v in LAZY_SUBCOMMANDS.items() if k not in UNSAFE_COMMANDS}
+    return LAZY_SUBCOMMANDS
+
+
+def get_lazy_help() -> dict[str, str]:
+    """Get lazy help strings, filtering for safe mode."""
+    if is_safe_mode():
+        return {k: v for k, v in LAZY_HELP.items() if k not in UNSAFE_COMMANDS}
+    return LAZY_HELP
+
+
 def create_disabled_command(name: str):
     """Create a command that shows a disabled message in safe mode."""
     def disabled_command():
@@ -60,66 +96,74 @@ def create_disabled_command(name: str):
     disabled_command.__doc__ = f"[DISABLED in safe mode] Execute {name} operations"
     return disabled_command
 
-# Create main app
+
+# Register lazy commands BEFORE importing any Typer apps
+# This ensures the registry is populated when LazyTyperGroup is instantiated
+register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
+
+# =============================================================================
+# EAGER IMPORTS - Core KB commands (fast, always needed)
+# =============================================================================
+from emdx.commands.core import app as core_app
+from emdx.commands.browse import app as browse_app
+from emdx.commands.tags import app as tag_app
+from emdx.commands.executions import app as executions_app
+from emdx.commands.lifecycle import app as lifecycle_app
+from emdx.commands.tasks import app as tasks_app
+from emdx.commands.groups import app as groups_app
+from emdx.commands.export import app as export_app
+from emdx.commands.export_profiles import app as export_profiles_app
+from emdx.commands.keybindings import app as keybindings_app
+from emdx.commands.prime import prime as prime_command
+from emdx.commands.status import status as status_command
+from emdx.commands.analyze import app as analyze_app
+from emdx.commands.maintain import app as maintain_app
+from emdx.commands.gist import app as gist_app
+
+
+# Create main app with lazy loading support
 app = typer.Typer(
     name="emdx",
     help="Documentation Index Management System - A powerful knowledge base for developers",
     add_completion=True,
     rich_markup_mode="rich",
+    cls=LazyTyperGroup,
 )
 
-# Add subcommand groups
-# Core commands are added directly to the main app
+# We need to set these after creation because Typer's __init__ doesn't pass them through
+# to the underlying Click group properly
+app_info = app.info
+app_info.cls = LazyTyperGroup
+
+
+# =============================================================================
+# Register eager commands
+# =============================================================================
+
+# Core commands (save, find, view, edit, delete, etc.)
 for command in core_app.registered_commands:
     app.registered_commands.append(command)
 
-# Browse commands are added directly to the main app
+# Browse commands (list, recent, stats)
 for command in browse_app.registered_commands:
     app.registered_commands.append(command)
 
-# Gist commands are added directly to the main app
+# Gist commands
 for command in gist_app.registered_commands:
     app.registered_commands.append(command)
 
-# Google Docs commands are added directly to the main app
-for command in gdoc_app.registered_commands:
-    app.registered_commands.append(command)
-
-# Tag commands are added directly to the main app
+# Tag commands
 for command in tag_app.registered_commands:
     app.registered_commands.append(command)
 
 # Add executions as a subcommand group
 app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 
-# Add claude execution as a subcommand group (disabled in safe mode)
-if is_safe_mode():
-    disabled_claude_app = typer.Typer()
-    disabled_claude_app.command(name="execute")(create_disabled_command("claude"))
-    app.add_typer(disabled_claude_app, name="claude", help="[DISABLED] Execute documents with Claude")
-else:
-    app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
-
-# Add the new unified analyze command
-app.command(name="analyze")(analyze_app.registered_commands[0].callback)
-
-# Add the new unified maintain command
-app.command(name="maintain")(maintain_app.registered_commands[0].callback)
-
-# Add lifecycle as a subcommand group (keeping this as-is)
+# Add lifecycle as a subcommand group
 app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Task management")
-
-# Add workflows as a subcommand group (disabled in safe mode)
-if is_safe_mode():
-    disabled_workflow_app = typer.Typer()
-    disabled_workflow_app.command(name="run")(create_disabled_command("workflow"))
-    disabled_workflow_app.command(name="list")(create_disabled_command("workflow"))
-    app.add_typer(disabled_workflow_app, name="workflow", help="[DISABLED] Manage and run multi-stage workflows")
-else:
-    app.add_typer(workflows_app, name="workflow", help="Manage and run multi-stage workflows")
 
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
@@ -133,40 +177,13 @@ app.add_typer(export_app, name="export", help="Export documents using profiles")
 # Add keybindings as a subcommand group
 app.add_typer(keybindings_app, name="keybindings", help="Manage TUI keybindings")
 
-# Add AI-powered features (ask, semantic search, embeddings)
-app.add_typer(ask_app, name="ai", help="AI-powered Q&A and semantic search")
+# Add analyze commands (maintain_app has multiple commands like cleanup, cleanup-dirs)
+for command in analyze_app.registered_commands:
+    app.registered_commands.append(command)
 
-# Add the run command for quick task execution (disabled in safe mode)
-if is_safe_mode():
-    app.command(name="run")(create_disabled_command("run"))
-else:
-    app.command(name="run")(run_command)
-
-# Add the agent command for sub-agent execution with EMDX tracking (disabled in safe mode)
-if is_safe_mode():
-    app.command(name="agent")(create_disabled_command("agent"))
-else:
-    app.command(name="agent")(agent_command)
-
-# Add each command for reusable parallel commands (disabled in safe mode)
-if is_safe_mode():
-    disabled_each_app = typer.Typer()
-    disabled_each_app.command(name="run")(create_disabled_command("each"))
-    disabled_each_app.command(name="create")(create_disabled_command("each"))
-    disabled_each_app.command(name="list")(create_disabled_command("each"))
-    app.add_typer(disabled_each_app, name="each", help="[DISABLED] Create and run reusable parallel commands")
-else:
-    app.add_typer(each_app, name="each", help="Create and run reusable parallel commands")
-
-# Add cascade command for autonomous document transformation (disabled in safe mode)
-if is_safe_mode():
-    disabled_cascade_app = typer.Typer()
-    disabled_cascade_app.command(name="add")(create_disabled_command("cascade"))
-    disabled_cascade_app.command(name="run")(create_disabled_command("cascade"))
-    disabled_cascade_app.command(name="status")(create_disabled_command("cascade"))
-    app.add_typer(disabled_cascade_app, name="cascade", help="[DISABLED] Cascade ideas through stages to working code")
-else:
-    app.add_typer(cascade_app, name="cascade", help="Cascade ideas through stages to working code")
+# Add maintain commands (maintain_app has maintain, cleanup, cleanup-dirs)
+for command in maintain_app.registered_commands:
+    app.registered_commands.append(command)
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
@@ -174,8 +191,15 @@ app.command(name="prime")(prime_command)
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
 
-# Add the gui command
-app.command()(gui)
+
+# =============================================================================
+# Handle safe mode for unsafe commands
+# =============================================================================
+if is_safe_mode():
+    # Add disabled versions of unsafe commands that would otherwise be lazy-loaded
+    for cmd_name in UNSAFE_COMMANDS:
+        if cmd_name in LAZY_SUBCOMMANDS:
+            app.command(name=cmd_name)(create_disabled_command(cmd_name))
 
 
 # Version command
@@ -188,8 +212,9 @@ def version():
 
 
 # Callback for global options
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
     db_url: Optional[str] = typer.Option(
@@ -243,9 +268,6 @@ def main(
     # and for future commands that might check at runtime
     if safe_mode:
         os.environ["EMDX_SAFE_MODE"] = "1"
-
-    # Note: Database connections are established per-command as needed
-    # Note: Logging is configured per-module as needed
 
 
 def run():
