@@ -8,8 +8,9 @@ including code syntax highlighting themes and formatting options.
 
 import os
 
-from rich.console import Console
 from rich.markdown import Markdown
+
+from ..utils.output import console as shared_console
 
 
 class MarkdownConfig:
@@ -78,7 +79,7 @@ class MarkdownConfig:
     def render_markdown(content, console=None, code_theme=None):
         """Render markdown content to console with optimal settings."""
         if console is None:
-            console = Console()
+            console = shared_console
 
         md = MarkdownConfig.create_markdown(content, code_theme)
         console.print(md)
@@ -92,14 +93,7 @@ def render_enhanced_markdown(content, code_theme=None):
     This function can be used as a drop-in replacement for basic markdown rendering
     with better code syntax highlighting and formatting.
     """
-    console = Console(
-        force_terminal=True,
-        width=None,
-        highlight=True,
-        markup=True,
-    )
-
-    return MarkdownConfig.render_markdown(content, console, code_theme)
+    return MarkdownConfig.render_markdown(content, shared_console, code_theme)
 
 
 def list_available_themes():

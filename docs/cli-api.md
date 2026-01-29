@@ -412,9 +412,6 @@ emdx workflow run task_parallel \
 # Run with document IDs as tasks
 emdx workflow run task_parallel -t 5182 -t 5183
 
-# Use a preset for saved configurations
-emdx workflow run parallel_analysis --preset security_audit
-
 # Control concurrency
 emdx workflow run task_parallel -t "Task 1" -t "Task 2" -j 3  # max 3 concurrent
 
@@ -427,7 +424,6 @@ emdx workflow run task_parallel -t "Task 1" -t "Task 2" --worktree
 
 **Options:**
 - `--task/-t TEXT` - Task to run (string or doc ID). Can be repeated.
-- `--preset/-p TEXT` - Use saved preset for variables
 - `--var/-v TEXT` - Override variables (key=value)
 - `--max-concurrent/-j INTEGER` - Max parallel executions
 - `--background/--foreground` - Run mode
@@ -447,22 +443,6 @@ emdx workflow runs --status completed
 # Show run details
 emdx workflow status 123
 ```
-
-### **emdx workflow preset**
-Manage workflow presets (saved configurations).
-
-```bash
-# List presets
-emdx workflow presets
-
-# Create a preset
-emdx workflow preset create parallel_analysis security_audit \
-  --var topic="Security Review"
-
-# Use a preset
-emdx workflow run parallel_analysis --preset security_audit
-```
-
 
 ## 🔄 **Lifecycle Management**
 
@@ -1045,6 +1025,7 @@ emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
 | `--group-role` | | Role in group (default: `exploration`) |
 | `--verbose` | `-v` | Show agent output in real-time |
 | `--pr` | | Instruct agent to create a PR if it makes code changes |
+| `--timeout` | | Timeout in seconds (default: 300 / 5 minutes) |
 
 ### Use Cases
 
@@ -1298,6 +1279,380 @@ emdx ai clear --yes
 - Use `emdx ai context | claude` to avoid API costs (uses Claude Max)
 - Semantic search works best with natural language queries
 - Lower threshold values (0.2-0.3) return more results but less relevant
+
+---
+
+## 🔍 Document Similarity (`emdx similar`)
+
+Find related documents using TF-IDF content analysis and tag similarity.
+
+### Find Similar by Document ID
+
+```bash
+# Find top 5 similar documents
+emdx similar 42
+
+# Find more results
+emdx similar 42 --limit 10
+
+# Only content similarity (ignore tags)
+emdx similar 42 --content-only
+
+# Only tag similarity (ignore content)
+emdx similar 42 --tags-only
+
+# Filter to same project
+emdx similar 42 --same-project
+
+# Lower similarity threshold (find more matches)
+emdx similar 42 --threshold 0.05
+
+# Output as JSON
+emdx similar 42 --json
+```
+
+### Find Similar by Text
+
+```bash
+# Search by natural language
+emdx similar-text "kubernetes deployment strategies"
+emdx similar-text "how to configure docker compose" --limit 10
+
+# Output as JSON
+emdx similar-text "authentication patterns" --json
+```
+
+### Index Management
+
+```bash
+# Rebuild TF-IDF index (auto-built on first use)
+emdx build-index
+
+# Force rebuild even if cache exists
+emdx build-index --force
+
+# Show index statistics
+emdx index-stats
+emdx index-stats --json
+```
+
+### Options Reference
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--limit` | `-l` | Number of results (default: 5) |
+| `--threshold` | `-t` | Minimum similarity score 0-1 (default: 0.1) |
+| `--content-only` | `-c` | Only use content similarity |
+| `--tags-only` | `-T` | Only use tag similarity |
+| `--same-project` | `-p` | Only find similar docs in same project |
+| `--json` | `-j` | Output as JSON |
+
+---
+
+## 📋 Task Management (`emdx task`)
+
+Manage tasks with dependencies and execution tracking.
+
+### Creating Tasks
+
+```bash
+# Create a basic task
+emdx task create "Implement user authentication"
+
+# Create with priority (1-5, lower is higher priority)
+emdx task create "Fix critical bug" --priority 1
+
+# Create with dependencies
+emdx task create "Deploy to production" --depends "123,124"
+
+# Create linked to a gameplan document
+emdx task create "Setup database" --gameplan 456
+
+# Create with description
+emdx task create "Refactor API" --description "Improve performance and add caching"
+
+# Create in specific project
+emdx task create "Add tests" --project myapp
+```
+
+### Listing Tasks
+
+```bash
+# List all tasks
+emdx task list
+
+# Filter by status
+emdx task list --status open
+emdx task list --status active,blocked
+
+# Filter by gameplan
+emdx task list --gameplan 456
+
+# Filter by project
+emdx task list --project myapp
+
+# Limit results
+emdx task list --limit 20
+```
+
+### Viewing and Updating
+
+```bash
+# Show task details
+emdx task show 1
+
+# Update task status
+emdx task update 1 --status active
+emdx task update 1 --status done
+
+# Update priority
+emdx task update 1 --priority 2
+
+# Add note to task log
+emdx task update 1 --note "Made progress on this"
+
+# Set current step (for resume)
+emdx task update 1 --step "Implementing API endpoints"
+```
+
+### Task Dependencies
+
+```bash
+# Show current dependencies
+emdx task depends 1
+
+# Add dependency
+emdx task depends 1 --on 2
+
+# Remove dependency
+emdx task depends 1 --remove 2
+```
+
+### Finding Ready Tasks
+
+```bash
+# Show tasks ready to work (open + dependencies satisfied)
+emdx task ready
+
+# Filter by gameplan
+emdx task ready --gameplan 456
+
+# Filter by project
+emdx task ready --project myapp
+```
+
+### Running Tasks
+
+```bash
+# Run task with Claude (direct execution)
+emdx task run 1
+
+# Run via workflow
+emdx task run 1 --workflow deep_analysis
+
+# Pass workflow variables
+emdx task run 1 --workflow code_fix --var fix_type=production_todos
+
+# Preview prompt without running
+emdx task run 1 --dry-run
+
+# Mark as manually completed
+emdx task manual 1
+emdx task manual 1 --note "Completed via separate PR"
+```
+
+### Task Execution History
+
+```bash
+# Show execution history for a task
+emdx task executions 1
+emdx task executions 1 --limit 20
+```
+
+### Log Management
+
+```bash
+# Add entry to task log
+emdx task log 1 "Started implementation"
+```
+
+### Deleting Tasks
+
+```bash
+# Delete a task
+emdx task delete 1
+
+# Skip confirmation
+emdx task delete 1 --force
+```
+
+### Task Statuses
+
+| Status | Icon | Description |
+|--------|------|-------------|
+| `open` | ○ | Not yet started |
+| `active` | ● | Currently being worked on |
+| `blocked` | ⚠ | Waiting on dependencies or external factors |
+| `done` | ✓ | Completed successfully |
+| `failed` | ✗ | Could not be completed |
+
+---
+
+## 📦 Document Archiving
+
+Archive documents to hide them from default views while preserving them.
+
+### Archive Documents
+
+```bash
+# Archive a document
+emdx archive 42
+
+# Archive document and all descendants
+emdx archive 42 --descendants
+```
+
+### Unarchive Documents
+
+```bash
+# Restore archived document to normal view
+emdx unarchive 42
+```
+
+### Viewing Archived Documents
+
+```bash
+# List documents including archived
+emdx list --archived
+```
+
+---
+
+## 🌊 Cascade - Ideas to Code
+
+The Cascade system transforms raw ideas through stages into working code with PRs.
+
+### Stage Flow
+
+| Stage | Description |
+|-------|-------------|
+| `idea` | Raw idea enters the cascade |
+| `prompt` | Claude transforms idea into well-formed prompt |
+| `analyzed` | Claude analyzes the prompt thoroughly |
+| `planned` | Claude creates detailed implementation gameplan |
+| `done` | Claude implements code and creates PR |
+
+### Adding Ideas
+
+```bash
+# Add an idea to the cascade
+emdx cascade add "Add dark mode toggle to settings"
+
+# Add with custom title
+emdx cascade add "Feature idea" --title "Dark Mode Implementation"
+
+# Add and auto-run through stages
+emdx cascade add "Add dark mode" --auto
+
+# Auto-run and stop at specific stage
+emdx cascade add "Add dark mode" --auto --stop planned
+
+# Shortcuts for common patterns
+emdx cascade add "Add dark mode" --analyze    # idea → analyzed
+emdx cascade add "Add dark mode" --plan       # idea → planned
+
+# Add at a specific starting stage
+emdx cascade add "My gameplan content" --stage planned --auto
+```
+
+### Checking Status
+
+```bash
+# Show cascade status (documents at each stage)
+emdx cascade status
+
+# Show documents at specific stage
+emdx cascade show idea
+emdx cascade show analyzed --limit 20
+```
+
+### Processing Documents
+
+```bash
+# Process one document at a stage (sync - waits for completion)
+emdx cascade process idea --sync
+emdx cascade process prompt --sync
+emdx cascade process analyzed --sync
+emdx cascade process planned --sync  # Creates code and PR
+
+# Process specific document
+emdx cascade process analyzed --doc 123 --sync
+
+# Dry run (show what would be processed)
+emdx cascade process idea --dry-run
+```
+
+### Running Continuously
+
+```bash
+# Run cascade continuously (one stage at a time)
+emdx cascade run
+
+# Auto mode: process ideas end-to-end
+emdx cascade run --auto
+
+# Auto mode with stop stage
+emdx cascade run --auto --stop planned
+
+# Process one document then exit
+emdx cascade run --once
+
+# Custom check interval
+emdx cascade run --interval 10
+```
+
+### Manual Operations
+
+```bash
+# Manually advance a document to next stage
+emdx cascade advance 123
+
+# Advance to specific stage
+emdx cascade advance 123 --to done
+
+# Remove from cascade (keeps document)
+emdx cascade remove 123
+```
+
+### Synthesizing Documents
+
+```bash
+# Combine multiple documents at a stage into one
+emdx cascade synthesize analyzed
+
+# With custom title
+emdx cascade synthesize analyzed --title "Combined Analysis"
+
+# Keep source documents (don't advance to done)
+emdx cascade synthesize analyzed --keep
+
+# Output to different stage
+emdx cascade synthesize analyzed --next planned
+```
+
+### Viewing Run History
+
+```bash
+# Show cascade run history
+emdx cascade runs
+
+# Filter by status
+emdx cascade runs --status running
+emdx cascade runs --status completed
+
+# Show more runs
+emdx cascade runs --limit 20
+```
 
 ---
 
