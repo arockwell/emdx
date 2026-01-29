@@ -118,3 +118,24 @@ class TestCLIBasics:
         result = runner.invoke(app, ["delete"])
         # Should show error about missing ID
         assert result.exit_code != 0
+
+    def test_help_subcommand(self):
+        """Test help subcommand works as alternative to --help."""
+        # Test help with no args shows main help
+        result = runner.invoke(app, ["help"])
+        assert result.exit_code == 0
+        assert "Usage:" in result.stdout
+
+    def test_help_subcommand_for_command(self):
+        """Test help subcommand works for specific commands."""
+        # Test help for a specific command
+        result = runner.invoke(app, ["help", "save"])
+        assert result.exit_code == 0
+        assert "save" in result.stdout.lower()
+
+    def test_help_subcommand_for_nested_command(self):
+        """Test help subcommand works for nested subcommands."""
+        # Test help for nested command (task create)
+        result = runner.invoke(app, ["help", "task", "create"])
+        assert result.exit_code == 0
+        assert "create" in result.stdout.lower()

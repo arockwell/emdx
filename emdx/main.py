@@ -4,8 +4,6 @@ Main CLI entry point for emdx
 """
 
 from typing import Optional
-import logging
-import os
 
 import typer
 from emdx import __build_id__, __version__
@@ -20,7 +18,6 @@ from emdx.commands.gdoc import app as gdoc_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
-from emdx.commands.similarity import app as similarity_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.workflows import app as workflows_app
@@ -33,8 +30,8 @@ from emdx.commands.each import app as each_app
 from emdx.commands.cascade import app as cascade_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.commands.help import help_command
 from emdx.ui.gui import gui
-from emdx.utils.output import console
 
 # Create main app
 app = typer.Typer(
@@ -122,6 +119,9 @@ app.command(name="status")(status_command)
 # Add the gui command
 app.command()(gui)
 
+# Add the help command (alternative to --help)
+app.command(name="help")(help_command)
+
 
 # Version command
 @app.command()
@@ -172,36 +172,6 @@ def main(
 
     # Note: Database connections are established per-command as needed
     # Note: Logging is configured per-module as needed
-
-
-def safe_register_commands(target_app, source_app, prefix=""):
-    """Safely register commands from source app to target app"""
-    try:
-        if hasattr(source_app, 'registered_commands'):
-            for command in source_app.registered_commands:
-                if hasattr(command, 'callback') and callable(command.callback):
-                    target_app.command(name=command.name)(command.callback)
-    except Exception as e:
-        console.print(f"[yellow]Warning: Could not register {prefix} commands: {e}[/yellow]")
-
-
-# Register all command groups
-safe_register_commands(app, core_app, "core")
-safe_register_commands(app, browse_app, "browse")
-safe_register_commands(app, gist_app, "gist")
-safe_register_commands(app, gdoc_app, "gdoc")
-safe_register_commands(app, tag_app, "tags")
-safe_register_commands(app, analyze_app, "analyze")
-safe_register_commands(app, maintain_app, "maintain")
-safe_register_commands(app, similarity_app, "similarity")
-
-# Register subcommand groups
-app.add_typer(executions_app, name="exec", help="Manage Claude executions")
-app.add_typer(claude_app, name="claude", help="Execute documents with Claude")
-app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
-
-# Register standalone commands
-app.command()(gui)
 
 
 def run():
