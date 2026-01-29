@@ -10,10 +10,11 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 
-# Default allowed tools for Claude execution
-DEFAULT_ALLOWED_TOOLS = [
-    "Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep",
-    "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"
+# Default allowed tools for Claude Code execution
+DEFAULT_ALLOWED_TOOLS: List[str] = [
+    "Read", "Write", "Edit", "MultiEdit", "Bash",
+    "Glob", "Grep", "LS", "Task", "TodoWrite",
+    "WebFetch", "WebSearch",
 ]
 
 
