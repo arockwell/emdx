@@ -78,18 +78,20 @@ def test_execution_id_uniqueness():
 
 
 @pytest.mark.integration
-def test_cleanup_commands():
-    """Test cleanup commands exist and can run (may fail due to DB schema issues)."""
-    print("\n=== Test: Cleanup Commands ===")
-    
+def test_maintenance_commands():
+    """Test maintenance commands exist and can run."""
+    print("\n=== Test: Maintenance Commands ===")
+
     commands = [
-        ["emdx", "cleanup", "--all"],
-        ["emdx", "cleanup", "--branches"],
-        ["emdx", "cleanup", "--processes"],
-        ["emdx", "cleanup", "--executions"],
-        ["emdx", "cleanup-dirs"],
+        # The maintain command help
+        ["emdx", "maintain", "--help"],
+        # Analyze command help
+        ["emdx", "analyze", "--help"],
+        # Exec commands
+        ["emdx", "exec", "--help"],
+        ["emdx", "exec", "stats"],
     ]
-    
+
     all_passed = True
     for cmd in commands:
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -101,8 +103,8 @@ def test_cleanup_commands():
             print(f"  stdout: {result.stdout[:100]}...")
             print(f"  stderr: {result.stderr[:100]}...")
             all_passed = False
-    
-    assert all_passed, "Some cleanup commands failed to run at all"
+
+    assert all_passed, "Some maintenance commands failed to run at all"
 
 
 @pytest.mark.integration

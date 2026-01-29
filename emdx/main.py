@@ -3,9 +3,8 @@
 Main CLI entry point for emdx
 """
 
-from typing import Optional
-import logging
 import os
+from typing import Optional
 
 import typer
 from emdx import __build_id__, __version__
@@ -20,7 +19,6 @@ from emdx.commands.gdoc import app as gdoc_app
 from emdx.commands.gist import app as gist_app
 from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.maintain import app as maintain_app
-from emdx.commands.similarity import app as similarity_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.workflows import app as workflows_app
@@ -34,7 +32,6 @@ from emdx.commands.cascade import app as cascade_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
 from emdx.ui.gui import gui
-from emdx.utils.output import console
 
 
 def is_safe_mode() -> bool:
@@ -251,37 +248,21 @@ def main(
     # Note: Logging is configured per-module as needed
 
 
-def safe_register_commands(target_app, source_app, prefix=""):
-    """Safely register commands from source app to target app"""
-    try:
-        if hasattr(source_app, 'registered_commands'):
-            for command in source_app.registered_commands:
-                if hasattr(command, 'callback') and callable(command.callback):
-                    target_app.command(name=command.name)(command.callback)
-    except Exception as e:
-        console.print(f"[yellow]Warning: Could not register {prefix} commands: {e}[/yellow]")
-
-
-# Register all command groups
-safe_register_commands(app, core_app, "core")
-safe_register_commands(app, browse_app, "browse")
-safe_register_commands(app, gist_app, "gist")
-safe_register_commands(app, gdoc_app, "gdoc")
-safe_register_commands(app, tag_app, "tags")
-safe_register_commands(app, analyze_app, "analyze")
-safe_register_commands(app, maintain_app, "maintain")
-safe_register_commands(app, similarity_app, "similarity")
-
-# Register subcommand groups
-# Note: executions_app and lifecycle_app are safe commands
-# claude_app is already conditionally registered above based on safe mode
-
-# Register standalone commands
-# Note: gui is already registered above
-
-
 def run():
-    """Entry point for the CLI"""
+    """Entry point for the CLI.
+
+    Supports trailing 'help' as alternative to --help:
+        emdx save help      → emdx save --help
+        emdx task help      → emdx task --help
+        emdx task create help → emdx task create --help
+    """
+    import sys
+
+    # Convert trailing 'help' to '--help' for convenience
+    # e.g., 'emdx save help' becomes 'emdx save --help'
+    if len(sys.argv) >= 2 and sys.argv[-1] == "help":
+        sys.argv[-1] = "--help"
+
     app()
 
 
