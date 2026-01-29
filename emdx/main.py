@@ -35,8 +35,6 @@ LAZY_SUBCOMMANDS = {
     "similar": "emdx.commands.similarity:app",
     # External services (imports google API libs)
     "gdoc": "emdx.commands.gdoc:app",
-    # TUI (imports textual, can be slow)
-    "gui": "emdx.ui.gui:gui",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -50,7 +48,6 @@ LAZY_HELP = {
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
     "gdoc": "Google Docs integration",
-    "gui": "Launch interactive TUI browser",
 }
 
 
@@ -116,6 +113,7 @@ from emdx.commands.export_profiles import app as export_profiles_app
 from emdx.commands.keybindings import app as keybindings_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.ui.gui import gui as gui_command
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.gist import app as gist_app
@@ -190,6 +188,9 @@ app.command(name="prime")(prime_command)
 
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
+
+# Add the gui command for interactive TUI browser
+app.command(name="gui")(gui_command)
 
 
 # =============================================================================
