@@ -137,10 +137,22 @@ def get_current_version() -> str:
 
 
 def bump_version(new_version: str) -> None:
-    """Bump the version in pyproject.toml."""
+    """Bump the version in pyproject.toml.
+
+    Only updates the [tool.poetry] version, not other version strings
+    like typer version or python_version.
+    """
     pyproject = Path("pyproject.toml")
     content = pyproject.read_text()
-    new_content = re.sub(r'version = "[^"]+"', f'version = "{new_version}"', content)
+
+    # Only replace the version in [tool.poetry] section
+    # Match: version = "x.y.z" that appears right after name = "emdx"
+    new_content = re.sub(
+        r'(\[tool\.poetry\]\nname = "emdx"\n)version = "[^"]+"',
+        f'\\1version = "{new_version}"',
+        content
+    )
+
     pyproject.write_text(new_content)
     print(f"Updated pyproject.toml to version {new_version}")
 
