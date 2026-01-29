@@ -13,12 +13,8 @@ from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Label, MarkdownViewer, Static, TextArea
 
-from emdx.database.documents import (
-    get_document,
-    get_cascade_stats,
-    list_documents_at_stage,
-    update_document_stage,
-)
+from emdx.database.documents import get_document
+from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
 
 logger = logging.getLogger(__name__)
@@ -309,7 +305,7 @@ class StageSummaryBar(Widget):
 
     def refresh_stats(self) -> None:
         """Refresh stage statistics."""
-        self.stats = get_cascade_stats()
+        self.stats = cascade_db.get_cascade_stats()
         self._update_display()
 
     def _update_display(self) -> None:
@@ -398,7 +394,7 @@ class DocumentList(Widget):
     def load_stage(self, stage: str) -> None:
         """Load documents for a stage."""
         self.current_stage = stage
-        self.docs = list_documents_at_stage(stage, limit=50)
+        self.docs = cascade_db.list_documents_at_stage(stage, limit=50)
         self.selected_ids.clear()  # Clear selection when changing stages
         self._refresh_table()
         self._update_selection_status()
@@ -1485,18 +1481,16 @@ class CascadeView(Widget):
 
         next_stage = NEXT_STAGE.get(stage)
         if next_stage:
-            update_document_stage(doc_id, next_stage)
+            cascade_db.update_cascade_stage(doc_id, next_stage)
             self._update_status(f"[green]Moved #{doc_id}: {stage} → {next_stage}[/green]")
             self.refresh_all()
 
     def action_new_idea(self) -> None:
         """Open modal to create a new cascade idea."""
-        from emdx.database.documents import save_document_to_cascade
-
         def handle_idea_result(idea_text: str | None) -> None:
             if idea_text:
                 # Save the idea to cascade at 'idea' stage
-                doc_id = save_document_to_cascade(
+                doc_id = cascade_db.save_document_to_cascade(
                     title=f"Cascade: {idea_text[:50]}{'...' if len(idea_text) > 50 else ''}",
                     content=idea_text,
                     stage="idea",
@@ -1550,7 +1544,7 @@ class CascadeView(Widget):
 
         if not selected_ids:
             # No selection - use all docs at stage
-            docs = list_documents_at_stage(stage)
+            docs = cascade_db.list_documents_at_stage(stage)
             doc_ids = [d["id"] for d in docs]
         else:
             doc_ids = selected_ids
@@ -1560,8 +1554,6 @@ class CascadeView(Widget):
             return
 
         # Build combined content for Claude to synthesize
-        from ..database.documents import get_document, save_document_to_cascade
-
         combined_parts = []
         for doc_id in doc_ids:
             doc = get_document(str(doc_id))
@@ -1572,7 +1564,7 @@ class CascadeView(Widget):
 
         # Create a synthesis input document (keeps sources intact for now)
         title = f"Synthesis: {len(doc_ids)} {stage} documents"
-        synthesis_doc_id = save_document_to_cascade(
+        synthesis_doc_id = cascade_db.save_document_to_cascade(
             title=title,
             content=combined_content,
             stage=stage,  # Same stage - will be processed by Claude
@@ -1665,7 +1657,7 @@ class CascadeBrowser(Widget):
                 return
         else:
             # Get oldest at stage
-            docs = list_documents_at_stage(stage)
+            docs = cascade_db.list_documents_at_stage(stage)
             if not docs:
                 self._update_status(f"[yellow]No documents at stage '{stage}'[/yellow]")
                 return
@@ -1799,7 +1791,7 @@ class CascadeBrowser(Widget):
 
                                         # Create child document with output
                                         if output:
-                                            from emdx.database.documents import save_document, update_document_stage
+                                            from emdx.database.documents import save_document
                                             next_stage = NEXT_STAGE.get(stage, "done")
                                             child_title = f"{doc.get('title', '')} [{stage}→{next_stage}]"
                                             new_doc_id = save_document(
@@ -1808,8 +1800,8 @@ class CascadeBrowser(Widget):
                                                 project=doc.get("project"),
                                                 parent_id=doc_id,
                                             )
-                                            update_document_stage(new_doc_id, next_stage)
-                                            update_document_stage(doc_id, "done")
+                                            cascade_db.update_cascade_stage(new_doc_id, next_stage)
+                                            cascade_db.update_cascade_stage(doc_id, "done")
 
                                             def update_success():
                                                 self._update_status(f"[green]✓ Done![/green] Created #{new_doc_id} at {next_stage}")

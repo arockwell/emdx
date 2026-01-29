@@ -22,16 +22,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ..database.documents import (
-    get_document,
-    get_oldest_at_stage,
-    get_cascade_stats,
-    list_documents_at_stage,
-    save_document,
-    save_document_to_cascade,
-    update_document_stage,
-    update_document_pr_url,
-)
+from ..database.documents import get_document, save_document
+from ..database import cascade as cascade_db
 from ..services.claude_executor import execute_claude_detached, execute_claude_sync
 from ..database.connection import db_connection
 
@@ -211,18 +203,18 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
                     project=doc.get("project"),
                     parent_id=doc_id,
                 )
-                update_document_stage(new_doc_id, next_stage)
+                cascade_db.update_cascade_stage(new_doc_id, next_stage)
                 console.print(f"[green]✓[/green] Created document #{new_doc_id}")
 
                 if pr_url:
-                    update_document_pr_url(new_doc_id, pr_url)
-                    update_document_pr_url(doc_id, pr_url)
+                    cascade_db.update_cascade_pr_url(new_doc_id, pr_url)
+                    cascade_db.update_cascade_pr_url(doc_id, pr_url)
 
                 # Mark original as done
-                update_document_stage(doc_id, "done")
+                cascade_db.update_cascade_stage(doc_id, "done")
             else:
                 # No output - just advance
-                update_document_stage(doc_id, next_stage)
+                cascade_db.update_cascade_stage(doc_id, next_stage)
                 console.print(f"[green]✓[/green] Advanced to {next_stage}")
 
             # Mark execution complete
@@ -295,7 +287,7 @@ def add(
         raise typer.Exit(1)
 
     doc_title = title or f"Cascade: {content[:50]}..."
-    doc_id = save_document_to_cascade(
+    doc_id = cascade_db.save_document_to_cascade(
         title=doc_title,
         content=content,
         stage=stage,
@@ -368,7 +360,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
 @app.command()
 def status():
     """Show cascade status - documents at each stage."""
-    stats = get_cascade_stats()
+    stats = cascade_db.get_cascade_stats()
 
     table = Table(title="Cascade Status")
     table.add_column("Stage", style="cyan")
@@ -411,7 +403,7 @@ def show(
         console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
         raise typer.Exit(1)
 
-    docs = list_documents_at_stage(stage, limit=limit)
+    docs = cascade_db.list_documents_at_stage(stage, limit=limit)
 
     if not docs:
         console.print(f"[dim]No documents at stage '{stage}'[/dim]")
@@ -464,7 +456,7 @@ def process(
             console.print(f"[red]Document #{doc_id} is at stage '{doc.get('stage')}', not '{stage}'[/red]")
             raise typer.Exit(1)
     else:
-        doc = get_oldest_at_stage(stage)
+        doc = cascade_db.get_oldest_at_stage(stage)
         if not doc:
             console.print(f"[dim]No documents waiting at stage '{stage}'[/dim]")
             return
@@ -529,7 +521,7 @@ def run(
             console.print(f"[dim]Checking every {interval}s. Press Ctrl+C to stop.[/dim]")
 
         while True:
-            doc = get_oldest_at_stage("idea")
+            doc = cascade_db.get_oldest_at_stage("idea")
             if doc:
                 console.print(f"\n[cyan]Found idea: #{doc['id']}[/cyan]")
                 try:
@@ -558,7 +550,7 @@ def run(
             processed = False
 
             for stage in active_stages:
-                doc = get_oldest_at_stage(stage)
+                doc = cascade_db.get_oldest_at_stage(stage)
                 if doc:
                     console.print(f"\n[cyan]Found document at '{stage}'[/cyan]")
                     success, _, _ = _process_stage(doc, stage)
@@ -610,7 +602,7 @@ def advance(
             return
         new_stage = NEXT_STAGE.get(current_stage, "done")
 
-    update_document_stage(doc_id, new_stage)
+    cascade_db.update_cascade_stage(doc_id, new_stage)
     console.print(f"[green]✓[/green] Moved document #{doc_id}: {current_stage} → {new_stage}")
 
 
@@ -632,7 +624,7 @@ def remove(
         console.print(f"[yellow]Document #{doc_id} is not in the cascade[/yellow]")
         return
 
-    update_document_stage(doc_id, None)
+    cascade_db.remove_from_cascade(doc_id)
     console.print(f"[green]✓[/green] Removed document #{doc_id} from cascade")
 
 
@@ -658,7 +650,7 @@ def synthesize(
         # Keep source docs (don't advance them to done)
         emdx cascade synthesize analyzed --keep
     """
-    docs = list_documents_at_stage(stage)
+    docs = cascade_db.list_documents_at_stage(stage)
 
     if not docs:
         console.print(f"[yellow]No documents at stage '{stage}' to synthesize[/yellow]")
@@ -683,7 +675,7 @@ def synthesize(
 
     # Create the synthesized document
     doc_title = title or f"Synthesis: {len(docs)} {stage} documents"
-    new_doc_id = save_document_to_cascade(
+    new_doc_id = cascade_db.save_document_to_cascade(
         title=doc_title,
         content=combined_content,
         stage=next_stage,
@@ -694,7 +686,7 @@ def synthesize(
     # Optionally advance source docs to done
     if not keep:
         for doc in docs:
-            update_document_stage(doc["id"], "done")
+            cascade_db.update_cascade_stage(doc["id"], "done")
         console.print(f"[dim]Moved {len(docs)} source documents to 'done'[/dim]")
     else:
         console.print(f"[dim]Kept {len(docs)} source documents at '{stage}'[/dim]")

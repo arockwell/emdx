@@ -887,10 +887,74 @@ def list_non_workflow_documents(
 # =============================================================================
 # Cascade Stage Operations (for autonomous document transformation)
 # =============================================================================
+#
+# DEPRECATION NOTE: These functions now dual-write to both the documents table
+# (for backward compatibility) and the new document_cascade_metadata table.
+# New code should import from emdx.database.cascade instead.
+#
+# During the transition period:
+# - READS: Primary source is document_cascade_metadata (via cascade.py)
+# - WRITES: Dual-write to both tables for backward compatibility
+# =============================================================================
+
+
+def _sync_cascade_metadata(doc_id: int, stage: str | None = None, pr_url: str | None = None) -> None:
+    """Sync cascade metadata to the new table (dual-write for backward compat).
+
+    This is called by the legacy functions to ensure data consistency
+    between documents table and document_cascade_metadata table.
+    """
+    try:
+        with db_connection.get_connection() as conn:
+            # Check if record exists
+            cursor = conn.execute(
+                "SELECT id FROM document_cascade_metadata WHERE document_id = ?",
+                (doc_id,),
+            )
+            exists = cursor.fetchone() is not None
+
+            if stage is None and pr_url is None:
+                # Remove from cascade
+                if exists:
+                    conn.execute(
+                        "DELETE FROM document_cascade_metadata WHERE document_id = ?",
+                        (doc_id,),
+                    )
+            elif exists:
+                # Update existing record
+                updates = []
+                params = []
+                if stage is not None:
+                    updates.append("stage = ?")
+                    params.append(stage)
+                if pr_url is not None:
+                    updates.append("pr_url = ?")
+                    params.append(pr_url)
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+                params.append(doc_id)
+                conn.execute(
+                    f"UPDATE document_cascade_metadata SET {', '.join(updates)} WHERE document_id = ?",
+                    params,
+                )
+            else:
+                # Insert new record
+                conn.execute(
+                    """
+                    INSERT INTO document_cascade_metadata (document_id, stage, pr_url)
+                    VALUES (?, ?, ?)
+                    """,
+                    (doc_id, stage, pr_url),
+                )
+            conn.commit()
+    except Exception as e:
+        # Log but don't fail - the documents table write succeeded
+        logger.warning(f"Failed to sync cascade metadata for doc {doc_id}: {e}")
 
 
 def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
     """Get the oldest document at a given cascade stage.
+
+    DEPRECATED: Use emdx.database.cascade.get_oldest_at_stage() instead.
 
     This is the core primitive for the patrol system - each patrol watches
     a stage and picks up the oldest unprocessed document.
@@ -901,6 +965,14 @@ def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
     Returns:
         The oldest document at that stage, or None if no documents are waiting
     """
+    # Read from new table with fallback to old
+    try:
+        from . import cascade as cascade_db
+        return cascade_db.get_oldest_at_stage(stage)
+    except Exception:
+        pass
+
+    # Fallback to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -918,6 +990,8 @@ def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
 def update_document_stage(doc_id: int, stage: str | None) -> bool:
     """Update a document's cascade stage.
 
+    DEPRECATED: Use emdx.database.cascade.update_cascade_stage() instead.
+
     Args:
         doc_id: Document ID
         stage: New stage (or None to remove from cascade)
@@ -925,6 +999,7 @@ def update_document_stage(doc_id: int, stage: str | None) -> bool:
     Returns:
         True if update was successful
     """
+    # Write to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -935,11 +1010,19 @@ def update_document_stage(doc_id: int, stage: str | None) -> bool:
             (stage, doc_id),
         )
         conn.commit()
-        return cursor.rowcount > 0
+        success = cursor.rowcount > 0
+
+    # Dual-write to new table
+    if success:
+        _sync_cascade_metadata(doc_id, stage=stage)
+
+    return success
 
 
 def update_document_pr_url(doc_id: int, pr_url: str) -> bool:
     """Update a document's PR URL (for cascade done stage).
+
+    DEPRECATED: Use emdx.database.cascade.update_cascade_pr_url() instead.
 
     Args:
         doc_id: Document ID
@@ -948,6 +1031,7 @@ def update_document_pr_url(doc_id: int, pr_url: str) -> bool:
     Returns:
         True if update was successful
     """
+    # Write to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -958,11 +1042,19 @@ def update_document_pr_url(doc_id: int, pr_url: str) -> bool:
             (pr_url, doc_id),
         )
         conn.commit()
-        return cursor.rowcount > 0
+        success = cursor.rowcount > 0
+
+    # Dual-write to new table
+    if success:
+        _sync_cascade_metadata(doc_id, pr_url=pr_url)
+
+    return success
 
 
 def get_document_pr_url(doc_id: int) -> str | None:
     """Get a document's PR URL.
+
+    DEPRECATED: Use emdx.database.cascade.get_cascade_pr_url() instead.
 
     Args:
         doc_id: Document ID
@@ -970,6 +1062,16 @@ def get_document_pr_url(doc_id: int) -> str | None:
     Returns:
         PR URL or None if not set
     """
+    # Read from new table with fallback
+    try:
+        from . import cascade as cascade_db
+        result = cascade_db.get_cascade_pr_url(doc_id)
+        if result is not None:
+            return result
+    except Exception:
+        pass
+
+    # Fallback to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             "SELECT pr_url FROM documents WHERE id = ? AND is_deleted = FALSE",
@@ -982,6 +1084,8 @@ def get_document_pr_url(doc_id: int) -> str | None:
 def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]:
     """List all documents at a given cascade stage.
 
+    DEPRECATED: Use emdx.database.cascade.list_documents_at_stage() instead.
+
     Args:
         stage: The stage to query
         limit: Maximum documents to return
@@ -989,6 +1093,14 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]
     Returns:
         List of documents at that stage, oldest first
     """
+    # Read from new table with fallback
+    try:
+        from . import cascade as cascade_db
+        return cascade_db.list_documents_at_stage(stage, limit)
+    except Exception:
+        pass
+
+    # Fallback to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -1006,12 +1118,22 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]
 def count_documents_at_stage(stage: str) -> int:
     """Count documents at a given cascade stage.
 
+    DEPRECATED: Use emdx.database.cascade.count_documents_at_stage() instead.
+
     Args:
         stage: The stage to query
 
     Returns:
         Number of documents at that stage
     """
+    # Read from new table with fallback
+    try:
+        from . import cascade as cascade_db
+        return cascade_db.count_documents_at_stage(stage)
+    except Exception:
+        pass
+
+    # Fallback to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -1026,9 +1148,19 @@ def count_documents_at_stage(stage: str) -> int:
 def get_cascade_stats() -> dict[str, int]:
     """Get counts of documents at each cascade stage.
 
+    DEPRECATED: Use emdx.database.cascade.get_cascade_stats() instead.
+
     Returns:
         Dictionary mapping stage name to document count
     """
+    # Read from new table with fallback
+    try:
+        from . import cascade as cascade_db
+        return cascade_db.get_cascade_stats()
+    except Exception:
+        pass
+
+    # Fallback to old table
     stages = ["idea", "prompt", "analyzed", "planned", "done"]
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
@@ -1055,6 +1187,8 @@ def save_document_to_cascade(
 ) -> int:
     """Save a document directly into the cascade at a given stage.
 
+    DEPRECATED: Use emdx.database.cascade.save_document_to_cascade() instead.
+
     Args:
         title: Document title
         content: Document content
@@ -1066,6 +1200,7 @@ def save_document_to_cascade(
     Returns:
         The new document's ID
     """
+    # Write to old table
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -1081,4 +1216,7 @@ def save_document_to_cascade(
             from emdx.models.tags import add_tags_to_document
             add_tags_to_document(doc_id, tags)
 
-        return doc_id
+    # Dual-write to new table
+    _sync_cascade_metadata(doc_id, stage=stage)
+
+    return doc_id
