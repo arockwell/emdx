@@ -30,7 +30,6 @@ from emdx.commands.each import app as each_app
 from emdx.commands.cascade import app as cascade_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
-from emdx.commands.help import help_command
 from emdx.ui.gui import gui
 
 # Create main app
@@ -119,9 +118,6 @@ app.command(name="status")(status_command)
 # Add the gui command
 app.command()(gui)
 
-# Add the help command (alternative to --help)
-app.command(name="help")(help_command)
-
 
 # Version command
 @app.command()
@@ -175,7 +171,20 @@ def main(
 
 
 def run():
-    """Entry point for the CLI"""
+    """Entry point for the CLI.
+
+    Supports trailing 'help' as alternative to --help:
+        emdx save help      → emdx save --help
+        emdx task help      → emdx task --help
+        emdx task create help → emdx task create --help
+    """
+    import sys
+
+    # Convert trailing 'help' to '--help' for convenience
+    # e.g., 'emdx save help' becomes 'emdx save --help'
+    if len(sys.argv) >= 2 and sys.argv[-1] == "help":
+        sys.argv[-1] = "--help"
+
     app()
 
 
