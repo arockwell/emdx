@@ -80,21 +80,13 @@ ignore = [
 ]
 
 [tool.mypy]
-<<<<<<< HEAD
-python_version = "0.8.2"
-=======
 python_version = "3.13"
->>>>>>> origin/main
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-<<<<<<< HEAD
-minversion = "0.8.2"
-=======
 minversion = "7.0.0"
->>>>>>> origin/main
 addopts = "-v --tb=short --strict-markers"
 testpaths = ["tests"]
 markers = [
