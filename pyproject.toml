@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.9.0"
+version = "0.10.0"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
@@ -23,7 +23,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.13"
-typer = {extras = ["all"], version = "0.9.0"}
+typer = {extras = ["all"], version = "0.10.0"}
 click = ">=8.0.0,<8.3.0"  # Pin click to avoid breaking changes in 8.3.x
 rich = "^13.0.0"
 python-dotenv = "^1.0.0"
@@ -80,13 +80,13 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "0.9.0"
+python_version = "0.10.0"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-minversion = "0.9.0"
+minversion = "0.10.0"
 addopts = "-v --tb=short --strict-markers"
 testpaths = ["tests"]
 markers = [
