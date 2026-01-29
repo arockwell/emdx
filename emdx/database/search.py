@@ -2,10 +2,40 @@
 Search functionality for emdx documents using FTS5
 """
 
+import re
 from typing import Any, Optional
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
+
+
+def escape_fts5_query(query: str) -> str:
+    """Escape a query string for FTS5 MATCH.
+
+    FTS5 has special characters that need to be escaped:
+    - Double quotes around terms to treat them as literals
+    - Hyphens are NOT operators in FTS5
+    - Asterisks are prefix operators
+    - Other special chars: AND, OR, NOT, NEAR, parentheses
+
+    This function wraps each term in double quotes to treat them literally,
+    preserving the user's intended search.
+    """
+    # If the query is already quoted, return as-is
+    if query.startswith('"') and query.endswith('"'):
+        return query
+
+    # Split on whitespace, quote each term, rejoin
+    # This handles "event-driven" -> '"event-driven"'
+    # and "hello world" -> '"hello" "world"' (implicit AND)
+    terms = query.split()
+    quoted_terms = []
+    for term in terms:
+        # Escape any internal double quotes
+        escaped = term.replace('"', '""')
+        quoted_terms.append(f'"{escaped}"')
+
+    return ' '.join(quoted_terms)
 
 
 def search_documents(
@@ -52,7 +82,7 @@ def search_documents(
                 JOIN documents_fts ON d.id = documents_fts.rowid
                 WHERE documents_fts MATCH ? AND d.deleted_at IS NULL
             """
-            params = [query]
+            params = [escape_fts5_query(query)]
         
         conditions = []
         

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.7.0"
+version = "0.8.0"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
