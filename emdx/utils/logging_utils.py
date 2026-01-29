@@ -1,4 +1,20 @@
-"""Simple logging utilities for EMDX."""
+"""Simple logging utilities for EMDX.
+
+Standard Logger Initialization Pattern
+--------------------------------------
+For most modules, use the standard Python pattern:
+
+    import logging
+    logger = logging.getLogger(__name__)
+
+This is the recommended approach because:
+- It follows Python conventions and is immediately recognizable
+- It allows configuration to be handled at the application level
+- It doesn't add overhead of file handler creation on import
+
+Use `get_logger()` only when you need immediate file-based logging
+with auto-configuration (e.g., for modules that may run standalone).
+"""
 
 import logging
 import sys

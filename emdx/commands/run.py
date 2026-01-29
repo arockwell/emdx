@@ -5,12 +5,10 @@ import subprocess
 from typing import List, Optional
 
 import typer
-from rich.console import Console
 
+from ..utils.output import console
 from ..workflows.executor import workflow_executor
 from .workflows import create_worktree_for_workflow, cleanup_worktree
-
-console = Console()
 
 
 def run(
