@@ -5,7 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - 2025-07-28
+## [0.8.0] - 2025-01-29
+
+### 🚀 Major Features
+
+#### Cascade - Autonomous Idea-to-Code Pipeline
+- **`emdx cascade`** - Transform raw ideas into working code through autonomous stages
+- Stage flow: idea → prompt → analyzed → planned → done (with PR creation)
+- `--auto` flag for continuous processing without manual intervention
+- `--analyze` and `--plan` shortcuts for common operations
+- New Idea modal in TUI for quick idea capture
+- Activity grouping for cascade-related documents
+
+#### Execution System Enhancements
+- **`emdx agent`** - Sub-agent execution with automatic EMDX tracking and metadata
+- **`emdx each`** - Reusable parallel operations with discovery patterns
+- **`emdx run`** - Quick parallel task execution with `--worktree` isolation
+- **`emdx prime`** and **`emdx status`** - Native Claude Code integration commands
+- `--pr` and `--pr-single` flags for automatic PR creation
+- Cursor CLI support with live log streaming
+- UnifiedExecutor for consistent execution across all commands
+
+#### AI-Powered Features
+- **Semantic search** with local embeddings (sentence-transformers)
+- **RAG Q&A system** - Ask questions about your knowledge base
+- **`emdx ai context`** - Pipe relevant docs to Claude CLI (uses Max subscription, no API cost!)
+- TF-IDF similarity scoring for document relationships
+
+#### TUI Improvements
+- **GitHub PR browser** with diff viewer
+- **Search screen** with Google-style command palette results
+- **Synthesis phase indicator** in workflow execution
+- Document titles shown in workflow task queue
+- Central keybinding registry with conflict detection
+- `?` help modal across all views
+- `i` keybinding for quick gist/copy operations
+- `d` key for single task deletion in workflow browser
+
+### 🐛 Bug Fixes
+- **search**: Escape hyphenated queries in FTS5 search
+- **ui**: Prevent Activity Browser flicker when scrolling
+- **ui**: Fix GUI keybindings, search selection, and semantic search
+- **cascade**: Use detached execution for reliable process management
+- **cli**: Add missing DEFAULT_ALLOWED_TOOLS constant
+- **db**: Calculate total_tokens and total_cost_usd in group metrics
+- **types**: Replace List[Any] with proper GitWorktree type annotations
+- **logging**: Add logging to silent exception handlers
+- Reduce default max concurrent from 10 to 5
+- Replace cryptic mode icons with clearer symbols
+- Correct task count display in workflow browser
+
+### ⚡ Performance
+- **Fast merge path** in maintenance operations
+- Optimized Activity layout rendering
+
+### 🔧 Technical Changes
+- Standardized parallelism flag (`-j`) across all CLI commands
+- Backward-compatible template aliases (`{{task}}` → `{{item}}`)
+- Removed deprecated agent system
+- Cleaned up unused tables and dead code
+- Removed `--pattern` flag for clearer language
+
+### 📚 Documentation
+- Updated CLAUDE.md with execution methods decision tree
+- Added documentation for `emdx run` and `emdx ai` commands
+- Added examples to `emdx workflow run --help`
+- Documented auto-loaded doc variables
+
+## [0.7.0] - 2025-01-28
 
 ### 🔥 Major Features Added
 
@@ -353,6 +420,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.8.0]: https://github.com/arockwell/emdx/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/arockwell/emdx/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/arockwell/emdx/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/arockwell/emdx/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/arockwell/emdx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/arockwell/emdx/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/arockwell/emdx/compare/v0.3.1...v0.3.2

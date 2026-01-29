@@ -411,8 +411,9 @@ class SQLiteDatabase:
 
             where_clause = " AND ".join(conditions)
 
-            # Escape special FTS characters
-            safe_query = query.replace('"', '""')
+            # Import escape function from search module
+            from .search import escape_fts5_query
+            safe_query = escape_fts5_query(query)
 
             cursor = conn.execute(
                 f"""
