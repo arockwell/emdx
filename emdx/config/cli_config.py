@@ -195,3 +195,21 @@ def get_available_models(cli_tool: CliTool) -> List[str]:
             "gemini-3-pro",
         ]
     return []
+
+
+# Default tools allowed for Claude CLI execution
+# These are the standard tools that most agents need for basic operations
+DEFAULT_ALLOWED_TOOLS: List[str] = [
+    "Read",
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "Bash",
+    "Glob",
+    "Grep",
+    "LS",
+    "Task",
+    "TodoWrite",
+    "WebFetch",
+    "WebSearch",
+]
