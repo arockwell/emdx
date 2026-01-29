@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.8.1"
+version = "0.9.1"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
@@ -80,13 +80,13 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "0.8.1"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-minversion = "0.8.1"
+minversion = "7.0.0"
 addopts = "-v --tb=short --strict-markers"
 testpaths = ["tests"]
 markers = [
