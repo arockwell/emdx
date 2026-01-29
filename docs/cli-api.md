@@ -831,8 +831,51 @@ emdx gist import <gist_id>
 
 ### **Environment Variables**
 - `EMDX_DB_PATH` - Custom database location
+- `EMDX_SAFE_MODE` - Enable safe mode (see below)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
+
+### **Safe Mode**
+
+Safe mode disables execution commands that can spawn external processes or make changes. This is useful for:
+- Read-only access to the knowledge base
+- Environments where external execution should be prevented
+- Security-conscious deployments
+
+**Enable safe mode:**
+
+```bash
+# Via environment variable
+export EMDX_SAFE_MODE=1
+emdx cascade add "idea"  # Will show: Command 'cascade' is disabled in safe mode.
+
+# Or set per-command
+EMDX_SAFE_MODE=1 emdx run "task"  # Will show disabled message
+```
+
+**Disabled commands in safe mode:**
+- `cascade` - Autonomous document transformation pipeline
+- `run` - Quick task execution
+- `each` - Reusable parallel commands
+- `agent` - Sub-agent execution
+- `workflow` - Multi-stage workflow execution
+- `claude` - Claude document execution
+
+**Always available commands:**
+- `save`, `find`, `view`, `edit`, `delete` - Document management
+- `tag`, `untag`, `tags`, `legend`, `retag` - Tag management
+- `list`, `recent`, `stats` - Information commands
+- `gui`, `prime`, `status` - Interface and overview
+- `ai` (ask, search, context) - AI-powered features
+- `export`, `export-profile` - Export functionality
+- `exec` - Execution monitoring (read-only)
+- `group`, `task`, `lifecycle` - Organization commands
+
+**Error message:**
+When a disabled command is invoked, you'll see:
+```
+Command 'cascade' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.
+```
 
 ### **Default Locations**
 - **Database**: `~/.emdx/emdx.db`
