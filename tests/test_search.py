@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from emdx.database.search import search_documents
+from emdx.database.search import escape_fts5_query, search_documents
 
 
 class FTS5TestDatabase:
@@ -551,16 +551,24 @@ class TestSearchEdgeCases:
         # Should match the first document which has "Python web" as a phrase
         assert len(results) >= 0
 
-    def test_search_with_or_operator(self, mock_db_connection):
-        """Test OR search with FTS5."""
+    def test_search_with_or_literal(self, mock_db_connection):
+        """Test that 'OR' is treated as a literal word, not FTS operator.
+
+        After the hyphenated query fix, all query terms are quoted to prevent
+        special characters (like hyphens) from being interpreted as operators.
+        This means FTS operators like OR are no longer available in queries.
+        """
         db = mock_db_connection
 
         db.save_document("Python Guide", "Python basics", "project1")
         db.save_document("JavaScript Guide", "JavaScript basics", "project1")
-        db.save_document("Ruby Guide", "Ruby basics", "project1")
+        db.save_document("Word OR Logic", "This doc contains the word OR", "project1")
 
-        results = search_documents("Python OR JavaScript")
-        assert len(results) == 2
+        # "Python OR JavaScript" is now treated as three literal terms
+        # Only the doc with literal "OR" in it will match all three terms
+        results = search_documents("OR")
+        assert len(results) == 1
+        assert "Word OR Logic" in results[0]["title"]
 
     def test_stemming_with_porter(self, mock_db_connection):
         """Test that Porter stemmer works (running -> run)."""
@@ -572,3 +580,105 @@ class TestSearchEdgeCases:
         results = search_documents("run")
         assert len(results) == 1
         assert results[0]["title"] == "Running Tips"
+
+
+class TestEscapeFts5Query:
+    """Test the escape_fts5_query function."""
+
+    def test_escape_simple_word(self):
+        """Test escaping a simple word."""
+        assert escape_fts5_query("hello") == '"hello"'
+
+    def test_escape_hyphenated_word(self):
+        """Test escaping a hyphenated word like 'event-driven'."""
+        # The hyphen would be interpreted as NOT operator without escaping
+        assert escape_fts5_query("event-driven") == '"event-driven"'
+
+    def test_escape_multiple_words(self):
+        """Test escaping multiple words."""
+        assert escape_fts5_query("hello world") == '"hello" "world"'
+
+    def test_escape_hyphenated_phrase(self):
+        """Test escaping a phrase with hyphenated word."""
+        assert escape_fts5_query("multi-stage workflow") == '"multi-stage" "workflow"'
+
+    def test_escape_preserves_already_quoted(self):
+        """Test that already quoted strings are preserved."""
+        assert escape_fts5_query('"already quoted"') == '"already quoted"'
+
+    def test_escape_handles_internal_quotes(self):
+        """Test escaping internal double quotes."""
+        # Internal quotes should be doubled to escape them in FTS5
+        result = escape_fts5_query('say "hello"')
+        assert '""' in result  # Internal quotes should be escaped
+
+    def test_escape_multiple_hyphens(self):
+        """Test escaping multiple hyphenated terms."""
+        result = escape_fts5_query("full-text event-driven")
+        assert result == '"full-text" "event-driven"'
+
+
+class TestHyphenatedSearch:
+    """Test that hyphenated terms work correctly in FTS5 search."""
+
+    def test_search_hyphenated_term(self, mock_db_connection):
+        """Test searching for hyphenated terms like 'event-driven'."""
+        db = mock_db_connection
+
+        db.save_document(
+            "Event-Driven Architecture",
+            "Learn about event-driven programming patterns",
+            "project1"
+        )
+        db.save_document(
+            "Other Doc",
+            "Some other content without the term",
+            "project1"
+        )
+
+        # This should NOT fail with "no such column: driven" error
+        results = search_documents("event-driven")
+        assert len(results) == 1
+        assert "Event-Driven" in results[0]["title"]
+
+    def test_search_multiple_hyphenated_terms(self, mock_db_connection):
+        """Test searching for multiple hyphenated terms."""
+        db = mock_db_connection
+
+        db.save_document(
+            "Multi-Stage Pipeline",
+            "A multi-stage, event-driven workflow system",
+            "project1"
+        )
+
+        results = search_documents("multi-stage event-driven")
+        assert len(results) == 1
+
+    def test_search_mixed_hyphenated_and_regular(self, mock_db_connection):
+        """Test searching with mix of hyphenated and regular terms."""
+        db = mock_db_connection
+
+        db.save_document(
+            "Full-Text Search",
+            "Implementing full-text search with SQLite FTS5",
+            "project1"
+        )
+
+        results = search_documents("full-text SQLite")
+        assert len(results) == 1
+
+    def test_search_term_with_dash_prefix(self, mock_db_connection):
+        """Test that dash at start doesn't break the query."""
+        db = mock_db_connection
+
+        db.save_document(
+            "Test Doc",
+            "Some test content here",
+            "project1"
+        )
+
+        # This used to be interpreted as NOT operator
+        # Now it should search for the literal term
+        results = search_documents("-test")
+        # Should not error, may or may not find results depending on tokenizer
+        assert isinstance(results, list)

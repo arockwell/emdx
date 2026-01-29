@@ -82,3 +82,15 @@ clean:
     rm -rf .mypy_cache
     rm -rf .ruff_cache
     rm -rf htmlcov
+
+# Show changelog preview (what would go in next release)
+changelog:
+    python3 scripts/release.py changelog
+
+# Bump version (e.g., just bump 0.8.0)
+bump version:
+    python3 scripts/release.py bump {{version}}
+
+# Prepare a release (bump version + update changelog)
+release version:
+    python3 scripts/release.py release {{version}}
