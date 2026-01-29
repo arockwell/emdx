@@ -29,6 +29,8 @@ LAZY_SUBCOMMANDS = {
     "run": "emdx.commands.run:run",
     "agent": "emdx.commands.agent:agent",
     "claude": "emdx.commands.claude_execute:app",
+    # Swarm - k3d parallel agent execution (imports k8s libs)
+    "swarm": "emdx.commands.swarm:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
     # Similarity (imports scikit-learn)
@@ -47,6 +49,7 @@ LAZY_HELP = {
     "run": "Quick task execution (parallel, worktree isolation)",
     "agent": "Run Claude sub-agent with EMDX tracking",
     "claude": "Execute documents with Claude",
+    "swarm": "Parallel agent execution with k3d isolation (battlestation)",
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
     "gdoc": "Google Docs integration",
@@ -64,7 +67,7 @@ def is_safe_mode() -> bool:
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "workflow", "claude"}
+UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "workflow", "claude", "swarm"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
