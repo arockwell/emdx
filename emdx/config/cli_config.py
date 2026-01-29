@@ -155,6 +155,22 @@ def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     return alias
 
 
+# Default allowed tools for Claude Code execution
+DEFAULT_ALLOWED_TOOLS = [
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "LS",
+    "TodoRead",
+    "TodoWrite",
+    "WebFetch",
+    "WebSearch",
+]
+
+
 def get_available_models(cli_tool: CliTool) -> List[str]:
     """Get list of known models for a CLI tool.
 

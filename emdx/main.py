@@ -8,8 +8,8 @@ fast. Heavy commands (workflow, cascade, each, ai, gui) are only imported when
 actually invoked.
 """
 
-from typing import Optional
 import os
+from typing import Optional
 
 import typer
 from emdx import __build_id__, __version__
@@ -271,7 +271,20 @@ def main(
 
 
 def run():
-    """Entry point for the CLI"""
+    """Entry point for the CLI.
+
+    Supports trailing 'help' as alternative to --help:
+        emdx save help      → emdx save --help
+        emdx task help      → emdx task --help
+        emdx task create help → emdx task create --help
+    """
+    import sys
+
+    # Convert trailing 'help' to '--help' for convenience
+    # e.g., 'emdx save help' becomes 'emdx save --help'
+    if len(sys.argv) >= 2 and sys.argv[-1] == "help":
+        sys.argv[-1] = "--help"
+
     app()
 
 
