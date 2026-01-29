@@ -36,7 +36,7 @@ LAZY_SUBCOMMANDS = {
     # External services (imports google API libs)
     "gdoc": "emdx.commands.gdoc:app",
     # TUI (imports textual, can be slow)
-    "gui": "emdx.ui.gui:gui",
+    "gui": "emdx.ui.gui:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
