@@ -16,9 +16,9 @@ def get_document(identifier: str) -> Optional[dict[str, Any]]:
     return db.get_document(identifier)
 
 
-def list_documents(project: Optional[str] = None, limit: int = DEFAULT_BROWSE_LIMIT) -> list[dict[str, Any]]:
+def list_documents(project: Optional[str] = None, limit: int = DEFAULT_BROWSE_LIMIT, include_archived: bool = False) -> list[dict[str, Any]]:
     """List documents with optional project filter"""
-    return db.list_documents(project, limit)
+    return db.list_documents(project, limit, include_archived=include_archived)
 
 
 def search_documents(
