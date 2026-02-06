@@ -200,7 +200,6 @@ class TestCLIIntegration:
             'emdx.commands.ask',
             'emdx.commands.similarity',
             'emdx.commands.gdoc',
-            'emdx.ui.gui',
         ]
 
         # Clear any cached imports
