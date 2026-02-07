@@ -21,6 +21,7 @@ from textual.containers import Horizontal, Vertical, ScrollableContainer
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
+from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Static, RichLog
 
 from .sparkline import sparkline
@@ -233,12 +234,11 @@ class AgentLogSubscriber(LogStreamSubscriber):
 class _ViewState:
     """Snapshot of activity view state for preserving across refreshes.
 
-    Captured once at the start of a refresh cycle and threaded through all
-    table updates so scroll/selection position is never lost — even when
-    _update_table is called multiple times in the same refresh.
+    Captures selection and expansion state so they can be restored after
+    data is reloaded. Scroll position is preserved automatically because
+    _update_table uses in-place cell updates instead of clear()+rebuild.
     """
 
-    scroll_y: int = 0
     selected_id: Tuple[str, int] | None = None
     selected_idx: int = 0
     expanded_ids: Set[Tuple[str, int]] = field(default_factory=set)
@@ -246,14 +246,6 @@ class _ViewState:
     @classmethod
     def capture(cls, view: "ActivityView") -> "_ViewState":
         """Capture current view state."""
-        # Scroll position
-        try:
-            table = view.query_one("#activity-table", DataTable)
-            scroll_y = table.scroll_y
-        except Exception:
-            scroll_y = 0
-
-        # Selection
         selected_id = None
         if view.flat_items and view.selected_idx < len(view.flat_items):
             item = view.flat_items[view.selected_idx]
@@ -272,7 +264,6 @@ class _ViewState:
         _collect_expanded(view.activity_items)
 
         return cls(
-            scroll_y=scroll_y,
             selected_id=selected_id,
             selected_idx=view.selected_idx,
             expanded_ids=expanded_ids,
@@ -465,8 +456,6 @@ class ActivityView(HelpMixin, Widget):
         self._zombies_cleaned = False
         # Guard flag: suppresses row-highlighted handler during programmatic refresh
         self._refreshing = False
-        # Row content cache — skip table rebuild when nothing changed
-        self._last_table_rows: list[tuple[str, str, str, str]] = []
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -514,14 +503,12 @@ class ActivityView(HelpMixin, Widget):
         # Start refresh timer
         self.set_interval(5.0, self._refresh_data)
 
-    async def load_data(self, update_preview: bool = True, restore_scroll_y: int | None = None) -> None:
+    async def load_data(self, update_preview: bool = True) -> None:
         """Load activity data.
 
         Args:
             update_preview: Whether to update the preview pane. Set to False during
                            periodic refresh to avoid flickering.
-            restore_scroll_y: Explicit scroll position to restore. Passed through to
-                              _update_table to avoid race conditions with deferred restores.
         """
         self.activity_items = []
 
@@ -576,7 +563,7 @@ class ActivityView(HelpMixin, Widget):
         self._flatten_items()
 
         # Update UI
-        await self._update_table(restore_scroll_y=restore_scroll_y)
+        await self._update_table()
         await self._update_status_bar()
         if update_preview:
             await self._update_preview(force=True)
@@ -1221,41 +1208,56 @@ class ActivityView(HelpMixin, Widget):
 
         return rows
 
-    async def _update_table(self, restore_scroll_y: int | None = None) -> None:
-        """Update the activity table.
+    async def _update_table(self) -> None:
+        """Update the activity table using in-place cell updates.
 
-        Args:
-            restore_scroll_y: Explicit scroll position to restore after update.
-                              If None, captures and restores current position.
+        Instead of clear()+re-add (which destroys scroll/cursor state),
+        we update existing cells, append new rows, or trim excess rows.
+        This keeps Textual's internal scroll and cursor state intact.
         """
         table = self.query_one("#activity-table", DataTable)
-
         new_rows = self._build_row_data()
+        old_count = table.row_count
+        new_count = len(new_rows)
 
-        # Skip the expensive clear+rebuild if content is identical —
-        # this is the common case during periodic refresh and avoids all
-        # scroll/cursor disruption entirely.
-        if new_rows == self._last_table_rows:
+        if old_count == 0 and new_count == 0:
             return
 
-        self._last_table_rows = new_rows
+        # First load (empty table) — just add all rows
+        if old_count == 0:
+            for row in new_rows:
+                table.add_row(*row)
+            if self.flat_items and self.selected_idx < len(self.flat_items):
+                table.move_cursor(row=self.selected_idx, scroll=False)
+            return
 
-        # Preserve scroll position to prevent visual flicker during refresh
-        saved_scroll_y = restore_scroll_y if restore_scroll_y is not None else table.scroll_y
+        # Update cells that already exist in-place (no scroll disruption)
+        for row_idx in range(min(old_count, new_count)):
+            for col_idx, value in enumerate(new_rows[row_idx]):
+                try:
+                    table.update_cell_at(Coordinate(row_idx, col_idx), value)
+                except Exception:
+                    pass
 
-        table.clear()
-        for row in new_rows:
-            table.add_row(*row)
+        # If we have more rows now, append the extras
+        if new_count > old_count:
+            for row in new_rows[old_count:]:
+                table.add_row(*row)
 
-        # Restore cursor position without scrolling
-        if self.flat_items and self.selected_idx < len(self.flat_items):
-            table.move_cursor(row=self.selected_idx, scroll=False)
+        # If we have fewer rows now, remove from the bottom
+        elif new_count < old_count:
+            # Remove rows from bottom to top to keep indices stable
+            rows_to_remove = list(table.ordered_rows)[new_count:]
+            for row_key in reversed(rows_to_remove):
+                try:
+                    table.remove_row(row_key.key)
+                except Exception:
+                    pass
 
-        # Restore scroll position after rows are rendered
-        def restore_scroll():
-            if saved_scroll_y > 0:
-                table.scroll_to(y=saved_scroll_y, animate=False)
-        self.call_later(restore_scroll)
+            # After removing rows, cursor may be past the end — fix it
+            if self.selected_idx >= new_count:
+                self.selected_idx = max(0, new_count - 1)
+                table.move_cursor(row=self.selected_idx, scroll=False)
 
     async def _update_status_bar(self) -> None:
         """Update the status bar with current stats."""
@@ -2209,19 +2211,16 @@ class ActivityView(HelpMixin, Widget):
     async def _refresh_data(self) -> None:
         """Periodic refresh of data.
 
-        Captures all view state (scroll, selection, expansion) once at the top,
-        then threads it through every table update to prevent scroll jumps.
+        Uses in-place cell updates (via _update_table) so scroll position
+        and cursor are never disrupted. We just need to preserve which items
+        were expanded and which item was selected.
         """
-        # Snapshot everything before touching the table
         state = _ViewState.capture(self)
 
-        # Suppress row-highlighted handler during refresh to prevent:
-        # 1. Expensive preview/context redraws from programmatic cursor moves
-        # 2. selected_idx being overwritten by intermediate move_cursor calls
         self._refreshing = True
         try:
-            # Load fresh data (calls _update_table internally)
-            await self.load_data(update_preview=False, restore_scroll_y=state.scroll_y)
+            # Load fresh data — _update_table uses in-place cell updates
+            await self.load_data(update_preview=False)
 
             # Restore expanded state — recursively walk the tree so nested
             # groups (which can be arbitrarily deep) get re-expanded too.
@@ -2243,17 +2242,14 @@ class ActivityView(HelpMixin, Widget):
 
                 await _restore_expanded(self.activity_items)
 
-                # Re-flatten and update table with the SAME saved scroll position
+                # Re-flatten and update table (in-place — no scroll disruption)
                 self._flatten_items()
-                await self._update_table(restore_scroll_y=state.scroll_y)
+                await self._update_table()
 
             # Restore selection cursor
             state.restore_selection(self)
         finally:
             self._refreshing = False
-
-        # Preview doesn't need updating during refresh unless item changed
-        # The cache in _update_preview handles this
 
     async def _expand_workflow(self, item: ActivityItem) -> None:
         """Expand a workflow to show its stage runs and individual runs.
