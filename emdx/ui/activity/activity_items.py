@@ -820,3 +820,104 @@ class AgentExecutionItem(ActivityItem):
                     pass
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
+
+
+@dataclass
+class MailItem(ActivityItem):
+    """A mail message in the activity stream."""
+
+    mail_message: Dict[str, Any] = field(default_factory=dict)
+    sender: str = ""
+    recipient: str = ""
+    is_read: bool = False
+    comment_count: int = 0
+    url: str = ""
+
+    @property
+    def item_type(self) -> str:
+        return "mail"
+
+    @property
+    def type_icon(self) -> str:
+        return "📧"
+
+    @property
+    def status_icon(self) -> str:
+        return "○" if self.is_read else "●"
+
+    def can_expand(self) -> bool:
+        return self.comment_count > 0
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        """Load replies as children."""
+        import asyncio
+        from emdx.services.mail_service import get_mail_service
+
+        children = []
+        service = get_mail_service()
+        thread = await asyncio.to_thread(service.get_thread, self.item_id)
+
+        if thread and thread.comments:
+            for i, comment in enumerate(thread.comments):
+                created_at = comment.get("created_at", "")
+                if isinstance(created_at, str) and created_at:
+                    try:
+                        parsed = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        # Strip timezone to match naive datetimes used elsewhere
+                        ts = parsed.replace(tzinfo=None)
+                    except ValueError:
+                        ts = self.timestamp
+                else:
+                    ts = self.timestamp
+
+                children.append(
+                    MailReplyItem(
+                        item_id=self.item_id * 1000 + i,
+                        title=f"@{comment.get('author', '?')}",
+                        timestamp=ts,
+                        body=comment.get("body", ""),
+                        author=comment.get("author", ""),
+                        depth=self.depth + 1,
+                    )
+                )
+        return children
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        """Show message body in preview."""
+        body = self.mail_message.get("body", "")
+        header = f"📧 #{self.item_id} from @{self.sender}"
+
+        content = f"# {self.title}\n\n"
+        content += f"**From:** @{self.sender} → @{self.recipient}\n\n"
+        content += f"---\n\n{body}"
+
+        return content, header
+
+
+@dataclass
+class MailReplyItem(ActivityItem):
+    """A reply within a mail thread (child of MailItem)."""
+
+    body: str = ""
+    author: str = ""
+
+    @property
+    def item_type(self) -> str:
+        return "mail_reply"
+
+    @property
+    def type_icon(self) -> str:
+        return "↩"
+
+    @property
+    def status_icon(self) -> str:
+        return "○"
+
+    def can_expand(self) -> bool:
+        return False
+
+    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+        return []
+
+    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+        return self.body, f"↩ @{self.author}"

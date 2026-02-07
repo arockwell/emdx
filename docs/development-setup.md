@@ -297,6 +297,46 @@ log("Debug message", data=some_object)
 textual console
 ```
 
+#### **Headless TUI Testing**
+
+Use Textual's `run_test()` to debug TUI crashes without launching an interactive terminal. This is especially useful in CI or when working inside Claude Code where interactive TUIs can't run.
+
+```python
+# test_tui_headless.py - reproduce TUI crashes without a terminal
+import asyncio
+from textual.app import App, ComposeResult
+from emdx.ui.activity.activity_view import ActivityView
+
+class TestApp(App):
+    def compose(self) -> ComposeResult:
+        yield ActivityView(id="activity-view")
+
+async def main():
+    app = TestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await asyncio.sleep(2)  # Let data load
+        print("App loaded OK")
+
+asyncio.run(main())
+```
+
+Run it:
+```bash
+poetry run python test_tui_headless.py
+```
+
+The headless test app mounts real widgets, runs `on_mount()`, loads data, and renders — so it catches the same errors you'd see in the live GUI (e.g. type errors in `format_time_ago`, missing attributes on new item types, rendering bugs). Tracebacks print to stderr with full locals.
+
+You can also interact with the app via the `pilot`:
+```python
+async with app.run_test(size=(120, 40)) as pilot:
+    await pilot.pause()
+    await pilot.press("j")      # Navigate down
+    await pilot.press("l")      # Expand
+    await pilot.press("a")      # Custom action
+```
+
 ## 📦 **Build and Distribution**
 
 ### **Building the Package**
