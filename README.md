@@ -73,25 +73,6 @@ emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{item}}"
 # Run on document IDs from previous work
 emdx run 5350 5351 5352
 
-### Presets
-
-Save configurations for common workflows:
-
-```bash
-# Create a preset
-emdx preset create security-audit \
-  --discover "find . -name '*.py'" \
-  --template "Security review {{item}}" \
-  --jobs 5 \
-  --synthesize
-
-# Use it
-emdx run -p security-audit
-
-# List presets
-emdx preset list
-```
-
 ## Agent Execution
 
 Run Claude Code sub-agents with automatic tracking:
@@ -183,22 +164,6 @@ emdx workflow run task_parallel -t "t1" -t "t2" -t "t3" -j 2
 | `iterative` | Sequential refinement |
 | `adversarial` | Multiple perspectives, then synthesis |
 | `dynamic` | Discover tasks at runtime |
-
-### Workflow Presets
-
-Save workflow configurations for reuse:
-
-```bash
-# Create from variables
-emdx workflow preset create task_parallel my-preset \
-  -v topic="API Security"
-
-# Create from a successful run
-emdx workflow preset from-run task_parallel my-preset --run 42
-
-# Use a preset
-emdx workflow run task_parallel --preset my-preset
-```
 
 ## Monitoring Executions
 

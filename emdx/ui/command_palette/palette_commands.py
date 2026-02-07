@@ -19,8 +19,6 @@ class CommandContext(Enum):
     GLOBAL = "global"  # Available everywhere
     DOCUMENT_BROWSER = "document_browser"
     ACTIVITY = "activity"
-    WORKFLOW = "workflow"
-    FILE_BROWSER = "file_browser"
 
 
 @dataclass
@@ -151,24 +149,12 @@ class CommandRegistry:
 
         self.register(
             PaletteCommand(
-                id="nav.workflows",
-                name="Go to Workflows",
-                description="Switch to Workflow browser",
-                keywords=["workflow", "runs", "tasks", "execution"],
+                id="nav.cascade",
+                name="Go to Cascade",
+                description="Switch to Cascade browser",
+                keywords=["cascade", "pipeline", "stages", "flow"],
                 context=CommandContext.GLOBAL,
                 shortcut="2",
-                category="Navigation",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="nav.documents",
-                name="Go to Documents",
-                description="Switch to Document browser",
-                keywords=["document", "docs", "knowledge", "notes", "browse"],
-                context=CommandContext.GLOBAL,
-                shortcut="3",
                 category="Navigation",
             )
         )
@@ -180,43 +166,19 @@ class CommandRegistry:
                 description="Switch to Search screen",
                 keywords=["search", "find", "query", "lookup"],
                 context=CommandContext.GLOBAL,
+                shortcut="3",
+                category="Navigation",
+            )
+        )
+
+        self.register(
+            PaletteCommand(
+                id="nav.documents",
+                name="Go to Documents",
+                description="Switch to Document browser",
+                keywords=["document", "docs", "knowledge", "notes", "browse"],
+                context=CommandContext.GLOBAL,
                 shortcut="4",
-                category="Navigation",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="nav.files",
-                name="Go to Files",
-                description="Switch to File browser",
-                keywords=["files", "file", "directory", "folder", "explorer"],
-                context=CommandContext.GLOBAL,
-                shortcut="f",
-                category="Navigation",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="nav.git",
-                name="Go to Git",
-                description="Switch to Git browser",
-                keywords=["git", "version", "diff", "commit", "branch"],
-                context=CommandContext.GLOBAL,
-                shortcut="g",
-                category="Navigation",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="nav.logs",
-                name="Go to Logs",
-                description="Switch to Log browser",
-                keywords=["logs", "log", "output", "debug", "trace"],
-                context=CommandContext.GLOBAL,
-                shortcut="l",
                 category="Navigation",
             )
         )

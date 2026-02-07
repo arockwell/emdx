@@ -19,11 +19,7 @@ class Context(Enum):
         ├── DOCUMENT_*
         │   └── VIM_* (when editing)
         ├── AGENT_*
-        ├── FILE_*
-        ├── TASK_*
-        ├── WORKFLOW_*
         ├── LOG_*
-        ├── CONTROL_*
         └── MODAL_* (highest priority, overrides all)
     """
 
@@ -44,30 +40,9 @@ class Context(Enum):
     AGENT_NORMAL = "agent:normal"
     AGENT_FORM = "agent:form"
 
-    # File browser contexts
-    FILE_NORMAL = "file:normal"
-    FILE_EDIT = "file:edit"
-
-    # Task browser contexts
-    TASK_NORMAL = "task:normal"
-    TASK_FILTER = "task:filter"
-
-    # Workflow browser contexts
-    WORKFLOW_NORMAL = "workflow:normal"
-
     # Log browser contexts
     LOG_NORMAL = "log:normal"
     LOG_SEARCH = "log:search"
-
-    # Control center (Pulse) contexts
-    CONTROL_NORMAL = "control:normal"
-    CONTROL_ZOOM0 = "control:zoom0"
-    CONTROL_ZOOM1 = "control:zoom1"
-    CONTROL_ZOOM2 = "control:zoom2"
-
-    # Git browser contexts
-    GIT_NORMAL = "git:normal"
-    GIT_DIFF = "git:diff"
 
     # Vim editor contexts (nested within edit contexts)
     VIM_NORMAL = "vim:normal"
@@ -85,31 +60,16 @@ class Context(Enum):
     MODAL_AGENT_EDIT = "modal:agent_edit"
     MODAL_AGENT_RUN = "modal:agent_run"
     MODAL_AGENT_SELECT = "modal:agent_select"
-    MODAL_FILE = "modal:file"
-    MODAL_FILE_SAVE = "modal:file_save"
-    MODAL_FILE_EXECUTE = "modal:file_execute"
-    MODAL_WORKTREE = "modal:worktree"
-    MODAL_WORKTREE_PICK = "modal:worktree_pick"
-    MODAL_STAGE = "modal:stage"
-    MODAL_STAGE_DOC = "modal:stage_doc"
-    MODAL_STAGE_AGENT = "modal:stage_agent"
-    MODAL_STAGE_PROJECT = "modal:stage_project"
-    MODAL_STAGE_CONFIG = "modal:stage_config"
-    MODAL_COMMIT = "modal:commit"
     MODAL_FULLSCREEN = "modal:fullscreen"
-    MODAL_EXECUTION = "modal:execution"
 
     # Nested view contexts (widgets within browsers)
     LOG_VIEW = "log:view"
-    FILE_LIST = "file:list"
-    PULSE_VIEW = "control:pulse"
 
     # Input contexts (when typing in an input field)
     INPUT_TITLE = "input:title"
     INPUT_AGENT_NAME = "input:agent_name"
     INPUT_AGENT_DISPLAY = "input:agent_display"
     INPUT_AGENT_DESC = "input:agent_desc"
-    INPUT_FILE = "input:file"
 
     # Widget-specific contexts for agent modals
     AGENT_LIST_WIDGET = "widget:agent_list"
@@ -134,25 +94,9 @@ class Context(Enum):
             # Agent contexts
             cls.AGENT_NORMAL: [cls.GLOBAL],
             cls.AGENT_FORM: [cls.AGENT_NORMAL, cls.GLOBAL],
-            # File contexts
-            cls.FILE_NORMAL: [cls.GLOBAL],
-            cls.FILE_EDIT: [cls.FILE_NORMAL, cls.GLOBAL],
-            # Task contexts
-            cls.TASK_NORMAL: [cls.GLOBAL],
-            cls.TASK_FILTER: [cls.TASK_NORMAL, cls.GLOBAL],
-            # Workflow contexts
-            cls.WORKFLOW_NORMAL: [cls.GLOBAL],
             # Log contexts
             cls.LOG_NORMAL: [cls.GLOBAL],
             cls.LOG_SEARCH: [cls.LOG_NORMAL, cls.GLOBAL],
-            # Control contexts
-            cls.CONTROL_NORMAL: [cls.GLOBAL],
-            cls.CONTROL_ZOOM0: [cls.CONTROL_NORMAL, cls.GLOBAL],
-            cls.CONTROL_ZOOM1: [cls.CONTROL_NORMAL, cls.GLOBAL],
-            cls.CONTROL_ZOOM2: [cls.CONTROL_NORMAL, cls.GLOBAL],
-            # Git contexts
-            cls.GIT_NORMAL: [cls.GLOBAL],
-            cls.GIT_DIFF: [cls.GIT_NORMAL, cls.GLOBAL],
             # Vim contexts (nested in edit)
             cls.VIM_NORMAL: [cls.DOCUMENT_EDIT, cls.GLOBAL],
             cls.VIM_INSERT: [cls.VIM_NORMAL, cls.DOCUMENT_EDIT, cls.GLOBAL],
@@ -161,25 +105,17 @@ class Context(Enum):
             cls.VIM_COMMAND: [cls.VIM_NORMAL, cls.DOCUMENT_EDIT, cls.GLOBAL],
             # Nested view contexts
             cls.LOG_VIEW: [cls.LOG_NORMAL, cls.GLOBAL],
-            cls.FILE_LIST: [cls.FILE_NORMAL, cls.GLOBAL],
-            cls.PULSE_VIEW: [cls.CONTROL_NORMAL, cls.GLOBAL],
             # Modals don't inherit - they override everything
             cls.MODAL_THEME: [],
             cls.MODAL_CONFIRM: [],
             cls.MODAL_DELETE: [],
             cls.MODAL_AGENT: [],
-            cls.MODAL_FILE: [],
-            cls.MODAL_WORKTREE: [],
-            cls.MODAL_WORKTREE_PICK: [],
-            cls.MODAL_STAGE: [],
             cls.MODAL_FULLSCREEN: [],
-            cls.MODAL_EXECUTION: [],
             # Input contexts - don't inherit from each other (only one active at a time)
             cls.INPUT_TITLE: [],
             cls.INPUT_AGENT_NAME: [],
             cls.INPUT_AGENT_DISPLAY: [],
             cls.INPUT_AGENT_DESC: [],
-            cls.INPUT_FILE: [],
             # Widget contexts - isolated
             cls.AGENT_LIST_WIDGET: [],
             # Global has no parent
@@ -227,24 +163,9 @@ class Context(Enum):
             # Agent browser
             "AgentBrowser": cls.AGENT_NORMAL,
             "AgentHistoryModal": cls.MODAL_AGENT,
-            # File browser
-            "FileBrowserView": cls.FILE_NORMAL,
-            "FileView": cls.FILE_NORMAL,
-            "FileList": cls.FILE_LIST,
-            # Task browser
-            "TaskBrowser": cls.TASK_NORMAL,
-            # Workflow browser
-            "WorkflowBrowser": cls.WORKFLOW_NORMAL,
             # Log browser
             "LogBrowser": cls.LOG_NORMAL,
             "LogView": cls.LOG_VIEW,
-            # Control center / Pulse
-            "ControlCenter": cls.CONTROL_NORMAL,
-            "ControlCenterBrowser": cls.CONTROL_NORMAL,
-            "PulseBrowser": cls.CONTROL_NORMAL,
-            "PulseView": cls.PULSE_VIEW,
-            # Git browser
-            "GitBrowser": cls.GIT_NORMAL,
             # Vim editor
             "VimEditTextArea": cls.VIM_NORMAL,
             "SelectionTextArea": cls.DOCUMENT_SELECTION,
@@ -252,16 +173,6 @@ class Context(Enum):
             "ThemeSelectorScreen": cls.MODAL_THEME,
             # Delete confirmation
             "DeleteConfirmScreen": cls.MODAL_DELETE,
-            # Stage selection screens - each stage gets its own context
-            "DocumentSelectionStage": cls.MODAL_STAGE_DOC,
-            "AgentSelectionStage": cls.MODAL_STAGE_AGENT,
-            "ProjectSelectionStage": cls.MODAL_STAGE_PROJECT,
-            "WorktreeSelectionStage": cls.MODAL_WORKTREE,
-            "ConfigStage": cls.MODAL_STAGE_CONFIG,
-            "ConfigSelectionStage": cls.MODAL_STAGE_CONFIG,
-            # Workflow execution
-            "WorkflowExecutionOverlay": cls.MODAL_EXECUTION,
-            "AgentExecutionOverlay": cls.MODAL_EXECUTION,
             # Agent modals
             "CreateAgentModal": cls.MODAL_AGENT_CREATE,
             "EditAgentModal": cls.MODAL_AGENT_EDIT,
@@ -274,24 +185,11 @@ class Context(Enum):
             "AgentNameInput": cls.INPUT_AGENT_NAME,
             "AgentDisplayNameInput": cls.INPUT_AGENT_DISPLAY,
             "AgentDescriptionArea": cls.INPUT_AGENT_DESC,
-            # File modals
-            "SaveFileModal": cls.MODAL_FILE_SAVE,
-            "ExecuteFileModal": cls.MODAL_FILE_EXECUTE,
-            "FileList": cls.FILE_NORMAL,
-            "FilePreview": cls.FILE_NORMAL,
-            "FileEditTextArea": cls.FILE_EDIT,
-            "FileSelectionTextArea": cls.FILE_EDIT,
             # Title input
             "TitleInput": cls.INPUT_TITLE,
-            # Worktree picker
-            "WorktreePickerScreen": cls.MODAL_WORKTREE_PICK,
-            # Commit message
-            "CommitMessageScreen": cls.MODAL_COMMIT,
             # Delete confirmation
             "DeleteConfirmationDialog": cls.MODAL_DELETE,
             # Activity browser
             "ActivityBrowser": cls.ACTIVITY_NORMAL,
-            # Category select
-            "CategorySelect": cls.MODAL_STAGE,
         }
         return mapping.get(widget_class_name, cls.GLOBAL)

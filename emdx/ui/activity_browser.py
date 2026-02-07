@@ -20,8 +20,7 @@ class ActivityBrowser(Widget):
         ("1", "switch_activity", "Activity"),
         ("2", "switch_cascade", "Cascade"),
         ("3", "switch_search", "Search"),
-        ("4", "switch_github", "GitHub"),
-        ("5", "switch_documents", "Documents"),
+        ("4", "switch_documents", "Documents"),
         ("?", "show_help", "Help"),
     ]
 
@@ -50,7 +49,7 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] GitHub │ [dim]5[/dim] Docs │ "
+            "[bold]1[/bold] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] Docs │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
             id="help-bar",
         )
@@ -89,11 +88,6 @@ class ActivityBrowser(Widget):
         """Switch to search screen."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("search")
-
-    async def action_switch_github(self) -> None:
-        """Switch to GitHub browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("github")
 
     def action_show_help(self) -> None:
         """Show help."""
