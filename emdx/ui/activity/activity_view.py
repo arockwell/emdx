@@ -10,9 +10,10 @@ The primary interface for monitoring Claude Code's work:
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from rich.markup import escape as escape_markup
 from textual.app import ComposeResult
@@ -228,6 +229,67 @@ class AgentLogSubscriber(LogStreamSubscriber):
         logger.error(f"Log stream error: {error}")
 
 
+@dataclass
+class _ViewState:
+    """Snapshot of activity view state for preserving across refreshes.
+
+    Captured once at the start of a refresh cycle and threaded through all
+    table updates so scroll/selection position is never lost — even when
+    _update_table is called multiple times in the same refresh.
+    """
+
+    scroll_y: int = 0
+    selected_id: Tuple[str, int] | None = None
+    selected_idx: int = 0
+    expanded_ids: Set[Tuple[str, int]] = field(default_factory=set)
+
+    @classmethod
+    def capture(cls, view: "ActivityView") -> "_ViewState":
+        """Capture current view state."""
+        # Scroll position
+        try:
+            table = view.query_one("#activity-table", DataTable)
+            scroll_y = table.scroll_y
+        except Exception:
+            scroll_y = 0
+
+        # Selection
+        selected_id = None
+        if view.flat_items and view.selected_idx < len(view.flat_items):
+            item = view.flat_items[view.selected_idx]
+            selected_id = (item.item_type, item.item_id)
+
+        # Expanded items (including nested children)
+        expanded_ids: Set[Tuple[str, int]] = set()
+        for item in view.activity_items:
+            if item.expanded:
+                expanded_ids.add((item.item_type, item.item_id))
+            for child in item.children:
+                if child.expanded:
+                    expanded_ids.add((child.item_type, child.item_id))
+
+        return cls(
+            scroll_y=scroll_y,
+            selected_id=selected_id,
+            selected_idx=view.selected_idx,
+            expanded_ids=expanded_ids,
+        )
+
+    def restore_selection(self, view: "ActivityView") -> None:
+        """Restore selection cursor without scrolling."""
+        if not self.selected_id:
+            return
+        for idx, item in enumerate(view.flat_items):
+            if (item.item_type, item.item_id) == self.selected_id:
+                view.selected_idx = idx
+                try:
+                    table = view.query_one("#activity-table", DataTable)
+                    table.move_cursor(row=idx, scroll=False)
+                except Exception:
+                    pass
+                return
+
+
 class ActivityView(HelpMixin, Widget):
     """Activity View - Mission Control for EMDX."""
 
@@ -430,12 +492,14 @@ class ActivityView(HelpMixin, Widget):
         # Start refresh timer
         self.set_interval(5.0, self._refresh_data)
 
-    async def load_data(self, update_preview: bool = True) -> None:
+    async def load_data(self, update_preview: bool = True, restore_scroll_y: int | None = None) -> None:
         """Load activity data.
 
         Args:
             update_preview: Whether to update the preview pane. Set to False during
                            periodic refresh to avoid flickering.
+            restore_scroll_y: Explicit scroll position to restore. Passed through to
+                              _update_table to avoid race conditions with deferred restores.
         """
         self.activity_items = []
 
@@ -490,7 +554,7 @@ class ActivityView(HelpMixin, Widget):
         self._flatten_items()
 
         # Update UI
-        await self._update_table()
+        await self._update_table(restore_scroll_y=restore_scroll_y)
         await self._update_status_bar()
         if update_preview:
             await self._update_preview(force=True)
@@ -1021,12 +1085,17 @@ class ActivityView(HelpMixin, Widget):
                             grandchild.depth = 2
                             self.flat_items.append(grandchild)
 
-    async def _update_table(self) -> None:
-        """Update the activity table."""
+    async def _update_table(self, restore_scroll_y: int | None = None) -> None:
+        """Update the activity table.
+
+        Args:
+            restore_scroll_y: Explicit scroll position to restore after update.
+                              If None, captures and restores current position.
+        """
         table = self.query_one("#activity-table", DataTable)
 
         # Preserve scroll position to prevent visual flicker during refresh
-        saved_scroll_y = table.scroll_y
+        saved_scroll_y = restore_scroll_y if restore_scroll_y is not None else table.scroll_y
 
         table.clear()
 
@@ -2096,31 +2165,21 @@ class ActivityView(HelpMixin, Widget):
             notif.remove_class("visible")
 
     async def _refresh_data(self) -> None:
-        """Periodic refresh of data."""
-        # Remember selection and expanded state
-        selected_id = None
-        if self.flat_items and self.selected_idx < len(self.flat_items):
-            item = self.flat_items[self.selected_idx]
-            selected_id = (item.item_type, item.item_id)
+        """Periodic refresh of data.
 
-        # Remember which items were expanded (including nested items like synthesis)
-        expanded_ids = set()
-        for item in self.activity_items:
-            if item.expanded:
-                expanded_ids.add((item.item_type, item.item_id))
-            # Also check children
-            for child in item.children:
-                if child.expanded:
-                    expanded_ids.add((child.item_type, child.item_id))
+        Captures all view state (scroll, selection, expansion) once at the top,
+        then threads it through every table update to prevent scroll jumps.
+        """
+        # Snapshot everything before touching the table
+        state = _ViewState.capture(self)
 
-        # Load data without updating preview (prevents flicker)
-        await self.load_data(update_preview=False)
+        # Load fresh data (calls _update_table internally)
+        await self.load_data(update_preview=False, restore_scroll_y=state.scroll_y)
 
         # Restore expanded state
-        if expanded_ids:
+        if state.expanded_ids:
             for item in self.activity_items:
-                if (item.item_type, item.item_id) in expanded_ids:
-                    # Re-expand this item
+                if (item.item_type, item.item_id) in state.expanded_ids:
                     if item.item_type == "workflow" and not item.expanded:
                         await self._expand_workflow(item)
                     elif item.item_type == "group" and not item.expanded:
@@ -2128,31 +2187,21 @@ class ActivityView(HelpMixin, Widget):
                     elif item.item_type == "document" and not item.expanded:
                         await self._expand_document(item)
 
-            # After re-expanding parents, check if any children need expansion
+            # Re-expand nested children
             for item in self.activity_items:
                 for child in item.children:
-                    if (child.item_type, child.item_id) in expanded_ids and not child.expanded:
+                    if (child.item_type, child.item_id) in state.expanded_ids and not child.expanded:
                         if child.item_type == "synthesis" and child.children:
                             child.expanded = True
                         elif child.item_type == "group" and getattr(child, '_has_group_children', False):
                             await self._expand_group(child)
 
-            # Re-flatten after restoring expansions
+            # Re-flatten and update table with the SAME saved scroll position
             self._flatten_items()
-            await self._update_table()
+            await self._update_table(restore_scroll_y=state.scroll_y)
 
-        # Restore selection if possible (without scrolling — user may have
-        # scrolled away from the selected row and we shouldn't jump back)
-        if selected_id:
-            for idx, item in enumerate(self.flat_items):
-                if (item.item_type, item.item_id) == selected_id:
-                    self.selected_idx = idx
-                    try:
-                        table = self.query_one("#activity-table", DataTable)
-                        table.move_cursor(row=idx, scroll=False)
-                    except Exception:
-                        pass
-                    break
+        # Restore selection cursor
+        state.restore_selection(self)
 
         # Preview doesn't need updating during refresh unless item changed
         # The cache in _update_preview handles this
