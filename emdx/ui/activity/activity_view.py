@@ -2141,14 +2141,15 @@ class ActivityView(HelpMixin, Widget):
             self._flatten_items()
             await self._update_table()
 
-        # Restore selection if possible
+        # Restore selection if possible (without scrolling — user may have
+        # scrolled away from the selected row and we shouldn't jump back)
         if selected_id:
             for idx, item in enumerate(self.flat_items):
                 if (item.item_type, item.item_id) == selected_id:
                     self.selected_idx = idx
                     try:
                         table = self.query_one("#activity-table", DataTable)
-                        table.move_cursor(row=idx)
+                        table.move_cursor(row=idx, scroll=False)
                     except Exception:
                         pass
                     break
