@@ -6,6 +6,7 @@ This folder contains detailed documentation for EMDX.
 
 ### Getting Started
 - [CLI Reference](cli-api.md) - Complete command documentation
+- [Mail System](mail.md) - Agent-to-agent communication via GitHub Issues
 - [Workflow System](workflows.md) - Multi-stage orchestration and execution patterns
 - [AI System](ai-system.md) - Semantic search and Q&A over your knowledge base
 
@@ -24,6 +25,7 @@ This folder contains detailed documentation for EMDX.
 | I want to... | Read this |
 |--------------|-----------|
 | Learn all CLI commands | [CLI Reference](cli-api.md) |
+| Send messages between agents | [Mail System](mail.md) |
 | Run multi-stage workflows | [Workflow System](workflows.md) |
 | Use semantic search & Q&A | [AI System](ai-system.md) |
 | Understand the codebase | [Architecture](architecture.md) |

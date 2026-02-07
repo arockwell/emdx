@@ -137,11 +137,12 @@ def get_current_version() -> str:
 
 
 def bump_version(new_version: str) -> None:
-    """Bump the version in pyproject.toml.
+    """Bump the version in pyproject.toml and emdx/__init__.py.
 
-    Only updates the [tool.poetry] version, not other version strings
-    like typer version or python_version.
+    Only updates the [tool.poetry] version in pyproject.toml, not other
+    version strings like typer version or python_version.
     """
+    # Update pyproject.toml
     pyproject = Path("pyproject.toml")
     content = pyproject.read_text()
 
@@ -155,6 +156,18 @@ def bump_version(new_version: str) -> None:
 
     pyproject.write_text(new_content)
     print(f"Updated pyproject.toml to version {new_version}")
+
+    # Update emdx/__init__.py
+    init_file = Path("emdx/__init__.py")
+    if init_file.exists():
+        init_content = init_file.read_text()
+        new_init = re.sub(
+            r'__version__ = "[^"]+"',
+            f'__version__ = "{new_version}"',
+            init_content
+        )
+        init_file.write_text(new_init)
+        print(f"Updated emdx/__init__.py to version {new_version}")
 
 
 def update_changelog(entry: str) -> None:
