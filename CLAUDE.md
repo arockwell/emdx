@@ -546,6 +546,55 @@ poetry run emdx find --tags "blocked"
 
 This enables powerful project management and success tracking while keeping the tag system simple and space-efficient.
 
+## 🚢 Release Process
+
+Use the release tooling in `scripts/release.py` (via `just`) to prepare releases.
+
+### Quick Release Checklist
+
+```bash
+# 1. Preview what changed since last release
+just changelog
+
+# 2. Bump version in pyproject.toml AND emdx/__init__.py
+just bump 0.X.Y
+
+# 3. Write a polished changelog entry in CHANGELOG.md
+#    - The auto-generated one from `just release` is mechanical;
+#      prefer hand-writing with proper feature descriptions
+#    - Add comparison link at bottom of CHANGELOG.md
+
+# 4. Create docs for any new features (e.g., docs/mail.md)
+#    - Update docs/README.md index
+#    - Update docs/cli-api.md with new commands
+
+# 5. Branch, commit, PR
+git checkout -b release/vX.Y.Z
+git add -A && git commit -m "chore: release vX.Y.Z"
+git push -u origin release/vX.Y.Z
+gh pr create --title "chore: Release vX.Y.Z"
+
+# 6. After merge, tag and push
+git tag vX.Y.Z
+git push --tags
+```
+
+### Release Script Commands
+
+| Command | What it does |
+|---------|-------------|
+| `just changelog` | Preview categorized commits since last release |
+| `just bump <version>` | Bump version in `pyproject.toml` and `emdx/__init__.py` |
+| `just release <version>` | Bump + auto-generate changelog (prefer manual changelog) |
+
+### Version Files
+
+Both of these must stay in sync:
+- `pyproject.toml` — `version = "X.Y.Z"` (used by Poetry/pip)
+- `emdx/__init__.py` — `__version__ = "X.Y.Z"` (used at runtime)
+
+The `just bump` and `just release` commands update both automatically.
+
 ---
 
 **Documentation Links:**
