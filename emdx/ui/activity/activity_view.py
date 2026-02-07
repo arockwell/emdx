@@ -32,6 +32,8 @@ from .activity_items import (
     CascadeRunItem,
     CascadeStageItem,
     AgentExecutionItem,
+    MailItem,
+    MailReplyItem,
 )
 from .group_picker import GroupPicker
 from ..modals import HelpMixin
@@ -261,6 +263,7 @@ class ActivityView(HelpMixin, Widget):
         ("u", "ungroup", "Ungroup"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
+        ("a", "mark_read", "Mark Read"),
         ("question_mark", "show_help", "Help"),
     ]
 
@@ -465,12 +468,16 @@ class ActivityView(HelpMixin, Widget):
         # Load standalone agent executions
         await self._load_agent_executions()
 
+        # Load mail messages
+        await self._load_mail_messages()
+
         # Sort: running items first (pinned), then by timestamp descending
-        # Running workflows and agent executions should always be at the top for visibility
+        # Running workflows, agent executions, and unread mail should always be at the top
         def sort_key(item):
             is_running = (
                 (item.item_type == "workflow" and item.status == "running") or
-                (item.item_type == "agent_execution" and item.status == "running")
+                (item.item_type == "agent_execution" and item.status == "running") or
+                (item.item_type == "mail" and not getattr(item, 'is_read', True))
             )
             # Running items get priority 0 (will be first after sort)
             # Non-running items get priority 1
@@ -950,6 +957,55 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error loading agent executions: {e}", exc_info=True)
 
+    async def _load_mail_messages(self) -> None:
+        """Load unread mail messages into activity items."""
+        try:
+            import asyncio
+            from emdx.services.mail_service import get_mail_service, get_mail_config_repo
+
+            # Skip if mail not configured
+            if not get_mail_config_repo():
+                return
+
+            service = get_mail_service()
+            messages = await asyncio.to_thread(service.list_inbox, limit=20)
+
+            for msg in messages:
+                # Parse timestamp
+                created_at = msg.created_at
+                if isinstance(created_at, str) and created_at:
+                    try:
+                        ts = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        # Strip timezone to match naive datetimes used elsewhere
+                        timestamp = ts.replace(tzinfo=None)
+                    except ValueError:
+                        timestamp = datetime.now()
+                else:
+                    timestamp = datetime.now()
+
+                item = MailItem(
+                    item_id=msg.number,
+                    title=msg.title,
+                    timestamp=timestamp,
+                    mail_message={
+                        "body": msg.body,
+                        "sender": msg.sender,
+                        "recipient": msg.recipient,
+                        "url": msg.url,
+                        "comment_count": msg.comment_count,
+                    },
+                    sender=msg.sender,
+                    recipient=msg.recipient,
+                    is_read=msg.is_read,
+                    comment_count=msg.comment_count,
+                    url=msg.url,
+                )
+
+                self.activity_items.append(item)
+
+        except Exception as e:
+            logger.debug(f"Could not load mail messages: {e}")
+
     def _flatten_items(self) -> None:
         """Flatten activity items for display, respecting expansion state."""
         self.flat_items = []
@@ -1339,6 +1395,16 @@ class ActivityView(HelpMixin, Widget):
         # Individual run details
         elif item.item_type == "individual_run" or getattr(item, 'individual_run', None):
             await self._show_individual_run_context(item, context_content, context_header)
+        # Mail message details
+        elif item.item_type == "mail":
+            context_header.update(f"📧 #{item.item_id}")
+            context_content.write(f"[bold]From:[/bold] @{item.sender}")
+            context_content.write(f"[bold]To:[/bold] @{item.recipient}")
+            context_content.write(f"[bold]Status:[/bold] {'read' if item.is_read else '[yellow]unread[/yellow]'}")
+            if item.comment_count:
+                context_content.write(f"[bold]Replies:[/bold] {item.comment_count}")
+            if item.url:
+                context_content.write(f"[dim]{item.url}[/dim]")
         else:
             context_header.update("DETAILS")
             context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
@@ -2467,6 +2533,23 @@ class ActivityView(HelpMixin, Widget):
     async def action_refresh(self) -> None:
         """Manual refresh."""
         await self._refresh_data()  # Use same logic as periodic refresh to preserve state
+
+    async def action_mark_read(self) -> None:
+        """Mark selected mail message as read."""
+        if not self.flat_items or self.selected_idx >= len(self.flat_items):
+            return
+        item = self.flat_items[self.selected_idx]
+        if item.item_type != "mail":
+            return
+
+        import asyncio
+        from emdx.services.mail_service import get_mail_service
+        service = get_mail_service()
+        success = await asyncio.to_thread(service.mark_read, item.item_id)
+        if success:
+            item.is_read = True
+            await self._update_table()
+            await self._update_context_panel()
 
     def action_focus_next(self) -> None:
         """Focus next pane."""
