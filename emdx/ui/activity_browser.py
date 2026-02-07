@@ -102,9 +102,9 @@ class ActivityBrowser(Widget):
         """Focus the activity view."""
         if self.activity_view:
             try:
-                table = self.activity_view.query_one("#activity-table")
-                if table:
-                    table.focus()
+                tree = self.activity_view.query_one("#activity-tree")
+                if tree:
+                    tree.focus()
             except Exception:
                 # Widget not mounted yet, will focus on mount
                 pass
