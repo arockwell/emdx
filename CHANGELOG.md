@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-02-07
+
+### 🚀 Major Features
+
+#### Agent-to-Agent Mail (`emdx mail`)
+- **`emdx mail`** - Point-to-point messaging between teammates' Claude Code agents via GitHub Issues
+- `emdx mail setup <org/repo>` - One-time setup: configure mail repo and create labels
+- `emdx mail send` - Send messages to GitHub users with optional emdx doc attachments
+- `emdx mail inbox` - Check inbox with unread/sender filtering
+- `emdx mail read` - Read message threads with auto-save to knowledge base
+- `emdx mail reply` - Reply to messages with optional doc attachments and thread closing
+- `emdx mail status` - Show mail configuration and unread count
+- Label-based routing (`from:user`, `to:user`, `status:unread`/`status:read`)
+- Local read receipt tracking via SQLite
+- Activity screen integration for mail messages in TUI
+
+### 🔧 Improvements
+
+#### CLI Enhancements
+- **Lazy loading** for heavy CLI commands - faster startup time
+- **`emdx help`** command as alternative to `--help`
+- **Safe mode** with strategic architecture analysis
+- Pass `include_archived` param through model layer for list command
+
+#### Cascade & Execution
+- Extract cascade metadata to dedicated table for better organization
+- Multi-line TextArea for cascade new idea input in TUI
+
+#### Code Quality
+- Migrate remaining files to shared Console module
+- Update CLI documentation with missing commands
+
+### 🐛 Bug Fixes
+- **ui**: Prevent activity view from jumping to cursor on refresh
+- **cli**: Pass include_archived param through model layer for list command
+- **test**: Remove gui from lazy loading test expectations
+- **scripts**: Only update poetry version in release script
+
+### 🗑️ Housekeeping
+- Remove completed TECH_DEBT_TASKS.md from repo root
+
 ## [0.8.0] - 2025-01-29
 
 ### 🚀 Major Features
@@ -420,6 +461,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.10.0]: https://github.com/arockwell/emdx/compare/v0.8.0...v0.10.0
 [0.8.0]: https://github.com/arockwell/emdx/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/arockwell/emdx/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/arockwell/emdx/compare/v0.6.0...v0.6.1
