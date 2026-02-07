@@ -122,7 +122,6 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **`workflow_runs`** - Workflow execution history
 - **`workflow_stage_runs`** - Stage-level execution tracking
 - **`workflow_individual_runs`** - Individual task runs within stages
-- **`workflow_presets`** - Saved variable configurations
 
 ### **Key Design Decisions**
 - **SQLite with FTS5** - Fast full-text search with simple deployment

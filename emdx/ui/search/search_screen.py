@@ -59,8 +59,7 @@ class SearchScreen(HelpMixin, Widget):
         Binding("1", "switch_activity", "Activity"),
         Binding("2", "switch_cascade", "Cascade"),
         Binding("3", "switch_search", "Search"),
-        Binding("4", "switch_github", "GitHub"),
-        Binding("5", "switch_documents", "Documents"),
+        Binding("4", "switch_documents", "Documents"),
     ]
 
     DEFAULT_CSS = """
@@ -158,7 +157,7 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] GitHub │ [dim]5[/dim] Docs │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] Docs │ "
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
             id="search-nav"
         )
@@ -554,7 +553,3 @@ class SearchScreen(HelpMixin, Widget):
         """Already on search, do nothing."""
         pass
 
-    async def action_switch_github(self) -> None:
-        """Switch to GitHub browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("github")
