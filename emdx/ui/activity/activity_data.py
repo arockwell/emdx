@@ -433,6 +433,10 @@ class ActivityDataLoader:
                     WHERE e.started_at > ?
                       AND (e.doc_title LIKE 'Agent:%' OR e.doc_title LIKE 'Delegate:%')
                       AND e.cascade_run_id IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM workflow_individual_runs ir
+                          WHERE ir.agent_execution_id = e.id
+                      )
                     ORDER BY e.started_at DESC
                     LIMIT 30
                     """,
@@ -452,6 +456,8 @@ class ActivityDataLoader:
                 title = doc_title or f"Execution #{exec_id}"
                 if title.startswith("Agent: "):
                     title = title[7:]
+                elif title.startswith("Delegate: "):
+                    title = title[10:]
                 title = title[:50]
 
                 item = AgentExecutionItem(
