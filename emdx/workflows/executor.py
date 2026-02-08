@@ -396,14 +396,19 @@ class WorkflowExecutor:
             input_context=stage_input,
         )
 
-        # Execute agent
+        # Execute agent — use task title for clean display if available
         effective_prompt = prompt or stage_input or ""
+        task_titles = getattr(stage, '_task_titles', None)
+        if task_titles:
+            title = f"Delegate: {task_titles[0][:60]}"
+        else:
+            title = f"Workflow Agent Run #{individual_run_id}"
         result = await run_agent(
             individual_run_id=individual_run_id,
             agent_id=stage.agent_id,
             prompt=effective_prompt,
             context=context,
-            title=f"Delegate: {effective_prompt[:50]}",
+            title=title,
         )
 
         return StageResult(
@@ -455,6 +460,7 @@ class WorkflowExecutor:
             logging.getLogger(__name__).warning(f"Could not create group for parallel stage: {e}")
 
         # Create individual run records
+        task_titles = getattr(stage, '_task_titles', None)
         individual_runs = []
         for i in range(num_runs):
             # Support per-run prompts (like iterative mode) or single prompt for all
@@ -469,7 +475,12 @@ class WorkflowExecutor:
                 prompt_used=prompt,
                 input_context=stage_input,
             )
-            individual_runs.append((individual_run_id, prompt))
+            # Use original task title for clean display, fall back to run number
+            if task_titles and i < len(task_titles):
+                task_title = task_titles[i]
+            else:
+                task_title = None
+            individual_runs.append((individual_run_id, prompt, task_title))
 
         # Execute all runs in parallel with worktree isolation
         # Track completion count for progress updates
@@ -487,7 +498,7 @@ class WorkflowExecutor:
             base_branch=base_branch,
         )
 
-        async def run_with_worktree(run_id: int, prompt: str, run_number: int):
+        async def run_with_worktree(run_id: int, prompt: str, run_number: int, task_title: str | None = None):
             nonlocal completed_count
             try:
                 async with pool.acquire(target_branch=f"parallel-{stage_run_id}-{run_number}") as worktree:
@@ -496,12 +507,16 @@ class WorkflowExecutor:
                     run_context['_working_dir'] = worktree.path
 
                     effective_prompt = prompt or stage_input or ""
+                    if task_title:
+                        title = f"Delegate: {task_title[:60]}"
+                    else:
+                        title = f"Workflow Agent Run #{run_id}"
                     result = await run_agent(
                         individual_run_id=run_id,
                         agent_id=stage.agent_id,
                         prompt=effective_prompt,
                         context=run_context,
-                        title=f"Delegate: {effective_prompt[:50]}",
+                        title=title,
                     )
                     # Update progress after each completion
                     completed_count += 1
@@ -512,8 +527,8 @@ class WorkflowExecutor:
 
         try:
             tasks = [
-                run_with_worktree(run_id, prompt, i + 1)
-                for i, (run_id, prompt) in enumerate(individual_runs)
+                run_with_worktree(run_id, prompt, i + 1, task_title)
+                for i, (run_id, prompt, task_title) in enumerate(individual_runs)
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
         finally:
@@ -604,6 +619,7 @@ class WorkflowExecutor:
         output_doc_ids: List[int] = []
         total_tokens = 0
         last_output_id = None
+        task_titles = getattr(stage, '_task_titles', None)
 
         for i in range(stage.runs):
             run_number = i + 1
@@ -632,12 +648,16 @@ class WorkflowExecutor:
             )
 
             # Execute this iteration
+            if task_titles and i < len(task_titles):
+                title = f"Delegate: {task_titles[i][:60]}"
+            else:
+                title = f"Workflow Agent Run #{individual_run_id}"
             result = await run_agent(
                 individual_run_id=individual_run_id,
                 agent_id=stage.agent_id,
                 prompt=prompt,
                 context=iter_context,
-                title=f"Delegate: {prompt[:50]}",
+                title=title,
             )
 
             if not result.get('success'):
@@ -730,7 +750,7 @@ class WorkflowExecutor:
                 agent_id=stage.agent_id,
                 prompt=prompt,
                 context=iter_context,
-                title=f"Delegate: {prompt[:50]}",
+                title=f"Workflow Agent Run #{individual_run_id}",
             )
 
             if not result.get('success'):
@@ -905,13 +925,13 @@ class WorkflowExecutor:
                         input_context=item,
                     )
 
-                    # Execute agent
+                    # Execute agent — use discovered item for clean title
                     result = await run_agent(
                         individual_run_id=individual_run_id,
                         agent_id=stage.agent_id,
                         prompt=prompt,
                         context=item_context,
-                        title=f"Delegate: {prompt[:50]}",
+                        title=f"Delegate: {item[:60]}",
                     )
 
                     return {
@@ -1011,6 +1031,9 @@ class WorkflowExecutor:
         generates one prompt per task by substituting {{task}}, {{task_title}},
         and {{task_id}} placeholders.
 
+        Also stores the original task titles on stage._task_titles for use
+        in execution titles (avoids garbled multi-line template titles).
+
         Args:
             stage: Stage configuration to modify
             context: Execution context with optional 'tasks' list
@@ -1034,6 +1057,12 @@ class WorkflowExecutor:
 
         # Set prompts on stage (parallel strategy will use these)
         stage.prompts = prompts
+
+        # Store original task titles for clean execution titles
+        stage._task_titles = [
+            task_ctx.title or task_ctx.content[:80]
+            for task_ctx in resolved_tasks
+        ]
 
 
 # Global executor instance
