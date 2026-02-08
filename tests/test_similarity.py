@@ -6,6 +6,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+sklearn = pytest.importorskip("sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')")
+
 from typer.testing import CliRunner
 
 from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService

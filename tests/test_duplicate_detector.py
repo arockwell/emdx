@@ -9,6 +9,8 @@ Tests cover:
 
 import pytest
 
+datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")
+
 from emdx.services.duplicate_detector import (
     DuplicateDetector,
     _tokenize,
