@@ -28,6 +28,7 @@ LAZY_SUBCOMMANDS = {
     "each": "emdx.commands.each:app",
     "run": "emdx.commands.run:run",
     "agent": "emdx.commands.agent:agent",
+    "delegate": "emdx.commands.delegate:app",
     "claude": "emdx.commands.claude_execute:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
@@ -45,6 +46,7 @@ LAZY_HELP = {
     "each": "Create and run reusable parallel commands",
     "run": "Quick task execution (parallel, worktree isolation)",
     "agent": "Run Claude sub-agent with EMDX tracking",
+    "delegate": "Delegate tasks to parallel agents (stdout-friendly)",
     "claude": "Execute documents with Claude",
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
@@ -63,7 +65,7 @@ def is_safe_mode() -> bool:
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "workflow", "claude"}
+UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "delegate", "workflow", "claude", "swarm"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -193,6 +195,7 @@ app.command(name="status")(status_command)
 
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
+
 
 
 # =============================================================================
