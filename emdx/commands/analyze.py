@@ -136,9 +136,13 @@ def analyze(
 def _analyze_health():
     """Show detailed health metrics."""
     monitor = HealthMonitor()
-    
-    with console.status("[bold green]Analyzing knowledge base health..."):
-        metrics = monitor.calculate_overall_health()
+
+    try:
+        with console.status("[bold green]Analyzing knowledge base health..."):
+            metrics = monitor.calculate_overall_health()
+    except ImportError as e:
+        console.print(f"  [red]{e}[/red]")
+        return
     
     # Overall health score
     overall_score = metrics["overall_score"] * 100  # Convert to percentage
@@ -220,10 +224,14 @@ def _analyze_health():
 def _analyze_duplicates():
     """Find duplicate documents."""
     detector = DuplicateDetector()
-    
-    with console.status("[bold green]Detecting duplicates..."):
-        exact_dupes = detector.find_duplicates()
-        near_dupes = detector.find_near_duplicates(threshold=0.85)
+
+    try:
+        with console.status("[bold green]Detecting duplicates..."):
+            exact_dupes = detector.find_duplicates()
+            near_dupes = detector.find_near_duplicates(threshold=0.85)
+    except ImportError as e:
+        console.print(f"  [red]{e}[/red]")
+        return
     
     console.print("[bold]Duplicate Analysis:[/bold]")
     
@@ -254,9 +262,13 @@ def _analyze_duplicates():
 def _analyze_similar():
     """Find similar documents for merging."""
     merger = DocumentMerger()
-    
-    with console.status("[bold green]Finding similar documents..."):
-        candidates = merger.find_merge_candidates(similarity_threshold=0.7)
+
+    try:
+        with console.status("[bold green]Finding similar documents..."):
+            candidates = merger.find_merge_candidates(similarity_threshold=0.7)
+    except ImportError as e:
+        console.print(f"  [red]{e}[/red]")
+        return
     
     console.print("[bold]Similar Documents (Merge Candidates):[/bold]")
     
@@ -523,7 +535,10 @@ def _get_success_color(rate: float) -> str:
 def _collect_health_data() -> Dict[str, Any]:
     """Collect health metrics as structured data."""
     monitor = HealthMonitor()
-    metrics = monitor.calculate_overall_health()
+    try:
+        metrics = monitor.calculate_overall_health()
+    except ImportError as e:
+        return {"error": str(e)}
     
     # Convert HealthMetric objects to dictionaries
     result = {
@@ -553,7 +568,10 @@ def _collect_duplicates_data() -> Dict[str, Any]:
     """Collect duplicate analysis data."""
     detector = DuplicateDetector()
     exact_dupes = detector.find_duplicates()
-    near_dupes = detector.find_near_duplicates(threshold=0.85)
+    try:
+        near_dupes = detector.find_near_duplicates(threshold=0.85)
+    except ImportError:
+        near_dupes = []
     
     result = {
         "exact_duplicates": {
@@ -589,7 +607,10 @@ def _collect_duplicates_data() -> Dict[str, Any]:
 def _collect_similar_data() -> Dict[str, Any]:
     """Collect similar documents data."""
     merger = DocumentMerger()
-    candidates = merger.find_merge_candidates(similarity_threshold=0.7)
+    try:
+        candidates = merger.find_merge_candidates(similarity_threshold=0.7)
+    except ImportError as e:
+        return {"error": str(e), "count": 0, "candidates": []}
     
     result = {
         "count": len(candidates),

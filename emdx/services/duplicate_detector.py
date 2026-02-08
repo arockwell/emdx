@@ -7,15 +7,31 @@ O(n²) pairwise comparisons. This makes duplicate detection scalable to
 thousands of documents.
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from datasketch import MinHash, MinHashLSH
+try:
+    from datasketch import MinHash, MinHashLSH
+
+    HAS_DATASKETCH = True
+except ImportError:
+    HAS_DATASKETCH = False
 
 from ..database import db
+
+
+def _require_datasketch() -> None:
+    """Raise ImportError with helpful message if datasketch is not installed."""
+    if not HAS_DATASKETCH:
+        raise ImportError(
+            "datasketch is required for near-duplicate detection. "
+            "Install it with: pip install 'emdx[similarity]'"
+        )
 
 
 # Default parameters for MinHash/LSH
@@ -177,6 +193,7 @@ class DuplicateDetector:
             - Space complexity: O(n * num_perm) for MinHash storage
             - At 1000 documents with 128 permutations: ~500KB memory, <1s runtime
         """
+        _require_datasketch()
         with db.get_connection() as conn:
             cursor = conn.cursor()
 

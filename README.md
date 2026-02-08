@@ -1,7 +1,7 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/arockwell/emdx/releases)
-[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-0.11.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 **Parallel task orchestration and knowledge capture for Claude Code.**
@@ -23,20 +23,29 @@ emdx run "Review auth module" "Check error handling" "Audit SQL queries" -j 3
 
 # Discover tasks dynamically from git branches
 emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
-
+```
 
 ## Installation
 
-**Requirements:** Python 3.13+
+**Requirements:** Python 3.11+
 
 ```bash
-# Development installation
+# Core install (lightweight - no ML/AI dependencies)
 git clone https://github.com/arockwell/emdx.git
 cd emdx && pip install -e .
 
+# With AI features (semantic search, embeddings, Claude Q&A)
+pip install -e '.[ai]'
+
+# With similarity features (TF-IDF, MinHash duplicate detection)
+pip install -e '.[similarity]'
+
+# Everything (AI + similarity + Google integrations)
+pip install -e '.[all]'
+
 # Or with Poetry (recommended for development)
 git clone https://github.com/arockwell/emdx.git
-cd emdx && poetry install
+cd emdx && poetry install --all-extras
 ```
 
 ## Quick Start: Parallel Tasks

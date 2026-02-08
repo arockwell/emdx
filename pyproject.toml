@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.10.0"
+version = "0.11.0"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
@@ -16,13 +16,15 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Documentation",
     "Topic :: Text Processing :: Indexing",
 ]
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.11"
 typer = {extras = ["all"], version = "^0.15.0"}
 click = ">=8.1.0"  # Typer 0.15+ requires click 8.1+
 rich = "^13.0.0"
@@ -31,14 +33,24 @@ gitpython = "^3.1.0"
 PyGithub = "^2.1.0"
 textual = "^4.0.0"
 psutil = "^7.0.0"
-google-api-python-client = "^2.100.0"
-google-auth-httplib2 = "^0.2.0"
-google-auth-oauthlib = "^1.2.0"
-scikit-learn = "^1.6.0"  # TF-IDF similarity
-datasketch = "^1.6.0"  # MinHash/LSH for O(n) duplicate detection
-sentence-transformers = "^3.0.0"  # Local embeddings for semantic search
-anthropic = "^0.40.0"  # Claude API for RAG Q&A
-numpy = "^1.26.0"  # Vector operations for embeddings
+
+# Optional heavy dependencies (declared but not installed by default)
+scikit-learn = {version = "^1.6.0", optional = true}
+datasketch = {version = "^1.6.0", optional = true}
+sentence-transformers = {version = "^3.0.0", optional = true}
+anthropic = {version = "^0.40.0", optional = true}
+numpy = {version = "^1.26.0", optional = true}
+google-api-python-client = {version = "^2.100.0", optional = true}
+google-auth-httplib2 = {version = "^0.2.0", optional = true}
+google-auth-oauthlib = {version = "^1.2.0", optional = true}
+
+[tool.poetry.extras]
+ai = ["sentence-transformers", "scikit-learn", "numpy", "anthropic"]
+similarity = ["scikit-learn", "datasketch", "numpy"]
+google = ["google-api-python-client", "google-auth-httplib2", "google-auth-oauthlib"]
+all = ["sentence-transformers", "scikit-learn", "numpy", "anthropic",
+       "datasketch", "google-api-python-client", "google-auth-httplib2",
+       "google-auth-oauthlib"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
@@ -58,7 +70,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 100
-target-version = ['py313']
+target-version = ['py311']
 
 [tool.ruff]
 line-length = 100
@@ -80,7 +92,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
