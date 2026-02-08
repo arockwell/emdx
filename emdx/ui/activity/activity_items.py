@@ -135,7 +135,7 @@ class WorkflowItem(ActivityItem):
                             doc_db.get_document(ir["output_doc_id"]) if doc_db else None
                         )
                         title = (
-                            doc.get("title", f"Run {run_num}")[:25]
+                            doc.get("title", f"Run {run_num}")
                             if doc
                             else f"Run {run_num}"
                         )
@@ -186,7 +186,7 @@ class WorkflowItem(ActivityItem):
                     children.append(
                         SynthesisItem(
                             item_id=sr["synthesis_doc_id"],
-                            title=title[:30],
+                            title=title,
                             timestamp=self.timestamp,
                             doc_id=sr["synthesis_doc_id"],
                             depth=self.depth + 1,
@@ -204,7 +204,7 @@ class WorkflowItem(ActivityItem):
                                 else None
                             )
                             out_title = (
-                                out_doc.get("title", f"Output #{ir['run_number']}")[:25]
+                                out_doc.get("title", f"Output #{ir['run_number']}")
                                 if out_doc
                                 else f"Output #{ir['run_number']}"
                             )
@@ -231,7 +231,7 @@ class WorkflowItem(ActivityItem):
                                 else None
                             )
                             title = (
-                                doc.get("title", f"Output #{ir['run_number']}")[:25]
+                                doc.get("title", f"Output #{ir['run_number']}")
                                 if doc
                                 else f"Output #{ir['run_number']}"
                             )
@@ -302,7 +302,7 @@ class DocumentItem(ActivityItem):
                 "variant": "≈",
             }.get(relationship, "")
 
-            title = child_doc.get("title", "")[:30]
+            title = child_doc.get("title", "")
             if rel_icon:
                 title = f"{rel_icon} {title}"
 
@@ -524,7 +524,7 @@ class CascadeRunItem(ActivityItem):
                 doc_stage = exec_data.get("doc_stage", "")
 
                 # Build title showing stage transition
-                title = exec_data.get("doc_title", "Stage execution")[:35]
+                title = exec_data.get("doc_title", "Stage execution")
                 if doc_stage:
                     title = f"{doc_stage}: {title}"
 
@@ -681,7 +681,7 @@ class GroupItem(ActivityItem):
             children.append(
                 GroupItem(
                     item_id=cg["id"],
-                    title=cg["name"][:35],
+                    title=cg["name"],
                     timestamp=self.timestamp,
                     group=cg,
                     doc_count=cg.get("doc_count", 0),
@@ -702,7 +702,7 @@ class GroupItem(ActivityItem):
                 "variant": "≈",
             }
             role_icon = role_icons.get(m.get("role", ""), "")
-            title = m.get("title", "Untitled")[:30]
+            title = m.get("title", "Untitled")
             if role_icon:
                 title = f"{role_icon} {title}"
 
