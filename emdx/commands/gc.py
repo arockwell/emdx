@@ -1,5 +1,5 @@
 """
-Garbage collection commands for EMDX.
+Garbage collection for EMDX.
 Clean up orphaned data, optimize database, and perform maintenance.
 """
 
@@ -8,17 +8,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-import typer
-from rich import box
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
-
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
-from ..utils.output import console
-
-app = typer.Typer()
 
 
 class GarbageCollector:
@@ -261,121 +252,3 @@ class GarbageCollector:
         }
 
 
-@app.command()
-def gc(
-    analyze_only: bool = typer.Option(False, "--analyze", "-a", help="Only analyze, don't clean"),
-    auto: bool = typer.Option(False, "--auto", help="Automatically clean all recommended items"),
-    vacuum: bool = typer.Option(False, "--vacuum", "-v", help="Vacuum database after cleaning"),
-    trash_days: int = typer.Option(30, "--trash-days", help="Days before permanently deleting trash"),
-    stale_days: int = typer.Option(180, "--stale-days", help="Days before considering documents stale"),
-):
-    """Run garbage collection on the knowledge base."""
-    
-    gc = GarbageCollector(get_db_path())
-    
-    # Analyze first
-    with console.status("[bold green]Analyzing database..."):
-        analysis = gc.analyze()
-    
-    # Display analysis
-    console.print(Panel(
-        "[bold cyan]🗑️  Garbage Collection Analysis[/bold cyan]",
-        box=box.DOUBLE
-    ))
-    
-    # Show findings
-    table = Table(show_header=False, box=box.SIMPLE)
-    table.add_column("Item", style="cyan")
-    table.add_column("Count", justify="right")
-    
-    table.add_row("Orphaned tags", str(analysis['orphaned_tags']))
-    table.add_row(f"Old trash (>{trash_days} days)", str(analysis['old_trash']))
-    table.add_row(f"Stale documents (>{stale_days} days)", str(analysis['stale_documents']))
-    table.add_row("Database size", f"{analysis['database_size'] / 1024 / 1024:.1f} MB")
-    table.add_row("Fragmentation", f"{analysis['fragmentation']:.1f}%")
-    
-    console.print(table)
-    
-    if analysis['recommendations']:
-        console.print("\n[bold]Recommendations:[/bold]")
-        for rec in analysis['recommendations']:
-            console.print(f"  • {rec}")
-    else:
-        console.print("\n[green]✨ No cleanup needed![/green]")
-        return
-    
-    if analyze_only:
-        console.print("\n[dim]Run without --analyze to perform cleanup[/dim]")
-        return
-    
-    # Confirm cleanup
-    if not auto:
-        if not typer.confirm("\n🗑️  Proceed with cleanup?"):
-            console.print("[red]Cleanup cancelled[/red]")
-            return
-    
-    # Perform cleanup
-    console.print("\n[bold]Performing cleanup...[/bold]\n")
-    
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        
-        # Clean orphaned tags
-        if analysis['orphaned_tags'] > 0:
-            task = progress.add_task("Removing orphaned tags...", total=None)
-            deleted = gc.clean_orphaned_tags()
-            progress.update(task, completed=True)
-            console.print(f"[green]✓[/green] Removed {deleted} orphaned tags")
-        
-        # Clean old trash
-        if analysis['old_trash'] > 0:
-            task = progress.add_task("Cleaning old trash...", total=None)
-            deleted = gc.clean_old_trash(trash_days)
-            progress.update(task, completed=True)
-            console.print(f"[green]✓[/green] Permanently deleted {deleted} old trash items")
-        
-        # Archive stale documents
-        if analysis['stale_documents'] > 0:
-            task = progress.add_task("Archiving stale documents...", total=None)
-            archived = gc.archive_stale_documents(stale_days)
-            progress.update(task, completed=True)
-            console.print(f"[green]✓[/green] Archived {archived} stale documents")
-        
-        # Vacuum if requested
-        if vacuum or (auto and analysis['fragmentation'] > 20):
-            task = progress.add_task("Vacuuming database...", total=None)
-            vacuum_result = gc.vacuum_database()
-            progress.update(task, completed=True)
-            
-            saved_mb = vacuum_result['space_saved'] / 1024 / 1024
-            console.print(f"[green]✓[/green] Vacuumed database, saved {saved_mb:.1f} MB")
-    
-    console.print("\n[bold green]✅ Garbage collection complete![/bold green]")
-
-
-@app.command()
-def schedule(
-    enable: bool = typer.Option(True, "--enable/--disable", help="Enable or disable scheduled GC"),
-    frequency: str = typer.Option("weekly", "--frequency", "-f", help="Frequency: daily, weekly, monthly"),
-    time: str = typer.Option("03:00", "--time", "-t", help="Time to run (HH:MM)"),
-):
-    """Schedule automatic garbage collection."""
-    
-    if not enable:
-        console.print("[yellow]⚠️  Scheduled garbage collection disabled[/yellow]")
-        console.print("[dim]Note: This feature requires system cron/scheduler setup[/dim]")
-        return
-    
-    # This would integrate with system scheduler (cron on Unix, Task Scheduler on Windows)
-    console.print(f"[green]✅ Scheduled garbage collection enabled[/green]")
-    console.print(f"[dim]Frequency: {frequency} at {time}[/dim]")
-    console.print("\n[yellow]Note: Automatic scheduling requires system integration.[/yellow]")
-    console.print("[dim]For now, run 'emdx gc --auto' manually or via cron:[/dim]")
-    console.print(f"[dim]0 3 * * {'*' if frequency == 'daily' else '1' if frequency == 'weekly' else '1'} /usr/local/bin/emdx gc --auto[/dim]")
-
-
-if __name__ == "__main__":
-    app()

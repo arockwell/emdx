@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
 
 
@@ -135,11 +136,10 @@ class EnvironmentValidator:
             self.info["installation"] = "standard"
         
         # Check EMDX config directory
-        config_dir = Path.home() / ".config" / "emdx"
-        if config_dir.exists():
-            self.info["config_dir"] = str(config_dir)
+        if EMDX_CONFIG_DIR.exists():
+            self.info["config_dir"] = str(EMDX_CONFIG_DIR)
         else:
-            self.warnings.append(f"EMDX config directory not found: {config_dir}")
+            self.warnings.append(f"EMDX config directory not found: {EMDX_CONFIG_DIR}")
         
         # Check log directory
         log_dir = config_dir / "logs"

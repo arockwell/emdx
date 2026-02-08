@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from emdx.config.constants import EMDX_LOG_DIR
 from .output_parser import extract_output_doc_id
 from .template import resolve_template
 from .services import document_service, execution_service, claude_service
@@ -74,10 +75,9 @@ async def synthesize_outputs(
 
     try:
         # Set up log file
-        log_dir = Path.home() / ".config" / "emdx" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
+        EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        log_file = log_dir / f"workflow-synthesis-{stage_run_id}-{timestamp}.log"
+        log_file = EMDX_LOG_DIR / f"workflow-synthesis-{stage_run_id}-{timestamp}.log"
 
         # Get working directory from context
         working_dir = context.get('_working_dir', str(Path.cwd()))

@@ -3,6 +3,7 @@ Document CRUD operations for emdx knowledge base
 """
 
 import logging
+import sqlite3
 from typing import Any, Optional, Union
 
 from ..utils.datetime_utils import parse_datetime
@@ -969,8 +970,10 @@ def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
     try:
         from . import cascade as cascade_db
         return cascade_db.get_oldest_at_stage(stage)
-    except Exception:
-        pass
+    except ImportError:
+        logger.debug("cascade module not available, falling back to documents table")
+    except sqlite3.OperationalError as e:
+        logger.debug("Cascade table query failed, falling back to documents table: %s", e)
 
     # Fallback to old table
     with db_connection.get_connection() as conn:
@@ -1068,8 +1071,10 @@ def get_document_pr_url(doc_id: int) -> str | None:
         result = cascade_db.get_cascade_pr_url(doc_id)
         if result is not None:
             return result
-    except Exception:
-        pass
+    except ImportError:
+        logger.debug("cascade module not available, falling back to documents table")
+    except sqlite3.OperationalError as e:
+        logger.debug("Cascade table query failed for PR URL, falling back: %s", e)
 
     # Fallback to old table
     with db_connection.get_connection() as conn:
@@ -1097,8 +1102,10 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]
     try:
         from . import cascade as cascade_db
         return cascade_db.list_documents_at_stage(stage, limit)
-    except Exception:
-        pass
+    except ImportError:
+        logger.debug("cascade module not available, falling back to documents table")
+    except sqlite3.OperationalError as e:
+        logger.debug("Cascade table query failed for list_documents_at_stage, falling back: %s", e)
 
     # Fallback to old table
     with db_connection.get_connection() as conn:
@@ -1130,8 +1137,10 @@ def count_documents_at_stage(stage: str) -> int:
     try:
         from . import cascade as cascade_db
         return cascade_db.count_documents_at_stage(stage)
-    except Exception:
-        pass
+    except ImportError:
+        logger.debug("cascade module not available, falling back to documents table")
+    except sqlite3.OperationalError as e:
+        logger.debug("Cascade table query failed for count_documents_at_stage, falling back: %s", e)
 
     # Fallback to old table
     with db_connection.get_connection() as conn:
@@ -1157,8 +1166,10 @@ def get_cascade_stats() -> dict[str, int]:
     try:
         from . import cascade as cascade_db
         return cascade_db.get_cascade_stats()
-    except Exception:
-        pass
+    except ImportError:
+        logger.debug("cascade module not available, falling back to documents table")
+    except sqlite3.OperationalError as e:
+        logger.debug("Cascade table query failed for get_cascade_stats, falling back: %s", e)
 
     # Fallback to old table
     stages = ["idea", "prompt", "analyzed", "planned", "done"]

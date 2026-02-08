@@ -25,6 +25,7 @@ from ..models.executions import (
 )
 from ..models.tags import add_tags_to_document
 from ..prompts import build_prompt
+from ..config.constants import EMDX_LOG_DIR
 from ..config.settings import DEFAULT_CLAUDE_MODEL
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
@@ -504,8 +505,7 @@ def execute(
         execution_id = generate_unique_execution_id(doc['id'])
 
         # Set up log file
-        log_dir = Path.home() / ".config" / "emdx" / "logs"
-        log_file = log_dir / f"{execution_id}.log"
+        log_file = EMDX_LOG_DIR / f"{execution_id}.log"
 
     if smart:
         # Get document tags

@@ -38,7 +38,7 @@ class Answer:
 class AskService:
     """Answer questions using your knowledge base."""
 
-    DEFAULT_MODEL = "claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
     MIN_EMBEDDINGS_FOR_SEMANTIC = 50  # Use semantic only if we have enough coverage
 
     def __init__(self, model: Optional[str] = None):

@@ -8,13 +8,14 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from emdx.config.constants import EMDX_CONFIG_DIR
 from .context import Context
 from .registry import KeybindingEntry
 
 logger = logging.getLogger(__name__)
 
 # Default config path
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "emdx" / "keybindings.yaml"
+DEFAULT_CONFIG_PATH = EMDX_CONFIG_DIR / "keybindings.yaml"
 
 # Example config content for new users
 EXAMPLE_CONFIG = """# EMDX Keybinding Configuration

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from ..config.constants import EMDX_CONFIG_DIR
 from . import migrations
 
 
@@ -22,9 +23,8 @@ def get_db_path() -> Path:
     if test_db:
         return Path(test_db)
 
-    config_dir = Path.home() / ".config" / "emdx"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "knowledge.db"
+    EMDX_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    return EMDX_CONFIG_DIR / "knowledge.db"
 
 
 class DatabaseConnection:

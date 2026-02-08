@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from emdx.config.constants import EMDX_LOG_DIR
 from emdx.models import tasks
 from emdx.models.documents import get_document
 from emdx.models.executions import create_execution
@@ -105,9 +106,8 @@ def run_task(
 def _run_task_direct(task_id: int, task: dict) -> int:
     """Run task via direct Claude execution."""
     # Setup log file
-    log_dir = Path.home() / ".config" / "emdx" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"task-{task_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
+    EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = EMDX_LOG_DIR / f"task-{task_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
 
     prompt = build_task_prompt(task_id)
 
@@ -254,9 +254,8 @@ asyncio.run(run())
 '''
 
     # Setup log file
-    log_dir = Path.home() / ".config" / "emdx" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"task-workflow-{task_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
+    EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = EMDX_LOG_DIR / f"task-workflow-{task_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.log"
 
     # Launch as detached subprocess using poetry to ensure correct environment
     # Use the emdx project directory (where pyproject.toml lives)

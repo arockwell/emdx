@@ -259,9 +259,9 @@ class ExecutionMonitor:
                     
             except psutil.NoSuchProcess:
                 # Process already gone - expected during cleanup
-                logger.debug("Process %s already terminated during cleanup", pid)
+                logger.debug("Process %s already terminated during cleanup", execution.pid)
             except psutil.AccessDenied:
                 # Can't access process
-                logger.debug("Access denied to process %s during cleanup", pid)
+                logger.debug("Access denied to process %s during cleanup", execution.pid)
         
         return actions

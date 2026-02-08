@@ -122,8 +122,12 @@ class ActivityDataLoader:
         items: List[ActivityItem] = []
         try:
             runs = wf_db.list_workflow_runs(limit=50)
+        except Exception as e:
+            logger.error(f"Error listing workflow runs: {e}", exc_info=True)
+            return items
 
-            for run in runs:
+        for run in runs:
+            try:
                 started = parse_datetime(run.get("started_at")) or datetime.now()
 
                 # Skip zombie running workflows (running for > 2 hours)
@@ -150,7 +154,7 @@ class ActivityDataLoader:
                         input_vars = json.loads(input_vars)
                     if input_vars:
                         task_title = input_vars.get("task_title", "")
-                except Exception:
+                except (json.JSONDecodeError, KeyError, TypeError):
                     pass
 
                 title = task_title or wf_name
@@ -251,8 +255,8 @@ class ActivityDataLoader:
 
                 items.append(item)
 
-        except Exception as e:
-            logger.error(f"Error loading workflows: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Error loading workflow run {run.get('id', '?')}: {e}", exc_info=True)
 
         return items
 
@@ -261,8 +265,12 @@ class ActivityDataLoader:
         items: List[ActivityItem] = []
         try:
             top_groups = groups_db.list_groups(top_level_only=True)
+        except Exception as e:
+            logger.error(f"Error listing groups: {e}", exc_info=True)
+            return items
 
-            for group in top_groups:
+        for group in top_groups:
+            try:
                 group_id = group["id"]
                 created = parse_datetime(group.get("created_at")) or datetime.now()
                 child_groups = groups_db.get_child_groups(group_id)
@@ -282,25 +290,29 @@ class ActivityDataLoader:
 
                 items.append(item)
 
-        except Exception as e:
-            logger.error(f"Error loading groups: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Error loading group {group.get('id', '?')}: {e}", exc_info=True)
 
         return items
 
     async def _load_direct_saves(self) -> List[ActivityItem]:
         """Load documents not created by workflows or added to groups."""
         items: List[ActivityItem] = []
+        grouped_doc_ids: Set[int] = set()
+        if HAS_GROUPS and groups_db:
+            try:
+                grouped_doc_ids = groups_db.get_all_grouped_document_ids()
+            except Exception as e:
+                logger.debug(f"Error getting grouped doc IDs: {e}")
+
         try:
-            grouped_doc_ids: Set[int] = set()
-            if HAS_GROUPS and groups_db:
-                try:
-                    grouped_doc_ids = groups_db.get_all_grouped_document_ids()
-                except Exception as e:
-                    logger.debug(f"Error getting grouped doc IDs: {e}")
-
             docs = list_non_workflow_documents(limit=100, days=7, include_archived=False)
+        except Exception as e:
+            logger.error(f"Error listing non-workflow documents: {e}", exc_info=True)
+            return items
 
-            for doc in docs:
+        for doc in docs:
+            try:
                 doc_id = doc["id"]
                 if doc_id in grouped_doc_ids:
                     continue
@@ -321,8 +333,8 @@ class ActivityDataLoader:
 
                 items.append(item)
 
-        except Exception as e:
-            logger.error(f"Error loading direct saves: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Error loading document {doc.get('id', '?')}: {e}", exc_info=True)
 
         return items
 
