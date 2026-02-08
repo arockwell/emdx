@@ -36,6 +36,7 @@ async def run_agent(
     agent_id: Optional[int],
     prompt: str,
     context: Dict[str, Any],
+    title: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run an agent with the given prompt using the UnifiedExecutor.
 
@@ -72,7 +73,7 @@ async def run_agent(
             prompt=prompt,
             output_instruction=OUTPUT_INSTRUCTION,
             working_dir=working_dir,
-            title=f"Workflow Agent Run #{individual_run_id}",
+            title=title or f"Workflow Agent Run #{individual_run_id}",
             doc_id=context.get('input_doc_id'),
             allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"],
             cli_tool=context.get('_cli_tool', 'claude'),
