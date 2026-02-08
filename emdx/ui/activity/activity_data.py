@@ -443,7 +443,7 @@ class ActivityDataLoader:
                            e.completed_at, e.log_file, e.exit_code, e.working_dir
                     FROM executions e
                     WHERE e.started_at > ?
-                      AND e.doc_title LIKE 'Agent:%'
+                      AND (e.doc_title LIKE 'Agent:%' OR e.doc_title LIKE 'Delegate:%')
                       AND e.cascade_run_id IS NULL
                     ORDER BY e.started_at DESC
                     LIMIT 30

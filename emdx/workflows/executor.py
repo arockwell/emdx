@@ -397,11 +397,13 @@ class WorkflowExecutor:
         )
 
         # Execute agent
+        effective_prompt = prompt or stage_input or ""
         result = await run_agent(
             individual_run_id=individual_run_id,
             agent_id=stage.agent_id,
-            prompt=prompt or stage_input or "",
+            prompt=effective_prompt,
             context=context,
+            title=f"Delegate: {effective_prompt[:50]}",
         )
 
         return StageResult(
@@ -493,11 +495,13 @@ class WorkflowExecutor:
                     run_context = dict(context)
                     run_context['_working_dir'] = worktree.path
 
+                    effective_prompt = prompt or stage_input or ""
                     result = await run_agent(
                         individual_run_id=run_id,
                         agent_id=stage.agent_id,
-                        prompt=prompt or stage_input or "",
+                        prompt=effective_prompt,
                         context=run_context,
+                        title=f"Delegate: {effective_prompt[:50]}",
                     )
                     # Update progress after each completion
                     completed_count += 1
@@ -633,6 +637,7 @@ class WorkflowExecutor:
                 agent_id=stage.agent_id,
                 prompt=prompt,
                 context=iter_context,
+                title=f"Delegate: {prompt[:50]}",
             )
 
             if not result.get('success'):
@@ -725,6 +730,7 @@ class WorkflowExecutor:
                 agent_id=stage.agent_id,
                 prompt=prompt,
                 context=iter_context,
+                title=f"Delegate: {prompt[:50]}",
             )
 
             if not result.get('success'):
@@ -905,6 +911,7 @@ class WorkflowExecutor:
                         agent_id=stage.agent_id,
                         prompt=prompt,
                         context=item_context,
+                        title=f"Delegate: {prompt[:50]}",
                     )
 
                     return {
