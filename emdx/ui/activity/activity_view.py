@@ -1291,11 +1291,7 @@ class ActivityView(HelpMixin, Widget):
                 item.expanded = True
                 # Add children to tree node
                 node.remove_children()
-                for child in item.children:
-                    if child.can_expand():
-                        node.add(tree._make_label(child), data=child)
-                    else:
-                        node.add_leaf(tree._make_label(child), data=child)
+                tree._add_children(node, item.children)
                 node.expand()
             except Exception as e:
                 logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)
@@ -1316,11 +1312,7 @@ class ActivityView(HelpMixin, Widget):
                 item.children = await item.load_children(wf_db, doc_db)
                 item.expanded = True
                 node.remove_children()
-                for child in item.children:
-                    if child.can_expand():
-                        node.add(tree._make_label(child), data=child)
-                    else:
-                        node.add_leaf(tree._make_label(child), data=child)
+                tree._add_children(node, item.children)
                 node.expand()
             except Exception as e:
                 logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)
@@ -1407,11 +1399,7 @@ class ActivityView(HelpMixin, Widget):
                 item.children = await item.load_children(wf_db, doc_db)
                 item.expanded = True
                 tree = self.query_one("#activity-tree", ActivityTree)
-                for child in item.children:
-                    if child.can_expand():
-                        node.add(tree._make_label(child), data=child)
-                    else:
-                        node.add_leaf(tree._make_label(child), data=child)
+                tree._add_children(node, item.children)
             except Exception as e:
                 logger.error(f"Error loading children for {item.item_type} #{item.item_id}: {e}", exc_info=True)
 
@@ -1699,11 +1687,7 @@ class ActivityView(HelpMixin, Widget):
                         item.children = await item.load_children(wf_db, doc_db)
                         item.expanded = True
                         top_node.remove_children()
-                        for child in item.children:
-                            if child.can_expand():
-                                top_node.add(tree._make_label(child), data=child)
-                            else:
-                                top_node.add_leaf(tree._make_label(child), data=child)
+                        tree._add_children(top_node, item.children)
                         top_node.expand()
                     except Exception as e:
                         logger.error(f"Error expanding workflow: {e}")
