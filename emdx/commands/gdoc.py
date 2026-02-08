@@ -9,6 +9,8 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from ..config.constants import EMDX_CONFIG_DIR
+
 logger = logging.getLogger(__name__)
 
 import typer
@@ -31,7 +33,7 @@ SCOPES = [
 ]
 
 # Default paths for credentials
-CONFIG_DIR = Path.home() / ".config" / "emdx"
+CONFIG_DIR = EMDX_CONFIG_DIR
 CREDENTIALS_FILE = CONFIG_DIR / "google_credentials.json"
 TOKEN_FILE = CONFIG_DIR / "google_token.json"
 

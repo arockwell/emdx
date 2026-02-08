@@ -4,6 +4,9 @@ from .settings import get_db_path
 
 # Re-export commonly used constants
 from .constants import (
+    # Paths
+    EMDX_CONFIG_DIR,
+    EMDX_LOG_DIR,
     # Database limits
     DEFAULT_LIST_LIMIT,
     DEFAULT_RECENT_LIMIT,
@@ -38,6 +41,9 @@ from .constants import (
 
 __all__ = [
     "get_db_path",
+    # Paths
+    "EMDX_CONFIG_DIR",
+    "EMDX_LOG_DIR",
     # Database limits
     "DEFAULT_LIST_LIMIT",
     "DEFAULT_RECENT_LIMIT",

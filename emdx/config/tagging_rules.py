@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from .constants import DEFAULT_TAGGING_CONFIDENCE
+from .constants import DEFAULT_TAGGING_CONFIDENCE, EMDX_CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class TaggingRule:
 class TaggingConfig:
     """Manages tagging configuration and custom rules."""
     
-    DEFAULT_CONFIG_PATH = "~/.config/emdx/tagging.yaml"
+    DEFAULT_CONFIG_PATH = str(EMDX_CONFIG_DIR / "tagging.yaml")
     
     def __init__(self, config_path: Optional[str] = None):
         self.config_path = Path(config_path or self.DEFAULT_CONFIG_PATH).expanduser()

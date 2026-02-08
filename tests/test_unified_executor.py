@@ -239,7 +239,7 @@ class TestDefaultAllowedTools:
     """Test default allowed tools."""
 
     def test_default_tools_list(self):
-        expected = ["Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "LS", "Task", "TodoWrite", "WebFetch", "WebSearch"]
+        expected = ["Bash", "Edit", "Glob", "Grep", "LS", "MultiEdit", "Read", "Task", "TodoRead", "TodoWrite", "WebFetch", "WebSearch", "Write"]
         assert DEFAULT_ALLOWED_TOOLS == expected
 
     def test_config_gets_copy(self):

@@ -6,6 +6,15 @@ previously scattered throughout the codebase. Organizing them here makes
 it easier to understand, modify, and maintain the system's behavior.
 """
 
+from pathlib import Path
+
+# =============================================================================
+# PATHS
+# =============================================================================
+
+EMDX_CONFIG_DIR = Path.home() / ".config" / "emdx"
+EMDX_LOG_DIR = EMDX_CONFIG_DIR / "logs"
+
 # =============================================================================
 # DATABASE & QUERY LIMITS
 # =============================================================================

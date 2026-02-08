@@ -13,6 +13,9 @@ This is the recommended approach because:
 - It doesn't add overhead of file handler creation on import
 
 Use `get_logger()` only when you need immediate file-based logging
+
+Note: This module uses inline Path construction instead of importing EMDX_CONFIG_DIR
+to avoid circular imports, since logging may be needed before config is fully loaded.
 with auto-configuration (e.g., for modules that may run standalone).
 """
 

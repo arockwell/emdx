@@ -18,13 +18,14 @@ from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Input, ListView, ListItem, Static
 
+from emdx.config.constants import EMDX_CONFIG_DIR
 from .palette_commands import CommandContext
 from .palette_presenter import PalettePresenter, PaletteResultItem, PaletteState, ResultType
 
 logger = logging.getLogger(__name__)
 
 # Debug log file for catching crashes
-DEBUG_LOG = Path.home() / ".config" / "emdx" / "palette_debug.log"
+DEBUG_LOG = EMDX_CONFIG_DIR / "palette_debug.log"
 
 
 def _debug_log(msg: str) -> None:

@@ -12,6 +12,7 @@ from textual.containers import Container, Vertical
 from textual.reactive import reactive
 from textual.widget import Widget
 
+from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.config.ui_config import get_theme, set_theme
 from emdx.ui.themes import register_all_themes, get_theme_names, get_opposite_theme, is_dark_theme
 
@@ -432,7 +433,7 @@ class BrowserContainer(App):
         from pathlib import Path
 
         # Debug log
-        debug_log = Path.home() / ".config" / "emdx" / "palette_debug.log"
+        debug_log = EMDX_CONFIG_DIR / "palette_debug.log"
         debug_log.parent.mkdir(parents=True, exist_ok=True)
         with open(debug_log, "a") as f:
             f.write("=== action_open_command_palette called ===\n")
@@ -470,7 +471,7 @@ class BrowserContainer(App):
             doc_id = result.get("doc_id")
             # Debug to file
             from pathlib import Path
-            debug_log = Path.home() / ".config" / "emdx" / "palette_debug.log"
+            debug_log = EMDX_CONFIG_DIR / "palette_debug.log"
             with open(debug_log, "a") as f:
                 f.write(f"=== _handle_palette_result view_document ===\n")
                 f.write(f"doc_id={doc_id}, current_browser={self.current_browser}\n")
