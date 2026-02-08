@@ -54,15 +54,19 @@ def similar(
 
     service = SimilarityService()
 
-    with console.status("[bold green]Finding similar documents..."):
-        results = service.find_similar(
-            doc_id=doc_id,
-            limit=limit,
-            min_similarity=threshold,
-            content_only=content_only,
-            tags_only=tags_only,
-            same_project=same_project,
-        )
+    try:
+        with console.status("[bold green]Finding similar documents..."):
+            results = service.find_similar(
+                doc_id=doc_id,
+                limit=limit,
+                min_similarity=threshold,
+                content_only=content_only,
+                tags_only=tags_only,
+                same_project=same_project,
+            )
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if json_output:
         output = {
@@ -142,12 +146,16 @@ def similar_text(
     """
     service = SimilarityService()
 
-    with console.status("[bold green]Finding similar documents..."):
-        results = service.find_similar_by_text(
-            text=text,
-            limit=limit,
-            min_similarity=threshold,
-        )
+    try:
+        with console.status("[bold green]Finding similar documents..."):
+            results = service.find_similar_by_text(
+                text=text,
+                limit=limit,
+                min_similarity=threshold,
+            )
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if json_output:
         output = {
@@ -212,11 +220,15 @@ def build_index(
     """
     service = SimilarityService()
 
-    if not quiet:
-        console.print("[bold]Building TF-IDF similarity index...[/bold]")
+    try:
+        if not quiet:
+            console.print("[bold]Building TF-IDF similarity index...[/bold]")
 
-    with console.status("[bold green]Building index...") if not quiet else nullcontext():
-        stats = service.build_index(force=force)
+        with console.status("[bold green]Building index...") if not quiet else nullcontext():
+            stats = service.build_index(force=force)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if not quiet:
         console.print(f"\n[green]✓[/green] Index built successfully!")

@@ -15,7 +15,7 @@ EMDX is a command-line knowledge base and documentation management system built 
 ## 🏗️ Architecture Summary
 
 **Core Technologies:**
-- **Python 3.13+** (minimum requirement)
+- **Python 3.11+** (minimum requirement)
 - **SQLite + FTS5** - Local database with full-text search
 - **Textual TUI** - Modern terminal interface framework
 - **Typer CLI** - Type-safe command-line interface
@@ -39,7 +39,7 @@ poetry install
 poetry run emdx --help
 
 # Or with pip in a virtual environment  
-python3.13 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 pip install -e .
 emdx --help

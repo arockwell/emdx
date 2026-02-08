@@ -182,30 +182,34 @@ def _interactive_wizard(dry_run: bool):
         # Ask about workflow exclusion
         exclude_workflow = Confirm.ask("Exclude workflow outputs?", default=True)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold green]{task.description}"),
-            BarColumn(),
-            TextColumn("[cyan]{task.fields[found]} pairs"),
-            console=console,
-            transient=True,
-        ) as progress:
-            task = progress.add_task("Building index...", total=100, found=0)
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold green]{task.description}"),
+                BarColumn(),
+                TextColumn("[cyan]{task.fields[found]} pairs"),
+                console=console,
+                transient=True,
+            ) as progress:
+                task = progress.add_task("Building index...", total=100, found=0)
 
-            def update_progress(current, total, found):
-                if current < 50:
-                    progress.update(task, description="Building TF-IDF index...", completed=current, found=found)
-                else:
-                    progress.update(task, description="Finding duplicates...", completed=current, found=found)
+                def update_progress(current, total, found):
+                    if current < 50:
+                        progress.update(task, description="Building TF-IDF index...", completed=current, found=found)
+                    else:
+                        progress.update(task, description="Finding duplicates...", completed=current, found=found)
 
-            # Get all pairs at 70% threshold
-            similarity_service = SimilarityService()
-            all_pairs = similarity_service.find_all_duplicate_pairs(
-                min_similarity=0.7,
-                progress_callback=update_progress,
-                exclude_workflow=exclude_workflow
-            )
-            progress.update(task, completed=100, found=len(all_pairs))
+                # Get all pairs at 70% threshold
+                similarity_service = SimilarityService()
+                all_pairs = similarity_service.find_all_duplicate_pairs(
+                    min_similarity=0.7,
+                    progress_callback=update_progress,
+                    exclude_workflow=exclude_workflow
+                )
+                progress.update(task, completed=100, found=len(all_pairs))
+        except ImportError as e:
+            console.print(f"  [red]{e}[/red]")
+            all_pairs = []
 
         if not all_pairs:
             console.print("[green]No duplicate documents found[/green]")
@@ -280,7 +284,11 @@ def _interactive_wizard(dry_run: bool):
 def _clean_documents(dry_run: bool) -> Optional[str]:
     """Clean duplicates and empty documents using MaintenanceApplication."""
     app = MaintenanceApplication()
-    result = app.clean_duplicates(dry_run=dry_run)
+    try:
+        result = app.clean_duplicates(dry_run=dry_run)
+    except ImportError as e:
+        console.print(f"  [red]{e}[/red]")
+        return None
 
     if result.items_affected == 0:
         console.print("  ✨ No duplicates or empty documents found!")
@@ -323,7 +331,11 @@ def _auto_tag_documents(dry_run: bool) -> Optional[str]:
 def _merge_documents(dry_run: bool, threshold: float = 0.7) -> Optional[str]:
     """Merge similar documents using MaintenanceApplication."""
     app = MaintenanceApplication()
-    result = app.merge_similar(dry_run=dry_run, threshold=threshold)
+    try:
+        result = app.merge_similar(dry_run=dry_run, threshold=threshold)
+    except ImportError as e:
+        console.print(f"  [red]{e}[/red]")
+        return None
 
     if result.items_processed == 0:
         console.print("  ✨ No similar documents found!")

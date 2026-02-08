@@ -3,7 +3,7 @@
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
-- **Python 3.13+** (required by project)
+- **Python 3.11+** (required by project)
 - **Git** for version control
 - **Poetry** for dependency management (recommended)
 
@@ -15,18 +15,20 @@
 git clone https://github.com/arockwell/emdx.git
 cd emdx
 
-# Install with Poetry (handles virtual environment automatically)
+# Install with Poetry - core only (fast, lightweight)
 poetry install
+
+# Install with all extras (AI, similarity, Google)
+poetry install --all-extras
 
 # Run commands with Poetry
 poetry run emdx --help
-poetry run emdx gui
 ```
 
 #### **Option 2: pipx (Recommended for Global CLI Usage)**
 ```bash
 # Install globally with pipx
-pipx install -e . --python python3.13
+pipx install -e . --python python3.11
 
 # Use directly from anywhere
 emdx --help
@@ -36,7 +38,7 @@ emdx gui
 #### **Option 3: Virtual Environment + pip**
 ```bash
 # Create and activate virtual environment
-python3.13 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
@@ -247,11 +249,11 @@ def test_log_stream():
 
 #### **Python Version Mismatch**
 ```bash
-# EMDX requires Python 3.13+
-python3.13 --version
+# EMDX requires Python 3.11+
+python3.11 --version
 
 # Poetry will automatically find compatible Python
-poetry env use python3.13
+poetry env use python3.11
 ```
 
 #### **Database Issues**

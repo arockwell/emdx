@@ -5,12 +5,20 @@ Uses semantic search when available (embeddings indexed),
 falls back to keyword search (FTS) otherwise.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import anthropic
+try:
+    import anthropic
+
+    HAS_ANTHROPIC = True
+except ImportError:
+    anthropic = None  # type: ignore[assignment]
+    HAS_ANTHROPIC = False
 
 from ..database import db
 
@@ -38,8 +46,13 @@ class AskService:
         self._client = None
         self._embedding_service = None
 
-    def _get_client(self) -> anthropic.Anthropic:
+    def _get_client(self):
         """Lazy load Anthropic client."""
+        if not HAS_ANTHROPIC:
+            raise ImportError(
+                "anthropic is required for AI Q&A features. "
+                "Install it with: pip install 'emdx[ai]'"
+            )
         if self._client is None:
             self._client = anthropic.Anthropic()
         return self._client
@@ -280,9 +293,11 @@ Rules:
 
             return response.content[0].text, context_size
 
-        except anthropic.APIError as e:
-            logger.error(f"Claude API error: {e}")
-            return f"Error generating answer: {e}", context_size
+        except Exception as e:
+            if HAS_ANTHROPIC and isinstance(e, anthropic.APIError):
+                logger.error(f"Claude API error: {e}")
+                return f"Error generating answer: {e}", context_size
+            raise
 
     def ask_with_context(
         self,
@@ -340,11 +355,13 @@ Rules:
                 context_size=len(context),
             )
 
-        except anthropic.APIError as e:
-            logger.error(f"Claude API error: {e}")
-            return Answer(
-                text=f"Error generating answer: {e}",
-                sources=[d[0] for d in docs],
-                method=method,
-                context_size=len(context),
-            )
+        except Exception as e:
+            if HAS_ANTHROPIC and isinstance(e, anthropic.APIError):
+                logger.error(f"Claude API error: {e}")
+                return Answer(
+                    text=f"Error generating answer: {e}",
+                    sources=[d[0] for d in docs],
+                    method=method,
+                    context_size=len(context),
+                )
+            raise
