@@ -552,6 +552,15 @@ class ActivityView(HelpMixin, Widget):
             except Exception as e:
                 logger.error(f"Error loading document: {e}")
 
+        # For agent executions without doc_id, use the item's preview method
+        if item.item_type == "agent_execution":
+            content, header_text = await item.get_preview_content(wf_db, doc_db)
+            if content:
+                self._render_markdown_preview(content)
+                show_markdown()
+                header.update(header_text)
+                return
+
         # For workflows, show summary
         if item.item_type == "workflow" and item.workflow_run:
             await self._show_workflow_summary(item)
