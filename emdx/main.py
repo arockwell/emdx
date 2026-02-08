@@ -8,8 +8,8 @@ fast. Heavy commands (workflow, cascade, each, ai, gui) are only imported when
 actually invoked.
 """
 
-from typing import Optional
 import os
+from typing import Optional
 
 import typer
 from emdx import __build_id__, __version__
@@ -29,16 +29,13 @@ LAZY_SUBCOMMANDS = {
     "run": "emdx.commands.run:run",
     "agent": "emdx.commands.agent:agent",
     "claude": "emdx.commands.claude_execute:app",
-    # Swarm - k3d parallel agent execution (imports k8s libs)
-    "swarm": "emdx.commands.swarm:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
     # Similarity (imports scikit-learn)
     "similar": "emdx.commands.similarity:app",
     # External services (imports google API libs)
     "gdoc": "emdx.commands.gdoc:app",
-    # TUI (imports textual, can be slow)
-    "gui": "emdx.ui.gui:gui",
+    "mail": "emdx.commands.mail:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -49,11 +46,10 @@ LAZY_HELP = {
     "run": "Quick task execution (parallel, worktree isolation)",
     "agent": "Run Claude sub-agent with EMDX tracking",
     "claude": "Execute documents with Claude",
-    "swarm": "Parallel agent execution with k3d isolation (battlestation)",
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
     "gdoc": "Google Docs integration",
-    "gui": "Launch interactive TUI browser",
+    "mail": "Agent-to-agent mail via GitHub Issues",
 }
 
 
@@ -119,6 +115,7 @@ from emdx.commands.export_profiles import app as export_profiles_app
 from emdx.commands.keybindings import app as keybindings_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.ui.gui import gui as gui_command
 from emdx.commands.analyze import app as analyze_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.gist import app as gist_app
@@ -193,6 +190,10 @@ app.command(name="prime")(prime_command)
 
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
+
+# Add the gui command for interactive TUI browser
+app.command(name="gui")(gui_command)
+
 
 
 # =============================================================================
@@ -274,7 +275,20 @@ def main(
 
 
 def run():
-    """Entry point for the CLI"""
+    """Entry point for the CLI.
+
+    Supports trailing 'help' as alternative to --help:
+        emdx save help      → emdx save --help
+        emdx task help      → emdx task --help
+        emdx task create help → emdx task create --help
+    """
+    import sys
+
+    # Convert trailing 'help' to '--help' for convenience
+    # e.g., 'emdx save help' becomes 'emdx save --help'
+    if len(sys.argv) >= 2 and sys.argv[-1] == "help":
+        sys.argv[-1] = "--help"
+
     app()
 
 

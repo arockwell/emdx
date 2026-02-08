@@ -5,6 +5,8 @@ Uses scikit-learn's TfidfVectorizer to compute document similarity
 with hybrid scoring that combines content similarity and tag similarity.
 """
 
+from __future__ import annotations
+
 import logging
 import pickle
 from dataclasses import dataclass
@@ -14,10 +16,24 @@ from typing import List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
 
 from ..database import db
+
+
+def _require_sklearn() -> None:
+    """Raise ImportError with helpful message if sklearn is not installed."""
+    if not HAS_SKLEARN:
+        raise ImportError(
+            "scikit-learn is required for similarity features. "
+            "Install it with: pip install 'emdx[similarity]'"
+        )
 
 
 @dataclass
@@ -127,6 +143,7 @@ class SimilarityService:
         Returns:
             Statistics about the built index
         """
+        _require_sklearn()
         if not force and self._vectorizer is not None:
             return self.get_index_stats()
 
@@ -254,6 +271,7 @@ class SimilarityService:
         Returns:
             List of similar documents, ordered by similarity score
         """
+        _require_sklearn()
         self._ensure_index()
 
         if not self._doc_ids or self._tfidf_matrix is None:
@@ -334,6 +352,7 @@ class SimilarityService:
         Returns:
             List of similar documents, ordered by similarity score
         """
+        _require_sklearn()
         self._ensure_index()
 
         if not self._doc_ids or self._tfidf_matrix is None or self._vectorizer is None:
@@ -427,6 +446,7 @@ class SimilarityService:
         Returns:
             List of tuples: (doc1_id, doc2_id, doc1_title, doc2_title, similarity)
         """
+        _require_sklearn()
         self._ensure_index()
 
         if not self._doc_ids or self._tfidf_matrix is None:
@@ -512,6 +532,7 @@ def compute_content_similarity(content1: str, content2: str) -> float:
     Returns:
         Cosine similarity between 0.0 and 1.0
     """
+    _require_sklearn()
     if not content1 or not content2:
         return 0.0
 

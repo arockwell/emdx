@@ -3,7 +3,7 @@
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
-- **Python 3.13+** (required by project)
+- **Python 3.11+** (required by project)
 - **Git** for version control
 - **Poetry** for dependency management (recommended)
 
@@ -15,18 +15,20 @@
 git clone https://github.com/arockwell/emdx.git
 cd emdx
 
-# Install with Poetry (handles virtual environment automatically)
+# Install with Poetry - core only (fast, lightweight)
 poetry install
+
+# Install with all extras (AI, similarity, Google)
+poetry install --all-extras
 
 # Run commands with Poetry
 poetry run emdx --help
-poetry run emdx gui
 ```
 
 #### **Option 2: pipx (Recommended for Global CLI Usage)**
 ```bash
 # Install globally with pipx
-pipx install -e . --python python3.13
+pipx install -e . --python python3.11
 
 # Use directly from anywhere
 emdx --help
@@ -36,7 +38,7 @@ emdx gui
 #### **Option 3: Virtual Environment + pip**
 ```bash
 # Create and activate virtual environment
-python3.13 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
@@ -247,11 +249,11 @@ def test_log_stream():
 
 #### **Python Version Mismatch**
 ```bash
-# EMDX requires Python 3.13+
-python3.13 --version
+# EMDX requires Python 3.11+
+python3.11 --version
 
 # Poetry will automatically find compatible Python
-poetry env use python3.13
+poetry env use python3.11
 ```
 
 #### **Database Issues**
@@ -295,6 +297,46 @@ log("Debug message", data=some_object)
 
 # View logs in separate terminal
 textual console
+```
+
+#### **Headless TUI Testing**
+
+Use Textual's `run_test()` to debug TUI crashes without launching an interactive terminal. This is especially useful in CI or when working inside Claude Code where interactive TUIs can't run.
+
+```python
+# test_tui_headless.py - reproduce TUI crashes without a terminal
+import asyncio
+from textual.app import App, ComposeResult
+from emdx.ui.activity.activity_view import ActivityView
+
+class TestApp(App):
+    def compose(self) -> ComposeResult:
+        yield ActivityView(id="activity-view")
+
+async def main():
+    app = TestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await asyncio.sleep(2)  # Let data load
+        print("App loaded OK")
+
+asyncio.run(main())
+```
+
+Run it:
+```bash
+poetry run python test_tui_headless.py
+```
+
+The headless test app mounts real widgets, runs `on_mount()`, loads data, and renders — so it catches the same errors you'd see in the live GUI (e.g. type errors in `format_time_ago`, missing attributes on new item types, rendering bugs). Tracebacks print to stderr with full locals.
+
+You can also interact with the app via the `pilot`:
+```python
+async with app.run_test(size=(120, 40)) as pilot:
+    await pilot.pause()
+    await pilot.press("j")      # Navigate down
+    await pilot.press("l")      # Expand
+    await pilot.press("a")      # Custom action
 ```
 
 ## 📦 **Build and Distribution**

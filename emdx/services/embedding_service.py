@@ -5,12 +5,20 @@ Uses sentence-transformers for local embedding generation,
 enabling semantic search without API costs.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 
-import numpy as np
+try:
+    import numpy as np
+
+    HAS_NUMPY = True
+except ImportError:
+    np = None  # type: ignore[assignment]
+    HAS_NUMPY = False
 
 from ..database import db
 
@@ -24,7 +32,18 @@ def _get_model():
     """Lazy load the embedding model."""
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        if not HAS_NUMPY:
+            raise ImportError(
+                "numpy is required for embedding features. "
+                "Install it with: pip install 'emdx[ai]'"
+            )
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError:
+            raise ImportError(
+                "sentence-transformers is required for embedding features. "
+                "Install it with: pip install 'emdx[ai]'"
+            )
 
         # all-MiniLM-L6-v2: Good balance of speed/quality
         # ~90MB download, ~80ms per doc, 384 dimensions
@@ -61,7 +80,7 @@ class EmbeddingService:
     MODEL_NAME = "all-MiniLM-L6-v2"
     EMBEDDING_DIM = 384
 
-    def embed_text(self, text: str) -> np.ndarray:
+    def embed_text(self, text: str):
         """Embed arbitrary text."""
         model = _get_model()
         return model.encode(text, convert_to_numpy=True, normalize_embeddings=True)

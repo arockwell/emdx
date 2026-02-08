@@ -1,5 +1,5 @@
 """
-GUI interface for emdx - seamless textual browser with nvim integration
+GUI interface for emdx - seamless textual browser
 """
 
 from typing import Optional
@@ -8,10 +8,7 @@ import typer
 
 from emdx.utils.output import console
 
-app = typer.Typer()
 
-
-@app.command()
 def gui(
     theme: Optional[str] = typer.Option(
         None,
@@ -20,11 +17,11 @@ def gui(
         help="Theme to use (emdx-dark, emdx-light, emdx-nord, emdx-solarized-dark, emdx-solarized-light)",
     ),
 ):
-    """Seamless TUI browser with zero-flash nvim integration."""
-    from emdx.ui.nvim_wrapper import run_textual_with_nvim_wrapper
+    """TUI browser for the EMDX knowledge base."""
+    from emdx.ui.run_browser import run_browser
 
     try:
-        run_textual_with_nvim_wrapper(theme=theme)
+        run_browser(theme=theme)
     except KeyboardInterrupt:
         pass
     except Exception as e:

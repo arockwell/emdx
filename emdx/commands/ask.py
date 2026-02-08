@@ -5,13 +5,13 @@ AI-powered Q&A and semantic search commands for EMDX.
 from typing import Optional
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from ..utils.output import console
+
 app = typer.Typer(help="AI-powered knowledge base features")
-console = Console()
 
 
 @app.command("ask")
@@ -37,8 +37,12 @@ def ask_question(
 
     service = AskService()
 
-    with console.status("[bold blue]Thinking...", spinner="dots"):
-        result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
+    try:
+        with console.status("[bold blue]Thinking...", spinner="dots"):
+            result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     # Display answer
     console.print()
@@ -76,11 +80,15 @@ def get_context(
 
     service = AskService()
 
-    # Retrieve docs (reuse the retrieval logic)
-    if keyword or not service._has_embeddings():
-        docs, method = service._retrieve_keyword(question, limit, project)
-    else:
-        docs, method = service._retrieve_semantic(question, limit, project)
+    try:
+        # Retrieve docs (reuse the retrieval logic)
+        if keyword or not service._has_embeddings():
+            docs, method = service._retrieve_keyword(question, limit, project)
+        else:
+            docs, method = service._retrieve_semantic(question, limit, project)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]", highlight=False)
+        raise typer.Exit(1)
 
     if not docs:
         print("No relevant documents found.", file=sys.stderr)
@@ -121,33 +129,37 @@ def build_index(
         emdx ai index          # Index new documents only
         emdx ai index --force  # Reindex everything
     """
-    from ..services.embedding_service import EmbeddingService
+    try:
+        from ..services.embedding_service import EmbeddingService
 
-    service = EmbeddingService()
+        service = EmbeddingService()
 
-    # Show current stats
-    stats = service.stats()
-    console.print(f"[dim]Current index: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+        # Show current stats
+        stats = service.stats()
+        console.print(f"[dim]Current index: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
 
-    if stats.indexed_documents == stats.total_documents and not force:
-        console.print("[green]Index is already up to date![/green]")
-        return
+        if stats.indexed_documents == stats.total_documents and not force:
+            console.print("[green]Index is already up to date![/green]")
+            return
 
-    # Build index
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Indexing documents...", total=None)
-        count = service.index_all(force=force, batch_size=batch_size)
-        progress.update(task, completed=True)
+        # Build index
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Indexing documents...", total=None)
+            count = service.index_all(force=force, batch_size=batch_size)
+            progress.update(task, completed=True)
 
-    console.print(f"[green]Indexed {count} documents[/green]")
+        console.print(f"[green]Indexed {count} documents[/green]")
 
-    # Show updated stats
-    stats = service.stats()
-    console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+        # Show updated stats
+        stats = service.stats()
+        console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command("search")
@@ -166,9 +178,13 @@ def semantic_search(
         emdx ai search "authentication flow"
         emdx ai search "performance optimization" --limit 5
     """
-    from ..services.embedding_service import EmbeddingService
+    try:
+        from ..services.embedding_service import EmbeddingService
 
-    service = EmbeddingService()
+        service = EmbeddingService()
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     # Check if we have embeddings
     stats = service.stats()
@@ -176,8 +192,12 @@ def semantic_search(
         console.print("[yellow]No documents indexed. Run 'emdx ai index' first.[/yellow]")
         raise typer.Exit(1)
 
-    with console.status("[bold blue]Searching...", spinner="dots"):
-        results = service.search(query, limit=limit, threshold=threshold)
+    try:
+        with console.status("[bold blue]Searching...", spinner="dots"):
+            results = service.search(query, limit=limit, threshold=threshold)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if not results:
         console.print(f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]")
@@ -215,7 +235,11 @@ def find_similar(
         emdx ai similar 42
         emdx ai similar 42 --limit 10
     """
-    from ..services.embedding_service import EmbeddingService
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     from ..database import db
 
     service = EmbeddingService()
@@ -230,8 +254,12 @@ def find_similar(
             raise typer.Exit(1)
         source_title = row[0]
 
-    with console.status("[bold blue]Finding similar...", spinner="dots"):
-        results = service.find_similar(doc_id, limit=limit)
+    try:
+        with console.status("[bold blue]Finding similar...", spinner="dots"):
+            results = service.find_similar(doc_id, limit=limit)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if not results:
         console.print(f"[yellow]No similar documents found[/yellow]")
@@ -254,7 +282,11 @@ def find_similar(
 @app.command("stats")
 def show_stats():
     """Show embedding index statistics."""
-    from ..services.embedding_service import EmbeddingService
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     service = EmbeddingService()
     stats = service.stats()
@@ -281,7 +313,11 @@ def clear_index(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ):
     """Clear the embedding index (requires reindexing)."""
-    from ..services.embedding_service import EmbeddingService
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if not confirm:
         confirm = typer.confirm("This will delete all embeddings. Continue?")

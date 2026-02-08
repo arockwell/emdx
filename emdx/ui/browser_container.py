@@ -226,52 +226,9 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{escape(str(e))}")
-            elif browser_type == "file":
-                from .file_browser import FileBrowser
-                self.browsers[browser_type] = FileBrowser()
-            elif browser_type == "git":
-                try:
-                    from .git_browser_enhanced import GitBrowserEnhanced
-                    self.browsers[browser_type] = GitBrowserEnhanced()
-                    logger.info("GitBrowserEnhanced created successfully")
-                except Exception as e:
-                    logger.error(f"Failed to create GitBrowserEnhanced: {e}", exc_info=True)
-                    # Fallback to standalone version
-                    from .git_browser_standalone import GitBrowser
-                    self.browsers[browser_type] = GitBrowser()
-            elif browser_type == "github":
-                try:
-                    from .github import GitHubBrowser
-                    self.browsers[browser_type] = GitHubBrowser()
-                    logger.info("GitHubBrowser created successfully")
-                except Exception as e:
-                    logger.error(f"Failed to create GitHubBrowser: {e}", exc_info=True)
-                    from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"GitHub browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
-            elif browser_type == "control":
-                from .pulse_browser import PulseBrowser
-                self.browsers[browser_type] = PulseBrowser()
-            elif browser_type == "workflow":
-                try:
-                    from .workflow_browser import WorkflowBrowser
-                    self.browsers[browser_type] = WorkflowBrowser()
-                    logger.info("WorkflowBrowser created successfully")
-                except Exception as e:
-                    logger.error(f"Failed to create WorkflowBrowser: {e}", exc_info=True)
-                    from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Workflow browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
-            elif browser_type == "tasks":
-                try:
-                    from .task_browser import TaskBrowser
-                    self.browsers[browser_type] = TaskBrowser()
-                    logger.info("TaskBrowser created successfully")
-                except Exception as e:
-                    logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
-                    from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Tasks browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
             elif browser_type == "cascade":
                 try:
                     from .cascade_browser import CascadeBrowser
@@ -332,10 +289,6 @@ class BrowserContainer(App):
         logger.info("action_quit called - exiting app")
         self.exit()
 
-    async def on_pulse_view_view_document(self, event) -> None:
-        """Handle ViewDocument message from PulseView - switch to document browser."""
-        await self._view_document(event.doc_id)
-
     async def on_activity_view_view_document(self, event) -> None:
         """Handle ViewDocument message from ActivityView - switch to document browser."""
         await self._view_document(event.doc_id)
@@ -367,7 +320,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Search, 4=GitHub, 5=Documents)
+        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Search, 4=Documents)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -381,16 +334,12 @@ class BrowserContainer(App):
             event.stop()
             return
         elif key == "4":
-            await self.switch_browser("github")
-            event.stop()
-            return
-        elif key == "5":
             await self.switch_browser("document")
             event.stop()
             return
 
-        # Q to quit from activity, document, cascade, search, or github browser
-        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search", "github"]:
+        # Q to quit from activity, document, cascade, or search browser
+        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search"]:
             logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
             self.exit()
             event.stop()
@@ -398,33 +347,13 @@ class BrowserContainer(App):
 
         # Browser-specific keys from document browser
         if self.current_browser == "document":
-            if key == "f":
-                await self.switch_browser("file")
-                event.stop()
-                return
-            elif key == "g":
-                await self.switch_browser("git")
-                event.stop()
-                return
-            elif key == "l":
+            if key == "l":
                 await self.switch_browser("log")
-                event.stop()
-                return
-            elif key == "c":
-                await self.switch_browser("control")
-                event.stop()
-                return
-            elif key == "w":
-                await self.switch_browser("workflow")
-                event.stop()
-                return
-            elif key == "t":
-                await self.switch_browser("tasks")
                 event.stop()
                 return
 
         # Q from sub-browsers goes back to activity (the new default)
-        if key == "q" and self.current_browser in ["file", "git", "log", "control", "workflow", "tasks"]:
+        if key == "q" and self.current_browser in ["log"]:
             await self.switch_browser("activity")
             event.stop()
             return
@@ -585,16 +514,10 @@ class BrowserContainer(App):
         # Navigation commands
         if command_id == "nav.activity":
             await self.switch_browser("activity")
-        elif command_id == "nav.workflows":
-            await self.switch_browser("workflow")
         elif command_id == "nav.documents":
             await self.switch_browser("document")
         elif command_id == "nav.search":
             await self.switch_browser("search")
-        elif command_id == "nav.files":
-            await self.switch_browser("file")
-        elif command_id == "nav.git":
-            await self.switch_browser("git")
         elif command_id == "nav.logs":
             await self.switch_browser("log")
 

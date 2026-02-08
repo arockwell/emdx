@@ -152,7 +152,7 @@ class DocumentBrowser(HelpMixin, Widget):
         yield Static("Ready", id="browser-status", classes="browser-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] GitHub │ [bold]5[/bold] Docs │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [bold]4[/bold] Docs │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] view │ [dim]e[/dim] edit",
             id="nav-bar", classes="nav-bar"
         )

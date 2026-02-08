@@ -2,21 +2,22 @@
 default:
     @just --list
 
-# Install dependencies and sync lock file
+# Install core dependencies (lightweight, no ML/AI)
 install:
     poetry lock
     poetry install
+    poetry env list --full-path | head -1 | cut -d' ' -f1 > .venv-path
+
+# Install with all optional extras (AI, similarity, Google)
+install-all:
+    poetry lock
+    poetry install --all-extras
     poetry env list --full-path | head -1 | cut -d' ' -f1 > .venv-path
 
 # Check if dependencies are installed and install if needed
 _ensure-installed:
     @if ! poetry run python -c "import textual" 2>/dev/null; then \
         echo "📦 Installing dependencies..."; \
-        if ! poetry env info | grep -q "Python 3.13"; then \
-            echo "🔄 Updating to Python 3.13..."; \
-            poetry env use python3.13; \
-            poetry lock; \
-        fi; \
         poetry install; \
         echo "✅ Dependencies installed!"; \
     fi

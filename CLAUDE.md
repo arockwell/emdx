@@ -15,7 +15,7 @@ EMDX is a command-line knowledge base and documentation management system built 
 ## 🏗️ Architecture Summary
 
 **Core Technologies:**
-- **Python 3.13+** (minimum requirement)
+- **Python 3.11+** (minimum requirement)
 - **SQLite + FTS5** - Local database with full-text search
 - **Textual TUI** - Modern terminal interface framework
 - **Typer CLI** - Type-safe command-line interface
@@ -39,7 +39,7 @@ poetry install
 poetry run emdx --help
 
 # Or with pip in a virtual environment  
-python3.13 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 pip install -e .
 emdx --help
@@ -416,11 +416,12 @@ emdx each delete fix-conflicts    # Delete command
 - `--pr-single`: Create one combined PR for all items
 - Worktree isolation is auto-enabled for git/gh commands
 
-**Built-in discoveries** (use with `--from @name`):
+**Built-in discoveries** (Coming Soon - use shell commands for now):
 ```bash
-emdx each discover list              # List all built-in discoveries
-emdx each --from @prs-with-conflicts --do "Fix {{item}}"
-emdx each --from @python-files --do "Review {{item}}"
+# Built-in discoveries like @prs-with-conflicts, @python-files are planned
+# For now, use shell commands directly:
+emdx each --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" --do "Fix {{item}}"
+emdx each --from "fd -e py src/" --do "Review {{item}}"
 ```
 
 ## 🔄 Workflow System for Multi-Agent Tasks
@@ -544,6 +545,55 @@ poetry run emdx find --tags "blocked"
 ```
 
 This enables powerful project management and success tracking while keeping the tag system simple and space-efficient.
+
+## 🚢 Release Process
+
+Use the release tooling in `scripts/release.py` (via `just`) to prepare releases.
+
+### Quick Release Checklist
+
+```bash
+# 1. Preview what changed since last release
+just changelog
+
+# 2. Bump version in pyproject.toml AND emdx/__init__.py
+just bump 0.X.Y
+
+# 3. Write a polished changelog entry in CHANGELOG.md
+#    - The auto-generated one from `just release` is mechanical;
+#      prefer hand-writing with proper feature descriptions
+#    - Add comparison link at bottom of CHANGELOG.md
+
+# 4. Create docs for any new features (e.g., docs/mail.md)
+#    - Update docs/README.md index
+#    - Update docs/cli-api.md with new commands
+
+# 5. Branch, commit, PR
+git checkout -b release/vX.Y.Z
+git add -A && git commit -m "chore: release vX.Y.Z"
+git push -u origin release/vX.Y.Z
+gh pr create --title "chore: Release vX.Y.Z"
+
+# 6. After merge, tag and push
+git tag vX.Y.Z
+git push --tags
+```
+
+### Release Script Commands
+
+| Command | What it does |
+|---------|-------------|
+| `just changelog` | Preview categorized commits since last release |
+| `just bump <version>` | Bump version in `pyproject.toml` and `emdx/__init__.py` |
+| `just release <version>` | Bump + auto-generate changelog (prefer manual changelog) |
+
+### Version Files
+
+Both of these must stay in sync:
+- `pyproject.toml` — `version = "X.Y.Z"` (used by Poetry/pip)
+- `emdx/__init__.py` — `__version__ = "X.Y.Z"` (used at runtime)
+
+The `just bump` and `just release` commands update both automatically.
 
 ---
 

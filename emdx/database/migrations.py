@@ -1775,6 +1775,32 @@ def migration_032_extract_cascade_metadata(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_033_add_mail_config(conn: sqlite3.Connection):
+    """Add mail configuration and read receipts tables."""
+    cursor = conn.cursor()
+
+    # Key-value config table for mail settings (repo, etc.)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mail_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Track which issues have been read locally + saved doc IDs
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mail_read_receipts (
+            issue_number INTEGER PRIMARY KEY,
+            repo TEXT NOT NULL,
+            read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            saved_doc_id INTEGER REFERENCES documents(id) ON DELETE SET NULL
+        )
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1810,6 +1836,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
     (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
     (32, "Extract cascade metadata to dedicated table", migration_032_extract_cascade_metadata),
+    (33, "Add mail config and read receipts", migration_033_add_mail_config),
 ]
 
 
