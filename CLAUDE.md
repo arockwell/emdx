@@ -137,6 +137,25 @@ emdx status
    - Creating tasks for remaining work
    - Running `emdx prime` to verify state
 
+### CRITICAL: Use `emdx delegate` Instead of Task Tool Sub-Agents
+
+**NEVER use the Task tool to spawn sub-agents.** Use `emdx delegate` instead:
+
+```bash
+# Single task (replaces Task tool)
+emdx delegate "analyze the auth module for security issues"
+
+# Parallel tasks (replaces multiple Task tool calls)
+emdx delegate "check auth" "review tests" "scan for XSS"
+
+# Parallel with synthesis
+emdx delegate --synthesize "task1" "task2" "task3" --tags analysis
+```
+
+**Why**: `emdx delegate` prints results to stdout (so you read them inline) AND
+saves them to the knowledge base. Task tool sub-agents lose their output when
+the conversation ends.
+
 ### Decision Tree: Which EMDX Command to Use
 
 ```
@@ -146,12 +165,12 @@ emdx status
                               │
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
-   Single task?        Multiple tasks?      Idea → working code?
-        │                     │                     │
-        ▼                     ▼                     ▼
-   emdx agent            emdx run             emdx cascade add
-   (tracked output)      (quick parallel)     (autonomous pipeline)
-        │                     │
+   Need results        Multiple tasks?      Idea → working code?
+   inline?                   │                     │
+        │                     ▼                     ▼
+        ▼              emdx delegate           emdx cascade add
+   emdx delegate       (parallel, stdout)     (autonomous pipeline)
+   (stdout + saved)          │
         │              Need to repeat?
         │                     │
         │              ┌──────┴──────┐
@@ -159,7 +178,7 @@ emdx status
         │          One-off?    Save for later?
         │              │             │
         │              ▼             ▼
-        │          emdx run    emdx each create
+        │        emdx delegate  emdx each create
         │
    Need worktree     Need custom stages
    isolation?        or adversarial mode?
@@ -172,8 +191,9 @@ emdx status
 
 | Situation | Command | Why |
 |-----------|---------|-----|
-| Spawning a sub-agent that should save output | `emdx agent "task" --tags ...` | Ensures tracked output with metadata |
-| Running 2-5 independent tasks in parallel | `emdx run "task1" "task2" ...` | Fast, simple, no setup |
+| Delegating research/analysis (read results inline) | `emdx delegate "task" --tags ...` | Results on stdout + persisted |
+| Parallel research (2-10 tasks) | `emdx delegate "t1" "t2" "t3"` | Parallel, stdout, persisted |
+| Parallel with combined summary | `emdx delegate --synthesize "t1" "t2"` | Auto-synthesis of results |
 | Same operation on many discovered items | `emdx each --from "discovery" --do "action"` | Discovery + parallel action |
 | Repeatable "for each X do Y" pattern | `emdx each create name --from ... --do ...` | Save it, run it anytime |
 | Parallel code fixes (may touch same files) | `emdx run --worktree "fix1" "fix2"` | Git isolation per task |
@@ -182,19 +202,15 @@ emdx status
 
 ### When Claude Should Use EMDX Automatically
 
-**Always track significant outputs:**
+**Delegate instead of using Task tool sub-agents:**
 ```bash
-# After completing analysis or research
-emdx agent "Analyze the auth module for security issues" --tags analysis,security
+# Instead of: Task tool with subagent_type=Explore
+emdx delegate "analyze the auth module for security issues"
 
-# When spawning sub-agents from a parent Claude session
-emdx agent "Deep dive on caching strategy" -T "Cache Analysis" -t analysis -g 456
-```
+# Instead of: multiple parallel Task tool calls
+emdx delegate "check auth" "review tests" "analyze docs" --synthesize
 
-**Use parallel execution for multiple independent tasks:**
-```bash
-# User asks: "Check auth, review tests, and look at the docs"
-emdx run "Check auth module" "Review test coverage" "Analyze documentation"
+# Results print to stdout — read them and continue the conversation
 ```
 
 **Use worktree isolation when tasks might conflict:**
@@ -232,23 +248,26 @@ When saving outputs, apply tags based on content:
 - `failed` → ❌ Didn't work
 - `partial` → ⚡ Mixed results
 
-### Sub-Agent Metadata Propagation
+### Delegating Work (Replaces Task Tool Sub-Agents)
 
-When Claude spawns sub-agents via Task tool, use `emdx agent` to ensure outputs are tracked:
+Use `emdx delegate` instead of the Task tool. Results print to stdout AND persist:
 
 ```bash
-# Parent agent spawns child with proper tracking
-emdx agent "Investigate memory leak in worker pool" \
-  --tags "analysis,performance" \
-  --group 789 \
-  --title "Memory Leak Investigation"
+# Single research task — results come back inline
+emdx delegate "Investigate memory leak in worker pool" --tags analysis,performance
 
-# Child agent's output will:
-# 1. Be saved with the specified tags
-# 2. Be linked to group 789
-# 3. Have proper title for easy discovery
-# 4. Print doc_id for parent to capture
+# Parallel research — up to 10 concurrent tasks
+emdx delegate \
+  "Check auth module for SQL injection" \
+  "Review input validation in API endpoints" \
+  "Scan for hardcoded secrets" \
+  --tags security --synthesize
+
+# Quiet mode — just content, no metadata
+emdx delegate -q "quick analysis of error rates"
 ```
+
+Metadata (doc_id, tokens, cost, duration) prints to stderr. Content prints to stdout.
 
 ### PR Creation Flow
 
@@ -384,6 +403,50 @@ emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
 - AI agents spawning sub-agents that need to save results to EMDX
 - Ensuring consistent metadata across human and AI-initiated work
 
+## 📡 Delegate — stdout-friendly parallel execution (`emdx delegate`)
+
+Designed for Claude Code to call via Bash instead of the Task tool. Results
+print to stdout (so Claude reads them inline) AND persist to emdx.
+
+```bash
+# Single task
+emdx delegate "analyze the auth module"
+
+# Parallel (up to 10 concurrent)
+emdx delegate "check auth" "review tests" "scan for XSS"
+
+# Parallel with synthesis
+emdx delegate --synthesize "task1" "task2" "task3"
+
+# With tags and title
+emdx delegate "deep analysis" --tags analysis,security --title "Security Audit"
+
+# Quiet mode (suppress metadata, just content)
+emdx delegate -q "quick analysis"
+```
+
+**Options:**
+- `--tags, -t` — Tags to apply to output documents
+- `--title, -T` — Title for the output document(s)
+- `--synthesize, -s` — Combine parallel outputs into one summary
+- `-j, --jobs` — Max parallel tasks (default: auto)
+- `--model, -m` — Override default model
+- `--quiet, -q` — Suppress metadata on stderr
+
+**Output format:**
+- stdout: Full content of the result (for Claude to read inline)
+- stderr: `doc_id:XXXX tokens:N cost:$X.XX duration:Xs`
+
+**vs other commands:**
+
+| | `delegate` | `agent` | `run` |
+|---|---|---|---|
+| Content on stdout | Yes | No | No |
+| Persists to emdx | Yes | Yes | Yes |
+| Parallel | Yes | No | Yes |
+| Synthesis | Yes | No | Yes |
+| Designed for | Machine callers | Humans/scripts | Humans/scripts |
+
 ## 🔁 Reusable Parallel Commands (`emdx each`)
 
 Create saved commands that discover items and process them in parallel. Perfect for repeatable "for each X, do Y" patterns.
@@ -457,14 +520,14 @@ emdx workflow run parallel_fix \
 emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
 ```
 
-### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
+### When to Use Which Command
 
-| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|--------------------------|-------------------------|----------------------------|
-| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
-| Simple task lists | Need tracked output | "For each X, do Y" patterns | Need iterative or adversarial modes |
-| One-off execution | Human or AI caller | Save for future use | Custom stage configurations |
-| Just want tasks done fast | Consistent metadata | Same operation on many items | Need detailed run monitoring |
+| Use `emdx delegate` when... | Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
+|------------------------------|------------------------|-------------------------|----------------------------|
+| Claude Code needs results inline | Worktree isolation needed | Reusable discovery+action | Complex multi-stage workflows |
+| Replacing Task tool sub-agents | Human-facing output | "For each X, do Y" patterns | Need iterative or adversarial modes |
+| Single or parallel research | Code changes in parallel | Save for future use | Custom stage configurations |
+| Want stdout + persistence | Just want tasks done fast | Same operation on many items | Need detailed run monitoring |
 
 For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
 
