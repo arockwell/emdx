@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-02-10
+
+### 🚀 Major Features
+
+#### `emdx delegate` — stdout-friendly parallel execution (#410)
+- New command designed for Claude Code to call instead of Task tool sub-agents
+- Results print to **stdout** (so the calling session reads them inline) AND persist to the knowledge base
+- Supports parallel execution, synthesis, tags, and title options
+- Updated CLAUDE.md decision tree to prefer `delegate` over Task tool
+
+#### Optional dependencies and Python 3.11+ support (#408)
+- **Core install is now lightweight** — `pip install emdx` no longer pulls in ML/AI packages
+- Heavy deps (sklearn, datasketch, anthropic, numpy, sentence-transformers, google-*) moved to optional extras: `[ai]`, `[similarity]`, `[google]`, `[all]`
+- Import guards with clear error messages when optional features are used without their extras
+- **Python requirement relaxed from ^3.13 to ^3.11**
+
+#### `emdx save --gist` — save and share in one step (#416)
+- `--gist`/`--share` flag creates a GitHub gist after saving
+- `--secret` and `--public` imply `--gist` so `emdx save "content" --secret` just works
+- `--copy`/`-c` copies gist URL to clipboard, `--open`/`-o` opens in browser
+- Gist failure is non-fatal — the save always succeeds
+
+### 🔧 Improvements
+
+#### Activity view overhaul
+- **Tree widget migration** — replaced DataTable with Tree[ActivityItem] to fix scroll jumping (#406)
+- **Column-aligned rows** — activity tree renders as aligned table columns (#413)
+- **Descriptive execution titles** — delegate/workflow executions show meaningful names (#411)
+- **Deduplication** — synthesis docs no longer appear twice in activity feed (#412)
+- **Clean RHS preview** — fixed context panel rendering (#415)
+
+#### Codebase audit (#414)
+- Deleted ~4,982 lines of dead code (unused swarm module, orphaned scripts, archived docs)
+- Fixed `DEFAULT_ALLOWED_TOOLS` config bug where `TodoRead` was silently lost
+- Updated stale model reference to claude-sonnet-4-5-20250929
+- Extracted hardcoded config paths into `EMDX_CONFIG_DIR`/`EMDX_LOG_DIR` constants
+- Added 532 new tests covering documents, emoji aliases, JSON parsing, title normalization, export destinations, lifecycle tracking, and CLI commands
+- Removed ~8,400 LOC of unused TUI components (#405)
+
+### 🐛 Bug Fixes
+- **activity**: Restore auto-refresh in activity TUI — async callback was silently never awaited (#417)
+- **activity**: Record document source for synthesis docs to prevent duplicates (#412)
+- **delegate**: Clean execution titles, deduplicate activity entries (#415)
+- **config**: Fix undefined variable `pid` → `execution.pid` in execution monitor
+- **db**: Replace blanket `except Exception: pass` with specific types + logging in cascade fallbacks
+- **db**: Narrow exception handling in groups.py to `sqlite3.IntegrityError`
+- **activity**: Protect against single bad item killing entire activity data load
+
 ## [0.10.0] - 2026-02-07
 
 ### 🚀 Major Features
@@ -461,6 +509,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.12.0]: https://github.com/arockwell/emdx/compare/v0.10.0...v0.12.0
 [0.10.0]: https://github.com/arockwell/emdx/compare/v0.8.0...v0.10.0
 [0.8.0]: https://github.com/arockwell/emdx/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/arockwell/emdx/compare/v0.6.1...v0.7.0
