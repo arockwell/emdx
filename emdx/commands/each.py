@@ -1,5 +1,7 @@
 """Reusable parallel commands for EMDX.
 
+DEPRECATED: Use `emdx delegate` instead. This command will be removed in a future release.
+
 The `emdx each` command provides a simple way to create and run
 reusable commands that discover items and process them in parallel.
 
@@ -17,6 +19,7 @@ import asyncio
 import json
 import re
 import subprocess
+import sys
 from typing import List, Optional
 
 import typer
@@ -490,6 +493,10 @@ def main(
 ):
     """Create and run reusable parallel commands.
 
+    DEPRECATED: Use `emdx delegate` instead:
+        emdx delegate "task1" "task2"            (parallel tasks)
+        emdx delegate --synthesize "t1" "t2"     (with synthesis)
+
     Examples:
         # Create a saved command
         emdx each create fix-conflicts --from "gh pr list ..." --do "Fix {{item}}"
@@ -503,6 +510,11 @@ def main(
         # List saved commands
         emdx each list
     """
+    sys.stderr.write(
+        "Warning: 'emdx each' is deprecated. Use 'emdx delegate' instead.\n"
+        "  emdx delegate \"t1\" \"t2\"               (parallel tasks)\n"
+        "  emdx delegate --synthesize \"t1\" \"t2\"   (with synthesis)\n"
+    )
     # If a subcommand was invoked, skip this
     if ctx.invoked_subcommand is not None:
         return

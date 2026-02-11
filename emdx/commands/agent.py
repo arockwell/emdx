@@ -1,5 +1,9 @@
-"""Run a CLI agent sub-process with EMDX tracking."""
+"""Run a CLI agent sub-process with EMDX tracking.
 
+DEPRECATED: Use `emdx delegate` instead. This command will be removed in a future release.
+"""
+
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -54,13 +58,20 @@ def agent(
 ):
     """Run a CLI agent sub-process with automatic EMDX tracking.
 
-    Supports both Claude Code and Cursor Agent CLIs.
+    DEPRECATED: Use `emdx delegate` instead:
+        emdx delegate "task" --pr           (replaces emdx agent "task" --pr)
+        emdx delegate --doc 42 "task"       (replaces emdx agent with group context)
 
     Examples:
         emdx agent "analyze the auth module" --tags analysis
         emdx agent --cli cursor "analyze the auth module"
         emdx agent --cli cursor --model auto "quick task"
     """
+    sys.stderr.write(
+        "Warning: 'emdx agent' is deprecated. Use 'emdx delegate' instead.\n"
+        "  emdx delegate \"task\" --pr       (for PR creation)\n"
+        "  emdx delegate \"task\" --tags t   (for tagged output)\n"
+    )
     # Flatten tags (handle both comma-separated and multiple -t flags)
     flat_tags = []
     if tags:

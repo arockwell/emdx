@@ -1,7 +1,11 @@
-"""Quick task execution command for EMDX."""
+"""Quick task execution command for EMDX.
+
+DEPRECATED: Use `emdx delegate` instead. This command will be removed in a future release.
+"""
 
 import asyncio
 import subprocess
+import sys
 from typing import List, Optional
 
 import typer
@@ -64,6 +68,11 @@ def run(
 ):
     """Run tasks in parallel.
 
+    DEPRECATED: Use `emdx delegate` instead:
+        emdx delegate "task1" "task2"            (parallel)
+        emdx delegate --worktree "fix X"         (worktree isolation)
+        emdx delegate --synthesize "t1" "t2"     (with synthesis)
+
     Examples:
         emdx run "analyze auth module"
         emdx run "task1" "task2" "task3"
@@ -75,6 +84,11 @@ def run(
 
     For reusable commands with saved discovery+templates, use `emdx each` instead.
     """
+    sys.stderr.write(
+        "Warning: 'emdx run' is deprecated. Use 'emdx delegate' instead.\n"
+        "  emdx delegate \"t1\" \"t2\"               (parallel)\n"
+        "  emdx delegate --worktree \"fix X\"       (worktree isolation)\n"
+    )
     task_list = list(tasks) if tasks else []
 
     # Handle discovery if specified

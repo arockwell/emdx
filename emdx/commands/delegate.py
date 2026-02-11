@@ -1,8 +1,8 @@
-"""Delegate tasks to parallel Claude agents with inline results.
+"""Delegate tasks to Claude agents with inline results.
 
-Designed for Claude Code to call via Bash instead of the Task tool.
-Results print to stdout (so Claude can read them inline) AND persist
-to emdx (so they're searchable later).
+The single command for all one-shot AI execution in EMDX. Results print to
+stdout (so Claude can read them inline) AND persist to emdx (so they're
+searchable later).
 
 Single task:
     emdx delegate "analyze the auth module"
@@ -12,10 +12,23 @@ Parallel tasks:
 
 With synthesis:
     emdx delegate --synthesize "task1" "task2" "task3"
+
+With document context:
+    emdx delegate --doc 42 "implement this plan"
+
+Sequential pipeline:
+    emdx delegate --chain "analyze" "plan" "implement"
+
+With PR creation:
+    emdx delegate --pr "fix the auth bug"
+
+With worktree isolation:
+    emdx delegate --worktree "fix X"
 """
 
 import asyncio
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -25,7 +38,35 @@ from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 from ..workflows.executor import workflow_executor
 
 
-app = typer.Typer(name="delegate", help="Delegate tasks to parallel agents (stdout-friendly)")
+app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
+
+PR_INSTRUCTION = (
+    "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
+    "1. Create a new branch with a descriptive name\n"
+    "2. Commit your changes with a clear message\n"
+    "3. Push and create a PR using: gh pr create --title \"...\" --body \"...\"\n"
+    "4. Report the PR URL that was created."
+)
+
+
+def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
+    """Load a document and combine it with an optional prompt.
+
+    If prompt provided: "Document #id (title):\n\n{content}\n\n---\n\nTask: {prompt}"
+    If no prompt: "Execute the following document:\n\n# {title}\n\n{content}"
+    """
+    doc = get_document(doc_id)
+    if not doc:
+        sys.stderr.write(f"delegate: document #{doc_id} not found\n")
+        raise typer.Exit(1)
+
+    title = doc.get("title", f"Document #{doc_id}")
+    content = doc.get("content", "")
+
+    if prompt:
+        return f"Document #{doc_id} ({title}):\n\n{content}\n\n---\n\nTask: {prompt}"
+    else:
+        return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
 def _print_doc_content(doc_id: int) -> None:
@@ -42,6 +83,8 @@ def _run_single(
     title: Optional[str],
     model: Optional[str],
     quiet: bool,
+    pr: bool = False,
+    working_dir: Optional[str] = None,
 ) -> Optional[int]:
     """Run a single task via UnifiedExecutor. Returns doc_id or None."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -58,13 +101,14 @@ def _run_single(
         "Report the document ID that was created."
     )
 
-    from pathlib import Path
+    if pr:
+        output_instruction += PR_INSTRUCTION
 
     config = ExecutionConfig(
         prompt=prompt,
         title=doc_title,
         output_instruction=output_instruction,
-        working_dir=str(Path.cwd()),
+        working_dir=working_dir or str(Path.cwd()),
         timeout_seconds=300,
         model=model,
     )
@@ -101,6 +145,8 @@ def _run_parallel(
     synthesize: bool,
     model: Optional[str],
     quiet: bool,
+    pr: bool = False,
+    base_branch: str = "main",
 ) -> List[int]:
     """Run multiple tasks in parallel via workflow executor. Returns doc_ids."""
     variables = {"tasks": tasks}
@@ -110,6 +156,10 @@ def _run_parallel(
         variables["_max_concurrent_override"] = jobs
     if model:
         variables["_model"] = model
+
+    # When --pr is set, append PR instruction to each task prompt
+    if pr:
+        variables["tasks"] = [t + PR_INSTRUCTION for t in tasks]
 
     result = asyncio.run(
         workflow_executor.execute_workflow(
@@ -167,6 +217,72 @@ def _run_parallel(
     return doc_ids
 
 
+def _run_chain(
+    tasks: List[str],
+    tags: List[str],
+    title: Optional[str],
+    model: Optional[str],
+    quiet: bool,
+    pr: bool = False,
+    working_dir: Optional[str] = None,
+) -> List[int]:
+    """Run tasks sequentially, piping output from each step to the next.
+
+    Returns list of doc_ids from all steps.
+    """
+    doc_ids = []
+    previous_output = None
+
+    for i, task in enumerate(tasks):
+        step_num = i + 1
+        total_steps = len(tasks)
+        is_last_step = step_num == total_steps
+
+        # Build prompt with previous context
+        if previous_output:
+            prompt = (
+                f"Previous step output:\n\n{previous_output}\n\n---\n\n"
+                f"Your task (step {step_num}/{total_steps}): {task}"
+            )
+        else:
+            prompt = f"Your task (step {step_num}/{total_steps}): {task}"
+
+        sys.stdout.write(f"\n=== Step {step_num}/{total_steps}: {task[:60]} ===\n")
+
+        # Only last step gets --pr
+        step_pr = pr and is_last_step
+
+        step_title = title or f"Delegate chain step {step_num}/{total_steps}"
+
+        doc_id = _run_single(
+            prompt=prompt,
+            tags=tags,
+            title=f"{step_title} [{step_num}/{total_steps}]",
+            model=model,
+            quiet=quiet,
+            pr=step_pr,
+            working_dir=working_dir,
+        )
+
+        if doc_id is None:
+            sys.stderr.write(f"delegate: chain aborted at step {step_num}/{total_steps}\n")
+            break
+
+        doc_ids.append(doc_id)
+
+        # Read output for next step
+        doc = get_document(doc_id)
+        if doc:
+            previous_output = doc.get("content", "")
+
+    if not quiet and doc_ids:
+        ids_str = ",".join(str(d) for d in doc_ids)
+        final_id = doc_ids[-1] if doc_ids else "none"
+        sys.stderr.write(f"doc_ids:{ids_str} chain_final:{final_id}\n")
+
+    return doc_ids
+
+
 @app.callback(invoke_without_command=True)
 def delegate(
     ctx: typer.Context,
@@ -198,12 +314,32 @@ def delegate(
         False, "--quiet", "-q",
         help="Suppress metadata on stderr (just content on stdout)",
     ),
+    doc: int = typer.Option(
+        None, "--doc", "-d",
+        help="Document ID to use as input context",
+    ),
+    pr: bool = typer.Option(
+        False, "--pr",
+        help="Instruct agent to create a PR after code changes",
+    ),
+    worktree: bool = typer.Option(
+        False, "--worktree", "-w",
+        help="Run in isolated git worktree",
+    ),
+    base_branch: str = typer.Option(
+        "main", "--base-branch",
+        help="Base branch for worktree (only with --worktree)",
+    ),
+    chain: bool = typer.Option(
+        False, "--chain",
+        help="Run tasks sequentially, piping output forward",
+    ),
 ):
     """Delegate tasks to Claude agents with results on stdout.
 
-    Designed for machine callers (Claude Code via Bash). Results print to
-    stdout so the caller can read them inline. Documents are also saved to
-    emdx for persistence. Metadata prints to stderr.
+    The single command for all one-shot AI execution. Results print to stdout
+    so the caller can read them inline. Documents are also saved to emdx for
+    persistence. Metadata prints to stderr.
 
     Single task:
         emdx delegate "analyze the auth module for security issues"
@@ -214,10 +350,34 @@ def delegate(
     Parallel with synthesis:
         emdx delegate --synthesize "task1" "task2" "task3"
 
+    With document context:
+        emdx delegate --doc 42 "implement the plan"
+
+    Sequential pipeline:
+        emdx delegate --chain "analyze code" "create plan" "implement changes"
+
+    With PR creation:
+        emdx delegate --pr "fix the auth bug"
+
+    With worktree isolation:
+        emdx delegate --worktree --pr "fix X"
+
     Quiet mode (just content, no metadata):
         emdx delegate -q "do something"
     """
+    # Validate mutually exclusive options
+    if chain and synthesize:
+        typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)
+        raise typer.Exit(1)
+
     task_list = list(tasks) if tasks else []
+
+    # 1. Resolve --doc
+    if doc:
+        if task_list:
+            task_list = [_load_doc_context(doc, t) for t in task_list]
+        else:
+            task_list = [_load_doc_context(doc, None)]
 
     if not task_list:
         typer.echo("Error: No tasks provided", err=True)
@@ -230,23 +390,57 @@ def delegate(
         for t in tags:
             flat_tags.extend(t.split(","))
 
-    if len(task_list) == 1:
-        doc_id = _run_single(
-            prompt=task_list[0],
-            tags=flat_tags,
-            title=title,
-            model=model,
-            quiet=quiet,
-        )
-        if doc_id is None:
+    # 2. Setup worktree for single/chain paths
+    worktree_path = None
+    if worktree and (len(task_list) == 1 or chain):
+        from .workflows import create_worktree_for_workflow
+        try:
+            worktree_path, _ = create_worktree_for_workflow(base_branch)
+            if not quiet:
+                sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
+        except Exception as e:
+            sys.stderr.write(f"delegate: failed to create worktree: {e}\n")
             raise typer.Exit(1)
-    else:
-        _run_parallel(
-            tasks=task_list,
-            tags=flat_tags,
-            title=title,
-            jobs=jobs,
-            synthesize=synthesize,
-            model=model,
-            quiet=quiet,
-        )
+
+    try:
+        # 3. Route
+        if chain and len(task_list) > 1:
+            _run_chain(
+                tasks=task_list,
+                tags=flat_tags,
+                title=title,
+                model=model,
+                quiet=quiet,
+                pr=pr,
+                working_dir=worktree_path,
+            )
+        elif len(task_list) == 1:
+            doc_id = _run_single(
+                prompt=task_list[0],
+                tags=flat_tags,
+                title=title,
+                model=model,
+                quiet=quiet,
+                pr=pr,
+                working_dir=worktree_path,
+            )
+            if doc_id is None:
+                raise typer.Exit(1)
+        else:
+            _run_parallel(
+                tasks=task_list,
+                tags=flat_tags,
+                title=title,
+                jobs=jobs,
+                synthesize=synthesize,
+                model=model,
+                quiet=quiet,
+                pr=pr,
+                base_branch=base_branch,
+            )
+    finally:
+        if worktree_path and not pr:
+            from .workflows import cleanup_worktree
+            if not quiet:
+                sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
+            cleanup_worktree(worktree_path)
