@@ -35,36 +35,16 @@ except ImportError:
     HAS_WORKFLOWS = False
 
 try:
-    from emdx.services.document_service import (
-        get_children as doc_get_children,
-        get_document as doc_get_document,
-        get_workflow_document_ids,
-        list_non_workflow_documents,
-    )
-    from emdx.services.group_service import (
-        get_all_grouped_document_ids,
-        get_child_groups,
-        get_recursive_doc_count,
-        list_groups as groups_list_groups,
-    )
+    from emdx.services import document_service as doc_svc
+    from emdx.services import group_service as group_svc
 
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
-    doc_get_children = None
-    doc_get_document = None
-    get_all_grouped_document_ids = None
-    get_child_groups = None
-    get_recursive_doc_count = None
-    groups_list_groups = None
+    doc_svc = None
+    group_svc = None
     HAS_DOCS = False
     HAS_GROUPS = False
-
-    def get_workflow_document_ids():
-        return set()
-
-    def list_non_workflow_documents(**kwargs):
-        return []
 
 
 class ActivityDataLoader:
@@ -225,7 +205,7 @@ class ActivityDataLoader:
                 timestamp = started
                 if output_doc_id and run.get("status") in ("completed", "failed") and HAS_DOCS:
                     try:
-                        out_doc = doc_get_document(output_doc_id)
+                        out_doc = doc_svc.get_document(output_doc_id)
                         if out_doc:
                             doc_created = parse_datetime(out_doc.get("created_at"))
                             if doc_created:
@@ -274,7 +254,7 @@ class ActivityDataLoader:
         """Load document groups into typed GroupItem instances."""
         items: List[ActivityItem] = []
         try:
-            top_groups = groups_list_groups(top_level_only=True)
+            top_groups = group_svc.list_groups(top_level_only=True)
         except Exception as e:
             logger.error(f"Error listing groups: {e}", exc_info=True)
             return items
@@ -283,8 +263,8 @@ class ActivityDataLoader:
             try:
                 group_id = group["id"]
                 created = parse_datetime(group.get("created_at")) or datetime.now()
-                child_groups = get_child_groups(group_id)
-                doc_count = get_recursive_doc_count(group_id)
+                child_groups = group_svc.get_child_groups(group_id)
+                doc_count = group_svc.get_recursive_doc_count(group_id)
 
                 item = GroupItem(
                     item_id=group_id,
@@ -311,12 +291,12 @@ class ActivityDataLoader:
         grouped_doc_ids: Set[int] = set()
         if HAS_GROUPS:
             try:
-                grouped_doc_ids = get_all_grouped_document_ids()
+                grouped_doc_ids = group_svc.get_all_grouped_document_ids()
             except Exception as e:
                 logger.debug(f"Error getting grouped doc IDs: {e}")
 
         try:
-            docs = list_non_workflow_documents(limit=100, days=7, include_archived=False)
+            docs = doc_svc.list_non_workflow_documents(limit=100, days=7, include_archived=False)
         except Exception as e:
             logger.error(f"Error listing non-workflow documents: {e}", exc_info=True)
             return items
@@ -329,7 +309,7 @@ class ActivityDataLoader:
 
                 created = doc.get("created_at")
                 title = doc.get("title", "")
-                children_docs = doc_get_children(doc_id, include_archived=False)
+                children_docs = doc_svc.get_children(doc_id, include_archived=False)
                 has_children = len(children_docs) > 0
 
                 item = DocumentItem(

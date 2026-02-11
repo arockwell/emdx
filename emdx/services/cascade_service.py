@@ -1,15 +1,21 @@
 """Cascade service facade for the UI layer.
 
 Provides a clean import boundary between UI code and the database layer
-for cascade pipeline operations. Also houses query functions previously
-embedded as raw SQL in UI code.
+for cascade pipeline operations.
 """
 
-from typing import Any, Dict, List
+import json
+import logging
+import os
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
 from emdx.database.documents import get_document
+
+logger = logging.getLogger(__name__)
 
 # Re-export cascade DB functions used by UI
 get_cascade_stats = cascade_db.get_cascade_stats
@@ -18,229 +24,126 @@ list_cascade_runs = cascade_db.list_cascade_runs
 list_documents_at_stage = cascade_db.list_documents_at_stage
 update_cascade_stage = cascade_db.update_cascade_stage
 save_document_to_cascade = cascade_db.save_document_to_cascade
-
-# Re-export document fetch (used alongside cascade ops)
 get_document = get_document
-
-__all__ = [
-    "get_cascade_run_executions",
-    "get_cascade_stats",
-    "get_child_info",
-    "get_document",
-    "get_document_children",
-    "get_document_pr_url",
-    "get_recent_cascade_activity",
-    "get_recent_cascade_runs",
-    "get_recent_pipeline_activity",
-    "list_cascade_runs",
-    "list_documents_at_stage",
-    "save_document_to_cascade",
-    "update_cascade_stage",
-]
-
-
-def get_recent_cascade_activity(limit: int = 20) -> List[Dict[str, Any]]:
-    """Get recent cascade activity from executions and document changes.
-
-    Moved from emdx/ui/cascade_browser.py to eliminate raw SQL in UI.
-    """
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT
-                e.id,
-                e.doc_id,
-                e.doc_title,
-                e.status,
-                e.started_at,
-                e.completed_at,
-                d.stage,
-                d.parent_id,
-                e.cascade_run_id
-            FROM executions e
-            LEFT JOIN documents d ON e.doc_id = d.id
-            WHERE e.doc_title LIKE 'Cascade:%' OR e.doc_title LIKE 'Pipeline:%' OR d.stage IS NOT NULL OR e.cascade_run_id IS NOT NULL
-            ORDER BY e.started_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        rows = cursor.fetchall()
-
-        return [
-            {
-                "exec_id": row[0],
-                "doc_id": row[1],
-                "doc_title": row[2],
-                "status": row[3],
-                "started_at": row[4],
-                "completed_at": row[5],
-                "stage": row[6],
-                "parent_id": row[7],
-                "cascade_run_id": row[8],
-            }
-            for row in rows
-        ]
 
 
 def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
-    """Get recent pipeline activity - executions with their input/output docs.
-
-    Moved from emdx/ui/cascade_browser.py to eliminate raw SQL in UI.
-    """
-    PREV_STAGE = {
-        "prompt": "idea",
-        "analyzed": "prompt",
-        "planned": "analyzed",
-        "done": "planned",
-    }
+    """Get recent pipeline activity — executions with their input/output docs."""
+    PREV_STAGE = {"prompt": "idea", "analyzed": "prompt", "planned": "analyzed", "done": "planned"}
 
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT
-                e.id as exec_id,
-                e.doc_id as input_id,
-                e.doc_title as input_title,
-                e.status,
-                e.started_at,
-                e.completed_at,
-                e.log_file,
-                child.id as output_id,
-                child.title as output_title,
-                child.stage as output_stage,
-                input_doc.stage as input_stage
+            SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at,
+                   e.completed_at, e.log_file, child.id, child.title,
+                   child.stage, input_doc.stage
             FROM executions e
             LEFT JOIN documents child ON child.parent_id = e.doc_id
             LEFT JOIN documents input_doc ON input_doc.id = e.doc_id
-            WHERE e.doc_title LIKE 'Cascade:%'
-               OR e.doc_title LIKE 'Pipeline:%'
-               OR input_doc.stage IS NOT NULL
-               OR e.cascade_run_id IS NOT NULL
-            ORDER BY e.started_at DESC
-            LIMIT ?
+            WHERE e.doc_title LIKE 'Cascade:%' OR e.doc_title LIKE 'Pipeline:%'
+               OR input_doc.stage IS NOT NULL OR e.cascade_run_id IS NOT NULL
+            ORDER BY e.started_at DESC LIMIT ?
             """,
             (limit,),
         )
-        rows = cursor.fetchall()
-
         results = []
-        for row in rows:
-            output_stage = row[9]
-            input_stage = row[10]
-            if output_stage:
-                from_stage = PREV_STAGE.get(output_stage, input_stage or "?")
-            else:
-                from_stage = input_stage or "?"
-
+        for row in cursor.fetchall():
+            output_stage, input_stage = row[9], row[10]
+            from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")
             results.append({
-                "exec_id": row[0],
-                "input_id": row[1],
-                "input_title": row[2],
-                "status": row[3],
-                "started_at": row[4],
-                "completed_at": row[5],
-                "log_file": row[6],
-                "output_id": row[7],
-                "output_title": row[8],
-                "output_stage": output_stage,
-                "from_stage": from_stage,
+                "exec_id": row[0], "input_id": row[1], "input_title": row[2],
+                "status": row[3], "started_at": row[4], "completed_at": row[5],
+                "log_file": row[6], "output_id": row[7], "output_title": row[8],
+                "output_stage": output_stage, "from_stage": from_stage,
             })
         return results
 
 
-def get_recent_cascade_runs(limit: int = 5) -> List[Dict[str, Any]]:
-    """Get recent cascade runs with their status and progress.
-
-    Moved from emdx/ui/cascade_browser.py to eliminate raw SQL in UI.
-    """
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT
-                cr.id,
-                cr.start_doc_id,
-                cr.current_doc_id,
-                cr.start_stage,
-                cr.stop_stage,
-                cr.current_stage,
-                cr.status,
-                cr.pr_url,
-                cr.started_at,
-                cr.completed_at,
-                cr.error_message,
-                d.title as start_doc_title
-            FROM cascade_runs cr
-            LEFT JOIN documents d ON cr.start_doc_id = d.id
-            ORDER BY cr.started_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        rows = cursor.fetchall()
-
-        return [
-            {
-                "run_id": row[0],
-                "start_doc_id": row[1],
-                "current_doc_id": row[2],
-                "start_stage": row[3],
-                "stop_stage": row[4],
-                "current_stage": row[5],
-                "status": row[6],
-                "pr_url": row[7],
-                "started_at": row[8],
-                "completed_at": row[9],
-                "error_message": row[10],
-                "start_doc_title": row[11],
-            }
-            for row in rows
-        ]
-
-
 def get_child_info(parent_id: int) -> Dict[str, Any] | None:
-    """Get info about the first child document of a parent.
-
-    Moved from DocumentList._get_child_info in cascade_browser.py.
-    """
+    """Get info about the first child document of a parent."""
     with db_connection.get_connection() as conn:
-        cursor = conn.execute(
+        row = conn.execute(
             "SELECT id, title, stage FROM documents WHERE parent_id = ? LIMIT 1",
             (parent_id,),
-        )
-        row = cursor.fetchone()
-        if row:
-            return {"id": row[0], "title": row[1], "stage": row[2]}
-    return None
+        ).fetchone()
+        return {"id": row[0], "title": row[1], "stage": row[2]} if row else None
 
 
 def get_document_pr_url(doc_id: int) -> str | None:
-    """Get PR URL for a document.
-
-    Moved from DocumentList._get_doc_pr_url in cascade_browser.py.
-    """
+    """Get PR URL for a document."""
     with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT pr_url FROM documents WHERE id = ?",
-            (doc_id,),
-        )
-        row = cursor.fetchone()
+        row = conn.execute("SELECT pr_url FROM documents WHERE id = ?", (doc_id,)).fetchone()
         return row[0] if row and row[0] else None
 
 
-def get_document_children(parent_id: int) -> List[Dict[str, Any]]:
-    """Get all child documents recursively.
+def monitor_execution_completion(
+    exec_id: int,
+    doc_id: int,
+    doc: dict,
+    stage: str,
+    log_file: Path,
+    next_stage_map: dict,
+    on_update: Callable[[str], None],
+    save_doc: Callable,
+) -> None:
+    """Poll a detached execution's log file for completion.
 
-    Moved from DocumentPreview._get_document_children in cascade_browser.py.
+    Runs synchronously — caller should run in a background thread.
+    Calls on_update(status_markup) for UI feedback.
     """
-    children = []
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT id, title, stage, pr_url FROM documents WHERE parent_id = ? ORDER BY id",
-            (parent_id,),
-        )
-        for row in cursor.fetchall():
-            child = {"id": row[0], "title": row[1], "stage": row[2], "pr_url": row[3]}
-            children.append(child)
-            children.extend(get_document_children(row[0]))
-    return children
+    from emdx.models.executions import get_execution, update_execution_status
+
+    poll_interval = 2.0
+    max_wait = 1800 if stage == "planned" else 300
+    start_time = time.time()
+
+    while True:
+        elapsed = time.time() - start_time
+
+        if elapsed > max_wait:
+            exec_record = get_execution(exec_id)
+            if exec_record and exec_record.pid:
+                try:
+                    os.kill(exec_record.pid, 9)
+                except ProcessLookupError:
+                    pass
+            update_execution_status(exec_id, "failed", exit_code=-1)
+            on_update(f"[red]\u2717 Timeout[/red] after {max_wait}s")
+            return
+
+        if log_file.exists():
+            try:
+                for line in log_file.read_text().splitlines():
+                    if line.startswith('{') and '"type":"result"' in line:
+                        try:
+                            result = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if result.get("is_error"):
+                            update_execution_status(exec_id, "failed", exit_code=1)
+                            on_update("[red]\u2717 Failed[/red]")
+                        else:
+                            update_execution_status(exec_id, "completed", exit_code=0)
+                            output = result.get("result", "")
+                            if output:
+                                next_stage = next_stage_map.get(stage, "done")
+                                new_id = save_doc(
+                                    title=f"{doc.get('title', '')} [{stage}\u2192{next_stage}]",
+                                    content=output, project=doc.get("project"), parent_id=doc_id,
+                                )
+                                update_cascade_stage(new_id, next_stage)
+                                update_cascade_stage(doc_id, "done")
+                                on_update(f"[green]\u2713 Done![/green] Created #{new_id} at {next_stage}")
+                            else:
+                                on_update("[green]\u2713 Completed[/green]")
+                        return
+            except Exception as e:
+                logger.debug(f"Error reading log file: {e}")
+
+        exec_record = get_execution(exec_id)
+        if exec_record and exec_record.is_zombie:
+            update_execution_status(exec_id, "failed", exit_code=-1)
+            on_update("[red]\u2717 Process died[/red]")
+            return
+
+        time.sleep(poll_interval)

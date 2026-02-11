@@ -30,8 +30,7 @@ __all__ = [
 def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
     """Get standalone agent/delegate executions not part of a workflow or cascade.
 
-    Moved from emdx/ui/activity/activity_data.py to eliminate raw SQL in UI.
-    """
+"""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -71,8 +70,7 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
 def get_execution_log_file(doc_title_pattern: str) -> str | None:
     """Find the log file for a running execution matching a title pattern.
 
-    Moved from emdx/ui/activity/activity_view.py to eliminate raw SQL in UI.
-    """
+"""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
