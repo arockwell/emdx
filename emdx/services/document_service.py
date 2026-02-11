@@ -7,6 +7,7 @@ come through this module.
 
 from emdx.database.documents import (
     count_documents,
+    get_children,
     get_children_count,
     get_document,
     get_document_source,
@@ -23,6 +24,7 @@ from emdx.models.documents import delete_document
 __all__ = [
     "count_documents",
     "delete_document",
+    "get_children",
     "get_children_count",
     "get_document",
     "get_document_source",

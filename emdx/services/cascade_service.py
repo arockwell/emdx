@@ -25,7 +25,10 @@ get_document = get_document
 __all__ = [
     "get_cascade_run_executions",
     "get_cascade_stats",
+    "get_child_info",
     "get_document",
+    "get_document_children",
+    "get_document_pr_url",
     "get_recent_cascade_activity",
     "get_recent_cascade_runs",
     "get_recent_pipeline_activity",
@@ -193,3 +196,51 @@ def get_recent_cascade_runs(limit: int = 5) -> List[Dict[str, Any]]:
             }
             for row in rows
         ]
+
+
+def get_child_info(parent_id: int) -> Dict[str, Any] | None:
+    """Get info about the first child document of a parent.
+
+    Moved from DocumentList._get_child_info in cascade_browser.py.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT id, title, stage FROM documents WHERE parent_id = ? LIMIT 1",
+            (parent_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return {"id": row[0], "title": row[1], "stage": row[2]}
+    return None
+
+
+def get_document_pr_url(doc_id: int) -> str | None:
+    """Get PR URL for a document.
+
+    Moved from DocumentList._get_doc_pr_url in cascade_browser.py.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT pr_url FROM documents WHERE id = ?",
+            (doc_id,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row and row[0] else None
+
+
+def get_document_children(parent_id: int) -> List[Dict[str, Any]]:
+    """Get all child documents recursively.
+
+    Moved from DocumentPreview._get_document_children in cascade_browser.py.
+    """
+    children = []
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT id, title, stage, pr_url FROM documents WHERE parent_id = ? ORDER BY id",
+            (parent_id,),
+        )
+        for row in cursor.fetchall():
+            child = {"id": row[0], "title": row[1], "stage": row[2], "pr_url": row[3]}
+            children.append(child)
+            children.extend(get_document_children(row[0]))
+    return children
