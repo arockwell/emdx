@@ -167,10 +167,77 @@ emdx retag "old-word-tag" "gameplan"
 emdx retag "todo" "active"
 ```
 
+### **emdx merge-tags**
+Merge multiple tags into a single target tag.
+
+```bash
+# Merge several tags into one
+emdx merge-tags "old-tag1" "old-tag2" --into "new-tag"
+
+# Skip confirmation prompt
+emdx merge-tags "todo" "task" --into "active" --force
+```
+
+**Options:**
+- `--into, -i TEXT` - Target tag to merge into (required)
+- `--force, -f` - Skip confirmation
+
+### **emdx batch**
+Batch auto-tag multiple documents using content analysis.
+
+```bash
+# Dry run: preview what would be tagged (default)
+emdx batch
+
+# Actually apply auto-tags
+emdx batch --execute
+
+# Only process untagged documents (default)
+emdx batch --untagged
+
+# Process all documents including already-tagged
+emdx batch --all
+
+# Filter by project
+emdx batch --project myapp --execute
+
+# Custom confidence threshold and max tags
+emdx batch --confidence 0.8 --max-tags 2 --execute
+
+# Limit number of documents to process
+emdx batch --limit 50 --execute
+```
+
+**Options:**
+- `--untagged/--all` - Only process untagged documents (default: untagged only)
+- `--project, -p TEXT` - Filter by project
+- `--confidence, -c FLOAT` - Minimum confidence threshold (default: 0.7)
+- `--max-tags, -m INTEGER` - Maximum tags per document (default: 3)
+- `--dry-run/--execute` - Preview or execute tagging (default: dry run)
+- `--limit, -l INTEGER` - Maximum documents to process
+
 ## ⚡ **Execution Management**
 
 ### **emdx exec**
 Manage and monitor command executions.
+
+#### **emdx exec \<doc_id\>**
+Execute a document with Claude (shortcut for `emdx claude execute`).
+
+```bash
+# Execute document in background (default)
+emdx exec 42
+
+# Execute in foreground
+emdx exec 42 --foreground
+
+# Execute with specific tools
+emdx exec 42 --tools "Read,Write,Bash"
+```
+
+**Options:**
+- `--background/--foreground` - Run in background (default) or foreground
+- `--tools, -t TEXT` - Comma-separated list of allowed tools
 
 #### **emdx exec list**
 List recent executions.
@@ -200,6 +267,32 @@ emdx exec show 42 --full
 emdx exec logs 42
 
 # Follow logs (alias for show -f)
+emdx exec tail 42
+```
+
+#### **emdx exec logs**
+Show only the logs for an execution (no metadata header).
+
+```bash
+# Show last 50 lines of logs
+emdx exec logs 42
+
+# Follow log output
+emdx exec logs 42 --follow
+
+# Show specific number of lines
+emdx exec logs 42 --lines 100
+```
+
+**Options:**
+- `--follow, -f` - Follow log output
+- `--lines, -n INTEGER` - Number of lines to show (default: 50)
+
+#### **emdx exec tail**
+Follow the log of a running execution (alias for `exec show -f`).
+
+```bash
+# Follow execution logs in real-time
 emdx exec tail 42
 ```
 
@@ -440,6 +533,49 @@ emdx workflow run task_parallel -t "Task 1" -t "Task 2" --worktree
 - `--background/--foreground` - Run mode
 - `--worktree/--no-worktree` - Git isolation
 
+### **emdx workflow create**
+Create a new custom workflow.
+
+```bash
+# Create a minimal single-stage workflow
+emdx workflow create my-workflow --display-name "My Workflow"
+
+# Create with description and category
+emdx workflow create security-audit \
+  --display-name "Security Audit" \
+  --description "Multi-stage security analysis" \
+  --category analysis
+
+# Create from a JSON definition file
+emdx workflow create complex-flow \
+  --display-name "Complex Flow" \
+  --file workflow-def.json
+```
+
+**Options:**
+- `--display-name, -n TEXT` - Display name (required)
+- `--description, -d TEXT` - Workflow description
+- `--category, -c TEXT` - Category: `analysis`, `planning`, `implementation`, `review`, `custom` (default: custom)
+- `--file, -f TEXT` - Load full definition from JSON file (stages, variables)
+
+### **emdx workflow delete**
+Delete or deactivate a workflow.
+
+```bash
+# Soft delete (deactivate)
+emdx workflow delete my-workflow
+
+# Permanently delete
+emdx workflow delete my-workflow --hard
+
+# Skip confirmation
+emdx workflow delete my-workflow --yes
+```
+
+**Options:**
+- `--hard` - Permanently delete (cannot be undone)
+- `--yes, -y` - Skip confirmation
+
 ### **emdx workflow runs**
 List workflow runs.
 
@@ -454,6 +590,76 @@ emdx workflow runs --status completed
 # Show run details
 emdx workflow status 123
 ```
+
+### **emdx workflow presets**
+List presets for a workflow or all workflows.
+
+```bash
+# List all presets across all workflows
+emdx workflow presets
+
+# List presets for a specific workflow
+emdx workflow presets task_parallel
+```
+
+### **emdx workflow preset**
+Manage workflow presets (saved variable configurations).
+
+#### **Create a preset**
+
+```bash
+# Create a preset with variables
+emdx workflow preset create task_parallel security_audit --var topic=Security --var depth=deep
+
+# Create with description
+emdx workflow preset create task_parallel perf_check --var topic=Performance --desc "Performance analysis preset"
+
+# Set as default preset for the workflow
+emdx workflow preset create task_parallel default_config --var topic=General --default
+```
+
+#### **Show preset details**
+
+```bash
+emdx workflow preset show task_parallel security_audit
+```
+
+#### **Update a preset**
+
+```bash
+# Add or update variables (merged with existing)
+emdx workflow preset update task_parallel security_audit --var depth=shallow
+
+# Update description
+emdx workflow preset update task_parallel security_audit --desc "Updated description"
+```
+
+#### **Delete a preset**
+
+```bash
+# Delete with confirmation
+emdx workflow preset delete task_parallel security_audit
+
+# Skip confirmation
+emdx workflow preset delete task_parallel security_audit --yes
+```
+
+#### **Create from a run**
+
+```bash
+# Save the variables from a previous run as a preset
+emdx workflow preset from-run task_parallel my_preset --run 223
+
+# With custom description
+emdx workflow preset from-run task_parallel my_preset --run 223 --desc "From successful run"
+```
+
+**Options (for all preset actions):**
+- `--var, -v TEXT` - Variables as key=value pairs (can be repeated)
+- `--desc TEXT` - Preset description
+- `--default` - Set as default preset for the workflow
+- `--run, -r INTEGER` - Run ID (for `from-run` action)
+- `--yes, -y` - Skip confirmation (for `delete` action)
 
 ## 🔄 **Lifecycle Management**
 
@@ -470,6 +676,27 @@ emdx lifecycle track 42
 # Show lifecycle statistics
 emdx lifecycle stats
 ```
+
+#### **emdx lifecycle auto-detect**
+Auto-detect and suggest lifecycle transitions based on document state.
+
+```bash
+# Dry run: show suggested transitions without applying
+emdx lifecycle auto-detect
+
+# Apply all suggested transitions
+emdx lifecycle auto-detect --apply
+
+# Filter suggestions by project
+emdx lifecycle auto-detect --project myapp
+
+# Apply transitions for a specific project
+emdx lifecycle auto-detect --apply --project myapp
+```
+
+**Options:**
+- `--apply, -a` - Apply suggested transitions (default: dry run only)
+- `--project, -p TEXT` - Filter by project
 
 ## 🧹 **Maintenance Commands**
 
@@ -824,6 +1051,33 @@ emdx gist gist-list
 echo "content" | emdx save --title "Share Me" --secret --copy
 ```
 
+### **emdx gdoc**
+Export documents to Google Docs.
+
+#### **emdx gdoc-auth**
+Authenticate with Google via interactive OAuth flow.
+
+```bash
+# Start Google OAuth authentication
+emdx gdoc-auth
+```
+
+Opens a browser window for Google OAuth authentication. Requires OAuth credentials to be configured at the expected credentials file path.
+
+#### **emdx gdoc-list**
+List all Google Docs created from EMDX documents.
+
+```bash
+# List all exported Google Docs
+emdx gdoc-list
+
+# Filter by project
+emdx gdoc-list --project myapp
+```
+
+**Options:**
+- `--project TEXT` - Filter by project
+
 ## 📧 **Mail** (`emdx mail`)
 
 Agent-to-agent communication via GitHub Issues. See [Mail System](mail.md) for full documentation.
@@ -891,6 +1145,213 @@ Show mail configuration and unread count.
 ```bash
 emdx mail status
 ```
+
+## ⚔️ **Swarm Execution** (`emdx swarm`)
+
+Parallel agent execution with k3d isolation. Run multiple Claude agents in parallel, each in isolated k3d pods with their own git worktrees.
+
+### **emdx swarm run**
+Run multiple tasks in parallel with isolated agents.
+
+```bash
+# Run 3 tasks in parallel
+emdx swarm run "Fix lint errors" "Add tests" "Document API"
+
+# With synthesis to combine outputs
+emdx swarm run --synthesize "Analyze auth" "Analyze api" "Analyze db"
+
+# Discover tasks from a command
+emdx swarm run --from "emdx find --tags bug,active"
+
+# Local mode (no k3d, just parallel subprocesses)
+emdx swarm run --local "task1" "task2"
+
+# Control concurrency and timeout
+emdx swarm run -j 4 --timeout 900 "task1" "task2" "task3" "task4"
+
+# Add tags to output documents
+emdx swarm run --tags "analysis,security" "check auth" "check api"
+
+# Verbose output
+emdx swarm run --verbose "task1" "task2"
+```
+
+**Options:**
+- `--from, -f TEXT` - Shell command that outputs tasks (one per line)
+- `--synthesize, -s` - Combine results into a synthesis document
+- `--jobs, -j INTEGER` - Maximum concurrent agents (default: 6)
+- `--local, -l` - Run locally without k3d (parallel subprocesses)
+- `--tags, -t TEXT` - Tags for output documents (comma-separated)
+- `--timeout INTEGER` - Timeout per task in seconds (default: 600)
+- `--memory, -m TEXT` - Memory per agent pod (default: 3Gi)
+- `--verbose, -v` - Show detailed output
+
+### **emdx swarm status**
+Show current swarm/cluster status including running, pending, completed, and failed agents.
+
+```bash
+emdx swarm status
+```
+
+### **emdx swarm logs**
+View logs from agent pods.
+
+```bash
+# Show logs from all pods
+emdx swarm logs
+
+# Show logs from a specific pod
+emdx swarm logs my-pod-name
+
+# Follow log output
+emdx swarm logs my-pod-name --follow
+```
+
+**Options:**
+- `--follow, -f` - Follow log output
+
+### **emdx swarm cleanup**
+Delete completed and failed agent pods.
+
+```bash
+emdx swarm cleanup
+```
+
+### **emdx swarm cluster**
+Manage the k3d cluster for swarm execution.
+
+#### **emdx swarm cluster start**
+Start (or create) the battlestation cluster.
+
+```bash
+emdx swarm cluster start
+```
+
+#### **emdx swarm cluster stop**
+Stop the cluster (preserves state for later restart).
+
+```bash
+emdx swarm cluster stop
+```
+
+#### **emdx swarm cluster delete**
+Delete the cluster entirely.
+
+```bash
+# Delete with confirmation
+emdx swarm cluster delete
+
+# Skip confirmation
+emdx swarm cluster delete --force
+```
+
+**Options:**
+- `--force, -f` - Skip confirmation
+
+#### **emdx swarm cluster status**
+Show whether the cluster exists and is running.
+
+```bash
+emdx swarm cluster status
+```
+
+---
+
+## ⌨️ **Keybinding Management** (`emdx keybindings`)
+
+Manage and inspect TUI keybindings, detect conflicts, and configure custom keybindings.
+
+### **emdx keybindings**
+Show a summary of all keybindings and any conflicts.
+
+```bash
+# Show summary (default)
+emdx keybindings
+
+# List all keybindings
+emdx keybindings --list
+
+# Show keybinding conflicts
+emdx keybindings --conflicts
+
+# Filter by context (e.g., document:normal)
+emdx keybindings --list --context document:normal
+
+# Output as JSON
+emdx keybindings --json
+```
+
+**Options:**
+- `--list, -l` - List all keybindings
+- `--conflicts, -c` - Show keybinding conflicts
+- `--context TEXT` - Filter by context (e.g., `document:normal`)
+- `--json, -j` - Output as JSON
+
+### **emdx keybindings init**
+Create an example keybindings configuration file.
+
+```bash
+emdx keybindings init
+```
+
+Creates a config file at the default keybindings config path if one does not already exist.
+
+### **emdx keybindings contexts**
+List all available keybinding contexts, grouped by prefix.
+
+```bash
+emdx keybindings contexts
+```
+
+---
+
+## 🤖 **Claude Document Execution** (`emdx claude`)
+
+Execute EMDX documents with Claude Code. The `emdx claude` subcommands provide direct document execution and environment management.
+
+### **emdx claude check-env**
+Check if the execution environment is properly configured.
+
+```bash
+# Basic environment check
+emdx claude check-env
+
+# Verbose mode with PATH details
+emdx claude check-env --verbose
+```
+
+**Options:**
+- `--verbose, -v` - Show detailed environment info
+
+Checks for: Python version, Claude Code installation, Git, EMDX CLI, and PATH configuration.
+
+### **emdx claude execute**
+Execute a document with Claude Code.
+
+```bash
+# Execute in background with smart context-aware mode (default)
+emdx claude execute 42
+
+# Execute in background
+emdx claude execute 42 --background
+
+# Execute with specific tools
+emdx claude execute 42 --tools "Read,Write,Bash"
+
+# Disable smart context-aware execution
+emdx claude execute 42 --no-smart
+
+# Use an existing execution ID from the database
+emdx claude execute 42 --exec-id 100
+```
+
+**Options:**
+- `--background, -b` - Run in background
+- `--tools, -t TEXT` - Comma-separated list of allowed tools
+- `--smart/--no-smart` - Use smart context-aware execution (default: smart)
+- `--exec-id INTEGER` - Use existing execution ID from database
+
+---
 
 ## ⚙️ **Configuration**
 
@@ -1545,6 +2006,19 @@ emdx task run 1 --dry-run
 emdx task manual 1
 emdx task manual 1 --note "Completed via separate PR"
 ```
+
+### Marking Tasks as Manually Complete
+
+```bash
+# Mark task as manually completed
+emdx task manual 1
+
+# Mark with a note explaining how it was completed
+emdx task manual 1 --note "Completed via separate PR"
+```
+
+**Options:**
+- `--note, -n TEXT` - Completion note
 
 ### Task Execution History
 
