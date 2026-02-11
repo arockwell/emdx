@@ -1,15 +1,6 @@
-"""Tests for workflow execution modes.
+"""Tests for workflow execution modes — imports, templates, and base classes.
 
-NOTE: These tests were originally written for the strategies/ module which
-was never actually integrated into the executor. The strategies were deleted
-in the workflow cleanup refactor (Phase 1).
-
-TODO: Rewrite these tests to test WorkflowExecutor._execute_single(),
-_execute_parallel(), _execute_iterative(), _execute_adversarial(), and
-_execute_dynamic() methods directly.
-
-For now, we have placeholder tests that verify the executor can be imported
-and basic functionality works.
+Strategy-specific tests live in test_strategies.py.
 """
 
 import pytest
