@@ -1,4 +1,8 @@
-"""Workflow executor for orchestrating multi-stage agent runs."""
+"""Workflow executor for orchestrating multi-stage agent runs.
+
+Execution mode logic (single, parallel, iterative, adversarial, dynamic)
+has been extracted into strategies/ — this module handles orchestration only.
+"""
 
 import asyncio
 import json
@@ -10,21 +14,15 @@ from typing import Any, Dict, List, Optional
 from .services import document_service
 from .base import (
     ExecutionMode,
-    IterationStrategy,
     StageConfig,
     StageResult,
     WorkflowConfig,
-    WorkflowIndividualRun,
     WorkflowRun,
-    WorkflowStageRun,
 )
 from . import database as wf_db
 from .registry import workflow_registry
 from .template import resolve_template
-from .output_parser import extract_output_doc_id, extract_token_usage_detailed
-from .agent_runner import run_agent
-from .synthesis import synthesize_outputs
-from emdx.database import groups as groups_db
+from .strategies import get_strategy
 from emdx.config import DEFAULT_MAX_CONCURRENT_WORKFLOWS
 
 logger = logging.getLogger(__name__)
@@ -33,11 +31,12 @@ logger = logging.getLogger(__name__)
 class WorkflowExecutor:
     """Executes workflows with support for different execution modes.
 
-    Supports:
-    - single: Run agent once
-    - parallel: Run agent N times simultaneously, synthesize results
-    - iterative: Run agent N times sequentially, each building on previous
-    - adversarial: Advocate -> Critic -> Synthesizer pattern
+    Mode implementations live in strategies/. This class handles:
+    - Workflow loading and variable merging
+    - Sequential stage execution
+    - Context propagation between stages
+    - Task-to-prompt expansion
+    - Document variable auto-loading
     """
 
     def __init__(self, max_concurrent: int = DEFAULT_MAX_CONCURRENT_WORKFLOWS):
@@ -96,7 +95,6 @@ class WorkflowExecutor:
             wf_db.increment_preset_usage(preset_id)
 
         # Merge all variables for storage: workflow defaults + preset + runtime
-        # This captures the complete picture of what was used
         merged_variables = {}
         merged_variables.update(workflow.variables)
         merged_variables.update(preset_variables)
@@ -107,12 +105,12 @@ class WorkflowExecutor:
         run_id = wf_db.create_workflow_run(
             workflow_id=workflow.id,
             input_doc_id=input_doc_id,
-            input_variables=merged_variables,  # Store the fully merged variables
+            input_variables=merged_variables,
             gameplan_id=gameplan_id,
             task_id=task_id,
         )
 
-        # Update run with preset info (separate call since create_workflow_run doesn't have these params yet)
+        # Update run with preset info
         if preset_id or preset_name:
             with wf_db.db_connection.get_connection() as conn:
                 conn.execute(
@@ -144,12 +142,10 @@ class WorkflowExecutor:
                     context['input'] = doc.get('content', '')
                     context['input_title'] = doc.get('title', '')
 
-            # Apply merged variables (already merged: workflow defaults + preset + runtime)
+            # Apply merged variables
             context.update(merged_variables)
 
             # Auto-load document content for doc_N variables
-            # If a variable like doc_1, doc_2, etc. is an integer, treat it as a document ID
-            # and load the content into doc_N_content and doc_N_title
             await self._load_document_variables(context)
 
             # Execute stages sequentially
@@ -163,7 +159,6 @@ class WorkflowExecutor:
                 )
 
                 if not result.success:
-                    # Stage failed - mark workflow as failed
                     wf_db.update_workflow_run(
                         run_id,
                         status='failed',
@@ -178,7 +173,6 @@ class WorkflowExecutor:
                 # Update context with stage output
                 total_tokens += result.tokens_used
 
-                # Store stage output in context for later stages
                 if result.output_doc_id:
                     doc = document_service.get_document(result.output_doc_id)
                     if doc:
@@ -191,7 +185,6 @@ class WorkflowExecutor:
                         context[f"{stage.name}.synthesis"] = doc.get('content', '')
                         context[f"{stage.name}.synthesis_id"] = result.synthesis_doc_id
 
-                # Store individual outputs for parallel mode
                 if result.individual_outputs:
                     outputs_content = []
                     for doc_id in result.individual_outputs:
@@ -200,7 +193,6 @@ class WorkflowExecutor:
                             outputs_content.append(doc.get('content', ''))
                     context[f"{stage.name}.outputs"] = outputs_content
 
-                # Update workflow run context
                 wf_db.update_workflow_run(
                     run_id,
                     context_json=json.dumps(context),
@@ -209,7 +201,6 @@ class WorkflowExecutor:
             # All stages completed successfully
             execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
-            # Get final output doc IDs from last stage
             final_outputs = []
             last_stage = workflow.stages[-1]
             if f"{last_stage.name}.output_id" in context:
@@ -245,31 +236,24 @@ class WorkflowExecutor:
         If a variable like doc_1, doc_2, etc. is an integer (document ID),
         load the document content and title into doc_N_content and doc_N_title.
 
-        This enables parameterized workflows where each parallel track can
-        receive a different input document.
-
         Args:
             context: Execution context (modified in place)
         """
         import re
 
-        # Find all doc_N variables that look like document IDs
         doc_pattern = re.compile(r'^doc_(\d+)$')
         docs_to_load = []
 
         for key, value in list(context.items()):
             match = doc_pattern.match(key)
             if match:
-                # Try to interpret value as a document ID
                 try:
                     doc_id = int(value) if value else None
                     if doc_id:
                         docs_to_load.append((key, doc_id))
                 except (ValueError, TypeError):
-                    # Not a document ID, skip
                     pass
 
-        # Load documents
         for var_name, doc_id in docs_to_load:
             try:
                 doc = document_service.get_document(doc_id)
@@ -278,12 +262,10 @@ class WorkflowExecutor:
                     context[f"{var_name}_title"] = doc.get('title', '')
                     context[f"{var_name}_id"] = doc_id
                 else:
-                    # Document not found - set empty values
                     context[f"{var_name}_content"] = f"[Document #{doc_id} not found]"
                     context[f"{var_name}_title"] = ""
                     context[f"{var_name}_id"] = None
             except Exception as e:
-                # Log error but continue - don't fail the whole workflow
                 context[f"{var_name}_content"] = f"[Error loading document #{doc_id}: {e}]"
                 context[f"{var_name}_title"] = ""
                 context[f"{var_name}_id"] = None
@@ -294,7 +276,7 @@ class WorkflowExecutor:
         stage: StageConfig,
         context: Dict[str, Any],
     ) -> StageResult:
-        """Execute a single stage.
+        """Execute a single stage by dispatching to the appropriate strategy.
 
         Args:
             workflow_run_id: Parent workflow run ID
@@ -325,19 +307,15 @@ class WorkflowExecutor:
             # Resolve input template if specified
             stage_input = resolve_template(stage.input, context) if stage.input else None
 
-            # Execute based on mode
-            if stage.mode == ExecutionMode.SINGLE:
-                result = await self._execute_single(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.PARALLEL:
-                result = await self._execute_parallel(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.ITERATIVE:
-                result = await self._execute_iterative(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.ADVERSARIAL:
-                result = await self._execute_adversarial(stage_run_id, stage, context, stage_input)
-            elif stage.mode == ExecutionMode.DYNAMIC:
-                result = await self._execute_dynamic(stage_run_id, stage, context, stage_input)
-            else:
-                raise ValueError(f"Unknown execution mode: {stage.mode}")
+            # Dispatch to strategy
+            strategy = get_strategy(stage.mode)
+            result = await strategy.execute(
+                stage_run_id=stage_run_id,
+                stage=stage,
+                context=context,
+                stage_input=stage_input,
+                executor=self,
+            )
 
             execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
             result.execution_time_ms = execution_time_ms
@@ -366,661 +344,6 @@ class WorkflowExecutor:
             )
             return StageResult(success=False, error_message=str(e))
 
-    async def _execute_single(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute a single run.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult
-        """
-        # Create individual run record
-        prompt = resolve_template(stage.prompt, context) if stage.prompt else None
-        individual_run_id = wf_db.create_individual_run(
-            stage_run_id=stage_run_id,
-            run_number=1,
-            prompt_used=prompt,
-            input_context=stage_input,
-        )
-
-        # Execute agent — use task title for clean display if available
-        effective_prompt = prompt or stage_input or ""
-        task_titles = getattr(stage, '_task_titles', None)
-        if task_titles:
-            title = f"Delegate: {task_titles[0][:60]}"
-        else:
-            title = f"Workflow Agent Run #{individual_run_id}"
-        result = await run_agent(
-            individual_run_id=individual_run_id,
-            agent_id=stage.agent_id,
-            prompt=effective_prompt,
-            context=context,
-            title=title,
-        )
-
-        return StageResult(
-            success=result.get('success', False),
-            output_doc_id=result.get('output_doc_id'),
-            individual_outputs=[result.get('output_doc_id')] if result.get('output_doc_id') else [],
-            tokens_used=result.get('tokens_used', 0),
-            error_message=result.get('error_message'),
-        )
-
-    async def _execute_parallel(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute N runs in parallel and synthesize results.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult with synthesis
-        """
-        # Create a group for this parallel execution's outputs
-        workflow_name = context.get("workflow_name", "Workflow")
-        stage_name = stage.name or f"Stage {stage_run_id}"
-        run_id = context.get("run_id")
-
-        # Determine run count: use prompts length if provided, otherwise stage.runs
-        num_runs = len(stage.prompts) if stage.prompts else stage.runs
-
-        group_id = None
-        try:
-            group_id = groups_db.create_group(
-                name=f"{workflow_name} - {stage_name}",
-                group_type="batch",
-                workflow_run_id=run_id,
-                description=f"Parallel outputs from {num_runs} runs",
-                created_by="workflow",
-            )
-        except Exception as e:
-            # Don't fail the workflow if group creation fails
-            import logging
-            logging.getLogger(__name__).warning(f"Could not create group for parallel stage: {e}")
-
-        # Create individual run records
-        task_titles = getattr(stage, '_task_titles', None)
-        individual_runs = []
-        for i in range(num_runs):
-            # Support per-run prompts (like iterative mode) or single prompt for all
-            if stage.prompts and i < len(stage.prompts):
-                prompt_template = stage.prompts[i]
-            else:
-                prompt_template = stage.prompt or ""
-            prompt = resolve_template(prompt_template, context) if prompt_template else None
-            individual_run_id = wf_db.create_individual_run(
-                stage_run_id=stage_run_id,
-                run_number=i + 1,
-                prompt_used=prompt,
-                input_context=stage_input,
-            )
-            # Use original task title for clean display, fall back to run number
-            if task_titles and i < len(task_titles):
-                task_title = task_titles[i]
-            else:
-                task_title = None
-            individual_runs.append((individual_run_id, prompt, task_title))
-
-        # Execute all runs in parallel with worktree isolation
-        # Track completion count for progress updates
-        completed_count = 0
-
-        # Get max_concurrent from context or stage config
-        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent or self.max_concurrent
-
-        # Use worktree pool for isolation when running multiple tasks
-        from .worktree_pool import WorktreePool
-
-        base_branch = context.get('base_branch', 'main')
-        pool = WorktreePool(
-            max_size=max_concurrent,
-            base_branch=base_branch,
-        )
-
-        async def run_with_worktree(run_id: int, prompt: str, run_number: int, task_title: str | None = None):
-            nonlocal completed_count
-            try:
-                async with pool.acquire(target_branch=f"parallel-{stage_run_id}-{run_number}") as worktree:
-                    # Create isolated context with worktree path
-                    run_context = dict(context)
-                    run_context['_working_dir'] = worktree.path
-
-                    effective_prompt = prompt or stage_input or ""
-                    if task_title:
-                        title = f"Delegate: {task_title[:60]}"
-                    else:
-                        title = f"Workflow Agent Run #{run_id}"
-                    result = await run_agent(
-                        individual_run_id=run_id,
-                        agent_id=stage.agent_id,
-                        prompt=effective_prompt,
-                        context=run_context,
-                        title=title,
-                    )
-                    # Update progress after each completion
-                    completed_count += 1
-                    wf_db.update_stage_run(stage_run_id, runs_completed=completed_count)
-                    return result
-            except Exception as e:
-                return {'success': False, 'error_message': str(e)}
-
-        try:
-            tasks = [
-                run_with_worktree(run_id, prompt, i + 1, task_title)
-                for i, (run_id, prompt, task_title) in enumerate(individual_runs)
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-        finally:
-            # Clean up worktree pool
-            await pool.cleanup()
-
-        # Collect successful outputs
-        output_doc_ids = []
-        total_tokens = 0
-        errors = []
-
-        for result in results:
-            if isinstance(result, Exception):
-                errors.append(str(result))
-            elif result.get('success'):
-                if result.get('output_doc_id'):
-                    doc_id = result['output_doc_id']
-                    output_doc_ids.append(doc_id)
-                    # Add to group as exploration
-                    if group_id:
-                        try:
-                            groups_db.add_document_to_group(
-                                group_id, doc_id, role="exploration", added_by="workflow"
-                            )
-                        except Exception as e:
-                            logger.debug("Failed to add doc %s to group %s: %s", doc_id, group_id, e)
-                total_tokens += result.get('tokens_used', 0)
-            else:
-                errors.append(result.get('error_message', 'Unknown error'))
-
-        if not output_doc_ids:
-            return StageResult(
-                success=False,
-                error_message=f"All parallel runs failed: {'; '.join(errors)}",
-            )
-
-        # Synthesize results (skip for single task - nothing to synthesize)
-        synthesis_doc_id = None
-        if len(output_doc_ids) > 1 and stage.synthesis_prompt:
-            # Emit synthesis phase status for UI display
-            wf_db.update_stage_run(stage_run_id, status='synthesizing')
-
-            synthesis_result = await synthesize_outputs(
-                stage_run_id=stage_run_id,
-                output_doc_ids=output_doc_ids,
-                synthesis_prompt=stage.synthesis_prompt,
-                context=context,
-            )
-
-            # Add synthesis doc to group as primary
-            synthesis_doc_id = synthesis_result.get('output_doc_id')
-            if group_id and synthesis_doc_id:
-                try:
-                    groups_db.add_document_to_group(
-                        group_id, synthesis_doc_id, role="primary", added_by="workflow"
-                    )
-                except Exception as e:
-                    logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
-            total_tokens += synthesis_result.get('tokens_used', 0)
-
-        return StageResult(
-            success=True,
-            output_doc_id=synthesis_doc_id or output_doc_ids[-1],
-            synthesis_doc_id=synthesis_doc_id,
-            individual_outputs=output_doc_ids,
-            tokens_used=total_tokens,
-        )
-
-    async def _execute_iterative(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute N runs sequentially, each building on previous.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult
-        """
-        previous_outputs: List[str] = []
-        output_doc_ids: List[int] = []
-        total_tokens = 0
-        last_output_id = None
-        task_titles = getattr(stage, '_task_titles', None)
-
-        for i in range(stage.runs):
-            run_number = i + 1
-
-            # Build prompt for this iteration
-            if stage.prompts and i < len(stage.prompts):
-                prompt_template = stage.prompts[i]
-            else:
-                prompt_template = stage.prompt or ""
-
-            # Build context for template resolution
-            iter_context = dict(context)
-            iter_context['input'] = stage_input or context.get('input', '')
-            iter_context['prev'] = previous_outputs[-1] if previous_outputs else ''
-            iter_context['all_prev'] = '\n\n---\n\n'.join(previous_outputs)
-            iter_context['run_number'] = run_number
-
-            prompt = resolve_template(prompt_template, iter_context)
-
-            # Create individual run record
-            individual_run_id = wf_db.create_individual_run(
-                stage_run_id=stage_run_id,
-                run_number=run_number,
-                prompt_used=prompt,
-                input_context=iter_context.get('prev', ''),
-            )
-
-            # Execute this iteration
-            if task_titles and i < len(task_titles):
-                title = f"Delegate: {task_titles[i][:60]}"
-            else:
-                title = f"Workflow Agent Run #{individual_run_id}"
-            result = await run_agent(
-                individual_run_id=individual_run_id,
-                agent_id=stage.agent_id,
-                prompt=prompt,
-                context=iter_context,
-                title=title,
-            )
-
-            if not result.get('success'):
-                return StageResult(
-                    success=False,
-                    error_message=f"Iteration {run_number} failed: {result.get('error_message')}",
-                    tokens_used=total_tokens,
-                )
-
-            # Collect output for next iteration
-            if result.get('output_doc_id'):
-                doc = document_service.get_document(result['output_doc_id'])
-                if doc:
-                    previous_outputs.append(doc.get('content', ''))
-                    output_doc_ids.append(result['output_doc_id'])
-                    last_output_id = result['output_doc_id']
-
-            total_tokens += result.get('tokens_used', 0)
-
-            # Update stage progress
-            wf_db.update_stage_run(stage_run_id, runs_completed=run_number)
-
-        return StageResult(
-            success=True,
-            output_doc_id=last_output_id,
-            individual_outputs=output_doc_ids,
-            tokens_used=total_tokens,
-        )
-
-    async def _execute_adversarial(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute adversarial pattern: Advocate -> Critic -> Synthesizer.
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult
-        """
-        # Default adversarial prompts
-        default_prompts = [
-            "ADVOCATE: Argue FOR this approach: {{input}}\n\nWhat are its strengths?",
-            "CRITIC: Given this advocacy: {{prev}}\n\nArgue AGAINST. What are the weaknesses?",
-            "SYNTHESIS: Advocate: {{all_prev[0]}}\nCritic: {{prev}}\n\nProvide balanced assessment.",
-        ]
-
-        outputs: List[str] = []
-        output_doc_ids: List[int] = []
-        total_tokens = 0
-        last_output_id = None
-
-        num_runs = stage.runs if stage.runs else 3  # Default to 3 for adversarial
-
-        for i in range(num_runs):
-            run_number = i + 1
-
-            # Get prompt for this role
-            if stage.prompts and i < len(stage.prompts):
-                prompt_template = stage.prompts[i]
-            else:
-                prompt_template = default_prompts[min(i, len(default_prompts) - 1)]
-
-            # Build context
-            iter_context = dict(context)
-            iter_context['input'] = stage_input or context.get('input', '')
-            iter_context['prev'] = outputs[-1] if outputs else ''
-            iter_context['all_prev'] = outputs  # Keep as list for indexed access
-
-            prompt = resolve_template(prompt_template, iter_context)
-
-            # Create individual run record
-            individual_run_id = wf_db.create_individual_run(
-                stage_run_id=stage_run_id,
-                run_number=run_number,
-                prompt_used=prompt,
-                input_context=iter_context.get('prev', ''),
-            )
-
-            # Execute
-            result = await run_agent(
-                individual_run_id=individual_run_id,
-                agent_id=stage.agent_id,
-                prompt=prompt,
-                context=iter_context,
-                title=f"Workflow Agent Run #{individual_run_id}",
-            )
-
-            if not result.get('success'):
-                return StageResult(
-                    success=False,
-                    error_message=f"Adversarial run {run_number} failed: {result.get('error_message')}",
-                    tokens_used=total_tokens,
-                )
-
-            # Collect output
-            if result.get('output_doc_id'):
-                doc = document_service.get_document(result['output_doc_id'])
-                if doc:
-                    outputs.append(doc.get('content', ''))
-                    output_doc_ids.append(result['output_doc_id'])
-                    last_output_id = result['output_doc_id']
-
-            total_tokens += result.get('tokens_used', 0)
-            wf_db.update_stage_run(stage_run_id, runs_completed=run_number)
-
-        return StageResult(
-            success=True,
-            output_doc_id=last_output_id,  # Final synthesis is the output
-            synthesis_doc_id=last_output_id,
-            individual_outputs=output_doc_ids,
-            tokens_used=total_tokens,
-        )
-
-    async def _run_discovery(
-        self,
-        command: str,
-        context: Dict[str, Any],
-    ) -> List[str]:
-        """Run discovery command and return list of items.
-
-        Args:
-            command: Shell command that outputs items (one per line)
-            context: Execution context for template resolution
-
-        Returns:
-            List of discovered items (strings)
-        """
-        import subprocess
-
-        # Resolve any templates in the command
-        resolved_command = resolve_template(command, context)
-
-        # Run command
-        result = await asyncio.to_thread(
-            subprocess.run,
-            resolved_command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=context.get('_working_dir'),
-        )
-
-        if result.returncode != 0:
-            raise ValueError(f"Discovery command failed: {result.stderr}")
-
-        # Parse output - one item per line, strip whitespace
-        items = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
-        return items
-
-    async def _execute_dynamic(
-        self,
-        stage_run_id: int,
-        stage: StageConfig,
-        context: Dict[str, Any],
-        stage_input: Optional[str],
-    ) -> StageResult:
-        """Execute dynamic mode: discover items and process each in parallel.
-
-        Dynamic mode:
-        1. Runs discovery_command to get a list of items
-        2. Creates a worktree for each item (up to max_concurrent)
-        3. Processes items in parallel, respecting concurrency limits
-        4. Optionally synthesizes results at the end
-
-        Args:
-            stage_run_id: Stage run ID
-            stage: Stage configuration
-            context: Execution context
-            stage_input: Resolved input for this stage
-
-        Returns:
-            StageResult with all outputs
-        """
-        from .worktree_pool import WorktreePool
-
-        # Get discovery command (CLI override takes precedence)
-        discovery_command = context.get('_discovery_override') or stage.discovery_command
-
-        # Validate configuration
-        if not discovery_command:
-            return StageResult(
-                success=False,
-                error_message="Dynamic mode requires discovery_command"
-            )
-
-        # Get max_concurrent (CLI override takes precedence)
-        max_concurrent = context.get('_max_concurrent_override') or stage.max_concurrent
-
-        # Step 1: Run discovery
-        try:
-            items = await self._run_discovery(discovery_command, context)
-        except Exception as e:
-            return StageResult(
-                success=False,
-                error_message=f"Discovery failed: {e}"
-            )
-
-        if not items:
-            return StageResult(
-                success=True,
-                error_message="No items discovered"
-            )
-
-        # Update target_runs to reflect discovered item count
-        wf_db.update_stage_run(stage_run_id, target_runs=len(items))
-
-        # Create a group for this dynamic execution's outputs
-        workflow_name = context.get("workflow_name", "Workflow")
-        stage_name = stage.name or f"Stage {stage_run_id}"
-        run_id = context.get("run_id")
-
-        group_id = None
-        try:
-            group_id = groups_db.create_group(
-                name=f"{workflow_name} - {stage_name}",
-                group_type="batch",
-                workflow_run_id=run_id,
-                description=f"Dynamic outputs from {len(items)} discovered items",
-                created_by="workflow",
-            )
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Could not create group for dynamic stage: {e}")
-
-        # Step 2: Set up worktree pool
-        base_branch = context.get('base_branch', 'main')
-        pool = WorktreePool(
-            max_size=max_concurrent,
-            base_branch=base_branch,
-            repo_root=context.get('_working_dir'),
-        )
-
-        output_doc_ids: List[int] = []
-        total_tokens = 0
-        errors: List[str] = []
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def process_item(item_index: int, item: str) -> Dict[str, Any]:
-            """Process a single discovered item."""
-            async with semaphore:
-                async with pool.acquire(target_branch=item) as worktree:
-                    # Build item-specific context
-                    item_context = dict(context)
-                    item_context[stage.item_variable] = item
-                    item_context['_working_dir'] = worktree.path
-                    item_context['item_index'] = item_index
-                    item_context['total_items'] = len(items)
-
-                    # Resolve prompt with item context
-                    prompt = resolve_template(stage.prompt, item_context) if stage.prompt else item
-
-                    # Create individual run record
-                    individual_run_id = wf_db.create_individual_run(
-                        stage_run_id=stage_run_id,
-                        run_number=item_index + 1,
-                        prompt_used=prompt,
-                        input_context=item,
-                    )
-
-                    # Execute agent — use discovered item for clean title
-                    result = await run_agent(
-                        individual_run_id=individual_run_id,
-                        agent_id=stage.agent_id,
-                        prompt=prompt,
-                        context=item_context,
-                        title=f"Delegate: {item[:60]}",
-                    )
-
-                    return {
-                        'item': item,
-                        'index': item_index,
-                        **result
-                    }
-
-        try:
-            # Step 3: Process all items in parallel
-            tasks = [process_item(i, item) for i, item in enumerate(items)]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Collect results
-            successful_items = 0
-            for result in results:
-                if isinstance(result, Exception):
-                    errors.append(str(result))
-                    if not stage.continue_on_failure:
-                        break
-                elif result.get('success'):
-                    successful_items += 1
-                    if result.get('output_doc_id'):
-                        doc_id = result['output_doc_id']
-                        output_doc_ids.append(doc_id)
-                        # Add to group as exploration
-                        if group_id:
-                            try:
-                                groups_db.add_document_to_group(
-                                    group_id, doc_id, role="exploration", added_by="workflow"
-                                )
-                            except Exception as e:
-                                logger.debug("Failed to add doc %s to group %s: %s", doc_id, group_id, e)
-                    total_tokens += result.get('tokens_used', 0)
-                else:
-                    error_msg = f"Item '{result.get('item')}' failed: {result.get('error_message', 'Unknown error')}"
-                    errors.append(error_msg)
-                    if not stage.continue_on_failure:
-                        break
-
-            # Update stage progress
-            wf_db.update_stage_run(stage_run_id, runs_completed=successful_items)
-
-            # Step 4: Optional synthesis (skip for single task - nothing to synthesize)
-            synthesis_doc_id = None
-            if len(output_doc_ids) > 1 and stage.synthesis_prompt:
-                # Emit synthesis phase status for UI display
-                wf_db.update_stage_run(stage_run_id, status='synthesizing')
-
-                synthesis_result = await synthesize_outputs(
-                    stage_run_id=stage_run_id,
-                    output_doc_ids=output_doc_ids,
-                    synthesis_prompt=stage.synthesis_prompt,
-                    context=context,
-                )
-                synthesis_doc_id = synthesis_result.get('output_doc_id')
-                total_tokens += synthesis_result.get('tokens_used', 0)
-
-                # Add synthesis doc to group as primary
-                if group_id and synthesis_doc_id:
-                    try:
-                        groups_db.add_document_to_group(
-                            group_id, synthesis_doc_id, role="primary", added_by="workflow"
-                        )
-                    except Exception as e:
-                        logger.debug("Failed to add synthesis doc %s to group %s: %s", synthesis_doc_id, group_id, e)
-
-            # Determine overall success
-            if not stage.continue_on_failure and errors:
-                return StageResult(
-                    success=False,
-                    error_message=f"Dynamic execution failed: {'; '.join(errors)}",
-                    individual_outputs=output_doc_ids,
-                    tokens_used=total_tokens,
-                )
-
-            # Success if at least one item succeeded
-            success = successful_items > 0
-
-            return StageResult(
-                success=success,
-                output_doc_id=synthesis_doc_id or (output_doc_ids[-1] if output_doc_ids else None),
-                synthesis_doc_id=synthesis_doc_id,
-                individual_outputs=output_doc_ids,
-                tokens_used=total_tokens,
-                error_message=f"Processed {successful_items}/{len(items)} items. Errors: {'; '.join(errors)}" if errors else None,
-            )
-
-        finally:
-            # Clean up worktree pool
-            await pool.cleanup()
-
     def _expand_tasks_to_prompts(self, stage: StageConfig, context: Dict[str, Any]) -> None:
         """Expand tasks into prompts if tasks are provided.
 
@@ -1039,7 +362,6 @@ class WorkflowExecutor:
         if not tasks or not stage.prompt:
             return
 
-        # Import here to avoid circular imports
         from .tasks import resolve_tasks
 
         resolved_tasks = resolve_tasks(tasks)
@@ -1052,7 +374,6 @@ class WorkflowExecutor:
             prompt = prompt.replace('{{task_id}}', str(task_ctx.id) if task_ctx.id else '')
             prompts.append(prompt)
 
-        # Set prompts on stage (parallel strategy will use these)
         stage.prompts = prompts
 
         # Store original task titles for clean execution titles
