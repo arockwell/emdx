@@ -28,12 +28,23 @@ echo "Gameplan content" | emdx save --title "Auth Gameplan" --tags "gameplan,act
 
 # Save from command output
 ls -la | emdx save --title "Directory Listing"
+
+# Save and create a secret gist
+echo "Shareable notes" | emdx save --title "Notes" --gist
+
+# Save and create a public gist, copy URL
+emdx save notes.md --public --copy
 ```
 
 **Options:**
 - `--title TEXT` - Custom title (auto-detected from filename if not provided)
 - `--tags TEXT` - Comma-separated tags using text aliases
 - `--project TEXT` - Override project detection
+- `--gist` / `--share` - Create a GitHub gist after saving
+- `--secret` - Create a secret gist (default; implies `--gist`)
+- `--public` - Create a public gist (implies `--gist`)
+- `--copy, -c` - Copy gist URL to clipboard
+- `--open, -o` - Open gist in browser
 
 ### **emdx find**
 Search documents with full-text and tag-based search.
@@ -794,17 +805,23 @@ emdx gui
 GitHub Gist integration.
 
 ```bash
-# Create public gist from document
-emdx gist create 42
+# Create secret gist from document
+emdx gist 42
 
-# Create private gist
-emdx gist create 42 --private
+# Create public gist
+emdx gist 42 --public
+
+# Create gist and copy URL to clipboard
+emdx gist 42 --copy
 
 # List your gists
-emdx gist list
+emdx gist gist-list
+```
 
-# Import gist to knowledge base
-emdx gist import <gist_id>
+**Tip:** Use `emdx save --gist` (or `--secret`/`--public`) to save and create a gist in one step:
+
+```bash
+echo "content" | emdx save --title "Share Me" --secret --copy
 ```
 
 ## 📧 **Mail** (`emdx mail`)
