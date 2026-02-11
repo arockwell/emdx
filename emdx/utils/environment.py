@@ -142,7 +142,7 @@ class EnvironmentValidator:
             self.warnings.append(f"EMDX config directory not found: {EMDX_CONFIG_DIR}")
         
         # Check log directory
-        log_dir = config_dir / "logs"
+        log_dir = EMDX_CONFIG_DIR / "logs"
         if not log_dir.exists():
             try:
                 log_dir.mkdir(parents=True, exist_ok=True)
