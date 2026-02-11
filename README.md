@@ -1,6 +1,6 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.11.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.12.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -30,22 +30,22 @@ emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
 **Requirements:** Python 3.11+
 
 ```bash
-# Core install (lightweight - no ML/AI dependencies)
+# Install with uv (recommended)
+uv tool install emdx
+
+# With optional extras
+uv tool install 'emdx[ai]'           # Semantic search, embeddings, Claude Q&A
+uv tool install 'emdx[similarity]'    # TF-IDF, MinHash duplicate detection
+uv tool install 'emdx[all]'           # Everything (AI + similarity + Google)
+
+# Or install with pip
+pip install emdx
+pip install 'emdx[all]'
+
+# Development (from source)
 git clone https://github.com/arockwell/emdx.git
-cd emdx && pip install -e .
-
-# With AI features (semantic search, embeddings, Claude Q&A)
-pip install -e '.[ai]'
-
-# With similarity features (TF-IDF, MinHash duplicate detection)
-pip install -e '.[similarity]'
-
-# Everything (AI + similarity + Google integrations)
-pip install -e '.[all]'
-
-# Or with Poetry (recommended for development)
-git clone https://github.com/arockwell/emdx.git
-cd emdx && poetry install --all-extras
+cd emdx
+uv sync                               # or: poetry install --all-extras
 ```
 
 ## Quick Start: Parallel Tasks
@@ -348,9 +348,9 @@ emdx legend  # Full alias reference
 ## Development
 
 ```bash
-poetry install
-poetry run emdx --help
-poetry run pytest
+uv sync                    # or: poetry install
+uv run emdx --help         # or: poetry run emdx --help
+uv run pytest              # or: poetry run pytest
 
 ## License
 
