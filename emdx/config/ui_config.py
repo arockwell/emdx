@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .constants import EMDX_CONFIG_DIR
+
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "emdx-dark",
@@ -23,9 +25,8 @@ def get_ui_config_path() -> Path:
     Returns:
         Path to ~/.config/emdx/ui_config.json
     """
-    config_dir = Path.home() / ".config" / "emdx"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "ui_config.json"
+    EMDX_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    return EMDX_CONFIG_DIR / "ui_config.json"
 
 
 def load_ui_config() -> dict[str, Any]:

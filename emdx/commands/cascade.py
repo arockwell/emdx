@@ -22,6 +22,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ..config.constants import EMDX_LOG_DIR
 from ..database.documents import get_document, save_document
 from ..database import cascade as cascade_db
 from ..services.claude_executor import execute_claude_detached, execute_claude_sync
@@ -154,9 +155,8 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
         console.print("[bold yellow]⚡ Implementation mode - Claude will write code and create a PR[/bold yellow]")
 
     # Set up logging
-    log_dir = Path.home() / ".config" / "emdx" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = EMDX_LOG_DIR / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
     # Create execution record
     with db_connection.get_connection() as conn:
@@ -475,9 +475,8 @@ def process(
         next_stage = NEXT_STAGE[stage]
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
-        log_dir = Path.home() / ".config" / "emdx" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_file = EMDX_LOG_DIR / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
         with db_connection.get_connection() as conn:
             cursor = conn.execute(

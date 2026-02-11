@@ -219,13 +219,16 @@ class WorkflowExecutor:
             wf_db.increment_workflow_usage(workflow.id, success=True)
 
         except Exception as e:
-            wf_db.update_workflow_run(
-                run_id,
-                status='failed',
-                error_message=str(e),
-                completed_at=datetime.now(),
-            )
-            wf_db.increment_workflow_usage(workflow.id, success=False)
+            try:
+                wf_db.update_workflow_run(
+                    run_id,
+                    status='failed',
+                    error_message=str(e),
+                    completed_at=datetime.now(),
+                )
+                wf_db.increment_workflow_usage(workflow.id, success=False)
+            except Exception as record_err:
+                logger.error("Failed to record workflow failure for run %s: %s (original error: %s)", run_id, record_err, e)
 
         row = wf_db.get_workflow_run(run_id)
         return WorkflowRun.from_db_row(row)

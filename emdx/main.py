@@ -65,7 +65,7 @@ def is_safe_mode() -> bool:
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "delegate", "workflow", "claude", "swarm"}
+UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "delegate", "workflow", "claude"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:

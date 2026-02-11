@@ -6,6 +6,7 @@ created (workflow, sub-agent, manual save).
 """
 
 import os
+import sqlite3
 from datetime import datetime
 from typing import Any
 
@@ -228,7 +229,7 @@ def add_document_to_group(
             _update_group_metrics(conn, group_id)
 
             return True
-        except Exception:
+        except sqlite3.IntegrityError:
             # Already in group (unique constraint)
             return False
 

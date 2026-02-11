@@ -10,11 +10,22 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 
-# Default allowed tools for Claude Code execution
+# Default tools allowed for Claude CLI execution
+# These are the standard tools that most agents need for basic operations
 DEFAULT_ALLOWED_TOOLS: List[str] = [
-    "Read", "Write", "Edit", "MultiEdit", "Bash",
-    "Glob", "Grep", "LS", "Task", "TodoWrite",
-    "WebFetch", "WebSearch",
+    "Bash",
+    "Edit",
+    "Glob",
+    "Grep",
+    "LS",
+    "MultiEdit",
+    "Read",
+    "Task",
+    "TodoRead",
+    "TodoWrite",
+    "WebFetch",
+    "WebSearch",
+    "Write",
 ]
 
 
@@ -155,22 +166,6 @@ def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     return alias
 
 
-# Default allowed tools for Claude Code execution
-DEFAULT_ALLOWED_TOOLS = [
-    "Bash",
-    "Read",
-    "Write",
-    "Edit",
-    "Glob",
-    "Grep",
-    "LS",
-    "TodoRead",
-    "TodoWrite",
-    "WebFetch",
-    "WebSearch",
-]
-
-
 def get_available_models(cli_tool: CliTool) -> List[str]:
     """Get list of known models for a CLI tool.
 
@@ -195,21 +190,3 @@ def get_available_models(cli_tool: CliTool) -> List[str]:
             "gemini-3-pro",
         ]
     return []
-
-
-# Default tools allowed for Claude CLI execution
-# These are the standard tools that most agents need for basic operations
-DEFAULT_ALLOWED_TOOLS: List[str] = [
-    "Read",
-    "Write",
-    "Edit",
-    "MultiEdit",
-    "Bash",
-    "Glob",
-    "Grep",
-    "LS",
-    "Task",
-    "TodoWrite",
-    "WebFetch",
-    "WebSearch",
-]

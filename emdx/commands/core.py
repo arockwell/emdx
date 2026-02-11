@@ -212,6 +212,11 @@ def save(
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
+    gist: bool = typer.Option(False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"),
+    public: bool = typer.Option(False, "--public", help="Make gist public (default: secret)"),
+    secret: bool = typer.Option(False, "--secret", help="Make gist secret (default, for explicitness)"),
+    copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
+    open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
     # Step 1: Get input content
@@ -276,6 +281,68 @@ def save(
             for tag, confidence in suggestions:
                 console.print(f"   • {tag} [dim]({confidence:.0%})[/dim]")
             console.print(f"\n[dim]Apply with: emdx tag {doc_id} <tags>[/dim]")
+
+    # Step 10: Create gist if requested (--secret or --public imply --gist)
+    if secret or public:
+        gist = True
+    if gist:
+        if public and secret:
+            console.print("[red]Error: Cannot use both --public and --secret[/red]")
+            raise typer.Exit(1)
+
+        import webbrowser as wb
+
+        from emdx.commands.gist import (
+            copy_to_clipboard,
+            create_gist_with_api,
+            create_gist_with_gh,
+            get_github_auth,
+            sanitize_filename,
+        )
+
+        token = get_github_auth()
+        if not token:
+            console.print("[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]")
+        else:
+            filename = sanitize_filename(metadata.title)
+            description = f"{metadata.title} - emdx knowledge base"
+            if metadata.project:
+                description += f" (Project: {metadata.project})"
+
+            console.print(f"[dim]Creating {'public' if public else 'secret'} gist...[/dim]")
+
+            result = create_gist_with_gh(input_content.content, filename, description, public)
+            if not result:
+                result = create_gist_with_api(input_content.content, filename, description, public, token)
+
+            if result:
+                gist_id_str = result["id"]
+                gist_url = result["url"]
+
+                # Record in gists table
+                try:
+                    with db.get_connection() as conn:
+                        conn.execute(
+                            "INSERT INTO gists (document_id, gist_id, gist_url, is_public) VALUES (?, ?, ?, ?)",
+                            (doc_id, gist_id_str, gist_url, public),
+                        )
+                        conn.commit()
+                except Exception:
+                    pass  # Non-fatal — gist was still created
+
+                console.print(f"   [green]Gist:[/green] {gist_url}")
+
+                if copy_url:
+                    if copy_to_clipboard(gist_url):
+                        console.print("   [green]✓ URL copied to clipboard[/green]")
+                    else:
+                        console.print("   [yellow]⚠ Could not copy to clipboard[/yellow]")
+
+                if open_browser:
+                    wb.open(gist_url)
+                    console.print("   [green]✓ Opened in browser[/green]")
+            else:
+                console.print("[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]")
 
 
 @app.command()

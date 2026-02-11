@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..config.cli_config import CliTool, get_default_cli_tool, DEFAULT_ALLOWED_TOOLS
+from ..config.constants import EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
 from .cli_executor import get_cli_executor
 
@@ -190,7 +191,7 @@ class UnifiedExecutor:
     """
 
     def __init__(self, log_dir: Optional[Path] = None):
-        self.log_dir = log_dir or (Path.home() / ".config" / "emdx" / "logs")
+        self.log_dir = log_dir or EMDX_LOG_DIR
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
     def execute(self, config: ExecutionConfig) -> ExecutionResult:

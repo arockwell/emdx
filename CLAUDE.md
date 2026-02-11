@@ -75,6 +75,11 @@ poetry run emdx save "Remember to fix the API" --title "API Note"
 # Save text via stdin (also works)
 echo "My document content" | poetry run emdx save --title "Doc"
 cat notes.txt | poetry run emdx save --title "Notes"
+
+# Save and create a gist in one step
+poetry run emdx save "share this" --title "Shared Note" --gist
+poetry run emdx save notes.md --secret --copy   # --secret implies --gist
+poetry run emdx save notes.md --public --open    # --public implies --gist
 ```
 
 ### Search and Browse

@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Set
 
+from ..config.constants import EMDX_CONFIG_DIR
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -75,7 +77,7 @@ class SimilarityService:
             db_path: Optional database path (unused, kept for API compatibility)
         """
         # Get cache directory
-        self._cache_dir = Path.home() / ".config" / "emdx"
+        self._cache_dir = EMDX_CONFIG_DIR
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._cache_path = self._cache_dir / "similarity_cache.pkl"
 
