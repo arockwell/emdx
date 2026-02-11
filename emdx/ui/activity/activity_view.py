@@ -48,8 +48,8 @@ except ImportError:
     HAS_WORKFLOWS = False
 
 try:
-    from emdx.database import documents as doc_db
-    from emdx.database import groups as groups_db
+    from emdx.services import document_service as doc_db
+    from emdx.services import group_service as groups_db
     from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
     HAS_DOCS = True
@@ -761,7 +761,7 @@ class ActivityView(HelpMixin, Widget):
             header.update(f"📄 #{doc['id']}")
 
             try:
-                from emdx.models.tags import get_document_tags
+                from emdx.services.tag_service import get_document_tags
                 tags = get_document_tags(item.doc_id)
             except ImportError:
                 tags = []
@@ -1106,8 +1106,7 @@ class ActivityView(HelpMixin, Widget):
 
             elif item.item_type == "individual_run" and item.item_id:
                 try:
-                    from emdx.models.executions import get_execution
-                    from emdx.database.connection import db_connection
+                    from emdx.services.execution_service import get_execution, get_execution_log_file
 
                     ir = wf_db.get_individual_run(item.item_id)
                     if ir:
@@ -1117,19 +1116,9 @@ class ActivityView(HelpMixin, Widget):
                                 log_path = Path(exec_record.log_file)
 
                         if not log_path:
-                            with db_connection.get_connection() as conn:
-                                cursor = conn.execute(
-                                    """
-                                    SELECT log_file FROM executions
-                                    WHERE doc_title LIKE ?
-                                    AND status = 'running'
-                                    ORDER BY id DESC LIMIT 1
-                                    """,
-                                    (f"Workflow Agent Run #{item.item_id}%",),
-                                )
-                                row = cursor.fetchone()
-                                if row and row['log_file']:
-                                    log_path = Path(row['log_file'])
+                            log_file = get_execution_log_file(f"Workflow Agent Run #{item.item_id}%")
+                            if log_file:
+                                log_path = Path(log_file)
                 except Exception as e:
                     logger.debug(f"Could not get individual run log: {e}")
 
@@ -1453,11 +1442,10 @@ class ActivityView(HelpMixin, Widget):
             title = doc.get("title", "Untitled")
             content = doc.get("content", "")
 
-            from emdx.database.documents import save_document
             from emdx.utils.git import get_git_project
 
             project = get_git_project()
-            new_doc_id = save_document(
+            new_doc_id = doc_db.save_document(
                 title=f"{title} (copy)",
                 content=content,
                 project=project,

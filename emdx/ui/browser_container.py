@@ -232,7 +232,7 @@ class BrowserContainer(App):
                 self.browsers[browser_type] = LogBrowser()
             elif browser_type == "cascade":
                 try:
-                    from .cascade_browser import CascadeBrowser
+                    from .cascade import CascadeBrowser
                     self.browsers[browser_type] = CascadeBrowser()
                     logger.info("CascadeBrowser created successfully")
                 except Exception as e:

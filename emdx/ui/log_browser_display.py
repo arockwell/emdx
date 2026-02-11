@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from textual.widgets import RichLog, Static
 
 if TYPE_CHECKING:
-    from emdx.models.executions import Execution
+    from emdx.services.execution_service import Execution
 
 logger = logging.getLogger(__name__)
 

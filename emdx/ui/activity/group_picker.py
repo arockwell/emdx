@@ -17,9 +17,9 @@ from textual.widgets import Input, Static
 
 logger = logging.getLogger(__name__)
 
-# Import groups database
+# Import groups service
 try:
-    from emdx.database import groups as groups_db
+    from emdx.services import group_service as groups_db
     HAS_GROUPS = True
 except ImportError:
     groups_db = None

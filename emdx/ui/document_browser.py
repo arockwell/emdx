@@ -17,7 +17,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, Label, RichLog, Static
 
-from emdx.models.tags import get_document_tags
+from emdx.services.tag_service import get_document_tags
 
 from .presenters import DocumentBrowserPresenter
 from .viewmodels import DocumentDetailVM, DocumentListVM
@@ -694,7 +694,7 @@ class DocumentBrowser(HelpMixin, Widget):
             return
 
         try:
-            from emdx.database.documents import save_document
+            from emdx.services.document_service import save_document
             from emdx.utils.git import get_git_project
 
             project = get_git_project()

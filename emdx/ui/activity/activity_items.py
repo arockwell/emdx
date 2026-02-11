@@ -505,7 +505,7 @@ class CascadeRunItem(ActivityItem):
 
     async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
         """Load cascade stage executions as children."""
-        from emdx.database import cascade as cascade_db
+        from emdx.services.cascade_service import get_cascade_run_executions
 
         children = []
 
@@ -517,7 +517,7 @@ class CascadeRunItem(ActivityItem):
             return children
 
         try:
-            executions = cascade_db.get_cascade_run_executions(run_id)
+            executions = get_cascade_run_executions(run_id)
 
             for exec_data in executions:
                 exec_status = exec_data.get("status", "pending")
@@ -658,7 +658,7 @@ class GroupItem(ActivityItem):
 
     async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
         """Load child groups and member documents."""
-        from emdx.database import groups
+        from emdx.services import group_service as groups
 
         children = []
 
@@ -721,7 +721,7 @@ class GroupItem(ActivityItem):
 
     async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
         """Show group summary in preview."""
-        from emdx.database import groups
+        from emdx.services import group_service as groups
 
         if not self.group:
             return "", "PREVIEW"

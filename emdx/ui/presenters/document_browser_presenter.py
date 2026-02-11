@@ -15,19 +15,16 @@ The original presenter handled:
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
-from emdx.database import db
-from emdx.database.documents import (
+from emdx.services.document_service import (
     count_documents,
-    get_children_count,
-    list_documents as db_list_documents,
-)
-from emdx.models.documents import (
     delete_document,
+    get_children_count,
     get_document,
+    list_documents as db_list_documents,
     save_document,
     update_document,
 )
-from emdx.models.tags import (
+from emdx.services.tag_service import (
     add_tags_to_document,
     get_tags_for_documents,
     remove_tags_from_document,
@@ -326,7 +323,7 @@ class DocumentBrowserPresenter:
             return
 
         try:
-            from emdx.database.search import search_documents
+            from emdx.services.document_service import search_documents
             raw_docs = search_documents(query, limit=100, include_archived=self._include_archived)
 
             doc_ids = [doc["id"] for doc in raw_docs]
