@@ -159,7 +159,6 @@ class Context(Enum):
             "ActivityView": cls.ACTIVITY_NORMAL,
             # Document browser and related
             "DocumentBrowser": cls.DOCUMENT_NORMAL,
-            "FullScreenView": cls.MODAL_FULLSCREEN,
             # Agent browser
             "AgentBrowser": cls.AGENT_NORMAL,
             "AgentHistoryModal": cls.MODAL_AGENT,
@@ -171,8 +170,6 @@ class Context(Enum):
             "SelectionTextArea": cls.DOCUMENT_SELECTION,
             # Theme selector
             "ThemeSelectorScreen": cls.MODAL_THEME,
-            # Delete confirmation
-            "DeleteConfirmScreen": cls.MODAL_DELETE,
             # Agent modals
             "CreateAgentModal": cls.MODAL_AGENT_CREATE,
             "EditAgentModal": cls.MODAL_AGENT_EDIT,

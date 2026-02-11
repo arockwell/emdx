@@ -45,27 +45,3 @@ def sparkline(values: List[float], width: Optional[int] = None) -> str:
         result += BLOCKS[idx]
 
     return result
-
-
-def sparkline_with_labels(
-    values: List[float],
-    labels: Optional[List[str]] = None,
-) -> str:
-    """Generate sparkline with optional labels below.
-
-    Args:
-        values: List of numeric values
-        labels: Optional labels (e.g., day names)
-
-    Returns:
-        Multi-line string with sparkline and labels
-    """
-    spark = sparkline(values)
-
-    if not labels:
-        return spark
-
-    # Truncate labels to 1 char each
-    label_line = "".join(l[0] if l else " " for l in labels[: len(values)])
-
-    return f"{spark}\n{label_line}"
