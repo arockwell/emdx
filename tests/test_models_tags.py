@@ -17,19 +17,18 @@ def clean_tags_tables(isolate_test_database):
     """Clean up tags-related tables before and after each test."""
     from emdx.database.connection import db_connection
 
-    with db_connection.get_connection() as conn:
-        conn.execute("DELETE FROM document_tags")
-        conn.execute("DELETE FROM tags")
-        conn.execute("DELETE FROM documents")
-        conn.commit()
+    def _clean():
+        with db_connection.get_connection() as conn:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("DELETE FROM document_tags")
+            conn.execute("DELETE FROM tags")
+            conn.execute("DELETE FROM documents")
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.commit()
 
+    _clean()
     yield
-
-    with db_connection.get_connection() as conn:
-        conn.execute("DELETE FROM document_tags")
-        conn.execute("DELETE FROM tags")
-        conn.execute("DELETE FROM documents")
-        conn.commit()
+    _clean()
 
 
 def _create_document(title="Test Doc", content="Test content", project=None):
