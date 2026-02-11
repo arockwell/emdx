@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-02-11
+
+### 🚀 Major Features
+
+#### `emdx delegate` consolidation — one command to rule them all (#427)
+- Merged `emdx agent`, `emdx run`, and `emdx each` into the single `emdx delegate` command
+- All execution modes now live under delegate: parallel tasks, sequential `--chain` pipelines, dynamic discovery with `--each`/`--do`, PR creation with `--pr`, and worktree isolation with `--worktree`
+- Removed three command modules (~1,200 lines), simplifying the CLI surface from 6 execution commands to 1
+- Updated CLAUDE.md decision tree and docs to reflect the unified interface
+
+#### Claude Code agents and slash commands (#424)
+- Added three reusable agents under `.claude/agents/`: `bug-hunter`, `release-notes`, `synthesis-reviewer`
+- Added six slash commands under `.claude/commands/`: `/audit`, `/fix-chain`, `/gameplan-review`, `/pr-check`, `/release`, `/tui-test`
+- Added `uv` install instructions to README alongside pip and poetry
+
+### 🔧 Improvements
+
+#### Codebase audit — dead code removal and +213 tests (#425)
+- Deleted dead TUI components: `sparkline.py`, `document_viewer.py`, plus remnants of the `each` module
+- Expanded CLI docs (`docs/cli-api.md`) with full command reference for delegate, cascade, and workflow systems
+- Added 1,011-line tag model test suite and 1,724-line workflow database test suite
+
+#### Database and executor refactors (#422, #423)
+- Eliminated duplicate SQL in `SQLiteDatabase` by extracting shared query builders
+- Extracted execution strategies from monolithic `executor.py` into dedicated strategy classes
+
+### 🐛 Bug Fixes
+- **delegate**: Fix `NameError` crashing synthesis when running parallel delegate tasks (#421)
+
 ## [0.12.0] - 2026-02-10
 
 ### 🚀 Major Features
@@ -509,6 +538,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.14.0]: https://github.com/arockwell/emdx/compare/v0.12.0...v0.14.0
 [0.12.0]: https://github.com/arockwell/emdx/compare/v0.10.0...v0.12.0
 [0.10.0]: https://github.com/arockwell/emdx/compare/v0.8.0...v0.10.0
 [0.8.0]: https://github.com/arockwell/emdx/compare/v0.7.0...v0.8.0
