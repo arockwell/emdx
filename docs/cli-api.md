@@ -167,10 +167,77 @@ emdx retag "old-word-tag" "gameplan"
 emdx retag "todo" "active"
 ```
 
+### **emdx merge-tags**
+Merge multiple tags into a single target tag.
+
+```bash
+# Merge several tags into one
+emdx merge-tags "old-tag1" "old-tag2" --into "new-tag"
+
+# Skip confirmation prompt
+emdx merge-tags "todo" "task" --into "active" --force
+```
+
+**Options:**
+- `--into, -i TEXT` - Target tag to merge into (required)
+- `--force, -f` - Skip confirmation
+
+### **emdx batch**
+Batch auto-tag multiple documents using content analysis.
+
+```bash
+# Dry run: preview what would be tagged (default)
+emdx batch
+
+# Actually apply auto-tags
+emdx batch --execute
+
+# Only process untagged documents (default)
+emdx batch --untagged
+
+# Process all documents including already-tagged
+emdx batch --all
+
+# Filter by project
+emdx batch --project myapp --execute
+
+# Custom confidence threshold and max tags
+emdx batch --confidence 0.8 --max-tags 2 --execute
+
+# Limit number of documents to process
+emdx batch --limit 50 --execute
+```
+
+**Options:**
+- `--untagged/--all` - Only process untagged documents (default: untagged only)
+- `--project, -p TEXT` - Filter by project
+- `--confidence, -c FLOAT` - Minimum confidence threshold (default: 0.7)
+- `--max-tags, -m INTEGER` - Maximum tags per document (default: 3)
+- `--dry-run/--execute` - Preview or execute tagging (default: dry run)
+- `--limit, -l INTEGER` - Maximum documents to process
+
 ## ⚡ **Execution Management**
 
 ### **emdx exec**
 Manage and monitor command executions.
+
+#### **emdx exec \<doc_id\>**
+Execute a document with Claude (shortcut for `emdx claude execute`).
+
+```bash
+# Execute document in background (default)
+emdx exec 42
+
+# Execute in foreground
+emdx exec 42 --foreground
+
+# Execute with specific tools
+emdx exec 42 --tools "Read,Write,Bash"
+```
+
+**Options:**
+- `--background/--foreground` - Run in background (default) or foreground
+- `--tools, -t TEXT` - Comma-separated list of allowed tools
 
 #### **emdx exec list**
 List recent executions.
@@ -200,6 +267,32 @@ emdx exec show 42 --full
 emdx exec logs 42
 
 # Follow logs (alias for show -f)
+emdx exec tail 42
+```
+
+#### **emdx exec logs**
+Show only the logs for an execution (no metadata header).
+
+```bash
+# Show last 50 lines of logs
+emdx exec logs 42
+
+# Follow log output
+emdx exec logs 42 --follow
+
+# Show specific number of lines
+emdx exec logs 42 --lines 100
+```
+
+**Options:**
+- `--follow, -f` - Follow log output
+- `--lines, -n INTEGER` - Number of lines to show (default: 50)
+
+#### **emdx exec tail**
+Follow the log of a running execution (alias for `exec show -f`).
+
+```bash
+# Follow execution logs in real-time
 emdx exec tail 42
 ```
 
@@ -440,6 +533,49 @@ emdx workflow run task_parallel -t "Task 1" -t "Task 2" --worktree
 - `--background/--foreground` - Run mode
 - `--worktree/--no-worktree` - Git isolation
 
+### **emdx workflow create**
+Create a new custom workflow.
+
+```bash
+# Create a minimal single-stage workflow
+emdx workflow create my-workflow --display-name "My Workflow"
+
+# Create with description and category
+emdx workflow create security-audit \
+  --display-name "Security Audit" \
+  --description "Multi-stage security analysis" \
+  --category analysis
+
+# Create from a JSON definition file
+emdx workflow create complex-flow \
+  --display-name "Complex Flow" \
+  --file workflow-def.json
+```
+
+**Options:**
+- `--display-name, -n TEXT` - Display name (required)
+- `--description, -d TEXT` - Workflow description
+- `--category, -c TEXT` - Category: `analysis`, `planning`, `implementation`, `review`, `custom` (default: custom)
+- `--file, -f TEXT` - Load full definition from JSON file (stages, variables)
+
+### **emdx workflow delete**
+Delete or deactivate a workflow.
+
+```bash
+# Soft delete (deactivate)
+emdx workflow delete my-workflow
+
+# Permanently delete
+emdx workflow delete my-workflow --hard
+
+# Skip confirmation
+emdx workflow delete my-workflow --yes
+```
+
+**Options:**
+- `--hard` - Permanently delete (cannot be undone)
+- `--yes, -y` - Skip confirmation
+
 ### **emdx workflow runs**
 List workflow runs.
 
@@ -454,6 +590,76 @@ emdx workflow runs --status completed
 # Show run details
 emdx workflow status 123
 ```
+
+### **emdx workflow presets**
+List presets for a workflow or all workflows.
+
+```bash
+# List all presets across all workflows
+emdx workflow presets
+
+# List presets for a specific workflow
+emdx workflow presets task_parallel
+```
+
+### **emdx workflow preset**
+Manage workflow presets (saved variable configurations).
+
+#### **Create a preset**
+
+```bash
+# Create a preset with variables
+emdx workflow preset create task_parallel security_audit --var topic=Security --var depth=deep
+
+# Create with description
+emdx workflow preset create task_parallel perf_check --var topic=Performance --desc "Performance analysis preset"
+
+# Set as default preset for the workflow
+emdx workflow preset create task_parallel default_config --var topic=General --default
+```
+
+#### **Show preset details**
+
+```bash
+emdx workflow preset show task_parallel security_audit
+```
+
+#### **Update a preset**
+
+```bash
+# Add or update variables (merged with existing)
+emdx workflow preset update task_parallel security_audit --var depth=shallow
+
+# Update description
+emdx workflow preset update task_parallel security_audit --desc "Updated description"
+```
+
+#### **Delete a preset**
+
+```bash
+# Delete with confirmation
+emdx workflow preset delete task_parallel security_audit
+
+# Skip confirmation
+emdx workflow preset delete task_parallel security_audit --yes
+```
+
+#### **Create from a run**
+
+```bash
+# Save the variables from a previous run as a preset
+emdx workflow preset from-run task_parallel my_preset --run 223
+
+# With custom description
+emdx workflow preset from-run task_parallel my_preset --run 223 --desc "From successful run"
+```
+
+**Options (for all preset actions):**
+- `--var, -v TEXT` - Variables as key=value pairs (can be repeated)
+- `--desc TEXT` - Preset description
+- `--default` - Set as default preset for the workflow
+- `--run, -r INTEGER` - Run ID (for `from-run` action)
+- `--yes, -y` - Skip confirmation (for `delete` action)
 
 ## 🔄 **Lifecycle Management**
 
@@ -470,6 +676,27 @@ emdx lifecycle track 42
 # Show lifecycle statistics
 emdx lifecycle stats
 ```
+
+#### **emdx lifecycle auto-detect**
+Auto-detect and suggest lifecycle transitions based on document state.
+
+```bash
+# Dry run: show suggested transitions without applying
+emdx lifecycle auto-detect
+
+# Apply all suggested transitions
+emdx lifecycle auto-detect --apply
+
+# Filter suggestions by project
+emdx lifecycle auto-detect --project myapp
+
+# Apply transitions for a specific project
+emdx lifecycle auto-detect --apply --project myapp
+```
+
+**Options:**
+- `--apply, -a` - Apply suggested transitions (default: dry run only)
+- `--project, -p TEXT` - Filter by project
 
 ## 🧹 **Maintenance Commands**
 
@@ -824,6 +1051,33 @@ emdx gist gist-list
 echo "content" | emdx save --title "Share Me" --secret --copy
 ```
 
+### **emdx gdoc**
+Export documents to Google Docs.
+
+#### **emdx gdoc-auth**
+Authenticate with Google via interactive OAuth flow.
+
+```bash
+# Start Google OAuth authentication
+emdx gdoc-auth
+```
+
+Opens a browser window for Google OAuth authentication. Requires OAuth credentials to be configured at the expected credentials file path.
+
+#### **emdx gdoc-list**
+List all Google Docs created from EMDX documents.
+
+```bash
+# List all exported Google Docs
+emdx gdoc-list
+
+# Filter by project
+emdx gdoc-list --project myapp
+```
+
+**Options:**
+- `--project TEXT` - Filter by project
+
 ## 📧 **Mail** (`emdx mail`)
 
 Agent-to-agent communication via GitHub Issues. See [Mail System](mail.md) for full documentation.
@@ -892,6 +1146,213 @@ Show mail configuration and unread count.
 emdx mail status
 ```
 
+## ⚔️ **Swarm Execution** (`emdx swarm`)
+
+Parallel agent execution with k3d isolation. Run multiple Claude agents in parallel, each in isolated k3d pods with their own git worktrees.
+
+### **emdx swarm run**
+Run multiple tasks in parallel with isolated agents.
+
+```bash
+# Run 3 tasks in parallel
+emdx swarm run "Fix lint errors" "Add tests" "Document API"
+
+# With synthesis to combine outputs
+emdx swarm run --synthesize "Analyze auth" "Analyze api" "Analyze db"
+
+# Discover tasks from a command
+emdx swarm run --from "emdx find --tags bug,active"
+
+# Local mode (no k3d, just parallel subprocesses)
+emdx swarm run --local "task1" "task2"
+
+# Control concurrency and timeout
+emdx swarm run -j 4 --timeout 900 "task1" "task2" "task3" "task4"
+
+# Add tags to output documents
+emdx swarm run --tags "analysis,security" "check auth" "check api"
+
+# Verbose output
+emdx swarm run --verbose "task1" "task2"
+```
+
+**Options:**
+- `--from, -f TEXT` - Shell command that outputs tasks (one per line)
+- `--synthesize, -s` - Combine results into a synthesis document
+- `--jobs, -j INTEGER` - Maximum concurrent agents (default: 6)
+- `--local, -l` - Run locally without k3d (parallel subprocesses)
+- `--tags, -t TEXT` - Tags for output documents (comma-separated)
+- `--timeout INTEGER` - Timeout per task in seconds (default: 600)
+- `--memory, -m TEXT` - Memory per agent pod (default: 3Gi)
+- `--verbose, -v` - Show detailed output
+
+### **emdx swarm status**
+Show current swarm/cluster status including running, pending, completed, and failed agents.
+
+```bash
+emdx swarm status
+```
+
+### **emdx swarm logs**
+View logs from agent pods.
+
+```bash
+# Show logs from all pods
+emdx swarm logs
+
+# Show logs from a specific pod
+emdx swarm logs my-pod-name
+
+# Follow log output
+emdx swarm logs my-pod-name --follow
+```
+
+**Options:**
+- `--follow, -f` - Follow log output
+
+### **emdx swarm cleanup**
+Delete completed and failed agent pods.
+
+```bash
+emdx swarm cleanup
+```
+
+### **emdx swarm cluster**
+Manage the k3d cluster for swarm execution.
+
+#### **emdx swarm cluster start**
+Start (or create) the battlestation cluster.
+
+```bash
+emdx swarm cluster start
+```
+
+#### **emdx swarm cluster stop**
+Stop the cluster (preserves state for later restart).
+
+```bash
+emdx swarm cluster stop
+```
+
+#### **emdx swarm cluster delete**
+Delete the cluster entirely.
+
+```bash
+# Delete with confirmation
+emdx swarm cluster delete
+
+# Skip confirmation
+emdx swarm cluster delete --force
+```
+
+**Options:**
+- `--force, -f` - Skip confirmation
+
+#### **emdx swarm cluster status**
+Show whether the cluster exists and is running.
+
+```bash
+emdx swarm cluster status
+```
+
+---
+
+## ⌨️ **Keybinding Management** (`emdx keybindings`)
+
+Manage and inspect TUI keybindings, detect conflicts, and configure custom keybindings.
+
+### **emdx keybindings**
+Show a summary of all keybindings and any conflicts.
+
+```bash
+# Show summary (default)
+emdx keybindings
+
+# List all keybindings
+emdx keybindings --list
+
+# Show keybinding conflicts
+emdx keybindings --conflicts
+
+# Filter by context (e.g., document:normal)
+emdx keybindings --list --context document:normal
+
+# Output as JSON
+emdx keybindings --json
+```
+
+**Options:**
+- `--list, -l` - List all keybindings
+- `--conflicts, -c` - Show keybinding conflicts
+- `--context TEXT` - Filter by context (e.g., `document:normal`)
+- `--json, -j` - Output as JSON
+
+### **emdx keybindings init**
+Create an example keybindings configuration file.
+
+```bash
+emdx keybindings init
+```
+
+Creates a config file at the default keybindings config path if one does not already exist.
+
+### **emdx keybindings contexts**
+List all available keybinding contexts, grouped by prefix.
+
+```bash
+emdx keybindings contexts
+```
+
+---
+
+## 🤖 **Claude Document Execution** (`emdx claude`)
+
+Execute EMDX documents with Claude Code. The `emdx claude` subcommands provide direct document execution and environment management.
+
+### **emdx claude check-env**
+Check if the execution environment is properly configured.
+
+```bash
+# Basic environment check
+emdx claude check-env
+
+# Verbose mode with PATH details
+emdx claude check-env --verbose
+```
+
+**Options:**
+- `--verbose, -v` - Show detailed environment info
+
+Checks for: Python version, Claude Code installation, Git, EMDX CLI, and PATH configuration.
+
+### **emdx claude execute**
+Execute a document with Claude Code.
+
+```bash
+# Execute in background with smart context-aware mode (default)
+emdx claude execute 42
+
+# Execute in background
+emdx claude execute 42 --background
+
+# Execute with specific tools
+emdx claude execute 42 --tools "Read,Write,Bash"
+
+# Disable smart context-aware execution
+emdx claude execute 42 --no-smart
+
+# Use an existing execution ID from the database
+emdx claude execute 42 --exec-id 100
+```
+
+**Options:**
+- `--background, -b` - Run in background
+- `--tools, -t TEXT` - Comma-separated list of allowed tools
+- `--smart/--no-smart` - Use smart context-aware execution (default: smart)
+- `--exec-id INTEGER` - Use existing execution ID from database
+
+---
+
 ## ⚙️ **Configuration**
 
 ### **Environment Variables**
@@ -915,7 +1376,7 @@ export EMDX_SAFE_MODE=1
 emdx cascade add "idea"  # Will show: Command 'cascade' is disabled in safe mode.
 
 # Or set per-command
-EMDX_SAFE_MODE=1 emdx run "task"  # Will show disabled message
+EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 ```
 
 **Disabled commands in safe mode:**
@@ -995,259 +1456,137 @@ emdx find --tags "gameplan" --project "myproject"
 
 ---
 
-## 🚀 Quick Task Execution
+## 📡 Delegate — One-Shot AI Execution (`emdx delegate`)
 
-The `emdx run` command is the first rung on EMDX's "execution ladder" - the fastest way to run tasks.
+`emdx delegate` is the **single command for all one-shot AI execution**. It handles single tasks, parallel execution, sequential chains, PR creation, worktree isolation, and document context — all in one command.
 
 **The Execution Ladder:**
 | Level | Command | Use When |
 |-------|---------|----------|
-| 1 | `emdx run` | Quick one-off or parallel tasks |
-| 2 | `emdx each` | Reusable "for each X, do Y" patterns |
-| 3 | `emdx workflow` | Complex multi-stage workflows |
-| 4 | `emdx cascade` | Ideas → code through stages |
-
-Start with `emdx run`. Graduate down only when you need more power.
+| 1 | `emdx delegate` | All one-shot AI execution |
+| 2 | `emdx workflow` | Complex multi-stage workflows |
+| 3 | `emdx cascade` | Ideas → code through stages |
 
 ### Basic Usage
 
 ```bash
-# Run a single task
-emdx run "analyze the auth module"
+# Single task
+emdx delegate "analyze the auth module"
 
-# Run multiple tasks in parallel
-emdx run "task1" "task2" "task3"
+# Multiple tasks in parallel
+emdx delegate "task1" "task2" "task3"
 
-# Run document IDs as tasks (content becomes the task)
-emdx run 5350 5351 5352
-
-# Add synthesis to combine outputs
-emdx run --synthesize "analyze" "review" "plan"
+# Parallel with synthesis
+emdx delegate --synthesize "analyze" "review" "plan"
 
 # Control concurrency
-emdx run -j 3 "task1" "task2" "task3" "task4" "task5"
+emdx delegate -j 3 "task1" "task2" "task3" "task4" "task5"
 
-# Set a title for the run (shows in Activity view)
-emdx run -T "Auth Analysis" "check login" "check logout"
+# Set a title
+emdx delegate -T "Auth Analysis" "check login" "check logout"
 ```
 
-### Dynamic Task Discovery
+### Document Context
 
-Discover tasks at runtime using shell commands:
+Use a saved document as input context for tasks:
 
 ```bash
-# Discover from git branches
-emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
+# Use doc as context with a task
+emdx delegate --doc 42 "implement the plan described here"
 
-# Discover from PR list
-emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{item}}"
+# Execute a doc directly (no extra prompt needed)
+emdx delegate --doc 42
 
-# Discover from file patterns
-emdx run -d "fd -e py -d 1 src/" -t "Analyze {{item}}"
+# Doc context with multiple parallel tasks
+emdx delegate --doc 42 "check for bugs" "review tests" "check docs"
 ```
 
-**Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
+### Sequential Chains
+
+Run tasks sequentially where each step receives the previous step's output:
+
+```bash
+# Three-step pipeline
+emdx delegate --chain "analyze the auth module" "create an implementation plan" "implement the plan"
+
+# Chain with PR creation (only last step creates PR)
+emdx delegate --chain --pr "analyze the issue" "implement the fix"
+
+# Chain with document context
+emdx delegate --doc 42 --chain "analyze" "implement"
+```
+
+### PR Creation
+
+Instruct the agent to create a PR after making code changes:
+
+```bash
+# Single task with PR
+emdx delegate --pr "fix the auth bug"
+
+# With worktree isolation (recommended for PRs)
+emdx delegate --worktree --pr "fix the null pointer in auth"
+
+# From a document with PR
+emdx delegate --doc 123 --pr "implement this plan"
+```
+
+### Worktree Isolation
+
+Run tasks in an isolated git worktree for clean environments:
+
+```bash
+# Single task in worktree
+emdx delegate --worktree "fix X"
+
+# Worktree with PR (worktree kept for the PR branch)
+emdx delegate --worktree --pr "fix X"
+
+# Chain in worktree (all steps share same worktree)
+emdx delegate --worktree --chain "analyze" "fix" "test"
+```
+
+### Dynamic Discovery
+
+Discover items at runtime via a shell command, then process each in parallel:
+
+```bash
+# Review all Python files
+emdx delegate --each "fd -e py src/" --do "Review {{item}} for security issues"
+
+# Process all feature branches
+emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
+
+# Combine with explicit tasks
+emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the README"
+```
 
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--title` | `-T` | Title for this run (shows in Activity) |
-| `--jobs` | `-j`, `-P` | Max parallel tasks (default: auto) |
-| `--synthesize` | `-s` | Combine outputs with synthesis stage |
-| `--discover` | `-d` | Shell command to discover tasks |
-| `--template` | `-t` | Template for discovered tasks (use `{{item}}`) |
-| `--worktree` | `-w` | Create isolated git worktree (recommended for code fixes) |
+| `--tags` | `-t` | Tags to apply to outputs (comma-separated) |
+| `--title` | `-T` | Title for output document(s) |
+| `--synthesize` | `-s` | Combine parallel outputs with synthesis |
+| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--model` | `-m` | Override default model |
+| `--quiet` | `-q` | Suppress metadata on stderr |
+| `--doc` | `-d` | Document ID to use as input context |
+| `--pr` | | Instruct agent to create a PR after code changes |
+| `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | | Base branch for worktree (default: main) |
+| `--chain` | | Run tasks sequentially, piping output forward |
+| `--each` | | Shell command to discover items (one per line) |
+| `--do` | | Template for each discovered item (use `{{item}}`) |
 
-### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
+**Note:** `--chain` and `--synthesize` are mutually exclusive. `--each` requires `--do`.
 
-| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|--------------------------|-------------------------|----------------------------|
-| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
-| Simple task lists | Need tracked output | Same operation on many items | Need iterative or adversarial modes |
-| One-off execution | Human or AI caller | Save commands for future use | Custom stage configurations |
-| Just want tasks done fast | Consistent metadata | "For each X, do Y" patterns | Need detailed run monitoring |
+### Output Format
 
----
+- **stdout**: Full content of the result (for reading inline)
+- **stderr**: `doc_id:XXXX tokens:N cost:$X.XX duration:Xs`
 
-## 🤖 Sub-Agent Execution (`emdx agent`)
-
-Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata.
-
-Works the same whether called by a human or another AI agent.
-
-### Basic Usage
-
-```bash
-# Run an agent with tags
-emdx agent "Analyze the auth module for security issues" --tags analysis,security
-
-# With custom title and group
-emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
-
-# Verbose mode to see output in real-time
-emdx agent "Deep dive on caching strategy" -t analysis -v
-
-# Have the agent create a PR if it makes code changes
-emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
-```
-
-### How It Works
-
-1. Takes your prompt and appends instructions telling the agent how to save its output
-2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
-3. Runs Claude Code and streams output to a log file
-4. Extracts the created document ID and prints `doc_id:123` for easy parsing
-
-### Options Reference
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--tags` | `-t` | Tags to apply (comma-separated or multiple flags) |
-| `--title` | `-T` | Title for the output document |
-| `--group` | `-g` | Group ID to add output to |
-| `--group-role` | | Role in group (default: `exploration`) |
-| `--verbose` | `-v` | Show agent output in real-time |
-| `--pr` | | Instruct agent to create a PR if it makes code changes |
-| `--timeout` | | Timeout in seconds (default: 300 / 5 minutes) |
-
-### Use Cases
-
-- **Humans**: Kick off analysis tasks with proper tagging and grouping
-- **AI agents**: Spawn sub-agents that save results to EMDX with consistent metadata
-- **Workflows**: Ensure outputs from any source are tracked the same way
-
-### Parsing Output
-
-The command prints `doc_id:123` on completion for easy parsing:
-
-```bash
-# Capture the document ID
-output=$(emdx agent "Analyze X" -t analysis)
-doc_id=$(echo "$output" | grep "^doc_id:" | cut -d: -f2)
-echo "Created document: $doc_id"
-```
-
----
-
-## 🔁 Reusable Parallel Commands (`emdx each`)
-
-Create saved commands that discover items and process them in parallel. Think of it as "for each item from this command, do this action."
-
-### Why `emdx each`?
-
-Ever find yourself running the same parallel discovery task repeatedly?
-
-```bash
-# Tedious to retype every time
-emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{item}}, resolve conflicts"
-```
-
-Save it once, run it forever:
-
-```bash
-# Create once
-emdx each create fix-conflicts \
-  --from "gh pr list ... | jq ..." \
-  --do "Merge main into {{item}}, resolve conflicts"
-
-# Run anytime
-emdx each run fix-conflicts
-```
-
-### Creating Commands
-
-```bash
-emdx each create <name> --from <command> --do <prompt> [options]
-```
-
-**Options:**
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--from` | | Shell command that outputs items (one per line) |
-| `--do` | | What to do with each `{{item}}` |
-| `--parallel` | `-j` | Max concurrent (default: 3) |
-| `--synthesize` | `-s` | Combine results (optional custom prompt) |
-| `--description` | | Human description |
-
-**Note:** Worktree isolation is auto-enabled when `--from` involves git/gh commands.
-
-### Examples
-
-```bash
-# Fix PRs with merge conflicts
-emdx each create fix-conflicts \
-  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
-  --do "Merge origin/main into {{item}}, resolve conflicts, push"
-
-# Review all open PRs
-emdx each create review-prs \
-  --from "gh pr list --json number --jq '.[].number'" \
-  --do "Review PR #{{item}} for bugs and security issues" \
-  --synthesize "Summarize findings across all {{count}} PRs"
-
-# Analyze Python files
-emdx each create audit-python \
-  --from "fd -e py -d 2 src/" \
-  --do "Review {{item}} for code quality" \
-  -j 5 \
-  --synthesize
-```
-
-### Running Commands
-
-```bash
-# Run with saved discovery
-emdx each run fix-conflicts
-
-# Override with explicit items
-emdx each run fix-conflicts feature-auth feature-payments
-
-# Override discovery command
-emdx each run fix-conflicts --from "echo 'specific-branch'"
-```
-
-### One-Off Execution (Without Saving)
-
-```bash
-# Discover and process without saving
-emdx each --from "fd -e md docs/" --do "Check {{item}} for broken links"
-```
-
-### Managing Commands
-
-```bash
-# List all saved commands
-emdx each list
-
-# Show command details
-emdx each show fix-conflicts
-
-# Edit in $EDITOR
-emdx each edit fix-conflicts
-
-# Delete
-emdx each delete fix-conflicts
-```
-
-### Variables
-
-**In `--do` prompt:**
-
-| Variable | Description |
-|----------|-------------|
-| `{{item}}` | Current item from discovery |
-| `{{index}}` | Zero-based index |
-| `{{total}}` | Total items discovered |
-
-**In `--synthesize` prompt:**
-
-| Variable | Description |
-|----------|-------------|
-| `{{outputs}}` | All outputs combined |
-| `{{count}}` | Number processed |
+For chains: `doc_ids:101,102,103 chain_final:103`
 
 ---
 
@@ -1545,6 +1884,19 @@ emdx task run 1 --dry-run
 emdx task manual 1
 emdx task manual 1 --note "Completed via separate PR"
 ```
+
+### Marking Tasks as Manually Complete
+
+```bash
+# Mark task as manually completed
+emdx task manual 1
+
+# Mark with a note explaining how it was completed
+emdx task manual 1 --note "Completed via separate PR"
+```
+
+**Options:**
+- `--note, -n TEXT` - Completion note
 
 ### Task Execution History
 

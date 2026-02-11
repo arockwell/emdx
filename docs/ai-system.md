@@ -208,7 +208,7 @@ emdx view 123
 # Analyze documents found by semantic search
 emdx ai search "tech debt" --limit 10
 # Note the IDs, then use in workflow
-emdx run 5350 5351 5352
+emdx delegate 5350 5351 5352
 ```
 
 ### Periodic Maintenance

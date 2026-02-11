@@ -193,9 +193,7 @@ class TestCLIIntegration:
         lazy_modules = [
             'emdx.commands.workflows',
             'emdx.commands.cascade',
-            'emdx.commands.each',
-            'emdx.commands.run',
-            'emdx.commands.agent',
+            'emdx.commands.delegate',
             'emdx.commands.claude_execute',
             'emdx.commands.ask',
             'emdx.commands.similarity',

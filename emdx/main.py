@@ -4,7 +4,7 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (workflow, cascade, each, ai, gui) are only imported when
+fast. Heavy commands (workflow, cascade, delegate, ai, gui) are only imported when
 actually invoked.
 """
 
@@ -25,9 +25,6 @@ LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
     "workflow": "emdx.commands.workflows:app",
     "cascade": "emdx.commands.cascade:app",
-    "each": "emdx.commands.each:app",
-    "run": "emdx.commands.run:run",
-    "agent": "emdx.commands.agent:agent",
     "delegate": "emdx.commands.delegate:app",
     "claude": "emdx.commands.claude_execute:app",
     # AI features (imports ML libraries, can be slow)
@@ -43,10 +40,7 @@ LAZY_SUBCOMMANDS = {
 LAZY_HELP = {
     "workflow": "Manage and run multi-stage workflows",
     "cascade": "Cascade ideas through stages to working code",
-    "each": "Create and run reusable parallel commands",
-    "run": "Quick task execution (parallel, worktree isolation)",
-    "agent": "Run Claude sub-agent with EMDX tracking",
-    "delegate": "Delegate tasks to parallel agents (stdout-friendly)",
+    "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
     "claude": "Execute documents with Claude",
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
@@ -58,14 +52,14 @@ LAZY_HELP = {
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (cascade, run, each, agent, workflow, claude).
+    Safe mode disables execution commands (cascade, delegate, workflow, claude).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "run", "each", "agent", "delegate", "workflow", "claude"}
+UNSAFE_COMMANDS = {"cascade", "delegate", "workflow", "claude"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -228,7 +222,7 @@ def main(
     ),
     safe_mode: bool = typer.Option(
         False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (cascade, run, each, agent, workflow, claude)"
+        help="Disable execution commands (cascade, delegate, workflow, claude)"
     ),
 ):
     """
@@ -239,7 +233,7 @@ def main(
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (cascade, run, each, agent, workflow, claude). Useful for read-only access
+    (cascade, delegate, workflow, claude). Useful for read-only access
     or when external execution should be prevented.
 
     Examples:
