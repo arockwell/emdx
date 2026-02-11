@@ -196,27 +196,30 @@ class ActivityTree(Tree[ActivityItem]):
         icon = self._get_icon(item)
         time_str = format_time_ago(item.timestamp)
         suffix = self._get_suffix(item)
-        full_title = f"{item.title}{suffix}"
+        # Collapse newlines — titles with \n break single-line row rendering
+        # because Rich counts \n as 0 cells but the text after \n is invisible
+        clean_title = item.title.replace("\n", " ").replace("  ", " ").strip()
+        full_title = f"{clean_title}{suffix}"
         id_str = self._get_id_str(item)
 
-        # Styles
+        # Styles — layer decorations on top of `style` so cursor background shows through
         title_style = style + Style(bold=True) if (
             item.item_type == "workflow" and item.status == "running"
         ) else style
-        icon_style = Style(color="red") if item.status == "failed" else style
-        dim = Style(dim=True)
+        icon_style = style + Style(color="red") if item.status == "failed" else style
+        dim_style = style + Style(dim=True)
 
         # Build left portion: expand + "icon "
         left = Text()
-        left.append(expand, style=base_style)
+        left.append(expand, style=style)
         left.append(f"{icon} ", style=icon_style)
         left_cells = left.cell_len
 
         # Build right portion: " time  #id" (always present for alignment)
         right = Text()
-        right.append(f" {time_str:>{TIME_WIDTH}}", style=dim)
+        right.append(f" {time_str:>{TIME_WIDTH}}", style=dim_style)
         if id_str:
-            right.append(f" {id_str:>{ID_WIDTH}}", style=dim)
+            right.append(f" {id_str:>{ID_WIDTH}}", style=dim_style)
         right_cells = right.cell_len
 
         # Title fills the remaining space exactly
@@ -241,8 +244,9 @@ class ActivityTree(Tree[ActivityItem]):
         text.append_text(left)
         text.append(title_display, style=title_style)
         if pad_needed > 0:
-            text.append(" " * pad_needed, style=base_style)
+            text.append(" " * pad_needed, style=style)
         text.append_text(right)
+
         return text
 
     def _add_children(

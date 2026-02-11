@@ -29,9 +29,9 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
-import asyncio
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional
 
@@ -39,7 +39,6 @@ import typer
 
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
-from ..workflows.executor import workflow_executor
 
 
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
@@ -196,57 +195,70 @@ def _run_parallel(
     pr: bool = False,
     base_branch: str = "main",
 ) -> List[int]:
-    """Run multiple tasks in parallel via workflow executor. Returns doc_ids."""
-    variables = {"tasks": tasks}
-    if title:
-        variables["task_title"] = title
-    if jobs:
-        variables["_max_concurrent_override"] = jobs
-    if model:
-        variables["_model"] = model
+    """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
+    max_workers = min(jobs or len(tasks), len(tasks), 10)
 
-    # When --pr is set, append PR instruction to each task prompt
-    if pr:
-        variables["tasks"] = [t + PR_INSTRUCTION for t in tasks]
+    # Results indexed by task position to preserve order
+    results: dict[int, Optional[int]] = {}
 
-    result = asyncio.run(
-        workflow_executor.execute_workflow(
-            workflow_name_or_id="task_parallel",
-            input_variables=variables,
+    def run_task(idx: int, task: str) -> tuple[int, Optional[int]]:
+        task_title = title or f"Delegate: {task[:60]}"
+        if len(tasks) > 1:
+            task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
+        return idx, _run_single(
+            prompt=task,
+            tags=tags,
+            title=task_title,
+            model=model,
+            quiet=True,  # suppress per-task metadata in parallel mode
+            pr=pr,
         )
-    )
 
-    if result.status != "completed":
-        sys.stderr.write(f"delegate: parallel run failed: {result.error_message}\n")
-        raise typer.Exit(1)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(run_task, i, task): i
+            for i, task in enumerate(tasks)
+        }
+        for future in as_completed(futures):
+            idx, doc_id = future.result()
+            results[idx] = doc_id
 
-    doc_ids = []
-    if result.output_doc_ids:
-        # output_doc_ids is a JSON string of IDs
-        import json
-
-        if isinstance(result.output_doc_ids, str):
-            try:
-                doc_ids = json.loads(result.output_doc_ids)
-            except json.JSONDecodeError:
-                doc_ids = [int(x.strip()) for x in result.output_doc_ids.split(",") if x.strip()]
-        elif isinstance(result.output_doc_ids, list):
-            doc_ids = result.output_doc_ids
+    # Collect doc_ids in original task order
+    doc_ids = [results[i] for i in range(len(tasks)) if results.get(i) is not None]
 
     if not doc_ids:
         sys.stderr.write("delegate: parallel run completed but no output documents found\n")
         raise typer.Exit(1)
 
     if synthesize and len(doc_ids) > 1:
-        # The last doc is the synthesis when task_parallel has synthesis enabled
-        # Print just the synthesis
-        _print_doc_content(doc_ids[-1])
+        # Run a synthesis task that combines all outputs
+        combined = []
+        for i, doc_id in enumerate(doc_ids):
+            doc = get_document(doc_id)
+            if doc:
+                combined.append(f"## Task {i + 1}: {tasks[i][:80]}\n\n{doc.get('content', '')}")
+
+        synthesis_prompt = (
+            "Synthesize the following task results into a unified summary. "
+            "Highlight key findings, common themes, and actionable items.\n\n"
+            + "\n\n---\n\n".join(combined)
+        )
+        synthesis_title = title or "Delegate synthesis"
+        synthesis_id = _run_single(
+            prompt=synthesis_prompt,
+            tags=tags,
+            title=f"{synthesis_title} [synthesis]",
+            model=model,
+            quiet=True,
+        )
+        if synthesis_id:
+            doc_ids.append(synthesis_id)
+            # Print just the synthesis
+            _print_doc_content(synthesis_id)
         if not quiet:
             sys.stderr.write(
                 f"doc_ids:{','.join(str(d) for d in doc_ids)} "
-                f"synthesis_id:{doc_ids[-1]} "
-                f"tokens:{result.total_tokens_used} "
-                f"duration:{(result.total_execution_time_ms or 0) / 1000:.1f}s\n"
+                f"synthesis_id:{synthesis_id or 'none'}\n"
             )
     else:
         # Print each result separated
@@ -257,9 +269,7 @@ def _run_parallel(
 
         if not quiet:
             sys.stderr.write(
-                f"doc_ids:{','.join(str(d) for d in doc_ids)} "
-                f"tokens:{result.total_tokens_used} "
-                f"duration:{(result.total_execution_time_ms or 0) / 1000:.1f}s\n"
+                f"doc_ids:{','.join(str(d) for d in doc_ids)}\n"
             )
 
     return doc_ids
