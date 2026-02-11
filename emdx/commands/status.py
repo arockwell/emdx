@@ -26,47 +26,53 @@ from ..models.tasks import (
 console = Console()
 
 
-def _relative_time(timestamp_str: Optional[str]) -> str:
+def _parse_timestamp(value) -> Optional[datetime]:
+    """Parse a timestamp that may be a datetime, string, or None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
+    except Exception:
+        return None
+
+
+def _relative_time(timestamp) -> str:
     """Format a timestamp as relative time (e.g. '4m ago', '2h ago')."""
-    if not timestamp_str:
+    dt = _parse_timestamp(timestamp)
+    if dt is None:
         return ""
-    try:
-        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-        age = datetime.now() - dt.replace(tzinfo=None)
-        if age.total_seconds() < 0:
-            return "just now"
-        if age < timedelta(minutes=1):
-            return f"{int(age.total_seconds())}s ago"
-        if age < timedelta(hours=1):
-            return f"{int(age.total_seconds() / 60)}m ago"
-        if age < timedelta(days=1):
-            return f"{int(age.total_seconds() / 3600)}h ago"
-        return f"{age.days}d ago"
-    except Exception:
-        return ""
+    age = datetime.utcnow() - dt
+    if age.total_seconds() < 0:
+        return "just now"
+    if age < timedelta(minutes=1):
+        return f"{int(age.total_seconds())}s ago"
+    if age < timedelta(hours=1):
+        return f"{int(age.total_seconds() / 60)}m ago"
+    if age < timedelta(days=1):
+        return f"{int(age.total_seconds() / 3600)}h ago"
+    return f"{age.days}d ago"
 
 
-def _running_duration(timestamp_str: Optional[str]) -> str:
+def _running_duration(timestamp) -> str:
     """Format how long something has been running."""
-    if not timestamp_str:
+    dt = _parse_timestamp(timestamp)
+    if dt is None:
         return ""
-    try:
-        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-        age = datetime.now() - dt.replace(tzinfo=None)
-        if age.total_seconds() < 0:
-            return "0s"
-        total_secs = int(age.total_seconds())
-        if total_secs < 60:
-            return f"{total_secs}s"
-        mins = total_secs // 60
-        secs = total_secs % 60
-        if mins < 60:
-            return f"{mins}m{secs:02d}s"
-        hours = mins // 60
-        mins = mins % 60
-        return f"{hours}h{mins:02d}m"
-    except Exception:
-        return ""
+    age = datetime.utcnow() - dt
+    if age.total_seconds() < 0:
+        return "0s"
+    total_secs = int(age.total_seconds())
+    if total_secs < 60:
+        return f"{total_secs}s"
+    mins = total_secs // 60
+    secs = total_secs % 60
+    if mins < 60:
+        return f"{mins}m{secs:02d}s"
+    hours = mins // 60
+    mins = mins % 60
+    return f"{hours}h{mins:02d}m"
 
 
 def _show_active_tasks():
