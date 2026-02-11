@@ -915,7 +915,7 @@ export EMDX_SAFE_MODE=1
 emdx cascade add "idea"  # Will show: Command 'cascade' is disabled in safe mode.
 
 # Or set per-command
-EMDX_SAFE_MODE=1 emdx run "task"  # Will show disabled message
+EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 ```
 
 **Disabled commands in safe mode:**
@@ -995,259 +995,137 @@ emdx find --tags "gameplan" --project "myproject"
 
 ---
 
-## 🚀 Quick Task Execution
+## 📡 Delegate — One-Shot AI Execution (`emdx delegate`)
 
-The `emdx run` command is the first rung on EMDX's "execution ladder" - the fastest way to run tasks.
+`emdx delegate` is the **single command for all one-shot AI execution**. It handles single tasks, parallel execution, sequential chains, PR creation, worktree isolation, and document context — all in one command.
 
 **The Execution Ladder:**
 | Level | Command | Use When |
 |-------|---------|----------|
-| 1 | `emdx run` | Quick one-off or parallel tasks |
-| 2 | `emdx each` | Reusable "for each X, do Y" patterns |
-| 3 | `emdx workflow` | Complex multi-stage workflows |
-| 4 | `emdx cascade` | Ideas → code through stages |
-
-Start with `emdx run`. Graduate down only when you need more power.
+| 1 | `emdx delegate` | All one-shot AI execution |
+| 2 | `emdx workflow` | Complex multi-stage workflows |
+| 3 | `emdx cascade` | Ideas → code through stages |
 
 ### Basic Usage
 
 ```bash
-# Run a single task
-emdx run "analyze the auth module"
+# Single task
+emdx delegate "analyze the auth module"
 
-# Run multiple tasks in parallel
-emdx run "task1" "task2" "task3"
+# Multiple tasks in parallel
+emdx delegate "task1" "task2" "task3"
 
-# Run document IDs as tasks (content becomes the task)
-emdx run 5350 5351 5352
-
-# Add synthesis to combine outputs
-emdx run --synthesize "analyze" "review" "plan"
+# Parallel with synthesis
+emdx delegate --synthesize "analyze" "review" "plan"
 
 # Control concurrency
-emdx run -j 3 "task1" "task2" "task3" "task4" "task5"
+emdx delegate -j 3 "task1" "task2" "task3" "task4" "task5"
 
-# Set a title for the run (shows in Activity view)
-emdx run -T "Auth Analysis" "check login" "check logout"
+# Set a title
+emdx delegate -T "Auth Analysis" "check login" "check logout"
 ```
 
-### Dynamic Task Discovery
+### Document Context
 
-Discover tasks at runtime using shell commands:
+Use a saved document as input context for tasks:
 
 ```bash
-# Discover from git branches
-emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
+# Use doc as context with a task
+emdx delegate --doc 42 "implement the plan described here"
 
-# Discover from PR list
-emdx run -d "gh pr list --json number -q '.[].number'" -t "Fix PR #{{item}}"
+# Execute a doc directly (no extra prompt needed)
+emdx delegate --doc 42
 
-# Discover from file patterns
-emdx run -d "fd -e py -d 1 src/" -t "Analyze {{item}}"
+# Doc context with multiple parallel tasks
+emdx delegate --doc 42 "check for bugs" "review tests" "check docs"
 ```
 
-**Tip:** If you find yourself reusing the same discovery + template pattern repeatedly, consider graduating to `emdx each` which saves these patterns as named commands. See the [emdx each](#-reusable-parallel-commands-emdx-each) section below.
+### Sequential Chains
+
+Run tasks sequentially where each step receives the previous step's output:
+
+```bash
+# Three-step pipeline
+emdx delegate --chain "analyze the auth module" "create an implementation plan" "implement the plan"
+
+# Chain with PR creation (only last step creates PR)
+emdx delegate --chain --pr "analyze the issue" "implement the fix"
+
+# Chain with document context
+emdx delegate --doc 42 --chain "analyze" "implement"
+```
+
+### PR Creation
+
+Instruct the agent to create a PR after making code changes:
+
+```bash
+# Single task with PR
+emdx delegate --pr "fix the auth bug"
+
+# With worktree isolation (recommended for PRs)
+emdx delegate --worktree --pr "fix the null pointer in auth"
+
+# From a document with PR
+emdx delegate --doc 123 --pr "implement this plan"
+```
+
+### Worktree Isolation
+
+Run tasks in an isolated git worktree for clean environments:
+
+```bash
+# Single task in worktree
+emdx delegate --worktree "fix X"
+
+# Worktree with PR (worktree kept for the PR branch)
+emdx delegate --worktree --pr "fix X"
+
+# Chain in worktree (all steps share same worktree)
+emdx delegate --worktree --chain "analyze" "fix" "test"
+```
+
+### Dynamic Discovery
+
+Discover items at runtime via a shell command, then process each in parallel:
+
+```bash
+# Review all Python files
+emdx delegate --each "fd -e py src/" --do "Review {{item}} for security issues"
+
+# Process all feature branches
+emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
+
+# Combine with explicit tasks
+emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the README"
+```
 
 ### Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--title` | `-T` | Title for this run (shows in Activity) |
-| `--jobs` | `-j`, `-P` | Max parallel tasks (default: auto) |
-| `--synthesize` | `-s` | Combine outputs with synthesis stage |
-| `--discover` | `-d` | Shell command to discover tasks |
-| `--template` | `-t` | Template for discovered tasks (use `{{item}}`) |
-| `--worktree` | `-w` | Create isolated git worktree (recommended for code fixes) |
+| `--tags` | `-t` | Tags to apply to outputs (comma-separated) |
+| `--title` | `-T` | Title for output document(s) |
+| `--synthesize` | `-s` | Combine parallel outputs with synthesis |
+| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--model` | `-m` | Override default model |
+| `--quiet` | `-q` | Suppress metadata on stderr |
+| `--doc` | `-d` | Document ID to use as input context |
+| `--pr` | | Instruct agent to create a PR after code changes |
+| `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | | Base branch for worktree (default: main) |
+| `--chain` | | Run tasks sequentially, piping output forward |
+| `--each` | | Shell command to discover items (one per line) |
+| `--do` | | Template for each discovered item (use `{{item}}`) |
 
-### When to Use `emdx run` vs `emdx agent` vs `emdx each` vs `emdx workflow`
+**Note:** `--chain` and `--synthesize` are mutually exclusive. `--each` requires `--do`.
 
-| Use `emdx run` when... | Use `emdx agent` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------|--------------------------|-------------------------|----------------------------|
-| Quick parallel tasks | Single sub-agent task | Reusable discovery+action | Complex multi-stage workflows |
-| Simple task lists | Need tracked output | Same operation on many items | Need iterative or adversarial modes |
-| One-off execution | Human or AI caller | Save commands for future use | Custom stage configurations |
-| Just want tasks done fast | Consistent metadata | "For each X, do Y" patterns | Need detailed run monitoring |
+### Output Format
 
----
+- **stdout**: Full content of the result (for reading inline)
+- **stderr**: `doc_id:XXXX tokens:N cost:$X.XX duration:Xs`
 
-## 🤖 Sub-Agent Execution (`emdx agent`)
-
-Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata.
-
-Works the same whether called by a human or another AI agent.
-
-### Basic Usage
-
-```bash
-# Run an agent with tags
-emdx agent "Analyze the auth module for security issues" --tags analysis,security
-
-# With custom title and group
-emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
-
-# Verbose mode to see output in real-time
-emdx agent "Deep dive on caching strategy" -t analysis -v
-
-# Have the agent create a PR if it makes code changes
-emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
-```
-
-### How It Works
-
-1. Takes your prompt and appends instructions telling the agent how to save its output
-2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
-3. Runs Claude Code and streams output to a log file
-4. Extracts the created document ID and prints `doc_id:123` for easy parsing
-
-### Options Reference
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--tags` | `-t` | Tags to apply (comma-separated or multiple flags) |
-| `--title` | `-T` | Title for the output document |
-| `--group` | `-g` | Group ID to add output to |
-| `--group-role` | | Role in group (default: `exploration`) |
-| `--verbose` | `-v` | Show agent output in real-time |
-| `--pr` | | Instruct agent to create a PR if it makes code changes |
-| `--timeout` | | Timeout in seconds (default: 300 / 5 minutes) |
-
-### Use Cases
-
-- **Humans**: Kick off analysis tasks with proper tagging and grouping
-- **AI agents**: Spawn sub-agents that save results to EMDX with consistent metadata
-- **Workflows**: Ensure outputs from any source are tracked the same way
-
-### Parsing Output
-
-The command prints `doc_id:123` on completion for easy parsing:
-
-```bash
-# Capture the document ID
-output=$(emdx agent "Analyze X" -t analysis)
-doc_id=$(echo "$output" | grep "^doc_id:" | cut -d: -f2)
-echo "Created document: $doc_id"
-```
-
----
-
-## 🔁 Reusable Parallel Commands (`emdx each`)
-
-Create saved commands that discover items and process them in parallel. Think of it as "for each item from this command, do this action."
-
-### Why `emdx each`?
-
-Ever find yourself running the same parallel discovery task repeatedly?
-
-```bash
-# Tedious to retype every time
-emdx run -d "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" -t "Merge main into {{item}}, resolve conflicts"
-```
-
-Save it once, run it forever:
-
-```bash
-# Create once
-emdx each create fix-conflicts \
-  --from "gh pr list ... | jq ..." \
-  --do "Merge main into {{item}}, resolve conflicts"
-
-# Run anytime
-emdx each run fix-conflicts
-```
-
-### Creating Commands
-
-```bash
-emdx each create <name> --from <command> --do <prompt> [options]
-```
-
-**Options:**
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--from` | | Shell command that outputs items (one per line) |
-| `--do` | | What to do with each `{{item}}` |
-| `--parallel` | `-j` | Max concurrent (default: 3) |
-| `--synthesize` | `-s` | Combine results (optional custom prompt) |
-| `--description` | | Human description |
-
-**Note:** Worktree isolation is auto-enabled when `--from` involves git/gh commands.
-
-### Examples
-
-```bash
-# Fix PRs with merge conflicts
-emdx each create fix-conflicts \
-  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
-  --do "Merge origin/main into {{item}}, resolve conflicts, push"
-
-# Review all open PRs
-emdx each create review-prs \
-  --from "gh pr list --json number --jq '.[].number'" \
-  --do "Review PR #{{item}} for bugs and security issues" \
-  --synthesize "Summarize findings across all {{count}} PRs"
-
-# Analyze Python files
-emdx each create audit-python \
-  --from "fd -e py -d 2 src/" \
-  --do "Review {{item}} for code quality" \
-  -j 5 \
-  --synthesize
-```
-
-### Running Commands
-
-```bash
-# Run with saved discovery
-emdx each run fix-conflicts
-
-# Override with explicit items
-emdx each run fix-conflicts feature-auth feature-payments
-
-# Override discovery command
-emdx each run fix-conflicts --from "echo 'specific-branch'"
-```
-
-### One-Off Execution (Without Saving)
-
-```bash
-# Discover and process without saving
-emdx each --from "fd -e md docs/" --do "Check {{item}} for broken links"
-```
-
-### Managing Commands
-
-```bash
-# List all saved commands
-emdx each list
-
-# Show command details
-emdx each show fix-conflicts
-
-# Edit in $EDITOR
-emdx each edit fix-conflicts
-
-# Delete
-emdx each delete fix-conflicts
-```
-
-### Variables
-
-**In `--do` prompt:**
-
-| Variable | Description |
-|----------|-------------|
-| `{{item}}` | Current item from discovery |
-| `{{index}}` | Zero-based index |
-| `{{total}}` | Total items discovered |
-
-**In `--synthesize` prompt:**
-
-| Variable | Description |
-|----------|-------------|
-| `{{outputs}}` | All outputs combined |
-| `{{count}}` | Number processed |
+For chains: `doc_ids:101,102,103 chain_final:103`
 
 ---
 
