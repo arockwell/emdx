@@ -196,7 +196,10 @@ class ActivityTree(Tree[ActivityItem]):
         icon = self._get_icon(item)
         time_str = format_time_ago(item.timestamp)
         suffix = self._get_suffix(item)
-        full_title = f"{item.title}{suffix}"
+        # Collapse newlines — titles with \n break single-line row rendering
+        # because Rich counts \n as 0 cells but the text after \n is invisible
+        clean_title = item.title.replace("\n", " ").replace("  ", " ").strip()
+        full_title = f"{clean_title}{suffix}"
         id_str = self._get_id_str(item)
 
         # Styles — layer decorations on top of `style` so cursor background shows through
@@ -243,6 +246,7 @@ class ActivityTree(Tree[ActivityItem]):
         if pad_needed > 0:
             text.append(" " * pad_needed, style=style)
         text.append_text(right)
+
         return text
 
     def _add_children(
