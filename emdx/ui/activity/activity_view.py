@@ -339,8 +339,8 @@ class ActivityView(HelpMixin, Widget):
         await self.load_data()
         tree.focus()
 
-        # Start refresh timer
-        self.set_interval(1.0, self._refresh_data)
+        # Start refresh timer (sync wrapper dispatches to async via run_worker)
+        self.set_interval(1.0, self._refresh_data_tick)
 
     async def load_data(self, update_preview: bool = True) -> None:
         """Load activity data."""
@@ -1244,6 +1244,12 @@ class ActivityView(HelpMixin, Widget):
             notif.update(self.notification_text)
         else:
             notif.remove_class("visible")
+
+    def _refresh_data_tick(self) -> None:
+        """Sync callback for set_interval — dispatches to async refresh."""
+        if self._refresh_in_progress:
+            return
+        self.run_worker(self._refresh_data(), exclusive=True, group="refresh")
 
     async def _refresh_data(self) -> None:
         """Periodic refresh of data.
