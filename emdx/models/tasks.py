@@ -21,21 +21,40 @@ def create_task(
     gameplan_id: Optional[int] = None,
     project: Optional[str] = None,
     depends_on: Optional[list[int]] = None,
+    # Delegate activity tracking fields
+    prompt: Optional[str] = None,
+    task_type: str = "single",
+    execution_id: Optional[int] = None,
+    output_doc_id: Optional[int] = None,
+    source_doc_id: Optional[int] = None,
+    parent_task_id: Optional[int] = None,
+    seq: Optional[int] = None,
+    retry_of: Optional[int] = None,
+    tags: Optional[str] = None,
+    status: str = "open",
 ) -> int:
     """Create task and return its ID."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO tasks (title, description, priority, gameplan_id, project)
-            VALUES (?, ?, ?, ?, ?)
-        """, (title, description, priority, gameplan_id, project))
+            INSERT INTO tasks (
+                title, description, priority, gameplan_id, project, status,
+                prompt, type, execution_id, output_doc_id, source_doc_id,
+                parent_task_id, seq, retry_of, tags
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            title, description, priority, gameplan_id, project, status,
+            prompt, task_type, execution_id, output_doc_id, source_doc_id,
+            parent_task_id, seq, retry_of, tags,
+        ))
         task_id = cursor.lastrowid
 
         if depends_on:
             # Use executemany for efficient batch insertion
             cursor.executemany(
                 "INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)",
-                [(task_id, dep_id) for dep_id in depends_on]
+                [(task_id, dep_id) for dep_id in depends_on if dep_id is not None]
             )
         conn.commit()
         return task_id
@@ -237,3 +256,53 @@ def get_gameplan_stats(gameplan_id: int) -> dict[str, Any]:
         total = sum(by_status.values())
         done = by_status.get('done', 0)
         return {'total': total, 'done': done, 'by_status': by_status}
+
+
+def get_active_delegate_tasks() -> list[dict[str, Any]]:
+    """Get active top-level delegate tasks with child progress counts."""
+    with db.get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT t.*,
+                (SELECT COUNT(*) FROM tasks c WHERE c.parent_task_id = t.id) as child_count,
+                (SELECT COUNT(*) FROM tasks c WHERE c.parent_task_id = t.id AND c.status = 'done') as children_done,
+                (SELECT COUNT(*) FROM tasks c WHERE c.parent_task_id = t.id AND c.status = 'active') as children_active
+            FROM tasks t
+            WHERE t.status = 'active' AND t.parent_task_id IS NULL
+            ORDER BY t.updated_at DESC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_children(parent_task_id: int) -> list[dict[str, Any]]:
+    """Get child tasks ordered by seq."""
+    with db.get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT * FROM tasks
+            WHERE parent_task_id = ?
+            ORDER BY seq, id
+        """, (parent_task_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_recent_completed_tasks(limit: int = 10) -> list[dict[str, Any]]:
+    """Get recent completed top-level tasks."""
+    with db.get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT * FROM tasks
+            WHERE status = 'done' AND parent_task_id IS NULL
+            ORDER BY completed_at DESC
+            LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_failed_tasks(limit: int = 5) -> list[dict[str, Any]]:
+    """Get recent failed top-level tasks."""
+    with db.get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT * FROM tasks
+            WHERE status = 'failed' AND parent_task_id IS NULL
+            ORDER BY updated_at DESC
+            LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
