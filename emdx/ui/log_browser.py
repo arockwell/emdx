@@ -22,7 +22,7 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widget import Widget
 from textual.widgets import DataTable, RichLog, Static
 
-from emdx.models.executions import Execution, get_recent_executions
+from emdx.services.execution_service import Execution, get_recent_executions
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
 from .log_browser_display import LogBrowserDisplayMixin

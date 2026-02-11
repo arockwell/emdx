@@ -35,18 +35,28 @@ except ImportError:
     HAS_WORKFLOWS = False
 
 try:
-    from emdx.database import documents as doc_db
-    from emdx.database import groups as groups_db
-    from emdx.database.documents import (
+    from emdx.services.document_service import (
+        get_children as doc_get_children,
+        get_document as doc_get_document,
         get_workflow_document_ids,
         list_non_workflow_documents,
+    )
+    from emdx.services.group_service import (
+        get_all_grouped_document_ids,
+        get_child_groups,
+        get_recursive_doc_count,
+        list_groups as groups_list_groups,
     )
 
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
-    doc_db = None
-    groups_db = None
+    doc_get_children = None
+    doc_get_document = None
+    get_all_grouped_document_ids = None
+    get_child_groups = None
+    get_recursive_doc_count = None
+    groups_list_groups = None
     HAS_DOCS = False
     HAS_GROUPS = False
 
@@ -86,13 +96,13 @@ class ActivityDataLoader:
             except Exception as e:
                 logger.debug(f"Could not cleanup zombies: {e}")
 
-        if HAS_GROUPS and groups_db:
+        if HAS_GROUPS:
             items.extend(await self._load_groups())
 
         if HAS_WORKFLOWS and wf_db:
             items.extend(await self._load_workflows())
 
-        if HAS_DOCS and doc_db:
+        if HAS_DOCS:
             items.extend(await self._load_direct_saves())
 
         items.extend(await self._load_cascade_executions())
@@ -215,7 +225,7 @@ class ActivityDataLoader:
                 timestamp = started
                 if output_doc_id and run.get("status") in ("completed", "failed") and HAS_DOCS:
                     try:
-                        out_doc = doc_db.get_document(output_doc_id)
+                        out_doc = doc_get_document(output_doc_id)
                         if out_doc:
                             doc_created = parse_datetime(out_doc.get("created_at"))
                             if doc_created:
@@ -264,7 +274,7 @@ class ActivityDataLoader:
         """Load document groups into typed GroupItem instances."""
         items: List[ActivityItem] = []
         try:
-            top_groups = groups_db.list_groups(top_level_only=True)
+            top_groups = groups_list_groups(top_level_only=True)
         except Exception as e:
             logger.error(f"Error listing groups: {e}", exc_info=True)
             return items
@@ -273,8 +283,8 @@ class ActivityDataLoader:
             try:
                 group_id = group["id"]
                 created = parse_datetime(group.get("created_at")) or datetime.now()
-                child_groups = groups_db.get_child_groups(group_id)
-                doc_count = groups_db.get_recursive_doc_count(group_id)
+                child_groups = get_child_groups(group_id)
+                doc_count = get_recursive_doc_count(group_id)
 
                 item = GroupItem(
                     item_id=group_id,
@@ -299,9 +309,9 @@ class ActivityDataLoader:
         """Load documents not created by workflows or added to groups."""
         items: List[ActivityItem] = []
         grouped_doc_ids: Set[int] = set()
-        if HAS_GROUPS and groups_db:
+        if HAS_GROUPS:
             try:
-                grouped_doc_ids = groups_db.get_all_grouped_document_ids()
+                grouped_doc_ids = get_all_grouped_document_ids()
             except Exception as e:
                 logger.debug(f"Error getting grouped doc IDs: {e}")
 
@@ -319,7 +329,7 @@ class ActivityDataLoader:
 
                 created = doc.get("created_at")
                 title = doc.get("title", "")
-                children_docs = doc_db.get_children(doc_id, include_archived=False)
+                children_docs = doc_get_children(doc_id, include_archived=False)
                 has_children = len(children_docs) > 0
 
                 item = DocumentItem(
@@ -343,14 +353,14 @@ class ActivityDataLoader:
         items: List[ActivityItem] = []
         try:
             from emdx.database.connection import db_connection
-            from emdx.database import cascade as cascade_db
+            from emdx.services.cascade_service import list_cascade_runs, get_cascade_run_executions
 
             cutoff = datetime.now() - timedelta(days=7)
             seen_run_ids: Set[int] = set()
 
             # Load cascade runs (grouped view)
             try:
-                runs = cascade_db.list_cascade_runs(limit=30)
+                runs = list_cascade_runs(limit=30)
 
                 for run in runs:
                     run_id = run.get("id")
@@ -360,7 +370,7 @@ class ActivityDataLoader:
                     seen_run_ids.add(run_id)
                     timestamp = parse_datetime(run.get("started_at")) or datetime.now()
                     title = run.get("initial_doc_title", f"Cascade Run #{run_id}")[:40]
-                    executions = cascade_db.get_cascade_run_executions(run_id)
+                    executions = get_cascade_run_executions(run_id)
 
                     item = CascadeRunItem(
                         item_id=run_id,
@@ -432,32 +442,21 @@ class ActivityDataLoader:
         """Load standalone agent executions."""
         items: List[ActivityItem] = []
         try:
-            from emdx.database.connection import db_connection
+            from emdx.services.execution_service import get_agent_executions
 
             cutoff = datetime.now() - timedelta(days=7)
-
-            with db_connection.get_connection() as conn:
-                cursor = conn.execute(
-                    """
-                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at,
-                           e.completed_at, e.log_file, e.exit_code, e.working_dir
-                    FROM executions e
-                    WHERE e.started_at > ?
-                      AND (e.doc_title LIKE 'Agent:%' OR e.doc_title LIKE 'Delegate:%')
-                      AND e.cascade_run_id IS NULL
-                      AND NOT EXISTS (
-                          SELECT 1 FROM workflow_individual_runs ir
-                          WHERE ir.agent_execution_id = e.id
-                      )
-                    ORDER BY e.started_at DESC
-                    LIMIT 30
-                    """,
-                    (cutoff.isoformat(),),
-                )
-                rows = cursor.fetchall()
+            rows = get_agent_executions(cutoff.isoformat(), limit=30)
 
             for row in rows:
-                exec_id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir = row
+                exec_id = row["id"]
+                doc_id = row["doc_id"]
+                doc_title = row["doc_title"]
+                status = row["status"]
+                started_at = row["started_at"]
+                completed_at = row["completed_at"]
+                log_file = row["log_file"]
+                exit_code = row["exit_code"]
+                working_dir = row["working_dir"]
 
                 timestamp = parse_datetime(started_at) or datetime.now()
 

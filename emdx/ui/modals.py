@@ -352,7 +352,7 @@ class DocumentPreviewModal(ModalScreen):
     async def on_mount(self) -> None:
         """Load and display the document."""
         try:
-            from emdx.models.documents import get_document
+            from emdx.services.document_service import get_document
 
             self._doc_data = get_document(self.doc_id)
             if not self._doc_data:
