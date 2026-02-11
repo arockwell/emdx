@@ -148,11 +148,6 @@ LIGHT_THEMES: set[str] = {
 }
 
 
-def get_all_themes() -> dict[str, Theme]:
-    """Get all custom EMDX themes."""
-    return EMDX_THEMES.copy()
-
-
 def register_all_themes(app) -> None:
     """
     Register all custom EMDX themes with the app.
