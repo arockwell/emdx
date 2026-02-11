@@ -170,38 +170,36 @@ the conversation ends.
                               │
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
-   Need results        Multiple tasks?      Idea → working code?
-   inline?                   │                     │
-        │                     ▼                     ▼
-        ▼              emdx delegate           emdx cascade add
-   emdx delegate       (parallel, stdout)     (autonomous pipeline)
-   (stdout + saved)          │
-        │              Need to repeat?
-        │                     │
-        │              ┌──────┴──────┐
-        │              ▼             ▼
-        │          One-off?    Save for later?
-        │              │             │
-        │              ▼             ▼
-        │        emdx delegate  emdx each create
-        │
-   Need worktree     Need custom stages
-   isolation?        or adversarial mode?
-        │                     │
-        ▼                     ▼
-   emdx run --worktree   emdx workflow run
+   One-shot AI task?   Idea → working code?   Custom multi-stage?
+        │                     │                     │
+        ▼                     ▼                     ▼
+   emdx delegate         emdx cascade add     emdx workflow run
+   (all execution)       (autonomous pipeline)
 ```
+
+**`emdx delegate` handles everything:**
+- Single task: `emdx delegate "analyze auth"`
+- Parallel: `emdx delegate "t1" "t2" "t3"`
+- Doc IDs as tasks: `emdx delegate 42 43 44`
+- Sequential pipeline: `emdx delegate --chain "analyze" "plan" "implement"`
+- Dynamic discovery: `emdx delegate --each "fd -e py src/" --do "Review {{item}}"`
+- With doc context: `emdx delegate --doc 42 "implement this"`
+- With PR creation: `emdx delegate --pr "fix the bug"`
+- With worktree isolation: `emdx delegate --worktree "fix X"`
+- Combined: `emdx delegate --doc 42 --pr --worktree --chain "analyze" "implement"`
 
 ### Quick Reference
 
 | Situation | Command | Why |
 |-----------|---------|-----|
-| Delegating research/analysis (read results inline) | `emdx delegate "task" --tags ...` | Results on stdout + persisted |
+| Research/analysis (read results inline) | `emdx delegate "task" --tags ...` | Results on stdout + persisted |
 | Parallel research (2-10 tasks) | `emdx delegate "t1" "t2" "t3"` | Parallel, stdout, persisted |
 | Parallel with combined summary | `emdx delegate --synthesize "t1" "t2"` | Auto-synthesis of results |
-| Same operation on many discovered items | `emdx each --from "discovery" --do "action"` | Discovery + parallel action |
-| Repeatable "for each X do Y" pattern | `emdx each create name --from ... --do ...` | Save it, run it anytime |
-| Parallel code fixes (may touch same files) | `emdx run --worktree "fix1" "fix2"` | Git isolation per task |
+| Sequential pipeline (output chains) | `emdx delegate --chain "analyze" "plan" "implement"` | Each step gets previous output |
+| Dynamic discovery (for each X, do Y) | `emdx delegate --each "fd -e py" --do "Review {{item}}"` | Discovers items, processes each |
+| Use doc as input context | `emdx delegate --doc 42 "implement this"` | Doc content prepended to prompt |
+| Code changes with PR | `emdx delegate --pr "fix the auth bug"` | Agent creates PR automatically |
+| Isolated git environment | `emdx delegate --worktree "fix X"` | Worktree created/cleaned up |
 | Transform an idea to a PR autonomously | `emdx cascade add "idea"` | Full autonomous pipeline |
 | Complex multi-stage with synthesis | `emdx workflow run task_parallel -t ...` | Full workflow system |
 
@@ -221,7 +219,13 @@ emdx delegate "check auth" "review tests" "analyze docs" --synthesize
 **Use worktree isolation when tasks might conflict:**
 ```bash
 # User asks: "Fix these three bugs"
-emdx run --worktree "Fix null pointer in auth" "Fix race condition in cache" "Fix validation bug"
+emdx delegate --worktree "fix X" "fix Y" "fix Z"
+```
+
+**Use chain for multi-step workflows:**
+```bash
+# Analyze, then plan, then implement — each step sees previous output
+emdx delegate --chain "analyze the auth module" "create implementation plan" "implement the plan" --pr
 ```
 
 **Use cascade for ideas that need full implementation:**
@@ -268,6 +272,12 @@ emdx delegate \
   "Scan for hardcoded secrets" \
   --tags security --synthesize
 
+# With document context
+emdx delegate --doc 42 "implement the plan described in this document"
+
+# Sequential pipeline — each step sees previous output
+emdx delegate --chain "analyze the problem" "design a solution" "implement it"
+
 # Quiet mode — just content, no metadata
 emdx delegate -q "quick analysis of error rates"
 ```
@@ -279,12 +289,17 @@ Metadata (doc_id, tokens, cost, duration) prints to stderr. Content prints to st
 When implementing code changes:
 
 ```bash
-# For single implementation tasks with PR
-emdx agent "Implement the feature from doc #123" --tags feature --pr
+# Single implementation with PR
+emdx delegate --pr "fix the auth bug"
 
-# For parallel fixes with individual PRs
-emdx each --from "emdx find --tags bugfix,active | head -5" \
-  --do "Fix {{item}}" --pr
+# Implementation from a doc with PR
+emdx delegate --doc 123 --pr "implement this plan"
+
+# Worktree-isolated fix with PR (worktree kept for the PR branch)
+emdx delegate --worktree --pr "fix the null pointer in auth"
+
+# Multi-step pipeline ending with PR
+emdx delegate --chain --pr "analyze the issue" "implement the fix"
 
 # For idea-to-PR pipeline (fully autonomous)
 emdx cascade add "Add user preferences page"
@@ -343,75 +358,10 @@ Press `4` in the GUI to access the Cascade browser. Navigate with:
 - `s` - Synthesize selected docs
 - `Space` - Toggle selection (for synthesis)
 
-## 🚀 Quick Task Execution (`emdx run`)
+## 📡 Delegate — The Single Execution Command (`emdx delegate`)
 
-The fastest way to run parallel tasks. This is the first rung on EMDX's "execution ladder" - start here and graduate to `emdx each` or `emdx workflow` only when you need more power.
-
-```bash
-# Run a single task
-emdx run "analyze the auth module"
-
-# Run multiple tasks in parallel
-emdx run "analyze auth" "review tests" "check docs"
-
-# With synthesis to combine outputs
-emdx run --synthesize "task1" "task2" "task3"
-
-# Dynamic discovery from shell commands
-emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
-
-# Control concurrency
-emdx run -j 3 "task1" "task2" "task3" "task4"
-
-# With worktree isolation (for parallel code fixes)
-emdx run --worktree "fix X" "fix Y"
-```
-
-For the full execution ladder (run → each → workflow → cascade), see [docs/workflows.md](docs/workflows.md#when-to-use-what).
-
-## 🤖 Sub-Agent Execution (`emdx agent`)
-
-Run Claude Code sub-agents with automatic EMDX tracking. The agent is instructed to save its output with the specified metadata (tags, title, group).
-
-Works the same whether called by a human or another AI agent.
-
-```bash
-# Basic usage - agent saves output with specified tags
-emdx agent "Analyze the auth module for security issues" --tags analysis,security
-
-# With title and group
-emdx agent "Review error handling in api/" -t refactor -T "API Error Review" -g 456
-
-# Verbose mode to see agent output in real-time
-emdx agent "Deep dive on caching strategy" -t analysis -v
-
-# Have the agent create a PR if it makes code changes
-emdx agent "Fix the null pointer bug in auth" -t bugfix --pr
-```
-
-**Options:**
-- `--tags, -t` - Tags to apply to output (comma-separated or multiple flags)
-- `--title, -T` - Title for the output document
-- `--group, -g` - Group ID to add output to
-- `--group-role` - Role in group (default: `exploration`)
-- `--verbose, -v` - Show agent output in real-time
-- `--pr` - Instruct agent to create a PR if it makes code changes
-
-**How it works:**
-1. Takes your prompt and appends instructions telling the agent how to save its output
-2. The agent receives: `echo "OUTPUT" | emdx save --title "..." --tags "..." --group N`
-3. Runs Claude Code and streams output to a log file
-4. Extracts the created document ID and prints `doc_id:123` for easy parsing
-
-**Use cases:**
-- Humans kicking off analysis tasks with proper tracking
-- AI agents spawning sub-agents that need to save results to EMDX
-- Ensuring consistent metadata across human and AI-initiated work
-
-## 📡 Delegate — stdout-friendly parallel execution (`emdx delegate`)
-
-Designed for Claude Code to call via Bash instead of the Task tool. Results
-print to stdout (so Claude reads them inline) AND persist to emdx.
+`emdx delegate` is the **one command for all one-shot AI execution**. Results print to
+stdout (so Claude reads them inline) AND persist to emdx.
 
 ```bash
 # Single task
@@ -422,6 +372,21 @@ emdx delegate "check auth" "review tests" "scan for XSS"
 
 # Parallel with synthesis
 emdx delegate --synthesize "task1" "task2" "task3"
+
+# With document context (prepends doc content to prompt)
+emdx delegate --doc 42 "implement the plan described here"
+
+# Sequential pipeline (each step sees previous output)
+emdx delegate --chain "analyze the problem" "design solution" "implement it"
+
+# With PR creation (agent creates branch + PR)
+emdx delegate --pr "fix the auth bug"
+
+# With worktree isolation (clean git environment)
+emdx delegate --worktree --pr "fix X"
+
+# All flags compose together
+emdx delegate --doc 42 --chain --worktree --pr "analyze" "implement"
 
 # With tags and title
 emdx delegate "deep analysis" --tags analysis,security --title "Security Audit"
@@ -437,64 +402,23 @@ emdx delegate -q "quick analysis"
 - `-j, --jobs` — Max parallel tasks (default: auto)
 - `--model, -m` — Override default model
 - `--quiet, -q` — Suppress metadata on stderr
+- `--doc, -d` — Document ID to use as input context
+- `--pr` — Instruct agent to create a PR after code changes
+- `--worktree, -w` — Run in isolated git worktree
+- `--base-branch` — Base branch for worktree (default: main)
+- `--chain` — Run tasks sequentially, piping output forward
+- `--each` — Shell command to discover items (one per line)
+- `--do` — Template for each discovered item (use `{{item}}`)
 
 **Output format:**
 - stdout: Full content of the result (for Claude to read inline)
 - stderr: `doc_id:XXXX tokens:N cost:$X.XX duration:Xs`
 
-**vs other commands:**
-
-| | `delegate` | `agent` | `run` |
-|---|---|---|---|
-| Content on stdout | Yes | No | No |
-| Persists to emdx | Yes | Yes | Yes |
-| Parallel | Yes | No | Yes |
-| Synthesis | Yes | No | Yes |
-| Designed for | Machine callers | Humans/scripts | Humans/scripts |
-
-## 🔁 Reusable Parallel Commands (`emdx each`)
-
-Create saved commands that discover items and process them in parallel. Perfect for repeatable "for each X, do Y" patterns.
-
-```bash
-# Create a reusable command
-emdx each create fix-conflicts \
-  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
-  --do "Merge origin/main into {{item}}, resolve conflicts, push"
-
-# Run it anytime
-emdx each run fix-conflicts
-
-# One-off execution (without saving)
-emdx each --from "fd -e py src/" --do "Review {{item}} for security issues"
-
-# Manage saved commands
-emdx each list                    # List all saved commands
-emdx each show fix-conflicts      # Show command details
-emdx each edit fix-conflicts      # Edit in $EDITOR
-emdx each delete fix-conflicts    # Delete command
-```
-
-**Key features:**
-- `--from`: Shell command that outputs items (one per line), or `@discovery-name` for built-ins
-- `--do`: What to do with each `{{item}}`
-- `-j`: Max parallel executions (default: 3)
-- `--synthesize`: Combine results at the end
-- `--pr`: Create a PR for each item processed
-- `--pr-single`: Create one combined PR for all items
-- Worktree isolation is auto-enabled for git/gh commands
-
-**Built-in discoveries** (Coming Soon - use shell commands for now):
-```bash
-# Built-in discoveries like @prs-with-conflicts, @python-files are planned
-# For now, use shell commands directly:
-emdx each --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" --do "Fix {{item}}"
-emdx each --from "fd -e py src/" --do "Review {{item}}"
-```
+**Note:** `--chain` and `--synthesize` are mutually exclusive. `--each` requires `--do`.
 
 ## 🔄 Workflow System for Multi-Agent Tasks
 
-When working on tasks that benefit from parallel execution or multiple perspectives, use the workflow system instead of running individual commands.
+For complex multi-stage workflows that go beyond what `delegate` offers, use the workflow system directly.
 
 ### Core Workflows
 
@@ -520,19 +444,16 @@ emdx workflow run parallel_fix \
   -t "Fix exception handling in api/" \
   -t "Remove deprecated function calls" \
   --worktree --base-branch main
-
-# Use document IDs as tasks (from previous analysis)
-emdx workflow run parallel_fix -t 5182 -t 5183 -t 5184 --worktree
 ```
 
 ### When to Use Which Command
 
-| Use `emdx delegate` when... | Use `emdx run` when... | Use `emdx each` when... | Use `emdx workflow` when... |
-|------------------------------|------------------------|-------------------------|----------------------------|
-| Claude Code needs results inline | Worktree isolation needed | Reusable discovery+action | Complex multi-stage workflows |
-| Replacing Task tool sub-agents | Human-facing output | "For each X, do Y" patterns | Need iterative or adversarial modes |
-| Single or parallel research | Code changes in parallel | Save for future use | Custom stage configurations |
-| Want stdout + persistence | Just want tasks done fast | Same operation on many items | Need detailed run monitoring |
+| Use `emdx delegate` when... | Use `emdx workflow` when... | Use `emdx cascade` when... |
+|------------------------------|----------------------------|---------------------------|
+| Any one-shot AI execution | Complex multi-stage workflows | Idea-to-PR autonomous pipeline |
+| Single, parallel, or chain | Need iterative or adversarial modes | Persistent stage tracking |
+| Results on stdout + persistence | Custom stage configurations | Full idea → prompt → plan → code flow |
+| PR creation, worktree, doc context | Need detailed run monitoring | Long-running autonomous work |
 
 For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
 

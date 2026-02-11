@@ -4,24 +4,19 @@ The EMDX workflow system provides powerful orchestration for multi-agent executi
 
 ## When to Use What
 
-EMDX has multiple ways to execute tasks, forming a "complexity ladder":
+EMDX has three execution commands, forming a "complexity ladder":
 
 | Command | Use When | Example |
 |---------|----------|---------|
-| `emdx run "task"` | Single quick task | `emdx run "analyze auth module"` |
-| `emdx run "t1" "t2"` | Multiple parallel tasks | `emdx run "fix X" "fix Y" -j 3` |
-| `emdx each run <name>` | Reusable "for each X, do Y" | `emdx each run fix-conflicts` |
+| `emdx delegate "task"` | All one-shot AI execution | `emdx delegate "analyze auth" --pr` |
 | `emdx workflow run <wf>` | Complex multi-stage workflows | `emdx workflow run deep_analysis` |
 | `emdx cascade` | Ideas → code through stages | `emdx cascade add "idea"` |
 
 ### The Execution Ladder
 
-Think of these tools as rungs on a ladder, from simplest to most powerful:
-
-1. **`emdx run`** - The fastest path. Just describe what you want done. Great for one-off tasks.
-2. **`emdx each`** - When you have a reusable pattern: "for each X from this command, do Y."
-3. **`emdx workflow`** - When you need multi-stage processing, iteration, or adversarial modes.
-4. **`emdx cascade`** - When transforming ideas through stages to working code.
+1. **`emdx delegate`** - The single command for all one-shot execution: single, parallel, chain, PR, worktree.
+2. **`emdx workflow`** - When you need multi-stage processing, iteration, or adversarial modes.
+3. **`emdx cascade`** - When transforming ideas through stages to working code.
 
 Start at the top. Graduate down only when you need more power.
 
@@ -64,8 +59,6 @@ emdx workflow run dynamic_items \
 
 ## Choosing the Right Tool: Decision Flowchart
 
-EMDX offers three ways to run parallel tasks. Use this flowchart to pick the right one:
-
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                 Do you have a task to run?                  │
@@ -73,15 +66,10 @@ EMDX offers three ways to run parallel tasks. Use this flowchart to pick the rig
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│        Is it a one-time or ad-hoc execution?                │
+│         One-shot execution?                                 │
 │                                                             │
-│  YES → Will you run it again with same discovery pattern?   │
-│        │                                                    │
-│        ├─ NO  → Use `emdx run`                              │
-│        │        (Quick parallel tasks, simple task lists)   │
-│        │                                                    │
-│        └─ YES → Use `emdx each`                             │
-│                 (Save discovery + action for reuse)         │
+│  YES → Use `emdx delegate`                                  │
+│         (Single, parallel, chain, PR, worktree, doc ctx)   │
 │                                                             │
 │  NO (Complex/multi-stage) → Use `emdx workflow run`         │
 │     (Iterative, adversarial, multi-stage orchestration)     │
@@ -92,41 +80,37 @@ EMDX offers three ways to run parallel tasks. Use this flowchart to pick the rig
 
 | Scenario | Tool | Example |
 |----------|------|---------|
-| Run 3 analysis tasks right now | `emdx run` | `emdx run "analyze auth" "review tests" "check docs"` |
-| Process all Python files once | `emdx run` | `emdx run -d "fd -e py" -t "Review {{item}}"` |
-| Repeatedly fix merge conflicts | `emdx each` | `emdx each create fix-conflicts --from "..." --do "..."` |
-| For-each pattern you'll reuse | `emdx each` | `emdx each run fix-conflicts` |
+| Run 3 analysis tasks right now | `emdx delegate` | `emdx delegate "analyze auth" "review tests" "check docs"` |
+| Sequential pipeline (output chains) | `emdx delegate` | `emdx delegate --chain "analyze" "plan" "implement"` |
+| Code fix with PR | `emdx delegate` | `emdx delegate --pr "fix the auth bug"` |
+| Use a doc as context | `emdx delegate` | `emdx delegate --doc 42 "implement this"` |
 | Multi-perspective code review | `emdx workflow` | `emdx workflow run parallel_analysis -t "review X"` |
 | Progressive refinement (draft→polish) | `emdx workflow` | `emdx workflow run iterative_refine --doc 123` |
 | Debate-style analysis | `emdx workflow` | `emdx workflow run adversarial_review -t "..." ` |
-| Need synthesis of outputs | Both | `emdx run --synthesize` or workflow with synthesis_prompt |
-| Worktree isolation needed | Both | `emdx workflow run X --worktree` or `emdx each --worktree` |
+| Synthesis of parallel outputs | `emdx delegate` | `emdx delegate --synthesize "t1" "t2" "t3"` |
+| Worktree isolation | `emdx delegate` | `emdx delegate --worktree --pr "fix X"` |
+| Dynamic discovery (for each X, do Y) | `emdx delegate` | `emdx delegate --each "fd -e py" --do "Review {{item}}"` |
 
 ### Detailed Comparison
 
-| Feature | `emdx run` | `emdx each` | `emdx workflow run` |
-|---------|------------|-------------|---------------------|
-| **Purpose** | Quick parallel execution | Reusable discovery+action | Complex orchestration |
-| **Task Source** | CLI arguments or `-d` discovery | Saved `--from` command | CLI `-t` flags or doc ID |
-| **Persistence** | None (one-shot) | Commands saved to DB | Workflows defined in DB |
-| **Execution Modes** | Parallel only | Parallel only | Single, Parallel, Iterative, Adversarial, Dynamic |
-| **Synthesis** | `--synthesize` flag | `--synthesize` flag | `synthesis_prompt` in config |
-| **Variables** | None | None | Full template system |
-| **Stage Chaining** | No | No | Yes (multi-stage pipelines) |
-| **Worktree Isolation** | Auto when needed | `--worktree` flag | `--worktree` flag |
-| **Best For** | Ad-hoc tasks | Repeated patterns | Production workflows |
+| Feature | `emdx delegate` | `emdx workflow run` |
+|---------|-----------------|---------------------|
+| **Purpose** | All one-shot execution | Complex orchestration |
+| **Task Source** | CLI arguments | CLI `-t` flags or doc ID |
+| **Execution Modes** | Single, Parallel, Chain, Discovery | Single, Parallel, Iterative, Adversarial, Dynamic |
+| **Synthesis** | `--synthesize` flag | `synthesis_prompt` in config |
+| **Stage Chaining** | `--chain` flag | Yes (multi-stage pipelines) |
+| **Worktree Isolation** | `--worktree` flag | `--worktree` flag |
+| **PR Creation** | `--pr` flag | No |
+| **Doc Context** | `--doc` flag | `--doc` flag |
+| **Best For** | Ad-hoc tasks, pipelines | Production workflows |
 
 ### When to Graduate
 
-**From `emdx run` to `emdx each`:**
-- You're running the same discovery command repeatedly
-- You want to share a pattern with your team
-- The discovery logic is complex and worth saving
-
-**From `emdx run`/`emdx each` to `emdx workflow`:**
+**From `emdx delegate` to `emdx workflow`:**
 - You need iterative refinement (draft → improve → polish)
 - You want adversarial review (advocate → critic → synthesis)
-- You're chaining multiple stages together
+- You need complex multi-stage orchestration beyond simple chains
 - You want detailed run tracking in the Activity view
 
 ## Core Concept: Execution Patterns vs Runtime Tasks
