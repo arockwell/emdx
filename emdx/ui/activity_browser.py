@@ -63,13 +63,6 @@ class ActivityBrowser(Widget):
             # Fallback: switch to document browser and select the doc
             logger.info(f"Would view document #{event.doc_id}")
 
-    def on_activity_view_workflow_completed(
-        self, event: ActivityView.WorkflowCompleted
-    ) -> None:
-        """Handle workflow completion notification."""
-        # Could trigger app-level notifications here
-        pass
-
     async def action_switch_activity(self) -> None:
         """Already on activity, do nothing."""
         pass
