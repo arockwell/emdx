@@ -107,6 +107,7 @@ from emdx.commands.status import status as status_command
 from emdx.ui.gui import gui as gui_command
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.gist import app as gist_app
+from emdx.commands.dream import dream as dream_command
 
 
 # Create main app with lazy loading support
@@ -167,6 +168,8 @@ app.command(name="status")(status_command)
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
 
+# Add the dream command for KB consolidation
+app.command(name="dream")(dream_command)
 
 
 # =============================================================================
