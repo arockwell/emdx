@@ -15,32 +15,22 @@ EMDX uses the [Textual](https://textual.textualize.io/) framework for its termin
 ```
 EMDXApp (Main Application)
 └── BrowserContainer (Modal Router)
-    ├── DocumentBrowser (Default Mode)
-    │   ├── Header (Title + Status)
-    │   ├── Horizontal Split
-    │   │   ├── DocumentTable (Left 60%)
-    │   │   │   ├── DataTable (Documents)
-    │   │   │   └── Footer (Stats + Actions)
-    │   │   └── RightPanel (Right 40%)
-    │   │       ├── PreviewPanel (Top)
-    │   │       │   ├── RichLog (Content)
-    │   │       │   └── ScrollableContainer
-    │   │       └── DetailsPanel (Bottom)
-    │   │           ├── TagDisplay
-    │   │           ├── MetadataGrid
-    │   │           └── ActionButtons
-    │   └── StatusBar (Global)
-    └── LogBrowser (Press 'l')
-        ├── Header (Execution Info)
-        ├── Horizontal Split
-        │   ├── ExecutionTable (Left 50%)
-        │   │   ├── DataTable (Executions)
-        │   │   └── FilterControls
-        │   └── LogPanel (Right 50%)
-        │       ├── LogViewer (RichLog)
-        │       ├── LiveControls
-        │       └── SearchBox
-        └── StatusBar
+    ├── DocumentBrowser (Default Mode - press 'd')
+    │   ├── DocumentTable (Left)
+    │   ├── PreviewPanel (Right)
+    │   └── StatusBar
+    ├── LogBrowser (Press 'l')
+    │   ├── ExecutionTable (Left)
+    │   └── LogViewer (Right, with live streaming)
+    ├── ActivityView (Press 'a')
+    │   ├── ActivityTree (executions, documents, groups)
+    │   └── ContextPanel (details for selected item)
+    ├── RunBrowser (Press '4' - Cascade)
+    │   ├── Stage columns (idea → prompt → analyzed → planned → done)
+    │   └── ActivityFeed (cascade runs/executions)
+    └── FileBrowser (Press 'f')
+        ├── FileTree (Left)
+        └── FilePreview (Right)
 ```
 
 ## 📱 **Core UI Components**
@@ -155,6 +145,23 @@ class LogBrowser(Widget):
             self.log_stream.subscribe(self.subscriber)
             self.is_live_mode = True
 ```
+
+### **4. ActivityView - Unified Activity Display**
+
+The ActivityView (press `a`) shows a unified tree of recent executions, documents, and groups.
+
+- **Tree-based display** - Hierarchical view with expandable items
+- **Lazy loading** - Children loaded on expand
+- **Multiple item types** - Executions, documents, groups in one view
+- **Refresh** - Press `r` to refresh
+
+### **5. RunBrowser - Cascade Stage Browser**
+
+The RunBrowser (press `4`) shows cascade pipeline stages and runs.
+
+- **Stage navigation** - `h/l` to switch between stages
+- **Document processing** - `p` to process through Claude
+- **Activity feed** - Shows cascade run progress
 
 ## 🎮 **Key Binding System**
 
