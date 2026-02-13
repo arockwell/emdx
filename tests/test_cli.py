@@ -139,10 +139,10 @@ class TestCLIBasics:
 
     def test_trailing_help_for_nested_command(self):
         """Test trailing 'help' works for nested subcommands."""
-        # Test 'emdx task create help' shows task create help (converted to --help)
-        result = runner.invoke(app, ["task", "create", "--help"])
+        # Test 'emdx task add help' shows task add help (converted to --help)
+        result = runner.invoke(app, ["task", "add", "--help"])
         assert result.exit_code == 0
-        assert "create" in result.stdout.lower()
+        assert "add" in result.stdout.lower()
 
 
 class TestTrailingHelpConversion:

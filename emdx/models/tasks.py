@@ -73,8 +73,13 @@ def list_tasks(
     gameplan_id: Optional[int] = None,
     project: Optional[str] = None,
     limit: int = DEFAULT_BROWSE_LIMIT,
+    exclude_delegate: bool = False,
 ) -> list[dict[str, Any]]:
-    """List tasks with filters."""
+    """List tasks with filters.
+
+    Args:
+        exclude_delegate: If True, exclude delegate-created tasks (prompt IS NULL).
+    """
     conditions, params = ["1=1"], []
 
     if status:
@@ -86,6 +91,8 @@ def list_tasks(
     if project:
         conditions.append("project = ?")
         params.append(project)
+    if exclude_delegate:
+        conditions.append("prompt IS NULL")
 
     params.append(limit)
 
@@ -153,14 +160,20 @@ def get_dependents(task_id: int) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_ready_tasks(gameplan_id: Optional[int] = None) -> list[dict[str, Any]]:
-    """Get tasks ready to work (open + all deps done)."""
+def get_ready_tasks(gameplan_id: Optional[int] = None, exclude_delegate: bool = True) -> list[dict[str, Any]]:
+    """Get tasks ready to work (open + all deps done).
+
+    Args:
+        exclude_delegate: If True (default), exclude delegate-created tasks.
+    """
     conditions = ["t.status = 'open'"]
     params = []
 
     if gameplan_id:
         conditions.append("t.gameplan_id = ?")
         params.append(gameplan_id)
+    if exclude_delegate:
+        conditions.append("t.prompt IS NULL")
 
     with db.get_connection() as conn:
         cursor = conn.execute(f"""
