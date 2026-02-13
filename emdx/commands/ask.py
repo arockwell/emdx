@@ -18,9 +18,12 @@ def ask_question(
     question: str = typer.Argument(..., help="Your question"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to search"),
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
+    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    recent: int | None = typer.Option(None, "--recent", "-r", help="Only search docs from last N days"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),
     show_sources: bool = typer.Option(True, "--sources/--no-sources", help="Show source documents"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
+    machine: bool = typer.Option(False, "--machine", "-m", help="Machine-readable output (for Claude)"),
 ):
     """
     Ask a question about your knowledge base.
@@ -31,26 +34,59 @@ def ask_question(
         emdx ai ask "What's our caching strategy?"
         emdx ai ask "How did we solve the auth bug?" --project myapp
         emdx ai ask "What does AUTH-123 involve?"
+        emdx ai ask "What's still TODO?" --tags "active,gameplan"
+        emdx ai ask "What happened recently?" --recent 7
     """
     from ..services.ask_service import AskService
+
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
     service = AskService()
 
     try:
         with console.status("[bold blue]Thinking...", spinner="dots"):
-            result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
+            result = service.ask(
+                question,
+                limit=limit,
+                project=project,
+                tags=tag_list,
+                recent_days=recent,
+                force_keyword=keyword,
+            )
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
+
+    # Machine-readable output for Claude consumption
+    if machine:
+        import sys
+        # Answer first, sources after (optimized for token efficiency)
+        print(result.text)
+        print()
+        if result.source_titles:
+            print("Sources:")
+            for doc_id, title in result.source_titles:
+                print(f"  #{doc_id} \"{title}\"")
+        # Confidence on stderr
+        print(f"confidence:{result.confidence} sources:{len(result.sources)} method:{result.method}", file=sys.stderr)
+        return
 
     # Display answer
     console.print()
     console.print(Panel(result.text, title="Answer", border_style="green"))
 
-    # Display metadata
-    if show_sources and result.sources:
+    # Display confidence indicator
+    confidence_colors = {"high": "green", "medium": "yellow", "low": "red"}
+    confidence_color = confidence_colors.get(result.confidence, "dim")
+    console.print(f"[{confidence_color}]Confidence: {result.confidence}[/{confidence_color}] ({len(result.sources)} sources)")
+
+    # Display sources with titles
+    if show_sources and result.source_titles:
         console.print()
-        console.print(f"[dim]Sources: {', '.join(f'#{id}' for id in result.sources)}[/dim]")
+        console.print("[bold]Sources:[/bold]")
+        for doc_id, title in result.source_titles:
+            console.print(f"  [cyan]#{doc_id}[/cyan] \"{title}\"")
 
     if verbose:
         console.print(f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]")
@@ -61,6 +97,8 @@ def get_context(
     question: str = typer.Argument(..., help="Your question"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to retrieve"),
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
+    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    recent: int | None = typer.Option(None, "--recent", "-r", help="Only search docs from last N days"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search"),
     include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),
 ):
@@ -73,19 +111,24 @@ def get_context(
         emdx ai context "How does auth work?" | claude
         emdx ai context "What's the API design?" | claude "summarize this"
         emdx ai context "error handling" --no-question | claude "list the patterns"
+        emdx ai context "security issues" --tags "security,active" | claude
+        emdx ai context "recent changes" --recent 7 | claude
     """
     import sys
 
     from ..services.ask_service import AskService
+
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
     service = AskService()
 
     try:
         # Retrieve docs (reuse the retrieval logic)
         if keyword or not service._has_embeddings():
-            docs, method = service._retrieve_keyword(question, limit, project)
+            docs, method = service._retrieve_keyword(question, limit, project, tags=tag_list, recent_days=recent)
         else:
-            docs, method = service._retrieve_semantic(question, limit, project)
+            docs, method = service._retrieve_semantic(question, limit, project, tags=tag_list, recent_days=recent)
     except ImportError as e:
         console.print(f"[red]{e}[/red]", highlight=False)
         raise typer.Exit(1)
