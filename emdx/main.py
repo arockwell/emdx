@@ -247,7 +247,7 @@ def main(
 
 
 # Known subcommands of `emdx tag` — used for shorthand routing
-_TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "legend", "batch", "--help", "-h", "help"}
+_TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "batch", "--help", "-h", "help"}
 
 
 def run():
