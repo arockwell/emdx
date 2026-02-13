@@ -99,7 +99,6 @@ poetry run emdx recent
 # Add tags using intuitive aliases (auto-converts to emojis)
 poetry run emdx tag 42 gameplan active urgent
 poetry run emdx tags  # List all tags
-poetry run emdx legend  # View emoji legend and aliases
 ```
 
 ## 🎯 Claude Code Integration - MANDATORY INSTRUCTIONS
