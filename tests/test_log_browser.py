@@ -145,37 +145,5 @@ class TestLogBrowserTimestamps:
         finally:
             temp_file.unlink()
 
-    def test_timestamp_continuity_across_lines(self):
-        """Test that timestamps maintain continuity when missing."""
-        from emdx.commands.claude_execute import parse_log_timestamp
-
-        # Simulate processing multiple lines
-        lines = [
-            "[14:00:01] First line",
-            "Continuation without timestamp",
-            "[14:00:05] New timestamped line",
-            "Another continuation",
-            "[14:00:10] Final line"
-        ]
-
-        last_timestamp = None
-        processed_timestamps = []
-        # Use a fixed fallback timestamp to avoid time-dependent test behavior
-        default_timestamp = 1702648800.0  # Fixed timestamp: 2023-12-15 14:00:00 UTC
-
-        for line in lines:
-            parsed = parse_log_timestamp(line)
-            if parsed:
-                last_timestamp = parsed
-            timestamp_to_use = parsed or last_timestamp or default_timestamp
-            processed_timestamps.append(timestamp_to_use)
-
-        # Verify timestamps are maintained
-        assert processed_timestamps[0] == processed_timestamps[1]  # Continuation uses previous
-        assert processed_timestamps[2] != processed_timestamps[0]  # New timestamp
-        assert processed_timestamps[3] == processed_timestamps[2]  # Another continuation
-        assert processed_timestamps[4] != processed_timestamps[2]  # Final new timestamp
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

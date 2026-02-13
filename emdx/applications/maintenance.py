@@ -23,7 +23,6 @@ from ..services.auto_tagger import AutoTagger
 from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
-from ..services.lifecycle_tracker import LifecycleTracker
 from ..services.similarity import SimilarityService
 
 
@@ -108,7 +107,6 @@ class MaintenanceApplication:
         self._auto_tagger: Optional[AutoTagger] = None
         self._document_merger: Optional[DocumentMerger] = None
         self._health_monitor: Optional[HealthMonitor] = None
-        self._lifecycle_tracker: Optional[LifecycleTracker] = None
 
     @property
     def duplicate_detector(self) -> DuplicateDetector:
@@ -138,13 +136,6 @@ class MaintenanceApplication:
             self._health_monitor = HealthMonitor()
         return self._health_monitor
 
-    @property
-    def lifecycle_tracker(self) -> LifecycleTracker:
-        """Lazy-loaded lifecycle tracker service."""
-        if self._lifecycle_tracker is None:
-            self._lifecycle_tracker = LifecycleTracker()
-        return self._lifecycle_tracker
-
     def maintain_all(
         self,
         dry_run: bool = True,
@@ -166,7 +157,6 @@ class MaintenanceApplication:
         report.add_result(self.clean_duplicates(dry_run=dry_run))
         report.add_result(self.auto_tag_documents(dry_run=dry_run))
         report.add_result(self.merge_similar(dry_run=dry_run, threshold=threshold))
-        report.add_result(self.transition_lifecycle(dry_run=dry_run))
         report.add_result(self.garbage_collect(dry_run=dry_run))
 
         return report
@@ -565,60 +555,6 @@ class MaintenanceApplication:
             items_processed=len(candidates),
             items_affected=merged_count,
             message=f"Merged {merged_count} document pairs",
-        )
-
-    def transition_lifecycle(self, dry_run: bool = True) -> MaintenanceResult:
-        """
-        Auto-transition stale gameplans.
-
-        Args:
-            dry_run: If True, only report what would be done.
-
-        Returns:
-            MaintenanceResult with operation details.
-        """
-        # Find transition suggestions
-        suggestions = self.lifecycle_tracker.auto_detect_transitions()
-
-        if not suggestions:
-            return MaintenanceResult(
-                operation="lifecycle",
-                success=True,
-                items_processed=0,
-                items_affected=0,
-                message="All gameplans are in appropriate stages",
-            )
-
-        if dry_run:
-            preview = []
-            for s in suggestions[:3]:
-                preview.append(
-                    f"'{s['title']}': {s['current_stage']} → {s['suggested_stage']}"
-                )
-
-            return MaintenanceResult(
-                operation="lifecycle",
-                success=True,
-                items_processed=len(suggestions),
-                items_affected=len(suggestions),
-                message=f"Would transition {len(suggestions)} gameplans",
-                details=preview,
-            )
-
-        # Apply transitions
-        success_count = 0
-        for s in suggestions:
-            if self.lifecycle_tracker.transition_document(
-                s["doc_id"], s["suggested_stage"], f"Auto-detected: {s['reason']}"
-            ):
-                success_count += 1
-
-        return MaintenanceResult(
-            operation="lifecycle",
-            success=True,
-            items_processed=len(suggestions),
-            items_affected=success_count,
-            message=f"Transitioned {success_count} gameplans",
         )
 
     def garbage_collect(self, dry_run: bool = True) -> MaintenanceResult:

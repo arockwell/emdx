@@ -44,26 +44,56 @@ class TestIsCompletionTag:
 
 
 # ---------------------------------------------------------------------------
-# tag command - add tags
+# tag add command (and bare `tag` shorthand via callback)
 # ---------------------------------------------------------------------------
-class TestTagCommand:
-    """Tests for the tag command."""
+class TestTagAddCommand:
+    """Tests for the tag add command."""
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.add_tags_to_document")
     @patch("emdx.commands.tags.get_document")
     @patch("emdx.commands.tags.db")
-    def test_add_tags(self, mock_db, mock_get_doc, mock_add_tags, mock_get_tags):
-        """Add tags to a document."""
+    def test_add_tags_explicit(self, mock_db, mock_get_doc, mock_add_tags, mock_get_tags):
+        """Add tags via explicit 'add' subcommand."""
         mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {"id": 1, "title": "Doc"}
         mock_add_tags.return_value = ["python", "testing"]
         mock_get_tags.return_value = ["python", "testing"]
 
-        result = runner.invoke(app, ["tag", "1", "python", "testing"])
+        result = runner.invoke(app, ["add", "1", "python", "testing"])
         assert result.exit_code == 0
         assert "Added tags" in _out(result)
         mock_add_tags.assert_called_once_with(1, ["python", "testing"])
+
+    def test_tag_shorthand_rewrite(self):
+        """The _rewrite_tag_shorthand helper inserts 'add' for bare `emdx tag 42 active`."""
+        from emdx.main import _rewrite_tag_shorthand
+
+        # Shorthand: `emdx tag 42 active` → `emdx tag add 42 active`
+        argv = ["emdx", "tag", "42", "active"]
+        _rewrite_tag_shorthand(argv)
+        assert argv == ["emdx", "tag", "add", "42", "active"]
+
+        # Explicit subcommand should not be rewritten
+        argv = ["emdx", "tag", "add", "42", "active"]
+        _rewrite_tag_shorthand(argv)
+        assert argv == ["emdx", "tag", "add", "42", "active"]
+
+        # Other subcommands should not be rewritten
+        for subcmd in ("remove", "list", "rename", "merge", "legend", "batch"):
+            argv = ["emdx", "tag", subcmd]
+            _rewrite_tag_shorthand(argv)
+            assert argv[2] == subcmd
+
+        # Bare `emdx tag` (no args) should not be rewritten
+        argv = ["emdx", "tag"]
+        _rewrite_tag_shorthand(argv)
+        assert argv == ["emdx", "tag"]
+
+        # Flags after tag should trigger add insertion
+        argv = ["emdx", "tag", "42", "--auto"]
+        _rewrite_tag_shorthand(argv)
+        assert argv == ["emdx", "tag", "add", "42", "--auto"]
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.get_document")
@@ -74,7 +104,7 @@ class TestTagCommand:
         mock_get_doc.return_value = {"id": 1, "title": "Doc"}
         mock_get_tags.return_value = ["python"]
 
-        result = runner.invoke(app, ["tag", "1"])
+        result = runner.invoke(app, ["add", "1"])
         out = _out(result)
         assert result.exit_code == 0
         assert "Tags for #1" in out
@@ -86,7 +116,7 @@ class TestTagCommand:
         mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = None
 
-        result = runner.invoke(app, ["tag", "999", "test"])
+        result = runner.invoke(app, ["add", "999", "test"])
         assert result.exit_code != 0
         assert "not found" in _out(result)
 
@@ -101,7 +131,7 @@ class TestTagCommand:
         mock_add_tags.return_value = []  # no new tags added
         mock_get_tags.return_value = ["python"]
 
-        result = runner.invoke(app, ["tag", "1", "python"])
+        result = runner.invoke(app, ["add", "1", "python"])
         assert result.exit_code == 0
         assert "No new tags added" in _out(result)
 
@@ -118,29 +148,29 @@ class TestTagCommand:
         mock_get_tags.return_value = ["done"]
         mock_archive.return_value = 2
 
-        result = runner.invoke(app, ["tag", "1", "done"])
+        result = runner.invoke(app, ["add", "1", "done"])
         assert result.exit_code == 0
         assert "Auto-archived 2" in _out(result)
 
 
 # ---------------------------------------------------------------------------
-# untag command
+# tag remove command (was: untag)
 # ---------------------------------------------------------------------------
-class TestUntagCommand:
-    """Tests for the untag command."""
+class TestTagRemoveCommand:
+    """Tests for the tag remove command."""
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.remove_tags_from_document")
     @patch("emdx.commands.tags.get_document")
     @patch("emdx.commands.tags.db")
-    def test_untag(self, mock_db, mock_get_doc, mock_remove_tags, mock_get_tags):
+    def test_remove(self, mock_db, mock_get_doc, mock_remove_tags, mock_get_tags):
         """Remove tags from a document."""
         mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {"id": 1, "title": "Doc"}
         mock_remove_tags.return_value = ["python"]
         mock_get_tags.return_value = []
 
-        result = runner.invoke(app, ["untag", "1", "python"])
+        result = runner.invoke(app, ["remove", "1", "python"])
         assert result.exit_code == 0
         assert "Removed tags" in _out(result)
 
@@ -148,34 +178,34 @@ class TestUntagCommand:
     @patch("emdx.commands.tags.remove_tags_from_document")
     @patch("emdx.commands.tags.get_document")
     @patch("emdx.commands.tags.db")
-    def test_untag_not_on_doc(self, mock_db, mock_get_doc, mock_remove_tags, mock_get_tags):
+    def test_remove_not_on_doc(self, mock_db, mock_get_doc, mock_remove_tags, mock_get_tags):
         """Removing a tag that doesn't exist shows message."""
         mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {"id": 1, "title": "Doc"}
         mock_remove_tags.return_value = []
         mock_get_tags.return_value = []
 
-        result = runner.invoke(app, ["untag", "1", "nonexistent"])
+        result = runner.invoke(app, ["remove", "1", "nonexistent"])
         assert result.exit_code == 0
         assert "No tags removed" in _out(result)
 
     @patch("emdx.commands.tags.get_document")
     @patch("emdx.commands.tags.db")
-    def test_untag_doc_not_found(self, mock_db, mock_get_doc):
-        """Untag a nonexistent document shows error."""
+    def test_remove_doc_not_found(self, mock_db, mock_get_doc):
+        """Remove tags from a nonexistent document shows error."""
         mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = None
 
-        result = runner.invoke(app, ["untag", "999", "tag"])
+        result = runner.invoke(app, ["remove", "999", "tag"])
         assert result.exit_code != 0
         assert "not found" in _out(result)
 
 
 # ---------------------------------------------------------------------------
-# tags command (list all tags)
+# tag list command (was: tags)
 # ---------------------------------------------------------------------------
-class TestTagsListCommand:
-    """Tests for the tags command."""
+class TestTagListCommand:
+    """Tests for the tag list command."""
 
     @patch("emdx.commands.tags.list_all_tags")
     @patch("emdx.commands.tags.db")
@@ -197,7 +227,7 @@ class TestTagsListCommand:
             },
         ]
 
-        result = runner.invoke(app, ["tags"])
+        result = runner.invoke(app, ["list"])
         out = _out(result)
         assert result.exit_code == 0
         assert "python" in out
@@ -210,7 +240,7 @@ class TestTagsListCommand:
         mock_db.ensure_schema = Mock()
         mock_list_all.return_value = []
 
-        result = runner.invoke(app, ["tags"])
+        result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         assert "No tags found" in _out(result)
 
@@ -221,20 +251,20 @@ class TestTagsListCommand:
         mock_db.ensure_schema = Mock()
         mock_list_all.return_value = []
 
-        runner.invoke(app, ["tags", "--sort", "name"])
+        runner.invoke(app, ["list", "--sort", "name"])
         mock_list_all.assert_called_once_with(sort_by="name")
 
 
 # ---------------------------------------------------------------------------
-# retag command
+# tag rename command (was: retag)
 # ---------------------------------------------------------------------------
-class TestRetagCommand:
-    """Tests for the retag command."""
+class TestTagRenameCommand:
+    """Tests for the tag rename command."""
 
     @patch("emdx.commands.tags.rename_tag")
     @patch("emdx.commands.tags.list_all_tags")
     @patch("emdx.commands.tags.db")
-    def test_retag_with_force(self, mock_db, mock_list_all, mock_rename):
+    def test_rename_with_force(self, mock_db, mock_list_all, mock_rename):
         """Rename a tag with --force."""
         mock_db.ensure_schema = Mock()
         mock_list_all.return_value = [
@@ -242,26 +272,26 @@ class TestRetagCommand:
         ]
         mock_rename.return_value = True
 
-        result = runner.invoke(app, ["retag", "old-tag", "new-tag", "--force"])
+        result = runner.invoke(app, ["rename", "old-tag", "new-tag", "--force"])
         assert result.exit_code == 0
         assert "Renamed" in _out(result)
         mock_rename.assert_called_once_with("old-tag", "new-tag")
 
     @patch("emdx.commands.tags.list_all_tags")
     @patch("emdx.commands.tags.db")
-    def test_retag_not_found(self, mock_db, mock_list_all):
+    def test_rename_not_found(self, mock_db, mock_list_all):
         """Rename a tag that doesn't exist shows error."""
         mock_db.ensure_schema = Mock()
         mock_list_all.return_value = []
 
-        result = runner.invoke(app, ["retag", "nope", "new", "--force"])
+        result = runner.invoke(app, ["rename", "nope", "new", "--force"])
         assert result.exit_code != 0
         assert "not found" in _out(result)
 
     @patch("emdx.commands.tags.rename_tag")
     @patch("emdx.commands.tags.list_all_tags")
     @patch("emdx.commands.tags.db")
-    def test_retag_failure(self, mock_db, mock_list_all, mock_rename):
+    def test_rename_failure(self, mock_db, mock_list_all, mock_rename):
         """Rename that fails (e.g. target already exists) shows error."""
         mock_db.ensure_schema = Mock()
         mock_list_all.return_value = [
@@ -269,16 +299,16 @@ class TestRetagCommand:
         ]
         mock_rename.return_value = False
 
-        result = runner.invoke(app, ["retag", "old", "existing", "--force"])
+        result = runner.invoke(app, ["rename", "old", "existing", "--force"])
         assert result.exit_code != 0
         assert "Could not rename" in _out(result)
 
 
 # ---------------------------------------------------------------------------
-# merge-tags command
+# tag merge command (was: merge-tags)
 # ---------------------------------------------------------------------------
-class TestMergeTagsCommand:
-    """Tests for the merge-tags command."""
+class TestTagMergeCommand:
+    """Tests for the tag merge command."""
 
     @patch("emdx.commands.tags.merge_tags")
     @patch("emdx.commands.tags.list_all_tags")
@@ -293,7 +323,7 @@ class TestMergeTagsCommand:
         mock_merge.return_value = 8
 
         result = runner.invoke(app, [
-            "merge-tags", "tag1", "tag2", "--into", "combined", "--force",
+            "merge", "tag1", "tag2", "--into", "combined", "--force",
         ])
         assert result.exit_code == 0
         assert "Merged" in _out(result)
@@ -306,17 +336,17 @@ class TestMergeTagsCommand:
         mock_list_all.return_value = []
 
         result = runner.invoke(app, [
-            "merge-tags", "nope1", "nope2", "--into", "target", "--force",
+            "merge", "nope1", "nope2", "--into", "target", "--force",
         ])
         assert result.exit_code != 0
         assert "No valid source tags" in _out(result)
 
 
 # ---------------------------------------------------------------------------
-# legend command
+# tag legend command
 # ---------------------------------------------------------------------------
-class TestLegendCommand:
-    """Tests for the legend command."""
+class TestTagLegendCommand:
+    """Tests for the tag legend command."""
 
     @patch("emdx.commands.tags.generate_legend")
     def test_legend(self, mock_legend):

@@ -37,7 +37,6 @@ def maintain(
     merge: bool = typer.Option(False, "--merge", "-m", help="Merge similar documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Auto-tag untagged documents"),
     gc: bool = typer.Option(False, "--gc", "-g", help="Run garbage collection"),
-    lifecycle: bool = typer.Option(False, "--lifecycle", "-l", help="Auto-transition stale gameplans"),
     dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
     threshold: float = typer.Option(0.7, "--threshold", help="Similarity threshold for merging"),
 ):
@@ -56,13 +55,13 @@ def maintain(
     """
     
     # If no specific maintenance requested, run interactive wizard
-    if not any([auto, clean, merge, tags, gc, lifecycle]):
+    if not any([auto, clean, merge, tags, gc]):
         _interactive_wizard(dry_run)
         return
-    
+
     # If --auto is specified, enable everything
     if auto:
-        clean = merge = tags = gc = lifecycle = True
+        clean = merge = tags = gc = True
     
     # Header
     console.print(Panel(
@@ -106,14 +105,6 @@ def maintain(
         collected = _garbage_collect(dry_run)
         if collected:
             actions_taken.append(collected)
-        console.print()
-    
-    # Auto-transition lifecycle
-    if lifecycle:
-        console.print("[bold]Auto-transitioning gameplans...[/bold]")
-        transitioned = _auto_transition_lifecycle(dry_run)
-        if transitioned:
-            actions_taken.append(transitioned)
         console.print()
     
     # Summary
@@ -244,13 +235,6 @@ def _interactive_wizard(dry_run: bool):
                 console.print("\n[yellow]These need manual review - skipping for now.[/yellow]")
                 console.print("[dim]Use 'emdx similar <doc_id>' to review individual documents.[/dim]")
 
-    # Lifecycle transitions (cheap check)
-    lifecycle_preview = app.transition_lifecycle(dry_run=True)
-    if lifecycle_preview.items_processed > 0:
-        console.print(f"\n[yellow]Found {lifecycle_preview.items_processed} gameplans needing transitions[/yellow]")
-        if Confirm.ask("Auto-transition stale gameplans?"):
-            actions.append("lifecycle")
-
     # Garbage collection (cheap check)
     gc_preview = app.garbage_collect(dry_run=True)
     if gc_preview.items_processed > 0:
@@ -274,8 +258,6 @@ def _interactive_wizard(dry_run: bool):
             _merge_documents(False)
         elif isinstance(action, tuple) and action[0] == "dedup_high":
             _deduplicate_pairs(action[1])
-        elif action == "lifecycle":
-            _auto_transition_lifecycle(False)
         elif action == "gc":
             _garbage_collect(False)
         console.print()
@@ -418,29 +400,6 @@ def _garbage_collect(dry_run: bool) -> Optional[str]:
     for detail in result.details:
         console.print(f"  [green]✓[/green] {detail}")
 
-    return result.message
-
-
-def _auto_transition_lifecycle(dry_run: bool) -> Optional[str]:
-    """Auto-transition stale gameplans using MaintenanceApplication."""
-    app = MaintenanceApplication()
-    result = app.transition_lifecycle(dry_run=dry_run)
-
-    if result.items_processed == 0:
-        console.print("  ✨ All gameplans are in appropriate stages!")
-        return None
-
-    console.print(f"  Found: {result.items_processed} gameplans needing transitions")
-
-    if dry_run:
-        # Show preview from result details
-        if result.details:
-            console.print("\n  Suggested transitions:")
-            for detail in result.details:
-                console.print(f"    • {detail}")
-        return result.message
-
-    console.print(f"  [green]✓[/green] {result.message}")
     return result.message
 
 

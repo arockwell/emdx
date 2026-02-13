@@ -26,7 +26,6 @@ LAZY_SUBCOMMANDS = {
     "workflow": "emdx.commands.workflows:app",
     "cascade": "emdx.commands.cascade:app",
     "delegate": "emdx.commands.delegate:app",
-    "claude": "emdx.commands.claude_execute:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
     # Similarity (imports scikit-learn)
@@ -41,7 +40,6 @@ LAZY_HELP = {
     "workflow": "Manage and run multi-stage workflows",
     "cascade": "Cascade ideas through stages to working code",
     "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
-    "claude": "Execute documents with Claude",
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
     "gdoc": "Google Docs integration",
@@ -52,14 +50,14 @@ LAZY_HELP = {
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (cascade, delegate, workflow, claude).
+    Safe mode disables execution commands (cascade, delegate, workflow).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "delegate", "workflow", "claude"}
+UNSAFE_COMMANDS = {"cascade", "delegate", "workflow"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -103,12 +101,8 @@ from emdx.commands.core import app as core_app
 from emdx.commands.browse import app as browse_app
 from emdx.commands.tags import app as tag_app
 from emdx.commands.executions import app as executions_app
-from emdx.commands.lifecycle import app as lifecycle_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.groups import app as groups_app
-from emdx.commands.export import app as export_app
-from emdx.commands.export_profiles import app as export_profiles_app
-from emdx.commands.keybindings import app as keybindings_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
 from emdx.ui.gui import gui as gui_command
@@ -148,30 +142,17 @@ for command in browse_app.registered_commands:
 for command in gist_app.registered_commands:
     app.registered_commands.append(command)
 
-# Tag commands
-for command in tag_app.registered_commands:
-    app.registered_commands.append(command)
+# Tag commands (subcommand group: emdx tag <subcommand>)
+app.add_typer(tag_app, name="tag", help="Manage document tags")
 
 # Add executions as a subcommand group
 app.add_typer(executions_app, name="exec", help="Manage Claude executions")
-
-# Add lifecycle as a subcommand group
-app.add_typer(lifecycle_app, name="lifecycle", help="Track document lifecycles")
 
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Task management")
 
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
-
-# Add export profile management as a subcommand group
-app.add_typer(export_profiles_app, name="export-profile", help="Manage export profiles")
-
-# Add export commands as a subcommand group
-app.add_typer(export_app, name="export", help="Export documents using profiles")
-
-# Add keybindings as a subcommand group
-app.add_typer(keybindings_app, name="keybindings", help="Manage TUI keybindings")
 
 # Add analyze commands (maintain_app has multiple commands like cleanup, cleanup-dirs)
 for command in analyze_app.registered_commands:
@@ -222,7 +203,7 @@ def main(
     ),
     safe_mode: bool = typer.Option(
         False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (cascade, delegate, workflow, claude)"
+        help="Disable execution commands (cascade, delegate, workflow)"
     ),
 ):
     """
@@ -233,7 +214,7 @@ def main(
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (cascade, delegate, workflow, claude). Useful for read-only access
+    (cascade, delegate, workflow). Useful for read-only access
     or when external execution should be prevented.
 
     Examples:
@@ -270,6 +251,10 @@ def main(
         os.environ["EMDX_SAFE_MODE"] = "1"
 
 
+# Known subcommands of `emdx tag` — used for shorthand routing
+_TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "legend", "batch", "--help", "-h", "help"}
+
+
 def run():
     """Entry point for the CLI.
 
@@ -277,6 +262,10 @@ def run():
         emdx save help      → emdx save --help
         emdx task help      → emdx task --help
         emdx task create help → emdx task create --help
+
+    Supports `emdx tag 42 active` shorthand for `emdx tag add 42 active`:
+        When `tag` is followed by something that is NOT a known subcommand
+        (i.e. a doc ID or flag), insert `add` automatically.
     """
     import sys
 
@@ -285,7 +274,38 @@ def run():
     if len(sys.argv) >= 2 and sys.argv[-1] == "help":
         sys.argv[-1] = "--help"
 
+    # Shorthand: `emdx tag 42 active` → `emdx tag add 42 active`
+    # When the first arg after `tag` is not a known subcommand, insert `add`.
+    _rewrite_tag_shorthand(sys.argv)
+
     app()
+
+
+def _rewrite_tag_shorthand(argv: list[str]) -> None:
+    """Insert 'add' after 'tag' when the next token isn't a subcommand.
+
+    Handles global flags (--verbose, --quiet, etc.) that may appear before 'tag'.
+    Mutates argv in-place.
+    """
+    # Find the position of 'tag' in argv (skip argv[0] which is the program name)
+    try:
+        tag_idx = next(
+            i for i in range(1, len(argv))
+            if argv[i] == "tag"
+        )
+    except StopIteration:
+        return
+
+    # Check the token immediately after 'tag'
+    next_idx = tag_idx + 1
+    if next_idx >= len(argv):
+        return  # `emdx tag` with no args — let Typer show help
+
+    next_token = argv[next_idx]
+    if next_token not in _TAG_SUBCOMMANDS:
+        # Not a known subcommand — insert 'add' so `emdx tag 42 active`
+        # becomes `emdx tag add 42 active`
+        argv.insert(next_idx, "add")
 
 
 if __name__ == "__main__":

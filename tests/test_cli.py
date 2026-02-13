@@ -86,12 +86,12 @@ class TestCLIBasics:
 
     @patch("emdx.models.tags.db")
     def test_tags_list_command(self, mock_db):
-        """Test tags list command."""
+        """Test tag list command (was: tags)."""
         mock_conn = Mock()
         mock_conn.execute.return_value.fetchall.return_value = []
         mock_db.get_connection.return_value.__enter__.return_value = mock_conn
 
-        result = runner.invoke(app, ["tags"])
+        result = runner.invoke(app, ["tag", "list"])
         # Should work even with no tags
         assert result.exit_code == 0
 

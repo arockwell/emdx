@@ -1,4 +1,9 @@
-"""Tag management commands for emdx."""
+"""Tag management commands for emdx.
+
+All tag-related commands live under `emdx tag <subcommand>`.
+The `add` subcommand is also the default callback, so `emdx tag 42 gameplan`
+works as a shorthand for `emdx tag add 42 gameplan`.
+"""
 
 
 from typing import Optional
@@ -27,7 +32,7 @@ from emdx.utils.text_formatting import truncate_title
 # Tags that indicate completion - when added, auto-archive descendants
 COMPLETION_TAGS = {"done", "complete", "success", "finished", "check"}
 
-app = typer.Typer()
+app = typer.Typer(help="Manage document tags")
 
 
 def _is_completion_tag(tag: str) -> bool:
@@ -68,14 +73,13 @@ def _check_and_auto_archive_descendants(doc_id: int, added_tags: list[str]) -> i
     return archive_descendants(doc_id)
 
 
-@app.command()
-def tag(
-    doc_id: int = typer.Argument(..., help="Document ID to tag"),
-    tags: list[str] = typer.Argument(None, help="Tags to add (space-separated)"),
-    auto: bool = typer.Option(False, "--auto", "-a", help="Apply high-confidence auto-tags"),
-    suggest: bool = typer.Option(False, "--suggest", "-s", help="Show tag suggestions"),
+def _add_tags_impl(
+    doc_id: int,
+    tags: Optional[list[str]],
+    auto: bool,
+    suggest: bool,
 ):
-    """Add tags to a document with optional auto-tagging"""
+    """Shared implementation for adding tags (used by both callback and add subcommand)."""
     try:
         # Ensure database schema exists
         db.ensure_schema()
@@ -114,25 +118,25 @@ def tag(
         if suggest:
             tagger = AutoTagger()
             suggestions = tagger.suggest_tags(doc_id)
-            
+
             if suggestions:
                 console.print(f"\n[bold]Tag suggestions for #{doc_id}: {doc['title']}[/bold]\n")
-                
+
                 table = Table(show_header=True, header_style="bold cyan")
                 table.add_column("Tag", style="cyan")
                 table.add_column("Confidence", justify="right")
                 table.add_column("Apply?", style="dim")
-                
-                for tag, confidence in suggestions:
+
+                for tag_name, confidence in suggestions:
                     conf_percent = f"{confidence:.0%}"
                     apply_hint = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"
-                    table.add_row(tag, conf_percent, apply_hint)
-                
+                    table.add_row(tag_name, conf_percent, apply_hint)
+
                 console.print(table)
-                console.print("\n[dim]Use 'emdx tag ID TAG...' to apply tags[/dim]")
+                console.print("\n[dim]Use 'emdx tag add ID TAG...' to apply tags[/dim]")
             else:
                 console.print("[yellow]No tag suggestions found[/yellow]")
-            
+
             # Show current tags
             current_tags = get_document_tags(doc_id)
             if current_tags:
@@ -176,12 +180,33 @@ def tag(
         raise typer.Exit(1) from e
 
 
+@app.callback()
+def tag_callback():
+    """Manage document tags.
+
+    Subcommands: add, remove, list, rename, merge, legend, batch.
+
+    Shorthand: `emdx tag 42 gameplan active` is equivalent to `emdx tag add 42 gameplan active`.
+    """
+
+
 @app.command()
-def untag(
+def add(
+    doc_id: int = typer.Argument(..., help="Document ID to tag"),
+    tags: Optional[list[str]] = typer.Argument(None, help="Tags to add (space-separated)"),
+    auto: bool = typer.Option(False, "--auto", "-a", help="Apply high-confidence auto-tags"),
+    suggest: bool = typer.Option(False, "--suggest", "-s", help="Show tag suggestions"),
+):
+    """Add tags to a document with optional auto-tagging."""
+    _add_tags_impl(doc_id, tags, auto, suggest)
+
+
+@app.command()
+def remove(
     doc_id: int = typer.Argument(..., help="Document ID to untag"),
     tags: list[str] = typer.Argument(..., help="Tags to remove (space-separated)"),
 ):
-    """Remove tags from a document"""
+    """Remove tags from a document."""
     try:
         # Ensure database schema exists
         db.ensure_schema()
@@ -215,12 +240,12 @@ def untag(
         raise typer.Exit(1) from e
 
 
-@app.command()
-def tags(
+@app.command("list")
+def list_tags(
     sort: str = typer.Option("usage", "--sort", "-s", help="Sort by: usage, name, created"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum tags to show"),
 ):
-    """List all tags with statistics"""
+    """List all tags with statistics."""
     try:
         # Ensure database schema exists
         db.ensure_schema()
@@ -241,11 +266,11 @@ def tags(
         table.add_column("Created", style="green")
         table.add_column("Last Used", style="magenta")
 
-        for tag in all_tags[:limit]:
-            created = tag["created_at"].strftime("%Y-%m-%d") if tag["created_at"] else "Unknown"
-            last_used = tag["last_used"].strftime("%Y-%m-%d") if tag["last_used"] else "Never"
+        for tag_entry in all_tags[:limit]:
+            created = tag_entry["created_at"].strftime("%Y-%m-%d") if tag_entry["created_at"] else "Unknown"
+            last_used = tag_entry["last_used"].strftime("%Y-%m-%d") if tag_entry["last_used"] else "Never"
 
-            table.add_row(tag["name"], str(tag["count"]), created, last_used)
+            table.add_row(tag_entry["name"], str(tag_entry["count"]), created, last_used)
 
         console.print(table)
 
@@ -260,12 +285,12 @@ def tags(
 
 
 @app.command()
-def retag(
+def rename(
     old_tag: str = typer.Argument(..., help="Old tag name"),
     new_tag: str = typer.Argument(..., help="New tag name"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
-    """Rename a tag globally"""
+    """Rename a tag globally."""
     try:
         # Ensure database schema exists
         db.ensure_schema()
@@ -303,13 +328,13 @@ def retag(
         raise typer.Exit(1) from e
 
 
-@app.command(name="merge-tags")
-def merge_tags_cmd(
+@app.command()
+def merge(
     source_tags: list[str] = typer.Argument(..., help="Source tags to merge"),
     target: str = typer.Option(..., "--into", "-i", help="Target tag to merge into"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
-    """Merge multiple tags into one"""
+    """Merge multiple tags into one."""
     try:
         # Ensure database schema exists
         db.ensure_schema()
@@ -319,8 +344,8 @@ def merge_tags_cmd(
         source_infos = []
         total_docs = 0
 
-        for tag in source_tags:
-            tag_info = next((t for t in all_tags if t["name"] == tag.lower()), None)
+        for tag_name in source_tags:
+            tag_info = next((t for t in all_tags if t["name"] == tag_name.lower()), None)
             if tag_info:
                 source_infos.append(tag_info)
                 total_docs += tag_info["count"]
@@ -355,14 +380,14 @@ def merge_tags_cmd(
 
 @app.command()
 def legend():
-    """Show emoji tag legend with text aliases"""
+    """Show emoji tag legend with text aliases."""
     try:
         from rich.markdown import Markdown
-        
+
         legend_content = generate_legend()
         markdown = Markdown(legend_content)
         console.print(markdown)
-        
+
     except Exception as e:
         console.print(f"[red]Error displaying legend: {e}[/red]")
         raise typer.Exit(1) from e
@@ -377,13 +402,13 @@ def batch(
     dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
 ):
-    """Batch auto-tag multiple documents"""
+    """Batch auto-tag multiple documents."""
     try:
         # Ensure database schema exists
         db.ensure_schema()
-        
+
         tagger = AutoTagger()
-        
+
         # Get suggestions first
         with console.status("[bold green]Analyzing documents..."):
             suggestions = tagger.batch_suggest(
@@ -391,51 +416,51 @@ def batch(
                 project=project,
                 limit=limit
             )
-        
+
         if not suggestions:
             console.print("[yellow]No documents found matching criteria[/yellow]")
             return
-        
+
         # Filter by confidence
         eligible_docs = []
         total_tags_to_apply = 0
-        
+
         for doc_id, doc_suggestions in suggestions.items():
             eligible_tags = [
-                (tag, conf) for tag, conf in doc_suggestions[:max_tags]
+                (tag_name, conf) for tag_name, conf in doc_suggestions[:max_tags]
                 if conf >= confidence
             ]
             if eligible_tags:
                 eligible_docs.append((doc_id, eligible_tags))
                 total_tags_to_apply += len(eligible_tags)
-        
+
         if not eligible_docs:
             console.print(f"[yellow]No tags found with confidence >= {confidence:.0%}[/yellow]")
             return
-        
+
         # Display what will be done
         console.print(f"\n[bold cyan]🏷️  Batch Auto-Tagging Report[/bold cyan]")
         console.print(f"\n[yellow]Found {len(eligible_docs)} documents to tag[/yellow]")
         console.print(f"[yellow]Total tags to apply: {total_tags_to_apply}[/yellow]\n")
-        
+
         # Show sample of what will be done
         sample_size = min(10, len(eligible_docs))
         if sample_size > 0:
             console.print("[bold]Sample of documents to be tagged:[/bold]\n")
-            
-            for doc_id, tags in eligible_docs[:sample_size]:
+
+            for doc_id, tag_list in eligible_docs[:sample_size]:
                 # Get document title
                 doc = get_document(str(doc_id))
                 title = truncate_title(doc['title'])
-                
+
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")
-                for tag, conf in tags:
-                    console.print(f"    → {tag} [dim]({conf:.0%})[/dim]")
+                for tag_name, conf in tag_list:
+                    console.print(f"    → {tag_name} [dim]({conf:.0%})[/dim]")
                 console.print()
-            
+
             if len(eligible_docs) > sample_size:
                 console.print(f"[dim]... and {len(eligible_docs) - sample_size} more documents[/dim]\n")
-        
+
         if dry_run:
             console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]")
             console.print(f"Would apply {total_tags_to_apply} tags to {len(eligible_docs)} documents")
@@ -445,21 +470,21 @@ def batch(
             if not typer.confirm(f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"):
                 console.print("[red]Batch tagging cancelled[/red]")
                 return
-            
+
             # Execute batch tagging
             applied_count = 0
             tagged_docs = 0
-            
+
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console
             ) as progress:
                 task = progress.add_task("Applying tags...", total=len(eligible_docs))
-                
-                for doc_id, tags in eligible_docs:
+
+                for doc_id, tag_list in eligible_docs:
                     applied = tagger.auto_tag_document(
-                        doc_id, 
+                        doc_id,
                         confidence_threshold=confidence,
                         max_tags=max_tags
                     )
@@ -467,10 +492,10 @@ def batch(
                         applied_count += len(applied)
                         tagged_docs += 1
                     progress.update(task, advance=1)
-            
+
             console.print(f"\n✅ [green]Successfully tagged {tagged_docs} documents![/green]")
             console.print(f"[dim]Total tags applied: {applied_count}[/dim]")
-    
+
     except Exception as e:
         console.print(f"[red]Error batch tagging: {e}[/red]")
         raise typer.Exit(1) from e

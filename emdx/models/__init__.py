@@ -7,7 +7,4 @@ This package defines the core data models and operations for:
 - tags: Tag system with emoji aliases and categorization
 - tasks: Task management with dependencies and status tracking
 - task_executions: Linking tasks to their execution history
-- export_profiles: Export profile management for document exports
 """
-
-from emdx.models import export_profiles

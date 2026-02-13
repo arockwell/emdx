@@ -147,19 +147,18 @@ class ClaudeService:
             context: Optional execution context
 
         Returns:
-            Exit code from Claude process
+            Exit code from Claude process (0 for success)
         """
-        from emdx.commands.claude_execute import execute_with_claude
-        return execute_with_claude(
+        from emdx.services.claude_executor import execute_cli_sync
+        result = execute_cli_sync(
             task=task,
             execution_id=execution_id,
             log_file=log_file,
             allowed_tools=allowed_tools,
-            verbose=verbose,
             working_dir=working_dir,
             doc_id=doc_id,
-            context=context,
         )
+        return result.get("exit_code", 1) if not result.get("success") else 0
 
 
 # Singleton instances for convenience
