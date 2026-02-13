@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-02-13
+
+**The simplification release.** EMDX went from 6 execution commands and a complex workflow engine down to one command that does everything: `emdx delegate`. The codebase shed ~15,000 lines of dead code while gaining 250 new tests. Every doc, every help string, every architecture diagram has been rewritten to match reality.
+
+### 🚀 Major Features
+
+#### Recipes replace workflows (#444)
+The workflow orchestration engine — with its presets, stage runs, individual runs, and 5-table DB schema — has been replaced by **recipes**: plain markdown documents tagged with 📋. A recipe is just a saved set of instructions that `emdx delegate` follows. Same power, zero complexity.
+
+```bash
+# Old way: configure workflow preset, run workflow, monitor stages
+emdx workflow create "Security Audit" --stages analyze,report
+emdx workflow run 1
+
+# New way: save instructions once, run them anywhere
+echo "Run a security audit..." | emdx save --title "Security Audit" --tags recipe
+emdx recipe run 42
+```
+
+#### `emdx delegate` — one command for all AI execution (#427, #445, #455, #458)
+Six separate execution commands (`agent`, `run`, `each`, `workflow run`, `claude execute`, `task run`) have been consolidated into `emdx delegate`. Everything composes:
+
+- **Parallel execution** — `emdx delegate "task1" "task2" "task3"` runs up to 10 concurrent tasks
+- **Doc IDs as tasks** — `emdx delegate 42 43 44` loads doc content and executes each (#455)
+- **Worktree isolation** — `--worktree` gives each parallel task a clean git environment (#445)
+- **PR creation** — `--pr` creates branches and PRs; implies `--worktree` automatically (#458)
+- **Sequential chains** — `--chain` pipes output from one step to the next
+- **Dynamic discovery** — `--each "fd -e py" --do "Review {{item}}"` finds items and processes each
+- **Auto branch names** — doc IDs with `--pr` generate branch names from document titles (#455)
+
+#### Simplified command surface (#438, #440)
+Commands have been reorganized into logical groups:
+- `emdx trash list/restore/purge` — trash management as a subcommand group
+- `emdx maintain cleanup/analyze` — maintenance tools nested under one parent
+- `emdx task add/ready/done/list/delete` — streamlined agent work queue (#459)
+- Tag commands consolidated under `emdx tag` with shorthand support (`emdx tag 42 active`)
+
+#### Activity browser: proper delegate tracking (#470)
+The activity browser now correctly displays delegate execution results. Executions link to their output documents (instead of showing raw logs), and token usage and cost metrics are persisted to the database and visible in the activity view.
+
+### 🔧 Improvements
+
+#### Leaner dependency tree (#436, #468)
+- Dropped `gitpython` and `PyGithub` — git operations use subprocess, GitHub uses `gh` CLI
+- Removed `gdoc` and `similar` commands and their heavy optional dependencies
+- Core install pulls in fewer packages for faster `pip install`
+
+#### Documentation rewritten from scratch
+Every documentation file has been updated to match the current codebase:
+- CLAUDE.md trimmed from 577 → 138 lines — focused instructions, no duplication (#467)
+- README restructured for onboarding — knowledge base features first (#434)
+- Architecture, UI, database, testing, and dev-setup docs all rewritten (#450, #460, #465)
+- CLI reference cleaned of 10+ nonexistent commands (#460)
+
+#### Test coverage: 532 → 780 tests
+- 57 new tests for trash, status, delegate, and recipe commands (#471)
+- Comprehensive audit added 213 tests in 0.12.0 cycle (#425)
+- Weak assertions tightened in execution system tests (#461)
+
+#### Codebase cleanup (~15,000 LOC removed)
+A sustained cleanup across 10+ PRs deleted dead code from every layer — unused services, orphaned models, no-op database functions, stale migration helpers, dead CLI commands, and empty UI scaffolding. The codebase is now ~35,000 lines (down from ~50,000).
+
+#### Other improvements
+- `emdx --version` / `-V` flag for quick version checking
+- `uv` install instructions added alongside pip/poetry (#424)
+- Claude Code slash commands and custom agents for common workflows (#424)
+- Cascade service layer refactor — clean import boundary for UI code (#428)
+- Database layer: eliminated duplicate SQL patterns (#423)
+
+### 🐛 Bug Fixes
+- **delegate**: Fix NameError crashing synthesis in parallel runs (#421)
+- **delegate**: Race condition in parallel log filenames produces wrong doc IDs (#442)
+- **delegate**: `--pr` now implies `--worktree` to prevent dirty-tree failures (#458)
+- **activity**: Delegate executions link to output docs instead of raw logs (#470)
+- **activity**: 32x performance improvement in auto-refresh cycle (#439)
+- **activity**: Auto-refresh no longer blocked by uncached service calls (#437)
+- **tui**: Workflow references removed from activity screen (#447)
+- **cli**: Nested Claude Code sessions work in all execution paths (#441)
+
+### 💥 Breaking Changes
+- **Workflow system replaced by recipes** — `emdx workflow` commands no longer exist. Use `emdx recipe run <id>` or `emdx delegate --doc <id>` instead.
+- **Mail system removed** — `emdx mail` replaced by GitHub Issues for agent communication.
+- **Commands removed**: `emdx legend` (merged into `emdx tag list`), `emdx gdoc`, `emdx similar`, `emdx agent`, `emdx run`, `emdx each`, archive/unarchive (use trash/restore).
+- **6 execution commands → 1** — everything is `emdx delegate` now.
+
 ## [0.12.0] - 2026-02-10
 
 ### 🚀 Major Features
@@ -509,6 +594,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.14.0]: https://github.com/arockwell/emdx/compare/v0.12.0...v0.14.0
 [0.12.0]: https://github.com/arockwell/emdx/compare/v0.10.0...v0.12.0
 [0.10.0]: https://github.com/arockwell/emdx/compare/v0.8.0...v0.10.0
 [0.8.0]: https://github.com/arockwell/emdx/compare/v0.7.0...v0.8.0

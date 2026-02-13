@@ -21,11 +21,11 @@ class TestCLIBasics:
         assert "Command" in result.stdout or "Usage:" in result.stdout
 
     def test_cli_version(self):
-        """Test version command."""
+        """Test --version flag."""
         result = runner.invoke(app, ["--version"])
 
-        # Version is not implemented, so it should show an error
-        assert result.exit_code != 0
+        assert result.exit_code == 0
+        assert "emdx" in result.output
 
     def test_cli_subcommand_help(self):
         """Test subcommand help."""
