@@ -540,7 +540,7 @@ def delegate(
     ),
     pr: bool = typer.Option(
         False, "--pr",
-        help="Instruct agent to create a PR after code changes",
+        help="Instruct agent to create a PR (implies --worktree)",
     ),
     worktree: bool = typer.Option(
         False, "--worktree", "-w",
@@ -643,8 +643,10 @@ def delegate(
             flat_tags.extend(t.split(","))
 
     # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
+    #    --pr always implies --worktree so the sub-agent has a clean git environment
+    use_worktree = worktree or pr
     worktree_path = None
-    if worktree and (len(task_list) == 1 or chain):
+    if use_worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
         try:
             worktree_path, _ = create_worktree(base_branch)
@@ -692,7 +694,7 @@ def delegate(
                 pr=pr,
                 base_branch=base_branch,
                 source_doc_id=doc,
-                worktree=worktree,
+                worktree=use_worktree,
             )
     finally:
         if worktree_path and not pr:
