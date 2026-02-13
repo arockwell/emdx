@@ -312,16 +312,15 @@ The Cascade browser's activity panel shows cascade runs grouped together:
 5. **Check the PR** - The autonomous implementation may need tweaks
 6. **Monitor with `cascade runs`** - Track your cascade journeys and their status
 
-## Comparison with Other Systems
+## Comparison with Delegate
 
-| Feature | Cascade | `emdx delegate` | `emdx workflow` |
-|---------|---------|-----------------|-----------------|
-| Stage transformations | ✅ | ❌ | ❌ |
-| Autonomous execution | ✅ | ✅ | ✅ |
-| PR creation | ✅ | ✅ | ❌ |
-| Document lineage | ✅ | ❌ | ✅ |
-| Multi-agent parallel | ❌ | ✅ | ✅ |
-| Sequential chains | ❌ | ✅ | ❌ |
-| Custom stages | ❌ | ❌ | ✅ |
+| Feature | Cascade | `emdx delegate` |
+|---------|---------|-----------------|
+| Stage transformations | ✅ | ❌ |
+| Autonomous execution | ✅ | ✅ |
+| PR creation | ✅ | ✅ |
+| Document lineage | ✅ | ❌ |
+| Multi-agent parallel | ❌ | ✅ |
+| Sequential chains | ❌ | ✅ |
 
-Use Cascade when you want ideas to flow automatically to implementation. Use `emdx delegate` for one-shot execution (parallel, chain, PR creation, worktree isolation). Use workflows for complex multi-stage processes with custom configurations.
+Use Cascade when you want ideas to flow automatically through stages to implementation. Use `emdx delegate` for one-shot execution (parallel, chain, PR creation, worktree isolation).

@@ -119,7 +119,7 @@ emdx tag 42 gameplan active urgent
 # View current tags for document
 emdx tag 42
 
-# Add workflow tags
+# Add status tags
 emdx tag 123 feature done success
 ```
 
@@ -488,178 +488,55 @@ emdx group delete 1 --hard
 
 ---
 
-## 🔄 **Workflow System**
+## 📋 **Recipe System**
 
-Workflows are execution patterns that define HOW to process tasks. Tasks are provided at runtime.
+Recipes are reusable emdx documents tagged with `recipe` that contain instructions for Claude to follow via `emdx delegate`.
 
-### **emdx workflow list**
-List available workflows.
+### **emdx recipe list**
+List all recipes.
 
 ```bash
-# List all workflows
-emdx workflow list
-
-# Show workflow details
-emdx workflow show parallel_analysis
+# List all recipes (documents tagged 📋)
+emdx recipe list
 ```
 
-### **emdx workflow run**
-Run a workflow with tasks.
+### **emdx recipe run**
+Run a recipe by passing it to `emdx delegate`.
 
 ```bash
-# Run with inline tasks (task-driven model)
-emdx workflow run task_parallel \
-  -t "Analyze authentication security" \
-  -t "Review database queries" \
-  -t "Check error handling"
+# Run by ID
+emdx recipe run 42
 
-# Run with document IDs as tasks
-emdx workflow run task_parallel -t 5182 -t 5183
+# Run by title search
+emdx recipe run "Deep Analysis"
 
-# Control concurrency
-emdx workflow run task_parallel -t "Task 1" -t "Task 2" -j 3  # max 3 concurrent
+# Run with extra arguments
+emdx recipe run 42 -- "analyze auth module"
 
-# Run in background
-emdx workflow run task_parallel -t "Long task" --background
-
-# Use worktree isolation (recommended for parallel)
-emdx workflow run task_parallel -t "Task 1" -t "Task 2" --worktree
+# Run with PR creation and worktree isolation
+emdx recipe run 42 --pr --worktree
 ```
 
 **Options:**
-- `--task/-t TEXT` - Task to run (string or doc ID). Can be repeated.
-- `--var/-v TEXT` - Override variables (key=value)
-- `--max-concurrent/-j INTEGER` - Max parallel executions
-- `--background/--foreground` - Run mode
-- `--worktree/--no-worktree` - Git isolation
+- `--quiet, -q` - Suppress metadata on stderr
+- `--model, -m TEXT` - Model to use
+- `--pr` - Instruct agent to create a PR
+- `--worktree, -w` - Run in isolated git worktree
 
-### **emdx workflow create**
-Create a new custom workflow.
-
-```bash
-# Create a minimal single-stage workflow
-emdx workflow create my-workflow --display-name "My Workflow"
-
-# Create with description and category
-emdx workflow create security-audit \
-  --display-name "Security Audit" \
-  --description "Multi-stage security analysis" \
-  --category analysis
-
-# Create from a JSON definition file
-emdx workflow create complex-flow \
-  --display-name "Complex Flow" \
-  --file workflow-def.json
-```
-
-**Options:**
-- `--display-name, -n TEXT` - Display name (required)
-- `--description, -d TEXT` - Workflow description
-- `--category, -c TEXT` - Category: `analysis`, `planning`, `implementation`, `review`, `custom` (default: custom)
-- `--file, -f TEXT` - Load full definition from JSON file (stages, variables)
-
-### **emdx workflow delete**
-Delete or deactivate a workflow.
+### **emdx recipe create**
+Create a recipe from a markdown file.
 
 ```bash
-# Soft delete (deactivate)
-emdx workflow delete my-workflow
+# Save a file as a recipe (tags it with 📋)
+emdx recipe create instructions.md
 
-# Permanently delete
-emdx workflow delete my-workflow --hard
-
-# Skip confirmation
-emdx workflow delete my-workflow --yes
+# With custom title
+emdx recipe create instructions.md --title "Security Audit"
 ```
 
-**Options:**
-- `--hard` - Permanently delete (cannot be undone)
-- `--yes, -y` - Skip confirmation
+Equivalent to `emdx save <file> --tags "recipe"`.
 
-### **emdx workflow runs**
-List workflow runs.
-
-```bash
-# List recent runs
-emdx workflow runs
-
-# Filter by status
-emdx workflow runs --status running
-emdx workflow runs --status completed
-
-# Show run details
-emdx workflow status 123
-```
-
-### **emdx workflow presets**
-List presets for a workflow or all workflows.
-
-```bash
-# List all presets across all workflows
-emdx workflow presets
-
-# List presets for a specific workflow
-emdx workflow presets task_parallel
-```
-
-### **emdx workflow preset**
-Manage workflow presets (saved variable configurations).
-
-#### **Create a preset**
-
-```bash
-# Create a preset with variables
-emdx workflow preset create task_parallel security_audit --var topic=Security --var depth=deep
-
-# Create with description
-emdx workflow preset create task_parallel perf_check --var topic=Performance --desc "Performance analysis preset"
-
-# Set as default preset for the workflow
-emdx workflow preset create task_parallel default_config --var topic=General --default
-```
-
-#### **Show preset details**
-
-```bash
-emdx workflow preset show task_parallel security_audit
-```
-
-#### **Update a preset**
-
-```bash
-# Add or update variables (merged with existing)
-emdx workflow preset update task_parallel security_audit --var depth=shallow
-
-# Update description
-emdx workflow preset update task_parallel security_audit --desc "Updated description"
-```
-
-#### **Delete a preset**
-
-```bash
-# Delete with confirmation
-emdx workflow preset delete task_parallel security_audit
-
-# Skip confirmation
-emdx workflow preset delete task_parallel security_audit --yes
-```
-
-#### **Create from a run**
-
-```bash
-# Save the variables from a previous run as a preset
-emdx workflow preset from-run task_parallel my_preset --run 223
-
-# With custom description
-emdx workflow preset from-run task_parallel my_preset --run 223 --desc "From successful run"
-```
-
-**Options (for all preset actions):**
-- `--var, -v TEXT` - Variables as key=value pairs (can be repeated)
-- `--desc TEXT` - Preset description
-- `--default` - Set as default preset for the workflow
-- `--run, -r INTEGER` - Run ID (for `from-run` action)
-- `--yes, -y` - Skip confirmation (for `delete` action)
+---
 
 ## 🔄 **Lifecycle Management**
 
@@ -1034,9 +911,6 @@ emdx gist 42 --public
 
 # Create gist and copy URL to clipboard
 emdx gist 42 --copy
-
-# List your gists
-emdx gist gist-list
 ```
 
 **Tip:** Use `emdx save --gist` (or `--secret`/`--public`) to save and create a gist in one step:
@@ -1071,117 +945,6 @@ emdx gdoc-list --project myapp
 
 **Options:**
 - `--project TEXT` - Filter by project
-
-## ⚔️ **Swarm Execution** (`emdx swarm`)
-
-Parallel agent execution with k3d isolation. Run multiple Claude agents in parallel, each in isolated k3d pods with their own git worktrees.
-
-### **emdx swarm run**
-Run multiple tasks in parallel with isolated agents.
-
-```bash
-# Run 3 tasks in parallel
-emdx swarm run "Fix lint errors" "Add tests" "Document API"
-
-# With synthesis to combine outputs
-emdx swarm run --synthesize "Analyze auth" "Analyze api" "Analyze db"
-
-# Discover tasks from a command
-emdx swarm run --from "emdx find --tags bug,active"
-
-# Local mode (no k3d, just parallel subprocesses)
-emdx swarm run --local "task1" "task2"
-
-# Control concurrency and timeout
-emdx swarm run -j 4 --timeout 900 "task1" "task2" "task3" "task4"
-
-# Add tags to output documents
-emdx swarm run --tags "analysis,security" "check auth" "check api"
-
-# Verbose output
-emdx swarm run --verbose "task1" "task2"
-```
-
-**Options:**
-- `--from, -f TEXT` - Shell command that outputs tasks (one per line)
-- `--synthesize, -s` - Combine results into a synthesis document
-- `--jobs, -j INTEGER` - Maximum concurrent agents (default: 6)
-- `--local, -l` - Run locally without k3d (parallel subprocesses)
-- `--tags, -t TEXT` - Tags for output documents (comma-separated)
-- `--timeout INTEGER` - Timeout per task in seconds (default: 600)
-- `--memory, -m TEXT` - Memory per agent pod (default: 3Gi)
-- `--verbose, -v` - Show detailed output
-
-### **emdx swarm status**
-Show current swarm/cluster status including running, pending, completed, and failed agents.
-
-```bash
-emdx swarm status
-```
-
-### **emdx swarm logs**
-View logs from agent pods.
-
-```bash
-# Show logs from all pods
-emdx swarm logs
-
-# Show logs from a specific pod
-emdx swarm logs my-pod-name
-
-# Follow log output
-emdx swarm logs my-pod-name --follow
-```
-
-**Options:**
-- `--follow, -f` - Follow log output
-
-### **emdx swarm cleanup**
-Delete completed and failed agent pods.
-
-```bash
-emdx swarm cleanup
-```
-
-### **emdx swarm cluster**
-Manage the k3d cluster for swarm execution.
-
-#### **emdx swarm cluster start**
-Start (or create) the battlestation cluster.
-
-```bash
-emdx swarm cluster start
-```
-
-#### **emdx swarm cluster stop**
-Stop the cluster (preserves state for later restart).
-
-```bash
-emdx swarm cluster stop
-```
-
-#### **emdx swarm cluster delete**
-Delete the cluster entirely.
-
-```bash
-# Delete with confirmation
-emdx swarm cluster delete
-
-# Skip confirmation
-emdx swarm cluster delete --force
-```
-
-**Options:**
-- `--force, -f` - Skip confirmation
-
-#### **emdx swarm cluster status**
-Show whether the cluster exists and is running.
-
-```bash
-emdx swarm cluster status
-```
-
----
 
 ## ⌨️ **Keybinding Management** (`emdx keybindings`)
 
@@ -1307,11 +1070,8 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 
 **Disabled commands in safe mode:**
 - `cascade` - Autonomous document transformation pipeline
-- `run` - Quick task execution
-- `each` - Reusable parallel commands
-- `agent` - Sub-agent execution
-- `workflow` - Multi-stage workflow execution
-- `claude` - Claude document execution
+- `delegate` - One-shot AI execution
+- `recipe` - Recipe execution
 
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
@@ -1390,8 +1150,7 @@ emdx find --tags "gameplan" --project "myproject"
 | Level | Command | Use When |
 |-------|---------|----------|
 | 1 | `emdx delegate` | All one-shot AI execution |
-| 2 | `emdx workflow` | Complex multi-stage workflows |
-| 3 | `emdx cascade` | Ideas → code through stages |
+| 2 | `emdx cascade` | Ideas → code through stages |
 
 ### Basic Usage
 
@@ -1576,7 +1335,7 @@ Retrieve context and pipe to the `claude` CLI to use your Claude Max subscriptio
 
 ```bash
 # Basic usage - pipe to claude
-emdx ai context "How does the workflow system work?" | claude
+emdx ai context "How does the cascade system work?" | claude
 
 # With a specific prompt
 emdx ai context "What are the tag conventions?" | claude "summarize briefly"
@@ -1796,12 +1555,6 @@ emdx task ready --project myapp
 ```bash
 # Run task with Claude (direct execution)
 emdx task run 1
-
-# Run via workflow
-emdx task run 1 --workflow deep_analysis
-
-# Pass workflow variables
-emdx task run 1 --workflow code_fix --var fix_type=production_todos
 
 # Preview prompt without running
 emdx task run 1 --dry-run
