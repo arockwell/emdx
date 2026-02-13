@@ -229,7 +229,7 @@ def _interactive_wizard(dry_run: bool):
                     console.print(f"  [dim]  ...and {len(med_sim) - 8} more[/dim]")
 
                 console.print("\n[yellow]These need manual review - skipping for now.[/yellow]")
-                console.print("[dim]Use 'emdx similar <doc_id>' to review individual documents.[/dim]")
+                console.print("[dim]Use 'emdx ai similar <doc_id>' to review individual documents.[/dim]")
 
     # Garbage collection (cheap check)
     gc_preview = app.garbage_collect(dry_run=True)

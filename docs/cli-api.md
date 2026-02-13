@@ -626,33 +626,6 @@ emdx gist 42 --copy
 echo "content" | emdx save --title "Share Me" --secret --copy
 ```
 
-### **emdx gdoc**
-Google Docs integration.
-
-#### **emdx gdoc gdoc-auth**
-Authenticate with Google via interactive OAuth flow.
-
-```bash
-# Start Google OAuth authentication
-emdx gdoc gdoc-auth
-```
-
-Opens a browser window for Google OAuth authentication. Requires OAuth credentials to be configured at the expected credentials file path.
-
-#### **emdx gdoc gdoc-list**
-List all Google Docs created from EMDX documents.
-
-```bash
-# List all exported Google Docs
-emdx gdoc gdoc-list
-
-# Filter by project
-emdx gdoc gdoc-list --project myapp
-```
-
-**Options:**
-- `--project TEXT` - Filter by project
-
 ## ⚙️ **Configuration**
 
 ### **Environment Variables**
@@ -690,7 +663,7 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 - `list`, `recent`, `stats` - Information commands
 - `gui`, `prime`, `status` - Interface and overview
 - `ai` (ask, search, context) - AI-powered features
-- `gist`, `gdoc` - Integration commands
+- `gist` - GitHub Gist integration
 - `exec` - Execution monitoring (read-only)
 - `group`, `task`, `trash` - Organization commands
 
@@ -996,73 +969,6 @@ emdx ai clear --yes
 - Use `emdx ai context | claude` to avoid API costs (uses Claude Max)
 - Semantic search works best with natural language queries
 - Lower threshold values (0.2-0.3) return more results but less relevant
-
----
-
-## 🔍 Document Similarity (`emdx similar`)
-
-Find related documents using TF-IDF content analysis and tag similarity.
-
-### Find Similar by Document ID
-
-```bash
-# Find top 5 similar documents
-emdx similar 42
-
-# Find more results
-emdx similar 42 --limit 10
-
-# Only content similarity (ignore tags)
-emdx similar 42 --content-only
-
-# Only tag similarity (ignore content)
-emdx similar 42 --tags-only
-
-# Filter to same project
-emdx similar 42 --same-project
-
-# Lower similarity threshold (find more matches)
-emdx similar 42 --threshold 0.05
-
-# Output as JSON
-emdx similar 42 --json
-```
-
-### Find Similar by Text
-
-```bash
-# Search by natural language
-emdx similar similar-text "kubernetes deployment strategies"
-emdx similar similar-text "how to configure docker compose" --limit 10
-
-# Output as JSON
-emdx similar similar-text "authentication patterns" --json
-```
-
-### Index Management
-
-```bash
-# Rebuild TF-IDF index (auto-built on first use)
-emdx similar build-index
-
-# Force rebuild even if cache exists
-emdx similar build-index --force
-
-# Show index statistics
-emdx similar index-stats
-emdx similar index-stats --json
-```
-
-### Options Reference
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--limit` | `-l` | Number of results (default: 5) |
-| `--threshold` | `-t` | Minimum similarity score 0-1 (default: 0.1) |
-| `--content-only` | `-c` | Only use content similarity |
-| `--tags-only` | `-T` | Only use tag similarity |
-| `--same-project` | `-p` | Only find similar docs in same project |
-| `--json` | `-j` | Output as JSON |
 
 ---
 
