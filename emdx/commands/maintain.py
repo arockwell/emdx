@@ -1060,9 +1060,41 @@ def cleanup_temp_dirs(
 
 # Create typer app for this module
 app = typer.Typer()
-app.command()(maintain)
+
+
+@app.callback(invoke_without_command=True)
+def maintain_callback(
+    ctx: typer.Context,
+    auto: bool = typer.Option(False, "--auto", "-a", help="Automatically fix all issues"),
+    clean: bool = typer.Option(False, "--clean", "-c", help="Remove duplicates and empty documents"),
+    merge: bool = typer.Option(False, "--merge", "-m", help="Merge similar documents"),
+    tags: bool = typer.Option(False, "--tags", "-t", help="Auto-tag untagged documents"),
+    gc: bool = typer.Option(False, "--gc", "-g", help="Run garbage collection"),
+    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
+    threshold: float = typer.Option(0.7, "--threshold", help="Similarity threshold for merging"),
+) -> None:
+    """
+    Maintain your knowledge base — fix issues, optimize, and analyze.
+
+    Run with no subcommand for the maintenance wizard.
+
+    Subcommands:
+        cleanup      Clean up execution resources (branches, processes)
+        cleanup-dirs Clean up temporary directories
+        analyze      Analyze knowledge base health and patterns
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    maintain(auto=auto, clean=clean, merge=merge, tags=tags, gc=gc,
+             dry_run=dry_run, threshold=threshold)
+
+
 app.command(name="cleanup")(cleanup_main)
 app.command(name="cleanup-dirs")(cleanup_temp_dirs)
+
+# Import and register analyze as a subcommand of maintain
+from emdx.commands.analyze import analyze as analyze_cmd
+app.command(name="analyze")(analyze_cmd)
 
 
 if __name__ == "__main__":

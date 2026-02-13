@@ -977,12 +977,6 @@ Show knowledge base statistics.
 ```bash
 # Overall statistics
 emdx stats
-
-# Detailed project breakdown
-emdx project-stats
-
-# Show all projects
-emdx projects
 ```
 
 ### **emdx trash**
@@ -993,10 +987,10 @@ Manage deleted documents.
 emdx trash
 
 # Restore document from trash
-emdx restore 42
+emdx trash restore 42
 
-# Permanently delete (careful!)
-emdx trash --permanent
+# Permanently delete all trash (careful!)
+emdx trash purge --force
 ```
 
 ## 🎨 **Interactive Interface**

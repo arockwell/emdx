@@ -526,24 +526,27 @@ class TestDeleteCommand:
 
 
 # ---------------------------------------------------------------------------
-# trash command
+# trash command (now a subcommand group: emdx trash [list|restore|purge])
+# Uses main_app since trash is registered as a typer subgroup there.
 # ---------------------------------------------------------------------------
+from emdx.main import app as main_app
+
 class TestTrashCommand:
     """Tests for the trash command."""
 
-    @patch("emdx.commands.core.list_deleted_documents")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.db")
     def test_trash_empty(self, mock_db, mock_list_deleted):
         """Empty trash shows message."""
         mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = []
 
-        result = runner.invoke(app, ["trash"])
+        result = runner.invoke(main_app, ["trash"])
         assert result.exit_code == 0
         assert "No documents in trash" in _out(result)
 
-    @patch("emdx.commands.core.list_deleted_documents")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.db")
     def test_trash_with_items(self, mock_db, mock_list_deleted):
         """Trash with items shows table."""
         mock_db.ensure_schema = Mock()
@@ -557,61 +560,61 @@ class TestTrashCommand:
             }
         ]
 
-        result = runner.invoke(app, ["trash"])
+        result = runner.invoke(main_app, ["trash"])
         assert result.exit_code == 0
         assert "Deleted Doc" in _out(result)
 
-    @patch("emdx.commands.core.list_deleted_documents")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.db")
     def test_trash_with_days_filter(self, mock_db, mock_list_deleted):
         """Trash --days filters by age."""
         mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = []
 
-        result = runner.invoke(app, ["trash", "--days", "7"])
+        result = runner.invoke(main_app, ["trash", "--days", "7"])
         assert result.exit_code == 0
         mock_list_deleted.assert_called_once_with(days=7, limit=50)
 
 
 # ---------------------------------------------------------------------------
-# restore command
+# trash restore command
 # ---------------------------------------------------------------------------
 class TestRestoreCommand:
-    """Tests for the restore command."""
+    """Tests for the trash restore command."""
 
-    @patch("emdx.commands.core.restore_document")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.restore_document")
+    @patch("emdx.commands.trash.db")
     def test_restore_by_id(self, mock_db, mock_restore):
         """Restore a specific document."""
         mock_db.ensure_schema = Mock()
         mock_restore.return_value = True
 
-        result = runner.invoke(app, ["restore", "1"])
+        result = runner.invoke(main_app, ["trash", "restore", "1"])
         assert result.exit_code == 0
         assert "Restored" in _out(result)
 
-    @patch("emdx.commands.core.restore_document")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.restore_document")
+    @patch("emdx.commands.trash.db")
     def test_restore_not_found(self, mock_db, mock_restore):
         """Restore a document not in trash."""
         mock_db.ensure_schema = Mock()
         mock_restore.return_value = False
 
-        result = runner.invoke(app, ["restore", "999"])
+        result = runner.invoke(main_app, ["trash", "restore", "999"])
         assert result.exit_code == 0
         assert "Could not restore" in _out(result)
 
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.db")
     def test_restore_no_args(self, mock_db):
         """Restore with no ID and no --all should error."""
         mock_db.ensure_schema = Mock()
 
-        result = runner.invoke(app, ["restore"])
+        result = runner.invoke(main_app, ["trash", "restore"])
         assert result.exit_code != 0
 
-    @patch("emdx.commands.core.list_deleted_documents")
-    @patch("emdx.commands.core.restore_document")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.restore_document")
+    @patch("emdx.commands.trash.db")
     def test_restore_all(self, mock_db, mock_restore, mock_list_deleted):
         """Restore --all restores all deleted documents."""
         mock_db.ensure_schema = Mock()
@@ -621,38 +624,38 @@ class TestRestoreCommand:
         ]
         mock_restore.return_value = True
 
-        result = runner.invoke(app, ["restore", "--all"], input="y\n")
+        result = runner.invoke(main_app, ["trash", "restore", "--all"], input="y\n")
         assert result.exit_code == 0
         assert "Restored 2" in _out(result)
 
 
 # ---------------------------------------------------------------------------
-# purge command
+# trash purge command
 # ---------------------------------------------------------------------------
 class TestPurgeCommand:
-    """Tests for the purge command."""
+    """Tests for the trash purge command."""
 
-    @patch("emdx.commands.core.list_deleted_documents")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.db")
     def test_purge_empty_trash(self, mock_db, mock_list_deleted):
         """Purge with empty trash shows message."""
         mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = []
 
-        result = runner.invoke(app, ["purge"])
+        result = runner.invoke(main_app, ["trash", "purge"])
         assert result.exit_code == 0
         assert "No documents in trash" in _out(result)
 
-    @patch("emdx.commands.core.purge_deleted_documents")
-    @patch("emdx.commands.core.list_deleted_documents")
-    @patch("emdx.commands.core.db")
+    @patch("emdx.commands.trash.purge_deleted_documents")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.db")
     def test_purge_with_force(self, mock_db, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
         mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]
         mock_purge.return_value = 1
 
-        result = runner.invoke(app, ["purge", "--force"])
+        result = runner.invoke(main_app, ["trash", "purge", "--force"])
         assert result.exit_code == 0
         assert "Permanently deleted" in _out(result)
 

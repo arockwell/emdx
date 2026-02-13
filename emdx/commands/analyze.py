@@ -41,10 +41,10 @@ def analyze(
     opportunities for improvement.
     
     Examples:
-        emdx analyze              # Show health overview with recommendations
-        emdx analyze --health     # Detailed health metrics
-        emdx analyze --duplicates # Find duplicate documents
-        emdx analyze --all        # Run all analyses
+        emdx maintain analyze              # Show health overview with recommendations
+        emdx maintain analyze --health     # Detailed health metrics
+        emdx maintain analyze --duplicates # Find duplicate documents
+        emdx maintain analyze --all        # Run all analyses
     """
     
     # If no specific analysis requested, show health overview
