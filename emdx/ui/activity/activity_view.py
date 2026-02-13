@@ -100,10 +100,12 @@ def format_time_ago(dt: datetime) -> str:
 
     # Handle any remaining future times
     if seconds < 0:
-        return "now"
+        return "just now"
 
+    if seconds < 10:
+        return "just now"
     if seconds < 60:
-        return "now"
+        return f"{int(seconds)}s"
     if seconds < 3600:
         mins = int(seconds / 60)
         return f"{mins}m"
@@ -1238,6 +1240,9 @@ class ActivityView(HelpMixin, Widget):
         """Sync callback for set_interval — dispatches to async refresh."""
         if self._refresh_in_progress:
             return
+        # Set flag here (sync) to prevent the next tick from cancelling
+        # the worker via exclusive=True before the coroutine starts.
+        self._refresh_in_progress = True
         self.run_worker(self._refresh_data(), exclusive=True, group="refresh")
 
     async def _refresh_data(self) -> None:
@@ -1248,10 +1253,6 @@ class ActivityView(HelpMixin, Widget):
         2. Call refresh_from_items() which diffs and updates labels in-place
         3. Tree preserves cursor position and scroll natively
         """
-        if self._refresh_in_progress:
-            return
-        self._refresh_in_progress = True
-
         try:
             self.activity_items = await self._data_loader.load_all(
                 zombies_cleaned=self._zombies_cleaned,
