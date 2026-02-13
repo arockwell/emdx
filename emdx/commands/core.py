@@ -209,6 +209,9 @@ def save(
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
+    smart: bool = typer.Option(
+        False, "--smart", "-s", help="Check for similar docs before saving (duplicate prevention)"
+    ),
     gist: bool = typer.Option(False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"),
     public: bool = typer.Option(False, "--public", help="Make gist public (default: secret)"),
     secret: bool = typer.Option(False, "--secret", help="Make gist secret (default, for explicitness)"),
@@ -268,6 +271,27 @@ def save(
 
     # Step 8: Display result
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
+
+    # Step 8.5: Smart save - check for similar docs and show warnings
+    if smart:
+        from emdx.services.contextual_save import check_for_similar, format_check_output
+
+        check_result = check_for_similar(
+            text=input_content.content,
+            title=metadata.title,
+            limit=5,
+            min_similarity=0.3,
+        )
+
+        if check_result.similar_docs:
+            # Show similar docs warning
+            output = format_check_output(check_result, doc_id=doc_id)
+            console.print(output)
+
+            # Show tag suggestions from similar docs if we didn't get explicit tags
+            if not tags and check_result.suggested_tags:
+                tag_list = ", ".join(check_result.suggested_tags)
+                console.print(f"Suggested tags: {tag_list} (use `emdx tag {doc_id} {' '.join(check_result.suggested_tags)}`)")
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
@@ -337,6 +361,110 @@ def save(
                     console.print("   [green]✓ Opened in browser[/green]")
             else:
                 console.print("[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]")
+
+
+@app.command()
+def check(
+    text: Optional[str] = typer.Argument(
+        None, help="Title or content to check for duplicates (reads from stdin if not provided)"
+    ),
+    limit: int = typer.Option(5, "--limit", "-l", help="Number of similar docs to show"),
+    threshold: float = typer.Option(
+        0.3, "--threshold", "-t", help="Minimum similarity threshold (0-1)"
+    ),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+) -> None:
+    """
+    Check for similar documents before saving (pre-save advisory).
+
+    This command helps prevent duplicate documents by checking if similar
+    content already exists in the knowledge base.
+
+    Examples:
+        emdx check "API authentication design"
+        echo "long document content" | emdx check
+        emdx check "kubernetes deployment" --limit 10
+    """
+    import sys
+
+    from emdx.services.contextual_save import check_for_similar
+
+    # Get input text
+    if text:
+        input_text = text
+    elif not sys.stdin.isatty():
+        input_text = sys.stdin.read().strip()
+    else:
+        console.print("[red]Error: Provide text as argument or pipe via stdin[/red]")
+        raise typer.Exit(1)
+
+    if not input_text:
+        console.print("[red]Error: No text provided to check[/red]")
+        raise typer.Exit(1)
+
+    # Run the check
+    result = check_for_similar(
+        text=input_text,
+        limit=limit,
+        min_similarity=threshold,
+    )
+
+    # Output as JSON if requested
+    if json_output:
+        output = {
+            "classification": result.classification,
+            "recommendation": result.recommendation,
+            "similar_docs": [
+                {
+                    "doc_id": d.doc_id,
+                    "title": d.title,
+                    "project": d.project,
+                    "similarity": round(d.similarity, 4),
+                    "tags": d.tags,
+                }
+                for d in result.similar_docs
+            ],
+            "suggested_tags": result.suggested_tags,
+            "suggested_project": result.suggested_project,
+        }
+        print(json.dumps(output, indent=2))
+        return
+
+    # Human-readable output
+    if not result.similar_docs:
+        console.print("[green]✓ No similar documents found - this appears to be new content.[/green]")
+        return
+
+    # Classification header
+    if result.classification == "duplicate":
+        console.print("[yellow]⚠ Potential duplicate detected![/yellow]\n")
+    elif result.classification == "related":
+        console.print("[blue]ℹ Related documents found.[/blue]\n")
+    else:
+        console.print("[green]✓ New topic with some related content.[/green]\n")
+
+    # Similar docs list
+    console.print("[bold]Similar existing docs:[/bold]")
+    for doc in result.similar_docs:
+        similarity_pct = f"{doc.similarity:.0%}"
+        color = "red" if doc.similarity >= 0.8 else "yellow" if doc.similarity >= 0.5 else "dim"
+        tags_str = f" [{', '.join(doc.tags)}]" if doc.tags else ""
+        console.print(f"  [{color}]#{doc.doc_id}[/{color}] \"{doc.title}\" ({similarity_pct} similar){tags_str}")
+
+    # Suggestions
+    if result.suggested_tags:
+        console.print(f"\n[bold]Suggested tags:[/bold] {', '.join(result.suggested_tags)}")
+
+    if result.suggested_project:
+        console.print(f"[bold]Suggested project:[/bold] {result.suggested_project}")
+
+    console.print(f"\n[bold]Recommendation:[/bold] {result.recommendation}")
+
+    # Show helpful commands
+    if result.classification == "duplicate":
+        top_doc = result.similar_docs[0]
+        console.print(f"\n[dim]To update existing doc: emdx edit {top_doc.doc_id}[/dim]")
+        console.print(f"[dim]To view existing doc: emdx view {top_doc.doc_id}[/dim]")
 
 
 @app.command()
