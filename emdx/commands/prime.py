@@ -3,9 +3,17 @@ Prime command - Output context for Claude session injection.
 
 This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
+
+The --smart flag provides context-aware priming with:
+- Recent activity (last 7 days)
+- Key docs (most viewed/referenced)
+- Knowledge map (tags across project)
+- Staleness detection (docs needing review)
 """
 
-from datetime import datetime
+import subprocess
+from datetime import datetime, timedelta
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -37,6 +45,11 @@ def prime(
         "--execution/--no-execution",
         help="Include execution method guidance"
     ),
+    smart: bool = typer.Option(
+        False,
+        "--smart", "-s",
+        help="Context-aware priming with recent activity, key docs, knowledge map, and staleness detection"
+    ),
 ):
     """
     Output priming context for Claude Code session injection.
@@ -49,6 +62,9 @@ def prime(
         # Basic priming
         emdx prime
 
+        # Smart context-aware priming (recommended)
+        emdx prime --smart
+
         # With full context
         emdx prime --verbose
 
@@ -60,7 +76,12 @@ def prime(
     """
     project = get_git_project()
 
-    if format == "json":
+    if smart:
+        if format == "json":
+            _output_smart_json(project)
+        else:
+            _output_smart_text(project)
+    elif format == "json":
         _output_json(project, verbose, quiet, execution)
     else:
         _output_text(project, verbose, quiet, format == "markdown", execution)
@@ -333,6 +354,341 @@ def _get_cascade_status() -> dict:
         pass
 
     return status
+
+
+# =============================================================================
+# Smart Priming Functions
+# =============================================================================
+
+
+def _get_git_context() -> dict:
+    """Get git context: branch, recent commits, open PRs."""
+    context = {
+        "branch": None,
+        "recent_commits": [],
+        "open_prs": [],
+    }
+
+    try:
+        # Get current branch
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            context["branch"] = result.stdout.strip()
+
+        # Get recent commits (last 3)
+        result = subprocess.run(
+            ["git", "log", "--oneline", "-3", "--no-decorate"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            commits = result.stdout.strip().split("\n")
+            context["recent_commits"] = [c for c in commits if c]
+
+        # Get open PRs (requires gh CLI)
+        result = subprocess.run(
+            ["gh", "pr", "list", "--state=open", "--limit=3", "--json=number,title"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            import json
+            try:
+                prs = json.loads(result.stdout)
+                context["open_prs"] = [{"number": pr["number"], "title": pr["title"]} for pr in prs]
+            except (json.JSONDecodeError, KeyError):
+                pass
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return context
+
+
+def _get_recent_activity(project: Optional[str], days: int = 7) -> list:
+    """Get recent docs for project within last N days."""
+    cutoff = datetime.now() - timedelta(days=days)
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        if project:
+            cursor.execute("""
+                SELECT id, title, accessed_at, access_count
+                FROM documents
+                WHERE is_deleted = 0
+                AND project = ?
+                AND accessed_at >= ?
+                ORDER BY accessed_at DESC
+                LIMIT 10
+            """, (project, cutoff.isoformat()))
+        else:
+            cursor.execute("""
+                SELECT id, title, accessed_at, access_count
+                FROM documents
+                WHERE is_deleted = 0
+                AND accessed_at >= ?
+                ORDER BY accessed_at DESC
+                LIMIT 10
+            """, (cutoff.isoformat(),))
+
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": r[0],
+                "title": r[1],
+                "accessed_at": r[2],
+                "views": r[3]
+            }
+            for r in rows
+        ]
+
+
+def _get_key_docs(project: Optional[str], limit: int = 5) -> list:
+    """Get key docs sorted by view count (importance score)."""
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        if project:
+            cursor.execute("""
+                SELECT id, title, access_count
+                FROM documents
+                WHERE is_deleted = 0
+                AND project = ?
+                AND access_count > 0
+                ORDER BY access_count DESC
+                LIMIT ?
+            """, (project, limit))
+        else:
+            cursor.execute("""
+                SELECT id, title, access_count
+                FROM documents
+                WHERE is_deleted = 0
+                AND access_count > 0
+                ORDER BY access_count DESC
+                LIMIT ?
+            """, (limit,))
+
+        rows = cursor.fetchall()
+        return [
+            {"id": r[0], "title": r[1], "views": r[2]}
+            for r in rows
+        ]
+
+
+def _get_knowledge_map(project: Optional[str]) -> dict:
+    """Get tag aggregation for project - shows what topics are covered."""
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Get tags with counts for this project
+        if project:
+            cursor.execute("""
+                SELECT t.name, COUNT(dt.document_id) as count
+                FROM tags t
+                JOIN document_tags dt ON t.id = dt.tag_id
+                JOIN documents d ON dt.document_id = d.id
+                WHERE d.is_deleted = 0
+                AND d.project = ?
+                GROUP BY t.name
+                ORDER BY count DESC
+                LIMIT 20
+            """, (project,))
+        else:
+            cursor.execute("""
+                SELECT t.name, COUNT(dt.document_id) as count
+                FROM tags t
+                JOIN document_tags dt ON t.id = dt.tag_id
+                JOIN documents d ON dt.document_id = d.id
+                WHERE d.is_deleted = 0
+                GROUP BY t.name
+                ORDER BY count DESC
+                LIMIT 20
+            """)
+
+        rows = cursor.fetchall()
+        tags = {r[0]: r[1] for r in rows}
+
+        # Expected topics - used to detect gaps
+        expected_topics = {
+            "architecture", "testing", "deployment", "docs", "security",
+            "api", "database", "performance", "ci/cd", "design"
+        }
+
+        # Find covered vs missing
+        covered = [tag for tag in tags.keys() if any(
+            exp in tag.lower() for exp in expected_topics
+        )]
+        missing = [topic for topic in expected_topics if not any(
+            topic in tag.lower() for tag in tags.keys()
+        )]
+
+        return {
+            "tags": tags,
+            "covered_topics": covered,
+            "potential_gaps": missing[:5],  # Limit to top 5 gaps
+        }
+
+
+def _get_stale_docs(project: Optional[str], stale_days: int = 14, importance_threshold: int = 3) -> list:
+    """Get important docs that haven't been viewed recently."""
+    cutoff = datetime.now() - timedelta(days=stale_days)
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        if project:
+            cursor.execute("""
+                SELECT id, title, accessed_at, access_count
+                FROM documents
+                WHERE is_deleted = 0
+                AND project = ?
+                AND access_count >= ?
+                AND accessed_at < ?
+                ORDER BY access_count DESC
+                LIMIT 5
+            """, (project, importance_threshold, cutoff.isoformat()))
+        else:
+            cursor.execute("""
+                SELECT id, title, accessed_at, access_count
+                FROM documents
+                WHERE is_deleted = 0
+                AND access_count >= ?
+                AND accessed_at < ?
+                ORDER BY access_count DESC
+                LIMIT 5
+            """, (importance_threshold, cutoff.isoformat()))
+
+        rows = cursor.fetchall()
+        result = []
+        for r in rows:
+            accessed_at = r[2]
+            if isinstance(accessed_at, str):
+                try:
+                    accessed_dt = datetime.fromisoformat(accessed_at.replace("Z", "+00:00"))
+                    days_stale = (datetime.now() - accessed_dt.replace(tzinfo=None)).days
+                except (ValueError, TypeError):
+                    days_stale = stale_days
+            else:
+                days_stale = stale_days
+
+            result.append({
+                "id": r[0],
+                "title": r[1],
+                "views": r[3],
+                "days_stale": days_stale,
+            })
+        return result
+
+
+def _format_relative_time(dt_str: str) -> str:
+    """Format datetime string as relative time (e.g., 'yesterday', '2 days ago')."""
+    try:
+        if isinstance(dt_str, str):
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            dt = dt.replace(tzinfo=None)
+        else:
+            dt = dt_str
+
+        now = datetime.now()
+        diff = now - dt
+        days = diff.days
+
+        # Handle future dates (can happen with timezone issues)
+        if days < 0:
+            days = 0
+
+        if days == 0:
+            return "today"
+        elif days == 1:
+            return "yesterday"
+        elif days < 7:
+            return f"{days} days ago"
+        elif days < 30:
+            weeks = days // 7
+            return f"{weeks} week{'s' if weeks > 1 else ''} ago"
+        else:
+            months = days // 30
+            return f"{months} month{'s' if months > 1 else ''} ago"
+    except (ValueError, TypeError, AttributeError):
+        return "unknown"
+
+
+def _output_smart_text(project: Optional[str]):
+    """Output smart priming context as compact text (<500 tokens target)."""
+    lines = []
+
+    # Header - compact
+    lines.append(f"EMDX CONTEXT — Project: {project or 'unknown'}")
+    lines.append("")
+
+    # Git context
+    git_ctx = _get_git_context()
+    if git_ctx["branch"]:
+        lines.append(f"Branch: {git_ctx['branch']}")
+    if git_ctx["recent_commits"]:
+        lines.append(f"Recent commits: {', '.join(git_ctx['recent_commits'][:2])}")
+    if git_ctx["open_prs"]:
+        pr_strs = [f"#{pr['number']}" for pr in git_ctx["open_prs"]]
+        lines.append(f"Open PRs: {', '.join(pr_strs)}")
+    if any([git_ctx["branch"], git_ctx["recent_commits"], git_ctx["open_prs"]]):
+        lines.append("")
+
+    # Recent activity (last 7 days)
+    recent = _get_recent_activity(project)
+    if recent:
+        lines.append("📅 Recent activity (last 7 days):")
+        for doc in recent[:5]:
+            relative = _format_relative_time(doc["accessed_at"])
+            views_str = f", {doc['views']} views" if doc["views"] > 1 else ""
+            lines.append(f"  #{doc['id']} \"{doc['title']}\" ({relative}{views_str})")
+        lines.append("")
+
+    # Key docs (most viewed)
+    key_docs = _get_key_docs(project)
+    if key_docs:
+        lines.append("🔑 Key docs (most viewed):")
+        for doc in key_docs:
+            lines.append(f"  #{doc['id']} \"{doc['title']}\" — {doc['views']} views")
+        lines.append("")
+
+    # Knowledge map
+    knowledge = _get_knowledge_map(project)
+    if knowledge["tags"]:
+        # Format as compact tag list with counts
+        tag_strs = [f"{tag}({count})" for tag, count in list(knowledge["tags"].items())[:8]]
+        lines.append(f"🏷️ Active tags: {', '.join(tag_strs)}")
+        if knowledge["potential_gaps"]:
+            lines.append(f"   Potential gaps: {', '.join(knowledge['potential_gaps'])}")
+        lines.append("")
+
+    # Stale docs needing review
+    stale = _get_stale_docs(project)
+    if stale:
+        lines.append("⏰ Needs review:")
+        for doc in stale[:3]:
+            importance = "HIGH" if doc["views"] >= 5 else "MEDIUM"
+            lines.append(f"  #{doc['id']} \"{doc['title']}\" — {doc['days_stale']} days stale, {importance} importance")
+        lines.append("")
+
+    # Compact footer
+    lines.append("Run 'emdx view <id>' to access any document.")
+
+    print("\n".join(lines))
+
+
+def _output_smart_json(project: Optional[str]):
+    """Output smart priming context as JSON."""
+    import json
+
+    data = {
+        "project": project,
+        "timestamp": datetime.now().isoformat(),
+        "git_context": _get_git_context(),
+        "recent_activity": _get_recent_activity(project),
+        "key_docs": _get_key_docs(project),
+        "knowledge_map": _get_knowledge_map(project),
+        "stale_docs": _get_stale_docs(project),
+    }
+
+    print(json.dumps(data, indent=2, default=str))
 
 
 # Create typer app for the command
