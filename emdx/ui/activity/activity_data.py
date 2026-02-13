@@ -51,7 +51,7 @@ class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
     # How often to re-fetch mail from gh CLI (seconds)
-    MAIL_CACHE_TTL = 30.0
+    MAIL_CACHE_TTL = 60.0
 
     def __init__(self) -> None:
         # Track workflow states for completion notifications
@@ -61,6 +61,7 @@ class ActivityDataLoader:
         # Cache for mail messages (avoid hitting gh CLI every tick)
         self._cached_mail_items: List[ActivityItem] = []
         self._mail_last_fetched: Optional[datetime] = None
+        self._mail_fetch_in_progress: bool = False
 
     async def load_all(self, zombies_cleaned: bool = True) -> List[ActivityItem]:
         """Load all activity items, sorted.
@@ -93,7 +94,10 @@ class ActivityDataLoader:
 
         items.extend(await self._load_cascade_executions())
         items.extend(await self._load_agent_executions())
-        items.extend(await self._load_mail_messages())
+
+        # Mail: return cached items immediately, refresh in background
+        items.extend(self._cached_mail_items)
+        self._maybe_refresh_mail_background()
 
         # Sort: running items first (pinned), then by timestamp descending
         def sort_key(item: ActivityItem) -> Tuple:
@@ -257,10 +261,13 @@ class ActivityDataLoader:
         return items
 
     async def _load_groups(self) -> List[ActivityItem]:
-        """Load document groups into typed GroupItem instances."""
+        """Load document groups into typed GroupItem instances.
+
+        Uses a single batched query instead of N+1 per-group lookups.
+        """
         items: List[ActivityItem] = []
         try:
-            top_groups = group_svc.list_groups(top_level_only=True)
+            top_groups = group_svc.list_top_groups_with_counts()
         except Exception as e:
             logger.error(f"Error listing groups: {e}", exc_info=True)
             return items
@@ -269,18 +276,16 @@ class ActivityDataLoader:
             try:
                 group_id = group["id"]
                 created = parse_datetime(group.get("created_at")) or datetime.now()
-                child_groups = group_svc.get_child_groups(group_id)
-                doc_count = group_svc.get_recursive_doc_count(group_id)
 
                 item = GroupItem(
                     item_id=group_id,
                     title=group["name"],
                     timestamp=created,
                     group=group,
-                    doc_count=doc_count,
+                    doc_count=group.get("doc_count", 0),
                     total_cost=group.get("total_cost_usd", 0) or 0,
                     total_tokens=group.get("total_tokens", 0) or 0,
-                    child_group_count=len(child_groups),
+                    child_group_count=group.get("child_group_count", 0),
                     cost=group.get("total_cost_usd", 0) or 0,
                 )
 
@@ -484,28 +489,43 @@ class ActivityDataLoader:
 
         return items
 
-    async def _load_mail_messages(self) -> List[ActivityItem]:
-        """Load mail messages with caching to avoid hitting gh CLI every tick."""
-        # Return cached results if still fresh
+    def _maybe_refresh_mail_background(self) -> None:
+        """Kick off a background mail fetch if the cache is stale.
+
+        Never blocks load_all — cached items are returned immediately,
+        and the background thread updates the cache for the next tick.
+        """
+        if self._mail_fetch_in_progress:
+            return
+
         now = datetime.now()
         if (
             self._mail_last_fetched is not None
             and (now - self._mail_last_fetched).total_seconds() < self.MAIL_CACHE_TTL
         ):
-            return list(self._cached_mail_items)
+            return
 
+        try:
+            from emdx.services.mail_service import get_mail_config_repo
+            if not get_mail_config_repo():
+                self._mail_last_fetched = now
+                return
+        except Exception:
+            return
+
+        import threading
+        self._mail_fetch_in_progress = True
+        thread = threading.Thread(target=self._fetch_mail_sync, daemon=True)
+        thread.start()
+
+    def _fetch_mail_sync(self) -> None:
+        """Synchronous mail fetch running on a background thread."""
         items: List[ActivityItem] = []
         try:
-            import asyncio
-            from emdx.services.mail_service import get_mail_service, get_mail_config_repo
-
-            if not get_mail_config_repo():
-                self._cached_mail_items = []
-                self._mail_last_fetched = now
-                return items
+            from emdx.services.mail_service import get_mail_service
 
             service = get_mail_service()
-            messages = await asyncio.to_thread(service.list_inbox, limit=20)
+            messages = service.list_inbox(limit=20)
 
             for msg in messages:
                 ts = parse_datetime(msg.created_at)
@@ -529,10 +549,9 @@ class ActivityDataLoader:
                     url=msg.url,
                 )
                 items.append(item)
-
         except Exception as e:
             logger.debug(f"Could not load mail messages: {e}")
 
         self._cached_mail_items = items
-        self._mail_last_fetched = now
-        return list(items)
+        self._mail_last_fetched = datetime.now()
+        self._mail_fetch_in_progress = False
