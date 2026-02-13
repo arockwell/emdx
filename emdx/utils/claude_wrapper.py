@@ -88,13 +88,16 @@ def main():
         write_log("Starting Claude process...")
 
         # Execute the command and format output before writing to log
+        # Strip CLAUDECODE env var to allow nested Claude Code sessions
+        child_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             # Don't set cwd - inherit from parent process which already set it
             text=True,
-            bufsize=1  # Line buffered
+            bufsize=1,  # Line buffered
+            env=child_env,
         )
 
         start_time = time.time()

@@ -16,6 +16,7 @@ from emdx.models.documents import get_document
 from emdx.models.executions import create_execution
 from emdx.models.task_executions import create_task_execution, complete_task_execution
 from emdx.services.claude_executor import execute_claude_detached
+from emdx.utils.environment import get_subprocess_env
 
 
 def build_task_prompt(task_id: int) -> str:
@@ -268,7 +269,7 @@ asyncio.run(run())
             stderr=subprocess.STDOUT,
             start_new_session=True,  # Detach from parent process
             cwd=str(emdx_project_dir),  # Run from project dir for poetry
-            env={**dict(__import__('os').environ), 'PYTHONUNBUFFERED': '1'},
+            env={**get_subprocess_env(), 'PYTHONUNBUFFERED': '1'},
         )
 
     tasks.log_progress(task_id, f"Workflow subprocess started, log: {log_file}")
