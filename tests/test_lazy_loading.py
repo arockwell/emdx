@@ -78,7 +78,7 @@ class TestLazyTyperGroup:
     def test_lazy_command_not_loaded_until_invoked(self):
         """Test that lazy commands don't import their modules until invoked."""
         group = LazyTyperGroup(
-            lazy_subcommands={"test_cmd": "emdx.commands.workflows:app"},
+            lazy_subcommands={"test_cmd": "emdx.commands.recipe:app"},
             lazy_help={"test_cmd": "Test help"},
         )
 
@@ -151,8 +151,8 @@ class TestLazyCommand:
         """Test that invoke loads the real command."""
         group = LazyTyperGroup()
         cmd = LazyCommand(
-            name="workflow",
-            import_path="emdx.commands.workflows:app",
+            name="recipe",
+            import_path="emdx.commands.recipe:app",
             help_text="Test help",
             parent_group=group,
         )
@@ -191,7 +191,7 @@ class TestCLIIntegration:
         """Test that --help doesn't load lazy modules."""
         # Track which modules are loaded
         lazy_modules = [
-            'emdx.commands.workflows',
+            'emdx.commands.recipe',
             'emdx.commands.cascade',
             'emdx.commands.delegate',
             'emdx.commands.claude_execute',
@@ -233,7 +233,7 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        assert "workflow" in result.output
+        assert "recipe" in result.output
         assert "cascade" in result.output
         assert "ai" in result.output
         assert "gui" in result.output
@@ -246,7 +246,7 @@ class TestCLIIntegration:
 
         assert result.exit_code == 0
         # Check that our lazy help text appears (not the actual module help)
-        assert "Manage and run multi-stage workflows" in result.output
+        assert "Manage and run EMDX recipes" in result.output
         assert "Cascade ideas through stages" in result.output
         assert "Google Docs integration" in result.output
 
@@ -254,10 +254,10 @@ class TestCLIIntegration:
         """Test that lazy commands work when actually invoked."""
         from emdx.main import app
 
-        result = runner.invoke(app, ["workflow", "--help"])
+        result = runner.invoke(app, ["recipe", "--help"])
 
         assert result.exit_code == 0
-        # Should show the actual workflow subcommands
+        # Should show the actual recipe subcommands
         assert "run" in result.output.lower()
         assert "list" in result.output.lower()
 

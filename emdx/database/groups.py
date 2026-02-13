@@ -18,9 +18,9 @@ def create_group(
     group_type: str = "batch",
     parent_group_id: int | None = None,
     project: str | None = None,
-    workflow_run_id: int | None = None,
     description: str | None = None,
     created_by: str | None = None,
+    **kwargs,
 ) -> int:
     """Create a new document group.
 
@@ -29,7 +29,6 @@ def create_group(
         group_type: One of 'batch', 'initiative', 'round', 'session', 'custom'
         parent_group_id: Parent group for nesting (optional)
         project: Associated project name (optional)
-        workflow_run_id: Workflow run that created this group (optional)
         description: Description of the group's purpose (optional)
         created_by: Who created the group (optional, defaults to USER env)
 
@@ -49,12 +48,10 @@ def create_group(
         cursor = conn.execute(
             """
             INSERT INTO document_groups
-            (name, description, parent_group_id, group_type, project,
-             workflow_run_id, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (name, description, parent_group_id, group_type, project, created_by)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (name, description, parent_group_id, group_type, project,
-             workflow_run_id, created_by),
+            (name, description, parent_group_id, group_type, project, created_by),
         )
         conn.commit()
         return cursor.lastrowid
@@ -79,9 +76,9 @@ def list_groups(
     parent_group_id: int | None = None,
     project: str | None = None,
     group_type: str | None = None,
-    workflow_run_id: int | None = None,
     include_inactive: bool = False,
     top_level_only: bool = False,
+    **kwargs,
 ) -> list[dict[str, Any]]:
     """List groups with optional filters.
 
@@ -89,7 +86,6 @@ def list_groups(
         parent_group_id: Filter by parent group (use -1 for top-level only)
         project: Filter by project name
         group_type: Filter by type ('batch', 'initiative', etc.)
-        workflow_run_id: Filter by associated workflow run
         include_inactive: Include soft-deleted groups
         top_level_only: Only return groups with no parent
 
@@ -115,10 +111,6 @@ def list_groups(
     if group_type is not None:
         conditions.append("group_type = ?")
         params.append(group_type)
-
-    if workflow_run_id is not None:
-        conditions.append("workflow_run_id = ?")
-        params.append(workflow_run_id)
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
@@ -420,32 +412,13 @@ def _update_group_metrics(conn, group_id: int) -> bool:
     )
     doc_count = cursor.fetchone()[0]
 
-    # Calculate total_tokens and total_cost_usd from document sources
-    # Documents are linked to workflow runs via document_sources table
-    # which references workflow_individual_runs containing tokens_used and cost_usd
-    cursor = conn.execute(
-        """
-        SELECT
-            COALESCE(SUM(wir.tokens_used), 0) as total_tokens,
-            COALESCE(SUM(wir.cost_usd), 0.0) as total_cost_usd
-        FROM document_group_members dgm
-        JOIN document_sources ds ON dgm.document_id = ds.document_id
-        JOIN workflow_individual_runs wir ON ds.workflow_individual_run_id = wir.id
-        WHERE dgm.group_id = ?
-        """,
-        (group_id,),
-    )
-    row = cursor.fetchone()
-    total_tokens = row[0] if row else 0
-    total_cost_usd = row[1] if row else 0.0
-
     conn.execute(
         """
         UPDATE document_groups
-        SET doc_count = ?, total_tokens = ?, total_cost_usd = ?, updated_at = ?
+        SET doc_count = ?, updated_at = ?
         WHERE id = ?
         """,
-        (doc_count, total_tokens, total_cost_usd, datetime.now().isoformat(), group_id),
+        (doc_count, datetime.now().isoformat(), group_id),
     )
     conn.commit()
     return True

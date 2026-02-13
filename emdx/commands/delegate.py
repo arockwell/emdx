@@ -605,9 +605,9 @@ def delegate(
     # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
     worktree_path = None
     if worktree and (len(task_list) == 1 or chain):
-        from .workflows import create_worktree_for_workflow
+        from ..utils.git import create_worktree
         try:
-            worktree_path, _ = create_worktree_for_workflow(base_branch)
+            worktree_path, _ = create_worktree(base_branch)
             if not quiet:
                 sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
         except Exception as e:
@@ -656,7 +656,7 @@ def delegate(
             )
     finally:
         if worktree_path and not pr:
-            from .workflows import cleanup_worktree
+            from ..utils.git import cleanup_worktree
             if not quiet:
                 sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
             cleanup_worktree(worktree_path)

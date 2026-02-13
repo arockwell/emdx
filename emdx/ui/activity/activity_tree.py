@@ -92,61 +92,26 @@ class ActivityTree(Tree[ActivityItem]):
 
     def _get_icon(self, item: ActivityItem) -> str:
         """Get the display icon for an item."""
-        is_recently_completed = (
-            item.item_type == "workflow"
-            and hasattr(self, "_recently_completed")
-            and item.item_id in self._recently_completed
-        )
-        if is_recently_completed:
-            return "✨"
-        elif item.status in ("running", "failed", "pending", "queued"):
+        if item.status in ("running", "failed", "pending", "queued"):
             return item.status_icon
         else:
             return item.type_icon
 
     def _get_suffix(self, item: ActivityItem) -> str:
         """Get the badge or progress bar suffix for an item's title."""
-        output_count = getattr(item, "output_count", 0)
         doc_count = getattr(item, "doc_count", 0)
 
-        if item.item_type == "workflow" and item.status == "running":
-            progress_total = getattr(item, "progress_total", 0)
-            progress_completed = getattr(item, "progress_completed", 0)
-            if getattr(item, "_is_synthesizing", False):
-                return " 🔮 Synthesizing..."
-            elif progress_total > 0:
-                pct = progress_completed / progress_total
-                bar_width = 10
-                filled_exact = pct * bar_width
-                filled_full = int(filled_exact)
-                remainder = filled_exact - filled_full
-                partial_chars = " ▏▎▍▌▋▊▉█"
-                partial_idx = int(remainder * 8)
-                partial = partial_chars[partial_idx] if partial_idx > 0 else ""
-                empty = bar_width - filled_full - (1 if partial else 0)
-                bar = "█" * filled_full + partial + "░" * empty
-                return f" {bar} {progress_completed}/{progress_total}"
-        elif not item.expanded:
-            if output_count > 0 and item.item_type == "workflow":
-                return f" [{output_count}]"
-            elif doc_count > 0 and item.item_type == "group":
+        if not item.expanded:
+            if doc_count > 0 and item.item_type == "group":
                 return f" [{doc_count}]"
         return ""
 
     def _get_id_str(self, item: ActivityItem) -> str:
         """Get the ID string for an item."""
-        if item.item_type in ("workflow", "group"):
+        if item.item_type == "group":
             return f"#{item.item_id}" if item.item_id else ""
-        elif item.item_type in ("document", "exploration", "synthesis", "cascade"):
+        elif item.item_type in ("document", "cascade"):
             return f"#{item.doc_id}" if getattr(item, "doc_id", None) else ""
-        elif item.item_type == "individual_run":
-            doc_id = getattr(item, "doc_id", None)
-            if doc_id:
-                return f"#{doc_id}"
-            elif item.item_id:
-                return f"r{item.item_id}"
-            else:
-                return ""
         else:
             return f"#{item.item_id}" if item.item_id else ""
 
@@ -203,9 +168,7 @@ class ActivityTree(Tree[ActivityItem]):
         id_str = self._get_id_str(item)
 
         # Styles — layer decorations on top of `style` so cursor background shows through
-        title_style = style + Style(bold=True) if (
-            item.item_type == "workflow" and item.status == "running"
-        ) else style
+        title_style = style + Style(bold=True) if item.status == "running" else style
         icon_style = style + Style(color="red") if item.status == "failed" else style
         dim_style = style + Style(dim=True)
 
@@ -371,15 +334,13 @@ class ActivityTree(Tree[ActivityItem]):
         return _search(self.root)
 
     def find_node_by_doc_id(
-        self, doc_id: int, skip_workflows: bool = True
+        self, doc_id: int
     ) -> Optional[TreeNode[ActivityItem]]:
         """Walk the tree to find a node with a matching doc_id."""
 
         def _search(node: TreeNode[ActivityItem]) -> Optional[TreeNode[ActivityItem]]:
             if node.data is not None:
-                if skip_workflows and node.data.item_type == "workflow":
-                    pass  # Skip workflow nodes, look for actual document children
-                elif getattr(node.data, "doc_id", None) == doc_id:
+                if getattr(node.data, "doc_id", None) == doc_id:
                     return node
             for child in node.children:
                 result = _search(child)

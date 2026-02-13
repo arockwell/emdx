@@ -108,6 +108,11 @@ EMOJI_ALIASES: Dict[str, str] = {
     "management": "📊",
     "pm": "📊",
     "tracking": "📊",
+
+    # Recipes
+    "recipe": "📋",
+    "template": "📋",
+    "playbook": "📋",
 }
 
 # Reverse mapping - emoji -> text aliases (for display/reference)
@@ -261,6 +266,7 @@ def get_category_emojis() -> Dict[str, List[str]]:
         "Technical Work": ["🔧", "🧪", "🐛", "✨", "💎"],
         "Priority": ["🚨", "🐌"],
         "Project Management": ["📊"],
+        "Recipes": ["📋"],
     }
     return categories
 
