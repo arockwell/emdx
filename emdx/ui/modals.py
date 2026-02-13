@@ -177,7 +177,6 @@ class HelpMixin:
         "add_tags": "Tags",
         "remove_tags": "Tags",
         "search": "Search",
-        "toggle_archived": "View",
         "selection_mode": "View",
         # General
         "show_help": "General",

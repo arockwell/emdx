@@ -119,7 +119,7 @@ class ActivityDataLoader:
                 logger.debug(f"Error getting grouped doc IDs: {e}")
 
         try:
-            docs = doc_svc.list_non_workflow_documents(limit=100, days=7, include_archived=False)
+            docs = doc_svc.list_non_workflow_documents(limit=100, days=7)
         except Exception as e:
             logger.error(f"Error listing non-workflow documents: {e}", exc_info=True)
             return items
@@ -132,7 +132,7 @@ class ActivityDataLoader:
 
                 created = doc.get("created_at")
                 title = doc.get("title", "")
-                children_docs = doc_svc.get_children(doc_id, include_archived=False)
+                children_docs = doc_svc.get_children(doc_id)
                 has_children = len(children_docs) > 0
 
                 item = DocumentItem(
