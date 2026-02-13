@@ -50,11 +50,17 @@ except ImportError:
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
+    # How often to re-fetch mail from gh CLI (seconds)
+    MAIL_CACHE_TTL = 30.0
+
     def __init__(self) -> None:
         # Track workflow states for completion notifications
         self._last_workflow_states: Dict[int, str] = {}
         # Callbacks for notifications
         self.on_workflow_complete: Optional[callable] = None
+        # Cache for mail messages (avoid hitting gh CLI every tick)
+        self._cached_mail_items: List[ActivityItem] = []
+        self._mail_last_fetched: Optional[datetime] = None
 
     async def load_all(self, zombies_cleaned: bool = True) -> List[ActivityItem]:
         """Load all activity items, sorted.
@@ -479,13 +485,23 @@ class ActivityDataLoader:
         return items
 
     async def _load_mail_messages(self) -> List[ActivityItem]:
-        """Load mail messages."""
+        """Load mail messages with caching to avoid hitting gh CLI every tick."""
+        # Return cached results if still fresh
+        now = datetime.now()
+        if (
+            self._mail_last_fetched is not None
+            and (now - self._mail_last_fetched).total_seconds() < self.MAIL_CACHE_TTL
+        ):
+            return list(self._cached_mail_items)
+
         items: List[ActivityItem] = []
         try:
             import asyncio
             from emdx.services.mail_service import get_mail_service, get_mail_config_repo
 
             if not get_mail_config_repo():
+                self._cached_mail_items = []
+                self._mail_last_fetched = now
                 return items
 
             service = get_mail_service()
@@ -517,4 +533,6 @@ class ActivityDataLoader:
         except Exception as e:
             logger.debug(f"Could not load mail messages: {e}")
 
-        return items
+        self._cached_mail_items = items
+        self._mail_last_fetched = now
+        return list(items)

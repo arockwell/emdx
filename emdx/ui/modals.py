@@ -12,9 +12,7 @@ from textual.containers import ScrollableContainer, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import RichLog, Static
 
-# Set up logging for debugging
 logger = logging.getLogger(__name__)
-key_logger = logging.getLogger("key_events")
 
 
 class KeybindingsHelpScreen(ModalScreen):

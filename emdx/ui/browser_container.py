@@ -12,7 +12,6 @@ from textual.containers import Container, Vertical
 from textual.reactive import reactive
 from textual.widget import Widget
 
-from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.config.ui_config import get_theme, set_theme
 from emdx.ui.themes import register_all_themes, get_theme_names, get_opposite_theme, is_dark_theme
 
@@ -107,7 +106,6 @@ class BrowserContainer(App):
     async def on_mount(self) -> None:
         """Mount the default browser on startup."""
         global _keybinding_registry
-        logger.info("=== BrowserContainer.on_mount START ===")
 
         # Initialize keybinding registry and check for conflicts
         await self._init_keybinding_registry()
@@ -118,23 +116,13 @@ class BrowserContainer(App):
         # Use CLI theme if provided, otherwise load from config
         if self._initial_theme and (self._initial_theme in get_theme_names() or self._initial_theme in self.available_themes):
             self.theme = self._initial_theme
-            logger.info(f"Applied theme from CLI: {self._initial_theme}")
         else:
             saved_theme = get_theme()
             if saved_theme in get_theme_names() or saved_theme in self.available_themes:
                 self.theme = saved_theme
-                logger.info(f"Applied theme: {saved_theme}")
             else:
-                # Fallback to default
                 self.theme = "emdx-dark"
                 logger.warning(f"Unknown theme '{saved_theme}', using emdx-dark")
-
-        logger.info(f"Screen size: {self.screen.size}")
-        logger.info(f"Screen region: {self.screen.region}")
-
-        # Log the container widget info
-        logger.info(f"Container widget size: {self.container_widget.size}")
-        logger.info(f"Container widget region: {self.container_widget.region}")
 
         # Create and mount Activity browser as the default (Mission Control)
         try:
@@ -142,9 +130,7 @@ class BrowserContainer(App):
             browser = ActivityBrowser()
             self.browsers["activity"] = browser
             self.current_browser = "activity"
-            logger.info("ActivityBrowser created successfully as default")
         except Exception as e:
-            # Fallback to document browser if activity fails
             logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
             from .document_browser import DocumentBrowser
             browser = DocumentBrowser()
@@ -152,15 +138,7 @@ class BrowserContainer(App):
             self.current_browser = "document"
 
         mount_point = self.container_widget.query_one("#browser-mount", Container)
-        logger.info(f"Mount point size before mount: {mount_point.size}")
-        logger.info(f"Mount point region before mount: {mount_point.region}")
-
         await mount_point.mount(browser)
-
-        # Log after mounting
-        logger.info(f"Mount point size after mount: {mount_point.size}")
-        logger.info(f"Mount point region after mount: {mount_point.region}")
-        logger.info("=== BrowserContainer.on_mount END ===")
 
     async def _init_keybinding_registry(self) -> None:
         """Initialize the keybinding registry and check for conflicts."""
@@ -172,8 +150,6 @@ class BrowserContainer(App):
 
             # Extract all keybindings from widgets
             entries = extract_all_keybindings()
-            logger.info(f"Extracted {len(entries)} keybindings from widgets")
-
             # Create and populate registry
             registry = KeybindingRegistry()
             registry.register_many(entries)
@@ -181,9 +157,6 @@ class BrowserContainer(App):
             # Detect conflicts
             conflicts = registry.detect_conflicts()
             _keybinding_registry = registry
-
-            # Log summary
-            logger.info(registry.summary())
 
             # Warn about critical conflicts
             critical = registry.get_conflicts_by_severity(ConflictSeverity.CRITICAL)
@@ -205,7 +178,7 @@ class BrowserContainer(App):
 
     async def switch_browser(self, browser_type: str) -> None:
         """Switch to a different browser."""
-        logger.info(f"Switching to {browser_type} browser")
+        logger.debug(f"Switching to {browser_type} browser")
 
         # Save current browser state
         current = self.browsers.get(self.current_browser)
@@ -222,7 +195,7 @@ class BrowserContainer(App):
                 try:
                     from .activity_browser import ActivityBrowser
                     self.browsers[browser_type] = ActivityBrowser()
-                    logger.info("ActivityBrowser created successfully")
+                    logger.debug("ActivityBrowser created")
                 except Exception as e:
                     logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
@@ -234,7 +207,7 @@ class BrowserContainer(App):
                 try:
                     from .cascade import CascadeBrowser
                     self.browsers[browser_type] = CascadeBrowser()
-                    logger.info("CascadeBrowser created successfully")
+                    logger.debug("CascadeBrowser created")
                 except Exception as e:
                     logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
@@ -243,7 +216,7 @@ class BrowserContainer(App):
                 try:
                     from .document_browser import DocumentBrowser
                     self.browsers[browser_type] = DocumentBrowser()
-                    logger.info("DocumentBrowser created successfully")
+                    logger.debug("DocumentBrowser created")
                 except Exception as e:
                     logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
@@ -252,7 +225,7 @@ class BrowserContainer(App):
                 try:
                     from .search import SearchScreen
                     self.browsers[browser_type] = SearchScreen()
-                    logger.info("SearchScreen created successfully")
+                    logger.debug("SearchScreen created")
                 except Exception as e:
                     logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
                     from textual.widgets import Static
@@ -287,7 +260,7 @@ class BrowserContainer(App):
 
     def action_quit(self) -> None:
         """Quit the application."""
-        logger.info("action_quit called - exiting app")
+        logger.debug("action_quit called")
         self.exit()
 
     async def on_activity_view_view_document(self, event) -> None:
@@ -296,7 +269,7 @@ class BrowserContainer(App):
 
     async def _view_document(self, doc_id: int) -> None:
         """Switch to document browser and view a specific document."""
-        logger.info(f"Switching to document browser to view doc #{doc_id}")
+        logger.debug(f"Viewing doc #{doc_id}")
 
         # Switch to document browser
         await self.switch_browser("document")
@@ -313,7 +286,6 @@ class BrowserContainer(App):
     async def on_key(self, event) -> None:
         """Global key routing - handle screen switching and browser-specific keys."""
         key = event.key
-        logger.info(f"BrowserContainer.on_key: {key}")
 
         # Debug key - dump widget tree
         if key == "ctrl+d":
@@ -341,7 +313,7 @@ class BrowserContainer(App):
 
         # Q to quit from activity, document, cascade, or search browser
         if key == "q" and self.current_browser in ["activity", "document", "cascade", "search"]:
-            logger.info(f"Q key pressed in {self.current_browser} browser - exiting app")
+            logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
             return
@@ -389,32 +361,17 @@ class BrowserContainer(App):
             await self._view_document(doc_id)
 
     def _dump_widget_tree(self) -> None:
-        """Debug function to dump the widget tree and regions."""
-        logger.info("=== WIDGET TREE DUMP ===")
-        logger.info(f"Screen size: {self.screen.size}")
-        logger.info(f"Screen region: {self.screen.region}")
+        """Debug function to dump the widget tree and regions (ctrl+d)."""
+        lines = [f"Screen size={self.screen.size} region={self.screen.region}"]
 
         def dump_widget(widget, indent=0):
             prefix = "  " * indent
-            logger.info(f"{prefix}{widget.__class__.__name__} id={widget.id}")
-            logger.info(f"{prefix}  region: {widget.region}")
-            logger.info(f"{prefix}  size: {widget.size}")
-            logger.info(f"{prefix}  styles.padding: {widget.styles.padding}")
-            logger.info(f"{prefix}  styles.margin: {widget.styles.margin}")
-
-            # Check computed styles
-            if hasattr(widget, 'styles') and hasattr(widget.styles, 'get_rule'):
-                try:
-                    computed_padding = widget.styles.get_rule('padding')
-                    logger.info(f"{prefix}  computed padding: {computed_padding}")
-                except Exception as e:
-                    logger.debug("Could not get computed padding for widget: %s", e)
-
+            lines.append(f"{prefix}{widget.__class__.__name__} id={widget.id} region={widget.region}")
             for child in widget.children:
                 dump_widget(child, indent + 1)
 
         dump_widget(self.screen)
-        logger.info("=== END WIDGET TREE DUMP ===")
+        logger.debug("Widget tree:\n%s", "\n".join(lines))
 
     def action_cycle_theme(self) -> None:
         """Open theme selector modal."""
@@ -422,7 +379,6 @@ class BrowserContainer(App):
 
         def on_theme_selected(theme_name: str | None) -> None:
             if theme_name:
-                logger.info(f"Theme selected: {theme_name}")
                 self.notify(f"Theme: {theme_name}", timeout=2)
 
         self.push_screen(ThemeSelectorScreen(), on_theme_selected)
@@ -430,68 +386,30 @@ class BrowserContainer(App):
     def action_open_command_palette(self) -> None:
         """Open the command palette modal."""
         import asyncio
-        from pathlib import Path
-
-        # Debug log
-        debug_log = EMDX_CONFIG_DIR / "palette_debug.log"
-        debug_log.parent.mkdir(parents=True, exist_ok=True)
-        with open(debug_log, "a") as f:
-            f.write("=== action_open_command_palette called ===\n")
-
         try:
             from emdx.ui.command_palette import CommandPaletteScreen
-
-            with open(debug_log, "a") as f:
-                f.write("CommandPaletteScreen imported OK\n")
 
             def on_palette_result(result: dict | None) -> None:
                 if result:
                     asyncio.create_task(self._handle_palette_result(result))
 
-            screen = CommandPaletteScreen()
-            with open(debug_log, "a") as f:
-                f.write(f"CommandPaletteScreen created: {screen}\n")
-
-            self.push_screen(screen, on_palette_result)
-            with open(debug_log, "a") as f:
-                f.write("push_screen called successfully\n")
+            self.push_screen(CommandPaletteScreen(), on_palette_result)
 
         except Exception as e:
-            import traceback
-            with open(debug_log, "a") as f:
-                f.write(f"ERROR: {e}\n{traceback.format_exc()}\n")
+            logger.error(f"Failed to open command palette: {e}", exc_info=True)
             raise
 
     async def _handle_palette_result(self, result: dict) -> None:
         """Handle a result from the command palette."""
         action = result.get("action")
-        logger.info(f"Command palette result: {result}")
 
         if action == "view_document":
             doc_id = result.get("doc_id")
-            # Debug to file
-            from pathlib import Path
-            debug_log = EMDX_CONFIG_DIR / "palette_debug.log"
-            with open(debug_log, "a") as f:
-                f.write(f"=== _handle_palette_result view_document ===\n")
-                f.write(f"doc_id={doc_id}, current_browser={self.current_browser}\n")
-
             if doc_id:
-                # Show document in current browser's preview pane (stay on current screen)
                 current = self.browsers.get(self.current_browser)
-                with open(debug_log, "a") as f:
-                    f.write(f"current={current}, has method={hasattr(current, 'select_document_by_id') if current else False}\n")
-
                 if current and hasattr(current, "select_document_by_id"):
-                    with open(debug_log, "a") as f:
-                        f.write(f"Calling select_document_by_id({doc_id})\n")
-                    select_result = await current.select_document_by_id(doc_id)
-                    with open(debug_log, "a") as f:
-                        f.write(f"select_document_by_id returned: {select_result}\n")
+                    await current.select_document_by_id(doc_id)
                 else:
-                    # Fall back to document browser if current screen can't show docs
-                    with open(debug_log, "a") as f:
-                        f.write("Falling back to _view_document\n")
                     await self._view_document(doc_id)
 
         elif action == "command":
@@ -510,7 +428,7 @@ class BrowserContainer(App):
 
     async def _execute_palette_command(self, command_id: str) -> None:
         """Execute a command from the palette by ID."""
-        logger.info(f"Executing palette command: {command_id}")
+        logger.debug(f"Palette command: {command_id}")
 
         # Navigation commands
         if command_id == "nav.activity":
@@ -562,5 +480,5 @@ class BrowserContainer(App):
 
         # Show indicator
         mode = "🌙 Dark" if is_dark_theme(new_theme) else "☀️ Light"
-        logger.info(f"Theme toggled: {current_theme} -> {new_theme}")
+        logger.debug(f"Theme toggled: {current_theme} -> {new_theme}")
         self.notify(f"{mode} mode", timeout=1.5)

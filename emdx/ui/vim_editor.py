@@ -82,10 +82,6 @@ class VimEditor(Vertical):
         self.edit_container.mount(self.line_numbers)
         self.edit_container.mount(self.text_area)
 
-        logger.debug(f"🔍 VimEditor.on_mount: Components mounted")
-        logger.debug(f"🔍 VimEditor.on_mount: TextArea text length: {len(self.text_area.text)}")
-        logger.debug(f"🔍 VimEditor.on_mount: First 50 chars of text: {repr(self.text_area.text[:50])}")
-
         # Note: Explicit scroll_to(0, 0) disabled - causes first line visibility issues
         
         # Focus the text area and initialize line numbers
@@ -114,7 +110,6 @@ class VimEditor(Vertical):
         max_digits = len(str(total_lines))
         # Minimum 3 chars (like vim), add 2 for padding
         width = max(3, max_digits) + 2
-        logger.debug(f"🔢 Line number width calculation: total_lines={total_lines}, max_digits={max_digits}, width={width}")
         return width
     
     def _update_line_number_width(self):
@@ -127,7 +122,6 @@ class VimEditor(Vertical):
             self.line_numbers.styles.width = line_number_width
             self.line_numbers.styles.min_width = line_number_width
             self.line_numbers.styles.max_width = line_number_width
-            logger.debug(f"line_number_width updated to {line_number_width}")
     
     def _initialize_editor(self):
         """Initialize editor after mounting - focus and set up line numbers."""
@@ -177,10 +171,7 @@ class VimEditor(Vertical):
             self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
             self._update_line_number_width()
             if hasattr(self.text_area, '_update_line_numbers'):
-                logger.debug(f"🔢 Calling text area's _update_line_numbers()")
                 self.text_area._update_line_numbers()
-
-            logger.debug(f"🔢 VimEditor _initialize_editor completed successfully")
             
         except Exception as e:
             logger.error(f"Error initializing vim editor: {e}")
