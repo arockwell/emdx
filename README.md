@@ -89,7 +89,7 @@ Tags use emoji under the hood, but you type plain text:
 emdx tag 42 gameplan active
 
 # See all tags in use
-emdx tags
+emdx tag list
 
 # Search by tags
 emdx find --tags "gameplan,success"
