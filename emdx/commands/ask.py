@@ -118,16 +118,21 @@ def get_context(
 def build_index(
     force: bool = typer.Option(False, "--force", "-f", help="Reindex all documents"),
     batch_size: int = typer.Option(50, "--batch-size", "-b", help="Documents per batch"),
+    chunks: bool = typer.Option(True, "--chunks/--no-chunks", help="Also build chunk-level index"),
 ):
     """
     Build or update the semantic search index.
 
-    This creates embeddings for all documents, enabling semantic search.
+    This creates embeddings for all documents and chunks, enabling semantic search.
     Run this once initially, then periodically to index new documents.
 
+    The chunk index enables more precise search results - returning the relevant
+    paragraph instead of the entire document.
+
     Examples:
-        emdx ai index          # Index new documents only
+        emdx ai index          # Index new documents and chunks
         emdx ai index --force  # Reindex everything
+        emdx ai index --no-chunks  # Only index documents, skip chunks
     """
     try:
         from ..services.embedding_service import EmbeddingService
@@ -137,26 +142,43 @@ def build_index(
         # Show current stats
         stats = service.stats()
         console.print(f"[dim]Current index: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+        console.print(f"[dim]Chunk index: {stats.indexed_chunks} chunks[/dim]")
 
-        if stats.indexed_documents == stats.total_documents and not force:
+        needs_doc_index = stats.indexed_documents < stats.total_documents or force
+        needs_chunk_index = chunks and (stats.indexed_chunks == 0 or force)
+
+        if not needs_doc_index and not needs_chunk_index:
             console.print("[green]Index is already up to date![/green]")
             return
 
-        # Build index
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Indexing documents...", total=None)
-            count = service.index_all(force=force, batch_size=batch_size)
-            progress.update(task, completed=True)
+        # Build document index
+        if needs_doc_index:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Indexing documents...", total=None)
+                doc_count = service.index_all(force=force, batch_size=batch_size)
+                progress.update(task, completed=True)
+            console.print(f"[green]Indexed {doc_count} documents[/green]")
 
-        console.print(f"[green]Indexed {count} documents[/green]")
+        # Build chunk index
+        if needs_chunk_index:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Indexing chunks...", total=None)
+                chunk_count = service.index_chunks(force=force, batch_size=batch_size)
+                progress.update(task, completed=True)
+            console.print(f"[green]Indexed {chunk_count} chunks[/green]")
 
         # Show updated stats
         stats = service.stats()
         console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+        console.print(f"[dim]Chunk index: {stats.indexed_chunks} chunks[/dim]")
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -299,12 +321,17 @@ def show_stats():
         else:
             return f"{b / (1024 * 1024):.1f} MB"
 
+    total_size = stats.index_size_bytes + stats.chunk_index_size_bytes
+
     console.print(Panel(f"""[bold]Embedding Index Statistics[/bold]
 
-Documents:  {stats.indexed_documents} / {stats.total_documents} indexed
-Coverage:   {stats.coverage_percent}%
-Model:      {stats.model_name}
-Index size: {format_bytes(stats.index_size_bytes)}
+Documents:    {stats.indexed_documents} / {stats.total_documents} indexed
+Coverage:     {stats.coverage_percent}%
+Chunks:       {stats.indexed_chunks} indexed
+Model:        {stats.model_name}
+Doc index:    {format_bytes(stats.index_size_bytes)}
+Chunk index:  {format_bytes(stats.chunk_index_size_bytes)}
+Total size:   {format_bytes(total_size)}
 """, title="AI Index"))
 
 

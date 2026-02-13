@@ -1834,6 +1834,47 @@ def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_039_add_chunk_embeddings(conn: sqlite3.Connection):
+    """Add chunk embeddings table for chunk-level semantic search.
+
+    Chunks are sections of documents split by markdown headings. Each chunk
+    gets its own embedding, enabling more precise semantic search that returns
+    the relevant paragraph, not the entire 5000-word document.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chunk_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            heading_path TEXT NOT NULL,
+            text TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            dimension INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(document_id, chunk_index, model_name)
+        )
+    """)
+
+    # Index for finding chunks by document
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_document
+        ON chunk_embeddings(document_id)
+    """)
+
+    # Index for finding chunks by model (for reindexing)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model
+        ON chunk_embeddings(model_name)
+    """)
+
+    conn.commit()
+
+
 def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
     """Remove the entire workflow system.
 
@@ -2171,6 +2212,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
     (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
     (38, "Add LOWER(title) index for case-insensitive search", migration_038_add_title_lower_index),
+    (39, "Add chunk embeddings for semantic search", migration_039_add_chunk_embeddings),
 ]
 
 
