@@ -463,5 +463,5 @@ class TestWorktreeCLI:
 - [Git Worktree Documentation](https://git-scm.com/docs/git-worktree)
 - Existing code: `emdx/utils/git_ops.py`
 - Existing code: `emdx/workflows/worktree_pool.py`
-- EMDX CLI patterns: `emdx/commands/tasks.py`, `emdx/commands/each.py`
+- EMDX CLI patterns: `emdx/commands/tasks.py`, `emdx/commands/delegate.py`
 

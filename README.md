@@ -1,6 +1,6 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.12.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.14.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -19,10 +19,10 @@ EMDX is designed for one workflow: **using Claude Code to get things done at sca
 
 ```bash
 # Run parallel code analysis
-emdx run "Review auth module" "Check error handling" "Audit SQL queries" -j 3
+emdx delegate "Review auth module" "Check error handling" "Audit SQL queries" -j 3
 
 # Discover tasks dynamically from git branches
-emdx run -d "git branch -r | grep feature" -t "Review {{item}}"
+emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
 ```
 
 ## Installation
@@ -48,22 +48,38 @@ cd emdx
 uv sync                               # or: poetry install --all-extras
 ```
 
-## Quick Start: Parallel Tasks
+## Quick Start: `emdx delegate`
 
-The `emdx run` command is the fastest way to execute parallel tasks with Claude:
+`emdx delegate` is the single command for all AI execution. Results print to stdout AND persist to the knowledge base.
 
 ```bash
-# Run multiple tasks in parallel
-emdx run "task one" "task two" "task three"
+# Single task
+emdx delegate "analyze the auth module"
 
-# Control concurrency (10 tasks, 5 slots)
-emdx run "t1" "t2" "t3" "t4" "t5" "t6" "t7" "t8" "t9" "t10" -j 5
+# Parallel tasks (up to 10 concurrent)
+emdx delegate "check auth" "review tests" "scan for XSS"
 
-# Add synthesis to combine outputs
-emdx run --synthesize "analyze auth" "analyze api" "analyze database"
+# Control concurrency
+emdx delegate "t1" "t2" "t3" "t4" "t5" -j 3
+
+# Combine parallel outputs into one summary
+emdx delegate --synthesize "analyze auth" "analyze api" "analyze database"
 
 # Set a title for tracking
-emdx run -T "Security Audit" "check XSS" "check SQL injection" "check CSRF"
+emdx delegate -T "Security Audit" "check XSS" "check SQL injection" "check CSRF"
+```
+
+### Sequential Pipelines
+
+Chain tasks where each step receives the previous output:
+
+```bash
+# Analyze, then plan, then implement
+emdx delegate --chain "analyze the problem" "design a solution" "implement it"
+
+# Chain with PR creation at the end
+emdx delegate --chain --pr "analyze the issue" "implement the fix"
+```
 
 ### Dynamic Task Discovery
 
@@ -71,53 +87,36 @@ Discover tasks at runtime from shell commands:
 
 ```bash
 # Review all feature branches
-emdx run -d "git branch -r | grep feature" -t "Review branch {{item}}"
+emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
 
 # Analyze all Python files in a directory
-emdx run -d "fd -e py src" -t "Analyze {{item}}"
+emdx delegate --each "fd -e py src" --do "Analyze {{item}}"
 
 # Process all open PRs
-emdx run -d "gh pr list --json number -q '.[].number'" -t "Review PR #{{item}}"
-
-# Run on document IDs from previous work
-emdx run 5350 5351 5352
-
-## Agent Execution
-
-Run Claude Code sub-agents with automatic tracking:
-
-```bash
-# Run agent with tags for tracking
-emdx agent "Analyze auth module for security issues" --tags analysis,security
-
-# With title and group
-emdx agent "Review error handling" -t refactor -T "API Error Review" -g 456
-
-# Verbose mode to see output in real-time
-emdx agent "Deep dive on caching strategy" -t analysis -v
-
-# Have the agent create a PR
-emdx agent "Fix the null pointer bug" -t bugfix --pr
+emdx delegate --each "gh pr list --json number -q '.[].number'" --do "Review PR #{{item}}"
 ```
 
-## Reusable Parallel Commands
-
-Create saved commands for repeatable "for each X, do Y" patterns:
+### Document Context and PR Creation
 
 ```bash
-# Create a reusable command
-emdx each create fix-conflicts \
-  --from "gh pr list --json headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus==\"DIRTY\") | .headRefName'" \
-  --do "Merge origin/main into {{item}}, resolve conflicts, push"
+# Use a document as input context
+emdx delegate --doc 42 "implement the plan described here"
 
-# Run it anytime
-emdx each run fix-conflicts
+# Have the agent create a PR
+emdx delegate --pr "fix the auth bug"
 
-# One-off execution (without saving)
-emdx each --from "fd -e py src/" --do "Review {{item}} for security issues"
+# Worktree isolation (clean git environment)
+emdx delegate --worktree --pr "fix the null pointer in auth"
 
-# List saved commands
-emdx each list
+# Combine: doc context + chain + worktree + PR
+emdx delegate --doc 42 --chain --worktree --pr "analyze" "implement"
+```
+
+### Run from Document IDs
+
+```bash
+# Use previous emdx documents as task prompts
+emdx delegate 5350 5351 5352
 ```
 
 ## Cascade: Ideas to Code
@@ -143,7 +142,7 @@ emdx cascade run
 
 ## Workflow System
 
-For complex multi-stage execution, use the workflow system:
+For complex multi-stage execution beyond what `delegate` offers:
 
 ```bash
 # List available workflows
@@ -163,6 +162,7 @@ emdx workflow run parallel_fix \
 
 # Control concurrency
 emdx workflow run task_parallel -t "t1" -t "t2" -t "t3" -j 2
+```
 
 ### Execution Modes
 
@@ -191,6 +191,7 @@ emdx exec kill 42
 
 # Kill all running
 emdx exec killall
+```
 
 ## Finding Information
 
@@ -221,6 +222,7 @@ emdx find "authentication"           # Search for terms
 emdx find --tags "active"            # Filter by tags
 emdx find "security" --tags "analysis"  # Combine text and tags
 emdx find "api" --project myapp      # Filter by project
+```
 
 ### Semantic Search
 
@@ -236,6 +238,7 @@ emdx ai search "authentication flow"
 
 # Adjust threshold (lower = more results)
 emdx ai search "caching" --threshold 0.3
+```
 
 ### Similar Documents
 
@@ -244,6 +247,7 @@ Find related content:
 ```bash
 emdx similar 42                      # Docs similar to #42
 emdx similar-text "retry logic with exponential backoff"
+```
 
 ### Q&A Over Your Knowledge Base
 
@@ -253,6 +257,7 @@ emdx ai context "How does the workflow system work?" | claude
 
 # Using Claude API (requires ANTHROPIC_API_KEY)
 emdx ai ask "How did we solve the auth bug?"
+```
 
 ### Browsing
 
@@ -285,6 +290,7 @@ emdx similar 42
 
 # 5. Get synthesized answers
 emdx ai context "What patterns do we use for error handling?" | claude
+```
 
 ### Session Start
 
@@ -316,20 +322,19 @@ Type text aliases instead of emoji:
 emdx tag 42 gameplan active
 emdx find --tags "gameplan,success"
 emdx legend  # Full alias reference
+```
 
 ## When to Use What
 
-**Execution Ladder** (start simple, graduate when needed):
-1. `emdx run` - Quick parallel tasks
-2. `emdx each` - Reusable discovery + action patterns
-3. `emdx workflow` - Complex multi-stage with custom configurations
-4. `emdx cascade` - Autonomous idea-to-PR pipeline
-
 | I want to... | Use this |
 |--------------|----------|
-| Run quick parallel tasks | `emdx run "t1" "t2" "t3"` |
-| Discover tasks dynamically | `emdx run -d "command" -t "template"` |
+| Run one or many tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
+| Chain tasks sequentially | `emdx delegate --chain "analyze" "plan" "implement"` |
+| Discover tasks dynamically | `emdx delegate --each "command" --do "template"` |
+| Create a PR from a task | `emdx delegate --pr "fix the bug"` |
+| Isolate work in a worktree | `emdx delegate --worktree "fix X"` |
 | Run complex multi-stage work | `emdx workflow run workflow_name` |
+| Go from idea to PR autonomously | `emdx cascade add "idea"` |
 | Search by keywords | `emdx find "query"` |
 | Search by meaning | `emdx ai search "concept"` |
 | Find similar docs | `emdx similar 42` |
@@ -351,6 +356,7 @@ emdx legend  # Full alias reference
 uv sync                    # or: poetry install
 uv run emdx --help         # or: poetry run emdx --help
 uv run pytest              # or: poetry run pytest
+```
 
 ## License
 
