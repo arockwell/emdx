@@ -18,7 +18,6 @@ from .activity_items import (
     CascadeRunItem,
     CascadeStageItem,
     AgentExecutionItem,
-    MailItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,18 +49,11 @@ except ImportError:
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
-    # How often to re-fetch mail from gh CLI (seconds)
-    MAIL_CACHE_TTL = 60.0
-
     def __init__(self) -> None:
         # Track workflow states for completion notifications
         self._last_workflow_states: Dict[int, str] = {}
         # Callbacks for notifications
         self.on_workflow_complete: Optional[callable] = None
-        # Cache for mail messages (avoid hitting gh CLI every tick)
-        self._cached_mail_items: List[ActivityItem] = []
-        self._mail_last_fetched: Optional[datetime] = None
-        self._mail_fetch_in_progress: bool = False
 
     async def load_all(self, zombies_cleaned: bool = True) -> List[ActivityItem]:
         """Load all activity items, sorted.
@@ -95,16 +87,11 @@ class ActivityDataLoader:
         items.extend(await self._load_cascade_executions())
         items.extend(await self._load_agent_executions())
 
-        # Mail: return cached items immediately, refresh in background
-        items.extend(self._cached_mail_items)
-        self._maybe_refresh_mail_background()
-
         # Sort: running items first (pinned), then by timestamp descending
         def sort_key(item: ActivityItem) -> Tuple:
             is_running = (
                 (item.item_type == "workflow" and item.status == "running")
                 or (item.item_type == "agent_execution" and item.status == "running")
-                or (item.item_type == "mail" and not getattr(item, "is_read", True))
             )
             return (
                 0 if is_running else 1,
@@ -488,70 +475,3 @@ class ActivityDataLoader:
             logger.error(f"Error loading agent executions: {e}", exc_info=True)
 
         return items
-
-    def _maybe_refresh_mail_background(self) -> None:
-        """Kick off a background mail fetch if the cache is stale.
-
-        Never blocks load_all — cached items are returned immediately,
-        and the background thread updates the cache for the next tick.
-        """
-        if self._mail_fetch_in_progress:
-            return
-
-        now = datetime.now()
-        if (
-            self._mail_last_fetched is not None
-            and (now - self._mail_last_fetched).total_seconds() < self.MAIL_CACHE_TTL
-        ):
-            return
-
-        try:
-            from emdx.services.mail_service import get_mail_config_repo
-            if not get_mail_config_repo():
-                self._mail_last_fetched = now
-                return
-        except Exception:
-            return
-
-        import threading
-        self._mail_fetch_in_progress = True
-        thread = threading.Thread(target=self._fetch_mail_sync, daemon=True)
-        thread.start()
-
-    def _fetch_mail_sync(self) -> None:
-        """Synchronous mail fetch running on a background thread."""
-        items: List[ActivityItem] = []
-        try:
-            from emdx.services.mail_service import get_mail_service
-
-            service = get_mail_service()
-            messages = service.list_inbox(limit=20)
-
-            for msg in messages:
-                ts = parse_datetime(msg.created_at)
-                timestamp = ts.replace(tzinfo=None) if ts and ts.tzinfo else (ts or datetime.now())
-
-                item = MailItem(
-                    item_id=msg.number,
-                    title=msg.title,
-                    timestamp=timestamp,
-                    mail_message={
-                        "body": msg.body,
-                        "sender": msg.sender,
-                        "recipient": msg.recipient,
-                        "url": msg.url,
-                        "comment_count": msg.comment_count,
-                    },
-                    sender=msg.sender,
-                    recipient=msg.recipient,
-                    is_read=msg.is_read,
-                    comment_count=msg.comment_count,
-                    url=msg.url,
-                )
-                items.append(item)
-        except Exception as e:
-            logger.debug(f"Could not load mail messages: {e}")
-
-        self._cached_mail_items = items
-        self._mail_last_fetched = datetime.now()
-        self._mail_fetch_in_progress = False
