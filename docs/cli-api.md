@@ -123,89 +123,89 @@ emdx tag 42
 emdx tag 123 feature done success
 ```
 
-### **emdx untag**
+### **emdx tag remove**
 Remove tags from documents.
 
 ```bash
 # Remove specific tags
-emdx untag 42 urgent active
+emdx tag remove 42 urgent active
 
 # Remove multiple tags
-emdx untag 42 old-tag another-tag
+emdx tag remove 42 old-tag another-tag
 ```
 
-### **emdx tags**
+### **emdx tag list**
 List all tags with usage statistics.
 
 ```bash
 # Show all tags with counts
-emdx tags
+emdx tag list
 
-# Show only emoji tags (space-efficient)
-emdx tags --emoji-only
+# Sort by name
+emdx tag list --sort name
 ```
 
-### **emdx legend**
-View emoji legend with text aliases (NEW!).
+### **emdx tag legend**
+View emoji legend with text aliases.
 
 ```bash
 # Show complete emoji legend with text aliases
-emdx legend
+emdx tag legend
 
 # This helps you remember that:
 # gameplan = 🎯, active = 🚀, bug = 🐛, etc.
 ```
 
-### **emdx retag**
+### **emdx tag rename**
 Rename tags globally across all documents.
 
 ```bash
 # Convert old word tags to emoji system
-emdx retag "old-word-tag" "gameplan"
+emdx tag rename "old-word-tag" "gameplan" --force
 
 # Standardize tag names
-emdx retag "todo" "active"
+emdx tag rename "todo" "active" --force
 ```
 
-### **emdx merge-tags**
+### **emdx tag merge**
 Merge multiple tags into a single target tag.
 
 ```bash
 # Merge several tags into one
-emdx merge-tags "old-tag1" "old-tag2" --into "new-tag"
+emdx tag merge "old-tag1" "old-tag2" --into "new-tag" --force
 
 # Skip confirmation prompt
-emdx merge-tags "todo" "task" --into "active" --force
+emdx tag merge "todo" "task" --into "active" --force
 ```
 
 **Options:**
 - `--into, -i TEXT` - Target tag to merge into (required)
 - `--force, -f` - Skip confirmation
 
-### **emdx batch**
+### **emdx tag batch**
 Batch auto-tag multiple documents using content analysis.
 
 ```bash
 # Dry run: preview what would be tagged (default)
-emdx batch
+emdx tag batch
 
 # Actually apply auto-tags
-emdx batch --execute
+emdx tag batch --execute
 
 # Only process untagged documents (default)
-emdx batch --untagged
+emdx tag batch --untagged
 
 # Process all documents including already-tagged
-emdx batch --all
+emdx tag batch --all
 
 # Filter by project
-emdx batch --project myapp --execute
+emdx tag batch --project myapp --execute
 
 # Custom confidence threshold and max tags
-emdx batch --confidence 0.8 --max-tags 2 --execute
+emdx tag batch --confidence 0.8 --max-tags 2 --execute
 
 # Limit number of documents to process
-emdx batch --limit 50 --execute
+emdx tag batch --limit 50 --execute
 ```
 
 **Options:**
@@ -220,24 +220,6 @@ emdx batch --limit 50 --execute
 
 ### **emdx exec**
 Manage and monitor command executions.
-
-#### **emdx exec \<doc_id\>**
-Execute a document with Claude (shortcut for `emdx claude execute`).
-
-```bash
-# Execute document in background (default)
-emdx exec 42
-
-# Execute in foreground
-emdx exec 42 --foreground
-
-# Execute with specific tools
-emdx exec 42 --tools "Read,Write,Bash"
-```
-
-**Options:**
-- `--background/--foreground` - Run in background (default) or foreground
-- `--tools, -t TEXT` - Comma-separated list of allowed tools
 
 #### **emdx exec list**
 List recent executions.
@@ -560,20 +542,6 @@ emdx maintain cleanup --files --execute
 emdx maintain cleanup --all --execute
 ```
 
-### **emdx gc**
-Garbage collection for unused data.
-
-```bash
-# Show what would be garbage collected
-emdx gc
-
-# Perform garbage collection
-emdx gc --execute
-
-# Aggressive cleanup (removes more data)
-emdx gc --aggressive --execute
-```
-
 ## 📊 **Information Commands**
 
 ### **emdx list**
@@ -670,79 +638,31 @@ echo "content" | emdx save --title "Share Me" --secret --copy
 ```
 
 ### **emdx gdoc**
-Export documents to Google Docs.
+Google Docs integration.
 
-#### **emdx gdoc-auth**
+#### **emdx gdoc gdoc-auth**
 Authenticate with Google via interactive OAuth flow.
 
 ```bash
 # Start Google OAuth authentication
-emdx gdoc-auth
+emdx gdoc gdoc-auth
 ```
 
 Opens a browser window for Google OAuth authentication. Requires OAuth credentials to be configured at the expected credentials file path.
 
-#### **emdx gdoc-list**
+#### **emdx gdoc gdoc-list**
 List all Google Docs created from EMDX documents.
 
 ```bash
 # List all exported Google Docs
-emdx gdoc-list
+emdx gdoc gdoc-list
 
 # Filter by project
-emdx gdoc-list --project myapp
+emdx gdoc gdoc-list --project myapp
 ```
 
 **Options:**
 - `--project TEXT` - Filter by project
-
-## 🤖 **Claude Document Execution** (`emdx claude`)
-
-Execute EMDX documents with Claude Code. The `emdx claude` subcommands provide direct document execution and environment management.
-
-### **emdx claude check-env**
-Check if the execution environment is properly configured.
-
-```bash
-# Basic environment check
-emdx claude check-env
-
-# Verbose mode with PATH details
-emdx claude check-env --verbose
-```
-
-**Options:**
-- `--verbose, -v` - Show detailed environment info
-
-Checks for: Python version, Claude Code installation, Git, EMDX CLI, and PATH configuration.
-
-### **emdx claude execute**
-Execute a document with Claude Code.
-
-```bash
-# Execute in background with smart context-aware mode (default)
-emdx claude execute 42
-
-# Execute in background
-emdx claude execute 42 --background
-
-# Execute with specific tools
-emdx claude execute 42 --tools "Read,Write,Bash"
-
-# Disable smart context-aware execution
-emdx claude execute 42 --no-smart
-
-# Use an existing execution ID from the database
-emdx claude execute 42 --exec-id 100
-```
-
-**Options:**
-- `--background, -b` - Run in background
-- `--tools, -t TEXT` - Comma-separated list of allowed tools
-- `--smart/--no-smart` - Use smart context-aware execution (default: smart)
-- `--exec-id INTEGER` - Use existing execution ID from database
-
----
 
 ## ⚙️ **Configuration**
 
@@ -777,13 +697,13 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
-- `tag`, `untag`, `tags`, `legend`, `retag` - Tag management
+- `tag` (add, remove, list, rename, merge, legend, batch) - Tag management
 - `list`, `recent`, `stats` - Information commands
 - `gui`, `prime`, `status` - Interface and overview
 - `ai` (ask, search, context) - AI-powered features
-- `export`, `export-profile` - Export functionality
+- `gist`, `gdoc` - Integration commands
 - `exec` - Execution monitoring (read-only)
-- `group`, `task`, `lifecycle` - Organization commands
+- `group`, `task`, `trash` - Organization commands
 
 **Error message:**
 When a disabled command is invoked, you'll see:
@@ -836,7 +756,7 @@ echo "Phase 1: Setup infrastructure" | emdx save --title "Project Gameplan" --ta
 
 # Mark phases complete
 emdx tag 123 done success
-emdx untag 123 active
+emdx tag remove 123 active
 
 # Review project progress
 emdx find --tags "gameplan" --project "myproject"
@@ -905,14 +825,11 @@ emdx delegate --doc 42 --chain "analyze" "implement"
 
 ### PR Creation
 
-Instruct the agent to create a PR after making code changes:
+Instruct the agent to create a PR after making code changes. `--pr` automatically creates an isolated git worktree.
 
 ```bash
-# Single task with PR
+# Single task with PR (worktree created automatically)
 emdx delegate --pr "fix the auth bug"
-
-# With worktree isolation (recommended for PRs)
-emdx delegate --worktree --pr "fix the null pointer in auth"
 
 # From a document with PR
 emdx delegate --doc 123 --pr "implement this plan"
@@ -959,7 +876,7 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--model` | `-m` | Override default model |
 | `--quiet` | `-q` | Suppress metadata on stderr |
 | `--doc` | `-d` | Document ID to use as input context |
-| `--pr` | | Instruct agent to create a PR after code changes |
+| `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
 | `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | | Base branch for worktree (default: main) |
 | `--chain` | | Run tasks sequentially, piping output forward |
@@ -1126,25 +1043,25 @@ emdx similar 42 --json
 
 ```bash
 # Search by natural language
-emdx similar-text "kubernetes deployment strategies"
-emdx similar-text "how to configure docker compose" --limit 10
+emdx similar similar-text "kubernetes deployment strategies"
+emdx similar similar-text "how to configure docker compose" --limit 10
 
 # Output as JSON
-emdx similar-text "authentication patterns" --json
+emdx similar similar-text "authentication patterns" --json
 ```
 
 ### Index Management
 
 ```bash
 # Rebuild TF-IDF index (auto-built on first use)
-emdx build-index
+emdx similar build-index
 
 # Force rebuild even if cache exists
-emdx build-index --force
+emdx similar build-index --force
 
 # Show index statistics
-emdx index-stats
-emdx index-stats --json
+emdx similar index-stats
+emdx similar index-stats --json
 ```
 
 ### Options Reference

@@ -149,7 +149,7 @@ app.add_typer(trash_app, name="trash", help="Manage deleted documents")
 app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 
 # Add tasks as a subcommand group
-app.add_typer(tasks_app, name="task", help="Task management")
+app.add_typer(tasks_app, name="task", help="Agent work queue")
 
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")

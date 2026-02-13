@@ -1,4 +1,8 @@
-"""Task CLI commands."""
+"""Task CLI commands — simplified agent work queue.
+
+Agent-facing commands for creating and consuming work items.
+Delegate activity tracking is separate (shown via `emdx status`).
+"""
 
 from typing import Optional
 
@@ -8,43 +12,100 @@ from rich.table import Table
 from emdx.models import tasks
 from emdx.utils.output import console
 
-app = typer.Typer(help="Task management")
+app = typer.Typer(help="Agent work queue")
 
-ICONS = {'open': '○', 'active': '●', 'blocked': '⚠', 'done': '✓', 'failed': '✗'}
+ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗"}
 
 
 @app.command()
-def create(
+def add(
     title: str = typer.Argument(..., help="Task title"),
-    gameplan: Optional[int] = typer.Option(None, "-g", "--gameplan", help="Gameplan doc ID"),
-    priority: int = typer.Option(3, "-p", "--priority", help="Priority 1-5"),
-    depends: Optional[str] = typer.Option(None, "-d", "--depends", help="Depends on (comma-sep IDs)"),
+    doc: Optional[int] = typer.Option(None, "-d", "--doc", help="Link to document ID"),
     description: Optional[str] = typer.Option(None, "-D", "--description", help="Task description"),
-    project: Optional[str] = typer.Option(None, "--project", help="Project name"),
 ):
-    """Create a task."""
-    deps = [int(x) for x in depends.split(',') if x.strip()] if depends else None
+    """Add a task to the work queue.
+
+    Examples:
+        emdx task add "Fix the auth bug"
+        emdx task add "Implement this" --doc 42
+        emdx task add "Refactor tests" -D "Split into unit and integration"
+    """
     task_id = tasks.create_task(
         title,
         description=description or "",
-        priority=priority,
-        gameplan_id=gameplan,
-        project=project,
-        depends_on=deps,
+        source_doc_id=doc,
     )
-    console.print(f"[green]✅ Created task #{task_id}[/green]")
+    msg = f"[green]✅ Task #{task_id}:[/green] {title}"
+    if doc:
+        msg += f" [dim](doc #{doc})[/dim]"
+    console.print(msg)
+
+
+@app.command()
+def ready():
+    """Show tasks ready to work on.
+
+    Lists open tasks that aren't blocked by dependencies.
+    Excludes delegate activity — only shows manually created tasks.
+
+    Examples:
+        emdx task ready
+    """
+    ready_tasks = tasks.get_ready_tasks()
+
+    if not ready_tasks:
+        console.print("[yellow]No ready tasks[/yellow]")
+        return
+
+    console.print(f"\n[bold]Ready ({len(ready_tasks)}):[/bold]")
+    for t in ready_tasks:
+        doc = f" [dim](doc #{t['source_doc_id']})[/dim]" if t.get("source_doc_id") else ""
+        console.print(f"  ○ #{t['id']} {t['title']}{doc}")
+
+
+@app.command()
+def done(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    note: Optional[str] = typer.Option(None, "-n", "--note", help="Completion note"),
+):
+    """Mark a task as done.
+
+    Examples:
+        emdx task done 42
+        emdx task done 42 --note "Fixed in PR #123"
+    """
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    kwargs = {"status": "done"}
+    tasks.update_task(task_id, **kwargs)
+    if note:
+        tasks.log_progress(task_id, note)
+
+    console.print(f"[green]✓ Done:[/green] #{task_id} {task['title']}")
 
 
 @app.command("list")
 def list_cmd(
     status: Optional[str] = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
-    gameplan: Optional[int] = typer.Option(None, "-g", "--gameplan", help="Filter by gameplan"),
-    project: Optional[str] = typer.Option(None, "--project", help="Filter by project"),
-    limit: int = typer.Option(50, "-n", "--limit"),
+    all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
+    limit: int = typer.Option(20, "-n", "--limit"),
 ):
-    """List tasks."""
-    status_list = [s.strip() for s in status.split(',')] if status else None
-    task_list = tasks.list_tasks(status=status_list, gameplan_id=gameplan, project=project, limit=limit)
+    """List tasks.
+
+    By default only shows manually created tasks (not delegate activity).
+    Use --all to include everything.
+
+    Examples:
+        emdx task list
+        emdx task list --all
+        emdx task list -s open,active
+    """
+    status_list = [s.strip() for s in status.split(",")] if status else None
+    exclude_delegate = not all
+    task_list = tasks.list_tasks(status=status_list, limit=limit, exclude_delegate=exclude_delegate)
 
     if not task_list:
         console.print("[yellow]No tasks[/yellow]")
@@ -54,17 +115,15 @@ def list_cmd(
     table.add_column("", width=2)
     table.add_column("ID", width=5)
     table.add_column("Title")
-    table.add_column("P", width=2)
-    table.add_column("GP", width=5)
+    table.add_column("Doc", width=5)
 
     for t in task_list:
-        gp = str(t['gameplan_id']) if t['gameplan_id'] else ""
+        doc = str(t["source_doc_id"]) if t.get("source_doc_id") else ""
         table.add_row(
-            ICONS.get(t['status'], '?'),
-            str(t['id']),
-            t['title'][:40],
-            str(t['priority']),
-            gp,
+            ICONS.get(t["status"], "?"),
+            str(t["id"]),
+            t["title"][:50],
+            doc,
         )
 
     console.print(table)
@@ -72,154 +131,16 @@ def list_cmd(
 
 
 @app.command()
-def show(task_id: int = typer.Argument(..., help="Task ID")):
-    """Show task details."""
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    console.print(f"\n[bold]#{task['id']}[/bold] {ICONS.get(task['status'], '?')} {task['title']}")
-    console.print(f"Status: {task['status']}  Priority: {task['priority']}")
-
-    if task['gameplan_id']:
-        console.print(f"Gameplan: #{task['gameplan_id']}")
-    if task['project']:
-        console.print(f"Project: {task['project']}")
-    if task['current_step']:
-        console.print(f"Current step: {task['current_step']}")
-
-    if task['description']:
-        console.print(f"\n[bold]Description:[/bold]\n{task['description']}")
-
-    deps = tasks.get_dependencies(task_id)
-    if deps:
-        console.print("\n[bold]Depends on:[/bold]")
-        for d in deps:
-            console.print(f"  {ICONS.get(d['status'], '?')} #{d['id']} {d['title']}")
-
-    log = tasks.get_task_log(task_id, limit=10)
-    if log:
-        console.print("\n[bold]Recent log:[/bold]")
-        for entry in reversed(log):
-            console.print(f"  {entry['message']}")
-
-
-@app.command()
-def update(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    status: Optional[str] = typer.Option(None, "-s", "--status", help="New status"),
-    priority: Optional[int] = typer.Option(None, "-p", "--priority", help="New priority"),
-    step: Optional[str] = typer.Option(None, "--step", help="Current step (for resume)"),
-    note: Optional[str] = typer.Option(None, "-n", "--note", help="Add to log"),
-):
-    """Update task."""
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    kwargs = {}
-    if status:
-        kwargs['status'] = status
-    if priority:
-        kwargs['priority'] = priority
-    if step:
-        kwargs['current_step'] = step
-
-    if kwargs:
-        tasks.update_task(task_id, **kwargs)
-    if note:
-        tasks.log_progress(task_id, note)
-
-    console.print(f"[green]✅ Updated #{task_id}[/green]")
-
-
-@app.command()
-def log(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    message: str = typer.Argument(..., help="Log message"),
-):
-    """Add log entry."""
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    tasks.log_progress(task_id, message)
-    console.print(f"[green]✅ Logged to #{task_id}[/green]")
-
-
-@app.command()
-def ready(
-    gameplan: Optional[int] = typer.Option(None, "-g", "--gameplan", help="Filter by gameplan"),
-    project: Optional[str] = typer.Option(None, "--project", help="Filter by project"),
-):
-    """Show tasks ready to work (open + deps satisfied)."""
-    ready_tasks = tasks.get_ready_tasks(gameplan_id=gameplan)
-
-    # Filter by project if specified
-    if project:
-        ready_tasks = [t for t in ready_tasks if t.get('project') == project]
-
-    if not ready_tasks:
-        console.print("[yellow]No ready tasks[/yellow]")
-        return
-
-    console.print(f"\n[bold]Ready ({len(ready_tasks)}):[/bold]")
-    for t in ready_tasks:
-        gp = f" [dim]GP#{t['gameplan_id']}[/dim]" if t['gameplan_id'] else ""
-        console.print(f"  ○ #{t['id']} {t['title']} [dim]P{t['priority']}[/dim]{gp}")
-
-
-@app.command()
-def depends(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    on: Optional[int] = typer.Option(None, "--on", help="Add dependency on this task ID"),
-    remove: Optional[int] = typer.Option(None, "--remove", help="Remove dependency on this task ID"),
-):
-    """Manage dependencies."""
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    if on:
-        if tasks.add_dependency(task_id, on):
-            console.print(f"[green]✅ #{task_id} now depends on #{on}[/green]")
-        else:
-            console.print(f"[red]Cannot add dependency (cycle or invalid)[/red]")
-            raise typer.Exit(1)
-    elif remove:
-        # Remove dependency
-        from emdx.database import db
-        with db.get_connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM task_deps WHERE task_id = ? AND depends_on = ?",
-                (task_id, remove)
-            )
-            conn.commit()
-            if cursor.rowcount > 0:
-                console.print(f"[green]✅ Removed dependency #{task_id} → #{remove}[/green]")
-            else:
-                console.print(f"[yellow]Dependency not found[/yellow]")
-    else:
-        # Show current dependencies
-        deps = tasks.get_dependencies(task_id)
-        if deps:
-            console.print(f"\n[bold]#{task_id} depends on:[/bold]")
-            for d in deps:
-                console.print(f"  {ICONS.get(d['status'], '?')} #{d['id']} {d['title']}")
-        else:
-            console.print(f"[dim]#{task_id} has no dependencies[/dim]")
-
-
-@app.command()
 def delete(
     task_id: int = typer.Argument(..., help="Task ID"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
-    """Delete a task."""
+    """Delete a task.
+
+    Examples:
+        emdx task delete 42
+        emdx task delete 42 --force
+    """
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -234,124 +155,3 @@ def delete(
 
     tasks.delete_task(task_id)
     console.print(f"[green]✅ Deleted #{task_id}[/green]")
-
-
-@app.command()
-def run(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show prompt only"),
-):
-    """Run task with Claude.
-
-    Examples:
-        emdx task run 1                    # Direct Claude execution
-        emdx task run 1 --dry-run          # Preview prompt
-    """
-    from emdx.services.task_runner import run_task, build_task_prompt
-
-    if dry_run:
-        console.print(build_task_prompt(task_id))
-        return
-
-    try:
-        task_exec_id = run_task(task_id)
-        console.print(f"[green]Started task #{task_id}, task_exec #{task_exec_id}[/green]")
-        console.print(f"[dim]View: emdx exec list[/dim]")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def manual(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    note: Optional[str] = typer.Option(None, "-n", "--note", help="Completion note"),
-):
-    """Mark task as manually completed."""
-    from emdx.services.task_runner import mark_task_manual
-
-    try:
-        task_exec_id = mark_task_manual(task_id, notes=note)
-        console.print(f"[green]✅ Task #{task_id} marked as manually completed (exec #{task_exec_id})[/green]")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
-
-
-@app.command()
-def retry(
-    task_id: int = typer.Argument(..., help="Task ID to retry"),
-):
-    """Re-run a failed task. Prints the delegate command to execute."""
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    prompt = task.get("prompt")
-    if not prompt:
-        console.print(f"[red]Task #{task_id} has no prompt — can't retry[/red]")
-        raise typer.Exit(1)
-
-    # Build delegate command from task metadata
-    parts = ["emdx delegate"]
-
-    # Escape the prompt for shell
-    escaped_prompt = prompt.replace('"', '\\"')
-    parts.append(f'"{escaped_prompt}"')
-
-    # Reconstruct tags
-    tag_str = task.get("tags")
-    if tag_str:
-        parts.append(f'--tags "{tag_str}"')
-
-    # Reconstruct source doc
-    source_doc = task.get("source_doc_id")
-    if source_doc:
-        parts.append(f"--doc {source_doc}")
-
-    cmd = " ".join(parts)
-    console.print(f"\n[bold]Retry task #{task_id}:[/bold]")
-    console.print(f"  [cyan]{cmd}[/cyan]\n")
-    console.print("[dim]Copy and run the command above to retry.[/dim]")
-
-
-@app.command()
-def executions(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    limit: int = typer.Option(10, "-n", "--limit"),
-):
-    """Show execution history for a task."""
-    from emdx.models.task_executions import list_task_executions, get_execution_stats
-
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    # Show stats
-    stats = get_execution_stats(task_id)
-    console.print(f"\n[bold]Task #{task_id}: {task['title']}[/bold]")
-    console.print(f"Executions: {stats['total']} total ({stats['completed']} completed, {stats['failed']} failed, {stats['running']} running)")
-    console.print(f"By type: {stats['direct_runs']} direct, {stats['manual_runs']} manual")
-
-    # Show history
-    execs = list_task_executions(task_id=task_id, limit=limit)
-    if execs:
-        console.print("\n[bold]Execution history:[/bold]")
-        table = Table()
-        table.add_column("ID", width=4)
-        table.add_column("Type", width=10)
-        table.add_column("Status", width=10)
-        table.add_column("Started", width=20)
-        table.add_column("Notes")
-
-        for e in execs:
-            table.add_row(
-                str(e['id']),
-                e['execution_type'],
-                e['status'],
-                str(e['started_at'])[:19] if e['started_at'] else "",
-                (e['notes'] or "")[:30],
-            )
-        console.print(table)
