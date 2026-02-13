@@ -18,7 +18,6 @@ from ..database.connection import db_connection
 from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
-from ..services.lifecycle_tracker import LifecycleTracker
 from ..utils.datetime_utils import parse_datetime
 from ..utils.output import console
 
@@ -29,7 +28,6 @@ def analyze(
     similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),
     empty: bool = typer.Option(False, "--empty", "-e", help="Find empty documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Analyze tag coverage and patterns"),
-    lifecycle: bool = typer.Option(False, "--lifecycle", "-l", help="Analyze gameplan lifecycle patterns"),
     projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
     all_analyses: bool = typer.Option(False, "--all", "-a", help="Run all analyses"),
     project: Optional[str] = typer.Option(None, "--project", help="Filter by specific project"),
@@ -50,12 +48,12 @@ def analyze(
     """
     
     # If no specific analysis requested, show health overview
-    if not any([health, duplicates, similar, empty, tags, lifecycle, projects, all_analyses]):
+    if not any([health, duplicates, similar, empty, tags, projects, all_analyses]):
         health = True
-    
+
     # If --all is specified, enable everything
     if all_analyses:
-        health = duplicates = similar = empty = tags = lifecycle = projects = True
+        health = duplicates = similar = empty = tags = projects = True
     
     # Collect results if JSON output is requested
     if json_output:
@@ -75,10 +73,7 @@ def analyze(
         
         if tags:
             results["tags"] = _collect_tags_data(project)
-        
-        if lifecycle:
-            results["lifecycle"] = _collect_lifecycle_data()
-        
+
         if projects:
             results["projects"] = _collect_projects_data()
         
@@ -95,39 +90,33 @@ def analyze(
     # Health Analysis
     if health:
         _analyze_health()
-        if any([duplicates, similar, empty, tags, lifecycle, projects]):
+        if any([duplicates, similar, empty, tags, projects]):
             console.print()  # Add spacing between sections
-    
+
     # Duplicate Analysis
     if duplicates:
         _analyze_duplicates()
-        if any([similar, empty, tags, lifecycle, projects]):
+        if any([similar, empty, tags, projects]):
             console.print()
-    
+
     # Similar Documents Analysis
     if similar:
         _analyze_similar()
-        if any([empty, tags, lifecycle, projects]):
+        if any([empty, tags, projects]):
             console.print()
-    
+
     # Empty Documents Analysis
     if empty:
         _analyze_empty()
-        if any([tags, lifecycle, projects]):
+        if any([tags, projects]):
             console.print()
-    
+
     # Tag Analysis
     if tags:
         _analyze_tags(project)
-        if any([lifecycle, projects]):
-            console.print()
-    
-    # Lifecycle Analysis
-    if lifecycle:
-        _analyze_lifecycle()
         if projects:
             console.print()
-    
+
     # Project Analysis
     if projects:
         _analyze_projects()
@@ -416,43 +405,6 @@ def _analyze_tags(project: Optional[str] = None):
             console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
 
 
-def _analyze_lifecycle():
-    """Analyze gameplan lifecycle patterns."""
-    tracker = LifecycleTracker()
-    
-    with console.status("[bold green]Analyzing lifecycle patterns..."):
-        analysis = tracker.analyze_lifecycle_patterns()
-    
-    console.print("[bold]Lifecycle Analysis:[/bold]")
-    
-    if analysis['total_gameplans'] == 0:
-        console.print("  [dim]No gameplans found[/dim]")
-        return
-    
-    console.print(f"\n  Total Gameplans: {analysis['total_gameplans']}")
-    # Format success rate with appropriate color coding
-    success_rate = analysis['success_rate']
-    color = _get_success_color(success_rate)
-    console.print(f"  Success Rate: [{color}]{success_rate:.0f}%[/{color}]")
-    console.print(f"  Average Duration: {analysis['average_duration']:.0f} days")
-    
-    # Stage distribution
-    if analysis['stage_distribution']:
-        console.print("\n  [bold]Stage Distribution:[/bold]")
-        for stage, count in analysis['stage_distribution'].items():
-            percentage = (count / analysis['total_gameplans'] * 100)
-            console.print(f"    • {stage}: {count} ({percentage:.0f}%)")
-    
-    # Insights
-    if analysis['insights']:
-        console.print("\n  [bold]Insights:[/bold]")
-        for insight in analysis['insights']:
-            console.print(f"    • {insight}")
-    
-    if analysis.get('stale_active', 0) > 0:
-        console.print("\n[dim]Run 'emdx maintain --lifecycle' to auto-transition stale gameplans[/dim]")
-
-
 def _analyze_projects():
     """Show project-level analysis."""
     with db_connection.get_connection() as conn:
@@ -516,16 +468,6 @@ def _get_coverage_color(coverage: float) -> str:
     if coverage >= 80:
         return "green"
     elif coverage >= 60:
-        return "yellow"
-    else:
-        return "red"
-
-
-def _get_success_color(rate: float) -> str:
-    """Get color based on success rate."""
-    if rate >= 70:
-        return "green"
-    elif rate >= 50:
         return "yellow"
     else:
         return "red"
@@ -746,21 +688,6 @@ def _collect_tags_data(project: Optional[str] = None) -> Dict[str, Any]:
         result["untagged_count"] = cursor.fetchone()['untagged']
 
     return result
-
-
-def _collect_lifecycle_data() -> Dict[str, Any]:
-    """Collect lifecycle analysis data."""
-    tracker = LifecycleTracker()
-    analysis = tracker.analyze_lifecycle_patterns()
-    
-    return {
-        "total_gameplans": analysis['total_gameplans'],
-        "success_rate": analysis['success_rate'],
-        "average_duration": analysis['average_duration'],
-        "stage_distribution": analysis['stage_distribution'],
-        "insights": analysis['insights'],
-        "stale_active": analysis.get('stale_active', 0)
-    }
 
 
 def _collect_projects_data() -> Dict[str, Any]:

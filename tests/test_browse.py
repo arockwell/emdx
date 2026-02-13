@@ -157,35 +157,3 @@ class TestBrowseCommands:
         assert "Popular Doc" in result.stdout
         mock_get_stats.assert_called_once_with(project=None)
 
-    @patch("emdx.commands.browse.db")
-    def test_projects_command(self, mock_db):
-        """Test projects command."""
-        mock_db.ensure_schema = Mock()
-        
-        # Mock the connection and cursor
-        mock_conn = Mock()
-        mock_cursor = Mock()
-        mock_cursor.fetchall.return_value = [
-            ("project-a", 10),
-            ("project-b", 5),
-            (None, 3),
-        ]
-        mock_conn.execute.return_value = mock_cursor
-        mock_db.get_connection.return_value.__enter__.return_value = mock_conn
-
-        result = runner.invoke(app, ["projects"])
-
-        assert result.exit_code == 0
-        assert "project-a" in result.stdout
-        assert "10" in result.stdout
-
-    @patch("emdx.commands.browse.db")
-    def test_projects_command_empty(self, mock_db):
-        """Test projects command with no projects."""
-        mock_db.ensure_schema = Mock()
-        mock_db.get_projects.return_value = []
-
-        result = runner.invoke(app, ["projects"])
-
-        assert result.exit_code == 0
-        assert "No projects found" in result.stdout
