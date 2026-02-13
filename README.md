@@ -105,7 +105,7 @@ emdx find --tags "gameplan,success"
 | `success` | 🎉 | Worked as intended |
 | `failed` | ❌ | Didn't work |
 
-Run `emdx legend` for the full alias list.
+Run `emdx tag list` to see all tags in use.
 
 ## Delegating Work to Claude
 

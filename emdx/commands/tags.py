@@ -24,7 +24,7 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import generate_legend, normalize_tag_to_emoji
+from emdx.utils.emoji_aliases import normalize_tag_to_emoji
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 
@@ -126,7 +126,7 @@ def _add_tags_impl(
 def tag_callback():
     """Manage document tags.
 
-    Subcommands: add, remove, list, rename, merge, legend, batch.
+    Subcommands: add, remove, list, rename, merge, batch.
 
     Shorthand: `emdx tag 42 gameplan active` is equivalent to `emdx tag add 42 gameplan active`.
     """
@@ -317,21 +317,6 @@ def merge(
         raise typer.Exit(0) from None
     except Exception as e:
         console.print(f"[red]Error merging tags: {e}[/red]")
-        raise typer.Exit(1) from e
-
-
-@app.command()
-def legend():
-    """Show emoji tag legend with text aliases."""
-    try:
-        from rich.markdown import Markdown
-
-        legend_content = generate_legend()
-        markdown = Markdown(legend_content)
-        console.print(markdown)
-
-    except Exception as e:
-        console.print(f"[red]Error displaying legend: {e}[/red]")
         raise typer.Exit(1) from e
 
 

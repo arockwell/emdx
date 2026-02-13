@@ -6,7 +6,6 @@ from emdx.utils.emoji_aliases import (
     REVERSE_ALIASES,
     expand_alias_string,
     expand_aliases,
-    generate_legend,
     get_aliases_for_emoji,
     get_all_aliases,
     get_category_emojis,
@@ -211,30 +210,6 @@ class TestGetCategoryEmojis:
         for cat, emojis in get_category_emojis().items():
             assert isinstance(emojis, list)
             assert len(emojis) > 0
-
-
-class TestGenerateLegend:
-    """Test generate_legend function."""
-
-    def test_contains_header(self):
-        legend = generate_legend()
-        assert "# EMDX Emoji Tag Legend" in legend
-
-    def test_contains_categories(self):
-        legend = generate_legend()
-        assert "## Document Types" in legend
-        assert "## Workflow Status" in legend
-        assert "## Outcomes" in legend
-
-    def test_contains_usage_examples(self):
-        legend = generate_legend()
-        assert "## Usage Examples" in legend
-        assert "emdx tag" in legend
-
-    def test_contains_emoji_entries(self):
-        legend = generate_legend()
-        assert "\U0001f3af" in legend
-        assert "`gameplan`" in legend
 
 
 class TestSuggestAliases:
