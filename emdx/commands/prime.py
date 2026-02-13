@@ -37,6 +37,11 @@ def prime(
         "--execution/--no-execution",
         help="Include execution method guidance"
     ),
+    smart: bool = typer.Option(
+        False,
+        "--smart", "-s",
+        help="Include stale documents needing review (Knowledge Decay)"
+    ),
 ):
     """
     Output priming context for Claude Code session injection.
@@ -52,6 +57,9 @@ def prime(
         # With full context
         emdx prime --verbose
 
+        # Include stale docs (Knowledge Decay)
+        emdx prime --smart
+
         # Minimal (just ready tasks)
         emdx prime --quiet
 
@@ -61,9 +69,9 @@ def prime(
     project = get_git_project()
 
     if format == "json":
-        _output_json(project, verbose, quiet, execution)
+        _output_json(project, verbose, quiet, execution, smart)
     else:
-        _output_text(project, verbose, quiet, format == "markdown", execution)
+        _output_text(project, verbose, quiet, format == "markdown", execution, smart)
 
 
 def _get_execution_guidance() -> list[str]:
@@ -135,7 +143,7 @@ def _get_execution_methods_json() -> list[dict]:
     ]
 
 
-def _output_text(project: str | None, verbose: bool, quiet: bool, markdown: bool, execution: bool):
+def _output_text(project: str | None, verbose: bool, quiet: bool, markdown: bool, execution: bool, smart: bool = False):
     """Output priming context as text."""
 
     lines = []
@@ -197,6 +205,21 @@ def _output_text(project: str | None, verbose: bool, quiet: bool, markdown: bool
             lines.append(f"  #{task['id']} {task['title']}")
         lines.append("")
 
+    # Stale documents (Knowledge Decay) - only with --smart flag
+    if smart and not quiet:
+        stale_docs = _get_stale_docs(limit=3)
+        if stale_docs:
+            lines.append("⏰ REVIEW NEEDED (stale important documents):")
+            lines.append("")
+            for doc in stale_docs:
+                urgency = doc.get("urgency", "WARNING")
+                days = doc.get("staleness_days", 0)
+                importance = doc.get("importance", 0)
+                lines.append(f"  #{doc['id']} \"{doc['title'][:40]}\" — {days}d stale, {urgency}")
+            lines.append("")
+            lines.append("Run 'emdx stale' for full list, 'emdx view <id>' to review.")
+            lines.append("")
+
     # Verbose additions
     if verbose and not quiet:
         # Recent documents
@@ -228,7 +251,7 @@ def _output_text(project: str | None, verbose: bool, quiet: bool, markdown: bool
     print("\n".join(lines))
 
 
-def _output_json(project: str | None, verbose: bool, quiet: bool, execution: bool):
+def _output_json(project: str | None, verbose: bool, quiet: bool, execution: bool, smart: bool = False):
     """Output priming context as JSON."""
     import json
 
@@ -241,6 +264,9 @@ def _output_json(project: str | None, verbose: bool, quiet: bool, execution: boo
 
     if execution:
         data["execution_methods"] = _get_execution_methods_json()
+
+    if smart:
+        data["stale_docs"] = _get_stale_docs(limit=5)
 
     if verbose:
         data["recent_docs"] = _get_recent_docs()
@@ -333,6 +359,20 @@ def _get_cascade_status() -> dict:
         pass
 
     return status
+
+
+def _get_stale_docs(limit: int = 3) -> list:
+    """Get top stale documents needing review (for Knowledge Decay).
+
+    Returns only CRITICAL and WARNING tier documents.
+    """
+    try:
+        from emdx.commands.stale import get_stale_documents
+        docs = get_stale_documents(limit=limit, min_staleness_days=7)
+        # Filter to only CRITICAL and WARNING
+        return [d for d in docs if d.get("urgency") in ("CRITICAL", "WARNING")][:limit]
+    except Exception:
+        return []
 
 
 # Create typer app for the command

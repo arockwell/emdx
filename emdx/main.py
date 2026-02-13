@@ -96,8 +96,10 @@ from emdx.commands.groups import app as groups_app
 from emdx.commands.maintain import app as maintain_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.commands.stale import stale as stale_command
 from emdx.commands.tags import app as tag_app
 from emdx.commands.tasks import app as tasks_app
+from emdx.commands.touch import touch as touch_command
 from emdx.commands.trash import app as trash_app
 from emdx.ui.gui import gui as gui_command
 
@@ -155,6 +157,12 @@ app.command(name="prime")(prime_command)
 
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
+
+# Add the stale command for Knowledge Decay (finding stale docs)
+app.command(name="stale")(stale_command)
+
+# Add the touch command for resetting staleness timer
+app.command(name="touch")(touch_command)
 
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
