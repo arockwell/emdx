@@ -11,6 +11,7 @@ The --smart flag provides context-aware priming with:
 - Staleness detection (docs needing review)
 """
 
+import json
 import subprocess
 from datetime import datetime, timedelta
 from typing import Optional
@@ -251,8 +252,6 @@ def _output_text(project: str | None, verbose: bool, quiet: bool, markdown: bool
 
 def _output_json(project: str | None, verbose: bool, quiet: bool, execution: bool):
     """Output priming context as JSON."""
-    import json
-
     data = {
         "project": project,
         "timestamp": datetime.now().isoformat(),
@@ -321,7 +320,7 @@ def _get_recent_docs() -> list:
             SELECT id, title, project
             FROM documents
             WHERE is_deleted = 0
-            ORDER BY last_accessed_at DESC
+            ORDER BY accessed_at DESC
             LIMIT 10
         """)
         rows = cursor.fetchall()
@@ -393,7 +392,6 @@ def _get_git_context() -> dict:
             capture_output=True, text=True, timeout=10
         )
         if result.returncode == 0:
-            import json
             try:
                 prs = json.loads(result.stdout)
                 context["open_prs"] = [{"number": pr["number"], "title": pr["title"]} for pr in prs]
@@ -676,8 +674,6 @@ def _output_smart_text(project: Optional[str]):
 
 def _output_smart_json(project: Optional[str]):
     """Output smart priming context as JSON."""
-    import json
-
     data = {
         "project": project,
         "timestamp": datetime.now().isoformat(),
