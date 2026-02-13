@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from ..config.cli_config import CliTool, get_default_cli_tool, DEFAULT_ALLOWED_TOOLS
 from ..config.constants import EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
+from ..utils.environment import get_subprocess_env
 from .cli_executor import get_cli_executor
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,7 @@ class UnifiedExecutor:
                         stderr=subprocess.PIPE,
                         text=True,
                         cwd=cmd.cwd,
+                        env=get_subprocess_env(),
                     )
 
                     import sys
@@ -329,6 +331,7 @@ class UnifiedExecutor:
                         stderr=subprocess.PIPE,
                         text=True,
                         cwd=cmd.cwd,
+                        env=get_subprocess_env(),
                     )
 
                     # Stream stdout to log file in real-time

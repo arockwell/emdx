@@ -11,6 +11,15 @@ from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
 
 
+def get_subprocess_env() -> dict:
+    """Get a clean environment dict for spawning CLI subprocesses.
+
+    Removes environment variables that prevent nested execution, such as
+    CLAUDECODE which blocks Claude Code from running inside another session.
+    """
+    return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
+
 class EnvironmentValidator:
     """Validates execution environment before running CLI tools.
 

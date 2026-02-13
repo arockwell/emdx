@@ -165,7 +165,9 @@ def execute_claude_detached(
         log_handle = open(log_file, 'a')
 
         # Ensure PATH contains the claude binary location
-        env = os.environ.copy()
+        # Use get_subprocess_env() to strip CLAUDECODE (allows nested sessions)
+        from ..utils.environment import get_subprocess_env
+        env = get_subprocess_env()
         env['PYTHONUNBUFFERED'] = '1'
         # Make sure PATH is preserved
         if 'PATH' not in env:
@@ -292,12 +294,14 @@ def execute_cli_sync(
 
         # Run with streaming output to log file for live viewing
         # Use Popen to stream stdout to file in real-time
+        from ..utils.environment import get_subprocess_env
         process = subprocess.Popen(
             cmd.args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             cwd=cmd.cwd or working_dir,
+            env=get_subprocess_env(),
         )
 
         # Track PID so we can detect zombies if parent dies
