@@ -330,7 +330,6 @@ class GistDestination:
             from emdx.commands.gist import (
                 get_github_auth,
                 create_gist_with_gh,
-                create_gist_with_api,
                 sanitize_filename,
             )
 
@@ -352,10 +351,7 @@ class GistDestination:
 
             public = profile.get("gist_public", False)
 
-            # Try gh CLI first, then API
             result = create_gist_with_gh(content, filename, description, public)
-            if not result:
-                result = create_gist_with_api(content, filename, description, public, token)
 
             if result:
                 return ExportResult(
