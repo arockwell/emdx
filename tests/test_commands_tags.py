@@ -53,7 +53,7 @@ class TestTagAddCommand:
         assert argv == ["emdx", "tag", "add", "42", "active"]
 
         # Other subcommands should not be rewritten
-        for subcmd in ("remove", "list", "rename", "merge", "legend", "batch"):
+        for subcmd in ("remove", "list", "rename", "merge", "batch"):
             argv = ["emdx", "tag", subcmd]
             _rewrite_tag_shorthand(argv)
             assert argv[2] == subcmd
@@ -296,18 +296,3 @@ class TestTagMergeCommand:
         ])
         assert result.exit_code != 0
         assert "No valid source tags" in _out(result)
-
-
-# ---------------------------------------------------------------------------
-# tag legend command
-# ---------------------------------------------------------------------------
-class TestTagLegendCommand:
-    """Tests for the tag legend command."""
-
-    @patch("emdx.commands.tags.generate_legend")
-    def test_legend(self, mock_legend):
-        """Legend command displays emoji legend."""
-        mock_legend.return_value = "# Emoji Legend\n- gameplan -> target"
-
-        result = runner.invoke(app, ["legend"])
-        assert result.exit_code == 0
