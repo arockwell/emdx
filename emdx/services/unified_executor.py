@@ -207,7 +207,7 @@ class UnifiedExecutor:
         """
         import subprocess
 
-        from ..workflows.output_parser import extract_output_doc_id, extract_token_usage_detailed
+        from ..utils.output_parser import extract_output_doc_id, extract_token_usage_detailed
 
         # Get the appropriate executor for the CLI tool
         executor = get_cli_executor(config.cli_tool)

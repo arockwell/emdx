@@ -770,80 +770,20 @@ def archive_descendants(doc_id: int) -> int:
 
 def record_document_source(
     document_id: int,
-    workflow_run_id: int | None = None,
-    workflow_stage_run_id: int | None = None,
-    workflow_individual_run_id: int | None = None,
-    source_type: str = "individual_output",
+    **kwargs,
 ) -> bool:
-    """Record the source of a document (which workflow created it).
-
-    Args:
-        document_id: The document ID
-        workflow_run_id: The workflow run that created this document
-        workflow_stage_run_id: The stage run (optional)
-        workflow_individual_run_id: The individual run (optional)
-        source_type: One of 'individual_output', 'synthesis', 'stage_output'
-
-    Returns:
-        True if recorded successfully
-    """
-    with db_connection.get_connection() as conn:
-        try:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO document_sources
-                (document_id, workflow_run_id, workflow_stage_run_id, workflow_individual_run_id, source_type)
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                (
-                    document_id,
-                    workflow_run_id,
-                    workflow_stage_run_id,
-                    workflow_individual_run_id,
-                    source_type,
-                ),
-            )
-            conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error recording document source: {e}")
-            return False
+    """No-op — workflow system removed. Kept for API compatibility."""
+    return False
 
 
 def get_document_source(document_id: int) -> dict[str, Any] | None:
-    """Get the source information for a document.
-
-    Returns:
-        Dict with workflow_run_id, stage_run_id, individual_run_id, source_type
-        or None if document has no workflow source
-    """
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM document_sources WHERE document_id = ?",
-            (document_id,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
+    """No-op — workflow system removed. Kept for API compatibility."""
+    return None
 
 
 def get_workflow_document_ids(workflow_run_id: int | None = None) -> set[int]:
-    """Get all document IDs created by workflows.
-
-    Args:
-        workflow_run_id: If provided, only return docs from this workflow run
-
-    Returns:
-        Set of document IDs
-    """
-    with db_connection.get_connection() as conn:
-        if workflow_run_id:
-            cursor = conn.execute(
-                "SELECT document_id FROM document_sources WHERE workflow_run_id = ?",
-                (workflow_run_id,),
-            )
-        else:
-            cursor = conn.execute("SELECT document_id FROM document_sources")
-        return {row[0] for row in cursor.fetchall()}
+    """No-op — workflow system removed. Kept for API compatibility."""
+    return set()
 
 
 def list_non_workflow_documents(
@@ -851,10 +791,7 @@ def list_non_workflow_documents(
     days: int = 7,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
-    """Get documents that were NOT created by workflows (direct saves).
-
-    This is an efficient single-query alternative to loading all documents
-    and filtering out workflow-generated ones.
+    """Get recent direct-save documents.
 
     Args:
         limit: Maximum documents to return
@@ -871,9 +808,7 @@ def list_non_workflow_documents(
     with db_connection.get_connection() as conn:
         query = """
             SELECT d.* FROM documents d
-            LEFT JOIN document_sources ds ON d.id = ds.document_id
-            WHERE ds.id IS NULL
-              AND d.parent_id IS NULL
+            WHERE d.parent_id IS NULL
               AND d.is_deleted = FALSE
               AND d.created_at > ?
         """

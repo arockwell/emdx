@@ -17,7 +17,6 @@ def clean_documents_tables(isolate_test_database):
 
     with db_connection.get_connection() as conn:
         conn.execute("DELETE FROM document_cascade_metadata")
-        conn.execute("DELETE FROM document_sources")
         conn.execute("DELETE FROM document_tags")
         conn.execute("DELETE FROM documents")
         conn.commit()
@@ -26,7 +25,6 @@ def clean_documents_tables(isolate_test_database):
 
     with db_connection.get_connection() as conn:
         conn.execute("DELETE FROM document_cascade_metadata")
-        conn.execute("DELETE FROM document_sources")
         conn.execute("DELETE FROM document_tags")
         conn.execute("DELETE FROM documents")
         conn.commit()
@@ -1007,123 +1005,6 @@ class TestGetStats:
 
         stats = get_stats(project="proj-a")
         assert stats["total_documents"] == 2
-
-
-# =========================================================================
-# Document Sources (Workflow Provenance)
-# =========================================================================
-
-
-class TestDocumentSources:
-    """Test record_document_source, get_document_source, get_workflow_document_ids."""
-
-    _wf_counter = 0
-
-    def _create_workflow_infrastructure(self):
-        """Create workflow tables needed for document sources."""
-        from emdx.database.connection import db_connection
-
-        TestDocumentSources._wf_counter += 1
-        name = f"test-wf-{TestDocumentSources._wf_counter}"
-
-        with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                """INSERT INTO workflows (name, display_name, definition_json)
-                   VALUES (?, ?, '{}')""",
-                (name, name),
-            )
-            workflow_id = cursor.lastrowid
-            cursor = conn.execute(
-                """INSERT INTO workflow_runs (workflow_id, status) VALUES (?, 'completed')""",
-                (workflow_id,),
-            )
-            workflow_run_id = cursor.lastrowid
-            conn.commit()
-            return workflow_run_id
-
-    def test_record_and_get_source(self):
-        from emdx.database.documents import save_document, record_document_source, get_document_source
-
-        doc_id = save_document("Sourced", "Content")
-        wf_run_id = self._create_workflow_infrastructure()
-
-        result = record_document_source(doc_id, workflow_run_id=wf_run_id)
-        assert result is True
-
-        source = get_document_source(doc_id)
-        assert source is not None
-        assert source["workflow_run_id"] == wf_run_id
-        assert source["source_type"] == "individual_output"
-
-    def test_get_source_none(self):
-        from emdx.database.documents import get_document_source
-
-        assert get_document_source(999999) is None
-
-    def test_get_workflow_document_ids(self):
-        from emdx.database.documents import (
-            save_document, record_document_source, get_workflow_document_ids,
-        )
-
-        wf_run_id = self._create_workflow_infrastructure()
-        d1 = save_document("WF Doc 1", "Content")
-        d2 = save_document("WF Doc 2", "Content")
-        save_document("Non-WF Doc", "Content")
-
-        record_document_source(d1, workflow_run_id=wf_run_id)
-        record_document_source(d2, workflow_run_id=wf_run_id)
-
-        ids = get_workflow_document_ids()
-        assert d1 in ids
-        assert d2 in ids
-
-    def test_get_workflow_document_ids_filtered(self):
-        from emdx.database.documents import (
-            save_document, record_document_source, get_workflow_document_ids,
-        )
-
-        wf_run_id = self._create_workflow_infrastructure()
-        d1 = save_document("WF Run Doc", "Content")
-        record_document_source(d1, workflow_run_id=wf_run_id)
-
-        ids = get_workflow_document_ids(workflow_run_id=wf_run_id)
-        assert d1 in ids
-
-        ids_other = get_workflow_document_ids(workflow_run_id=999999)
-        assert len(ids_other) == 0
-
-
-class TestListNonWorkflowDocuments:
-    """Test list_non_workflow_documents()."""
-
-    def test_excludes_workflow_documents(self):
-        from emdx.database.documents import (
-            save_document, record_document_source, list_non_workflow_documents,
-        )
-        from emdx.database.connection import db_connection
-
-        # Create workflow infrastructure
-        with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                """INSERT INTO workflows (name, display_name, definition_json)
-                   VALUES ('test', 'Test', '{}')"""
-            )
-            wf_id = cursor.lastrowid
-            cursor = conn.execute(
-                "INSERT INTO workflow_runs (workflow_id, status) VALUES (?, 'completed')",
-                (wf_id,),
-            )
-            wf_run_id = cursor.lastrowid
-            conn.commit()
-
-        wf_doc = save_document("Workflow Doc", "Content")
-        record_document_source(wf_doc, workflow_run_id=wf_run_id)
-        manual_doc = save_document("Manual Doc", "Content")
-
-        docs = list_non_workflow_documents(days=1)
-        titles = [d["title"] for d in docs]
-        assert "Manual Doc" in titles
-        assert "Workflow Doc" not in titles
 
 
 # =========================================================================

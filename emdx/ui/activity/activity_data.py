@@ -3,7 +3,6 @@
 Produces typed ActivityItem subclasses from activity_items.py.
 """
 
-import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -12,7 +11,6 @@ from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
     ActivityItem,
-    WorkflowItem,
     DocumentItem,
     GroupItem,
     CascadeRunItem,
@@ -21,17 +19,6 @@ from .activity_items import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Import services (same guards as activity_view)
-try:
-    from emdx.workflows import database as wf_db
-    from emdx.workflows.registry import workflow_registry
-
-    HAS_WORKFLOWS = True
-except ImportError:
-    wf_db = None
-    workflow_registry = None
-    HAS_WORKFLOWS = False
 
 try:
     from emdx.services import document_service as doc_svc
@@ -50,10 +37,7 @@ class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
     def __init__(self) -> None:
-        # Track workflow states for completion notifications
-        self._last_workflow_states: Dict[int, str] = {}
-        # Callbacks for notifications
-        self.on_workflow_complete: Optional[callable] = None
+        pass
 
     async def load_all(self, zombies_cleaned: bool = True) -> List[ActivityItem]:
         """Load all activity items, sorted.
@@ -66,20 +50,8 @@ class ActivityDataLoader:
         """
         items: List[ActivityItem] = []
 
-        # Clean up zombie workflow runs on first load
-        if HAS_WORKFLOWS and wf_db and not zombies_cleaned:
-            try:
-                cleaned = wf_db.cleanup_zombie_workflow_runs(max_age_hours=24.0)
-                if cleaned > 0:
-                    logger.info(f"Cleaned up {cleaned} zombie workflow runs")
-            except Exception as e:
-                logger.debug(f"Could not cleanup zombies: {e}")
-
         if HAS_GROUPS:
             items.extend(await self._load_groups())
-
-        if HAS_WORKFLOWS and wf_db:
-            items.extend(await self._load_workflows())
 
         if HAS_DOCS:
             items.extend(await self._load_direct_saves())
@@ -90,8 +62,7 @@ class ActivityDataLoader:
         # Sort: running items first (pinned), then by timestamp descending
         def sort_key(item: ActivityItem) -> Tuple:
             is_running = (
-                (item.item_type == "workflow" and item.status == "running")
-                or (item.item_type == "agent_execution" and item.status == "running")
+                item.item_type == "agent_execution" and item.status == "running"
             )
             return (
                 0 if is_running else 1,
@@ -99,152 +70,6 @@ class ActivityDataLoader:
             )
 
         items.sort(key=sort_key)
-        return items
-
-    async def _load_workflows(self) -> List[ActivityItem]:
-        """Load workflow runs into typed WorkflowItem instances.
-
-        Merges stage_runs + individual_runs into a single pass to halve DB calls.
-        """
-        items: List[ActivityItem] = []
-        try:
-            runs = wf_db.list_workflow_runs(limit=50)
-        except Exception as e:
-            logger.error(f"Error listing workflow runs: {e}", exc_info=True)
-            return items
-
-        for run in runs:
-            try:
-                started = parse_datetime(run.get("started_at")) or datetime.now()
-
-                # Skip zombie running workflows (running for > 2 hours)
-                if run.get("status") == "running":
-                    age_hours = (datetime.now() - started).total_seconds() / 3600
-                    if age_hours > 2:
-                        continue
-
-                # Get workflow name
-                wf_name = "Workflow"
-                if workflow_registry:
-                    try:
-                        wf = workflow_registry.get_workflow(run["workflow_id"])
-                        if wf:
-                            wf_name = wf.display_name
-                    except Exception:
-                        pass
-
-                # Get task title from input variables
-                task_title = ""
-                try:
-                    input_vars = run.get("input_variables")
-                    if isinstance(input_vars, str):
-                        input_vars = json.loads(input_vars)
-                    if input_vars:
-                        task_title = input_vars.get("task_title", "")
-                except (json.JSONDecodeError, KeyError, TypeError):
-                    pass
-
-                title = task_title or wf_name
-
-                # Single pass over stage_runs and individual_runs
-                # (previously done twice: once for cost, once for outputs/progress)
-                cost = run.get("total_cost_usd", 0) or 0
-                has_outputs = False
-                output_doc_id = None
-                output_count = 0
-                total_target = 0
-                total_completed = 0
-                current_stage = ""
-                is_synthesizing = False
-                total_input_tokens = 0
-                total_output_tokens = 0
-                cost_from_runs = 0.0
-
-                try:
-                    stage_runs = wf_db.list_stage_runs(run["id"])
-                    for sr in stage_runs:
-                        target = sr.get("target_runs", 1)
-                        completed = sr.get("runs_completed", 0)
-                        total_target += target
-                        total_completed += completed
-
-                        if sr.get("status") == "running":
-                            current_stage = sr.get("stage_name", "")
-                        elif sr.get("status") == "synthesizing":
-                            current_stage = sr.get("stage_name", "")
-                            is_synthesizing = True
-
-                        if sr.get("synthesis_doc_id"):
-                            output_count += 1
-                            has_outputs = True
-                            if not output_doc_id:
-                                output_doc_id = sr["synthesis_doc_id"]
-
-                        ind_runs = wf_db.list_individual_runs(sr["id"])
-                        for ir in ind_runs:
-                            total_input_tokens += ir.get("input_tokens", 0) or 0
-                            total_output_tokens += ir.get("output_tokens", 0) or 0
-                            ir_cost = ir.get("cost_usd", 0) or 0
-                            cost_from_runs += ir_cost
-                            if ir.get("output_doc_id"):
-                                output_count += 1
-                                has_outputs = True
-                                if not output_doc_id:
-                                    output_doc_id = ir["output_doc_id"]
-                except Exception as e:
-                    logger.debug(f"Error scanning workflow outputs for run {run['id']}: {e}")
-
-                # Use summed cost from runs if top-level cost is missing
-                if not cost:
-                    cost = cost_from_runs
-
-                # For completed workflows, use output document timestamp
-                timestamp = started
-                if output_doc_id and run.get("status") in ("completed", "failed") and HAS_DOCS:
-                    try:
-                        out_doc = doc_svc.get_document(output_doc_id)
-                        if out_doc:
-                            doc_created = parse_datetime(out_doc.get("created_at"))
-                            if doc_created:
-                                timestamp = doc_created
-                    except Exception:
-                        pass
-
-                item = WorkflowItem(
-                    item_id=run["id"],
-                    title=title,
-                    timestamp=timestamp,
-                    workflow_run=run,
-                    status=run.get("status", "unknown"),
-                    cost=cost,
-                    tokens=0,
-                    input_tokens=total_input_tokens,
-                    output_tokens=total_output_tokens,
-                    progress_completed=total_completed if run.get("status") == "running" else 0,
-                    progress_total=total_target if run.get("status") == "running" else 0,
-                    progress_stage=current_stage if run.get("status") == "running" else "",
-                    output_count=output_count,
-                    doc_id=output_doc_id if run.get("status") in ("completed", "failed") else None,
-                    has_workflow_outputs=has_outputs,
-                )
-
-                # Store synthesizing state for display
-                if run.get("status") == "running" and is_synthesizing:
-                    item._is_synthesizing = True
-
-                # Track for notifications
-                old_status = self._last_workflow_states.get(run["id"])
-                new_status = run.get("status")
-                if old_status == "running" and new_status in ("completed", "failed"):
-                    if self.on_workflow_complete:
-                        self.on_workflow_complete(run["id"], new_status == "completed")
-                self._last_workflow_states[run["id"]] = new_status
-
-                items.append(item)
-
-            except Exception as e:
-                logger.error(f"Error loading workflow run {run.get('id', '?')}: {e}", exc_info=True)
-
         return items
 
     async def _load_groups(self) -> List[ActivityItem]:
