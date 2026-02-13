@@ -14,7 +14,7 @@ from ..utils.datetime_utils import parse_timestamp
 class Execution:
     """Represents a Claude execution."""
     id: int  # Now numeric auto-incrementing ID
-    doc_id: Optional[int]  # Can be None for workflow agent executions
+    doc_id: Optional[int]  # Can be None for standalone delegate executions
     doc_title: str
     status: str  # 'running', 'completed', 'failed'
     started_at: datetime
@@ -64,7 +64,7 @@ def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
     """Create a new execution and return its ID.
 
     Args:
-        doc_id: Document ID (can be None for workflow agent executions)
+        doc_id: Document ID (can be None for standalone delegate executions)
         doc_title: Title for the execution
         log_file: Path to log file
         working_dir: Working directory for execution
@@ -197,6 +197,20 @@ def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] 
                 WHERE id = ?
             """, (status, exec_id))
         
+        conn.commit()
+
+
+def update_execution(exec_id: int, **kwargs) -> None:
+    """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.)."""
+    if not kwargs:
+        return
+    sets = [f"{k} = ?" for k in kwargs]
+    params = list(kwargs.values()) + [exec_id]
+    with db_connection.get_connection() as conn:
+        conn.execute(
+            f"UPDATE executions SET {', '.join(sets)} WHERE id = ?",
+            params,
+        )
         conn.commit()
 
 

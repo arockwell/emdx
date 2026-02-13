@@ -211,13 +211,6 @@ emdx ai context "How does the workflow system work?" | claude
 emdx ai ask "How did we solve the auth bug?"
 ```
 
-### Similar documents
-
-```bash
-emdx similar 42                                     # Docs similar to #42
-emdx similar-text "retry logic with exponential backoff"
-```
-
 ## Going Further
 
 ### Cascade: ideas to code
