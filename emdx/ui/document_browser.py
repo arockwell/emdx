@@ -159,7 +159,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     
     async def on_mount(self) -> None:
         """Initialize the document browser."""
-        logger.info("DocumentBrowser mounted - LHS split implementation")
+        logger.debug("DocumentBrowser mounted")
 
         # Initialize preview mode manager
         from .preview_mode_manager import PreviewModeManager
@@ -366,7 +366,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     return False
 
         # Document not in current list - try searching for it
-        logger.info(f"Document #{doc_id} not in current list, searching...")
+        logger.debug(f"Document #{doc_id} not in current list, searching")
         await self.presenter.search(f"#{doc_id}")
         return False
 
@@ -462,7 +462,7 @@ class DocumentBrowser(HelpMixin, Widget):
         
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
-        logger.info("action_save_and_exit_edit called")
+        logger.debug("action_save_and_exit_edit called")
         try:
             # Use call_after_refresh to avoid timing issues
             self.call_after_refresh(self._async_save_and_exit_edit_mode)
@@ -477,13 +477,13 @@ class DocumentBrowser(HelpMixin, Widget):
             
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
-        logger.info("_async_exit_edit_mode called")
+        logger.debug("_async_exit_edit_mode")
         import asyncio
         asyncio.create_task(self.exit_edit_mode())
         
     def _async_save_and_exit_edit_mode(self) -> None:
         """Async wrapper for save_and_exit_edit_mode."""
-        logger.info("_async_save_and_exit_edit_mode called")
+        logger.debug("_async_save_and_exit_edit_mode")
         import asyncio
         asyncio.create_task(self.save_and_exit_edit_mode())
         
@@ -507,7 +507,7 @@ class DocumentBrowser(HelpMixin, Widget):
                 # Save new document via presenter
                 doc_id = await self.presenter.save_new_document(title, content)
                 if doc_id:
-                    logger.info(f"Created new document with ID: {doc_id}")
+                    logger.debug(f"Created doc #{doc_id}")
                     self.new_document_mode = False
                 else:
                     self._update_vim_status("ERROR: Failed to save document")
@@ -521,7 +521,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     if not success:
                         self._update_vim_status("ERROR: Failed to update document")
                         return
-                    logger.info(f"Updated document ID: {self.editing_doc_id}")
+                    logger.debug(f"Updated doc #{self.editing_doc_id}")
 
             # Exit edit mode and reload documents
             await self.exit_edit_mode()

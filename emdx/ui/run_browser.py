@@ -3,9 +3,8 @@
 Run the new browser container.
 """
 
-# Set up logging using shared utility
 from ..utils.logging_utils import setup_tui_logging
-logger, key_logger = setup_tui_logging(__name__)
+logger, _key_logger = setup_tui_logging(__name__)
 
 
 def run_browser(theme: str | None = None):

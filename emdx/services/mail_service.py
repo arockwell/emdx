@@ -114,7 +114,6 @@ class MailService:
         """
         try:
             cmd = ["gh"] + args
-            logger.debug(f"Running gh command: {' '.join(cmd)}")
 
             result = subprocess.run(
                 cmd,

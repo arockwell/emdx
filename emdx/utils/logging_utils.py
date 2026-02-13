@@ -20,8 +20,12 @@ with auto-configuration (e.g., for modules that may run standalone).
 """
 
 import logging
-import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+# Max log file size: 5MB, keep 2 backups
+_MAX_LOG_BYTES = 5 * 1024 * 1024
+_BACKUP_COUNT = 2
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -35,7 +39,9 @@ def get_logger(name: str) -> logging.Logger:
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "emdx.log"
 
-        handler = logging.FileHandler(log_file)
+        handler = RotatingFileHandler(
+            log_file, maxBytes=_MAX_LOG_BYTES, backupCount=_BACKUP_COUNT
+        )
         handler.setLevel(logging.INFO)
 
         # Create formatter
@@ -54,7 +60,11 @@ def get_logger(name: str) -> logging.Logger:
 
 def setup_tui_logging(module_name: str) -> tuple[logging.Logger, logging.Logger]:
     """
-    Set up TUI debug logging for UI modules.
+    Set up TUI logging for UI modules.
+
+    The root logger is set to WARNING to avoid noise from third-party libs.
+    EMDX's own loggers (emdx.*) are set to INFO. Key events get a separate
+    file that is only written to when actively editing.
 
     Returns:
         tuple: (main_logger, key_events_logger)
@@ -65,25 +75,33 @@ def setup_tui_logging(module_name: str) -> tuple[logging.Logger, logging.Logger]
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "tui_debug.log"
 
-        # Configure basic logging if not already done
+        # Configure root logger — WARNING only, with rotation
         if not logging.getLogger().handlers:
+            handler = RotatingFileHandler(
+                log_file, maxBytes=_MAX_LOG_BYTES, backupCount=_BACKUP_COUNT
+            )
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            )
             logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                handlers=[
-                    logging.FileHandler(log_file),
-                    # logging.StreamHandler()  # Uncomment for console output
-                ],
+                level=logging.WARNING,
+                handlers=[handler],
             )
 
-        # Set up key events logger
+        # Let emdx.* loggers through at INFO
+        emdx_logger = logging.getLogger("emdx")
+        emdx_logger.setLevel(logging.INFO)
+
+        # Key events logger — separate rotating file
         key_log_file = log_dir / "key_events.log"
         key_logger = logging.getLogger("key_events")
         if not key_logger.handlers:
-            key_handler = logging.FileHandler(key_log_file)
+            key_handler = RotatingFileHandler(
+                key_log_file, maxBytes=_MAX_LOG_BYTES, backupCount=_BACKUP_COUNT
+            )
             key_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
             key_logger.addHandler(key_handler)
-            key_logger.setLevel(logging.DEBUG)
+            key_logger.setLevel(logging.WARNING)  # Only errors, not every keystroke
 
         main_logger = logging.getLogger(module_name)
 

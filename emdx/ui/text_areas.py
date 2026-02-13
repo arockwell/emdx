@@ -10,7 +10,7 @@ from textual.widgets import TextArea
 
 # Set up logging using shared utility
 from ..utils.logging_utils import setup_tui_logging
-logger, key_logger = setup_tui_logging(__name__)
+logger, _key_logger = setup_tui_logging(__name__)
 
 
 class SelectionTextArea(TextArea):
@@ -22,15 +22,6 @@ class SelectionTextArea(TextArea):
 
     def on_key(self, event: events.Key) -> None:
         try:
-            # Comprehensive logging of key event attributes
-            event_attrs = {}
-            for attr in ['key', 'character', 'name', 'is_printable', 'aliases']:
-                if hasattr(event, attr):
-                    event_attrs[attr] = getattr(event, attr)
-            
-            key_logger.info(f"SelectionTextArea.on_key: {event_attrs}")
-            logger.debug(f"SelectionTextArea.on_key: key={event.key}")
-            
             # Only allow specific keys in selection mode:
             # - 's' and 'escape' to exit selection mode
             # - 'ctrl+c' to copy
@@ -57,14 +48,8 @@ class SelectionTextArea(TextArea):
                 event.prevent_default()
                 return
                 
-        except (AttributeError, RuntimeError) as e:
-            key_logger.error(f"Known error in SelectionTextArea.on_key: {type(e).__name__}: {e}")
-            logger.error(f"Error in SelectionTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
-            # Don't re-raise - let app continue
         except Exception as e:
-            key_logger.error(f"Unexpected error in SelectionTextArea.on_key: {type(e).__name__}: {e}")
-            logger.error(f"Unexpected error in SelectionTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
-            # Don't re-raise - let app continue
+            logger.error(f"Error in SelectionTextArea.on_key: {e}", exc_info=True)
 
 
 class VimEditTextArea(TextArea):
@@ -142,8 +127,6 @@ class VimEditTextArea(TextArea):
     def on_key(self, event: events.Key) -> None:
         """Handle key events with vim-like behavior."""
         try:
-            key_logger.info(f"VimEditTextArea.on_key: key={event.key}, mode={self.vim_mode}")
-            
             # Global ESC handling - exit edit mode from any vim mode
             if event.key == "escape":
                 if self.vim_mode == self.VIM_INSERT:
@@ -179,29 +162,17 @@ class VimEditTextArea(TextArea):
             elif self.vim_mode == self.VIM_COMMAND:
                 self._handle_command_mode(event)
                 
-        except (AttributeError, RuntimeError) as e:
-            key_logger.error(f"Known error in VimEditTextArea.on_key: {type(e).__name__}: {e}")
-            logger.error(f"Error in VimEditTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
-            # Try to continue without crashing the app
-            try:
-                self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except (AttributeError, RuntimeError) as e2:
-                logger.debug("Could not update vim status: %s", e2)
         except Exception as e:
-            key_logger.error(f"Unexpected error in VimEditTextArea.on_key: {type(e).__name__}: {e}")
-            logger.error(f"Unexpected error in VimEditTextArea.on_key: {type(e).__name__}: {e}", exc_info=True)
-            # Try to continue without crashing the app
+            logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except (AttributeError, RuntimeError) as e2:
-                logger.debug("Could not update vim status: %s", e2)
+            except Exception:
+                pass
     
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""
         key = event.key
         char = event.character if hasattr(event, 'character') else None
-        
-        key_logger.info(f"VimEditTextArea._handle_normal_mode: key={key}, char={char}")
         
         # Handle Ctrl+S to save
         if key == "ctrl+s":
@@ -215,26 +186,20 @@ class VimEditTextArea(TextArea):
         # Handle repeat counts (e.g., 3j to move down 3 lines)
         if char and char.isdigit() and (self.repeat_count or char != '0'):
             self.repeat_count += char
-            key_logger.info(f"Added to repeat count: {self.repeat_count}")
             return
         
         # Get repeat count as integer
         count = int(self.repeat_count) if self.repeat_count else 1
         self.repeat_count = ""  # Reset after use
         
-        key_logger.info(f"Processing command with count={count}")
-        
         # Movement commands
         if key == "h" or key == "left":
-            key_logger.info(f"Moving left by {count}")
             self.move_cursor_relative(columns=-count)
             self._update_line_numbers()
         elif key == "j" or key == "down":
-            key_logger.info(f"Moving down by {count}")
             self.move_cursor_relative(rows=count)
             self._update_line_numbers()
         elif key == "k" or key == "up":
-            key_logger.info(f"Moving up by {count}")
             self.move_cursor_relative(rows=-count)
             self._update_line_numbers()
         elif key == "l" or key == "right":
