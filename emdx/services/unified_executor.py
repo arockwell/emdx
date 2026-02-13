@@ -9,6 +9,7 @@ Uses stream-json output format by default for real-time log streaming.
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -223,8 +224,9 @@ class UnifiedExecutor:
                 cli_tool=config.cli_tool,
             )
 
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        log_file = self.log_dir / f"unified-{config.cli_tool}-{timestamp}.log"
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        thread_id = threading.get_ident()
+        log_file = self.log_dir / f"unified-{config.cli_tool}-{timestamp}-{thread_id}.log"
 
         exec_id = create_execution(
             doc_id=config.doc_id,
