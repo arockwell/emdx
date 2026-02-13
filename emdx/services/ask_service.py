@@ -21,8 +21,47 @@ except ImportError:
     HAS_ANTHROPIC = False
 
 from ..database import db
+from ..utils.emoji_aliases import normalize_tag_to_emoji
 
 logger = logging.getLogger(__name__)
+
+
+def _add_filters(
+    query: str,
+    params: list,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    recent_days: int | None = None,
+) -> tuple[str, list]:
+    """
+    Add project, tag, and recency filters to a SQL query.
+
+    Args:
+        query: The base SQL query string (must use documents table)
+        params: List of parameters for the query
+        project: Filter by project name
+        tags: Filter by tags (documents must have at least one of these tags)
+        recent_days: Filter to documents created/updated in last N days
+
+    Returns:
+        Tuple of (modified query string, updated params list)
+    """
+    if project:
+        query += " AND project = ?"
+        params.append(project)
+
+    if tags:
+        # Filter by tags via document_tags and tags tables
+        resolved_tags = [normalize_tag_to_emoji(t) for t in tags]
+        placeholders = ",".join("?" * len(resolved_tags))
+        query += f" AND id IN (SELECT dt.document_id FROM document_tags dt JOIN tags t ON dt.tag_id = t.id WHERE t.name IN ({placeholders}))"
+        params.extend(resolved_tags)
+
+    if recent_days:
+        query += " AND updated_at >= datetime('now', ?)"
+        params.append(f"-{recent_days} days")
+
+    return query, params
 
 
 @dataclass
@@ -149,28 +188,6 @@ class AskService:
         docs = []
         seen = set()
 
-        # Build tag and recency filter conditions
-        def add_filters(query: str, params: list) -> Tuple[str, list]:
-            """Add tag and recency filters to query."""
-            if project:
-                query += " AND project = ?"
-                params.append(project)
-
-            if tags:
-                # Join with document_tags and tags tables to filter by tag names
-                # Use emoji aliases lookup for tags
-                from ..utils.emoji_aliases import normalize_tag_to_emoji
-                resolved_tags = [normalize_tag_to_emoji(t) for t in tags]
-                placeholders = ",".join("?" * len(resolved_tags))
-                query += f" AND id IN (SELECT dt.document_id FROM document_tags dt JOIN tags t ON dt.tag_id = t.id WHERE t.name IN ({placeholders}))"
-                params.extend(resolved_tags)
-
-            if recent_days:
-                query += " AND updated_at >= datetime('now', ?)"
-                params.append(f"-{recent_days} days")
-
-            return query, params
-
         with db.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -184,7 +201,7 @@ class AskService:
                     doc_id_int = int(doc_id)
                     query = "SELECT id, title, content FROM documents WHERE id = ? AND is_deleted = 0"
                     params: list = [doc_id_int]
-                    query, params = add_filters(query, params)
+                    query, params = _add_filters(query, params, project, tags, recent_days)
                     cursor.execute(query, params)
                     row = cursor.fetchone()
                     if row and row[0] not in seen:
@@ -200,7 +217,7 @@ class AskService:
                     WHERE content LIKE ? AND is_deleted = 0
                 """
                 params = [f"%{ticket}%"]
-                query, params = add_filters(query, params)
+                query, params = _add_filters(query, params, project, tags, recent_days)
                 query += " LIMIT 3"
                 cursor.execute(query, params)
 
@@ -218,7 +235,7 @@ class AskService:
                     WHERE documents_fts MATCH ? AND is_deleted = 0
                 """
                 params = [terms]
-                query, params = add_filters(query, params)
+                query, params = _add_filters(query, params, project, tags, recent_days)
                 query += " ORDER BY rank LIMIT ?"
                 params.append(limit - len(docs))
 
@@ -239,7 +256,7 @@ class AskService:
                     WHERE is_deleted = 0
                 """
                 params = []
-                query, params = add_filters(query, params)
+                query, params = _add_filters(query, params, project, tags, recent_days)
                 query += " ORDER BY updated_at DESC LIMIT ?"
                 params.append(limit)
 
@@ -271,22 +288,7 @@ class AskService:
                 for match in matches:
                     query = "SELECT id, title, content FROM documents WHERE id = ? AND is_deleted = 0"
                     params: list = [match.doc_id]
-
-                    if project:
-                        query += " AND project = ?"
-                        params.append(project)
-
-                    if tags:
-                        # Filter by tags via document_tags and tags tables
-                        from ..utils.emoji_aliases import normalize_tag_to_emoji
-                        resolved_tags = [normalize_tag_to_emoji(t) for t in tags]
-                        placeholders = ",".join("?" * len(resolved_tags))
-                        query += f" AND id IN (SELECT dt.document_id FROM document_tags dt JOIN tags t ON dt.tag_id = t.id WHERE t.name IN ({placeholders}))"
-                        params.extend(resolved_tags)
-
-                    if recent_days:
-                        query += " AND updated_at >= datetime('now', ?)"
-                        params.append(f"-{recent_days} days")
+                    query, params = _add_filters(query, params, project, tags, recent_days)
 
                     cursor.execute(query, params)
                     row = cursor.fetchone()
