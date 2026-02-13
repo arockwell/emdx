@@ -757,9 +757,9 @@ class GroupItem(ActivityItem):
 
 @dataclass
 class AgentExecutionItem(ActivityItem):
-    """A standalone agent execution (from `emdx agent` command).
+    """A standalone agent execution (from `emdx delegate` command).
 
-    These are direct CLI agent runs not part of any workflow or cascade.
+    These are direct CLI delegate runs not part of any workflow or cascade.
     """
 
     execution: Dict[str, Any] = field(default_factory=dict)

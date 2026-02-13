@@ -314,13 +314,14 @@ The Cascade browser's activity panel shows cascade runs grouped together:
 
 ## Comparison with Other Systems
 
-| Feature | Cascade | `emdx run` | `emdx workflow` |
-|---------|---------|-----------|-----------------|
+| Feature | Cascade | `emdx delegate` | `emdx workflow` |
+|---------|---------|-----------------|-----------------|
 | Stage transformations | ✅ | ❌ | ❌ |
 | Autonomous execution | ✅ | ✅ | ✅ |
-| PR creation | ✅ | ❌ | ❌ |
+| PR creation | ✅ | ✅ | ❌ |
 | Document lineage | ✅ | ❌ | ✅ |
 | Multi-agent parallel | ❌ | ✅ | ✅ |
+| Sequential chains | ❌ | ✅ | ❌ |
 | Custom stages | ❌ | ❌ | ✅ |
 
-Use Cascade when you want ideas to flow automatically to implementation. Use `emdx run` for quick parallel tasks. Use workflows for complex multi-stage processes with custom configurations.
+Use Cascade when you want ideas to flow automatically to implementation. Use `emdx delegate` for one-shot execution (parallel, chain, PR creation, worktree isolation). Use workflows for complex multi-stage processes with custom configurations.
