@@ -1832,6 +1832,101 @@ def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
+    """Remove the entire workflow system.
+
+    The workflow system has been replaced by recipes — markdown documents
+    tagged with 📋 that Claude reads and follows via `emdx delegate`.
+
+    Tables dropped:
+    - workflow_presets
+    - workflow_individual_runs
+    - workflow_stage_runs
+    - workflow_runs
+    - workflows
+    - document_sources (entirely workflow-coupled)
+
+    FK columns cleaned:
+    - task_executions.workflow_run_id → DROP column
+    - document_groups.workflow_run_id → DROP column
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # 1. Drop workflow tables (in FK dependency order)
+    cursor.execute("DROP TABLE IF EXISTS workflow_presets")
+    cursor.execute("DROP TABLE IF EXISTS workflow_individual_runs")
+    cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs")
+    cursor.execute("DROP TABLE IF EXISTS workflow_runs")
+    cursor.execute("DROP TABLE IF EXISTS workflows")
+    cursor.execute("DROP TABLE IF EXISTS document_sources")
+
+    # 2. Recreate task_executions without workflow_run_id column
+    cursor.execute("DROP TABLE IF EXISTS task_executions_new")
+    cursor.execute("""
+        CREATE TABLE task_executions_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
+            execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),
+            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            notes TEXT
+        )
+    """)
+    cursor.execute("""
+        INSERT INTO task_executions_new (id, task_id, execution_id, execution_type, status, started_at, completed_at, notes)
+        SELECT id, task_id, execution_id, execution_type, status, started_at, completed_at, notes
+        FROM task_executions
+    """)
+    cursor.execute("DROP TABLE task_executions")
+    cursor.execute("ALTER TABLE task_executions_new RENAME TO task_executions")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
+
+    # 3. Recreate document_groups without workflow_run_id column
+    cursor.execute("DROP TABLE IF EXISTS document_groups_new")
+    cursor.execute("""
+        CREATE TABLE document_groups_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            parent_group_id INTEGER,
+            group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),
+            project TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT TRUE,
+            doc_count INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            total_cost_usd REAL DEFAULT 0.0,
+            FOREIGN KEY (parent_group_id) REFERENCES document_groups_new(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        INSERT INTO document_groups_new (id, name, description, parent_group_id, group_type, project,
+            created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd)
+        SELECT id, name, description, parent_group_id, group_type, project,
+            created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd
+        FROM document_groups
+    """)
+    cursor.execute("DROP TABLE document_groups")
+    cursor.execute("ALTER TABLE document_groups_new RENAME TO document_groups")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_name ON document_groups(name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_project ON document_groups(project)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_type ON document_groups(group_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_active ON document_groups(is_active)")
+
+    cursor.execute("PRAGMA foreign_keys = ON")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1869,6 +1964,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (32, "Extract cascade metadata to dedicated table", migration_032_extract_cascade_metadata),
     (33, "Add mail config and read receipts", migration_033_add_mail_config),
     (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
+    (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
 ]
 
 

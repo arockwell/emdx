@@ -3,11 +3,62 @@ Git utility functions for emdx
 """
 
 import logging
+import os
+import random
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def create_worktree(base_branch: str = "main") -> tuple[str, str]:
+    """Create a unique git worktree for isolated execution.
+
+    Args:
+        base_branch: Branch to base the worktree on
+
+    Returns:
+        Tuple of (worktree_path, branch_name)
+    """
+    # Get the repo root
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, check=True
+    )
+    repo_root = result.stdout.strip()
+
+    # Create unique branch and worktree names with timestamp + random + pid
+    timestamp = int(time.time())
+    random_suffix = random.randint(1000, 9999)
+    pid = os.getpid()
+    unique_id = f"{timestamp}-{pid}-{random_suffix}"
+    branch_name = f"worktree-{unique_id}"
+    worktree_dir = Path(repo_root).parent / f"emdx-worktree-{unique_id}"
+
+    # Create the worktree
+    subprocess.run(
+        ["git", "worktree", "add", "-b", branch_name, str(worktree_dir), base_branch],
+        capture_output=True, text=True, check=True
+    )
+
+    return str(worktree_dir), branch_name
+
+
+def cleanup_worktree(worktree_path: str):
+    """Clean up a worktree after completion.
+
+    Args:
+        worktree_path: Path to the worktree to clean up
+    """
+    try:
+        subprocess.run(
+            ["git", "worktree", "remove", worktree_path, "--force"],
+            capture_output=True, text=True
+        )
+    except Exception as e:
+        logger.warning("Could not clean up worktree %s: %s", worktree_path, e)
 
 
 def get_git_project(path: Optional[Path] = None) -> Optional[str]:

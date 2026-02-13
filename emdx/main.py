@@ -23,7 +23,7 @@ from emdx.utils.output import console
 # IMPORTANT: Register BEFORE any Typer app creation
 LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
-    "workflow": "emdx.commands.workflows:app",
+    "recipe": "emdx.commands.recipe:app",
     "cascade": "emdx.commands.cascade:app",
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
@@ -36,7 +36,7 @@ LAZY_SUBCOMMANDS = {
 
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
-    "workflow": "Manage and run multi-stage workflows",
+    "recipe": "Manage and run EMDX recipes",
     "cascade": "Cascade ideas through stages to working code",
     "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
@@ -55,7 +55,7 @@ def is_safe_mode() -> bool:
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "delegate", "workflow"}
+UNSAFE_COMMANDS = {"cascade", "delegate", "recipe"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -199,7 +199,7 @@ def main(
     ),
     safe_mode: bool = typer.Option(
         False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (cascade, delegate, workflow)"
+        help="Disable execution commands (cascade, delegate, recipe)"
     ),
 ):
     """
@@ -210,7 +210,7 @@ def main(
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (cascade, delegate, workflow). Useful for read-only access
+    (cascade, delegate, recipe). Useful for read-only access
     or when external execution should be prevented.
 
     Examples:
