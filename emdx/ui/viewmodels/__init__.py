@@ -25,7 +25,6 @@ class DocumentListItem:
     parent_id: Optional[int] = None
     has_children: bool = False
     depth: int = 0
-    is_archived: bool = False
     relationship: Optional[str] = None
 
 

@@ -105,7 +105,6 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
 def list_documents(
     project: Optional[str] = None,
     limit: int = 50,
-    include_archived: bool = False,
     parent_id: Optional[int] = None,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
@@ -114,7 +113,6 @@ def list_documents(
     Args:
         project: Filter by project name (None = all projects)
         limit: Maximum number of documents to return
-        include_archived: Whether to include archived documents
         parent_id: Filter by parent document:
             - None: Only top-level documents (parent_id IS NULL)
             - -1: All documents regardless of parent
@@ -126,7 +124,7 @@ def list_documents(
     """
     with db_connection.get_connection() as conn:
         # Build query with filters
-        conditions = ["is_deleted = FALSE"]
+        conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
         params: list[Any] = []
 
         # Parent filter
@@ -136,10 +134,6 @@ def list_documents(
             conditions.append("parent_id = ?")
             params.append(parent_id)
         # If parent_id == -1, no parent filter (show all)
-
-        # Archive filter
-        if not include_archived:
-            conditions.append("archived_at IS NULL")
 
         # Project filter
         if project:
@@ -173,21 +167,19 @@ def list_documents(
 
 def count_documents(
     project: Optional[str] = None,
-    include_archived: bool = False,
     parent_id: Optional[int] = None,
 ) -> int:
     """Count documents with optional project and hierarchy filters.
 
     Args:
         project: Filter by project name (None = all projects)
-        include_archived: Whether to include archived documents
         parent_id: Filter by parent document (see list_documents for details)
 
     Returns:
         Count of matching documents
     """
     with db_connection.get_connection() as conn:
-        conditions = ["is_deleted = FALSE"]
+        conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
         params: list[Any] = []
 
         if parent_id is None:
@@ -195,9 +187,6 @@ def count_documents(
         elif parent_id > 0:
             conditions.append("parent_id = ?")
             params.append(parent_id)
-
-        if not include_archived:
-            conditions.append("archived_at IS NULL")
 
         if project:
             conditions.append("project = ?")
@@ -212,40 +201,30 @@ def count_documents(
         return cursor.fetchone()[0]
 
 
-def has_children(doc_id: int, include_archived: bool = False) -> bool:
+def has_children(doc_id: int) -> bool:
     """Check if a document has children.
 
     Args:
         doc_id: Parent document ID
-        include_archived: Whether to count archived children
 
     Returns:
         True if the document has at least one child
     """
     with db_connection.get_connection() as conn:
-        conditions = ["is_deleted = FALSE", "parent_id = ?"]
-        params: list[Any] = [doc_id]
-
-        if not include_archived:
-            conditions.append("archived_at IS NULL")
-
-        where_clause = " AND ".join(conditions)
-
         cursor = conn.execute(
-            f"SELECT 1 FROM documents WHERE {where_clause} LIMIT 1",
-            params,
+            "SELECT 1 FROM documents WHERE is_deleted = FALSE AND parent_id = ? AND archived_at IS NULL LIMIT 1",
+            (doc_id,),
         )
         return cursor.fetchone() is not None
 
 
 def get_children_count(
-    doc_ids: list[int], include_archived: bool = False
+    doc_ids: list[int],
 ) -> dict[int, int]:
     """Get child counts for multiple documents efficiently.
 
     Args:
         doc_ids: List of parent document IDs
-        include_archived: Whether to count archived children
 
     Returns:
         Dictionary mapping doc_id to child count
@@ -255,22 +234,15 @@ def get_children_count(
 
     with db_connection.get_connection() as conn:
         placeholders = ",".join("?" * len(doc_ids))
-        conditions = ["is_deleted = FALSE", f"parent_id IN ({placeholders})"]
-        params: list[Any] = list(doc_ids)
-
-        if not include_archived:
-            conditions.append("archived_at IS NULL")
-
-        where_clause = " AND ".join(conditions)
 
         cursor = conn.execute(
             f"""
             SELECT parent_id, COUNT(*) as child_count
             FROM documents
-            WHERE {where_clause}
+            WHERE is_deleted = FALSE AND parent_id IN ({placeholders}) AND archived_at IS NULL
             GROUP BY parent_id
             """,
-            params,
+            list(doc_ids),
         )
 
         result = {doc_id: 0 for doc_id in doc_ids}
@@ -635,81 +607,25 @@ def set_parent(doc_id: int, parent_id: int, relationship: str = "supersedes") ->
         return cursor.rowcount > 0
 
 
-def archive_document(doc_id: int) -> bool:
-    """Archive a document (set archived_at timestamp).
-
-    Args:
-        doc_id: ID of document to archive
-
-    Returns:
-        True if archive was successful
-    """
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            UPDATE documents
-            SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND is_deleted = FALSE AND archived_at IS NULL
-            """,
-            (doc_id,),
-        )
-        conn.commit()
-        return cursor.rowcount > 0
-
-
-def unarchive_document(doc_id: int) -> bool:
-    """Unarchive a document (clear archived_at timestamp).
-
-    Args:
-        doc_id: ID of document to unarchive
-
-    Returns:
-        True if unarchive was successful
-    """
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            UPDATE documents
-            SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND is_deleted = FALSE AND archived_at IS NOT NULL
-            """,
-            (doc_id,),
-        )
-        conn.commit()
-        return cursor.rowcount > 0
-
-
-def get_children(doc_id: int, include_archived: bool = False) -> list[dict[str, Any]]:
+def get_children(doc_id: int) -> list[dict[str, Any]]:
     """Get all child documents of a parent.
 
     Args:
         doc_id: ID of parent document
-        include_archived: Whether to include archived children
 
     Returns:
         List of child documents
     """
     with db_connection.get_connection() as conn:
-        if include_archived:
-            cursor = conn.execute(
-                """
-                SELECT id, title, project, created_at, parent_id, relationship, archived_at
-                FROM documents
-                WHERE parent_id = ? AND is_deleted = FALSE
-                ORDER BY created_at DESC
-                """,
-                (doc_id,),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                SELECT id, title, project, created_at, parent_id, relationship, archived_at
-                FROM documents
-                WHERE parent_id = ? AND is_deleted = FALSE AND archived_at IS NULL
-                ORDER BY created_at DESC
-                """,
-                (doc_id,),
-            )
+        cursor = conn.execute(
+            """
+            SELECT id, title, project, created_at, parent_id, relationship, archived_at
+            FROM documents
+            WHERE parent_id = ? AND is_deleted = FALSE AND archived_at IS NULL
+            ORDER BY created_at DESC
+            """,
+            (doc_id,),
+        )
 
         docs = []
         for row in cursor.fetchall():
@@ -737,30 +653,12 @@ def get_descendants(doc_id: int) -> list[dict[str, Any]]:
             continue
         visited.add(current_id)
 
-        children = get_children(current_id, include_archived=True)
+        children = get_children(current_id)
         for child in children:
             descendants.append(child)
             to_visit.append(child["id"])
 
     return descendants
-
-
-def archive_descendants(doc_id: int) -> int:
-    """Archive all descendants of a document.
-
-    Args:
-        doc_id: ID of root document (not archived, only descendants)
-
-    Returns:
-        Number of documents archived
-    """
-    descendants = get_descendants(doc_id)
-    count = 0
-    for desc in descendants:
-        if desc.get("archived_at") is None:
-            if archive_document(desc["id"]):
-                count += 1
-    return count
 
 
 # =============================================================================
@@ -789,14 +687,12 @@ def get_workflow_document_ids(workflow_run_id: int | None = None) -> set[int]:
 def list_non_workflow_documents(
     limit: int = 100,
     days: int = 7,
-    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     """Get recent direct-save documents.
 
     Args:
         limit: Maximum documents to return
         days: Only include documents from the last N days
-        include_archived: Whether to include archived documents
 
     Returns:
         List of document dicts
@@ -811,10 +707,9 @@ def list_non_workflow_documents(
             WHERE d.parent_id IS NULL
               AND d.is_deleted = FALSE
               AND d.created_at > ?
+              AND d.archived_at IS NULL
+            ORDER BY d.created_at DESC LIMIT ?
         """
-        if not include_archived:
-            query += " AND d.archived_at IS NULL"
-        query += " ORDER BY d.created_at DESC LIMIT ?"
 
         cursor = conn.execute(query, (cutoff.isoformat(), limit))
         return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]

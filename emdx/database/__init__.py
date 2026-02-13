@@ -146,17 +146,15 @@ class SQLiteDatabase:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def list_documents(self, project=None, limit=50, include_archived=False):
+    def list_documents(self, project=None, limit=50):
         """List documents with optional filters."""
         if not self._uses_custom_path:
-            return list_documents(project, limit, include_archived)
+            return list_documents(project, limit)
 
         # Isolated mode
         with self._connection.get_connection() as conn:
-            conditions = ["is_deleted = FALSE"]
+            conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
             params = []
-            if not include_archived:
-                conditions.append("archived_at IS NULL")
             if project:
                 conditions.append("project = ?")
                 params.append(project)

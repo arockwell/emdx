@@ -232,18 +232,15 @@ emdx cascade run          # Process all stages automatically
 
 See [Cascade documentation](docs/cascade.md) for details.
 
-### Workflow system
+### Recipes — reusable instructions
 
-For complex multi-stage execution with custom configurations:
+Save instructions as recipes and run them repeatedly:
 
 ```bash
-emdx workflow run task_parallel \
-  -t "Analyze authentication" \
-  -t "Analyze authorization" \
-  -t "Analyze data flow"
+emdx recipe create security-audit.md --title "Security Audit"
+emdx recipe list
+emdx recipe run "Security Audit" -- "check auth module"
 ```
-
-See [Workflow documentation](docs/workflows.md) for execution modes (parallel, iterative, adversarial, dynamic).
 
 ### Monitoring executions
 
@@ -292,7 +289,6 @@ emdx status   # Quick overview
 ## Documentation
 
 - [CLI Reference](docs/cli-api.md) — Complete command documentation
-- [Workflow System](docs/workflows.md) — Multi-stage execution patterns
 - [Cascade](docs/cascade.md) — Idea-to-code pipeline
 - [AI System](docs/ai-system.md) — Semantic search and Q&A
 - [Architecture](docs/architecture.md) — System design

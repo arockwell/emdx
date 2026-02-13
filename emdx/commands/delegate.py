@@ -73,8 +73,30 @@ PR_INSTRUCTION = (
 )
 
 
-def _resolve_task(task: str) -> str:
-    """Resolve a task argument — if it's a numeric doc ID, load the document content."""
+def _slugify_title(title: str) -> str:
+    """Convert a document title to a git branch slug.
+
+    Examples:
+        "Gameplan #1: Contextual Save" -> "contextual-save"
+        "Smart Priming (context-aware)" -> "smart-priming-context-aware"
+    """
+    import re
+    # Remove common prefixes like "Gameplan #1:", "Feature:", etc.
+    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()
+    # Keep only alphanumeric and spaces/hyphens
+    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', slug)
+    # Collapse whitespace to hyphens, lowercase
+    slug = re.sub(r'\s+', '-', slug).strip('-').lower()
+    # Truncate to reasonable branch name length
+    return slug[:50].rstrip('-') or 'feature'
+
+
+def _resolve_task(task: str, pr: bool = False) -> str:
+    """Resolve a task argument — if it's a numeric doc ID, load the document content.
+
+    When pr=True and the task is a doc ID, adds implementation and PR instructions
+    with a branch name derived from the document title.
+    """
     try:
         doc_id = int(task)
     except ValueError:
@@ -87,6 +109,20 @@ def _resolve_task(task: str) -> str:
 
     title = doc.get("title", f"Document #{doc_id}")
     content = doc.get("content", "")
+
+    if pr:
+        branch = f"feat/{_slugify_title(title)}"
+        return (
+            f"Read and implement the following gameplan:\n\n# {title}\n\n{content}\n\n"
+            f"---\n\n"
+            f"Implementation instructions:\n"
+            f"1. Implement the feature exactly as described in the gameplan above\n"
+            f"2. Create a branch named `{branch}`\n"
+            f"3. Commit your changes with a clear message\n"
+            f"4. Push and create a PR via: gh pr create --title \"feat: {title}\" --body \"...\"\n"
+            f"5. Use `poetry run emdx` to test your changes\n"
+        )
+
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
@@ -264,9 +300,9 @@ def _run_parallel(
         # Create per-task worktree if requested
         task_worktree_path = None
         if worktree:
-            from .workflows import create_worktree_for_workflow
+            from ..utils.git import create_worktree
             try:
-                task_worktree_path, _ = create_worktree_for_workflow(base_branch)
+                task_worktree_path, _ = create_worktree(base_branch)
                 if not quiet:
                     sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")
             except Exception as e:
@@ -288,7 +324,7 @@ def _run_parallel(
         finally:
             # Clean up worktree unless --pr (keep for the PR branch)
             if task_worktree_path and not pr:
-                from .workflows import cleanup_worktree
+                from ..utils.git import cleanup_worktree
                 cleanup_worktree(task_worktree_path)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -554,6 +590,9 @@ def delegate(
     With PR creation:
         emdx delegate --pr "fix the auth bug"
 
+    Implement gameplans by doc ID (auto-branches + PRs):
+        emdx delegate --worktree --pr -j 7 6097 6098 6099 6100 6101 6102 6103
+
     Dynamic discovery (for each item, do action):
         emdx delegate --each "fd -e py src/" --do "Review {{item}} for issues"
 
@@ -582,7 +621,8 @@ def delegate(
         task_list = discovered + task_list  # discovered tasks + any explicit tasks
 
     # 1. Resolve numeric args as doc IDs (e.g. `emdx delegate 42 43 44`)
-    task_list = [_resolve_task(t) for t in task_list]
+    #    When --pr is set, doc IDs get implementation + PR instructions with branch names
+    task_list = [_resolve_task(t, pr=pr) for t in task_list]
 
     # 2. Resolve --doc (applies doc context to all tasks)
     if doc:

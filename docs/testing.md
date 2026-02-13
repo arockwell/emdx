@@ -56,10 +56,8 @@ tests/
 ├── test_smart_execution.py           # Smart execution features
 ├── test_sqlite_database.py           # SQLite-specific database tests
 ├── test_tags.py                      # Tag system and emoji aliases
-├── test_timestamp_parsing.py         # Timestamp parsing logic
 ├── test_utils.py                     # Utility functions
-├── test_vim_line_numbers.py          # Vim editor line numbering
-└── test_workflow_executor.py         # Workflow executor tests
+└── test_vim_line_numbers.py          # Vim editor line numbering
 ```
 
 ## 🎯 **Test Categories**
