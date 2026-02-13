@@ -98,8 +98,8 @@ poetry run emdx recent
 ```bash
 # Add tags using intuitive aliases (auto-converts to emojis)
 poetry run emdx tag 42 gameplan active urgent
-poetry run emdx tags  # List all tags
-poetry run emdx legend  # View emoji legend and aliases
+poetry run emdx tag list  # List all tags
+poetry run emdx tag legend  # View emoji legend and aliases
 ```
 
 ## 🎯 Claude Code Integration - MANDATORY INSTRUCTIONS
