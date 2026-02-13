@@ -7,7 +7,7 @@ import os
 import subprocess
 import webbrowser
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +17,6 @@ from rich.table import Table
 from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
-
-if TYPE_CHECKING:
-    from github import Github, GithubException
 
 app = typer.Typer()
 
@@ -112,31 +109,6 @@ def create_gist_with_gh(
     return None
 
 
-def create_gist_with_api(
-    content: str, filename: str, description: str, public: bool = False, token: Optional[str] = None
-) -> Optional[dict[str, str]]:
-    """Create a gist using GitHub API."""
-    if not token:
-        return None
-
-    # Lazy import - PyGithub is slow to import (~300ms)
-    from github import Github, GithubException
-
-    try:
-        g = Github(token)
-        user = g.get_user()
-
-        # Create gist
-        gist = user.create_gist(
-            public=public, files={filename: {"content": content}}, description=description
-        )
-
-        return {"id": gist.id, "url": gist.html_url}
-    except GithubException as e:
-        console.print(f"[red]GitHub API error: {e}[/red]")
-        return None
-
-
 def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
     """Update an existing gist using gh CLI.
 
@@ -170,28 +142,6 @@ def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
                 logger.debug("Failed to clean up temp file %s: %s", temp_path, e)
 
     return False
-
-
-def update_gist_with_api(
-    gist_id: str, content: str, filename: str, token: Optional[str] = None
-) -> bool:
-    """Update an existing gist using GitHub API."""
-    if not token:
-        return False
-
-    # Lazy import - PyGithub is slow to import (~300ms)
-    from github import Github, GithubException
-
-    try:
-        g = Github(token)
-        gist = g.get_gist(gist_id)
-
-        # Update gist
-        gist.edit(files={filename: {"content": content}})
-        return True
-    except GithubException as e:
-        console.print(f"[red]GitHub API error: {e}[/red]")
-        return False
 
 
 def copy_to_clipboard(text: str) -> bool:
@@ -251,17 +201,11 @@ def create(
         console.print(f"[red]Error: Document '{identifier}' not found[/red]")
         raise typer.Exit(1)
 
-    # Get GitHub authentication
-    token = get_github_auth()
-    if not token:
+    # Verify GitHub authentication (gh CLI)
+    if not get_github_auth():
         console.print("[red]Error: GitHub authentication not configured[/red]")
-        console.print("\nTo use the gist command, you need to:")
-        console.print("1. Set the GITHUB_TOKEN environment variable, or")
-        console.print("2. Install and authenticate with GitHub CLI: [cyan]gh auth login[/cyan]")
-        console.print("\nTo create a GitHub token:")
-        console.print("1. Go to https://github.com/settings/tokens/new")
-        console.print("2. Select 'gist' scope")
-        console.print("3. Set: [cyan]export GITHUB_TOKEN=your_token[/cyan]")
+        console.print("\nTo use the gist command, authenticate with GitHub CLI:")
+        console.print("  [cyan]gh auth login[/cyan]")
         raise typer.Exit(1)
 
     # Prepare gist content
@@ -279,12 +223,7 @@ def create(
         # Update existing gist
         console.print(f"[yellow]Updating gist {update}...[/yellow]")
 
-        # Try gh CLI first
         success = update_gist_with_gh(update, content, filename)
-        if not success:
-            # Fallback to API
-            success = update_gist_with_api(update, content, filename, token)
-
         if success:
             console.print(f"[green]✓ Updated gist {update}[/green]")
 
@@ -306,12 +245,7 @@ def create(
         # Create new gist
         console.print(f"[yellow]Creating {'public' if public else 'secret'} gist...[/yellow]")
 
-        # Try gh CLI first
         result = create_gist_with_gh(content, filename, description, public)
-        if not result:
-            # Fallback to API
-            result = create_gist_with_api(content, filename, description, public, token)
-
         if result:
             gist_id = result["id"]
             gist_url = result["url"]

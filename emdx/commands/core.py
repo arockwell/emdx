@@ -294,7 +294,6 @@ def save(
 
         from emdx.commands.gist import (
             copy_to_clipboard,
-            create_gist_with_api,
             create_gist_with_gh,
             get_github_auth,
             sanitize_filename,
@@ -312,8 +311,6 @@ def save(
             console.print(f"[dim]Creating {'public' if public else 'secret'} gist...[/dim]")
 
             result = create_gist_with_gh(input_content.content, filename, description, public)
-            if not result:
-                result = create_gist_with_api(input_content.content, filename, description, public, token)
 
             if result:
                 gist_id_str = result["id"]

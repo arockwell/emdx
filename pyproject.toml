@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.13.0"
+version = "0.14.0"
 description = "Documentation Index Management System - A powerful knowledge base for developers"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
@@ -29,8 +29,6 @@ typer = {extras = ["all"], version = "^0.15.0"}
 click = ">=8.1.0"  # Typer 0.15+ requires click 8.1+
 rich = "^13.0.0"
 python-dotenv = "^1.0.0"
-gitpython = "^3.1.0"
-PyGithub = "^2.1.0"
 textual = "^4.0.0"
 psutil = "^7.0.0"
 

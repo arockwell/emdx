@@ -3,11 +3,9 @@ Git utility functions for emdx
 """
 
 import logging
+import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    import git
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,43 +20,56 @@ def get_git_project(path: Optional[Path] = None) -> Optional[str]:
     Returns:
         The repository name if in a git repo, None otherwise.
     """
-    # Lazy import - GitPython is slow to import (~135ms)
-    import git
-
     if path is None:
         path = Path.cwd()
 
+    cwd = str(path)
+
     try:
-        # Find the git repository
-        repo = git.Repo(path, search_parent_directories=True)
+        # Check if we're in a git repo and get the repo root
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            # Not in a git repository
+            return None
+
+        repo_root = result.stdout.strip()
 
         # Try to get the remote origin URL
-        if repo.remotes:
-            for remote in repo.remotes:
-                if remote.name == "origin":
-                    url = remote.url
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+        )
+        if result.returncode == 0:
+            url = result.stdout.strip()
 
-                    # Extract repo name from URL
-                    # Handle different URL formats:
-                    # - https://github.com/user/repo.git
-                    # - git@github.com:user/repo.git
-                    # - https://github.com/user/repo
+            # Extract repo name from URL
+            # Handle different URL formats:
+            # - https://github.com/user/repo.git
+            # - git@github.com:user/repo.git
+            # - https://github.com/user/repo
 
-                    if url.endswith(".git"):
-                        url = url[:-4]
+            if url.endswith(".git"):
+                url = url[:-4]
 
-                    # Get the last part of the URL
-                    repo_name = url.split("/")[-1]
-                    if ":" in repo_name:  # Handle SSH format
-                        repo_name = repo_name.split(":")[-1]
+            # Get the last part of the URL
+            repo_name = url.split("/")[-1]
+            if ":" in repo_name:  # Handle SSH format
+                repo_name = repo_name.split(":")[-1]
 
-                    return repo_name
+            return repo_name
 
-        # If no remote, use the repository directory name
-        return Path(repo.working_dir).name
+        # If no origin remote, use the repository directory name
+        return Path(repo_root).name
 
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-        # Not in a git repository
+    except (OSError, FileNotFoundError):
+        # git not found or path doesn't exist
         return None
     except Exception as e:
         # Any other error, just return None
