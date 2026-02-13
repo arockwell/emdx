@@ -237,6 +237,7 @@ def _run_parallel(
     pr: bool = False,
     base_branch: str = "main",
     source_doc_id: Optional[int] = None,
+    worktree: bool = False,
 ) -> List[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -259,16 +260,36 @@ def _run_parallel(
         task_title = title or f"Delegate: {task[:60]}"
         if len(tasks) > 1:
             task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
-        return idx, _run_single(
-            prompt=task,
-            tags=tags,
-            title=task_title,
-            model=model,
-            quiet=True,  # suppress per-task metadata in parallel mode
-            pr=pr,
-            parent_task_id=parent_task_id,
-            seq=idx + 1,
-        )
+
+        # Create per-task worktree if requested
+        task_worktree_path = None
+        if worktree:
+            from .workflows import create_worktree_for_workflow
+            try:
+                task_worktree_path, _ = create_worktree_for_workflow(base_branch)
+                if not quiet:
+                    sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")
+            except Exception as e:
+                sys.stderr.write(f"delegate: failed to create worktree for task {idx + 1}: {e}\n")
+                return idx, (None, None)
+
+        try:
+            return idx, _run_single(
+                prompt=task,
+                tags=tags,
+                title=task_title,
+                model=model,
+                quiet=True,  # suppress per-task metadata in parallel mode
+                pr=pr,
+                working_dir=task_worktree_path,
+                parent_task_id=parent_task_id,
+                seq=idx + 1,
+            )
+        finally:
+            # Clean up worktree unless --pr (keep for the PR branch)
+            if task_worktree_path and not pr:
+                from .workflows import cleanup_worktree
+                cleanup_worktree(task_worktree_path)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
@@ -581,7 +602,7 @@ def delegate(
         for t in tags:
             flat_tags.extend(t.split(","))
 
-    # 3. Setup worktree for single/chain paths
+    # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
     worktree_path = None
     if worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
@@ -631,6 +652,7 @@ def delegate(
                 pr=pr,
                 base_branch=base_branch,
                 source_doc_id=doc,
+                worktree=worktree,
             )
     finally:
         if worktree_path and not pr:
