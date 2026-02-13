@@ -14,6 +14,7 @@ from emdx.database.groups import (
     get_group_members,
     get_recursive_doc_count,
     list_groups,
+    list_top_groups_with_counts,
     remove_document_from_group,
     update_group,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "get_group_members",
     "get_recursive_doc_count",
     "list_groups",
+    "list_top_groups_with_counts",
     "remove_document_from_group",
     "update_group",
 ]

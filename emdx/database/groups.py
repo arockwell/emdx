@@ -365,6 +365,39 @@ def get_recursive_doc_count(group_id: int) -> int:
         return cursor.fetchone()[0]
 
 
+def list_top_groups_with_counts() -> list[dict[str, Any]]:
+    """List top-level groups with child_group_count and doc_count in one query.
+
+    Avoids the N+1 pattern of calling get_child_groups + get_recursive_doc_count
+    per group. Used by the Activity view refresh loop.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                g.*,
+                COALESCE(cc.child_count, 0) AS child_group_count,
+                COALESCE(dc.doc_count, 0) AS doc_count
+            FROM document_groups g
+            LEFT JOIN (
+                SELECT parent_group_id, COUNT(*) AS child_count
+                FROM document_groups
+                WHERE is_active = TRUE AND parent_group_id IS NOT NULL
+                GROUP BY parent_group_id
+            ) cc ON cc.parent_group_id = g.id
+            LEFT JOIN (
+                SELECT dgm.group_id, COUNT(DISTINCT dgm.document_id) AS doc_count
+                FROM document_group_members dgm
+                JOIN documents d ON dgm.document_id = d.id AND d.is_deleted = FALSE
+                GROUP BY dgm.group_id
+            ) dc ON dc.group_id = g.id
+            WHERE g.parent_group_id IS NULL AND g.is_active = TRUE
+            ORDER BY g.created_at DESC
+            """
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def update_group_metrics(group_id: int) -> bool:
     """Recalculate and update group metrics (doc_count, tokens, cost).
 
