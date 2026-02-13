@@ -9,8 +9,6 @@ import pytest
 
 sklearn = pytest.importorskip("sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')")
 
-from typer.testing import CliRunner
-
 from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService
 
 
@@ -616,55 +614,3 @@ class TestSimilarityServiceIntegration:
             assert stats.last_built is not None
 
 
-class TestSimilarityCLI:
-    """Tests for similarity CLI commands."""
-
-    def test_similar_command_help(self):
-        """Test that similar command has proper help text."""
-        from emdx.commands.similarity import app
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["similar", "--help"])
-
-        assert result.exit_code == 0
-        assert "Find documents similar" in result.output
-
-    def test_similar_text_command_help(self):
-        """Test that similar-text command has proper help text."""
-        from emdx.commands.similarity import app
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["similar-text", "--help"])
-
-        assert result.exit_code == 0
-        assert "Find documents similar to the provided text" in result.output
-
-    def test_build_index_command_help(self):
-        """Test that build-index command has proper help text."""
-        from emdx.commands.similarity import app
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["build-index", "--help"])
-
-        assert result.exit_code == 0
-        assert "Rebuild the TF-IDF similarity index" in result.output
-
-    def test_index_stats_command_help(self):
-        """Test that index-stats command has proper help text."""
-        from emdx.commands.similarity import app
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["index-stats", "--help"])
-
-        assert result.exit_code == 0
-        assert "Show statistics about the similarity index" in result.output
-
-    def test_similar_command_conflicting_options(self):
-        """Test that --content-only and --tags-only are mutually exclusive."""
-        from emdx.commands.similarity import app
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["similar", "1", "--content-only", "--tags-only"])
-
-        assert result.exit_code == 1
-        assert "Cannot use both" in result.output

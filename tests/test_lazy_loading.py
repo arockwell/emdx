@@ -196,8 +196,6 @@ class TestCLIIntegration:
             'emdx.commands.delegate',
             'emdx.commands.claude_execute',
             'emdx.commands.ask',
-            'emdx.commands.similarity',
-            'emdx.commands.gdoc',
         ]
 
         # Clear any cached imports
@@ -248,7 +246,6 @@ class TestCLIIntegration:
         # Check that our lazy help text appears (not the actual module help)
         assert "Manage and run EMDX recipes" in result.output
         assert "Cascade ideas through stages" in result.output
-        assert "Google Docs integration" in result.output
 
     def test_lazy_command_works_when_invoked(self):
         """Test that lazy commands work when actually invoked."""

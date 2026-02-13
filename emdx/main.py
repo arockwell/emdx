@@ -27,10 +27,6 @@ LAZY_SUBCOMMANDS = {
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
-    # Similarity (imports scikit-learn)
-    "similar": "emdx.commands.similarity:app",
-    # External services (imports google API libs)
-    "gdoc": "emdx.commands.gdoc:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -39,8 +35,6 @@ LAZY_HELP = {
     "cascade": "Cascade ideas through stages to working code",
     "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
-    "similar": "Find similar documents using TF-IDF",
-    "gdoc": "Google Docs integration",
 }
 
 
