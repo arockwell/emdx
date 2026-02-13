@@ -6,13 +6,11 @@ import logging
 import os
 import subprocess
 import webbrowser
-from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 import typer
-from rich.table import Table
 
 from emdx.database import db
 from emdx.models.documents import get_document
@@ -276,70 +274,6 @@ def create(
         else:
             console.print("[red]Error: Failed to create gist[/red]")
             raise typer.Exit(1)
-
-
-@app.command("gist-list")
-def list_gists(
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
-):
-    """List all gists created from documents."""
-    db.ensure_schema()
-
-    with db.get_connection() as conn:
-        if project:
-            cursor = conn.execute(
-                """
-                SELECT g.*, d.title, d.project
-                FROM gists g
-                JOIN documents d ON g.document_id = d.id
-                WHERE d.project = ?
-                ORDER BY g.created_at DESC
-            """,
-                (project,),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                SELECT g.*, d.title, d.project
-                FROM gists g
-                JOIN documents d ON g.document_id = d.id
-                ORDER BY g.created_at DESC
-            """
-            )
-
-        rows = cursor.fetchall()
-
-    if not rows:
-        console.print("[yellow]No gists found[/yellow]")
-        return
-
-    # Create table
-    table = Table(title="Created Gists")
-    table.add_column("Doc ID", style="cyan")
-    table.add_column("Title", style="white")
-    table.add_column("Project", style="blue")
-    table.add_column("Gist ID", style="green")
-    table.add_column("Type", style="yellow")
-    table.add_column("Created", style="dim")
-
-    for row in rows:
-        # Handle datetime formatting
-        created_at = row["created_at"]
-        if isinstance(created_at, datetime):
-            created_at_str = created_at.strftime("%Y-%m-%d %H:%M")
-        else:
-            created_at_str = str(created_at)[:16]
-
-        table.add_row(
-            str(row["document_id"]),
-            row["title"],
-            row["project"] or "-",
-            row["gist_id"],
-            "Public" if row["is_public"] else "Secret",
-            created_at_str,
-        )
-
-    console.print(table)
 
 
 # Register the create function as the default 'gist' command

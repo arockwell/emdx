@@ -85,8 +85,8 @@ def test_maintenance_commands():
     commands = [
         # The maintain command help
         ["emdx", "maintain", "--help"],
-        # Analyze command help
-        ["emdx", "analyze", "--help"],
+        # Analyze command help (now under maintain)
+        ["emdx", "maintain", "analyze", "--help"],
         # Exec commands
         ["emdx", "exec", "--help"],
         ["emdx", "exec", "stats"],
