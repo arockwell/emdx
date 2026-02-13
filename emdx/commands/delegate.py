@@ -240,7 +240,7 @@ def _run_single(
         title=doc_title,
         output_instruction=output_instruction,
         working_dir=working_dir or str(Path.cwd()),
-        timeout_seconds=300,
+        timeout_seconds=600,
         model=model,
     )
 
