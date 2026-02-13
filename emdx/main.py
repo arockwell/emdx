@@ -32,7 +32,6 @@ LAZY_SUBCOMMANDS = {
     "similar": "emdx.commands.similarity:app",
     # External services (imports google API libs)
     "gdoc": "emdx.commands.gdoc:app",
-    "mail": "emdx.commands.mail:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -43,7 +42,6 @@ LAZY_HELP = {
     "ai": "AI-powered Q&A and semantic search",
     "similar": "Find similar documents using TF-IDF",
     "gdoc": "Google Docs integration",
-    "mail": "Agent-to-agent mail via GitHub Issues",
 }
 
 

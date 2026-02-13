@@ -10,7 +10,6 @@ Uses Textual's Tree widget for native hierarchy, expand/collapse,
 and cursor tracking by node reference — eliminating scroll jumping.
 """
 
-import asyncio
 import json
 import logging
 import re
@@ -168,7 +167,6 @@ class ActivityView(HelpMixin, Widget):
         ("u", "ungroup", "Ungroup"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
-        ("a", "mark_read", "Mark Read"),
         ("question_mark", "show_help", "Help"),
     ]
 
@@ -607,16 +605,6 @@ class ActivityView(HelpMixin, Widget):
         # Individual run details
         elif item.item_type == "individual_run" or getattr(item, 'individual_run', None):
             await self._show_individual_run_context(item, context_content, context_header)
-        # Mail message details
-        elif item.item_type == "mail":
-            context_header.update(f"📧 #{item.item_id}")
-            context_content.write(f"[bold]From:[/bold] @{item.sender}")
-            context_content.write(f"[bold]To:[/bold] @{item.recipient}")
-            context_content.write(f"[bold]Status:[/bold] {'read' if item.is_read else '[yellow]unread[/yellow]'}")
-            if item.comment_count:
-                context_content.write(f"[bold]Replies:[/bold] {item.comment_count}")
-            if item.url:
-                context_content.write(f"[dim]{item.url}[/dim]")
         else:
             context_header.update("DETAILS")
             context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
@@ -1349,26 +1337,6 @@ class ActivityView(HelpMixin, Widget):
     async def action_refresh(self) -> None:
         """Manual refresh."""
         await self._refresh_data()
-
-    async def action_mark_read(self) -> None:
-        """Mark selected mail message as read."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-        if item.item_type != "mail":
-            return
-
-        from emdx.services.mail_service import get_mail_service
-        service = get_mail_service()
-        success = await asyncio.to_thread(service.mark_read, item.item_id)
-        if success:
-            item.is_read = True
-            # Update the tree node label
-            tree = self.query_one("#activity-tree", ActivityTree)
-            node = tree.cursor_node
-            if node:
-                node.set_label(tree._make_label(item))
-            await self._update_context_panel()
 
     def action_focus_next(self) -> None:
         """Focus next pane."""
