@@ -67,7 +67,6 @@ class DocumentBrowser(HelpMixin, Widget):
         Binding("right", "expand_children", "Expand", show=False),
         Binding("h", "collapse_children", "Collapse", show=False),
         Binding("left", "collapse_children", "Collapse", show=False),
-        Binding("a", "toggle_archived", "Toggle Archived", show=False),
     ]
 
     CSS_PATH = "document_browser.tcss"
@@ -253,9 +252,6 @@ class DocumentBrowser(HelpMixin, Widget):
             branch = "└─"
             prefix = f"{indent}{branch}"
 
-        # Add archived indicator
-        archived_suffix = " [archived]" if doc.is_archived else ""
-
         # Add relationship indicator for children
         rel_prefix = ""
         if doc.relationship and doc.depth > 0:
@@ -266,7 +262,7 @@ class DocumentBrowser(HelpMixin, Widget):
             }
             rel_prefix = f"{rel_map.get(doc.relationship, '')} "
 
-        return f"{prefix}{rel_prefix}{doc.title}{archived_suffix}"
+        return f"{prefix}{rel_prefix}{doc.title}"
 
     async def _render_document_list(self) -> None:
         """Render the document list from current ViewModel.
@@ -297,7 +293,7 @@ class DocumentBrowser(HelpMixin, Widget):
         try:
             status_text = vm.status_text
             if self.mode == "NORMAL":
-                status_text += " | e=edit | n=new | /=search | t=tag | l/h=expand/collapse | a=archived | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | l/h=expand/collapse | q=quit"
             elif self.mode == "SEARCH":
                 status_text += " | Enter=apply | ESC=cancel"
             self.update_status(status_text)
@@ -801,14 +797,6 @@ class DocumentBrowser(HelpMixin, Widget):
                         return
 
         self.update_status("No parent or children to collapse")
-
-    async def action_toggle_archived(self) -> None:
-        """Toggle display of archived documents."""
-        await self.presenter.toggle_archived()
-        if self.presenter.include_archived:
-            self.update_status("Showing archived documents")
-        else:
-            self.update_status("Hiding archived documents")
 
     def update_status(self, message: str) -> None:
         """Update the document browser status bar."""

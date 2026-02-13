@@ -1614,36 +1614,6 @@ emdx task delete 1 --force
 
 ---
 
-## 📦 Document Archiving
-
-Archive documents to hide them from default views while preserving them.
-
-### Archive Documents
-
-```bash
-# Archive a document
-emdx archive 42
-
-# Archive document and all descendants
-emdx archive 42 --descendants
-```
-
-### Unarchive Documents
-
-```bash
-# Restore archived document to normal view
-emdx unarchive 42
-```
-
-### Viewing Archived Documents
-
-```bash
-# List documents including archived
-emdx list --archived
-```
-
----
-
 ## 🌊 Cascade - Ideas to Code
 
 The Cascade system transforms raw ideas through stages into working code with PRs.

@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
 
-from emdx.commands.tags import app, _is_completion_tag
+from emdx.commands.tags import app
 
 runner = CliRunner()
 
@@ -14,33 +14,6 @@ runner = CliRunner()
 def _out(result) -> str:
     """Strip ANSI escape sequences from CliRunner output for assertions."""
     return re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
-
-
-# ---------------------------------------------------------------------------
-# _is_completion_tag helper
-# ---------------------------------------------------------------------------
-class TestIsCompletionTag:
-    """Tests for _is_completion_tag helper."""
-
-    def test_text_completion_tags(self):
-        assert _is_completion_tag("done") is True
-        assert _is_completion_tag("complete") is True
-        assert _is_completion_tag("success") is True
-        assert _is_completion_tag("finished") is True
-        assert _is_completion_tag("check") is True
-
-    def test_case_insensitive(self):
-        assert _is_completion_tag("Done") is True
-        assert _is_completion_tag("DONE") is True
-
-    def test_non_completion_tags(self):
-        assert _is_completion_tag("python") is False
-        assert _is_completion_tag("active") is False
-        assert _is_completion_tag("wip") is False
-
-    def test_emoji_completion_tags(self):
-        assert _is_completion_tag("\u2705") is True  # checkmark
-        assert _is_completion_tag("\U0001f389") is True  # party popper
 
 
 # ---------------------------------------------------------------------------
@@ -134,23 +107,6 @@ class TestTagAddCommand:
         result = runner.invoke(app, ["add", "1", "python"])
         assert result.exit_code == 0
         assert "No new tags added" in _out(result)
-
-    @patch("emdx.commands.tags.archive_descendants")
-    @patch("emdx.commands.tags.get_document_tags")
-    @patch("emdx.commands.tags.add_tags_to_document")
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
-    def test_tag_completion_auto_archives(self, mock_db, mock_get_doc, mock_add_tags, mock_get_tags, mock_archive):
-        """Adding completion tag auto-archives descendants."""
-        mock_db.ensure_schema = Mock()
-        mock_get_doc.return_value = {"id": 1, "title": "Doc"}
-        mock_add_tags.return_value = ["done"]
-        mock_get_tags.return_value = ["done"]
-        mock_archive.return_value = 2
-
-        result = runner.invoke(app, ["add", "1", "done"])
-        assert result.exit_code == 0
-        assert "Auto-archived 2" in _out(result)
 
 
 # ---------------------------------------------------------------------------

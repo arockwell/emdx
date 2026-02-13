@@ -58,41 +58,7 @@ class TestBrowseCommands:
 
         assert result.exit_code == 0
         mock_list_docs.assert_called_once_with(
-            project="test-project", limit=50, include_archived=False
-        )
-
-    @patch("emdx.commands.browse.db")
-    @patch("emdx.commands.browse.list_documents")
-    def test_list_command_with_archived_flag(self, mock_list_docs, mock_db):
-        """Test list command with --archived flag."""
-        mock_db.ensure_schema = Mock()
-        mock_list_docs.return_value = [
-            {
-                "id": 1,
-                "title": "Active Doc",
-                "project": "test",
-                "created_at": datetime(2024, 1, 1, 12, 0, 0),
-                "access_count": 5,
-                "archived_at": None,
-            },
-            {
-                "id": 2,
-                "title": "Archived Doc",
-                "project": "test",
-                "created_at": datetime(2024, 1, 2, 12, 0, 0),
-                "access_count": 3,
-                "archived_at": datetime(2024, 1, 5, 10, 0, 0),
-            },
-        ]
-
-        result = runner.invoke(app, ["list", "--archived"])
-
-        assert result.exit_code == 0
-        assert "Active Doc" in result.stdout
-        assert "Archived Doc" in result.stdout
-        assert "Archived" in result.stdout  # Status column
-        mock_list_docs.assert_called_once_with(
-            project=None, limit=50, include_archived=True
+            project="test-project", limit=50
         )
 
     @patch("emdx.commands.browse.db")

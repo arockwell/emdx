@@ -94,7 +94,7 @@ class DocumentItem(ActivityItem):
         if not doc_db:
             return children
 
-        child_docs = doc_db.get_children(self.doc_id, include_archived=False)
+        child_docs = doc_db.get_children(self.doc_id)
 
         for child_doc in child_docs:
             relationship = child_doc.get("relationship", "")
@@ -108,7 +108,7 @@ class DocumentItem(ActivityItem):
             if rel_icon:
                 title = f"{rel_icon} {title}"
 
-            grandchildren = doc_db.get_children(child_doc["id"], include_archived=False)
+            grandchildren = doc_db.get_children(child_doc["id"])
 
             children.append(
                 DocumentItem(
