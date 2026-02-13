@@ -35,7 +35,6 @@ EXAMPLE_CONFIG = """# EMDX Keybinding Configuration
 #   agent:normal        - Agent browser
 #   file:normal         - File browser
 #   task:normal         - Task browser
-#   workflow:normal     - Workflow browser
 #   log:normal          - Log browser
 #   control:normal      - Control center
 #   vim:normal          - Vim normal mode in editor

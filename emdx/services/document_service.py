@@ -12,7 +12,7 @@ from emdx.database.documents import (
     get_document,
     get_recent_documents,
     list_documents,
-    list_non_workflow_documents,
+    list_recent_documents,
     save_document,
     update_document,
 )
@@ -27,7 +27,7 @@ __all__ = [
     "get_document",
     "get_recent_documents",
     "list_documents",
-    "list_non_workflow_documents",
+    "list_recent_documents",
     "save_document",
     "search_documents",
     "update_document",

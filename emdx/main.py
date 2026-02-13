@@ -4,7 +4,7 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (workflow, cascade, delegate, ai, gui) are only imported when
+fast. Heavy commands (cascade, delegate, ai, etc.) are only imported when
 actually invoked.
 """
 
@@ -14,7 +14,6 @@ from typing import Optional
 import typer
 from emdx import __build_id__, __version__
 from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
-from emdx.utils.output import console
 
 # =============================================================================
 # LAZY COMMANDS - Heavy features (defer import until invoked)
@@ -48,7 +47,7 @@ LAZY_HELP = {
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (cascade, delegate, workflow).
+    Safe mode disables execution commands (cascade, delegate, recipe).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")

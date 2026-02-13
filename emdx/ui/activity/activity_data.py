@@ -119,7 +119,7 @@ class ActivityDataLoader:
                 logger.debug(f"Error getting grouped doc IDs: {e}")
 
         try:
-            docs = doc_svc.list_non_workflow_documents(limit=100, days=7)
+            docs = doc_svc.list_recent_documents(limit=100, days=7)
         except Exception as e:
             logger.error(f"Error listing non-workflow documents: {e}", exc_info=True)
             return items

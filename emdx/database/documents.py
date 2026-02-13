@@ -660,7 +660,7 @@ def get_descendants(doc_id: int) -> list[dict[str, Any]]:
     return descendants
 
 
-def list_non_workflow_documents(
+def list_recent_documents(
     limit: int = 100,
     days: int = 7,
 ) -> list[dict[str, Any]]:

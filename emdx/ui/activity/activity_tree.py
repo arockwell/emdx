@@ -17,7 +17,7 @@ aligned across all rows regardless of depth.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple
 
 from rich.style import Style
 from rich.text import Text
@@ -25,9 +25,6 @@ from textual.widgets import Tree
 from textual.widgets._tree import TreeNode
 
 from .activity_items import ActivityItem
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

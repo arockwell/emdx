@@ -7,10 +7,7 @@ replacing the stringly-typed item_type field with proper polymorphism.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -51,12 +48,12 @@ class ActivityItem(ABC):
         ...
 
     @abstractmethod
-    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> List["ActivityItem"]:
         """Load child items from database."""
         ...
 
     @abstractmethod
-    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Get content and header for preview pane.
 
         Returns:
@@ -87,7 +84,7 @@ class DocumentItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.has_children
 
-    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> List["ActivityItem"]:
         """Load child documents."""
         children = []
 
@@ -123,7 +120,7 @@ class DocumentItem(ActivityItem):
 
         return children
 
-    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Get document content for preview."""
         if not doc_db:
             return "", "PREVIEW"
@@ -181,7 +178,7 @@ class CascadeRunItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.execution_count > 0 or len(self.children) > 0
 
-    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> List["ActivityItem"]:
         """Load cascade stage executions as children."""
         from emdx.services.cascade_service import get_cascade_run_executions
 
@@ -223,7 +220,7 @@ class CascadeRunItem(ActivityItem):
 
         return children
 
-    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Get cascade run preview - status and stage info."""
         run = self.cascade_run
 
@@ -288,11 +285,11 @@ class CascadeStageItem(ActivityItem):
     def can_expand(self) -> bool:
         return False
 
-    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> List["ActivityItem"]:
         """Stage items don't have children."""
         return []
 
-    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Get stage execution output."""
         if self.doc_id and doc_db:
             doc = doc_db.get_document(self.doc_id)
@@ -334,7 +331,7 @@ class GroupItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.doc_count > 0 or self.child_group_count > 0 or len(self.children) > 0
 
-    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> List["ActivityItem"]:
         """Load child groups and member documents."""
         from emdx.services import group_service as groups
 
@@ -397,7 +394,7 @@ class GroupItem(ActivityItem):
 
         return children
 
-    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Show group summary in preview."""
         from emdx.services import group_service as groups
 
@@ -469,11 +466,11 @@ class AgentExecutionItem(ActivityItem):
     def can_expand(self) -> bool:
         return False
 
-    async def load_children(self, wf_db, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> List["ActivityItem"]:
         """Agent executions don't have children."""
         return []
 
-    async def get_preview_content(self, wf_db, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Show execution log content in preview."""
         from pathlib import Path
 

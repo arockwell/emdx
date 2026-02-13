@@ -509,7 +509,7 @@ class ActivityView(HelpMixin, Widget):
 
         # For agent executions without doc_id, use the item's preview method
         if item.item_type == "agent_execution":
-            content, header_text = await item.get_preview_content(None, doc_db)
+            content, header_text = await item.get_preview_content(doc_db)
             if content:
                 self._render_markdown_preview(content)
                 show_markdown()
@@ -847,7 +847,7 @@ class ActivityView(HelpMixin, Widget):
         elif item.can_expand():
             # Load children before expanding
             try:
-                item.children = await item.load_children(None, doc_db)
+                item.children = await item.load_children(doc_db)
                 item.expanded = True
                 # Add children to tree node
                 node.remove_children()
@@ -869,7 +869,7 @@ class ActivityView(HelpMixin, Widget):
 
         if item.can_expand():
             try:
-                item.children = await item.load_children(None, doc_db)
+                item.children = await item.load_children(doc_db)
                 item.expanded = True
                 node.remove_children()
                 tree._add_children(node, item.children)
@@ -936,7 +936,7 @@ class ActivityView(HelpMixin, Widget):
         # Load children from DB
         if item.can_expand():
             try:
-                item.children = await item.load_children(None, doc_db)
+                item.children = await item.load_children(doc_db)
                 item.expanded = True
                 tree = self.query_one("#activity-tree", ActivityTree)
                 tree._add_children(node, item.children)

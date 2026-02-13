@@ -22,7 +22,6 @@ emdx/
 │   ├── trash.py           # trash, restore, purge
 │   ├── gist.py            # GitHub gist integration
 │   ├── executions.py      # execution monitoring
-│   ├── claude_execute.py  # Claude Code integration
 │   ├── delegate.py        # one-shot AI execution
 │   ├── cascade.py         # idea-to-code pipeline
 │   ├── recipe.py          # reusable recipe management
@@ -40,9 +39,7 @@ emdx/
 ├── ui/                     # TUI components (Textual)
 │   ├── browser_container.py # main app container
 │   ├── document_browser.py  # document management
-│   ├── file_browser.py      # file system browser
 │   ├── log_browser.py       # execution logs
-│   ├── git_browser.py       # git diff viewer
 │   ├── cascade_browser.py   # cascade stage browser
 │   ├── activity/            # Activity view components
 │   │   └── activity_view.py # unified activity display
@@ -51,6 +48,7 @@ emdx/
 │   ├── log_stream.py      # event-driven log streaming
 │   ├── file_watcher.py    # file monitoring
 │   ├── auto_tagger.py     # automatic tagging
+│   ├── claude_executor.py # Claude Code integration
 │   └── health_monitor.py  # system health
 └── utils/                  # Shared utilities
     ├── git.py             # git operations
@@ -64,8 +62,6 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 
 ### **Browser Container** (`browser_container.py`)
 - **Document Mode** (default) - `d` or start here
-- **File Mode** - `f` to switch from document mode
-- **Git Mode** - `g` to switch from document mode
 - **Log Mode** - `l` to switch from document mode
 - **Activity Mode** - `a` to view execution activity
 - **Cascade Mode** - `4` to view cascade stages
@@ -83,15 +79,6 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - `s` - selection mode
 - `x` - execute document  
 - `r` - refresh
-
-**File Browser** (`file_browser.py`):
-- `j/k` - move up/down
-- `h/l` - parent dir/enter dir  
-- `g/G` - go to top/bottom
-- `.` - toggle hidden files
-- `s` - selection mode
-- `e` - edit file
-- `/` - search
 
 **Log Browser** (`log_browser.py`):
 - `j/k` - move up/down
@@ -140,9 +127,6 @@ App (emdx gui)
     │   ├── ExecutionTable
     │   ├── LogViewer (with streaming)
     │   └── MetadataPanel
-    ├── FileBrowser (press 'f')
-    │   ├── FileTree
-    │   └── FilePreview
     ├── ActivityView (press 'a')
     │   ├── ActivityTree (executions, documents, groups)
     │   └── ContextPanel (details for selected item)
