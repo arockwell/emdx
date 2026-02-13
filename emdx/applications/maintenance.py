@@ -80,7 +80,7 @@ class MaintenanceApplication:
     Application service for orchestrating maintenance operations.
 
     Provides a high-level API for maintaining the knowledge base,
-    composing multiple services to perform complex workflows.
+    composing multiple services to perform complex operations.
 
     Example:
         app = MaintenanceApplication()
@@ -340,7 +340,6 @@ class MaintenanceApplication:
         self, dry_run: bool = True, threshold: float = 0.7,
         progress_callback: Optional[callable] = None,
         use_tfidf: bool = True,
-        exclude_workflow: bool = False
     ) -> MaintenanceResult:
         """
         Merge similar documents.
@@ -351,7 +350,6 @@ class MaintenanceApplication:
             progress_callback: Optional callback(current, total, found) for progress updates.
             use_tfidf: If True, use fast TF-IDF similarity (recommended).
                        If False, use slower pairwise comparison.
-            exclude_workflow: If True, exclude workflow output documents from results.
 
         Returns:
             MaintenanceResult with operation details.
@@ -362,7 +360,6 @@ class MaintenanceApplication:
             pairs = similarity_service.find_all_duplicate_pairs(
                 min_similarity=threshold,
                 progress_callback=progress_callback,
-                exclude_workflow=exclude_workflow
             )
 
             if not pairs:
