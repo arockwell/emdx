@@ -76,7 +76,7 @@ poetry run pytest
 poetry run pytest --cov=emdx
 
 # Run specific test file
-poetry run pytest tests/test_log_stream.py
+poetry run pytest tests/test_database.py
 
 # Run tests matching pattern
 poetry run pytest -k "test_streaming"
@@ -151,12 +151,15 @@ TEXTUAL_LOG=DEBUG poetry run emdx gui
 ### **Test Organization**
 ```
 tests/
-├── conftest.py           # Pytest configuration and fixtures
-├── test_commands/        # CLI command tests
-├── test_ui/             # TUI component tests  
-├── test_services/       # Service layer tests
-├── test_models/         # Data model tests
-└── test_integration/    # End-to-end integration tests
+├── conftest.py              # Pytest configuration and fixtures
+├── test_commands_core.py    # Core command tests (save, find, view)
+├── test_commands_tags.py    # Tag command tests
+├── test_commands_groups.py  # Group command tests
+├── test_database.py         # Database operations
+├── test_documents.py        # Document CRUD
+├── test_core.py             # Core CLI commands
+├── test_log_browser.py      # TUI component tests
+└── ...                      # 38 test files total (see testing.md)
 ```
 
 ### **Common Test Patterns**

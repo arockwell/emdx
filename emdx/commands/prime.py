@@ -154,13 +154,14 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
         lines.append("1. ALWAYS save significant outputs to emdx:")
         lines.append("   echo \"output\" | emdx save --title \"Title\" --tags \"tag1,tag2\"")
         lines.append("")
-        lines.append("2. ALWAYS create tasks for discovered work:")
-        lines.append("   emdx task create \"Title\" --description \"Details\"")
-        lines.append("")
-        lines.append("3. ALWAYS check ready tasks before starting work:")
+        lines.append("2. ALWAYS check ready tasks before starting work:")
         lines.append("   emdx task ready")
         lines.append("")
-        lines.append("4. NEVER end session without updating task status")
+        lines.append("3. Create tasks for discovered work:")
+        lines.append("   emdx task add \"Title\" --doc 42")
+        lines.append("")
+        lines.append("4. Mark tasks done when finished:")
+        lines.append("   emdx task done <id> --note \"summary\"")
         lines.append("")
         lines.append("-" * 60)
         lines.append("")
@@ -180,19 +181,17 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
         lines.append("READY TASKS (work you can start immediately):")
         lines.append("")
         for task in ready_tasks[:10]:  # Limit to top 10
-            priority_label = ["P0-CRITICAL", "P1-HIGH", "P2-MEDIUM", "P3-LOW", "P4-BACKLOG"][min(task['priority'], 4)]
-            lines.append(f"  #{task['id']} [{priority_label}] {task['title']}")
+            doc = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
+            lines.append(f"  #{task['id']} {task['title']}{doc}")
             if task.get('description') and verbose:
                 desc = task['description'][:100] + "..." if len(task['description']) > 100 else task['description']
                 lines.append(f"      {desc}")
         lines.append("")
-        lines.append(f"Run 'emdx task show <id>' for details, 'emdx task run <id>' to start work.")
-        lines.append("")
     else:
-        lines.append("No ready tasks. Create new tasks with 'emdx task create'.")
+        lines.append("No ready tasks. Create new tasks with 'emdx task add'.")
         lines.append("")
 
-    # In-progress tasks
+    # In-progress tasks (manual only, not delegate)
     in_progress = _get_in_progress_tasks()
     if in_progress:
         lines.append("IN-PROGRESS TASKS (work already started):")
@@ -225,7 +224,7 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
     # Footer reminder
     if not quiet:
         lines.append("-" * 60)
-        lines.append("Remember: Track your work. Save outputs. Update tasks.")
+        lines.append("Remember: Track your work. Save outputs. Mark tasks done.")
         lines.append("=" * 60)
 
     # Output
@@ -254,36 +253,38 @@ def _output_json(project: Optional[str], verbose: bool, quiet: bool, execution: 
 
 
 def _get_ready_tasks() -> list:
-    """Get tasks that are ready to work on (open + no blockers)."""
+    """Get tasks that are ready to work on (open + no blockers, excludes delegate)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT t.id, t.title, t.description, t.priority, t.status
+            SELECT t.id, t.title, t.description, t.priority, t.status, t.source_doc_id
             FROM tasks t
             WHERE t.status = 'open'
+            AND t.prompt IS NULL
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps td
                 JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status != 'completed'
+                WHERE td.task_id = t.id AND blocker.status != 'done'
             )
             ORDER BY t.priority ASC, t.created_at ASC
             LIMIT 20
         """)
         rows = cursor.fetchall()
         return [
-            {"id": r[0], "title": r[1], "description": r[2], "priority": r[3], "status": r[4]}
+            {"id": r[0], "title": r[1], "description": r[2], "priority": r[3], "status": r[4], "source_doc_id": r[5]}
             for r in rows
         ]
 
 
 def _get_in_progress_tasks() -> list:
-    """Get tasks currently in progress."""
+    """Get manually created tasks currently in progress (excludes delegate)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, title, description, priority
             FROM tasks
-            WHERE status = 'in_progress'
+            WHERE status = 'active'
+            AND prompt IS NULL
             ORDER BY updated_at DESC
             LIMIT 10
         """)

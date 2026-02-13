@@ -863,63 +863,67 @@ class TestGetStats:
 
 
 class TestCascadeStageOperations:
-    """Test cascade-related functions in documents.py."""
+    """Test cascade-related functions in emdx.database.cascade."""
 
-    def test_update_document_stage(self):
-        from emdx.database.documents import save_document, update_document_stage
+    def test_update_cascade_stage(self):
+        from emdx.database.documents import save_document
+        from emdx.database.cascade import update_cascade_stage
         from emdx.database.connection import db_connection
 
         doc_id = save_document("Stage Test", "Content")
-        result = update_document_stage(doc_id, "idea")
+        result = update_cascade_stage(doc_id, "idea")
         assert result is True
 
-        # Verify in documents table
+        # Verify in cascade metadata table
         with db_connection.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT stage FROM documents WHERE id = ?", (doc_id,)
+                "SELECT stage FROM document_cascade_metadata WHERE document_id = ?", (doc_id,)
             )
             assert cursor.fetchone()[0] == "idea"
 
-    def test_update_document_stage_progression(self):
-        from emdx.database.documents import save_document, update_document_stage
+    def test_update_cascade_stage_progression(self):
+        from emdx.database.documents import save_document
+        from emdx.database.cascade import update_cascade_stage
         from emdx.database.connection import db_connection
 
         doc_id = save_document("Stage Prog", "Content")
         for stage in ["idea", "prompt", "analyzed", "planned", "done"]:
-            update_document_stage(doc_id, stage)
+            update_cascade_stage(doc_id, stage)
 
         with db_connection.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT stage FROM documents WHERE id = ?", (doc_id,)
+                "SELECT stage FROM document_cascade_metadata WHERE document_id = ?", (doc_id,)
             )
             assert cursor.fetchone()[0] == "done"
 
-    def test_update_document_stage_to_none(self):
-        from emdx.database.documents import save_document, update_document_stage
-        from emdx.database.connection import db_connection
+    def test_update_cascade_stage_to_none(self):
+        from emdx.database.documents import save_document
+        from emdx.database.cascade import update_cascade_stage, get_cascade_metadata
 
         doc_id = save_document("Remove Stage", "Content")
-        update_document_stage(doc_id, "idea")
-        update_document_stage(doc_id, None)
+        update_cascade_stage(doc_id, "idea")
+        update_cascade_stage(doc_id, None)
 
-        with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT stage FROM documents WHERE id = ?", (doc_id,)
-            )
-            assert cursor.fetchone()[0] is None
+        # Setting stage to None removes from cascade
+        metadata = get_cascade_metadata(doc_id)
+        assert metadata is None
 
-    def test_update_document_stage_nonexistent(self):
-        from emdx.database.documents import update_document_stage
+    def test_update_cascade_stage_nonexistent(self):
+        import sqlite3
+        import pytest
+        from emdx.database.cascade import update_cascade_stage
 
-        result = update_document_stage(999999, "idea")
-        assert result is False
+        # update_cascade_stage will fail with foreign key constraint if doc doesn't exist
+        with pytest.raises(sqlite3.IntegrityError):
+            update_cascade_stage(999999, "idea")
 
-    def test_update_document_stage_dual_writes(self):
-        from emdx.database.documents import save_document, update_document_stage
+    def test_update_cascade_stage_writes_to_metadata_table(self):
+        from emdx.database.documents import save_document
+        from emdx.database.cascade import update_cascade_stage
         from emdx.database.connection import db_connection
 
-        doc_id = save_document("Dual Write", "Content")
-        update_document_stage(doc_id, "prompt")
+        doc_id = save_document("Cascade Write", "Content")
+        update_cascade_stage(doc_id, "prompt")
 
         # Check cascade metadata table
         with db_connection.get_connection() as conn:
@@ -931,37 +935,36 @@ class TestCascadeStageOperations:
             assert row is not None
             assert row[0] == "prompt"
 
-    def test_update_document_pr_url(self):
-        from emdx.database.documents import save_document, update_document_pr_url
-        from emdx.database.connection import db_connection
+    def test_update_cascade_pr_url(self):
+        from emdx.database.documents import save_document
+        from emdx.database.cascade import update_cascade_stage, update_cascade_pr_url, get_cascade_pr_url
 
         doc_id = save_document("PR URL Test", "Content")
+        update_cascade_stage(doc_id, "done")
         pr_url = "https://github.com/user/repo/pull/42"
-        result = update_document_pr_url(doc_id, pr_url)
+        result = update_cascade_pr_url(doc_id, pr_url)
         assert result is True
 
-        with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT pr_url FROM documents WHERE id = ?", (doc_id,)
-            )
-            assert cursor.fetchone()[0] == pr_url
+        retrieved = get_cascade_pr_url(doc_id)
+        assert retrieved == pr_url
 
     def test_get_cascade_stats(self):
-        from emdx.database.documents import save_document, update_document_stage, get_cascade_stats
+        from emdx.database.documents import save_document
+        from emdx.database.cascade import update_cascade_stage, get_cascade_stats
 
         save_document("Idea 1", "Content")
         d1 = save_document("Idea 2", "Content")
         d2 = save_document("Prompt 1", "Content")
-        update_document_stage(d1, "idea")
-        update_document_stage(d2, "prompt")
+        update_cascade_stage(d1, "idea")
+        update_cascade_stage(d2, "prompt")
 
         stats = get_cascade_stats()
         assert stats["idea"] >= 1
         assert stats["prompt"] >= 1
 
     def test_save_document_to_cascade(self):
-        from emdx.database.documents import save_document_to_cascade, get_document
-        from emdx.database.connection import db_connection
+        from emdx.database.documents import get_document
+        from emdx.database.cascade import save_document_to_cascade, get_cascade_metadata
 
         doc_id = save_document_to_cascade(
             title="Cascade Doc",
@@ -974,11 +977,9 @@ class TestCascadeStageOperations:
         assert doc is not None
         assert doc["title"] == "Cascade Doc"
 
-        with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT stage FROM documents WHERE id = ?", (doc_id,)
-            )
-            assert cursor.fetchone()[0] == "idea"
+        metadata = get_cascade_metadata(doc_id)
+        assert metadata is not None
+        assert metadata["stage"] == "idea"
 
 
 # =========================================================================

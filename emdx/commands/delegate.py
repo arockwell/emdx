@@ -64,6 +64,18 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
     except Exception:
         pass
 
+
+def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
+    """Update execution record, never fail delegate."""
+    if exec_id is None:
+        return
+    try:
+        from ..models.executions import update_execution
+        update_execution(exec_id, **kwargs)
+    except Exception:
+        pass
+
+
 PR_INSTRUCTION = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
@@ -245,6 +257,8 @@ def _run_single(
     doc_id = result.output_doc_id
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
+        # Write doc_id back to execution so activity browser can show the output
+        _safe_update_execution(result.execution_id, doc_id=doc_id)
         _print_doc_content(doc_id)
         if not quiet:
             sys.stderr.write(
@@ -540,7 +554,7 @@ def delegate(
     ),
     pr: bool = typer.Option(
         False, "--pr",
-        help="Instruct agent to create a PR after code changes",
+        help="Instruct agent to create a PR (implies --worktree)",
     ),
     worktree: bool = typer.Option(
         False, "--worktree", "-w",
@@ -643,8 +657,10 @@ def delegate(
             flat_tags.extend(t.split(","))
 
     # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
+    #    --pr always implies --worktree so the sub-agent has a clean git environment
+    use_worktree = worktree or pr
     worktree_path = None
-    if worktree and (len(task_list) == 1 or chain):
+    if use_worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
         try:
             worktree_path, _ = create_worktree(base_branch)
@@ -692,7 +708,7 @@ def delegate(
                 pr=pr,
                 base_branch=base_branch,
                 source_doc_id=doc,
-                worktree=worktree,
+                worktree=use_worktree,
             )
     finally:
         if worktree_path and not pr:

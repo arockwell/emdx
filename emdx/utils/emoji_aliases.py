@@ -271,65 +271,6 @@ def get_category_emojis() -> Dict[str, List[str]]:
     return categories
 
 
-def generate_legend() -> str:
-    """
-    Generate a markdown legend of all emoji aliases.
-    
-    Returns:
-        Markdown string with emoji legend
-    """
-    categories = get_category_emojis()
-    
-    legend_lines = [
-        "# EMDX Emoji Tag Legend",
-        "",
-        "Quick reference for emoji tags and their text aliases.",
-        "",
-    ]
-    
-    for category, emojis in categories.items():
-        legend_lines.append(f"## {category}")
-        legend_lines.append("")
-        
-        for emoji in emojis:
-            aliases = get_aliases_for_emoji(emoji)
-            if aliases:
-                # Show primary alias first, then others
-                primary = aliases[0]
-                others = aliases[1:] if len(aliases) > 1 else []
-                
-                line = f"- {emoji} = `{primary}`"
-                if others:
-                    other_list = ", ".join(f"`{alias}`" for alias in others)
-                    line += f" (also: {other_list})"
-                
-                legend_lines.append(line)
-        
-        legend_lines.append("")
-    
-    legend_lines.extend([
-        "## Usage Examples",
-        "",
-        "```bash",
-        "# Use text aliases for easier typing",
-        'emdx tag 123 gameplan active urgent',
-        "",
-        "# Mix aliases and emojis", 
-        'emdx tag 123 notes 🚀',
-        "",
-        "# Search by aliases",
-        'emdx find --tags \"gameplan,active\"',
-        "",
-        "# Save with tags using aliases",
-        'echo \"My plan\" | emdx save --title \"Strategy\" --tags \"gameplan,active\"',
-        "```",
-        "",
-        "**Note**: All text aliases are case-insensitive and automatically converted to emojis.",
-    ])
-    
-    return "\n".join(legend_lines)
-
-
 def suggest_aliases(partial: str) -> List[str]:
     """
     Suggest aliases based on partial input.

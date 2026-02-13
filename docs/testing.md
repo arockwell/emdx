@@ -2,29 +2,15 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has 36 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
+EMDX has 38 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
 
-### **Current Test Status** 🎉 **FULLY FUNCTIONAL TEST SUITE**
+### **Current Test Status**
 
 ```bash
-# 🎉 Test suite is fully operational!
 poetry run pytest tests/ -v
 
-# 🎉 Current Results (as of 2026-01-14):
-# - 395 tests collected
-# - 395 tests passing ✅ (100% success rate)
-# - 0 tests failing
-# - 5 tests skipped
-# - 0 collection errors ✅
-
-# ✅ ALL IMPORT ERRORS FIXED:
-# - emdx.browse → emdx.commands.browse
-# - emdx.cli → emdx.main
-# - emdx.sqlite_database → emdx.database
-# - emdx.migrations → emdx.database.migrations
-# - emdx.utils get_git_project → emdx.utils.git
-# - TestDatabase → DatabaseForTesting (pytest collection fix)
-# - Added asyncio marker for TUI tests
+# Run quick (stop on first failure)
+poetry run pytest tests/ -x -q
 ```
 
 ## 📁 **Test Structure**
@@ -34,13 +20,21 @@ tests/
 ├── conftest.py                       # Pytest configuration and fixtures
 ├── test_auto_tagger.py               # Automatic tagging system
 ├── test_browse.py                    # Browse commands (list, stats, recent)
-├── test_claude_execute.py            # Claude Code integration
+├── test_cascade_metadata.py          # Cascade stage operations
 ├── test_cli.py                       # CLI integration tests
+├── test_commands_core.py             # Core command tests (save, find, view)
+├── test_commands_groups.py           # Group command tests
+├── test_commands_tags.py             # Tag command tests
 ├── test_config.py                    # Configuration management
 ├── test_core.py                      # Core CLI commands (save, find, view)
 ├── test_database.py                  # Database operations and models
-├── test_execution_system.py          # Execution tracking and monitoring
-├── test_export_profiles.py           # Export profile functionality
+├── test_document_merger.py           # Document merging
+├── test_documents.py                 # Document CRUD operations
+├── test_duplicate_detector.py        # Duplicate detection
+├── test_emoji_aliases.py             # Emoji alias system
+├── test_execution_monitor.py         # Execution monitoring
+├── test_execution_system.py          # Execution tracking
+├── test_execution_system_comprehensive.py # Comprehensive execution tests
 ├── test_file_size.py                 # File size utilities
 ├── test_file_watcher.py              # File watcher service tests
 ├── test_groups.py                    # Document group management
@@ -48,14 +42,18 @@ tests/
 ├── test_input_content.py             # Content input handling
 ├── test_lazy_loading.py              # Lazy loading functionality
 ├── test_log_browser.py               # Log browser TUI component
-├── test_log_browser_timestamps.py    # Log parsing and timestamps
 ├── test_migrations.py                # Database schema migrations
-├── test_overlay.py                   # Overlay functionality tests
+├── test_modal_keys.py                # Modal key bindings
+├── test_models_tags.py               # Tag model tests
+├── test_project_discovery.py         # Project auto-detection
 ├── test_search.py                    # Search functionality tests
 ├── test_similarity.py                # Document similarity service
-├── test_smart_execution.py           # Smart execution features
 ├── test_sqlite_database.py           # SQLite-specific database tests
+├── test_stream_json_parser.py        # Stream JSON parsing
 ├── test_tags.py                      # Tag system and emoji aliases
+├── test_text_formatting.py           # Text formatting utilities
+├── test_title_normalization.py       # Title normalization
+├── test_unified_executor.py          # Unified CLI executor
 ├── test_utils.py                     # Utility functions
 └── test_vim_line_numbers.py          # Vim editor line numbering
 ```
@@ -63,19 +61,23 @@ tests/
 ## 🎯 **Test Categories**
 
 ### **Core Functionality Tests**
-- **CLI Commands** (`test_core.py`, `test_cli.py`) - save, find, view, edit, delete
-- **Database Operations** (`test_database.py`, `test_sqlite_database.py`) - CRUD, search, migrations
-- **Tag System** (`test_tags.py`, `test_tagging_config.py`) - emoji tags, aliases, management
+- **CLI Commands** (`test_core.py`, `test_cli.py`, `test_commands_core.py`) - save, find, view, edit, delete
+- **Database Operations** (`test_database.py`, `test_sqlite_database.py`, `test_documents.py`) - CRUD, search, migrations
+- **Tag System** (`test_tags.py`, `test_models_tags.py`, `test_commands_tags.py`, `test_emoji_aliases.py`) - emoji tags, aliases, management
+- **Groups** (`test_groups.py`, `test_commands_groups.py`) - document group management
 
 ### **Advanced Feature Tests**
-- **Claude Integration** (`test_claude_execute.py`, `test_smart_execution.py`) - Execution system
-- **TUI Components** (`test_log_browser.py`, `test_vim_line_numbers.py`) - UI widget tests
-- **Log Processing** (`test_log_browser_timestamps.py`, `test_timestamp_parsing.py`) - Log parsing
+- **Execution System** (`test_execution_system.py`, `test_execution_system_comprehensive.py`, `test_execution_monitor.py`, `test_unified_executor.py`) - execution tracking and monitoring
+- **TUI Components** (`test_log_browser.py`, `test_vim_line_numbers.py`, `test_modal_keys.py`) - UI widget tests
+- **Cascade** (`test_cascade_metadata.py`) - cascade stage operations
+- **Similarity** (`test_similarity.py`, `test_duplicate_detector.py`) - document similarity and dedup
 
 ### **Infrastructure Tests**
-- **Database Migrations** (`test_migrations.md`) - Schema evolution
+- **Database Migrations** (`test_migrations.py`) - Schema evolution
 - **Configuration** (`test_config.py`) - Settings and configuration
-- **Utilities** (`test_utils.py`, `test_file_size.py`) - Helper functions
+- **Utilities** (`test_utils.py`, `test_file_size.py`, `test_text_formatting.py`, `test_title_normalization.py`) - Helper functions
+- **Search** (`test_search.py`) - FTS5 search functionality
+- **Input/Output** (`test_input_content.py`, `test_stream_json_parser.py`) - content handling and parsing
 
 ## 🔧 **Common Test Patterns**
 
@@ -134,24 +136,12 @@ def test_log_browser():
     # Note: Full TUI testing is complex and limited
 ```
 
-## 🚨 **Known Test Issues**
+## 🚨 **Known Limitations**
 
-### **Resolved Issues** ✅
-1. ✅ **Import errors FIXED** - All module path issues resolved
-2. ✅ **Module paths FIXED** - Updated to current code structure
-3. ✅ **Missing imports FIXED** - All import references corrected
-4. ✅ **Asyncio marker FIXED** - TUI tests now have proper markers
-5. ✅ **Test fixture issues FIXED** - Collection warnings resolved
-6. ✅ **All tests passing** - 395/395 tests pass (5 skipped)
-
-### **Minor Considerations**
 - **TUI testing is limited** - Textual widget testing is challenging
 - **Some timing-dependent tests** - May be sensitive to system load
-
-### **Test Coverage Gaps**
-- **Full TUI integration** - Hard to test complete user workflows
-- **Cross-platform behavior** - Most testing on single platform
-- **Performance testing** - No performance regression tests
+- **No performance regression tests** - No benchmarks or perf tracking
+- **Single-platform testing** - Most testing on macOS
 
 ## 🎯 **Running Tests Effectively**
 
@@ -232,17 +222,6 @@ class TestDocumentModel:
 - **Organize tests** - Group related tests better
 - **Add integration tests** - Test complete workflows
 - **Performance tests** - Ensure no regressions
-
-## 🛠️ **Test Suite Maintenance**
-
-### **Current State: Healthy** ✅
-The test suite is fully operational with 100% pass rate (395 tests passing, 5 skipped).
-
-### **Future Improvements**
-1. **Add performance regression testing** - Track test execution times
-2. **Cross-platform testing automation** - CI/CD for multiple platforms
-3. **Visual regression testing for TUI** - Screenshot comparisons
-4. **Load testing for large document collections** - Stress testing
 
 ## 💡 **Contributing Tests**
 

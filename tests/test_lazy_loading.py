@@ -11,7 +11,7 @@ from emdx.utils.lazy_group import (
     LazyCommand,
     LazyTyperGroup,
     register_lazy_commands,
-    get_lazy_registry,
+    _LAZY_REGISTRY,
 )
 
 
@@ -196,8 +196,6 @@ class TestCLIIntegration:
             'emdx.commands.delegate',
             'emdx.commands.claude_execute',
             'emdx.commands.ask',
-            'emdx.commands.similarity',
-            'emdx.commands.gdoc',
         ]
 
         # Clear any cached imports
@@ -248,7 +246,6 @@ class TestCLIIntegration:
         # Check that our lazy help text appears (not the actual module help)
         assert "Manage and run EMDX recipes" in result.output
         assert "Cascade ideas through stages" in result.output
-        assert "Google Docs integration" in result.output
 
     def test_lazy_command_works_when_invoked(self):
         """Test that lazy commands work when actually invoked."""
@@ -290,7 +287,8 @@ class TestLazyRegistry:
             {"cmd1": "Help 1", "cmd2": "Help 2"},
         )
 
-        subcommands, help_strings = get_lazy_registry()
+        subcommands = _LAZY_REGISTRY["subcommands"]
+        help_strings = _LAZY_REGISTRY["help"]
 
         assert "cmd1" in subcommands
         assert "cmd2" in subcommands

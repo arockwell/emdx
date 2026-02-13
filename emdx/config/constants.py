@@ -22,15 +22,15 @@ EMDX_LOG_DIR = EMDX_CONFIG_DIR / "logs"
 # Default limits for list operations
 DEFAULT_LIST_LIMIT = 10  # Standard search results, tag suggestions
 DEFAULT_RECENT_LIMIT = 20  # Recent executions, recent tag results
-DEFAULT_BROWSE_LIMIT = 50  # Document/task browser, workflow runs
+DEFAULT_BROWSE_LIMIT = 50  # Document/task browser
 DEFAULT_BATCH_LIMIT = 100  # Large batch operations, document loading
 
 # =============================================================================
 # TIMEOUT & STALE DETECTION (in seconds unless noted)
 # =============================================================================
 
-# Agent/workflow execution timeouts
-EXECUTION_TIMEOUT_SECONDS = 3600  # 1 hour - max time for agent/workflow execution
+# Agent execution timeouts
+EXECUTION_TIMEOUT_SECONDS = 3600  # 1 hour - max time for agent execution
 STALE_EXECUTION_TIMEOUT_SECONDS = 1800  # 30 minutes - when to consider execution stale
 
 # Process monitoring
@@ -44,7 +44,6 @@ DEFAULT_REFRESH_INTERVAL_SECONDS = 5  # UI auto-refresh interval
 # CONCURRENCY & POOL SIZES
 # =============================================================================
 
-DEFAULT_MAX_CONCURRENT_WORKFLOWS = 5  # Workflow executor default
 DEFAULT_MAX_CONCURRENT_STAGES = 5  # Stage config, worktree pool
 DEFAULT_MAX_AGENT_ITERATIONS = 10  # Max iterations for agent loops
 
@@ -182,11 +181,10 @@ DATE_GROUP_THIS_YEAR = 365
 DATE_GROUP_TODAY_SECONDS = 3600  # Show as "today" if within 1 hour
 
 # =============================================================================
-# WORKFLOW DEFAULTS
+# STAGE DEFAULTS
 # =============================================================================
 
 DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
-RECOMMENDED_WORKFLOW_RUNS = 5  # Recommended runs for workflow stats
 
 # =============================================================================
 # CLAUDE MODEL CONFIGURATION

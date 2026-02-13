@@ -135,15 +135,16 @@ def test_execution_monitoring():
 def test_environment_validation():
     """Test environment validation."""
     print("\n=== Test: Environment Validation ===")
-    
+
     result = subprocess.run(
         ["emdx", "claude", "check-env"],
         capture_output=True,
         text=True
     )
-    
+
     if "properly configured" in result.stdout:
         print("✅ Environment is properly configured")
+        assert result.returncode == 0, "check-env should return 0 for properly configured environment"
     else:
         print("⚠️  Environment has issues (this may be expected)")
         print(result.stdout)
@@ -154,32 +155,39 @@ def main():
     """Run all tests."""
     print("🧪 EMDX Execution System Test Suite")
     print("=" * 50)
-    
+
     tests = [
         test_environment_validation,
         test_execution_id_uniqueness,
-        test_cleanup_commands,
+        test_maintenance_commands,
         test_execution_monitoring,
     ]
-    
+
     passed = 0
     failed = 0
-    
+    skipped = 0
+
     for test_func in tests:
         try:
-            if test_func():
-                passed += 1
-            else:
-                failed += 1
+            test_func()
+            print(f"✅ {test_func.__name__} passed")
+            passed += 1
+        except pytest.skip.Exception as e:
+            print(f"⏭️  {test_func.__name__} skipped: {e}")
+            skipped += 1
+        except AssertionError as e:
+            print(f"❌ {test_func.__name__} failed assertion: {e}")
+            failed += 1
         except Exception as e:
             print(f"❌ {test_func.__name__} failed with exception: {e}")
             failed += 1
-    
+
     print("\n" + "=" * 50)
     print(f"✅ Passed: {passed}")
+    print(f"⏭️  Skipped: {skipped}")
     print(f"❌ Failed: {failed}")
-    print(f"📊 Total: {passed + failed}")
-    
+    print(f"📊 Total: {passed + skipped + failed}")
+
     if failed == 0:
         print("\n🎉 All tests passed!")
     else:

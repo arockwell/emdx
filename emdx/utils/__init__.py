@@ -8,6 +8,5 @@ This package provides shared utilities used across the EMDX codebase:
 - file_size: Human-readable file size formatting
 - git/git_ops: Git repository operations and utilities
 - logging/structured_logger: Logging configuration and structured logging
-- log_migration: Migration utilities for log format changes
 - text_formatting: Text display and formatting helpers
 """

@@ -4,7 +4,7 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (workflow, cascade, delegate, ai, gui) are only imported when
+fast. Heavy commands (cascade, delegate, ai, etc.) are only imported when
 actually invoked.
 """
 
@@ -14,7 +14,6 @@ from typing import Optional
 import typer
 from emdx import __build_id__, __version__
 from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
-from emdx.utils.output import console
 
 # =============================================================================
 # LAZY COMMANDS - Heavy features (defer import until invoked)
@@ -28,10 +27,6 @@ LAZY_SUBCOMMANDS = {
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
-    # Similarity (imports scikit-learn)
-    "similar": "emdx.commands.similarity:app",
-    # External services (imports google API libs)
-    "gdoc": "emdx.commands.gdoc:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -40,15 +35,13 @@ LAZY_HELP = {
     "cascade": "Cascade ideas through stages to working code",
     "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
-    "similar": "Find similar documents using TF-IDF",
-    "gdoc": "Google Docs integration",
 }
 
 
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (cascade, delegate, workflow).
+    Safe mode disables execution commands (cascade, delegate, recipe).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
@@ -150,7 +143,7 @@ app.add_typer(trash_app, name="trash", help="Manage deleted documents")
 app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 
 # Add tasks as a subcommand group
-app.add_typer(tasks_app, name="task", help="Task management")
+app.add_typer(tasks_app, name="task", help="Agent work queue")
 
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
@@ -248,7 +241,7 @@ def main(
 
 
 # Known subcommands of `emdx tag` — used for shorthand routing
-_TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "legend", "batch", "--help", "-h", "help"}
+_TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "batch", "--help", "-h", "help"}
 
 
 def run():

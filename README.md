@@ -89,7 +89,7 @@ Tags use emoji under the hood, but you type plain text:
 emdx tag 42 gameplan active
 
 # See all tags in use
-emdx tags
+emdx tag list
 
 # Search by tags
 emdx find --tags "gameplan,success"
@@ -105,7 +105,7 @@ emdx find --tags "gameplan,success"
 | `success` | 🎉 | Worked as intended |
 | `failed` | ❌ | Didn't work |
 
-Run `emdx legend` for the full alias list.
+Run `emdx tag list` to see all tags in use.
 
 ## Delegating Work to Claude
 
@@ -209,13 +209,6 @@ emdx ai context "How does the workflow system work?" | claude
 
 # Or use the API directly (requires ANTHROPIC_API_KEY)
 emdx ai ask "How did we solve the auth bug?"
-```
-
-### Similar documents
-
-```bash
-emdx similar 42                                     # Docs similar to #42
-emdx similar-text "retry logic with exponential backoff"
 ```
 
 ## Going Further

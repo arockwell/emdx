@@ -15,42 +15,22 @@ EMDX uses the [Textual](https://textual.textualize.io/) framework for its termin
 ```
 EMDXApp (Main Application)
 └── BrowserContainer (Modal Router)
-    ├── DocumentBrowser (Default Mode)
-    │   ├── Header (Title + Status)
-    │   ├── Horizontal Split
-    │   │   ├── DocumentTable (Left 60%)
-    │   │   │   ├── DataTable (Documents)
-    │   │   │   └── Footer (Stats + Actions)
-    │   │   └── RightPanel (Right 40%)
-    │   │       ├── PreviewPanel (Top)
-    │   │       │   ├── RichLog (Content)
-    │   │       │   └── ScrollableContainer
-    │   │       └── DetailsPanel (Bottom)
-    │   │           ├── TagDisplay
-    │   │           ├── MetadataGrid
-    │   │           └── ActionButtons
-    │   └── StatusBar (Global)
-    ├── LogBrowser (Press 'l')
-    │   ├── Header (Execution Info)
-    │   ├── Horizontal Split
-    │   │   ├── ExecutionTable (Left 50%)
-    │   │   │   ├── DataTable (Executions)
-    │   │   │   └── FilterControls
-    │   │   └── LogPanel (Right 50%)
-    │   │       ├── LogViewer (RichLog)
-    │   │       ├── LiveControls
-    │   │       └── SearchBox
+    ├── DocumentBrowser (Default Mode - press 'd')
+    │   ├── DocumentTable (Left)
+    │   ├── PreviewPanel (Right)
     │   └── StatusBar
+    ├── LogBrowser (Press 'l')
+    │   ├── ExecutionTable (Left)
+    │   └── LogViewer (Right, with live streaming)
+    ├── ActivityView (Press 'a')
+    │   ├── ActivityTree (executions, documents, groups)
+    │   └── ContextPanel (details for selected item)
+    ├── RunBrowser (Press '4' - Cascade)
+    │   ├── Stage columns (idea → prompt → analyzed → planned → done)
+    │   └── ActivityFeed (cascade runs/executions)
     └── FileBrowser (Press 'f')
-        ├── Header (Directory Path)
-        ├── Horizontal Split
-        │   ├── FileTree (Left 40%)
-        │   │   ├── DirectoryTree
-        │   │   └── NavigationControls
-        │   └── FilePreview (Right 60%)
-        │       ├── ContentDisplay
-        │       └── FileMetadata
-        └── StatusBar
+        ├── FileTree (Left)
+        └── FilePreview (Right)
 ```
 
 ## 📱 **Core UI Components**
@@ -60,20 +40,18 @@ EMDXApp (Main Application)
 ```python
 class BrowserContainer(Widget):
     """Main container that manages different browser modes."""
-    
+
     BINDINGS = [
         ("q", "quit", "Quit"),
-        ("l", "switch_to_logs", "Logs"), 
-        ("f", "switch_to_files", "Files"),
+        ("l", "switch_to_logs", "Logs"),
         ("d", "switch_to_documents", "Documents"),
     ]
-    
+
     def __init__(self):
         super().__init__()
         self.current_mode = "documents"
         self.document_browser = DocumentBrowser()
         self.log_browser = LogBrowser()
-        self.file_browser = FileBrowser()
 ```
 
 **Key Features:**
@@ -168,31 +146,22 @@ class LogBrowser(Widget):
             self.is_live_mode = True
 ```
 
-### **4. FileBrowser - File System Navigation**
+### **4. ActivityView - Unified Activity Display**
 
-```python
-class FileBrowser(Widget):
-    """File system browser with git integration."""
-    
-    BINDINGS = [
-        ("enter", "open_file", "Open"),
-        ("o", "open_external", "Open External"),
-        ("s", "save_to_emdx", "Save to EMDX"),
-        ("g", "git_status", "Git Status"),
-    ]
-```
+The ActivityView (press `a`) shows a unified tree of recent executions, documents, and groups.
 
-#### **FileTree Component**
-- **Git integration** - Show git status, modified files
-- **Smart filtering** - Hide .gitignore files by default
-- **Directory navigation** - Collapsible tree structure
-- **File type icons** - Visual file type identification
+- **Tree-based display** - Hierarchical view with expandable items
+- **Lazy loading** - Children loaded on expand
+- **Multiple item types** - Executions, documents, groups in one view
+- **Refresh** - Press `r` to refresh
 
-#### **FilePreview Component**
-- **Syntax highlighting** - Language-specific code highlighting
-- **Image support** - Display images in terminal (if supported)
-- **Binary detection** - Safe handling of binary files
-- **Size limits** - Performance protection for large files
+### **5. RunBrowser - Cascade Stage Browser**
+
+The RunBrowser (press `4`) shows cascade pipeline stages and runs.
+
+- **Stage navigation** - `h/l` to switch between stages
+- **Document processing** - `p` to process through Claude
+- **Activity feed** - Shows cascade run progress
 
 ## 🎮 **Key Binding System**
 
@@ -209,7 +178,7 @@ GLOBAL_BINDINGS = [
 ### **Mode-Specific Bindings**
 - **Document Mode**: vim-like navigation (j/k/g/G), search (/), edit (e)
 - **Log Mode**: live toggle (space), follow (f), kill (k)
-- **File Mode**: open (enter), external (o), save (s)
+- **Activity Mode**: expand/collapse (l/h), refresh (r), fullscreen (f)
 
 ### **Modal Editing (Vim Mode)**
 ```python

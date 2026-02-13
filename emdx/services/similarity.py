@@ -433,7 +433,6 @@ class SimilarityService:
         self,
         min_similarity: float = 0.7,
         progress_callback: Optional[callable] = None,
-        exclude_workflow: bool = False
     ) -> List[tuple]:
         """Find all pairs of similar documents efficiently using matrix operations.
 
@@ -443,7 +442,6 @@ class SimilarityService:
         Args:
             min_similarity: Minimum similarity threshold (0.0 to 1.0)
             progress_callback: Optional callback(current, total, found) for progress
-            exclude_workflow: If True, exclude workflow-related documents from results
 
         Returns:
             List of tuples: (doc1_id, doc2_id, doc1_title, doc2_title, similarity)
@@ -486,23 +484,11 @@ class SimilarityService:
         if progress_callback:
             progress_callback(75, 100, len(matching_sims))
 
-        # Workflow title patterns to exclude
-        workflow_patterns = ['workflow', 'synthesis', 'agent output', 'workflow session']
-
-        def is_workflow_title(title: str) -> bool:
-            """Check if a title indicates workflow output."""
-            title_lower = title.lower()
-            return any(pattern in title_lower for pattern in workflow_patterns)
-
         # Build result tuples
         for idx in range(len(matching_rows)):
             i, j = matching_rows[idx], matching_cols[idx]
             title1 = self._doc_titles[i]
             title2 = self._doc_titles[j]
-
-            # Skip workflow-related pairs if requested
-            if exclude_workflow and (is_workflow_title(title1) or is_workflow_title(title2)):
-                continue
 
             pairs.append((
                 self._doc_ids[i],

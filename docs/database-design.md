@@ -78,6 +78,17 @@ CREATE TABLE executions (
 );
 ```
 
+### **Additional Tables**
+
+The database also includes tables for:
+- **`cascade_metadata`** — Tracks cascade stage and parent/child relationships for documents
+- **`cascade_runs`** — End-to-end cascade pipeline executions (idea → done)
+- **`document_groups`** — Hierarchical document organization
+- **`tasks`** — Task management with dependencies and status tracking
+- **`document_embeddings`** — Semantic search vectors (384-dimensional)
+
+See `emdx/database/migrations.py` for complete schema definitions.
+
 ### **Search Infrastructure**
 
 #### **`documents_fts` - Full-Text Search**
@@ -116,16 +127,9 @@ CREATE INDEX idx_executions_doc_id ON executions(doc_id);
 
 ```python
 # Migration structure in emdx/database/migrations.py
-MIGRATIONS = [
-    (1, create_initial_tables),
-    (2, add_access_tracking),
-    (3, add_tag_system),
-    (4, add_fts_search),
-    (5, add_execution_tracking),
-    (6, update_execution_ids),
-    (7, add_emoji_tags),
-    # Future migrations...
-]
+# Each migration is a tuple: (version, description, function)
+# Currently 36 migrations (0-35)
+# See emdx/database/migrations.py for the full list
 ```
 
 ### **Migration Best Practices**

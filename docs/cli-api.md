@@ -123,89 +123,78 @@ emdx tag 42
 emdx tag 123 feature done success
 ```
 
-### **emdx untag**
+### **emdx tag remove**
 Remove tags from documents.
 
 ```bash
 # Remove specific tags
-emdx untag 42 urgent active
+emdx tag remove 42 urgent active
 
 # Remove multiple tags
-emdx untag 42 old-tag another-tag
+emdx tag remove 42 old-tag another-tag
 ```
 
-### **emdx tags**
+### **emdx tag list**
 List all tags with usage statistics.
 
 ```bash
 # Show all tags with counts
-emdx tags
+emdx tag list
 
-# Show only emoji tags (space-efficient)
-emdx tags --emoji-only
+# Sort by name
+emdx tag list --sort name
 ```
 
-### **emdx legend**
-View emoji legend with text aliases (NEW!).
-
-```bash
-# Show complete emoji legend with text aliases
-emdx legend
-
-# This helps you remember that:
-# gameplan = 🎯, active = 🚀, bug = 🐛, etc.
-```
-
-### **emdx retag**
+### **emdx tag rename**
 Rename tags globally across all documents.
 
 ```bash
 # Convert old word tags to emoji system
-emdx retag "old-word-tag" "gameplan"
+emdx tag rename "old-word-tag" "gameplan" --force
 
 # Standardize tag names
-emdx retag "todo" "active"
+emdx tag rename "todo" "active" --force
 ```
 
-### **emdx merge-tags**
+### **emdx tag merge**
 Merge multiple tags into a single target tag.
 
 ```bash
 # Merge several tags into one
-emdx merge-tags "old-tag1" "old-tag2" --into "new-tag"
+emdx tag merge "old-tag1" "old-tag2" --into "new-tag" --force
 
 # Skip confirmation prompt
-emdx merge-tags "todo" "task" --into "active" --force
+emdx tag merge "todo" "task" --into "active" --force
 ```
 
 **Options:**
 - `--into, -i TEXT` - Target tag to merge into (required)
 - `--force, -f` - Skip confirmation
 
-### **emdx batch**
+### **emdx tag batch**
 Batch auto-tag multiple documents using content analysis.
 
 ```bash
 # Dry run: preview what would be tagged (default)
-emdx batch
+emdx tag batch
 
 # Actually apply auto-tags
-emdx batch --execute
+emdx tag batch --execute
 
 # Only process untagged documents (default)
-emdx batch --untagged
+emdx tag batch --untagged
 
 # Process all documents including already-tagged
-emdx batch --all
+emdx tag batch --all
 
 # Filter by project
-emdx batch --project myapp --execute
+emdx tag batch --project myapp --execute
 
 # Custom confidence threshold and max tags
-emdx batch --confidence 0.8 --max-tags 2 --execute
+emdx tag batch --confidence 0.8 --max-tags 2 --execute
 
 # Limit number of documents to process
-emdx batch --limit 50 --execute
+emdx tag batch --limit 50 --execute
 ```
 
 **Options:**
@@ -220,24 +209,6 @@ emdx batch --limit 50 --execute
 
 ### **emdx exec**
 Manage and monitor command executions.
-
-#### **emdx exec \<doc_id\>**
-Execute a document with Claude (shortcut for `emdx claude execute`).
-
-```bash
-# Execute document in background (default)
-emdx exec 42
-
-# Execute in foreground
-emdx exec 42 --foreground
-
-# Execute with specific tools
-emdx exec 42 --tools "Read,Write,Bash"
-```
-
-**Options:**
-- `--background/--foreground` - Run in background (default) or foreground
-- `--tools, -t TEXT` - Comma-separated list of allowed tools
 
 #### **emdx exec list**
 List recent executions.
@@ -538,43 +509,6 @@ Equivalent to `emdx save <file> --tags "recipe"`.
 
 ---
 
-## 🔄 **Lifecycle Management**
-
-### **emdx lifecycle**
-Track and analyze document lifecycle patterns.
-
-```bash
-# Show lifecycle analysis for all documents
-emdx lifecycle analyze
-
-# Track specific document evolution
-emdx lifecycle track 42
-
-# Show lifecycle statistics
-emdx lifecycle stats
-```
-
-#### **emdx lifecycle auto-detect**
-Auto-detect and suggest lifecycle transitions based on document state.
-
-```bash
-# Dry run: show suggested transitions without applying
-emdx lifecycle auto-detect
-
-# Apply all suggested transitions
-emdx lifecycle auto-detect --apply
-
-# Filter suggestions by project
-emdx lifecycle auto-detect --project myapp
-
-# Apply transitions for a specific project
-emdx lifecycle auto-detect --apply --project myapp
-```
-
-**Options:**
-- `--apply, -a` - Apply suggested transitions (default: dry run only)
-- `--project, -p TEXT` - Filter by project
-
 ## 🧹 **Maintenance Commands**
 
 ### **emdx maintain**
@@ -596,233 +530,6 @@ emdx maintain cleanup --files --execute
 # Full system cleanup
 emdx maintain cleanup --all --execute
 ```
-
-### **emdx gc**
-Garbage collection for unused data.
-
-```bash
-# Show what would be garbage collected
-emdx gc
-
-# Perform garbage collection
-emdx gc --execute
-
-# Aggressive cleanup (removes more data)
-emdx gc --aggressive --execute
-```
-
-## 📤 **Export Profiles**
-
-### **emdx export-profile**
-Manage export profiles for document transformation and sharing.
-
-#### **emdx export-profile create**
-Create a new export profile.
-
-```bash
-# Basic clipboard profile
-emdx export-profile create simple-share
-
-# Blog post with frontmatter
-emdx export-profile create blog-post \
-  --frontmatter --fm-fields title,date,tags \
-  --dest file --path ~/blog/drafts/{{title}}.md
-
-# GitHub issue format
-emdx export-profile create github-issue \
-  --strip-tags 🚧,🚨 \
-  --tag-labels '{"🐛": "bug", "✨": "enhancement"}'
-
-# Google Docs export
-emdx export-profile create team-share \
-  --format gdoc --dest gdoc \
-  --display "Team Share"
-
-# Gist export
-emdx export-profile create quick-gist \
-  --format gist --dest gist
-
-# With header and footer templates
-emdx export-profile create report \
-  --header "# Report: {{title}}\nGenerated: {{date}}" \
-  --footer "---\nEnd of report"
-
-# Project-scoped profile
-emdx export-profile create docs-export \
-  --project myapp --desc "Export for documentation site"
-```
-
-**Options:**
-- `--display, -D TEXT` - Human-readable name
-- `--format, -f TEXT` - Output format: `markdown`, `gdoc`, `gist` (default: markdown)
-- `--dest, -d TEXT` - Destination type: `clipboard`, `file`, `gdoc`, `gist` (default: clipboard)
-- `--path TEXT` - File path (supports `{{title}}`, `{{date}}` variables)
-- `--strip-tags TEXT` - Comma-separated emoji tags to strip
-- `--frontmatter` - Add YAML frontmatter
-- `--fm-fields TEXT` - Comma-separated frontmatter fields: `title`, `date`, `tags`, `author`
-- `--header TEXT` - Header template (supports variables)
-- `--footer TEXT` - Footer template
-- `--tag-labels TEXT` - Tag to label mapping as JSON
-- `--desc TEXT` - Profile description
-- `--project, -p TEXT` - Project scope (default: global)
-
-#### **emdx export-profile list**
-List all export profiles.
-
-```bash
-# List all profiles
-emdx export-profile list
-
-# Filter by project
-emdx export-profile list --project myapp
-
-# Output as JSON
-emdx export-profile list --format json
-
-# Include inactive profiles
-emdx export-profile list --all
-```
-
-**Options:**
-- `--project, -p TEXT` - Filter by project
-- `--format, -f TEXT` - Output format: `table`, `json` (default: table)
-- `--all, -a` - Include inactive profiles
-
-#### **emdx export-profile show**
-Show details of an export profile.
-
-```bash
-emdx export-profile show blog-post
-emdx export-profile show 5  # by ID
-```
-
-#### **emdx export-profile edit**
-Edit an export profile in your editor.
-
-```bash
-emdx export-profile edit blog-post
-```
-
-Opens the profile configuration as JSON in your default editor.
-
-#### **emdx export-profile delete**
-Delete an export profile.
-
-```bash
-# Soft delete
-emdx export-profile delete old-profile
-
-# Skip confirmation
-emdx export-profile delete old-profile --force
-
-# Permanent delete
-emdx export-profile delete old-profile --hard
-```
-
-**Options:**
-- `--force, -f` - Skip confirmation
-- `--hard` - Permanently delete (not just deactivate)
-
-#### **emdx export-profile export-json**
-Export a profile as JSON for sharing.
-
-```bash
-# Export to stdout
-emdx export-profile export-json blog-post
-
-# Save to file
-emdx export-profile export-json blog-post > blog-post-profile.json
-```
-
-#### **emdx export-profile import-json**
-Import a profile from a JSON file.
-
-```bash
-# Import profile
-emdx export-profile import-json blog-post-profile.json
-
-# Overwrite existing profile
-emdx export-profile import-json blog-post-profile.json --overwrite
-```
-
-**Options:**
-- `--overwrite` - Overwrite existing profile
-
-#### **emdx export-profile history**
-Show export history.
-
-```bash
-# Show recent exports
-emdx export-profile history
-
-# Show more history
-emdx export-profile history --limit 50
-
-# Filter by profile
-emdx export-profile history --profile blog-post
-```
-
-**Options:**
-- `--limit, -n INTEGER` - Number of records to show (default: 20)
-- `--profile, -p TEXT` - Filter by profile name
-
----
-
-### **emdx export**
-Export documents using profiles.
-
-#### **emdx export export**
-Export a document using an export profile.
-
-```bash
-# Export to clipboard using profile
-emdx export export 42 --profile blog-post
-
-# Preview without exporting
-emdx export export "My Notes" --profile github-issue --preview
-
-# Override destination
-emdx export export 42 --profile blog-post --dest clipboard
-
-# Export to specific file
-emdx export export 42 --profile share-external --dest file --path ~/export.md
-
-# Dry run (show what would happen)
-emdx export export 42 --profile blog-post --dry-run
-```
-
-**Options:**
-- `--profile, -p TEXT` - Export profile name (required)
-- `--dest, -d TEXT` - Override destination: `clipboard`, `file`, `gdoc`, `gist`
-- `--path TEXT` - Override destination path (for file destination)
-- `--preview` - Show transformed content without exporting
-- `--dry-run` - Show what would happen without exporting
-
-#### **emdx export quick**
-Quick export using profile number.
-
-```bash
-# Use most-used profile (number 1)
-emdx export quick 42
-
-# Use second most-used profile
-emdx export quick 42 -n 2
-
-# Use third most-used profile
-emdx export quick "My Document" -n 3
-```
-
-**Options:**
-- `--n, -n INTEGER` - Profile number from list 1-9 (default: 1)
-
-#### **emdx export list-profiles**
-List profiles with their quick-export numbers.
-
-```bash
-emdx export list-profiles
-```
-
-Shows profiles sorted by usage, with numbers 1-9 for quick export.
 
 ## 📊 **Information Commands**
 
@@ -919,129 +626,6 @@ emdx gist 42 --copy
 echo "content" | emdx save --title "Share Me" --secret --copy
 ```
 
-### **emdx gdoc**
-Export documents to Google Docs.
-
-#### **emdx gdoc-auth**
-Authenticate with Google via interactive OAuth flow.
-
-```bash
-# Start Google OAuth authentication
-emdx gdoc-auth
-```
-
-Opens a browser window for Google OAuth authentication. Requires OAuth credentials to be configured at the expected credentials file path.
-
-#### **emdx gdoc-list**
-List all Google Docs created from EMDX documents.
-
-```bash
-# List all exported Google Docs
-emdx gdoc-list
-
-# Filter by project
-emdx gdoc-list --project myapp
-```
-
-**Options:**
-- `--project TEXT` - Filter by project
-
-## ⌨️ **Keybinding Management** (`emdx keybindings`)
-
-Manage and inspect TUI keybindings, detect conflicts, and configure custom keybindings.
-
-### **emdx keybindings**
-Show a summary of all keybindings and any conflicts.
-
-```bash
-# Show summary (default)
-emdx keybindings
-
-# List all keybindings
-emdx keybindings --list
-
-# Show keybinding conflicts
-emdx keybindings --conflicts
-
-# Filter by context (e.g., document:normal)
-emdx keybindings --list --context document:normal
-
-# Output as JSON
-emdx keybindings --json
-```
-
-**Options:**
-- `--list, -l` - List all keybindings
-- `--conflicts, -c` - Show keybinding conflicts
-- `--context TEXT` - Filter by context (e.g., `document:normal`)
-- `--json, -j` - Output as JSON
-
-### **emdx keybindings init**
-Create an example keybindings configuration file.
-
-```bash
-emdx keybindings init
-```
-
-Creates a config file at the default keybindings config path if one does not already exist.
-
-### **emdx keybindings contexts**
-List all available keybinding contexts, grouped by prefix.
-
-```bash
-emdx keybindings contexts
-```
-
----
-
-## 🤖 **Claude Document Execution** (`emdx claude`)
-
-Execute EMDX documents with Claude Code. The `emdx claude` subcommands provide direct document execution and environment management.
-
-### **emdx claude check-env**
-Check if the execution environment is properly configured.
-
-```bash
-# Basic environment check
-emdx claude check-env
-
-# Verbose mode with PATH details
-emdx claude check-env --verbose
-```
-
-**Options:**
-- `--verbose, -v` - Show detailed environment info
-
-Checks for: Python version, Claude Code installation, Git, EMDX CLI, and PATH configuration.
-
-### **emdx claude execute**
-Execute a document with Claude Code.
-
-```bash
-# Execute in background with smart context-aware mode (default)
-emdx claude execute 42
-
-# Execute in background
-emdx claude execute 42 --background
-
-# Execute with specific tools
-emdx claude execute 42 --tools "Read,Write,Bash"
-
-# Disable smart context-aware execution
-emdx claude execute 42 --no-smart
-
-# Use an existing execution ID from the database
-emdx claude execute 42 --exec-id 100
-```
-
-**Options:**
-- `--background, -b` - Run in background
-- `--tools, -t TEXT` - Comma-separated list of allowed tools
-- `--smart/--no-smart` - Use smart context-aware execution (default: smart)
-- `--exec-id INTEGER` - Use existing execution ID from database
-
----
-
 ## ⚙️ **Configuration**
 
 ### **Environment Variables**
@@ -1075,13 +659,13 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
-- `tag`, `untag`, `tags`, `legend`, `retag` - Tag management
+- `tag` (add, remove, list, rename, merge, batch) - Tag management
 - `list`, `recent`, `stats` - Information commands
 - `gui`, `prime`, `status` - Interface and overview
 - `ai` (ask, search, context) - AI-powered features
-- `export`, `export-profile` - Export functionality
+- `gist` - GitHub Gist integration
 - `exec` - Execution monitoring (read-only)
-- `group`, `task`, `lifecycle` - Organization commands
+- `group`, `task`, `trash` - Organization commands
 
 **Error message:**
 When a disabled command is invoked, you'll see:
@@ -1134,7 +718,7 @@ echo "Phase 1: Setup infrastructure" | emdx save --title "Project Gameplan" --ta
 
 # Mark phases complete
 emdx tag 123 done success
-emdx untag 123 active
+emdx tag remove 123 active
 
 # Review project progress
 emdx find --tags "gameplan" --project "myproject"
@@ -1203,14 +787,11 @@ emdx delegate --doc 42 --chain "analyze" "implement"
 
 ### PR Creation
 
-Instruct the agent to create a PR after making code changes:
+Instruct the agent to create a PR after making code changes. `--pr` automatically creates an isolated git worktree.
 
 ```bash
-# Single task with PR
+# Single task with PR (worktree created automatically)
 emdx delegate --pr "fix the auth bug"
-
-# With worktree isolation (recommended for PRs)
-emdx delegate --worktree --pr "fix the null pointer in auth"
 
 # From a document with PR
 emdx delegate --doc 123 --pr "implement this plan"
@@ -1257,7 +838,7 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--model` | `-m` | Override default model |
 | `--quiet` | `-q` | Suppress metadata on stderr |
 | `--doc` | `-d` | Document ID to use as input context |
-| `--pr` | | Instruct agent to create a PR after code changes |
+| `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
 | `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | | Base branch for worktree (default: main) |
 | `--chain` | | Run tasks sequentially, piping output forward |
@@ -1388,73 +969,6 @@ emdx ai clear --yes
 - Use `emdx ai context | claude` to avoid API costs (uses Claude Max)
 - Semantic search works best with natural language queries
 - Lower threshold values (0.2-0.3) return more results but less relevant
-
----
-
-## 🔍 Document Similarity (`emdx similar`)
-
-Find related documents using TF-IDF content analysis and tag similarity.
-
-### Find Similar by Document ID
-
-```bash
-# Find top 5 similar documents
-emdx similar 42
-
-# Find more results
-emdx similar 42 --limit 10
-
-# Only content similarity (ignore tags)
-emdx similar 42 --content-only
-
-# Only tag similarity (ignore content)
-emdx similar 42 --tags-only
-
-# Filter to same project
-emdx similar 42 --same-project
-
-# Lower similarity threshold (find more matches)
-emdx similar 42 --threshold 0.05
-
-# Output as JSON
-emdx similar 42 --json
-```
-
-### Find Similar by Text
-
-```bash
-# Search by natural language
-emdx similar-text "kubernetes deployment strategies"
-emdx similar-text "how to configure docker compose" --limit 10
-
-# Output as JSON
-emdx similar-text "authentication patterns" --json
-```
-
-### Index Management
-
-```bash
-# Rebuild TF-IDF index (auto-built on first use)
-emdx build-index
-
-# Force rebuild even if cache exists
-emdx build-index --force
-
-# Show index statistics
-emdx index-stats
-emdx index-stats --json
-```
-
-### Options Reference
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--limit` | `-l` | Number of results (default: 5) |
-| `--threshold` | `-t` | Minimum similarity score 0-1 (default: 0.1) |
-| `--content-only` | `-c` | Only use content similarity |
-| `--tags-only` | `-T` | Only use tag similarity |
-| `--same-project` | `-p` | Only find similar docs in same project |
-| `--json` | `-j` | Output as JSON |
 
 ---
 

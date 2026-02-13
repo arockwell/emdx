@@ -4,12 +4,12 @@ This module provides a LazyTyperGroup class that extends Typer's group
 to support lazy loading of subcommands. This significantly improves
 startup performance for CLI applications with many heavy dependencies.
 
-Heavy commands (workflow, cascade, each, ai, gui) are only imported
+Heavy commands (cascade, delegate, ai, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
 
 import importlib
-from typing import Any, Callable
+from typing import Any
 
 import click
 from typer.core import TyperGroup
@@ -37,15 +37,6 @@ def register_lazy_commands(
     """
     _LAZY_REGISTRY["subcommands"] = subcommands
     _LAZY_REGISTRY["help"] = help_strings
-
-
-def get_lazy_registry() -> tuple[dict[str, str], dict[str, str]]:
-    """Get the current lazy command registry.
-
-    Returns:
-        Tuple of (subcommands dict, help dict)
-    """
-    return _LAZY_REGISTRY["subcommands"], _LAZY_REGISTRY["help"]
 
 
 class LazyCommand(click.MultiCommand):

@@ -419,6 +419,20 @@ class UnifiedExecutor:
                     result.output_tokens = usage.get('output', 0)
                     result.cost_usd = usage.get('cost_usd', 0.0)
 
+            # Persist metrics to execution record
+            if result.tokens_used > 0 or result.cost_usd > 0:
+                try:
+                    from ..models.executions import update_execution
+                    update_execution(
+                        exec_id,
+                        cost_usd=result.cost_usd,
+                        tokens_used=result.tokens_used,
+                        input_tokens=result.input_tokens,
+                        output_tokens=result.output_tokens,
+                    )
+                except Exception:
+                    logger.debug("Could not persist execution metrics", exc_info=True)
+
             return result
 
         except subprocess.TimeoutExpired:
