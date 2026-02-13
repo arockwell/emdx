@@ -1927,6 +1927,34 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_036_add_execution_metrics(conn: sqlite3.Connection):
+    """Add metrics and task linkage to executions table.
+
+    Fixes delegate→activity browser data flow:
+    - task_id: links execution back to creating task
+    - cost_usd, tokens_used, input_tokens, output_tokens: persist metrics
+    """
+    cursor = conn.cursor()
+
+    existing = {row[1] for row in cursor.execute("PRAGMA table_info(executions)").fetchall()}
+
+    new_columns = [
+        ("task_id", "INTEGER REFERENCES tasks(id)"),
+        ("cost_usd", "REAL DEFAULT 0.0"),
+        ("tokens_used", "INTEGER DEFAULT 0"),
+        ("input_tokens", "INTEGER DEFAULT 0"),
+        ("output_tokens", "INTEGER DEFAULT 0"),
+    ]
+
+    for col_name, col_def in new_columns:
+        if col_name not in existing:
+            cursor.execute(f"ALTER TABLE executions ADD COLUMN {col_name} {col_def}")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_task_id ON executions(task_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1965,6 +1993,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (33, "Add mail config and read receipts", migration_033_add_mail_config),
     (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
     (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
+    (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
 ]
 
 

@@ -64,6 +64,18 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
     except Exception:
         pass
 
+
+def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
+    """Update execution record, never fail delegate."""
+    if exec_id is None:
+        return
+    try:
+        from ..models.executions import update_execution
+        update_execution(exec_id, **kwargs)
+    except Exception:
+        pass
+
+
 PR_INSTRUCTION = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
@@ -245,6 +257,8 @@ def _run_single(
     doc_id = result.output_doc_id
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
+        # Write doc_id back to execution so activity browser can show the output
+        _safe_update_execution(result.execution_id, doc_id=doc_id)
         _print_doc_content(doc_id)
         if not quiet:
             sys.stderr.write(

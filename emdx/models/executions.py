@@ -200,6 +200,20 @@ def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] 
         conn.commit()
 
 
+def update_execution(exec_id: int, **kwargs) -> None:
+    """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.)."""
+    if not kwargs:
+        return
+    sets = [f"{k} = ?" for k in kwargs]
+    params = list(kwargs.values()) + [exec_id]
+    with db_connection.get_connection() as conn:
+        conn.execute(
+            f"UPDATE executions SET {', '.join(sets)} WHERE id = ?",
+            params,
+        )
+        conn.commit()
+
+
 def update_execution_pid(exec_id: int, pid: int) -> None:
     """Update execution PID."""
     with db_connection.get_connection() as conn:
