@@ -185,6 +185,24 @@ def display_save_result(
         console.print(f"   [dim]Tags:[/dim] {format_tags(applied_tags)}")
 
 
+def display_document_links(doc_id: int) -> None:
+    """Display related documents for a document."""
+    try:
+        from emdx.services.linking_service import LinkingService
+
+        linker = LinkingService()
+        doc_links = linker.get_links(doc_id, limit=5)
+        if doc_links:
+            console.print("\n[bold]Related docs:[/bold]")
+            for link in doc_links:
+                score_pct = f"{link.similarity_score:.0%}"
+                console.print(f"  #{link.doc_id} \"{link.title}\" ({score_pct})")
+    except ImportError:
+        pass  # Embedding dependencies not installed
+    except Exception:
+        pass  # Links table may not exist or other error
+
+
 @app.command()
 def save(
     input: Optional[str] = typer.Argument(
@@ -206,6 +224,10 @@ def save(
     ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
     suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
+    auto_link: bool = typer.Option(
+        False, "--auto-link", "-l",
+        help="Find and link to similar documents (requires 'emdx ai index' first)"
+    ),
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
@@ -268,6 +290,25 @@ def save(
 
     # Step 8: Display result
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
+
+    # Step 8.5: Auto-link to similar documents if requested
+    if auto_link:
+        try:
+            from emdx.services.linking_service import LinkingService
+
+            linker = LinkingService()
+            links = linker.link_document(doc_id, force=True)
+            if links:
+                console.print("[cyan]🔗 Linked to:[/cyan]")
+                for link in links[:5]:  # Show top 5
+                    score_pct = f"{link.similarity_score:.0%}"
+                    console.print(f"   #{link.doc_id} \"{link.title}\" ({score_pct} similar)")
+            else:
+                console.print("[dim]🔗 No similar documents found (run 'emdx ai index' to build embedding index)[/dim]")
+        except ImportError:
+            console.print("[yellow]🔗 Auto-linking requires embedding dependencies. Install with: pip install 'emdx[ai]'[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]🔗 Auto-linking skipped: {e}[/yellow]")
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
@@ -577,6 +618,7 @@ def view(
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
+    links: bool = typer.Option(True, "--links/--no-links", help="Show related documents"),
 ) -> None:
     """View a document from the knowledge base"""
     try:
@@ -610,6 +652,10 @@ def view(
             else:
                 markdown = Markdown(doc["content"])
                 console.print(markdown)
+
+            # Show related documents if enabled
+            if links:
+                display_document_links(doc["id"])
         else:
             # Use Rich's pager with color support
             # Set LESS environment variable if not already set
@@ -637,6 +683,10 @@ def view(
                 else:
                     markdown = Markdown(doc["content"])
                     console.print(markdown)
+
+                # Show related documents if enabled
+                if links:
+                    display_document_links(doc["id"])
 
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")

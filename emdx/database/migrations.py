@@ -1927,6 +1927,54 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_036_add_document_links(conn: sqlite3.Connection):
+    """Add document_links table for auto-linking related documents.
+
+    This table stores bidirectional similarity links between documents.
+    When a new document is saved, the system computes its similarity
+    to existing documents and stores links to the most similar ones.
+
+    Links are bidirectional: if A links to B with score X, B also links
+    to A with the same score.
+    """
+    cursor = conn.cursor()
+
+    # Create the document_links table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_doc_id INTEGER NOT NULL,
+            target_doc_id INTEGER NOT NULL,
+            similarity_score REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (source_doc_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_doc_id) REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(source_doc_id, target_doc_id)
+        )
+    """)
+
+    # Create indexes for efficient queries
+    # Index for finding links FROM a document
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_document_links_source
+        ON document_links(source_doc_id)
+    """)
+
+    # Index for finding links TO a document
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_document_links_target
+        ON document_links(target_doc_id)
+    """)
+
+    # Index for finding links by score (for cleanup/analysis)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_document_links_score
+        ON document_links(similarity_score DESC)
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1965,6 +2013,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (33, "Add mail config and read receipts", migration_033_add_mail_config),
     (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
     (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
+    (36, "Add document links for auto-linking", migration_036_add_document_links),
 ]
 
 

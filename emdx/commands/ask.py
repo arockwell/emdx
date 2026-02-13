@@ -328,3 +328,172 @@ def clear_index(
     count = service.clear_index()
 
     console.print(f"[green]Cleared {count} embeddings[/green]")
+
+
+@app.command("links")
+def show_links(
+    doc_id: int = typer.Argument(..., help="Document ID to show links for"),
+    depth: int = typer.Option(1, "--depth", "-d", help="How many levels deep to traverse (1-3)"),
+):
+    """
+    Show documents linked to a given document.
+
+    Displays the link graph for a document, showing related documents
+    and optionally their related documents (nested).
+
+    Examples:
+        emdx ai links 42              # Show links for doc #42
+        emdx ai links 42 --depth 2    # Show 2 levels deep
+    """
+    from ..services.linking_service import LinkingService
+    from ..database import db
+
+    linker = LinkingService()
+
+    # Clamp depth to reasonable range
+    depth = max(1, min(depth, 3))
+
+    # Get the source document title
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM documents WHERE id = ?", (doc_id,))
+        row = cursor.fetchone()
+        if not row:
+            console.print(f"[red]Document {doc_id} not found[/red]")
+            raise typer.Exit(1)
+        source_title = row[0]
+
+    # Get links
+    links = linker.get_links(doc_id)
+
+    if not links:
+        console.print(f"[yellow]No links found for #{doc_id} '{source_title}'[/yellow]")
+        console.print("[dim]Run 'emdx ai link <id>' or 'emdx ai link --all' to create links[/dim]")
+        return
+
+    console.print(f"[bold]#{doc_id}[/bold] \"{source_title}\"")
+
+    def print_tree(links, prefix="", is_last_list=None):
+        if is_last_list is None:
+            is_last_list = []
+
+        for i, link in enumerate(links):
+            is_last = i == len(links) - 1
+
+            # Build the tree branch characters
+            if prefix:
+                branch = "└── " if is_last else "├── "
+            else:
+                branch = "├── " if not is_last else "└── "
+
+            score = f"{link.similarity_score:.0%}"
+            console.print(f"{prefix}{branch}#{link.doc_id} \"{link.title}\" ({score})")
+
+            # Get child links if depth > 1
+            if depth > 1 and len(is_last_list) < depth - 1:
+                child_prefix = prefix + ("    " if is_last else "│   ")
+                child_links = linker.get_links(link.doc_id, limit=3)
+                # Filter out the parent to avoid showing reverse link
+                child_links = [l for l in child_links if l.doc_id != doc_id]
+                if child_links:
+                    print_tree(child_links[:3], child_prefix, is_last_list + [is_last])
+
+    print_tree(links)
+
+
+@app.command("link")
+def link_document(
+    doc_id: Optional[int] = typer.Argument(None, help="Document ID to link (or use --all)"),
+    all_docs: bool = typer.Option(False, "--all", "-a", help="Link all documents"),
+    force: bool = typer.Option(False, "--force", "-f", help="Recompute links even if they exist"),
+    batch_size: int = typer.Option(50, "--batch-size", "-b", help="Documents per batch (for --all)"),
+):
+    """
+    Create semantic links for a document or all documents.
+
+    This analyzes document content using embeddings and creates bidirectional
+    links to similar documents. Requires embeddings to be built first.
+
+    Examples:
+        emdx ai link 42           # Link document #42 to similar docs
+        emdx ai link --all        # Link all documents (backfill)
+        emdx ai link --all -f     # Recompute all links
+    """
+    from ..services.linking_service import LinkingService
+
+    linker = LinkingService()
+
+    if all_docs:
+        # Backfill all documents
+        console.print("[bold]Linking all documents...[/bold]")
+
+        # Show current stats
+        stats = linker.get_stats()
+        console.print(f"[dim]Current links: {stats.total_links} across {stats.documents_with_links} documents[/dim]")
+
+        def progress_callback(current, total):
+            console.print(f"[dim]Progress: {current}/{total} documents[/dim]", end="\r")
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Linking documents...", total=None)
+            count = linker.link_all(force=force, batch_size=batch_size)
+            progress.update(task, completed=True)
+
+        console.print(f"\n[green]Linked {count} documents[/green]")
+
+        # Show updated stats
+        stats = linker.get_stats()
+        console.print(f"[dim]Total links: {stats.total_links} (avg {stats.avg_links_per_doc:.1f}/doc, avg similarity {stats.avg_similarity:.0%})[/dim]")
+
+    elif doc_id is not None:
+        # Link a single document
+        from ..database import db
+
+        # Get document title
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT title FROM documents WHERE id = ?", (doc_id,))
+            row = cursor.fetchone()
+            if not row:
+                console.print(f"[red]Document {doc_id} not found[/red]")
+                raise typer.Exit(1)
+            title = row[0]
+
+        console.print(f"[bold]Linking #{doc_id} '{title}'...[/bold]")
+
+        with console.status("[bold blue]Finding similar documents..."):
+            links = linker.link_document(doc_id, force=force)
+
+        if links:
+            console.print(f"[green]Created {len(links)} links:[/green]")
+            for link in links:
+                score = f"{link.similarity_score:.0%}"
+                console.print(f"  #{link.doc_id} \"{link.title}\" ({score})")
+        else:
+            console.print("[yellow]No similar documents found[/yellow]")
+            console.print("[dim]Make sure embeddings are built: emdx ai index[/dim]")
+
+    else:
+        console.print("[red]Error: Provide a document ID or use --all[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("link-stats")
+def link_stats():
+    """Show document linking statistics."""
+    from ..services.linking_service import LinkingService
+
+    linker = LinkingService()
+    stats = linker.get_stats()
+
+    console.print(Panel(f"""[bold]Document Link Statistics[/bold]
+
+Total links:        {stats.total_links}
+Documents linked:   {stats.documents_with_links}
+Avg links/doc:      {stats.avg_links_per_doc:.1f}
+Avg similarity:     {stats.avg_similarity:.0%}
+""", title="Auto-Linking"))
