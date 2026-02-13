@@ -281,52 +281,77 @@ class ActivityTree(Tree[ActivityItem]):
     def _refresh_children(
         self, parent: TreeNode[ActivityItem], fresh_items: List[ActivityItem]
     ) -> None:
-        """Diff and update children of a parent node."""
+        """Diff and update children of a parent node.
+
+        Updates labels in-place when possible, adds/removes as needed,
+        and does a full repopulate when the order changes (e.g., new item
+        at the top).
+        """
         # Build map of existing children by item key
         existing: Dict[ItemKey, TreeNode[ActivityItem]] = {}
         for child in parent.children:
             if child.data is not None:
                 existing[_item_key(child.data)] = child
 
-        # Build set of fresh keys for removal detection
         fresh_keys = {_item_key(item) for item in fresh_items}
-
-        # Remove nodes no longer present
-        to_remove = [
-            node for key, node in existing.items() if key not in fresh_keys
+        existing_keys = [
+            _item_key(child.data)
+            for child in parent.children
+            if child.data is not None
         ]
-        for node in to_remove:
-            node.remove()
 
-        # Rebuild existing map after removals
-        existing = {}
-        for child in parent.children:
-            if child.data is not None:
-                existing[_item_key(child.data)] = child
+        # Compute the expected order of keys that already exist
+        fresh_existing_order = [
+            _item_key(item) for item in fresh_items if _item_key(item) in existing
+        ]
 
-        # Update existing nodes and add new ones
-        for i, item in enumerate(fresh_items):
-            key = _item_key(item)
+        # Check if any new items or removals or order changes
+        has_new = any(k not in existing for k in fresh_keys)
+        has_removed = any(k not in fresh_keys for k in existing_keys)
+        # Order changed among the surviving items?
+        surviving_current = [k for k in existing_keys if k in fresh_keys]
+        order_changed = surviving_current != fresh_existing_order
 
-            if key in existing:
-                node = existing[key]
-                # Update data and label in-place
-                node.data = item
-                new_label = self._make_label(item)
-                node.set_label(new_label)
+        if has_new or has_removed or order_changed:
+            # Structural change — save expanded/cursor state, repopulate
+            expanded_keys: set[ItemKey] = set()
+            expanded_children: Dict[ItemKey, List[ActivityItem]] = {}
+            for child in parent.children:
+                if child.data is not None and child.is_expanded:
+                    key = _item_key(child.data)
+                    expanded_keys.add(key)
+                    if child.data.children:
+                        expanded_children[key] = child.data.children
 
-                # Update expandability
-                node.allow_expand = item.can_expand()
+            # Remove all children and re-add in correct order
+            for child in list(parent.children):
+                child.remove()
 
-                # If this node is expanded, refresh its children too
-                if node.is_expanded and node.data and node.data.children:
-                    self._refresh_children(node, node.data.children)
-            else:
-                # New item — add it
+            for item in fresh_items:
+                key = _item_key(item)
                 if item.can_expand():
-                    parent.add(self._make_label(item), data=item)
+                    node = parent.add(self._make_label(item), data=item)
+                    node.allow_expand = True
+                    if key in expanded_keys:
+                        node.expand()
+                        if key in expanded_children:
+                            self._refresh_children(node, item.children or [])
                 else:
                     parent.add_leaf(self._make_label(item), data=item)
+        else:
+            # No structural changes — update labels in-place (no scroll disruption)
+            for child in parent.children:
+                if child.data is not None:
+                    key = _item_key(child.data)
+                    # Find matching fresh item
+                    for item in fresh_items:
+                        if _item_key(item) == key:
+                            child.data = item
+                            child.set_label(self._make_label(item))
+                            child.allow_expand = item.can_expand()
+                            if child.is_expanded and item.children:
+                                self._refresh_children(child, item.children)
+                            break
 
     def find_node_by_item_key(
         self, item_type: str, item_id: int
