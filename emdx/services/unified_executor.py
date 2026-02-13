@@ -258,8 +258,12 @@ class UnifiedExecutor:
 
             if config.verbose:
                 # Stream output in real-time using Popen
+                import select
+                import sys
+
                 stdout_lines = []
                 stderr_lines = []
+                deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
                     process = subprocess.Popen(
@@ -271,26 +275,36 @@ class UnifiedExecutor:
                         env=get_subprocess_env(),
                     )
 
-                    import sys
-
-                    # Stream stdout in real-time
+                    # Stream stdout in real-time with timeout
                     while True:
-                        # Check if process has finished
+                        if time.time() > deadline:
+                            process.kill()
+                            process.wait()
+                            raise subprocess.TimeoutExpired(
+                                cmd.args, config.timeout_seconds
+                            )
+
                         retcode = process.poll()
 
-                        # Read available stdout
+                        # Use select for non-blocking read with 1s timeout
                         if process.stdout:
-                            line = process.stdout.readline()
-                            if line:
-                                stdout_lines.append(line)
-                                # Format the line for readable output
-                                formatted = format_stream_line(line, time.time())
-                                if formatted:
-                                    f.write(formatted + "\n")
-                                    f.flush()
-                                    # Print formatted output to terminal
-                                    sys.stdout.write(formatted + "\n")
-                                    sys.stdout.flush()
+                            try:
+                                ready, _, _ = select.select(
+                                    [process.stdout], [], [], 1.0
+                                )
+                            except (ValueError, TypeError):
+                                # Fallback for mocked pipes without real fd
+                                ready = [process.stdout]
+                            if ready:
+                                line = process.stdout.readline()
+                                if line:
+                                    stdout_lines.append(line)
+                                    formatted = format_stream_line(line, time.time())
+                                    if formatted:
+                                        f.write(formatted + "\n")
+                                        f.flush()
+                                        sys.stdout.write(formatted + "\n")
+                                        sys.stdout.flush()
 
                         if retcode is not None:
                             # Process finished, read any remaining output
@@ -323,8 +337,11 @@ class UnifiedExecutor:
             else:
                 # Stream output to log file in real-time (without terminal output)
                 # This enables Activity browser to show live logs
+                import select
+
                 stdout_lines = []
                 stderr_lines = []
+                deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
                     process = subprocess.Popen(
@@ -336,18 +353,33 @@ class UnifiedExecutor:
                         env=get_subprocess_env(),
                     )
 
-                    # Stream stdout to log file in real-time
+                    # Stream stdout to log file in real-time with timeout
                     while True:
+                        if time.time() > deadline:
+                            process.kill()
+                            process.wait()
+                            raise subprocess.TimeoutExpired(
+                                cmd.args, config.timeout_seconds
+                            )
+
                         retcode = process.poll()
 
                         if process.stdout:
-                            line = process.stdout.readline()
-                            if line:
-                                stdout_lines.append(line)
-                                formatted = format_stream_line(line, time.time())
-                                if formatted:
-                                    f.write(formatted + "\n")
-                                    f.flush()  # Flush immediately for live viewing
+                            try:
+                                ready, _, _ = select.select(
+                                    [process.stdout], [], [], 1.0
+                                )
+                            except (ValueError, TypeError):
+                                # Fallback for mocked pipes without real fd
+                                ready = [process.stdout]
+                            if ready:
+                                line = process.stdout.readline()
+                                if line:
+                                    stdout_lines.append(line)
+                                    formatted = format_stream_line(line, time.time())
+                                    if formatted:
+                                        f.write(formatted + "\n")
+                                        f.flush()  # Flush immediately for live viewing
 
                         if retcode is not None:
                             # Process finished, read any remaining output
