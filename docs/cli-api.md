@@ -145,17 +145,6 @@ emdx tag list
 emdx tag list --sort name
 ```
 
-### **emdx tag legend**
-View emoji legend with text aliases.
-
-```bash
-# Show complete emoji legend with text aliases
-emdx tag legend
-
-# This helps you remember that:
-# gameplan = 🎯, active = 🚀, bug = 🐛, etc.
-```
-
 ### **emdx tag rename**
 Rename tags globally across all documents.
 
@@ -697,7 +686,7 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
-- `tag` (add, remove, list, rename, merge, legend, batch) - Tag management
+- `tag` (add, remove, list, rename, merge, batch) - Tag management
 - `list`, `recent`, `stats` - Information commands
 - `gui`, `prime`, `status` - Interface and overview
 - `ai` (ask, search, context) - AI-powered features
