@@ -288,11 +288,14 @@ class ActivityDataLoader:
                         "log_file": log_file,
                         "exit_code": exit_code,
                         "working_dir": working_dir,
+                        "cost_usd": row.get("cost_usd", 0.0),
+                        "tokens_used": row.get("tokens_used", 0),
                     },
                     status=status or "unknown",
                     doc_id=doc_id,
                     log_file=log_file or "",
                     cli_tool=cli_tool,
+                    cost=row.get("cost_usd", 0.0),
                 )
                 items.append(item)
 
