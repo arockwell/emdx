@@ -297,6 +297,44 @@ def manual(
 
 
 @app.command()
+def retry(
+    task_id: int = typer.Argument(..., help="Task ID to retry"),
+):
+    """Re-run a failed task. Prints the delegate command to execute."""
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    prompt = task.get("prompt")
+    if not prompt:
+        console.print(f"[red]Task #{task_id} has no prompt — can't retry[/red]")
+        raise typer.Exit(1)
+
+    # Build delegate command from task metadata
+    parts = ["emdx delegate"]
+
+    # Escape the prompt for shell
+    escaped_prompt = prompt.replace('"', '\\"')
+    parts.append(f'"{escaped_prompt}"')
+
+    # Reconstruct tags
+    tag_str = task.get("tags")
+    if tag_str:
+        parts.append(f'--tags "{tag_str}"')
+
+    # Reconstruct source doc
+    source_doc = task.get("source_doc_id")
+    if source_doc:
+        parts.append(f"--doc {source_doc}")
+
+    cmd = " ".join(parts)
+    console.print(f"\n[bold]Retry task #{task_id}:[/bold]")
+    console.print(f"  [cyan]{cmd}[/cyan]\n")
+    console.print("[dim]Copy and run the command above to retry.[/dim]")
+
+
+@app.command()
 def executions(
     task_id: int = typer.Argument(..., help="Task ID"),
     limit: int = typer.Option(10, "-n", "--limit"),

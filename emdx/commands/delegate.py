@@ -43,6 +43,27 @@ from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
 
+
+def _safe_create_task(**kwargs) -> Optional[int]:
+    """Create task, never fail delegate."""
+    try:
+        from ..models.tasks import create_task
+        return create_task(**kwargs)
+    except Exception as e:
+        sys.stderr.write(f"delegate: task tracking failed: {e}\n")
+        return None
+
+
+def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
+    """Update task, never fail delegate."""
+    if task_id is None:
+        return
+    try:
+        from ..models.tasks import update_task
+        update_task(task_id, **kwargs)
+    except Exception:
+        pass
+
 PR_INSTRUCTION = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
@@ -132,9 +153,24 @@ def _run_single(
     quiet: bool,
     pr: bool = False,
     working_dir: Optional[str] = None,
-) -> Optional[int]:
-    """Run a single task via UnifiedExecutor. Returns doc_id or None."""
+    source_doc_id: Optional[int] = None,
+    parent_task_id: Optional[int] = None,
+    seq: Optional[int] = None,
+) -> tuple[Optional[int], Optional[int]]:
+    """Run a single task via UnifiedExecutor. Returns (doc_id, task_id)."""
     doc_title = title or f"Delegate: {prompt[:60]}"
+
+    # Create task before execution
+    task_id = _safe_create_task(
+        title=doc_title,
+        prompt=prompt[:500],
+        task_type="single",
+        status="active",
+        source_doc_id=source_doc_id,
+        parent_task_id=parent_task_id,
+        seq=seq,
+        tags=",".join(tags) if tags else None,
+    )
 
     # Build save instruction so the sub-agent persists output
     cmd_parts = [f'emdx save --title "{doc_title}"']
@@ -162,26 +198,32 @@ def _run_single(
 
     result = UnifiedExecutor().execute(config)
 
+    # Link execution to task
+    _safe_update_task(task_id, execution_id=result.execution_id)
+
     if not result.success:
         sys.stderr.write(f"delegate: task failed: {result.error_message}\n")
-        return None
+        _safe_update_task(task_id, status="failed", error=result.error_message)
+        return None, task_id
 
     doc_id = result.output_doc_id
     if doc_id:
+        _safe_update_task(task_id, status="done", output_doc_id=doc_id)
         _print_doc_content(doc_id)
         if not quiet:
             sys.stderr.write(
-                f"doc_id:{doc_id} tokens:{result.tokens_used} "
+                f"task_id:{task_id} doc_id:{doc_id} tokens:{result.tokens_used} "
                 f"cost:${result.cost_usd:.4f} duration:{result.execution_time_ms / 1000:.1f}s\n"
             )
     else:
+        _safe_update_task(task_id, status="done")
         # No doc saved — print whatever output we captured
         if result.output_content:
             sys.stdout.write(result.output_content)
             sys.stdout.write("\n")
         sys.stderr.write("delegate: agent completed but no document was saved\n")
 
-    return doc_id
+    return doc_id, task_id
 
 
 def _run_parallel(
@@ -194,14 +236,26 @@ def _run_parallel(
     quiet: bool,
     pr: bool = False,
     base_branch: str = "main",
+    source_doc_id: Optional[int] = None,
 ) -> List[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
 
-    # Results indexed by task position to preserve order
-    results: dict[int, Optional[int]] = {}
+    # Create parent group task
+    flat_tags = ",".join(tags) if tags else None
+    parent_task_id = _safe_create_task(
+        title=title or f"Parallel: {len(tasks)} tasks",
+        prompt=" | ".join(t[:60] for t in tasks),
+        task_type="group",
+        status="active",
+        source_doc_id=source_doc_id,
+        tags=flat_tags,
+    )
 
-    def run_task(idx: int, task: str) -> tuple[int, Optional[int]]:
+    # Results indexed by task position to preserve order
+    results: dict[int, tuple[Optional[int], Optional[int]]] = {}
+
+    def run_task(idx: int, task: str) -> tuple[int, tuple[Optional[int], Optional[int]]]:
         task_title = title or f"Delegate: {task[:60]}"
         if len(tasks) > 1:
             task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
@@ -212,6 +266,8 @@ def _run_parallel(
             model=model,
             quiet=True,  # suppress per-task metadata in parallel mode
             pr=pr,
+            parent_task_id=parent_task_id,
+            seq=idx + 1,
         )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -220,16 +276,18 @@ def _run_parallel(
             for i, task in enumerate(tasks)
         }
         for future in as_completed(futures):
-            idx, doc_id = future.result()
-            results[idx] = doc_id
+            idx, result_pair = future.result()
+            results[idx] = result_pair
 
     # Collect doc_ids in original task order
-    doc_ids = [results[i] for i in range(len(tasks)) if results.get(i) is not None]
+    doc_ids = [results[i][0] for i in range(len(tasks)) if results.get(i) and results[i][0] is not None]
 
     if not doc_ids:
         sys.stderr.write("delegate: parallel run completed but no output documents found\n")
+        _safe_update_task(parent_task_id, status="failed", error="no output documents")
         raise typer.Exit(1)
 
+    # Update parent task
     if synthesize and len(doc_ids) > 1:
         # Run a synthesis task that combines all outputs
         combined = []
@@ -244,23 +302,26 @@ def _run_parallel(
             + "\n\n---\n\n".join(combined)
         )
         synthesis_title = title or "Delegate synthesis"
-        synthesis_id = _run_single(
+        synthesis_doc_id, _ = _run_single(
             prompt=synthesis_prompt,
             tags=tags,
             title=f"{synthesis_title} [synthesis]",
             model=model,
             quiet=True,
+            parent_task_id=parent_task_id,
         )
-        if synthesis_id:
-            doc_ids.append(synthesis_id)
+        if synthesis_doc_id:
+            doc_ids.append(synthesis_doc_id)
             # Print just the synthesis
-            _print_doc_content(synthesis_id)
+            _print_doc_content(synthesis_doc_id)
+        _safe_update_task(parent_task_id, status="done", output_doc_id=synthesis_doc_id)
         if not quiet:
             sys.stderr.write(
-                f"doc_ids:{','.join(str(d) for d in doc_ids)} "
-                f"synthesis_id:{synthesis_id or 'none'}\n"
+                f"task_id:{parent_task_id} doc_ids:{','.join(str(d) for d in doc_ids)} "
+                f"synthesis_id:{synthesis_doc_id or 'none'}\n"
             )
     else:
+        _safe_update_task(parent_task_id, status="done")
         # Print each result separated
         for i, doc_id in enumerate(doc_ids):
             if len(doc_ids) > 1:
@@ -269,7 +330,7 @@ def _run_parallel(
 
         if not quiet:
             sys.stderr.write(
-                f"doc_ids:{','.join(str(d) for d in doc_ids)}\n"
+                f"task_id:{parent_task_id} doc_ids:{','.join(str(d) for d in doc_ids)}\n"
             )
 
     return doc_ids
@@ -283,11 +344,38 @@ def _run_chain(
     quiet: bool,
     pr: bool = False,
     working_dir: Optional[str] = None,
+    source_doc_id: Optional[int] = None,
 ) -> List[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
     Returns list of doc_ids from all steps.
     """
+    # Create parent task for the chain
+    parent_task_id = _safe_create_task(
+        title=title or f"Chain: {len(tasks)} steps",
+        prompt=" → ".join(t[:40] for t in tasks),
+        task_type="chain",
+        status="active",
+        source_doc_id=source_doc_id,
+        tags=",".join(tags) if tags else None,
+    )
+
+    # Pre-create all step tasks
+    step_task_ids = []
+    prev_step_id = None
+    for i, task in enumerate(tasks):
+        step_id = _safe_create_task(
+            title=f"Step {i+1}/{len(tasks)}: {task[:60]}",
+            prompt=task[:500],
+            task_type="single",
+            status="open",
+            parent_task_id=parent_task_id,
+            seq=i + 1,
+            depends_on=[prev_step_id] if prev_step_id else None,
+        )
+        step_task_ids.append(step_id)
+        prev_step_id = step_id
+
     doc_ids = []
     previous_output = None
 
@@ -295,6 +383,9 @@ def _run_chain(
         step_num = i + 1
         total_steps = len(tasks)
         is_last_step = step_num == total_steps
+
+        # Mark step as active
+        _safe_update_task(step_task_ids[i], status="active")
 
         # Build prompt with previous context
         if previous_output:
@@ -312,7 +403,7 @@ def _run_chain(
 
         step_title = title or f"Delegate chain step {step_num}/{total_steps}"
 
-        doc_id = _run_single(
+        doc_id, _ = _run_single(
             prompt=prompt,
             tags=tags,
             title=f"{step_title} [{step_num}/{total_steps}]",
@@ -320,12 +411,22 @@ def _run_chain(
             quiet=quiet,
             pr=step_pr,
             working_dir=working_dir,
+            parent_task_id=parent_task_id,
+            seq=step_num,
         )
 
         if doc_id is None:
             sys.stderr.write(f"delegate: chain aborted at step {step_num}/{total_steps}\n")
+            # Mark current step as failed
+            _safe_update_task(step_task_ids[i], status="failed", error="execution failed")
+            # Mark remaining steps as failed
+            for j in range(i + 1, len(step_task_ids)):
+                _safe_update_task(step_task_ids[j], status="failed", error="chain aborted")
+            _safe_update_task(parent_task_id, status="failed", error=f"aborted at step {step_num}")
             break
 
+        # Update step task with output
+        _safe_update_task(step_task_ids[i], status="done", output_doc_id=doc_id)
         doc_ids.append(doc_id)
 
         # Read output for next step
@@ -333,10 +434,14 @@ def _run_chain(
         if doc:
             previous_output = doc.get("content", "")
 
+    # If all steps completed, mark parent as done
+    if len(doc_ids) == len(tasks):
+        _safe_update_task(parent_task_id, status="done", output_doc_id=doc_ids[-1])
+
     if not quiet and doc_ids:
         ids_str = ",".join(str(d) for d in doc_ids)
         final_id = doc_ids[-1] if doc_ids else "none"
-        sys.stderr.write(f"doc_ids:{ids_str} chain_final:{final_id}\n")
+        sys.stderr.write(f"task_id:{parent_task_id} doc_ids:{ids_str} chain_final:{final_id}\n")
 
     return doc_ids
 
@@ -499,9 +604,10 @@ def delegate(
                 quiet=quiet,
                 pr=pr,
                 working_dir=worktree_path,
+                source_doc_id=doc,
             )
         elif len(task_list) == 1:
-            doc_id = _run_single(
+            doc_id, _ = _run_single(
                 prompt=task_list[0],
                 tags=flat_tags,
                 title=title,
@@ -509,6 +615,7 @@ def delegate(
                 quiet=quiet,
                 pr=pr,
                 working_dir=worktree_path,
+                source_doc_id=doc,
             )
             if doc_id is None:
                 raise typer.Exit(1)
@@ -523,6 +630,7 @@ def delegate(
                 quiet=quiet,
                 pr=pr,
                 base_branch=base_branch,
+                source_doc_id=doc,
             )
     finally:
         if worktree_path and not pr:

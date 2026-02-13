@@ -1801,6 +1801,37 @@ def migration_033_add_mail_config(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
+    """Add delegate activity tracking columns to tasks table."""
+    cursor = conn.cursor()
+
+    existing = {row[1] for row in cursor.execute("PRAGMA table_info(tasks)").fetchall()}
+
+    new_columns = [
+        ("prompt", "TEXT"),
+        ("type", "TEXT DEFAULT 'single'"),
+        ("execution_id", "INTEGER REFERENCES executions(id)"),
+        ("output_doc_id", "INTEGER REFERENCES documents(id)"),
+        ("source_doc_id", "INTEGER REFERENCES documents(id)"),
+        ("parent_task_id", "INTEGER REFERENCES tasks(id)"),
+        ("seq", "INTEGER"),
+        ("retry_of", "INTEGER REFERENCES tasks(id)"),
+        ("error", "TEXT"),
+        ("tags", "TEXT"),
+    ]
+
+    for col_name, col_def in new_columns:
+        if col_name not in existing:
+            cursor.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_def}")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_output_doc_id ON tasks(output_doc_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_execution_id ON tasks(execution_id)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1837,6 +1868,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
     (32, "Extract cascade metadata to dedicated table", migration_032_extract_cascade_metadata),
     (33, "Add mail config and read receipts", migration_033_add_mail_config),
+    (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
 ]
 
 

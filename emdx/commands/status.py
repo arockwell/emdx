@@ -1,10 +1,10 @@
 """
-Status command - Show consolidated project status.
+Status command - Show delegate activity index and project status.
 
 Provides a quick overview of:
-- Ready tasks
-- In-progress work
-- Recent activity
+- Active delegate tasks (running now)
+- Recent completed tasks
+- Failed tasks (with retry hints)
 - Cascade queue
 """
 
@@ -13,167 +13,174 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from ..database import db
-from ..utils.git import get_git_project
+from ..models.tasks import (
+    get_active_delegate_tasks,
+    get_children,
+    get_failed_tasks,
+    get_recent_completed_tasks,
+)
 
 console = Console()
 
 
-def status(
-    verbose: bool = typer.Option(
-        False,
-        "--verbose", "-v",
-        help="Show additional details"
-    ),
-):
-    """
-    Show consolidated project status.
-
-    Displays ready tasks, in-progress work, recent activity,
-    and cascade queue status in a single view.
-
-    Examples:
-        emdx status
-        emdx status --verbose
-    """
-    project = get_git_project()
-
-    console.print()
-    console.print(Panel(
-        f"[bold cyan]📊 EMDX Status[/bold cyan]" +
-        (f" - [dim]{project}[/dim]" if project else ""),
-        expand=False
-    ))
-    console.print()
-
-    # Ready tasks
-    _show_ready_tasks(verbose)
-
-    # In-progress tasks
-    _show_in_progress_tasks()
-
-    # Recent activity
-    _show_recent_activity(verbose)
-
-    # Cascade status
-    _show_cascade_status()
-
-    # Quick tips
-    console.print()
-    console.print("[dim]Quick commands:[/dim]")
-    console.print("  [cyan]emdx task ready[/cyan]      - Full ready task list")
-    console.print("  [cyan]emdx task run <id>[/cyan]   - Start working on a task")
-    console.print("  [cyan]emdx prime[/cyan]           - Output context for Claude")
-    console.print()
+def _parse_timestamp(value) -> Optional[datetime]:
+    """Parse a timestamp that may be a datetime, string, or None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
+    except Exception:
+        return None
 
 
-def _show_ready_tasks(verbose: bool):
-    """Show ready tasks."""
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT t.id, t.title, t.priority
-            FROM tasks t
-            WHERE t.status = 'open'
-            AND NOT EXISTS (
-                SELECT 1 FROM task_deps td
-                JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status != 'completed'
+def _relative_time(timestamp) -> str:
+    """Format a timestamp as relative time (e.g. '4m ago', '2h ago')."""
+    dt = _parse_timestamp(timestamp)
+    if dt is None:
+        return ""
+    age = datetime.utcnow() - dt
+    if age.total_seconds() < 0:
+        return "just now"
+    if age < timedelta(minutes=1):
+        return f"{int(age.total_seconds())}s ago"
+    if age < timedelta(hours=1):
+        return f"{int(age.total_seconds() / 60)}m ago"
+    if age < timedelta(days=1):
+        return f"{int(age.total_seconds() / 3600)}h ago"
+    return f"{age.days}d ago"
+
+
+def _running_duration(timestamp) -> str:
+    """Format how long something has been running."""
+    dt = _parse_timestamp(timestamp)
+    if dt is None:
+        return ""
+    age = datetime.utcnow() - dt
+    if age.total_seconds() < 0:
+        return "0s"
+    total_secs = int(age.total_seconds())
+    if total_secs < 60:
+        return f"{total_secs}s"
+    mins = total_secs // 60
+    secs = total_secs % 60
+    if mins < 60:
+        return f"{mins}m{secs:02d}s"
+    hours = mins // 60
+    mins = mins % 60
+    return f"{hours}h{mins:02d}m"
+
+
+def _show_active_tasks():
+    """Show active delegate tasks with children."""
+    active = get_active_delegate_tasks()
+    if not active:
+        return
+
+    console.print(f"[bold yellow]⚡ Active ({len(active)})[/bold yellow]")
+    for task in active:
+        task_type = task.get("type", "single")
+        title = task.get("title", "")[:50]
+        task_id = task["id"]
+        duration = _running_duration(task.get("created_at"))
+
+        if task_type in ("group", "chain"):
+            child_count = task.get("child_count", 0)
+            children_done = task.get("children_done", 0)
+            children_active = task.get("children_active", 0)
+            progress = f"step {children_done + 1}/{child_count}" if child_count else ""
+            console.print(
+                f"  [cyan]#{task_id}[/cyan]  {task_type:<7} "
+                f'"{title}"  {progress}  {duration}'
             )
-            ORDER BY t.priority ASC, t.created_at ASC
-            LIMIT 7
-        """)
-        tasks = cursor.fetchall()
 
-        # Count total
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM tasks t
-            WHERE t.status = 'open'
-            AND NOT EXISTS (
-                SELECT 1 FROM task_deps td
-                JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status != 'completed'
+            # Show children
+            children = get_children(task_id)
+            for i, child in enumerate(children):
+                is_last = i == len(children) - 1
+                prefix = "└─" if is_last else "├─"
+                child_status = child.get("status", "open")
+                child_title = child.get("title", "")[:40]
+                child_id = child["id"]
+                out_doc = child.get("output_doc_id")
+
+                if child_status == "done":
+                    doc_ref = f"→ doc #{out_doc}" if out_doc else ""
+                    time_ref = _relative_time(child.get("completed_at"))
+                    console.print(
+                        f"       {prefix} [cyan]#{child_id}[/cyan]  "
+                        f"[green]done[/green]    \"{child_title}\"  "
+                        f"[dim]{doc_ref}  {time_ref}[/dim]"
+                    )
+                elif child_status == "active":
+                    dur = _running_duration(child.get("updated_at") or child.get("created_at"))
+                    console.print(
+                        f"       {prefix} [cyan]#{child_id}[/cyan]  "
+                        f"[yellow]active[/yellow]  \"{child_title}\"  "
+                        f"running {dur}"
+                    )
+                elif child_status == "failed":
+                    console.print(
+                        f"       {prefix} [cyan]#{child_id}[/cyan]  "
+                        f"[red]failed[/red]  \"{child_title}\""
+                    )
+                else:
+                    console.print(
+                        f"       {prefix} [cyan]#{child_id}[/cyan]  "
+                        f"[dim]open[/dim]    \"{child_title}\"  waiting"
+                    )
+        else:
+            console.print(
+                f"  [cyan]#{task_id}[/cyan]  single  "
+                f'"{title}"  running {duration}'
             )
-        """)
-        total = cursor.fetchone()[0]
 
-    if tasks:
-        console.print(f"[bold green]Ready Tasks[/bold green] ({total} total):")
-        for task_id, title, priority in tasks:
-            priority_colors = ["red", "yellow", "blue", "dim", "dim"]
-            priority_labels = ["P0", "P1", "P2", "P3", "P4"]
-            p_idx = min(priority, 4)
-            console.print(f"  [cyan]#{task_id}[/cyan] [{priority_colors[p_idx]}]{priority_labels[p_idx]}[/{priority_colors[p_idx]}] {title[:60]}")
-        if total > 7:
-            console.print(f"  [dim]... and {total - 7} more[/dim]")
-        console.print()
-    else:
-        console.print("[yellow]No ready tasks.[/yellow] Create with [cyan]emdx task create[/cyan]")
-        console.print()
+    console.print()
 
 
-def _show_in_progress_tasks():
-    """Show in-progress tasks."""
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, title, updated_at
-            FROM tasks
-            WHERE status = 'in_progress'
-            ORDER BY updated_at DESC
-            LIMIT 5
-        """)
-        tasks = cursor.fetchall()
+def _show_recent_tasks():
+    """Show recent completed top-level tasks."""
+    recent = get_recent_completed_tasks(limit=5)
+    if not recent:
+        return
 
-    if tasks:
-        console.print("[bold yellow]In Progress:[/bold yellow]")
-        for task_id, title, updated_at in tasks:
-            console.print(f"  [cyan]#{task_id}[/cyan] {title[:60]}")
-        console.print()
+    console.print(f"[bold blue]📋 Recent ({len(recent)})[/bold blue]")
+    for task in recent:
+        task_id = task["id"]
+        title = task.get("title", "")[:50]
+        out_doc = task.get("output_doc_id")
+        doc_ref = f"→ doc #{out_doc}" if out_doc else ""
+        time_ref = _relative_time(task.get("completed_at"))
+        console.print(
+            f"  [cyan]#{task_id}[/cyan]  [green]done[/green]    "
+            f'"{title}"  [dim]{doc_ref}  {time_ref}[/dim]'
+        )
+    console.print()
 
 
-def _show_recent_activity(verbose: bool):
-    """Show recent document activity."""
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
+def _show_failed_tasks():
+    """Show failed top-level tasks with retry hints."""
+    failed = get_failed_tasks(limit=3)
+    if not failed:
+        return
 
-        # Recent documents
-        cursor.execute("""
-            SELECT id, title, created_at
-            FROM documents
-            WHERE is_deleted = 0
-            ORDER BY created_at DESC
-            LIMIT 5
-        """)
-        recent = cursor.fetchall()
-
-    if recent and verbose:
-        console.print("[bold blue]Recent Activity:[/bold blue]")
-        for doc_id, title, created_at in recent:
-            # Format time relative
-            if created_at:
-                try:
-                    dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                    age = datetime.now() - dt.replace(tzinfo=None)
-                    if age < timedelta(hours=1):
-                        time_str = f"{int(age.seconds / 60)}m ago"
-                    elif age < timedelta(days=1):
-                        time_str = f"{int(age.seconds / 3600)}h ago"
-                    else:
-                        time_str = f"{age.days}d ago"
-                except:
-                    time_str = ""
-            else:
-                time_str = ""
-
-            title_short = title[:50] + "..." if len(title) > 50 else title
-            console.print(f"  [cyan]#{doc_id}[/cyan] {title_short} [dim]{time_str}[/dim]")
-        console.print()
+    console.print(f"[bold red]❌ Failed ({len(failed)})[/bold red]")
+    for task in failed:
+        task_id = task["id"]
+        title = task.get("title", "")[:50]
+        time_ref = _relative_time(task.get("updated_at"))
+        error = task.get("error", "")
+        console.print(
+            f'  [cyan]#{task_id}[/cyan]  "{title}"  [dim]{time_ref}[/dim]'
+        )
+        if error:
+            console.print(f"       error: {error[:80]}")
+        console.print(f"       → [cyan]emdx task retry {task_id}[/cyan]")
+    console.print()
 
 
 def _show_cascade_status():
@@ -194,7 +201,7 @@ def _show_cascade_status():
 
         total = sum(counts.values())
         if total > 0:
-            console.print("[bold magenta]Cascade Queue:[/bold magenta]")
+            console.print("[bold magenta]🌊 Cascade Queue:[/bold magenta]")
             parts = []
             for stage in stages:
                 if counts.get(stage, 0) > 0:
@@ -205,6 +212,45 @@ def _show_cascade_status():
     except Exception:
         # cascade_stage column may not exist in older databases
         pass
+
+
+def status(
+    verbose: bool = typer.Option(
+        False,
+        "--verbose", "-v",
+        help="Show additional details"
+    ),
+):
+    """
+    Show delegate activity index and project status.
+
+    Displays active delegate tasks, recent completions, failures,
+    and cascade queue status.
+
+    Examples:
+        emdx status
+        emdx status --verbose
+    """
+    console.print()
+
+    # Active delegate tasks
+    _show_active_tasks()
+
+    # Recent completed tasks
+    _show_recent_tasks()
+
+    # Failed tasks with retry hints
+    _show_failed_tasks()
+
+    # Cascade status
+    _show_cascade_status()
+
+    # Quick tips
+    console.print("[dim]Quick commands:[/dim]")
+    console.print("  [cyan]emdx delegate \"task\"[/cyan]    - Run a task")
+    console.print("  [cyan]emdx task retry <id>[/cyan]   - Retry a failed task")
+    console.print("  [cyan]emdx task list[/cyan]         - Full task list")
+    console.print()
 
 
 # Create typer app for the command
