@@ -333,7 +333,7 @@ def executions(
     stats = get_execution_stats(task_id)
     console.print(f"\n[bold]Task #{task_id}: {task['title']}[/bold]")
     console.print(f"Executions: {stats['total']} total ({stats['completed']} completed, {stats['failed']} failed, {stats['running']} running)")
-    console.print(f"By type: {stats['workflow_runs']} workflow, {stats['direct_runs']} direct, {stats['manual_runs']} manual")
+    console.print(f"By type: {stats['direct_runs']} direct, {stats['manual_runs']} manual")
 
     # Show history
     execs = list_task_executions(task_id=task_id, limit=limit)

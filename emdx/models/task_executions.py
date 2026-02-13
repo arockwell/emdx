@@ -153,7 +153,6 @@ def get_execution_stats(task_id: int) -> dict[str, Any]:
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
                 SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
-                SUM(CASE WHEN execution_type = 'workflow' THEN 1 ELSE 0 END) as workflow_runs,
                 SUM(CASE WHEN execution_type = 'direct' THEN 1 ELSE 0 END) as direct_runs,
                 SUM(CASE WHEN execution_type = 'manual' THEN 1 ELSE 0 END) as manual_runs
             FROM task_executions
@@ -162,5 +161,5 @@ def get_execution_stats(task_id: int) -> dict[str, Any]:
         row = cursor.fetchone()
         return dict(row) if row else {
             'total': 0, 'completed': 0, 'failed': 0, 'running': 0,
-            'workflow_runs': 0, 'direct_runs': 0, 'manual_runs': 0
+            'direct_runs': 0, 'manual_runs': 0
         }

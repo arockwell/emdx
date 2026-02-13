@@ -661,30 +661,7 @@ def get_descendants(doc_id: int) -> list[dict[str, Any]]:
     return descendants
 
 
-# =============================================================================
-# Document Sources (Bridge Table for Workflow Provenance)
-# =============================================================================
-
-
-def record_document_source(
-    document_id: int,
-    **kwargs,
-) -> bool:
-    """No-op — workflow system removed. Kept for API compatibility."""
-    return False
-
-
-def get_document_source(document_id: int) -> dict[str, Any] | None:
-    """No-op — workflow system removed. Kept for API compatibility."""
-    return None
-
-
-def get_workflow_document_ids(workflow_run_id: int | None = None) -> set[int]:
-    """No-op — workflow system removed. Kept for API compatibility."""
-    return set()
-
-
-def list_non_workflow_documents(
+def list_recent_documents(
     limit: int = 100,
     days: int = 7,
 ) -> list[dict[str, Any]]:

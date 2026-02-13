@@ -30,26 +30,16 @@ EMDXApp (Main Application)
     │   │           ├── MetadataGrid
     │   │           └── ActionButtons
     │   └── StatusBar (Global)
-    ├── LogBrowser (Press 'l')
-    │   ├── Header (Execution Info)
-    │   ├── Horizontal Split
-    │   │   ├── ExecutionTable (Left 50%)
-    │   │   │   ├── DataTable (Executions)
-    │   │   │   └── FilterControls
-    │   │   └── LogPanel (Right 50%)
-    │   │       ├── LogViewer (RichLog)
-    │   │       ├── LiveControls
-    │   │       └── SearchBox
-    │   └── StatusBar
-    └── FileBrowser (Press 'f')
-        ├── Header (Directory Path)
+    └── LogBrowser (Press 'l')
+        ├── Header (Execution Info)
         ├── Horizontal Split
-        │   ├── FileTree (Left 40%)
-        │   │   ├── DirectoryTree
-        │   │   └── NavigationControls
-        │   └── FilePreview (Right 60%)
-        │       ├── ContentDisplay
-        │       └── FileMetadata
+        │   ├── ExecutionTable (Left 50%)
+        │   │   ├── DataTable (Executions)
+        │   │   └── FilterControls
+        │   └── LogPanel (Right 50%)
+        │       ├── LogViewer (RichLog)
+        │       ├── LiveControls
+        │       └── SearchBox
         └── StatusBar
 ```
 
@@ -60,20 +50,18 @@ EMDXApp (Main Application)
 ```python
 class BrowserContainer(Widget):
     """Main container that manages different browser modes."""
-    
+
     BINDINGS = [
         ("q", "quit", "Quit"),
-        ("l", "switch_to_logs", "Logs"), 
-        ("f", "switch_to_files", "Files"),
+        ("l", "switch_to_logs", "Logs"),
         ("d", "switch_to_documents", "Documents"),
     ]
-    
+
     def __init__(self):
         super().__init__()
         self.current_mode = "documents"
         self.document_browser = DocumentBrowser()
         self.log_browser = LogBrowser()
-        self.file_browser = FileBrowser()
 ```
 
 **Key Features:**
@@ -168,32 +156,6 @@ class LogBrowser(Widget):
             self.is_live_mode = True
 ```
 
-### **4. FileBrowser - File System Navigation**
-
-```python
-class FileBrowser(Widget):
-    """File system browser with git integration."""
-    
-    BINDINGS = [
-        ("enter", "open_file", "Open"),
-        ("o", "open_external", "Open External"),
-        ("s", "save_to_emdx", "Save to EMDX"),
-        ("g", "git_status", "Git Status"),
-    ]
-```
-
-#### **FileTree Component**
-- **Git integration** - Show git status, modified files
-- **Smart filtering** - Hide .gitignore files by default
-- **Directory navigation** - Collapsible tree structure
-- **File type icons** - Visual file type identification
-
-#### **FilePreview Component**
-- **Syntax highlighting** - Language-specific code highlighting
-- **Image support** - Display images in terminal (if supported)
-- **Binary detection** - Safe handling of binary files
-- **Size limits** - Performance protection for large files
-
 ## 🎮 **Key Binding System**
 
 ### **Global Bindings (Available in All Modes)**
@@ -209,7 +171,7 @@ GLOBAL_BINDINGS = [
 ### **Mode-Specific Bindings**
 - **Document Mode**: vim-like navigation (j/k/g/G), search (/), edit (e)
 - **Log Mode**: live toggle (space), follow (f), kill (k)
-- **File Mode**: open (enter), external (o), save (s)
+- **Activity Mode**: expand/collapse (l/h), refresh (r), fullscreen (f)
 
 ### **Modal Editing (Vim Mode)**
 ```python

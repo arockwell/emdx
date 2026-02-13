@@ -170,9 +170,6 @@ def _interactive_wizard(dry_run: bool):
         from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
         from emdx.services.similarity import SimilarityService
 
-        # Ask about workflow exclusion
-        exclude_workflow = Confirm.ask("Exclude workflow outputs?", default=True)
-
         try:
             with Progress(
                 SpinnerColumn(),
@@ -195,7 +192,6 @@ def _interactive_wizard(dry_run: bool):
                 all_pairs = similarity_service.find_all_duplicate_pairs(
                     min_similarity=0.7,
                     progress_callback=update_progress,
-                    exclude_workflow=exclude_workflow
                 )
                 progress.update(task, completed=100, found=len(all_pairs))
         except ImportError as e:

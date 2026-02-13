@@ -218,39 +218,3 @@ class StructuredLogger:
         })
 
 
-def parse_structured_log(log_file: Union[str, Path]) -> list[Dict[str, Any]]:
-    """Parse a structured log file into entries.
-    
-    Args:
-        log_file: Path to the log file
-        
-    Returns:
-        List of parsed log entries
-    """
-    entries = []
-    log_path = Path(log_file)
-    
-    if not log_path.exists():
-        return entries
-    
-    try:
-        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    entries.append(entry)
-                except json.JSONDecodeError:
-                    # Handle non-JSON lines (legacy format)
-                    entries.append({
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "level": "INFO",
-                        "process": {"type": "legacy", "pid": 0, "name": "legacy"},
-                        "message": line
-                    })
-    except Exception as e:
-        print(f"Error parsing log file: {e}", file=sys.stderr)
-    
-    return entries

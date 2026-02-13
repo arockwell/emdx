@@ -11,7 +11,7 @@ from emdx.utils.lazy_group import (
     LazyCommand,
     LazyTyperGroup,
     register_lazy_commands,
-    get_lazy_registry,
+    _LAZY_REGISTRY,
 )
 
 
@@ -290,7 +290,8 @@ class TestLazyRegistry:
             {"cmd1": "Help 1", "cmd2": "Help 2"},
         )
 
-        subcommands, help_strings = get_lazy_registry()
+        subcommands = _LAZY_REGISTRY["subcommands"]
+        help_strings = _LAZY_REGISTRY["help"]
 
         assert "cmd1" in subcommands
         assert "cmd2" in subcommands
