@@ -323,8 +323,6 @@ def show(
             parent = groups.get_group(group['parent_group_id'])
             parent_name = parent['name'] if parent else "Unknown"
             console.print(f"[dim]Parent:[/dim] #{group['parent_group_id']} ({parent_name})")
-        if group['workflow_run_id']:
-            console.print(f"[dim]Workflow Run:[/dim] #{group['workflow_run_id']}")
         console.print(f"[dim]Created:[/dim] {group['created_at']}")
         if group['created_by']:
             console.print(f"[dim]Created by:[/dim] {group['created_by']}")

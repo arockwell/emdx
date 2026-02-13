@@ -997,7 +997,7 @@ class ActivityView(HelpMixin, Widget):
     # Group management actions
 
     def action_add_to_group(self) -> None:
-        """Show group picker to add selected document, group, or workflow to another group."""
+        """Show group picker to add selected document or group to another group."""
         item = self._get_selected_item()
         if item is None:
             return
