@@ -179,7 +179,11 @@ def _show_failed_tasks():
         )
         if error:
             console.print(f"       error: {error[:80]}")
-        console.print(f"       → [cyan]emdx task retry {task_id}[/cyan]")
+        # Show retry hint using delegate
+        prompt = task.get("prompt", "")
+        if prompt:
+            escaped = prompt[:60].replace('"', '\\"')
+            console.print(f'       → [cyan]emdx delegate "{escaped}"[/cyan]')
     console.print()
 
 
@@ -248,8 +252,8 @@ def status(
     # Quick tips
     console.print("[dim]Quick commands:[/dim]")
     console.print("  [cyan]emdx delegate \"task\"[/cyan]    - Run a task")
-    console.print("  [cyan]emdx task retry <id>[/cyan]   - Retry a failed task")
-    console.print("  [cyan]emdx task list[/cyan]         - Full task list")
+    console.print("  [cyan]emdx task ready[/cyan]         - Show work queue")
+    console.print("  [cyan]emdx task list --all[/cyan]    - Full task list")
     console.print()
 
 
