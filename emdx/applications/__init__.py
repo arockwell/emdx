@@ -13,7 +13,6 @@ The application layer breaks bidirectional dependencies by:
 - Services remain independent and focused
 """
 
-from .db_initializer import DatabaseInitializer, ensure_db
 from .maintenance import MaintenanceApplication
 
-__all__ = ["DatabaseInitializer", "ensure_db", "MaintenanceApplication"]
+__all__ = ["MaintenanceApplication"]
