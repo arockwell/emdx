@@ -1,4 +1,4 @@
-"""Task executions model - the join between tasks and workflows."""
+"""Task executions model - tracks how tasks are executed."""
 
 from typing import Any, Optional
 
@@ -8,16 +8,15 @@ from emdx.database import db
 def create_task_execution(
     task_id: int,
     execution_type: str,
-    workflow_run_id: Optional[int] = None,
     execution_id: Optional[int] = None,
     notes: Optional[str] = None,
+    **kwargs,
 ) -> int:
     """Create a task execution record. Returns the execution ID.
 
     Args:
         task_id: The task being executed
-        execution_type: 'workflow', 'direct', or 'manual'
-        workflow_run_id: Set if execution_type is 'workflow'
+        execution_type: 'direct' or 'manual'
         execution_id: Set if execution_type is 'direct'
         notes: Optional notes about the execution
     """
@@ -25,9 +24,9 @@ def create_task_execution(
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO task_executions
-            (task_id, execution_type, workflow_run_id, execution_id, notes, status)
-            VALUES (?, ?, ?, ?, ?, 'running')
-        """, (task_id, execution_type, workflow_run_id, execution_id, notes))
+            (task_id, execution_type, execution_id, notes, status)
+            VALUES (?, ?, ?, ?, 'running')
+        """, (task_id, execution_type, execution_id, notes))
         conn.commit()
         return cursor.lastrowid
 
@@ -45,10 +44,10 @@ def get_task_execution(task_execution_id: int) -> Optional[dict[str, Any]]:
 
 def list_task_executions(
     task_id: Optional[int] = None,
-    workflow_run_id: Optional[int] = None,
     execution_type: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
+    **kwargs,
 ) -> list[dict[str, Any]]:
     """List task executions with optional filters."""
     conditions, params = ["1=1"], []
@@ -56,9 +55,6 @@ def list_task_executions(
     if task_id:
         conditions.append("task_id = ?")
         params.append(task_id)
-    if workflow_run_id:
-        conditions.append("workflow_run_id = ?")
-        params.append(workflow_run_id)
     if execution_type:
         conditions.append("execution_type = ?")
         params.append(execution_type)

@@ -28,9 +28,7 @@ __all__ = [
 
 
 def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
-    """Get standalone agent/delegate executions not part of a workflow or cascade.
-
-"""
+    """Get standalone agent/delegate executions not part of a cascade."""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -40,10 +38,6 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
             WHERE e.started_at > ?
               AND (e.doc_title LIKE 'Agent:%' OR e.doc_title LIKE 'Delegate:%')
               AND e.cascade_run_id IS NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM workflow_individual_runs ir
-                  WHERE ir.agent_execution_id = e.id
-              )
             ORDER BY e.started_at DESC
             LIMIT ?
             """,
