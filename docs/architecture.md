@@ -18,42 +18,51 @@ emdx/
 ├── commands/               # CLI command implementations
 │   ├── core.py            # save, find, view, edit, delete
 │   ├── browse.py          # list, stats, recent
-│   ├── tags.py            # tag management
+│   ├── tags.py            # tag add/remove/list/rename/merge/legend/batch
 │   ├── trash.py           # trash, restore, purge
+│   ├── groups.py          # document group management
+│   ├── tasks.py           # task management with dependencies
 │   ├── gist.py            # GitHub gist integration
+│   ├── gdoc.py            # Google Docs integration
 │   ├── executions.py      # execution monitoring
-│   ├── claude_execute.py  # Claude Code integration
-│   ├── delegate.py        # one-shot AI execution
+│   ├── delegate.py        # one-shot AI execution (parallel, chain, worktree, PR)
 │   ├── cascade.py         # idea-to-code pipeline
 │   ├── recipe.py          # reusable recipe management
+│   ├── similarity.py      # TF-IDF document similarity
+│   ├── ask.py             # AI Q&A over knowledge base
+│   ├── prime.py           # session priming context
+│   ├── status.py          # project status overview
 │   ├── analyze.py         # database analysis
 │   └── maintain.py        # maintenance operations
 ├── database/               # SQLite operations
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
 │   ├── search.py          # FTS5 search
+│   ├── cascade.py         # cascade metadata
+│   ├── groups.py          # document group operations
 │   └── migrations.py      # schema migrations
 ├── models/                 # Data models
 │   ├── documents.py       # document model
-│   ├── tags.py           # tag model
-│   └── executions.py     # execution model
+│   ├── tags.py            # tag model
+│   ├── executions.py      # execution model
+│   └── tasks.py           # task model with dependencies
 ├── ui/                     # TUI components (Textual)
-│   ├── browser_container.py # main app container
-│   ├── document_browser.py  # document management
-│   ├── file_browser.py      # file system browser
-│   ├── log_browser.py       # execution logs
-│   ├── git_browser.py       # git diff viewer
-│   ├── cascade_browser.py   # cascade stage browser
-│   ├── activity/            # Activity view components
-│   │   └── activity_view.py # unified activity display
-│   └── vim_editor.py        # vim modal editing
+│   ├── browser_container.py   # main app container
+│   ├── document_browser.py    # document management
+│   ├── log_browser.py         # execution logs
+│   ├── activity_browser.py    # unified activity display
+│   ├── run_browser.py         # cascade run browser
+│   ├── vim_editor.py          # vim modal editing
+│   └── themes.py              # theme system
 ├── services/               # Business logic
+│   ├── unified_executor.py # CLI execution (Claude/Cursor)
 │   ├── log_stream.py      # event-driven log streaming
 │   ├── file_watcher.py    # file monitoring
 │   ├── auto_tagger.py     # automatic tagging
+│   ├── embedding_service.py # semantic search embeddings
 │   └── health_monitor.py  # system health
 └── utils/                  # Shared utilities
-    ├── git.py             # git operations
+    ├── git.py             # git operations (worktrees, branches)
     ├── emoji_aliases.py   # tag alias system
     └── claude_wrapper.py  # Claude Code integration
 ```
