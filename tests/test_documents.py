@@ -416,30 +416,6 @@ class TestListDocuments:
         assert len(docs) == 1
         assert docs[0]["title"] == "Proj A"
 
-    def test_list_excludes_archived_by_default(self):
-        from emdx.database.documents import save_document, list_documents, archive_document
-
-        doc_id = save_document("Archived", "Content")
-        save_document("Active", "Content")
-        archive_document(doc_id)
-
-        docs = list_documents(parent_id=-1)
-        titles = [d["title"] for d in docs]
-        assert "Active" in titles
-        assert "Archived" not in titles
-
-    def test_list_includes_archived_when_requested(self):
-        from emdx.database.documents import save_document, list_documents, archive_document
-
-        doc_id = save_document("Archived", "Content")
-        save_document("Active", "Content")
-        archive_document(doc_id)
-
-        docs = list_documents(parent_id=-1, include_archived=True)
-        titles = [d["title"] for d in docs]
-        assert "Active" in titles
-        assert "Archived" in titles
-
     def test_list_excludes_deleted(self):
         from emdx.database.documents import save_document, list_documents, delete_document
 
@@ -509,23 +485,6 @@ class TestCountDocuments:
         save_document("B", "Content", project="x")
         save_document("C", "Content", project="y")
         assert count_documents(project="x", parent_id=-1) == 2
-
-    def test_count_excludes_archived_by_default(self):
-        from emdx.database.documents import save_document, count_documents, archive_document
-
-        doc_id = save_document("A", "Content")
-        save_document("B", "Content")
-        archive_document(doc_id)
-        assert count_documents(parent_id=-1) == 1
-
-    def test_count_includes_archived_when_requested(self):
-        from emdx.database.documents import save_document, count_documents, archive_document
-
-        doc_id = save_document("A", "Content")
-        save_document("B", "Content")
-        archive_document(doc_id)
-        assert count_documents(parent_id=-1, include_archived=True) == 2
-
 
 class TestGetRecentDocuments:
     """Test get_recent_documents()."""
@@ -800,29 +759,6 @@ class TestGetChildren:
         titles = {c["title"] for c in children}
         assert titles == {"Child 1", "Child 2"}
 
-    def test_get_children_excludes_archived(self):
-        from emdx.database.documents import save_document, get_children, archive_document
-
-        parent = save_document("Parent", "Content")
-        child1 = save_document("Active Child", "Content", parent_id=parent)
-        child2 = save_document("Archived Child", "Content", parent_id=parent)
-        archive_document(child2)
-
-        children = get_children(parent)
-        assert len(children) == 1
-        assert children[0]["title"] == "Active Child"
-
-    def test_get_children_includes_archived(self):
-        from emdx.database.documents import save_document, get_children, archive_document
-
-        parent = save_document("Parent", "Content")
-        save_document("Active", "Content", parent_id=parent)
-        child2 = save_document("Archived", "Content", parent_id=parent)
-        archive_document(child2)
-
-        children = get_children(parent, include_archived=True)
-        assert len(children) == 2
-
     def test_has_children(self):
         from emdx.database.documents import save_document, has_children
 
@@ -831,16 +767,6 @@ class TestGetChildren:
 
         save_document("Child", "Content", parent_id=parent)
         assert has_children(parent) is True
-
-    def test_has_children_ignores_archived(self):
-        from emdx.database.documents import save_document, has_children, archive_document
-
-        parent = save_document("Parent", "Content")
-        child = save_document("Child", "Content", parent_id=parent)
-        archive_document(child)
-
-        assert has_children(parent) is False
-        assert has_children(parent, include_archived=True) is True
 
 
 class TestGetChildrenCount:
@@ -893,82 +819,6 @@ class TestGetDescendants:
 
         leaf = save_document("Leaf", "Content")
         assert get_descendants(leaf) == []
-
-
-class TestArchiveDescendants:
-    """Test archive_descendants()."""
-
-    def test_archive_descendants(self):
-        from emdx.database.documents import (
-            save_document, archive_descendants, get_document,
-        )
-
-        root = save_document("Root", "Content")
-        child = save_document("Child", "Content", parent_id=root)
-        grandchild = save_document("Grandchild", "Content", parent_id=child)
-
-        count = archive_descendants(root)
-        assert count == 2
-
-        # Root itself should NOT be archived
-        root_doc = get_document(root)
-        assert root_doc["archived_at"] is None
-
-        # Children should be archived
-        child_doc = get_document(child)
-        assert child_doc["archived_at"] is not None
-        grandchild_doc = get_document(grandchild)
-        assert grandchild_doc["archived_at"] is not None
-
-
-# =========================================================================
-# Archive / Unarchive
-# =========================================================================
-
-
-class TestArchiveUnarchive:
-    """Test archive_document() and unarchive_document()."""
-
-    def test_archive_document(self):
-        from emdx.database.documents import save_document, get_document, archive_document
-
-        doc_id = save_document("To Archive", "Content")
-        result = archive_document(doc_id)
-        assert result is True
-
-        doc = get_document(doc_id)
-        assert doc["archived_at"] is not None
-
-    def test_archive_already_archived_returns_false(self):
-        from emdx.database.documents import save_document, archive_document
-
-        doc_id = save_document("Double Archive", "Content")
-        archive_document(doc_id)
-        assert archive_document(doc_id) is False
-
-    def test_unarchive_document(self):
-        from emdx.database.documents import save_document, get_document, archive_document, unarchive_document
-
-        doc_id = save_document("To Unarchive", "Content")
-        archive_document(doc_id)
-        result = unarchive_document(doc_id)
-        assert result is True
-
-        doc = get_document(doc_id)
-        assert doc["archived_at"] is None
-
-    def test_unarchive_non_archived_returns_false(self):
-        from emdx.database.documents import save_document, unarchive_document
-
-        doc_id = save_document("Not Archived", "Content")
-        assert unarchive_document(doc_id) is False
-
-    def test_archive_deleted_returns_false(self):
-        from emdx.database.documents import save_document, delete_document, archive_document
-
-        doc_id = save_document("Deleted", "Content")
-        delete_document(doc_id)
-        assert archive_document(doc_id) is False
 
 
 # =========================================================================

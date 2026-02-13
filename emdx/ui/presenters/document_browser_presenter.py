@@ -58,7 +58,6 @@ class DocumentBrowserPresenter:
         self._has_more: bool = False
         self._loading_more: bool = False
         self._expanded_docs: Set[int] = set()
-        self._include_archived: bool = False
         self._tags_cache: Dict[int, List[str]] = {}
         self._doc_cache: Dict[int, Dict[str, Any]] = {}
         self._doc_cache_max: int = 50
@@ -66,14 +65,13 @@ class DocumentBrowserPresenter:
     def _create_list_vm(self) -> DocumentListVM:
         """Create current list ViewModel."""
         doc_count = len(self._filtered_documents)
-        archived_indicator = " [+archived]" if self._include_archived else ""
         if self._has_more:
             status_text = (
-                f"{doc_count}/{self._total_count} docs{archived_indicator} "
+                f"{doc_count}/{self._total_count} docs "
                 "(scroll for more)"
             )
         else:
-            status_text = f"{doc_count}/{self._total_count} docs{archived_indicator}"
+            status_text = f"{doc_count}/{self._total_count} docs"
 
         return DocumentListVM(
             documents=self._documents,
@@ -112,7 +110,6 @@ class DocumentBrowserPresenter:
             parent_id=doc.get("parent_id"),
             has_children=has_children,
             depth=depth,
-            is_archived=doc.get("archived_at") is not None,
             relationship=doc.get("relationship"),
         )
 
@@ -123,14 +120,12 @@ class DocumentBrowserPresenter:
         try:
             if not append:
                 self._total_count = count_documents(
-                    include_archived=self._include_archived,
                     parent_id=None,
                 )
 
             raw_docs = db_list_documents(
                 limit=limit,
                 offset=offset,
-                include_archived=self._include_archived,
                 parent_id=None,
             )
 
@@ -138,9 +133,7 @@ class DocumentBrowserPresenter:
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
             self._tags_cache.update(all_tags)
 
-            children_counts = get_children_count(
-                doc_ids, include_archived=self._include_archived
-            )
+            children_counts = get_children_count(doc_ids)
 
             new_items = []
             for doc in raw_docs:
@@ -177,16 +170,13 @@ class DocumentBrowserPresenter:
         try:
             raw_docs = db_list_documents(
                 parent_id=parent_id,
-                include_archived=self._include_archived,
             )
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
             self._tags_cache.update(all_tags)
 
-            children_counts = get_children_count(
-                doc_ids, include_archived=self._include_archived
-            )
+            children_counts = get_children_count(doc_ids)
 
             items = []
             for doc in raw_docs:
@@ -283,20 +273,9 @@ class DocumentBrowserPresenter:
         else:
             return await self.expand_document(doc_id)
 
-    async def toggle_archived(self) -> None:
-        """Toggle whether archived documents are shown."""
-        self._include_archived = not self._include_archived
-        self._expanded_docs.clear()
-        await self.load_documents()
-
     def is_expanded(self, doc_id: int) -> bool:
         """Check if a document is expanded."""
         return doc_id in self._expanded_docs
-
-    @property
-    def include_archived(self) -> bool:
-        """Whether archived documents are being shown."""
-        return self._include_archived
 
     async def load_more_documents(self) -> None:
         """Load more documents for pagination."""
@@ -324,13 +303,13 @@ class DocumentBrowserPresenter:
 
         try:
             from emdx.services.document_service import search_documents
-            raw_docs = search_documents(query, limit=100, include_archived=self._include_archived)
+            raw_docs = search_documents(query, limit=100)
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
             self._tags_cache.update(all_tags)
 
-            children_counts = get_children_count(doc_ids, include_archived=self._include_archived)
+            children_counts = get_children_count(doc_ids)
 
             self._documents = []
             for doc in raw_docs:

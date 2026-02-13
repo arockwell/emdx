@@ -80,12 +80,12 @@ emdx ai similar 42
 **Option A: Using Claude API** (requires `ANTHROPIC_API_KEY`):
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-emdx ai ask "How does the workflow system work?"
+emdx ai ask "How does the cascade system work?"
 ```
 
 **Option B: Using Claude CLI** (uses Claude Max subscription):
 ```bash
-emdx ai context "How does the workflow system work?" | claude
+emdx ai context "How does the cascade system work?" | claude
 ```
 
 ## Commands Reference
@@ -202,19 +202,19 @@ emdx ai search "authentication" --limit 5
 emdx view 123
 ```
 
-### With Workflows
+### With Delegate
 
 ```bash
 # Analyze documents found by semantic search
 emdx ai search "tech debt" --limit 10
-# Note the IDs, then use in workflow
+# Note the IDs, then delegate analysis
 emdx delegate 5350 5351 5352
 ```
 
 ### Periodic Maintenance
 
 ```bash
-# Add to your workflow: reindex after adding many docs
+# Reindex after adding many docs
 emdx ai index
 
 # Check coverage

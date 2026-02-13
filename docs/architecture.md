@@ -19,17 +19,15 @@ emdx/
 │   ├── core.py            # save, find, view, edit, delete
 │   ├── browse.py          # list, stats, recent
 │   ├── tags.py            # tag management
-│   ├── workflows.py       # workflow orchestration
-│   ├── gist.py            # GitHub integration
+│   ├── trash.py           # trash, restore, purge
+│   ├── gist.py            # GitHub gist integration
 │   ├── executions.py      # execution monitoring
 │   ├── claude_execute.py  # Claude Code integration
+│   ├── delegate.py        # one-shot AI execution
+│   ├── cascade.py         # idea-to-code pipeline
+│   ├── recipe.py          # reusable recipe management
 │   ├── analyze.py         # database analysis
 │   └── maintain.py        # maintenance operations
-├── workflows/              # Workflow orchestration system
-│   ├── executor.py        # Multi-stage execution engine
-│   ├── registry.py        # Workflow management
-│   ├── strategies/        # Execution strategies (parallel, iterative, etc.)
-│   └── worktree_pool.py   # Git worktree isolation
 ├── database/               # SQLite operations
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
@@ -37,7 +35,7 @@ emdx/
 │   └── migrations.py      # schema migrations
 ├── models/                 # Data models
 │   ├── documents.py       # document model
-│   ├── tags.py           # tag model  
+│   ├── tags.py           # tag model
 │   └── executions.py     # execution model
 ├── ui/                     # TUI components (Textual)
 │   ├── browser_container.py # main app container
@@ -45,7 +43,7 @@ emdx/
 │   ├── file_browser.py      # file system browser
 │   ├── log_browser.py       # execution logs
 │   ├── git_browser.py       # git diff viewer
-│   ├── workflow_browser.py  # workflow management
+│   ├── cascade_browser.py   # cascade stage browser
 │   ├── activity/            # Activity view components
 │   │   └── activity_view.py # unified activity display
 │   └── vim_editor.py        # vim modal editing
@@ -69,7 +67,8 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **File Mode** - `f` to switch from document mode
 - **Git Mode** - `g` to switch from document mode
 - **Log Mode** - `l` to switch from document mode
-- **Activity Mode** - `a` to view workflow/execution activity
+- **Activity Mode** - `a` to view execution activity
+- **Cascade Mode** - `4` to view cascade stages
 - **Back to Document** - `q` from any other mode
 
 ### **Actual Key Bindings** (from real code):
@@ -106,22 +105,19 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - `g/G` - go to top/bottom
 - `enter` - expand/view details
 - `r` - refresh
-- Filter by workflow runs, documents, groups
+- Filter by executions, documents, groups
 
 ## 🗃️ **Database Architecture**
 
 ### **Core Tables**
 - **`documents`** - Document metadata, content, and indexing
-- **`tags`** - Tag definitions with emoji and aliases  
+- **`tags`** - Tag definitions with emoji and aliases
 - **`document_tags`** - Many-to-many document-tag relationships
 - **`executions`** - Execution tracking and lifecycle
 - **`documents_fts`** - Full-text search virtual table
-
-### **Workflow System Tables**
-- **`workflows`** - Workflow definitions and configuration
-- **`workflow_runs`** - Workflow execution history
-- **`workflow_stage_runs`** - Stage-level execution tracking
-- **`workflow_individual_runs`** - Individual task runs within stages
+- **`cascade_runs`** - Cascade pipeline executions
+- **`document_groups`** - Hierarchical document organization
+- **`tasks`** - Task management with dependencies
 
 ### **Key Design Decisions**
 - **SQLite with FTS5** - Fast full-text search with simple deployment
@@ -138,7 +134,7 @@ App (emdx gui)
 └── BrowserContainer
     ├── DocumentBrowser (default)
     │   ├── DocumentTable
-    │   ├── PreviewPanel  
+    │   ├── PreviewPanel
     │   └── DetailsPanel
     ├── LogBrowser (press 'l')
     │   ├── ExecutionTable
@@ -147,10 +143,12 @@ App (emdx gui)
     ├── FileBrowser (press 'f')
     │   ├── FileTree
     │   └── FilePreview
-    └── ActivityView (press 'a')
-        ├── ActivityTable (workflow runs, documents, groups)
-        ├── ContextPanel (details for selected item)
-        └── Filtering by type/status
+    ├── ActivityView (press 'a')
+    │   ├── ActivityTree (executions, documents, groups)
+    │   └── ContextPanel (details for selected item)
+    └── CascadeBrowser (press '4')
+        ├── Stage columns (idea → prompt → analyzed → planned → done)
+        └── Document processing controls
 ```
 
 ### **Key Patterns**

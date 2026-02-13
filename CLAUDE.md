@@ -168,13 +168,13 @@ the conversation ends.
 │                   What are you doing?                        │
 └─────────────────────────────────────────────────────────────┘
                               │
-        ┌─────────────────────┼─────────────────────┐
-        ▼                     ▼                     ▼
-   One-shot AI task?   Idea → working code?   Custom multi-stage?
-        │                     │                     │
-        ▼                     ▼                     ▼
-   emdx delegate         emdx cascade add     emdx workflow run
-   (all execution)       (autonomous pipeline)
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+       One-shot AI task? Idea → code?   Reusable pattern?
+              │               │               │
+              ▼               ▼               ▼
+        emdx delegate    emdx cascade   emdx recipe run
+        (all execution)  (autonomous)   (saved instructions)
 ```
 
 **`emdx delegate` handles everything:**
@@ -201,7 +201,7 @@ the conversation ends.
 | Code changes with PR | `emdx delegate --pr "fix the auth bug"` | Agent creates PR automatically |
 | Isolated git environment | `emdx delegate --worktree "fix X"` | Worktree created/cleaned up |
 | Transform an idea to a PR autonomously | `emdx cascade add "idea"` | Full autonomous pipeline |
-| Complex multi-stage with synthesis | `emdx workflow run task_parallel -t ...` | Full workflow system |
+| Run a saved recipe | `emdx recipe run 42` | Reusable instructions via delegate |
 
 ### When Claude Should Use EMDX Automatically
 
@@ -416,46 +416,32 @@ emdx delegate -q "quick analysis"
 
 **Note:** `--chain` and `--synthesize` are mutually exclusive. `--each` requires `--do`.
 
-## 🔄 Workflow System for Multi-Agent Tasks
+## 📋 Recipes — Reusable Instruction Templates (`emdx recipe`)
 
-For complex multi-stage workflows that go beyond what `delegate` offers, use the workflow system directly.
-
-### Core Workflows
-
-| Workflow | Use When |
-|----------|----------|
-| `task_parallel` | Running multiple analysis or fix tasks in parallel |
-| `parallel_fix` | Multiple code fixes that might touch same files (uses worktree isolation) |
-
-### Common Patterns
+Recipes are emdx documents tagged with `recipe` (📋) that contain reusable instructions for Claude via `emdx delegate`.
 
 ```bash
-# Analyze multiple aspects of a codebase in parallel
-emdx workflow run task_parallel \
-  -t "Find dead code and unused imports" \
-  -t "Identify missing error handling" \
-  -t "Review test coverage gaps" \
-  --title "Tech Debt Analysis" \
-  -j 3
+# List all recipes
+emdx recipe list
 
-# Fix multiple issues with worktree isolation (each task gets own branch)
-emdx workflow run parallel_fix \
-  -t "Add type hints to auth module" \
-  -t "Fix exception handling in api/" \
-  -t "Remove deprecated function calls" \
-  --worktree --base-branch main
+# Run a recipe by ID or title
+emdx recipe run 42
+emdx recipe run "Security Audit" -- "analyze auth module"
+
+# Create a recipe from a markdown file
+emdx recipe create instructions.md --title "My Recipe"
+
+# Or manually: save + tag
+echo "Instructions here" | emdx save --title "My Recipe" --tags "recipe"
 ```
 
 ### When to Use Which Command
 
-| Use `emdx delegate` when... | Use `emdx workflow` when... | Use `emdx cascade` when... |
-|------------------------------|----------------------------|---------------------------|
-| Any one-shot AI execution | Complex multi-stage workflows | Idea-to-PR autonomous pipeline |
-| Single, parallel, or chain | Need iterative or adversarial modes | Persistent stage tracking |
-| Results on stdout + persistence | Custom stage configurations | Full idea → prompt → plan → code flow |
-| PR creation, worktree, doc context | Need detailed run monitoring | Long-running autonomous work |
-
-For full workflow documentation, see [docs/workflows.md](docs/workflows.md).
+| Use `emdx delegate` when... | Use `emdx cascade` when... | Use `emdx recipe` when... |
+|------------------------------|---------------------------|--------------------------|
+| Any one-shot AI execution | Idea-to-PR autonomous pipeline | Reusable saved instructions |
+| Single, parallel, or chain | Persistent stage tracking | Repeatable patterns |
+| PR creation, worktree, doc context | Full idea → prompt → plan → code flow | Pre-defined analysis templates |
 
 ## ✨ AI-Powered Search & Q&A (`emdx ai`)
 
@@ -470,10 +456,10 @@ emdx ai search "authentication patterns"
 emdx ai similar 42  # Find docs similar to #42
 
 # Q&A with Claude API (needs ANTHROPIC_API_KEY)
-emdx ai ask "How does the workflow system work?"
+emdx ai ask "How does the cascade system work?"
 
 # Q&A with Claude CLI (uses Claude Max subscription - no API cost!)
-emdx ai context "How does the workflow system work?" | claude
+emdx ai context "How does the cascade system work?" | claude
 emdx ai context "error handling" --limit 5 | claude "summarize"
 ```
 
@@ -553,7 +539,7 @@ just bump 0.X.Y
 #      prefer hand-writing with proper feature descriptions
 #    - Add comparison link at bottom of CHANGELOG.md
 
-# 4. Create docs for any new features (e.g., docs/mail.md)
+# 4. Create docs for any new features
 #    - Update docs/README.md index
 #    - Update docs/cli-api.md with new commands
 

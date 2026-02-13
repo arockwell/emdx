@@ -247,19 +247,18 @@ def remove_document_from_group(group_id: int, document_id: int) -> bool:
 
 def get_group_members(
     group_id: int,
-    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     """Get all documents in a group.
 
     Args:
         group_id: Group to query
-        include_archived: Include archived documents
 
     Returns:
         List of dicts with document info and membership role
     """
     with db_connection.get_connection() as conn:
-        query = """
+        cursor = conn.execute(
+            """
             SELECT
                 d.*,
                 dgm.role,
@@ -269,12 +268,11 @@ def get_group_members(
             JOIN document_group_members dgm ON d.id = dgm.document_id
             WHERE dgm.group_id = ?
               AND d.is_deleted = FALSE
-        """
-        if not include_archived:
-            query += " AND d.archived_at IS NULL"
-        query += " ORDER BY dgm.added_at DESC"
-
-        cursor = conn.execute(query, (group_id,))
+              AND d.archived_at IS NULL
+            ORDER BY dgm.added_at DESC
+            """,
+            (group_id,),
+        )
         return [dict(row) for row in cursor.fetchall()]
 
 
