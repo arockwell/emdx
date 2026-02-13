@@ -3,7 +3,7 @@ Application Service Layer for EMDX.
 
 This layer sits between commands and services, providing:
 - Centralized database initialization
-- Service orchestration for complex workflows
+- Service orchestration for complex operations
 - Cross-cutting concerns (logging, error handling)
 - Testable business logic separated from CLI
 

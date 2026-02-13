@@ -109,7 +109,7 @@ class ActivityDataLoader:
         return items
 
     async def _load_direct_saves(self) -> List[ActivityItem]:
-        """Load documents not created by workflows or added to groups."""
+        """Load documents not added to groups (standalone saves)."""
         items: List[ActivityItem] = []
         grouped_doc_ids: Set[int] = set()
         if HAS_GROUPS:
@@ -121,7 +121,7 @@ class ActivityDataLoader:
         try:
             docs = doc_svc.list_recent_documents(limit=100, days=7)
         except Exception as e:
-            logger.error(f"Error listing non-workflow documents: {e}", exc_info=True)
+            logger.error(f"Error listing recent documents: {e}", exc_info=True)
             return items
 
         for doc in docs:

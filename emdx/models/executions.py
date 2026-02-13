@@ -14,7 +14,7 @@ from ..utils.datetime_utils import parse_timestamp
 class Execution:
     """Represents a Claude execution."""
     id: int  # Now numeric auto-incrementing ID
-    doc_id: Optional[int]  # Can be None for workflow agent executions
+    doc_id: Optional[int]  # Can be None for standalone delegate executions
     doc_title: str
     status: str  # 'running', 'completed', 'failed'
     started_at: datetime
@@ -64,7 +64,7 @@ def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
     """Create a new execution and return its ID.
 
     Args:
-        doc_id: Document ID (can be None for workflow agent executions)
+        doc_id: Document ID (can be None for standalone delegate executions)
         doc_title: Title for the execution
         log_file: Path to log file
         working_dir: Working directory for execution
