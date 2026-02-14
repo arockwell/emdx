@@ -1,8 +1,16 @@
 """Tests for delegate command helper functions."""
 
+import pytest
+from click.exceptions import Exit as ClickExit
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +98,154 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each.
+
+    This is a critical security function that prevents command injection
+    via the --each flag by restricting to a safe allowlist of commands.
+    """
+
+    # === Allowed commands ===
+
+    def test_allows_fd_command(self):
+        args = _validate_discovery_command("fd -e py src/")
+        assert args[0] == "fd"
+        assert "-e" in args
+        assert "py" in args
+
+    def test_allows_find_command(self):
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_allows_git_ls_files(self):
+        args = _validate_discovery_command("git ls-files '*.py'")
+        assert args[0] == "git"
+        assert "ls-files" in args
+
+    def test_allows_git_diff_name_only(self):
+        args = _validate_discovery_command("git diff --name-only HEAD~1")
+        assert args[0] == "git"
+        assert "--name-only" in args
+
+    def test_allows_rg_files(self):
+        args = _validate_discovery_command("rg --files src/")
+        assert args[0] == "rg"
+
+    def test_allows_grep_l(self):
+        args = _validate_discovery_command("grep -l 'pattern' *.py")
+        assert args[0] == "grep"
+
+    def test_allows_ls(self):
+        args = _validate_discovery_command("ls -la src/")
+        assert args[0] == "ls"
+
+    def test_allows_eza(self):
+        args = _validate_discovery_command("eza --oneline src/")
+        assert args[0] == "eza"
+
+    def test_allows_tree(self):
+        args = _validate_discovery_command("tree -fi src/")
+        assert args[0] == "tree"
+
+    def test_allows_absolute_path_to_allowed_command(self):
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args[0] == "/usr/bin/fd"
+
+    # === Blocked commands ===
+
+    def test_blocks_arbitrary_commands(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_blocks_curl(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("curl https://evil.com")
+
+    def test_blocks_wget(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("wget https://evil.com")
+
+    def test_blocks_python(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("python -c 'import os; os.system(\"id\")'")
+
+    def test_blocks_bash(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("bash -c 'whoami'")
+
+    def test_blocks_sh(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("sh -c 'cat /etc/passwd'")
+
+    # === Command injection patterns ===
+
+    def test_blocks_semicolon_injection(self):
+        """Command chaining via semicolon."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py; rm -rf /")
+
+    def test_blocks_pipe_injection(self):
+        """Command chaining via pipe."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_blocks_ampersand_injection(self):
+        """Background execution via &."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py & curl evil.com")
+
+    def test_blocks_and_operator(self):
+        """Command chaining via &&."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py && rm -rf /")
+
+    def test_blocks_or_operator(self):
+        """Command chaining via ||."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("false || rm -rf /")
+
+    def test_blocks_backtick_substitution(self):
+        """Command substitution via backticks."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd `rm -rf /`")
+
+    def test_blocks_dollar_paren_substitution(self):
+        """Command substitution via $()."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd $(rm -rf /)")
+
+    def test_blocks_output_redirection(self):
+        """Output redirection."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py > /tmp/pwned")
+
+    def test_blocks_input_redirection(self):
+        """Input redirection."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py < /etc/passwd")
+
+    def test_blocks_newline_injection(self):
+        """Newline-based command separation."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py\nrm -rf /")
+
+    # === Edge cases ===
+
+    def test_blocks_empty_command(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("")
+
+    def test_blocks_whitespace_only(self):
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("   ")
+
+    def test_handles_quoted_args_safely(self):
+        """Quoted arguments should be parsed correctly."""
+        args = _validate_discovery_command('fd -e py "my folder"')
+        assert "my folder" in args
+
+    def test_safe_commands_is_frozen(self):
+        """Ensure the allowlist cannot be modified at runtime."""
+        assert isinstance(SAFE_DISCOVERY_COMMANDS, frozenset)
