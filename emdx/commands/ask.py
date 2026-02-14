@@ -373,9 +373,9 @@ def show_links(
 
     console.print(f"[bold]#{doc_id}[/bold] \"{source_title}\"")
 
-    def print_tree(links, prefix="", is_last_list=None):
-        if is_last_list is None:
-            is_last_list = []
+    def print_tree(links, prefix="", current_level=1, visited=None):
+        if visited is None:
+            visited = {doc_id}  # Start with root doc as visited
 
         for i, link in enumerate(links):
             is_last = i == len(links) - 1
@@ -389,14 +389,15 @@ def show_links(
             score = f"{link.similarity_score:.0%}"
             console.print(f"{prefix}{branch}#{link.doc_id} \"{link.title}\" ({score})")
 
-            # Get child links if depth > 1
-            if depth > 1 and len(is_last_list) < depth - 1:
+            # Get child links if we haven't reached max depth
+            if current_level < depth:
                 child_prefix = prefix + ("    " if is_last else "│   ")
                 child_links = linker.get_links(link.doc_id, limit=3)
-                # Filter out the parent to avoid showing reverse link
-                child_links = [l for l in child_links if l.doc_id != doc_id]
+                # Filter out all visited ancestors to prevent cycles
+                child_links = [l for l in child_links if l.doc_id not in visited]
                 if child_links:
-                    print_tree(child_links[:3], child_prefix, is_last_list + [is_last])
+                    new_visited = visited | {link.doc_id}
+                    print_tree(child_links[:3], child_prefix, current_level + 1, new_visited)
 
     print_tree(links)
 
