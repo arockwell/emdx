@@ -328,7 +328,7 @@ def show(
             console.print(f"[dim]Created by:[/dim] {group['created_by']}")
 
         # Stats
-        console.print(f"\n[bold]Statistics:[/bold]")
+        console.print("\n[bold]Statistics:[/bold]")
         console.print(f"  Documents: {group['doc_count']}")
         if group['total_tokens']:
             console.print(f"  Total tokens: {group['total_tokens']:,}")
@@ -395,7 +395,7 @@ def delete(
             action = "Permanently deleted" if hard else "Deleted"
             console.print(f"[green]✅ {action} group #{group_id} ({group['name']})[/green]")
         else:
-            console.print(f"[red]Error: Failed to delete group[/red]")
+            console.print("[red]Error: Failed to delete group[/red]")
             raise typer.Exit(1)
 
     except typer.Abort:
@@ -442,7 +442,7 @@ def edit(
             for key, value in updates.items():
                 console.print(f"   [dim]{key}: {value}[/dim]")
         else:
-            console.print(f"[red]Error: Failed to update group[/red]")
+            console.print("[red]Error: Failed to update group[/red]")
             raise typer.Exit(1)
 
     except ValueError as e:

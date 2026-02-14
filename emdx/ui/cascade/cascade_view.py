@@ -22,7 +22,7 @@ from emdx.services.cascade_service import (
 )
 from emdx.services.execution_service import get_execution, update_execution_status
 
-from .constants import NEXT_STAGE, STAGES, STAGE_EMOJI
+from .constants import NEXT_STAGE, STAGE_EMOJI, STAGES
 from .document_list import DocumentList
 from .new_idea_screen import NewIdeaScreen
 from .stage_summary_bar import StageSummaryBar

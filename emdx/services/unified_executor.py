@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..config.cli_config import CliTool, get_default_cli_tool, DEFAULT_ALLOWED_TOOLS
+from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..config.constants import EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
 from ..utils.environment import get_subprocess_env

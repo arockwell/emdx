@@ -16,16 +16,16 @@ Usage:
             logger.warning(conflict.to_string())
 """
 
+from .config import KeybindingConfig, get_config_path, load_config
 from .context import Context
+from .extractor import KeybindingExtractor, extract_all_keybindings
 from .registry import (
+    ConflictReport,
+    ConflictSeverity,
+    ConflictType,
     KeybindingEntry,
     KeybindingRegistry,
-    ConflictReport,
-    ConflictType,
-    ConflictSeverity,
 )
-from .extractor import KeybindingExtractor, extract_all_keybindings
-from .config import KeybindingConfig, load_config, get_config_path
 
 __all__ = [
     "Context",

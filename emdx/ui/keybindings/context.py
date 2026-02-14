@@ -161,7 +161,6 @@ class Context(Enum):
             "DocumentBrowser": cls.DOCUMENT_NORMAL,
             # Agent browser
             "AgentBrowser": cls.AGENT_NORMAL,
-            "AgentHistoryModal": cls.MODAL_AGENT,
             # Log browser
             "LogBrowser": cls.LOG_NORMAL,
             "LogView": cls.LOG_VIEW,

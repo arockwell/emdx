@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from .palette_commands import CommandContext, CommandRegistry, PaletteCommand, get_command_registry
+from .palette_commands import CommandContext, PaletteCommand, get_command_registry
 
 logger = logging.getLogger(__name__)
 

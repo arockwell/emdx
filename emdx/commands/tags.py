@@ -24,7 +24,6 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import normalize_tag_to_emoji
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 
@@ -366,7 +365,7 @@ def batch(
             return
 
         # Display what will be done
-        console.print(f"\n[bold cyan]🏷️  Batch Auto-Tagging Report[/bold cyan]")
+        console.print("\n[bold cyan]🏷️  Batch Auto-Tagging Report[/bold cyan]")
         console.print(f"\n[yellow]Found {len(eligible_docs)} documents to tag[/yellow]")
         console.print(f"[yellow]Total tags to apply: {total_tags_to_apply}[/yellow]\n")
 

@@ -9,7 +9,6 @@ instructions for Claude to follow via `emdx delegate`.
 """
 
 import subprocess
-import sys
 from pathlib import Path
 from typing import List, Optional
 
