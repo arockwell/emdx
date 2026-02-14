@@ -726,3 +726,182 @@ class TestArchiveCommand:
         result = runner.invoke(app, ["archive", "1", "--descendants"])
         assert result.exit_code == 0
         assert "3 descendants" in _out(result)
+
+
+# ---------------------------------------------------------------------------
+# check command (contextual save duplicate prevention)
+# ---------------------------------------------------------------------------
+from emdx.services.contextual_save import CheckResult, SimilarDoc
+
+
+class TestCheckCommand:
+    """Tests for the check command (contextual save duplicate prevention)."""
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_basic(self, mock_check):
+        """Basic check with text argument."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[
+                SimilarDoc(doc_id=1, title="Existing Doc", project="proj", similarity=0.7, tags=["python"]),
+            ],
+            suggested_tags=["python"],
+            suggested_project="proj",
+            recommendation="Related to #1.",
+            classification="related",
+        )
+
+        result = runner.invoke(app, ["check", "API authentication design"])
+        assert result.exit_code == 0
+        assert "Existing Doc" in _out(result) or "Related" in _out(result)
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_no_similar_found(self, mock_check):
+        """Check when no similar docs are found."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[],
+            suggested_tags=[],
+            suggested_project=None,
+            recommendation="New topic.",
+            classification="new",
+        )
+
+        result = runner.invoke(app, ["check", "Completely unique content"])
+        assert result.exit_code == 0
+        assert "No similar documents" in _out(result) or "new content" in _out(result).lower()
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_duplicate_warning(self, mock_check):
+        """Check shows warning for potential duplicates."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[
+                SimilarDoc(doc_id=42, title="Very Similar Doc", project="proj", similarity=0.9, tags=["api"]),
+            ],
+            suggested_tags=["api"],
+            suggested_project="proj",
+            recommendation="Overlaps with #42. Consider updating instead.",
+            classification="duplicate",
+        )
+
+        result = runner.invoke(app, ["check", "API design that matches"])
+        out = _out(result)
+        assert result.exit_code == 0
+        assert "duplicate" in out.lower() or "Potential" in out
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_json_output(self, mock_check):
+        """Check with --json outputs JSON."""
+        import json as json_module
+
+        mock_check.return_value = CheckResult(
+            similar_docs=[
+                SimilarDoc(doc_id=1, title="JSON Test", project="p", similarity=0.65, tags=["test"]),
+            ],
+            suggested_tags=["test"],
+            suggested_project="p",
+            recommendation="Related to #1.",
+            classification="related",
+        )
+
+        result = runner.invoke(app, ["check", "Test content", "--json"])
+        assert result.exit_code == 0
+
+        # Parse the JSON output
+        output = json_module.loads(result.stdout)
+        assert output["classification"] == "related"
+        assert len(output["similar_docs"]) == 1
+        assert output["similar_docs"][0]["doc_id"] == 1
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_with_limit(self, mock_check):
+        """Check with --limit parameter."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[],
+            suggested_tags=[],
+            suggested_project=None,
+            recommendation="New topic.",
+            classification="new",
+        )
+
+        result = runner.invoke(app, ["check", "Test content", "--limit", "10"])
+        assert result.exit_code == 0
+
+        # Verify limit was passed
+        mock_check.assert_called_once()
+        call_kwargs = mock_check.call_args
+        assert call_kwargs[1]["limit"] == 10
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_with_threshold(self, mock_check):
+        """Check with --threshold parameter."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[],
+            suggested_tags=[],
+            suggested_project=None,
+            recommendation="New topic.",
+            classification="new",
+        )
+
+        result = runner.invoke(app, ["check", "Test content", "--threshold", "0.5"])
+        assert result.exit_code == 0
+
+        # Verify threshold was passed
+        mock_check.assert_called_once()
+        call_kwargs = mock_check.call_args
+        assert call_kwargs[1]["min_similarity"] == 0.5
+
+    def test_check_no_input(self):
+        """Check with no input should fail."""
+        result = runner.invoke(app, ["check"])
+        assert result.exit_code != 0
+        assert "Error" in _out(result) or "text" in _out(result).lower()
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_from_stdin(self, mock_check):
+        """Check reads from stdin when no argument provided."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[],
+            suggested_tags=[],
+            suggested_project=None,
+            recommendation="New topic.",
+            classification="new",
+        )
+
+        # Simulate piped input
+        result = runner.invoke(app, ["check"], input="Piped content from stdin")
+        assert result.exit_code == 0
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_shows_suggested_tags(self, mock_check):
+        """Check shows suggested tags from similar docs."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[
+                SimilarDoc(doc_id=1, title="Tagged Doc", project="p", similarity=0.6, tags=["python", "api"]),
+            ],
+            suggested_tags=["python", "api"],
+            suggested_project="p",
+            recommendation="Related to #1.",
+            classification="related",
+        )
+
+        result = runner.invoke(app, ["check", "Some content"])
+        out = _out(result)
+        assert result.exit_code == 0
+        assert "Suggested tags" in out or "python" in out
+
+    @patch("emdx.services.contextual_save.check_for_similar")
+    def test_check_shows_edit_suggestion_for_duplicates(self, mock_check):
+        """Check shows edit suggestion for potential duplicates."""
+        mock_check.return_value = CheckResult(
+            similar_docs=[
+                SimilarDoc(doc_id=99, title="Duplicate Doc", project="p", similarity=0.85, tags=[]),
+            ],
+            suggested_tags=[],
+            suggested_project="p",
+            recommendation="Overlaps with #99. Consider updating instead.",
+            classification="duplicate",
+        )
+
+        result = runner.invoke(app, ["check", "Duplicate content"])
+        out = _out(result)
+        assert result.exit_code == 0
+        assert "emdx edit" in out or "emdx view" in out or "99" in out

@@ -8,7 +8,6 @@ duplicate documents in the knowledge base.
 from __future__ import annotations
 
 import logging
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -308,7 +307,7 @@ def format_check_output(result: CheckResult, doc_id: Optional[int] = None) -> st
     if doc_id is not None and result.similar_docs:
         lines.append(f"⚠ Similar docs found:")
         for doc in result.similar_docs[:3]:
-            action = "consider `emdx edit {}`".format(doc.doc_id) if doc.similarity >= DUPLICATE_THRESHOLD else ""
+            action = f"consider `emdx edit {doc.doc_id}`" if doc.similarity >= DUPLICATE_THRESHOLD else ""
             line = f"  #{doc.doc_id} ({doc.similarity:.0%} similar)"
             if action:
                 line += f" — {action}"
