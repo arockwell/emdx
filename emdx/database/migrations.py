@@ -1955,6 +1955,52 @@ def migration_036_add_execution_metrics(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_037_add_collate_nocase_indexes(conn: sqlite3.Connection):
+    """Add COLLATE NOCASE indexes for case-insensitive title searches.
+
+    The codebase uses LOWER(title) = LOWER(?) pattern for case-insensitive
+    lookups (see documents.py get_document, delete_document, etc.). Without
+    an index, SQLite must scan the entire table and apply LOWER() to each row.
+
+    COLLATE NOCASE indexes enable SQLite to use index lookups for
+    case-insensitive comparisons when queries use COLLATE NOCASE or
+    when the indexed column is compared with LIKE (case-insensitive by default).
+
+    Note: For queries using LOWER(col) = LOWER(?), the optimizer may not
+    use COLLATE NOCASE indexes directly. The recommended approach is to:
+    1. Create the COLLATE NOCASE index (this migration)
+    2. Update queries to use: title = ? COLLATE NOCASE
+       or: title COLLATE NOCASE = ?
+
+    For FTS5, case-insensitivity is already handled by the tokenizer
+    (porter unicode61), so no additional indexes are needed there.
+    """
+    cursor = conn.cursor()
+
+    # Index for case-insensitive title lookups on active documents
+    # Partial index excludes deleted documents since most lookups filter those out
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_title_nocase
+        ON documents(title COLLATE NOCASE)
+        WHERE is_deleted = FALSE
+    """)
+
+    # Index for case-insensitive title lookups on deleted documents (for restore)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_title_nocase_deleted
+        ON documents(title COLLATE NOCASE)
+        WHERE is_deleted = TRUE
+    """)
+
+    # Index for tag name lookups (tags are compared case-insensitively)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tags_name_nocase
+        ON tags(name COLLATE NOCASE)
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1994,6 +2040,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
     (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
+    (37, "Add COLLATE NOCASE indexes for case-insensitive search", migration_037_add_collate_nocase_indexes),
 ]
 
 
