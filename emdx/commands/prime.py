@@ -5,6 +5,8 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
+import sqlite3
+
 import typer
 from datetime import datetime
 from typing import Optional
@@ -331,7 +333,7 @@ def _get_cascade_status() -> dict:
             for stage, count in cursor.fetchall():
                 if stage in status:
                     status[stage] = count
-    except Exception:
+    except sqlite3.OperationalError:
         # cascade_stage column may not exist in older databases
         pass
 

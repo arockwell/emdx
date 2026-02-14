@@ -9,6 +9,7 @@ Uses stream-json output format by default for real-time log streaming.
 
 import json
 import logging
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
@@ -462,8 +463,8 @@ class UnifiedExecutor:
                         input_tokens=result.input_tokens,
                         output_tokens=result.output_tokens,
                     )
-                except Exception:
-                    logger.debug("Could not persist execution metrics", exc_info=True)
+                except (sqlite3.OperationalError, ImportError) as e:
+                    logger.debug(f"Could not persist execution metrics: {e}", exc_info=True)
 
             return result
 

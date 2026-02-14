@@ -20,8 +20,8 @@ def _generate_build_id():
         build_data = f"{__version__}-{mtime}-{time.time()}"
         build_hash = hashlib.md5(build_data.encode()).hexdigest()[:8]
         return f"{__version__}-{build_hash}"
-    except Exception:
-        # Fallback to timestamp if file ops fail
+    except OSError:
+        # Fallback to timestamp if file ops fail (e.g., stat() fails)
         return f"{__version__}-{int(time.time())}"
 
 __build_id__ = _generate_build_id()

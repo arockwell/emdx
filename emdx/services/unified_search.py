@@ -7,6 +7,7 @@ Supports query parsing with special syntax for different search modes.
 
 import logging
 import re
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -582,5 +583,6 @@ class UnifiedSearchService:
                 cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
                 count = cursor.fetchone()[0]
                 return count > 0
-        except Exception:
+        except sqlite3.OperationalError:
+            # Table may not exist or database may be locked
             return False

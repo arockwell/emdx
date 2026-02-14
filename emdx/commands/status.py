@@ -12,6 +12,8 @@ import typer
 from datetime import datetime, timedelta
 from typing import Optional
 
+import sqlite3
+
 from rich.console import Console
 from rich.text import Text
 
@@ -34,7 +36,8 @@ def _parse_timestamp(value) -> Optional[datetime]:
         return value
     try:
         return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
-    except Exception:
+    except ValueError:
+        # Invalid datetime string format
         return None
 
 
@@ -213,7 +216,7 @@ def _show_cascade_status():
             console.print("  " + " → ".join(parts))
             console.print("  [dim]Run [cyan]emdx cascade process <stage>[/cyan] to advance[/dim]")
             console.print()
-    except Exception:
+    except sqlite3.OperationalError:
         # cascade_stage column may not exist in older databases
         pass
 

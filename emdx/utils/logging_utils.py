@@ -107,6 +107,6 @@ def setup_tui_logging(module_name: str) -> tuple[logging.Logger, logging.Logger]
 
         return main_logger, key_logger
 
-    except Exception:
-        # Fallback if logging setup fails
+    except (OSError, PermissionError):
+        # Fallback if logging setup fails (e.g., can't create/write log files)
         return logging.getLogger(module_name), logging.getLogger("key_events")

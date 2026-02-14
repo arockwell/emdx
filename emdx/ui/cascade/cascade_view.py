@@ -193,7 +193,8 @@ class CascadeView(Widget):
             ts = act.get("completed_at") or act.get("started_at")
             try:
                 time_str = (ts.strftime("%H:%M:%S") if isinstance(ts, datetime) else datetime.fromisoformat(str(ts)).strftime("%H:%M:%S")) if ts else ""
-            except Exception:
+            except ValueError:
+                # Invalid datetime format
                 time_str = "?"
 
             from_stage, to_stage = act.get("from_stage", "?"), act.get("output_stage", "?")
