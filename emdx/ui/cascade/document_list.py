@@ -9,7 +9,6 @@ from textual.widgets import DataTable, Static
 
 from emdx.services.cascade_service import (
     get_child_info,
-    get_document_pr_url,
     list_documents_at_stage,
 )
 

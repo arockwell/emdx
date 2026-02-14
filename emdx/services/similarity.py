@@ -453,7 +453,6 @@ class SimilarityService:
             return []
 
         import numpy as np
-        from scipy.sparse import csr_matrix
 
         # Compute full similarity matrix (sparse operation, very fast)
         if progress_callback:

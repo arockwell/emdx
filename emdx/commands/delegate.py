@@ -40,7 +40,6 @@ import typer
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
-
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
 
 

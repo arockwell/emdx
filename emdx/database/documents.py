@@ -40,12 +40,12 @@ def save_document(
 
         conn.commit()
         doc_id = cursor.lastrowid
-        
+
         # Add tags if provided
         if tags:
             from emdx.models.tags import add_tags_to_document
             add_tags_to_document(doc_id, tags)
-        
+
         return doc_id
 
 
@@ -54,7 +54,7 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
-        
+
         # Update access tracking
         if identifier_str.isdigit():
             conn.execute(
@@ -271,7 +271,7 @@ def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> b
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
-        
+
         if hard_delete:
             # Permanent deletion
             if identifier_str.isdigit():

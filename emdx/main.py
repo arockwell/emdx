@@ -12,6 +12,7 @@ import os
 from typing import Optional
 
 import typer
+
 from emdx import __build_id__, __version__
 from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 
@@ -88,19 +89,18 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # =============================================================================
 # EAGER IMPORTS - Core KB commands (fast, always needed)
 # =============================================================================
-from emdx.commands.core import app as core_app
 from emdx.commands.browse import app as browse_app
-from emdx.commands.tags import app as tag_app
-from emdx.commands.trash import app as trash_app
+from emdx.commands.core import app as core_app
 from emdx.commands.executions import app as executions_app
-from emdx.commands.tasks import app as tasks_app
+from emdx.commands.gist import app as gist_app
 from emdx.commands.groups import app as groups_app
+from emdx.commands.maintain import app as maintain_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.commands.tags import app as tag_app
+from emdx.commands.tasks import app as tasks_app
+from emdx.commands.trash import app as trash_app
 from emdx.ui.gui import gui as gui_command
-from emdx.commands.maintain import app as maintain_app
-from emdx.commands.gist import app as gist_app
-
 
 # Create main app with lazy loading support
 app = typer.Typer(

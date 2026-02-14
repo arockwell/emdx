@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from emdx.config.constants import EMDX_CONFIG_DIR
+
 from .context import Context
 from .registry import KeybindingEntry
 

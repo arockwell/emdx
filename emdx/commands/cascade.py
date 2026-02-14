@@ -15,7 +15,6 @@ Key concepts:
 import re
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 import typer
@@ -23,10 +22,10 @@ from rich.console import Console
 from rich.table import Table
 
 from ..config.constants import EMDX_LOG_DIR
-from ..database.documents import get_document, save_document
 from ..database import cascade as cascade_db
-from ..services.claude_executor import execute_claude_detached, execute_claude_sync
 from ..database.connection import db_connection
+from ..database.documents import get_document, save_document
+from ..services.claude_executor import execute_claude_detached, execute_claude_sync
 
 console = Console()
 
@@ -227,7 +226,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
 
             return True, new_doc_id, pr_url
         else:
-            console.print(f"[red]✗ Processing failed[/red]")
+            console.print("[red]✗ Processing failed[/red]")
             with db_connection.get_connection() as conn:
                 conn.execute(
                     "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -327,7 +326,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
         # Verify document is at expected stage
         if doc.get("stage") != stage:
             console.print(f"[red]Document #{current_doc_id} is at '{doc.get('stage')}', expected '{stage}'[/red]")
-            _update_cascade_run(cascade_run_id, status='failed', error_message=f"Stage mismatch")
+            _update_cascade_run(cascade_run_id, status='failed', error_message="Stage mismatch")
             raise typer.Exit(1)
 
         success, new_doc_id, stage_pr_url = _process_stage(doc, stage, cascade_run_id)
@@ -350,7 +349,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
     # Complete the cascade run
     _update_cascade_run(cascade_run_id, status='completed')
 
-    console.print(f"[bold green]✓ Cascade complete![/bold green]")
+    console.print("[bold green]✓ Cascade complete![/bold green]")
     console.print(f"  Final document: #{current_doc_id}")
     console.print(f"  Final stage: {stop_stage}")
     if pr_url:
@@ -472,7 +471,6 @@ def process(
     else:
         # Async execution - start and return immediately
         doc_id = doc["id"]
-        next_stage = NEXT_STAGE[stage]
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
         EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
