@@ -29,6 +29,7 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -139,11 +140,24 @@ def _resolve_task(task: str, pr: bool = False) -> str:
 
 
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a discovery command and return output lines as items.
+
+    Security: Uses shlex.split() with shell=False to prevent command injection.
+    The command is parsed into arguments rather than passed to a shell interpreter.
+    This means shell features like pipes (|), redirects (>), command chaining (;, &&)
+    won't work, but typical discovery commands like 'fd -e py src/' are supported.
+    """
     try:
+        # Parse command into arguments safely - prevents injection attacks like:
+        # --each '; rm -rf ~' or --each '$(malicious_command)'
+        args = shlex.split(command)
+        if not args:
+            sys.stderr.write("delegate: discovery command is empty\n")
+            raise typer.Exit(1)
+
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
@@ -160,6 +174,15 @@ def _run_discovery(command: str) -> List[str]:
         sys.stderr.write(f"delegate: discovered {len(lines)} item(s)\n")
         return lines
 
+    except ValueError as e:
+        # shlex.split can raise ValueError on malformed input (e.g., unclosed quotes)
+        sys.stderr.write(f"delegate: invalid discovery command syntax: {e}\n")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        # Command not found
+        cmd_name = shlex.split(command)[0] if command else "unknown"
+        sys.stderr.write(f"delegate: command not found: {cmd_name}\n")
+        raise typer.Exit(1)
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
         raise typer.Exit(1)
