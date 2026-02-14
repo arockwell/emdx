@@ -29,6 +29,8 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +140,93 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Safe commands allowed for --each discovery
+# These are file-listing tools that don't modify state
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find replacement
+    "find",         # Traditional find
+    "git",          # git ls-files, git diff --name-only, etc.
+    "ls",           # List files
+    "rg",           # ripgrep with --files
+    "eza",          # Modern ls replacement
+    "exa",          # Alias for eza
+    "tree",         # Directory tree
+    "locate",       # Locate files
+    "fdfind",       # Debian/Ubuntu name for fd
+})
+
+# Shell metacharacters that could enable command injection
+# Note: * and ? are allowed for glob patterns (e.g., "fd *.py", "find -name '*.txt'")
+# These are safe because we use shell=False, so they're passed as literal arguments
+SHELL_METACHARACTERS = re.compile(r'[;&|`$(){}[\]<>!\\\n\r]')
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Validate and parse a discovery command for safe execution.
+
+    Args:
+        command: The raw command string from --each
+
+    Returns:
+        List of arguments suitable for subprocess with shell=False
+
+    Raises:
+        typer.Exit: If the command is not allowed
+
+    Security:
+        - Only allows known-safe file-listing commands
+        - Rejects shell metacharacters that could enable injection
+        - Uses shlex.split() for proper argument parsing
+    """
+    # Check for shell metacharacters
+    if SHELL_METACHARACTERS.search(command):
+        sys.stderr.write(
+            "delegate: --each command contains shell metacharacters\n"
+            "delegate: only simple file-listing commands are allowed\n"
+            "delegate: allowed commands: fd, find, git, ls, rg, eza, tree, locate\n"
+        )
+        raise typer.Exit(1)
+
+    # Parse the command into arguments
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: --each command is empty\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (first argument)
+    base_cmd = Path(args[0]).name  # Handle paths like /usr/bin/fd
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not an allowed discovery command\n"
+            f"delegate: allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+            f"delegate: for arbitrary commands, run them separately and pipe to delegate\n"
+        )
+        raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    Security:
+        - Commands are validated against an allowlist before execution
+        - Shell metacharacters are rejected
+        - Runs with shell=False using parsed argument list
+    """
+    # Validate and parse the command
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
@@ -162,6 +245,9 @@ def _run_discovery(command: str) -> List[str]:
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        sys.stderr.write(f"delegate: command not found: {args[0]}\n")
         raise typer.Exit(1)
 
 
