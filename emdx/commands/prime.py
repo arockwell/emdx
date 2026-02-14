@@ -5,6 +5,7 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
+import logging
 import typer
 from datetime import datetime
 from typing import Optional
@@ -17,6 +18,7 @@ from ..database import db
 from ..utils.git import get_git_project
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def prime(
@@ -331,9 +333,9 @@ def _get_cascade_status() -> dict:
             for stage, count in cursor.fetchall():
                 if stage in status:
                     status[stage] = count
-    except Exception:
+    except Exception as e:
         # cascade_stage column may not exist in older databases
-        pass
+        logger.debug(f"Could not load cascade status (may be old schema): {e}")
 
     return status
 

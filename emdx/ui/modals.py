@@ -381,7 +381,8 @@ class DocumentPreviewModal(ModalScreen):
                     from .markdown_config import MarkdownConfig
                     markdown = MarkdownConfig.create_markdown(content)
                     preview.write(markdown)
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Markdown rendering failed, falling back to plain text: {e}")
                     preview.write(content)
             else:
                 preview.write("[dim]Empty document[/dim]")

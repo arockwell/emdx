@@ -582,5 +582,6 @@ class UnifiedSearchService:
                 cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
                 count = cursor.fetchone()[0]
                 return count > 0
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not check embeddings availability: {e}")
             return False

@@ -803,8 +803,9 @@ class DocumentBrowser(HelpMixin, Widget):
         try:
             status = self.query_one("#browser-status", Static)
             status.update(message)
-        except Exception:
+        except Exception as e:
             # Fallback to app status if our status bar doesn't exist
+            logger.debug(f"Could not update browser status bar: {e}")
             app = self.app
             if hasattr(app, 'update_status'):
                 app.update_status(message)
@@ -976,12 +977,13 @@ class DocumentBrowser(HelpMixin, Widget):
                     preview.write(markdown)
                 else:
                     preview.write("[dim]Empty document[/dim]")
-            except Exception:
+            except Exception as e:
                 # Fallback to plain text if markdown fails
+                logger.debug(f"Markdown rendering failed, using plain text: {e}")
                 preview.write(detail_vm.content[:50000])
-        except Exception:
+        except Exception as e:
             # Preview widget not found or not ready - ignore
-            pass
+            logger.debug(f"Preview widget not ready: {e}")
 
         # Update details panel
         self.call_later(lambda: self._update_details_from_vm(detail_vm))

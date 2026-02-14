@@ -26,6 +26,11 @@ from ..models.tasks import (
 console = Console()
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def _parse_timestamp(value) -> Optional[datetime]:
     """Parse a timestamp that may be a datetime, string, or None."""
     if value is None:
@@ -34,7 +39,8 @@ def _parse_timestamp(value) -> Optional[datetime]:
         return value
     try:
         return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to parse timestamp '{value}': {e}")
         return None
 
 
@@ -213,9 +219,9 @@ def _show_cascade_status():
             console.print("  " + " → ".join(parts))
             console.print("  [dim]Run [cyan]emdx cascade process <stage>[/cyan] to advance[/dim]")
             console.print()
-    except Exception:
+    except Exception as e:
         # cascade_stage column may not exist in older databases
-        pass
+        logger.debug(f"Could not load cascade status (may be old schema): {e}")
 
 
 def status(

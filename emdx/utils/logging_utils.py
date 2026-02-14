@@ -107,6 +107,8 @@ def setup_tui_logging(module_name: str) -> tuple[logging.Logger, logging.Logger]
 
         return main_logger, key_logger
 
-    except Exception:
-        # Fallback if logging setup fails
+    except Exception as e:
+        # Fallback if logging setup fails - log to stderr as last resort
+        import sys
+        print(f"Warning: TUI logging setup failed: {e}", file=sys.stderr)
         return logging.getLogger(module_name), logging.getLogger("key_events")
