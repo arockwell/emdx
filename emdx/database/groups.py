@@ -134,7 +134,15 @@ def update_group(group_id: int, **kwargs) -> bool:
 
     Returns:
         True if update succeeded
+
+    Security Note:
+        Field names are interpolated into SQL, but this is safe because they
+        are filtered through `allowed_fields` (an allowlist). Only the exact
+        field names in that set can appear in the query. User-provided values
+        are always passed as parameterized query arguments (?), never interpolated.
     """
+    # SECURITY: This allowlist controls which field names can be interpolated
+    # into the SQL query. Only these exact strings will be used in the SET clause.
     allowed_fields = {
         "name", "description", "parent_group_id", "group_type",
         "project", "is_active",
@@ -152,6 +160,8 @@ def update_group(group_id: int, **kwargs) -> bool:
 
     updates["updated_at"] = datetime.now().isoformat()
 
+    # SECURITY: Field names come from allowed_fields allowlist above.
+    # Values use parameterized queries (?) to prevent SQL injection.
     set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
     values = list(updates.values()) + [group_id]
 

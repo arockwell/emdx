@@ -1807,6 +1807,9 @@ def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
 
     existing = {row[1] for row in cursor.execute("PRAGMA table_info(tasks)").fetchall()}
 
+    # SECURITY: Column names are hardcoded below. Do NOT accept user input here.
+    # This pattern (f-string with column names) is safe because the values come
+    # from this hardcoded tuple, not from user input or external sources.
     new_columns = [
         ("prompt", "TEXT"),
         ("type", "TEXT DEFAULT 'single'"),
