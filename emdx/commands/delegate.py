@@ -139,11 +139,30 @@ def _resolve_task(task: str, pr: bool = False) -> str:
 
 
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a discovery command and return output lines as items.
+
+    Security: Uses shlex.split() with shell=False to prevent command injection.
+    This means shell features like pipes (|) and command chaining (;, &&) are
+    NOT supported. For complex discovery, use a script or pre-process the list.
+    """
+    import shlex
+
+    try:
+        # Parse command into arguments safely - prevents command injection
+        # by avoiding shell=True. This means no pipes, redirects, or chaining.
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid discovery command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
@@ -160,6 +179,9 @@ def _run_discovery(command: str) -> List[str]:
         sys.stderr.write(f"delegate: discovered {len(lines)} item(s)\n")
         return lines
 
+    except FileNotFoundError:
+        sys.stderr.write(f"delegate: discovery command not found: {args[0]}\n")
+        raise typer.Exit(1)
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
         raise typer.Exit(1)
@@ -570,7 +592,7 @@ def delegate(
     ),
     each: str = typer.Option(
         None, "--each",
-        help="Shell command to discover items (one per line)",
+        help="Command to discover items (one per line, no shell features like pipes)",
     ),
     do: str = typer.Option(
         None, "--do",

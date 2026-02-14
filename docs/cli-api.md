@@ -814,18 +814,22 @@ emdx delegate --worktree --chain "analyze" "fix" "test"
 
 ### Dynamic Discovery
 
-Discover items at runtime via a shell command, then process each in parallel:
+Discover items at runtime via a command, then process each in parallel:
 
 ```bash
 # Review all Python files
 emdx delegate --each "fd -e py src/" --do "Review {{item}} for security issues"
 
-# Process all feature branches
-emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
+# Process all feature branches (use git flags instead of pipes)
+emdx delegate --each "git branch -r --list *feature*" --do "Review branch {{item}}"
 
 # Combine with explicit tasks
 emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the README"
 ```
+
+> **Security note:** For security, `--each` does not support shell features like pipes (`|`),
+> redirects (`>`), or command chaining (`;`, `&&`). Use command-specific flags or pre-process
+> lists via a script.
 
 ### Options Reference
 
@@ -842,7 +846,7 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | | Base branch for worktree (default: main) |
 | `--chain` | | Run tasks sequentially, piping output forward |
-| `--each` | | Shell command to discover items (one per line) |
+| `--each` | | Command to discover items (one per line, no shell features) |
 | `--do` | | Template for each discovered item (use `{{item}}`) |
 
 **Note:** `--chain` and `--synthesize` are mutually exclusive. `--each` requires `--do`.

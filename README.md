@@ -149,9 +149,13 @@ Find items at runtime, then process each one:
 # Review every Python file in src/
 emdx delegate --each "fd -e py src/" --do "Review {{item}} for issues"
 
-# Review all feature branches
-emdx delegate --each "git branch -r | grep feature" --do "Review {{item}}"
+# Review all remote branches (note: pipes not supported, use git flags)
+emdx delegate --each "git branch -r --list *feature*" --do "Review {{item}}"
 ```
+
+> **Note:** For security, `--each` does not support shell features like pipes (`|`) or
+> command chaining. Use command-specific flags (like `git branch --list`) or pre-process
+> lists via a script.
 
 ### Use documents as input
 

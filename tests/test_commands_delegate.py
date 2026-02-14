@@ -1,8 +1,12 @@
 """Tests for delegate command helper functions."""
 
-from unittest.mock import patch
+import subprocess
+from unittest.mock import patch, MagicMock
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import pytest
+import typer
+
+from emdx.commands.delegate import _slugify_title, _resolve_task, _run_discovery, PR_INSTRUCTION
 
 
 class TestSlugifyTitle:
@@ -90,3 +94,81 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestRunDiscovery:
+    """Tests for _run_discovery — security hardened command execution."""
+
+    @patch("subprocess.run")
+    def test_simple_command_succeeds(self, mock_run):
+        """Basic command execution works."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="file1.py\nfile2.py\n",
+            stderr="",
+        )
+        result = _run_discovery("echo test")
+        assert result == ["file1.py", "file2.py"]
+        # Verify shell=False is used (security fix)
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["shell"] is False
+
+    @patch("subprocess.run")
+    def test_uses_shlex_split(self, mock_run):
+        """Command is parsed with shlex.split for security."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="result\n",
+            stderr="",
+        )
+        _run_discovery('fd -e py "src dir"')
+        # Should be split into ['fd', '-e', 'py', 'src dir']
+        call_args = mock_run.call_args[0][0]
+        assert call_args == ["fd", "-e", "py", "src dir"]
+
+    def test_rejects_empty_command(self):
+        """Empty command raises exit."""
+        with pytest.raises(typer.Exit):
+            _run_discovery("")
+
+    def test_rejects_malformed_quotes(self):
+        """Malformed quotes in command raise exit."""
+        with pytest.raises(typer.Exit):
+            _run_discovery('echo "unterminated')
+
+    @patch("subprocess.run")
+    def test_command_not_found_exits(self, mock_run):
+        """Non-existent command raises exit."""
+        mock_run.side_effect = FileNotFoundError()
+        with pytest.raises(typer.Exit):
+            _run_discovery("nonexistent_command")
+
+    @patch("subprocess.run")
+    def test_timeout_exits(self, mock_run):
+        """Command timeout raises exit."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=30)
+        with pytest.raises(typer.Exit):
+            _run_discovery("slow_command")
+
+    @patch("subprocess.run")
+    def test_nonzero_exit_code_exits(self, mock_run):
+        """Non-zero return code raises exit."""
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="error message",
+        )
+        with pytest.raises(typer.Exit):
+            _run_discovery("failing_command")
+
+    @patch("subprocess.run")
+    def test_empty_output_exits(self, mock_run):
+        """Empty output raises exit."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="\n\n",
+            stderr="",
+        )
+        with pytest.raises(typer.Exit):
+            _run_discovery("empty_command")
