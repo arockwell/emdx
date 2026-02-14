@@ -29,6 +29,8 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +140,76 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Allowlist of safe commands for --each discovery
+# These are read-only file discovery tools that cannot execute arbitrary code
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find alternative
+    "find",         # Standard file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "ls",           # List directory
+    "eza",          # Modern ls alternative
+    "rg",           # Ripgrep (file listing mode)
+    "grep",         # Grep (file listing mode)
+    "ag",           # Silver searcher
+    "tree",         # Directory tree
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Validate and parse a discovery command for safety.
+
+    Only allows commands from SAFE_DISCOVERY_COMMANDS to prevent command injection.
+    Returns the parsed command as a list of arguments.
+
+    Raises typer.Exit(1) if command is unsafe.
+    """
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Get the base command (strip path if present)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not in the allowed discovery commands.\n"
+            f"Allowed: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+            f"For arbitrary shell commands, run them manually and pipe to delegate.\n"
+        )
+        raise typer.Exit(1)
+
+    # Block shell metacharacters that could allow injection even with safe commands
+    # These could be used to chain commands or redirect output
+    dangerous_chars = re.compile(r'[;&|`$(){}]|>>|<<')
+    if dangerous_chars.search(command):
+        sys.stderr.write(
+            "delegate: shell metacharacters (;, &, |, `, $, etc.) are not allowed.\n"
+            "For complex pipelines, run them manually and pipe to delegate.\n"
+        )
+        raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    Security: Only allows commands from SAFE_DISCOVERY_COMMANDS to prevent
+    command injection via the --each flag. Shell metacharacters are blocked.
+    """
+    # Validate command before execution
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,  # Use parsed args, not shell string
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,

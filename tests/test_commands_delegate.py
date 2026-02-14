@@ -1,8 +1,16 @@
 """Tests for delegate command helper functions."""
 
+import pytest
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    _run_discovery,
+    SAFE_DISCOVERY_COMMANDS,
+    PR_INSTRUCTION,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +98,150 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — prevents command injection."""
+
+    def test_safe_fd_command_allowed(self):
+        """fd is in the allowlist and should work."""
+        args = _validate_discovery_command("fd -e py src/")
+        assert args[0] == "fd"
+        assert "-e" in args
+        assert "py" in args
+
+    def test_safe_find_command_allowed(self):
+        """find is in the allowlist and should work."""
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_safe_git_command_allowed(self):
+        """git is in the allowlist and should work."""
+        args = _validate_discovery_command("git ls-files '*.py'")
+        assert args[0] == "git"
+
+    def test_safe_ls_command_allowed(self):
+        """ls is in the allowlist and should work."""
+        args = _validate_discovery_command("ls -la src/")
+        assert args[0] == "ls"
+
+    def test_safe_rg_command_allowed(self):
+        """rg is in the allowlist and should work."""
+        args = _validate_discovery_command("rg -l pattern")
+        assert args[0] == "rg"
+
+    def test_unsafe_rm_command_blocked(self):
+        """rm is NOT in the allowlist and should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_unsafe_curl_command_blocked(self):
+        """curl is NOT in the allowlist and should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("curl http://evil.com")
+
+    def test_unsafe_bash_command_blocked(self):
+        """bash is NOT in the allowlist and should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("bash -c 'echo pwned'")
+
+    def test_unsafe_sh_command_blocked(self):
+        """sh is NOT in the allowlist and should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("sh -c 'rm -rf /'")
+
+    def test_command_chaining_with_semicolon_blocked(self):
+        """Command chaining with ; should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("fd -e py; rm -rf /")
+
+    def test_command_chaining_with_ampersand_blocked(self):
+        """Command chaining with & should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("fd -e py & rm -rf /")
+
+    def test_command_chaining_with_pipe_blocked(self):
+        """Command chaining with | should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_command_substitution_backticks_blocked(self):
+        """Command substitution with backticks should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("fd `rm -rf /`")
+
+    def test_command_substitution_dollar_parens_blocked(self):
+        """Command substitution with $() should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("fd $(rm -rf /)")
+
+    def test_empty_command_blocked(self):
+        """Empty command should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("")
+
+    def test_full_path_to_allowed_command_works(self):
+        """Full paths to allowed commands should work."""
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert "fd" in args[0]  # Path basename is fd
+
+    def test_full_path_to_disallowed_command_blocked(self):
+        """Full paths to disallowed commands should be blocked."""
+        from click.exceptions import Exit
+        with pytest.raises(Exit):
+            _validate_discovery_command("/usr/bin/rm -rf /")
+
+
+class TestRunDiscovery:
+    """Tests for _run_discovery — secure command execution."""
+
+    def test_discovery_uses_shell_false(self):
+        """Discovery should use shell=False to prevent injection."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "file1.py\nfile2.py"
+            mock_run.return_value.stderr = ""
+
+            _run_discovery("fd -e py")
+
+            # Verify shell=False is used
+            call_kwargs = mock_run.call_args[1]
+            assert call_kwargs["shell"] is False
+
+    def test_discovery_passes_args_as_list(self):
+        """Discovery should pass parsed args as a list, not string."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "file1.py\nfile2.py"
+            mock_run.return_value.stderr = ""
+
+            _run_discovery("fd -e py src/")
+
+            # First positional arg should be a list
+            call_args = mock_run.call_args[0][0]
+            assert isinstance(call_args, list)
+            assert call_args[0] == "fd"
+
+    def test_safe_discovery_commands_constant(self):
+        """Verify the allowlist contains expected safe commands."""
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+        assert "git" in SAFE_DISCOVERY_COMMANDS
+        assert "ls" in SAFE_DISCOVERY_COMMANDS
+        assert "rg" in SAFE_DISCOVERY_COMMANDS
+        # These should NOT be in the allowlist
+        assert "rm" not in SAFE_DISCOVERY_COMMANDS
+        assert "curl" not in SAFE_DISCOVERY_COMMANDS
+        assert "bash" not in SAFE_DISCOVERY_COMMANDS
+        assert "sh" not in SAFE_DISCOVERY_COMMANDS
+        assert "python" not in SAFE_DISCOVERY_COMMANDS
