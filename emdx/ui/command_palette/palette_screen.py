@@ -34,8 +34,9 @@ def _debug_log(msg: str) -> None:
         DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(DEBUG_LOG, "a") as f:
             f.write(f"{msg}\n")
-    except Exception:
-        pass
+    except Exception as e:
+        # Use logger.debug since this is already a debug logging function
+        logger.debug(f"Debug log write failed: {e}")
 
 
 class PaletteResultWidget(ListItem):

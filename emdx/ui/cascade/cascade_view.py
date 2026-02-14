@@ -193,7 +193,8 @@ class CascadeView(Widget):
             ts = act.get("completed_at") or act.get("started_at")
             try:
                 time_str = (ts.strftime("%H:%M:%S") if isinstance(ts, datetime) else datetime.fromisoformat(str(ts)).strftime("%H:%M:%S")) if ts else ""
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Time parsing failed: {e}")
                 time_str = "?"
 
             from_stage, to_stage = act.get("from_stage", "?"), act.get("output_stage", "?")
@@ -224,7 +225,8 @@ class CascadeView(Widget):
             scroll = self.query_one("#pv-preview-scroll", ScrollableContainer)
             content = self.query_one("#pv-preview-content", RichLog)
             log_widget = self.query_one("#pv-preview-log", RichLog)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready: {e}")
             return
 
         scroll.display = True
@@ -256,7 +258,8 @@ class CascadeView(Widget):
             from textual.widgets import RichLog
             scroll = self.query_one("#pv-preview-scroll", ScrollableContainer)
             log_widget = self.query_one("#pv-preview-log", RichLog)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Preview widgets not ready: {e}")
             return
 
         exec_id = exec_data.get("exec_id")

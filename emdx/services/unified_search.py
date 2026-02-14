@@ -582,5 +582,7 @@ class UnifiedSearchService:
                 cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
                 count = cursor.fetchone()[0]
                 return count > 0
-        except Exception:
+        except Exception as e:
+            # Table may not exist or other DB error - semantic search not available
+            logger.debug(f"Embeddings check failed (semantic search unavailable): {e}")
             return False

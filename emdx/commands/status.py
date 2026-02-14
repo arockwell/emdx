@@ -213,9 +213,11 @@ def _show_cascade_status():
             console.print("  " + " → ".join(parts))
             console.print("  [dim]Run [cyan]emdx cascade process <stage>[/cyan] to advance[/dim]")
             console.print()
-    except Exception:
+    except Exception as e:
         # cascade_stage column may not exist in older databases
-        pass
+        # Log at debug level for diagnostics without user-facing noise
+        import logging
+        logging.getLogger(__name__).debug(f"Cascade status query failed (may be missing column): {e}")
 
 
 def status(

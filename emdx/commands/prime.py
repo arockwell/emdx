@@ -331,9 +331,10 @@ def _get_cascade_status() -> dict:
             for stage, count in cursor.fetchall():
                 if stage in status:
                     status[stage] = count
-    except Exception:
+    except Exception as e:
         # cascade_stage column may not exist in older databases
-        pass
+        import logging
+        logging.getLogger(__name__).debug(f"Cascade status query failed (may be missing column): {e}")
 
     return status
 

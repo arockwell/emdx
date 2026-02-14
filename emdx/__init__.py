@@ -22,6 +22,7 @@ def _generate_build_id():
         return f"{__version__}-{build_hash}"
     except Exception:
         # Fallback to timestamp if file ops fail
+        # Don't log here - logging may not be configured yet at import time
         return f"{__version__}-{int(time.time())}"
 
 __build_id__ = _generate_build_id()

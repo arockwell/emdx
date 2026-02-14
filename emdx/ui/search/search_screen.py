@@ -209,8 +209,8 @@ class SearchScreen(HelpMixin, Widget):
                     btn.add_class("active")
                 else:
                     btn.remove_class("active")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to update mode button state: {e}")
 
     def _render_results_sync(self, state: SearchStateVM) -> None:
         """Render results to OptionList with rich, Google-style formatting."""
@@ -317,7 +317,8 @@ class SearchScreen(HelpMixin, Widget):
             elif delta.days < 30:
                 return f"{delta.days // 7}w"
             return time_str[:10]
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Time formatting failed: {e}")
             return ""
 
     def _update_selection(self) -> None:
@@ -335,8 +336,8 @@ class SearchScreen(HelpMixin, Widget):
         if self._debounce_timer:
             try:
                 self._debounce_timer.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Timer stop failed: {e}")
             self._debounce_timer = None
 
         # Get debounce time for current mode
@@ -497,8 +498,8 @@ class SearchScreen(HelpMixin, Widget):
         try:
             status = self.query_one("#search-status", Static)
             status.update(message)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Status update failed: {e}")
 
     def save_state(self) -> dict:
         """Save current state for restoration."""
@@ -531,8 +532,8 @@ class SearchScreen(HelpMixin, Widget):
                 if event.key in vim_keys:
                     # Don't stop - let the input handle it
                     return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Key event handling check failed: {e}")
 
     async def action_switch_activity(self) -> None:
         """Switch to activity browser."""

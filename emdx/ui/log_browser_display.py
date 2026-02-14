@@ -94,13 +94,13 @@ class LogBrowserDisplayMixin:
             error_msg = f"❌ Log streaming error: {error}"
             log_content.write(error_msg)
             logger.error(f"Log streaming error: {error}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to display error message: {e}")
 
     def update_status(self, text: str) -> None:
         """Update the status bar."""
         try:
             status = self.query_one(".log-status", Static)
             status.update(text)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Status update failed: {e}")

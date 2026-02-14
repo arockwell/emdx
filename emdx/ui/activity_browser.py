@@ -98,9 +98,9 @@ class ActivityBrowser(Widget):
                 tree = self.activity_view.query_one("#activity-tree")
                 if tree:
                     tree.focus()
-            except Exception:
+            except Exception as e:
                 # Widget not mounted yet, will focus on mount
-                pass
+                logger.debug(f"Focus failed (widget may not be mounted): {e}")
 
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Select and show a document by its ID in the activity view."""

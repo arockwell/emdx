@@ -55,25 +55,37 @@ def _safe_create_task(**kwargs) -> Optional[int]:
 
 
 def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
-    """Update task, never fail delegate."""
+    """Update task, never fail delegate.
+
+    Logs failures at debug level since task tracking is non-critical
+    and should not interrupt delegate execution.
+    """
     if task_id is None:
         return
     try:
         from ..models.tasks import update_task
         update_task(task_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        # Log at debug level - task tracking failure is non-critical
+        import logging
+        logging.getLogger(__name__).debug(f"Task update failed (task_id={task_id}): {e}")
 
 
 def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
-    """Update execution record, never fail delegate."""
+    """Update execution record, never fail delegate.
+
+    Logs failures at debug level since execution tracking is non-critical
+    and should not interrupt delegate execution.
+    """
     if exec_id is None:
         return
     try:
         from ..models.executions import update_execution
         update_execution(exec_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        # Log at debug level - execution tracking failure is non-critical
+        import logging
+        logging.getLogger(__name__).debug(f"Execution update failed (exec_id={exec_id}): {e}")
 
 
 PR_INSTRUCTION = (

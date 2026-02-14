@@ -57,7 +57,7 @@ def cleanup_worktree(worktree_path: str):
             ["git", "worktree", "remove", worktree_path, "--force"],
             capture_output=True, text=True
         )
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
         logger.warning("Could not clean up worktree %s: %s", worktree_path, e)
 
 

@@ -273,7 +273,8 @@ class ActivityView(HelpMixin, Widget):
             tree = self.query_one("#activity-tree", ActivityTree)
             node = tree.cursor_node
             return node.data if node else None
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to get selected item: {e}")
             return None
 
     def compose(self) -> ComposeResult:
@@ -429,8 +430,9 @@ class ActivityView(HelpMixin, Widget):
                 preview.write(markdown)
             else:
                 preview.write("[dim]Empty document[/dim]")
-        except Exception:
+        except Exception as e:
             # Fallback to plain text if markdown fails
+            logger.debug(f"Markdown rendering failed, using plain text: {e}")
             preview.write(content[:50000] if content else "[dim]No content[/dim]")
 
     async def _update_preview(self, force: bool = False) -> None:

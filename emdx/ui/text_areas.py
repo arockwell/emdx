@@ -166,8 +166,8 @@ class VimEditTextArea(TextArea):
             logger.error(f"Error in VimEditTextArea.on_key: {e}", exc_info=True)
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
-            except Exception:
-                pass
+            except Exception as e2:
+                logger.debug(f"Failed to update vim status after error: {e2}")
     
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""

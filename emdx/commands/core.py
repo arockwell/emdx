@@ -318,8 +318,10 @@ def save(
                             (doc_id, gist_id_str, gist_url, public),
                         )
                         conn.commit()
-                except Exception:
-                    pass  # Non-fatal — gist was still created
+                except Exception as e:
+                    # Non-fatal — gist was still created, but log for diagnostics
+                    import logging
+                    logging.getLogger(__name__).debug(f"Failed to record gist metadata: {e}")
 
                 console.print(f"   [green]Gist:[/green] {gist_url}")
 
