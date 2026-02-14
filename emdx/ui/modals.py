@@ -351,7 +351,7 @@ class DocumentPreviewModal(ModalScreen):
         try:
             from emdx.services.document_service import get_document
 
-            self._doc_data = get_document(self.doc_id)
+            self._doc_data = get_document(self.doc_id, track_access=False)
             if not self._doc_data:
                 self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")
                 return

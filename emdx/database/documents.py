@@ -49,23 +49,32 @@ def save_document(
         return doc_id
 
 
-def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
-    """Get a document by ID or title"""
+def get_document(
+    identifier: Union[str, int], track_access: bool = True
+) -> Optional[dict[str, Any]]:
+    """Get a document by ID or title.
+
+    Args:
+        identifier: Document ID (int/str) or title (str)
+        track_access: If True, increment access_count and update accessed_at.
+            Pass False for internal/programmatic lookups to avoid inflating counts.
+    """
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
         identifier_str = str(identifier)
-        
-        # Update access tracking
+
         if identifier_str.isdigit():
-            conn.execute(
-                """
-                UPDATE documents
-                SET accessed_at = CURRENT_TIMESTAMP,
-                    access_count = access_count + 1
-                WHERE id = ? AND is_deleted = FALSE
-            """,
-                (int(identifier_str),),
-            )
+            # Update access tracking only for user-facing reads
+            if track_access:
+                conn.execute(
+                    """
+                    UPDATE documents
+                    SET accessed_at = CURRENT_TIMESTAMP,
+                        access_count = access_count + 1
+                    WHERE id = ? AND is_deleted = FALSE
+                """,
+                    (int(identifier_str),),
+                )
 
             cursor = conn.execute(
                 """
@@ -74,15 +83,16 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
                 (int(identifier_str),),
             )
         else:
-            conn.execute(
-                """
-                UPDATE documents
-                SET accessed_at = CURRENT_TIMESTAMP,
-                    access_count = access_count + 1
-                WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
-            """,
-                (identifier_str,),
-            )
+            if track_access:
+                conn.execute(
+                    """
+                    UPDATE documents
+                    SET accessed_at = CURRENT_TIMESTAMP,
+                        access_count = access_count + 1
+                    WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
+                """,
+                    (identifier_str,),
+                )
 
             cursor = conn.execute(
                 """

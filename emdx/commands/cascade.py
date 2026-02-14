@@ -318,7 +318,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
     pr_url = None
 
     for stage in stages_to_process:
-        doc = get_document(str(current_doc_id))
+        doc = get_document(str(current_doc_id), track_access=False)
         if not doc:
             console.print(f"[red]Document #{current_doc_id} not found[/red]")
             _update_cascade_run(cascade_run_id, status='failed', error_message=f"Document {current_doc_id} not found")
@@ -448,7 +448,7 @@ def process(
 
     # Get document to process
     if doc_id:
-        doc = get_document(str(doc_id))
+        doc = get_document(str(doc_id), track_access=False)
         if not doc:
             console.print(f"[red]Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
@@ -580,7 +580,7 @@ def advance(
         emdx cascade advance 123
         emdx cascade advance 123 --to done
     """
-    doc = get_document(str(doc_id))
+    doc = get_document(str(doc_id), track_access=False)
     if not doc:
         console.print(f"[red]Document #{doc_id} not found[/red]")
         raise typer.Exit(1)
@@ -614,7 +614,7 @@ def remove(
     Sets the stage to NULL, removing it from cascade processing
     but keeping the document in the knowledge base.
     """
-    doc = get_document(str(doc_id))
+    doc = get_document(str(doc_id), track_access=False)
     if not doc:
         console.print(f"[red]Document #{doc_id} not found[/red]")
         raise typer.Exit(1)
@@ -667,7 +667,7 @@ def synthesize(
     # Build combined content
     combined_content = f"# Synthesized from {len(docs)} documents\n\n"
     for doc in docs:
-        full_doc = get_document(str(doc["id"]))
+        full_doc = get_document(str(doc["id"]), track_access=False)
         combined_content += f"## From: {full_doc['title']}\n\n"
         combined_content += full_doc["content"]
         combined_content += "\n\n---\n\n"

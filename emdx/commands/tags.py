@@ -43,7 +43,7 @@ def _add_tags_impl(
         db.ensure_schema()
 
         # Check if document exists
-        doc = get_document(str(doc_id))
+        doc = get_document(str(doc_id), track_access=False)
         if not doc:
             console.print(f"[red]Error: Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
@@ -154,7 +154,7 @@ def remove(
         db.ensure_schema()
 
         # Check if document exists
-        doc = get_document(str(doc_id))
+        doc = get_document(str(doc_id), track_access=False)
         if not doc:
             console.print(f"[red]Error: Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
@@ -377,7 +377,7 @@ def batch(
 
             for doc_id, tag_list in eligible_docs[:sample_size]:
                 # Get document title
-                doc = get_document(str(doc_id))
+                doc = get_document(str(doc_id), track_access=False)
                 title = truncate_title(doc['title'])
 
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")

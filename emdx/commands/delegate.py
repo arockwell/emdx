@@ -114,7 +114,7 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     except ValueError:
         return task
 
-    doc = get_document(doc_id)
+    doc = get_document(doc_id, track_access=False)
     if not doc:
         sys.stderr.write(f"delegate: document #{doc_id} not found, treating as text\n")
         return task
@@ -171,7 +171,7 @@ def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
     If prompt provided: "Document #id (title):\n\n{content}\n\n---\n\nTask: {prompt}"
     If no prompt: "Execute the following document:\n\n# {title}\n\n{content}"
     """
-    doc = get_document(doc_id)
+    doc = get_document(doc_id, track_access=False)
     if not doc:
         sys.stderr.write(f"delegate: document #{doc_id} not found\n")
         raise typer.Exit(1)
@@ -187,7 +187,7 @@ def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
 
 def _print_doc_content(doc_id: int) -> None:
     """Print a document's content to stdout."""
-    doc = get_document(doc_id)
+    doc = get_document(doc_id, track_access=False)
     if doc:
         sys.stdout.write(doc.get("content", ""))
         sys.stdout.write("\n")
@@ -363,7 +363,7 @@ def _run_parallel(
         # Run a synthesis task that combines all outputs
         combined = []
         for i, doc_id in enumerate(doc_ids):
-            doc = get_document(doc_id)
+            doc = get_document(doc_id, track_access=False)
             if doc:
                 combined.append(f"## Task {i + 1}: {tasks[i][:80]}\n\n{doc.get('content', '')}")
 
@@ -501,7 +501,7 @@ def _run_chain(
         doc_ids.append(doc_id)
 
         # Read output for next step
-        doc = get_document(doc_id)
+        doc = get_document(doc_id, track_access=False)
         if doc:
             previous_output = doc.get("content", "")
 

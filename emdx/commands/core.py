@@ -777,7 +777,7 @@ def delete(
         not_found = []
 
         for identifier in identifiers:
-            doc = get_document(identifier)
+            doc = get_document(identifier, track_access=False)
             if doc:
                 docs_to_delete.append(doc)
             else:

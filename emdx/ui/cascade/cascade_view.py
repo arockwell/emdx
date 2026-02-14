@@ -231,7 +231,7 @@ class CascadeView(Widget):
         log_widget.display = False
         content.clear()
 
-        doc = get_document(doc_id)
+        doc = get_document(doc_id, track_access=False)
         if not doc:
             header.update("[bold]Preview[/bold]")
             content.write("[dim]Document not found[/dim]")
@@ -518,7 +518,7 @@ class CascadeView(Widget):
 
         parts = []
         for did in selected_ids:
-            doc = get_document(str(did))
+            doc = get_document(str(did), track_access=False)
             if doc:
                 parts.append(f"=== Document #{did}: {doc['title']} ===\n{doc['content']}")
 

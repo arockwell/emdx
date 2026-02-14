@@ -28,7 +28,7 @@ def _find_recipe(id_or_name: str) -> Optional[dict]:
     # Try as numeric ID first
     try:
         doc_id = int(id_or_name)
-        doc = get_document(doc_id)
+        doc = get_document(doc_id, track_access=False)
         if doc:
             return doc
     except ValueError:

@@ -505,7 +505,7 @@ class TestDeleteCommand:
         """Delete multiple documents at once."""
         mock_db.ensure_schema = Mock()
 
-        def side_effect(identifier):
+        def side_effect(identifier, track_access=True):
             docs = {
                 "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},
                 "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},

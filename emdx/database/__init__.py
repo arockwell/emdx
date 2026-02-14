@@ -114,30 +114,32 @@ class SQLiteDatabase:
 
             return doc_id
 
-    def get_document(self, identifier):
+    def get_document(self, identifier, track_access=True):
         """Get a document by ID or title."""
         if not self._uses_custom_path:
-            return get_document(identifier)
+            return get_document(identifier, track_access=track_access)
 
         # Isolated mode
         with self._connection.get_connection() as conn:
             identifier_str = str(identifier)
             if identifier_str.isdigit():
-                conn.execute(
-                    "UPDATE documents SET accessed_at = CURRENT_TIMESTAMP, "
-                    "access_count = access_count + 1 WHERE id = ? AND is_deleted = FALSE",
-                    (int(identifier_str),),
-                )
+                if track_access:
+                    conn.execute(
+                        "UPDATE documents SET accessed_at = CURRENT_TIMESTAMP, "
+                        "access_count = access_count + 1 WHERE id = ? AND is_deleted = FALSE",
+                        (int(identifier_str),),
+                    )
                 cursor = conn.execute(
                     "SELECT * FROM documents WHERE id = ? AND is_deleted = FALSE",
                     (int(identifier_str),),
                 )
             else:
-                conn.execute(
-                    "UPDATE documents SET accessed_at = CURRENT_TIMESTAMP, "
-                    "access_count = access_count + 1 WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",
-                    (identifier_str,),
-                )
+                if track_access:
+                    conn.execute(
+                        "UPDATE documents SET accessed_at = CURRENT_TIMESTAMP, "
+                        "access_count = access_count + 1 WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",
+                        (identifier_str,),
+                    )
                 cursor = conn.execute(
                     "SELECT * FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",
                     (identifier_str,),

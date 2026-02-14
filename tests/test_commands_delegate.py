@@ -57,7 +57,7 @@ class TestResolveTask:
         result = _resolve_task("42")
         assert "Hello world" in result
         assert "Test Doc" in result
-        mock_get.assert_called_once_with(42)
+        mock_get.assert_called_once_with(42, track_access=False)
 
     @patch("emdx.commands.delegate.get_document")
     def test_numeric_id_with_pr_adds_instructions(self, mock_get):

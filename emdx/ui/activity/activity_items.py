@@ -125,7 +125,7 @@ class DocumentItem(ActivityItem):
         if not doc_db:
             return "", "PREVIEW"
 
-        doc = doc_db.get_document(self.doc_id)
+        doc = doc_db.get_document(self.doc_id, track_access=False)
         if doc:
             content = doc.get("content", "")
             title = doc.get("title", "Untitled")
@@ -292,7 +292,7 @@ class CascadeStageItem(ActivityItem):
     async def get_preview_content(self, doc_db) -> tuple[str, str]:
         """Get stage execution output."""
         if self.doc_id and doc_db:
-            doc = doc_db.get_document(self.doc_id)
+            doc = doc_db.get_document(self.doc_id, track_access=False)
             if doc:
                 return doc.get("content", ""), f"{self.type_icon} #{self.doc_id}"
 
@@ -476,7 +476,7 @@ class AgentExecutionItem(ActivityItem):
 
         # If we have an output doc, show it
         if self.doc_id and doc_db:
-            doc = doc_db.get_document(self.doc_id)
+            doc = doc_db.get_document(self.doc_id, track_access=False)
             if doc:
                 return doc.get("content", ""), f"{self.type_icon} #{self.doc_id}"
 

@@ -94,7 +94,7 @@ def add(
 
         for doc_id in doc_ids:
             # Verify document exists
-            doc = get_document(str(doc_id))
+            doc = get_document(str(doc_id), track_access=False)
             if not doc:
                 not_found.append(doc_id)
                 continue
@@ -112,7 +112,7 @@ def add(
                 f"#{group_id} ({group['name']}):[/green]"
             )
             for doc_id in added:
-                doc = get_document(str(doc_id))
+                doc = get_document(str(doc_id), track_access=False)
                 console.print(f"   [dim]#{doc_id}: {doc['title'][:40]} ({role})[/dim]")
 
         if already_in:

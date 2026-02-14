@@ -194,7 +194,7 @@ def create(
         raise typer.Exit(1)
 
     # Get the document
-    doc = get_document(identifier)
+    doc = get_document(identifier, track_access=False)
     if not doc:
         console.print(f"[red]Error: Document '{identifier}' not found[/red]")
         raise typer.Exit(1)

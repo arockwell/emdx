@@ -478,7 +478,7 @@ class ActivityView(HelpMixin, Widget):
         # For documents, show content
         if item.doc_id and HAS_DOCS:
             try:
-                doc = doc_db.get_document(item.doc_id)
+                doc = doc_db.get_document(item.doc_id, track_access=False)
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
@@ -562,7 +562,7 @@ class ActivityView(HelpMixin, Widget):
             return
 
         try:
-            doc = doc_db.get_document(item.doc_id)
+            doc = doc_db.get_document(item.doc_id, track_access=False)
             if not doc:
                 header.update(f"📄 #{item.doc_id}")
                 return
@@ -970,7 +970,7 @@ class ActivityView(HelpMixin, Widget):
             return
 
         try:
-            doc = doc_db.get_document(item.doc_id)
+            doc = doc_db.get_document(item.doc_id, track_access=False)
             if not doc:
                 self._show_notification("Document not found", is_error=True)
                 return
@@ -1029,7 +1029,7 @@ class ActivityView(HelpMixin, Widget):
             return
 
         try:
-            doc = doc_db.get_document(item.doc_id) if HAS_DOCS else None
+            doc = doc_db.get_document(item.doc_id, track_access=False) if HAS_DOCS else None
             doc_title = doc.get("title", "Untitled") if doc else "Untitled"
 
             group_name = f"{doc_title[:30]} Group"
@@ -1161,7 +1161,7 @@ class ActivityView(HelpMixin, Widget):
 
         # Fallback - just show doc in preview
         if HAS_DOCS and doc_db:
-            doc = doc_db.get_document(doc_id)
+            doc = doc_db.get_document(doc_id, track_access=False)
             if doc:
                 content = doc.get("content", "")
                 title = doc.get("title", "Untitled")

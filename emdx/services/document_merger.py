@@ -253,8 +253,8 @@ class DocumentMerger:
             MergeStrategy with recommended approach
         """
         # Get both documents
-        doc1 = get_document(str(doc1_id))
-        doc2 = get_document(str(doc2_id))
+        doc1 = get_document(str(doc1_id), track_access=False)
+        doc2 = get_document(str(doc2_id), track_access=False)
         
         if not doc1 or not doc2:
             raise ValueError("One or both documents not found")
@@ -460,7 +460,7 @@ class DocumentMerger:
         Returns:
             List of tuples (doc_id, title, similarity_score)
         """
-        doc = get_document(str(doc_id))
+        doc = get_document(str(doc_id), track_access=False)
         if not doc:
             return []
 

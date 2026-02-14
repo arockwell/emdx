@@ -24,7 +24,7 @@ class TestFindRecipe:
         result = _find_recipe("42")
         assert result is not None
         assert result["id"] == 42
-        mock_get.assert_called_once_with(42)
+        mock_get.assert_called_once_with(42, track_access=False)
 
     @patch("emdx.commands.recipe.get_document")
     def test_numeric_id_not_found_searches_tags(self, mock_get):

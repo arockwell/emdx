@@ -399,7 +399,7 @@ class DocumentBrowserPresenter:
             if doc_id in self._doc_cache:
                 doc = self._doc_cache[doc_id]
             else:
-                doc = get_document(doc_id)
+                doc = get_document(doc_id, track_access=False)
                 if doc is None:
                     return None
 

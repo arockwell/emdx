@@ -67,7 +67,7 @@ class CascadeBrowser(Widget):
         stage, doc_id = event.stage, event.doc_id
 
         if doc_id:
-            doc = get_document(str(doc_id))
+            doc = get_document(str(doc_id), track_access=False)
             if not doc:
                 self._update_status(f"[red]Document #{doc_id} not found[/red]")
                 return
