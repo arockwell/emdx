@@ -65,7 +65,7 @@ def extract_output_doc_id(log_file: Path) -> Optional[int]:
 
         return last_match
 
-    except (OSError, IOError) as e:
+    except OSError as e:
         logger.debug(f"Could not read log file {log_file}: {type(e).__name__}: {e}")
         return None
     except Exception as e:
@@ -150,7 +150,7 @@ def extract_token_usage_detailed(log_file: Path) -> Dict[str, int]:
 
         return empty
 
-    except (OSError, IOError) as e:
+    except OSError as e:
         logger.debug(f"Could not read log file {log_file}: {type(e).__name__}: {e}")
         return empty
     except Exception as e:

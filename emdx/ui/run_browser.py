@@ -4,6 +4,7 @@ Run the new browser container.
 """
 
 from ..utils.logging_utils import setup_tui_logging
+
 logger, _key_logger = setup_tui_logging(__name__)
 
 
@@ -13,9 +14,10 @@ def run_browser(theme: str | None = None):
     Args:
         theme: Optional theme name to use (overrides saved preference for this session)
     """
-    from .browser_container import BrowserContainer
-    import traceback
     import sys
+    import traceback
+
+    from .browser_container import BrowserContainer
 
     app = BrowserContainer(initial_theme=theme)
     try:

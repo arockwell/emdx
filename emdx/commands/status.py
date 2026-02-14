@@ -8,12 +8,11 @@ Provides a quick overview of:
 - Cascade queue
 """
 
-import typer
 from datetime import datetime, timedelta
 from typing import Optional
 
+import typer
 from rich.console import Console
-from rich.text import Text
 
 from ..database import db
 from ..models.tasks import (

@@ -24,11 +24,11 @@ class TaggingRule:
     tags: List[str]
     confidence: float = DEFAULT_TAGGING_CONFIDENCE
     enabled: bool = True
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return asdict(self)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'TaggingRule':
         """Create from dictionary."""
@@ -37,21 +37,21 @@ class TaggingRule:
 
 class TaggingConfig:
     """Manages tagging configuration and custom rules."""
-    
+
     DEFAULT_CONFIG_PATH = str(EMDX_CONFIG_DIR / "tagging.yaml")
-    
+
     def __init__(self, config_path: Optional[str] = None):
         self.config_path = Path(config_path or self.DEFAULT_CONFIG_PATH).expanduser()
         self.rules: Dict[str, TaggingRule] = {}
         self.load_config()
-    
+
     def load_config(self):
         """Load configuration from file."""
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r') as f:
+                with open(self.config_path) as f:
                     data = yaml.safe_load(f) or {}
-                
+
                 # Load custom rules
                 for name, rule_data in data.get('rules', {}).items():
                     self.rules[name] = TaggingRule.from_dict({
@@ -65,12 +65,12 @@ class TaggingConfig:
         else:
             # Create default config
             self.create_default_config()
-    
+
     def save_config(self):
         """Save configuration to file."""
         # Ensure directory exists
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Convert rules to serializable format
         data = {
             'rules': {
@@ -78,14 +78,14 @@ class TaggingConfig:
                 for name, rule in self.rules.items()
             }
         }
-        
+
         # Remove 'name' from each rule dict (redundant with key)
         for rule_data in data['rules'].values():
             rule_data.pop('name', None)
-        
+
         with open(self.config_path, 'w') as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-    
+
     def create_default_config(self):
         """Create default configuration with example rules."""
         self.rules = {
@@ -119,13 +119,13 @@ class TaggingConfig:
             )
         }
         self.save_config()
-    
+
     def add_rule(self, rule: TaggingRule) -> bool:
         """Add or update a tagging rule."""
         self.rules[rule.name] = rule
         self.save_config()
         return True
-    
+
     def remove_rule(self, name: str) -> bool:
         """Remove a tagging rule."""
         if name in self.rules:
@@ -133,15 +133,15 @@ class TaggingConfig:
             self.save_config()
             return True
         return False
-    
+
     def get_rule(self, name: str) -> Optional[TaggingRule]:
         """Get a specific rule by name."""
         return self.rules.get(name)
-    
+
     def list_rules(self) -> List[TaggingRule]:
         """List all active rules."""
         return [rule for rule in self.rules.values() if rule.enabled]
-    
+
     def enable_rule(self, name: str) -> bool:
         """Enable a rule."""
         if name in self.rules:
@@ -149,7 +149,7 @@ class TaggingConfig:
             self.save_config()
             return True
         return False
-    
+
     def disable_rule(self, name: str) -> bool:
         """Disable a rule."""
         if name in self.rules:
@@ -157,7 +157,7 @@ class TaggingConfig:
             self.save_config()
             return True
         return False
-    
+
     def export_rules(self) -> Dict[str, Any]:
         """Export rules as a dictionary compatible with AutoTagger."""
         return {
@@ -170,7 +170,7 @@ class TaggingConfig:
             for name, rule in self.rules.items()
             if rule.enabled
         }
-    
+
     def import_rules(self, rules_data: Dict[str, Any]):
         """Import rules from a dictionary."""
         for name, rule_data in rules_data.items():
@@ -183,23 +183,23 @@ class TaggingConfig:
                 enabled=rule_data.get('enabled', True)
             )
         self.save_config()
-    
+
     def validate_rule(self, rule: TaggingRule) -> List[str]:
         """Validate a tagging rule and return any errors."""
         errors = []
-        
+
         if not rule.name:
             errors.append("Rule must have a name")
-        
+
         if not rule.tags:
             errors.append("Rule must specify at least one tag")
-        
+
         if not rule.title_patterns and not rule.content_patterns:
             errors.append("Rule must have at least one title or content pattern")
-        
+
         if rule.confidence < 0 or rule.confidence > 1:
             errors.append("Confidence must be between 0 and 1")
-        
+
         # Test regex patterns
         import re
         for pattern in rule.title_patterns + rule.content_patterns:
@@ -207,7 +207,7 @@ class TaggingConfig:
                 re.compile(pattern)
             except re.error as e:
                 errors.append(f"Invalid regex pattern '{pattern}': {e}")
-        
+
         return errors
 
 
@@ -222,19 +222,19 @@ def merge_with_defaults(custom_patterns: Dict[str, Any]) -> Dict[str, Any]:
     Custom patterns take precedence.
     """
     from ..services.auto_tagger import AutoTagger
-    
+
     # Start with default patterns
     merged = AutoTagger.DEFAULT_PATTERNS.copy()
-    
+
     # Load custom patterns from config
     config = get_default_config()
     custom_from_config = config.export_rules()
-    
+
     # Merge config patterns
     merged.update(custom_from_config)
-    
+
     # Merge provided custom patterns (highest priority)
     if custom_patterns:
         merged.update(custom_patterns)
-    
+
     return merged

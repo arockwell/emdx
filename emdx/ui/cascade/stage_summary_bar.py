@@ -9,7 +9,7 @@ from textual.widgets import Static
 
 from emdx.services.cascade_service import get_cascade_stats
 
-from .constants import STAGES, STAGE_EMOJI
+from .constants import STAGE_EMOJI, STAGES
 
 
 class StageSummaryBar(Widget):

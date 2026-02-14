@@ -32,7 +32,7 @@ def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
             # Silently continue, but log for debugging
             import logging
             logging.debug(f"Heartbeat update failed: {e}")
-        
+
         # Wait 30 seconds or until stop event
         stop_event.wait(30)
 
@@ -49,24 +49,24 @@ def main():
 
     # Open log file directly for human-readable output
     log_handle = open(log_file, 'w', buffering=1)  # Line buffered
-    
+
     # Helper to write timestamped log entries
     def write_log(message: str):
         timestamp = datetime.now().strftime('%H:%M:%S')
         log_handle.write(f"[{timestamp}] {message}\n")
         log_handle.flush()
-    
+
     # Log execution start
     write_log(f"🚀 Starting execution #{exec_id}")
     write_log(f"📂 Working directory: {os.getcwd()}")
-    
+
     # Do lightweight environment validation (no subprocess calls)
     write_log("🔍 Checking environment...")
 
     exit_code = 1  # Default to failure
     status = "failed"
     lines_processed = 0  # Track lines to detect empty runs
-    
+
     # Start heartbeat thread
     stop_heartbeat = threading.Event()
     heartbeat = threading.Thread(target=heartbeat_thread, args=(exec_id, stop_heartbeat))
@@ -111,7 +111,7 @@ def main():
             line = line.strip()
             if not line:
                 continue
-            
+
             # Try to parse and format Claude's JSON output
             try:
                 data = json.loads(line)
@@ -135,7 +135,7 @@ def main():
                     # Format system messages nicely
                     if data.get("subtype") == "init":
                         # Extract useful info from init message
-                        write_log(f"🔧 System initialized")
+                        write_log("🔧 System initialized")
                         write_log(f"📍 Working directory: {data.get('cwd', 'unknown')}")
                         write_log(f"🤖 Model: {data.get('model', 'unknown')}")
                         # List available tools
@@ -149,16 +149,16 @@ def main():
                                     mcp_tools.append(tool.replace('mcp__gmail-mcp__', ''))
                                 else:
                                     basic_tools.append(tool)
-                            
+
                             if basic_tools:
-                                write_log(f"🛠️ Tools available:")
+                                write_log("🛠️ Tools available:")
                                 for i, tool in enumerate(basic_tools, 1):
                                     write_log(f"    {i:2d}. {tool}")
                                 if len(basic_tools) > 20:  # Only show first 20 to keep logs readable
                                     write_log(f"         ...and {len(basic_tools) - 20} more")
-                            
+
                             if mcp_tools:
-                                write_log(f"📧 MCP Gmail tools:")
+                                write_log("📧 MCP Gmail tools:")
                                 for i, tool in enumerate(mcp_tools, 1):
                                     write_log(f"    {i:2d}. {tool}")
                     else:
@@ -218,7 +218,7 @@ def main():
         # Stop heartbeat thread
         stop_heartbeat.set()
         heartbeat.join(timeout=1)
-        
+
         # Always try to update the database
         try:
             # Always update status - the lock file should prevent true duplicates
@@ -228,7 +228,7 @@ def main():
             write_log(f"❌ Failed to update database: {str(e)}")
             # Don't exit with error if only DB update failed
             # The main process ran, which is what matters
-        
+
         # Close log file
         log_handle.close()
 

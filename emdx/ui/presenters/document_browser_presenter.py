@@ -20,9 +20,11 @@ from emdx.services.document_service import (
     delete_document,
     get_children_count,
     get_document,
-    list_documents as db_list_documents,
     save_document,
     update_document,
+)
+from emdx.services.document_service import (
+    list_documents as db_list_documents,
 )
 from emdx.services.tag_service import (
     add_tags_to_document,

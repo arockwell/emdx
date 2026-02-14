@@ -13,7 +13,6 @@ from emdx.services.cascade_service import (
     get_document,
     list_documents_at_stage,
     monitor_execution_completion,
-    update_cascade_stage,
 )
 from emdx.services.document_service import save_document
 from emdx.services.execution_service import create_execution
@@ -81,8 +80,8 @@ class CascadeBrowser(Widget):
 
         self._update_status(f"[cyan]Processing #{doc_id}: {doc.get('title', '')[:40]}...[/cyan]")
 
-        from emdx.services.claude_executor import execute_claude_detached, DEFAULT_ALLOWED_TOOLS
         from emdx.commands.cascade import STAGE_PROMPTS
+        from emdx.services.claude_executor import DEFAULT_ALLOWED_TOOLS, execute_claude_detached
 
         prompt = STAGE_PROMPTS[stage].format(content=doc.get("content", ""))
 

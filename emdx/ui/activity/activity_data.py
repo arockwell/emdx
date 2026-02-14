@@ -5,17 +5,17 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import List, Set, Tuple
 
 from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
     ActivityItem,
-    DocumentItem,
-    GroupItem,
+    AgentExecutionItem,
     CascadeRunItem,
     CascadeStageItem,
-    AgentExecutionItem,
+    DocumentItem,
+    GroupItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ class ActivityDataLoader:
         items: List[ActivityItem] = []
         try:
             from emdx.database.connection import db_connection
-            from emdx.services.cascade_service import list_cascade_runs, get_cascade_run_executions
+            from emdx.services.cascade_service import get_cascade_run_executions, list_cascade_runs
 
             cutoff = datetime.now() - timedelta(days=7)
             seen_run_ids: Set[int] = set()

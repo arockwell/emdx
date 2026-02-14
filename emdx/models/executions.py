@@ -35,13 +35,13 @@ class Execution:
     def is_running(self) -> bool:
         """Check if execution is still running."""
         return self.status == 'running'
-    
+
     @property
     def is_zombie(self) -> bool:
         """Check if this is a zombie process (marked running but process is dead)."""
         if not self.is_running or not self.pid:
             return False
-        
+
         # Check if process exists
         try:
             # Send signal 0 to check if process exists
@@ -76,7 +76,7 @@ def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO executions 
+            INSERT INTO executions
             (doc_id, doc_title, status, started_at, log_file, working_dir, pid)
             VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?)
         """, (doc_id, doc_title, log_file, working_dir, pid))
@@ -92,7 +92,7 @@ def get_execution(exec_id: int) -> Optional[Execution]:
             SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions WHERE id = ?
         """, (exec_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return None
@@ -121,17 +121,17 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-            FROM executions 
-            ORDER BY id DESC 
+            FROM executions
+            ORDER BY id DESC
             LIMIT ?
         """, (limit,))
-        
+
         executions = []
         for row in cursor.fetchall():
             # Parse timestamps with timezone handling
             started_at = parse_timestamp(row[4])
             completed_at = parse_timestamp(row[5]) if row[5] else None
-                
+
             executions.append(Execution(
                 id=int(row[0]),  # Convert to int for numeric ID
                 doc_id=row[1],
@@ -144,7 +144,7 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
                 working_dir=row[8],
                 pid=row[9] if len(row) > 9 else None
             ))
-        
+
         return executions
 
 
@@ -154,17 +154,17 @@ def get_running_executions() -> List[Execution]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-            FROM executions 
+            FROM executions
             WHERE status = 'running'
             ORDER BY started_at DESC
         """, )
-        
+
         executions = []
         for row in cursor.fetchall():
             # Parse timestamps with timezone handling
             started_at = parse_timestamp(row[4])
             completed_at = parse_timestamp(row[5]) if row[5] else None
-                
+
             executions.append(Execution(
                 id=int(row[0]),  # Convert to int for numeric ID
                 doc_id=row[1],
@@ -177,7 +177,7 @@ def get_running_executions() -> List[Execution]:
                 working_dir=row[8],
                 pid=row[9] if len(row) > 9 else None
             ))
-        
+
         return executions
 
 
@@ -186,17 +186,17 @@ def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] 
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:
             cursor = conn.execute("""
-                UPDATE executions 
+                UPDATE executions
                 SET status = ?, completed_at = CURRENT_TIMESTAMP, exit_code = ?
                 WHERE id = ?
             """, (status, exit_code, exec_id))
         else:
             cursor = conn.execute("""
-                UPDATE executions 
+                UPDATE executions
                 SET status = ?
                 WHERE id = ?
             """, (status, exec_id))
-        
+
         conn.commit()
 
 
@@ -218,7 +218,7 @@ def update_execution_pid(exec_id: int, pid: int) -> None:
     """Update execution PID."""
     with db_connection.get_connection() as conn:
         conn.execute("""
-            UPDATE executions 
+            UPDATE executions
             SET pid = ?
             WHERE id = ?
         """, (pid, exec_id))
@@ -229,7 +229,7 @@ def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
     """Update execution working directory."""
     with db_connection.get_connection() as conn:
         conn.execute("""
-            UPDATE executions 
+            UPDATE executions
             SET working_dir = ?
             WHERE id = ?
         """, (working_dir, exec_id))
@@ -240,7 +240,7 @@ def update_execution_heartbeat(exec_id: int) -> None:
     """Update execution heartbeat timestamp."""
     with db_connection.get_connection() as conn:
         conn.execute("""
-            UPDATE executions 
+            UPDATE executions
             SET last_heartbeat = CURRENT_TIMESTAMP
             WHERE id = ? AND status = 'running'
         """, (exec_id,))
@@ -279,13 +279,13 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
             )
             ORDER BY started_at DESC
         """, (interval, interval))
-        
+
         executions = []
         for row in cursor.fetchall():
             # Parse timestamps with timezone handling
             started_at = parse_timestamp(row[4])
             completed_at = parse_timestamp(row[5]) if row[5] else None
-                
+
             executions.append(Execution(
                 id=int(row[0]),
                 doc_id=row[1],
@@ -298,7 +298,7 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
                 working_dir=row[8],
                 pid=row[9] if len(row) > 9 else None
             ))
-        
+
         return executions
 
 
@@ -320,26 +320,26 @@ def get_execution_stats() -> dict:
     """Get execution statistics."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Count by status
         cursor.execute("""
-            SELECT status, COUNT(*) 
-            FROM executions 
+            SELECT status, COUNT(*)
+            FROM executions
             GROUP BY status
         """)
         status_counts = dict(cursor.fetchall())
-        
+
         # Total executions
         cursor.execute("SELECT COUNT(*) FROM executions")
         total = cursor.fetchone()[0]
-        
+
         # Recent activity (last 24 hours)
         cursor.execute("""
-            SELECT COUNT(*) FROM executions 
+            SELECT COUNT(*) FROM executions
             WHERE started_at > datetime('now', '-1 day')
         """)
         recent = cursor.fetchone()[0]
-        
+
         return {
             'total': total,
             'recent_24h': recent,

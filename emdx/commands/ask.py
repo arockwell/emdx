@@ -75,8 +75,9 @@ def get_context(
         emdx ai context "What's the API design?" | claude "summarize this"
         emdx ai context "error handling" --no-question | claude "list the patterns"
     """
-    from ..services.ask_service import AskService
     import sys
+
+    from ..services.ask_service import AskService
 
     service = AskService()
 
@@ -262,7 +263,7 @@ def find_similar(
         raise typer.Exit(1)
 
     if not results:
-        console.print(f"[yellow]No similar documents found[/yellow]")
+        console.print("[yellow]No similar documents found[/yellow]")
         return
 
     console.print(f"[bold]Documents similar to #{doc_id} '{source_title}':[/bold]\n")
