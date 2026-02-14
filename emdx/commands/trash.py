@@ -21,7 +21,7 @@ from emdx.models.documents import (
 )
 from emdx.utils.output import console
 
-app = typer.Typer()
+app = typer.Typer(help="Manage deleted documents (trash)")
 
 
 @app.callback(invoke_without_command=True)

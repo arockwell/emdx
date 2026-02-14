@@ -1055,7 +1055,7 @@ def cleanup_temp_dirs(
 
 
 # Create typer app for this module
-app = typer.Typer()
+app = typer.Typer(help="Database maintenance and cleanup operations")
 
 
 @app.callback(invoke_without_command=True)
