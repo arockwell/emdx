@@ -38,11 +38,11 @@ class ProjectHealth:
 
 class HealthMonitor:
     """Service for monitoring knowledge base health."""
-    
+
     # Health thresholds
     CRITICAL_THRESHOLD = 0.4
     WARNING_THRESHOLD = 0.7
-    
+
     # Metric weights
     WEIGHTS = {
         'tag_coverage': 0.25,
@@ -52,20 +52,20 @@ class HealthMonitor:
         'quality': 0.10,
         'growth': 0.10
     }
-    
+
     def __init__(self, db_path: Optional[Union[str, Path]] = None):
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
-    
+
     def calculate_overall_health(self) -> Dict[str, Any]:
         """
         Calculate comprehensive health score for the knowledge base.
-        
+
         Returns:
             Dictionary with overall health score and breakdown by metrics
         """
         metrics = []
-        
+
         # Calculate individual metrics
         metrics.append(self._calculate_tag_coverage())
         metrics.append(self._calculate_duplicate_health())
@@ -73,10 +73,10 @@ class HealthMonitor:
         metrics.append(self._calculate_activity_health())
         metrics.append(self._calculate_quality_health())
         metrics.append(self._calculate_growth_health())
-        
+
         # Calculate weighted overall score
         overall_score = sum(m.value * m.weight for m in metrics)
-        
+
         # Determine overall status
         if overall_score < self.CRITICAL_THRESHOLD:
             overall_status = 'critical'
@@ -84,10 +84,10 @@ class HealthMonitor:
             overall_status = 'warning'
         else:
             overall_status = 'good'
-        
+
         # Get statistics
         stats = self._get_basic_stats()
-        
+
         return {
             'overall_score': overall_score,
             'overall_status': overall_status,
@@ -95,7 +95,7 @@ class HealthMonitor:
             'statistics': stats,
             'timestamp': datetime.now().isoformat()
         }
-    
+
     def _get_basic_stats(self) -> Dict[str, Any]:
         """Get basic statistics about the knowledge base."""
         with self._db.get_connection() as conn:
@@ -124,7 +124,7 @@ class HealthMonitor:
             'database_size': db_size,
             'database_size_mb': round(db_size / 1024 / 1024, 2)
         }
-    
+
     def _calculate_tag_coverage(self) -> HealthMetric:
         """Calculate tag coverage health metric."""
         with self._db.get_connection() as conn:
@@ -148,7 +148,7 @@ class HealthMonitor:
             coverage = 1.0
         else:
             coverage = tagged / total
-        
+
         # Determine status
         if coverage < 0.5:
             status = 'critical'
@@ -156,14 +156,14 @@ class HealthMonitor:
             status = 'warning'
         else:
             status = 'good'
-        
+
         # Generate recommendations
         recommendations = []
         if coverage < 0.8:
             untagged = total - tagged
             recommendations.append(f"Tag {untagged} untagged documents using 'emdx tag batch'")
             recommendations.append("Enable auto-tagging with 'emdx save --auto-tag'")
-        
+
         return HealthMetric(
             name='tag_coverage',
             value=coverage,
@@ -172,7 +172,7 @@ class HealthMonitor:
             details=f"{tagged}/{total} documents tagged ({coverage:.1%})",
             recommendations=recommendations
         )
-    
+
     def _calculate_duplicate_health(self) -> HealthMetric:
         """Calculate duplicate document health metric."""
         detector = DuplicateDetector()
@@ -187,10 +187,10 @@ class HealthMonitor:
             duplicate_ratio = 0.0
         else:
             duplicate_ratio = stats['total_duplicates'] / total
-        
+
         # Invert for health score (fewer duplicates = better health)
         health_value = 1.0 - min(duplicate_ratio, 1.0)
-        
+
         # Determine status
         if duplicate_ratio > 0.2:
             status = 'critical'
@@ -198,7 +198,7 @@ class HealthMonitor:
             status = 'warning'
         else:
             status = 'good'
-        
+
         # Generate recommendations
         recommendations = []
         if stats['total_duplicates'] > 0:
@@ -206,7 +206,7 @@ class HealthMonitor:
             if stats['space_wasted'] > 1024 * 1024:  # 1MB
                 mb_wasted = stats['space_wasted'] / 1024 / 1024
                 recommendations.append(f"Save {mb_wasted:.1f}MB by removing duplicates")
-        
+
         return HealthMetric(
             name='duplicate_ratio',
             value=health_value,
@@ -215,7 +215,7 @@ class HealthMonitor:
             details=f"{stats['total_duplicates']} duplicates found ({duplicate_ratio:.1%} of total)",
             recommendations=recommendations
         )
-    
+
     def _calculate_organization_health(self) -> HealthMetric:
         """Calculate organization health based on project distribution."""
         with self._db.get_connection() as conn:
@@ -249,7 +249,7 @@ class HealthMonitor:
         else:
             # Score based on % with projects
             project_coverage = with_project / total
-            
+
             # Penalize too many or too few projects
             if project_count == 0:
                 distribution_score = 0.0
@@ -259,9 +259,9 @@ class HealthMonitor:
                 distribution_score = 0.8
             else:
                 distribution_score = 1.0
-            
+
             org_score = (project_coverage * 0.7) + (distribution_score * 0.3)
-        
+
         # Determine status
         if org_score < 0.5:
             status = 'critical'
@@ -269,7 +269,7 @@ class HealthMonitor:
             status = 'warning'
         else:
             status = 'good'
-        
+
         # Generate recommendations
         recommendations = []
         if without_project > 0:
@@ -278,7 +278,7 @@ class HealthMonitor:
             recommendations.append("Consider breaking down large projects into smaller ones")
         elif avg_per_project < 5 and project_count > 10:
             recommendations.append("Consider consolidating small projects")
-        
+
         return HealthMetric(
             name='organization',
             value=org_score,
@@ -287,7 +287,7 @@ class HealthMonitor:
             details=f"{project_count} projects, {without_project} unorganized docs",
             recommendations=recommendations
         )
-    
+
     def _calculate_activity_health(self) -> HealthMetric:
         """Calculate activity health based on recent usage."""
         # Define time periods
@@ -334,17 +334,17 @@ class HealthMonitor:
             week_ratio = week_active / total
             month_ratio = month_active / total
             quarter_ratio = quarter_active / total
-            
+
             activity_score = (
                 week_ratio * 0.5 +
                 month_ratio * 0.3 +
                 quarter_ratio * 0.2
             )
-            
+
             # Boost score if actively creating new docs
             if new_last_month > total * 0.05:  # 5% growth
                 activity_score = min(1.0, activity_score * 1.2)
-        
+
         # Determine status
         if activity_score < 0.1:
             status = 'critical'
@@ -352,18 +352,18 @@ class HealthMonitor:
             status = 'warning'
         else:
             status = 'good'
-        
+
         # Generate recommendations
         recommendations = []
         if week_active < total * 0.1:
             recommendations.append("Knowledge base is underutilized - review and update content")
         if new_last_month == 0:
             recommendations.append("No new documents in the last month - consider capturing new knowledge")
-        
+
         stale_count = total - quarter_active
         if stale_count > total * 0.5:
             recommendations.append(f"Review {stale_count} documents not accessed in 90+ days")
-        
+
         return HealthMetric(
             name='activity',
             value=activity_score,
@@ -372,7 +372,7 @@ class HealthMonitor:
             details=f"{week_active} docs active this week, {new_last_month} new this month",
             recommendations=recommendations
         )
-    
+
     def _calculate_quality_health(self) -> HealthMetric:
         """Calculate content quality health metric."""
         with self._db.get_connection() as conn:
@@ -404,15 +404,15 @@ class HealthMonitor:
             short_ratio = short / total
             very_short_ratio = very_short / total
             poor_title_ratio = poor_titles / total
-            
+
             # Base quality score
             quality_score = 1.0
             quality_score -= very_short_ratio * 0.5  # Heavy penalty for very short
             quality_score -= (short_ratio - very_short_ratio) * 0.2  # Lighter penalty for short
             quality_score -= poor_title_ratio * 0.3  # Penalty for poor titles
-            
+
             quality_score = max(0.0, quality_score)
-        
+
         # Determine status
         if quality_score < 0.5:
             status = 'critical'
@@ -420,17 +420,17 @@ class HealthMonitor:
             status = 'warning'
         else:
             status = 'good'
-        
+
         # Generate recommendations
         recommendations = []
         if very_short > 0:
             recommendations.append(f"Review {very_short} very short documents (<50 chars)")
-            recommendations.append(f"Remove empty documents with 'emdx clean empty'")
+            recommendations.append("Remove empty documents with 'emdx clean empty'")
         if poor_titles > total * 0.1:
             recommendations.append(f"Improve titles for {poor_titles} documents")
         if avg_length < 500:
             recommendations.append("Consider adding more detail to documents")
-        
+
         return HealthMetric(
             name='quality',
             value=quality_score,
@@ -439,7 +439,7 @@ class HealthMonitor:
             details=f"Avg length: {int(avg_length)} chars, {very_short} very short docs",
             recommendations=recommendations
         )
-    
+
     def _calculate_growth_health(self) -> HealthMetric:
         """Calculate growth trend health metric."""
         # Get growth over different periods
@@ -476,14 +476,14 @@ class HealthMonitor:
             # Look at recent growth relative to total
             week_growth = growth_data['week'] / max(total * 0.02, 1)  # Expect 2% weekly
             month_growth = growth_data['month'] / max(total * 0.08, 1)  # Expect 8% monthly
-            
+
             # Combine scores
             growth_score = min(1.0, (week_growth * 0.6 + month_growth * 0.4))
-            
+
             # Penalize if no recent growth
             if growth_data['week'] == 0:
                 growth_score *= 0.5
-        
+
         # Determine status
         if growth_score < 0.2:
             status = 'critical'
@@ -491,7 +491,7 @@ class HealthMonitor:
             status = 'warning'
         else:
             status = 'good'
-        
+
         # Generate recommendations
         recommendations = []
         if growth_data['week'] == 0:
@@ -500,7 +500,7 @@ class HealthMonitor:
             recommendations.append("Low growth rate - consider regular knowledge capture habits")
         if total > 1000 and growth_data['year'] > total * 0.5:
             recommendations.append("Rapid growth detected - ensure proper organization")
-        
+
         return HealthMetric(
             name='growth',
             value=growth_score,
@@ -509,7 +509,7 @@ class HealthMonitor:
             details=f"+{growth_data['week']} this week, +{growth_data['month']} this month",
             recommendations=recommendations
         )
-    
+
     def get_project_health(self, limit: Optional[int] = None) -> List[ProjectHealth]:
         """
         Get health metrics for each project.
@@ -581,19 +581,19 @@ class HealthMonitor:
         if limit:
             return projects[:limit]
         return projects
-    
+
     def get_maintenance_recommendations(self) -> List[Tuple[str, str, str]]:
         """
         Get prioritized maintenance recommendations.
-        
+
         Returns:
             List of tuples (priority, task, command)
         """
         health = self.calculate_overall_health()
         recommendations = []
-        
+
         # Collect all recommendations with priority
-        for metric_name, metric in health['metrics'].items():
+        for _metric_name, metric in health['metrics'].items():
             if metric.status in ['warning', 'critical']:
                 priority = 'HIGH' if metric.status == 'critical' else 'MEDIUM'
                 for rec in metric.recommendations:
@@ -604,38 +604,38 @@ class HealthMonitor:
                         command = match.group(1) if match else ""
                     else:
                         command = ""
-                    
+
                     recommendations.append((priority, rec, command))
-        
+
         # Sort by priority
         priority_order = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}
         recommendations.sort(key=lambda x: priority_order.get(x[0], 3))
-        
+
         return recommendations
-    
+
     def generate_health_report(self) -> str:
         """Generate a comprehensive health report in markdown format."""
         health = self.calculate_overall_health()
         stats = health['statistics']
-        
+
         # Build report
         report = []
         report.append("# EMDX Knowledge Base Health Report")
         report.append(f"\n*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n")
-        
+
         # Overall health
         score = health['overall_score']
         status_emoji = "🟢" if score >= 0.7 else "🟡" if score >= 0.4 else "🔴"
         report.append(f"## Overall Health: {status_emoji} {score:.0%}")
         report.append(f"\n**Status**: {health['overall_status'].upper()}\n")
-        
+
         # Statistics
         report.append("## Statistics")
         report.append(f"- **Total Documents**: {stats['total_documents']:,}")
         report.append(f"- **Projects**: {stats['total_projects']}")
         report.append(f"- **Tags**: {stats['total_tags']}")
         report.append(f"- **Database Size**: {stats['database_size_mb']} MB\n")
-        
+
         # Metrics breakdown
         report.append("## Health Metrics")
         for metric_name, metric in health['metrics'].items():
@@ -644,12 +644,12 @@ class HealthMonitor:
             report.append(f"- **Score**: {metric.value:.0%}")
             report.append(f"- **Status**: {metric.status}")
             report.append(f"- **Details**: {metric.details}")
-            
+
             if metric.recommendations:
                 report.append("- **Recommendations**:")
                 for rec in metric.recommendations:
                     report.append(f"  - {rec}")
-        
+
         # Top projects
         report.append("\n## Project Health (Top 5)")
         projects = self.get_project_health(limit=5)
@@ -662,7 +662,7 @@ class HealthMonitor:
                     f"{p.tag_coverage:.0%} | {p.activity_score:.0%} | "
                     f"{p.overall_score:.0%} |"
                 )
-        
+
         # Action items
         report.append("\n## Recommended Actions")
         recommendations = self.get_maintenance_recommendations()
@@ -673,5 +673,5 @@ class HealthMonitor:
                     report.append(f"  ```bash\n  {command}\n  ```")
         else:
             report.append("✨ No immediate actions required!")
-        
+
         return "\n".join(report)

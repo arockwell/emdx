@@ -56,7 +56,7 @@ class GitFileStatus:
     path: str
     status: str  # M, A, D, ??, etc.
     staged: bool
-    
+
     @property
     def status_icon(self) -> str:
         """Get icon for file status."""
@@ -69,7 +69,7 @@ class GitFileStatus:
             '??': '❓',  # Untracked
         }
         return icons.get(self.status, '❓')
-    
+
     @property
     def status_description(self) -> str:
         """Get human-readable status description."""
@@ -388,10 +388,10 @@ def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
             check=True,
             cwd=project_path
         )
-        
+
         worktrees = []
         current_worktree = {}
-        
+
         for line in result.stdout.strip().split('\n'):
             if not line:
                 if current_worktree:
@@ -408,7 +408,7 @@ def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
                 current_worktree['HEAD'] = line[5:]
             elif line.startswith('branch '):
                 current_worktree['branch'] = line[7:]
-        
+
         # Handle last worktree
         if current_worktree:
             worktrees.append(GitWorktree(
@@ -417,7 +417,7 @@ def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
                 commit=current_worktree.get('HEAD', ''),
                 is_current=current_worktree.get('worktree') == os.getcwd()
             ))
-        
+
         return worktrees
     except subprocess.CalledProcessError as e:
         logger.debug("Failed to get worktree list: %s", e)
@@ -429,7 +429,7 @@ def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
     try:
         cmd = ['git', 'status', '--porcelain']
         cwd = worktree_path if worktree_path else None
-        
+
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -437,25 +437,25 @@ def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
             check=True,
             cwd=cwd
         )
-        
+
         files = []
         for line in result.stdout.strip().split('\n'):
             if not line:
                 continue
-                
+
             # Parse git status format: XY filename where:
             # X = staged status, Y = unstaged status
             # Always expect 2 chars + space + filename
             if len(line) < 3:
                 continue
-                
+
             status_chars = line[:2]
             filename = line[2:].lstrip()  # Remove status chars and strip leading whitespace
-            
+
             # Git status always uses 2 characters
             staged_char = status_chars[0]
             unstaged_char = status_chars[1]
-            
+
             # Determine primary status and whether file has staged changes
             # Priority: staged changes > unstaged changes > untracked
             if staged_char != ' ' and staged_char != '?':
@@ -472,7 +472,7 @@ def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
                     status=unstaged_char,
                     staged=False
                 ))
-        
+
         return files
     except subprocess.CalledProcessError as e:
         logger.debug("Failed to get git status: %s", e)
@@ -483,25 +483,25 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: Optional[str] = No
     """Get comprehensive diff showing both staged and unstaged changes."""
     staged_diff = get_git_diff(file_path, staged=True, worktree_path=worktree_path)
     unstaged_diff = get_git_diff(file_path, staged=False, worktree_path=worktree_path)
-    
+
     output_parts = []
-    
+
     # Add staged changes if they exist
     if staged_diff and not staged_diff.startswith("No staged changes") and not staged_diff.startswith("Error:"):
         output_parts.append("[bold green]📦 STAGED CHANGES[/bold green]")
         output_parts.append(staged_diff)
         output_parts.append("")
-    
-    # Add unstaged changes if they exist  
+
+    # Add unstaged changes if they exist
     if unstaged_diff and not unstaged_diff.startswith("No unstaged changes") and not unstaged_diff.startswith("Error:"):
         output_parts.append("[bold yellow]📝 UNSTAGED CHANGES[/bold yellow]")
         output_parts.append(unstaged_diff)
         output_parts.append("")
-    
+
     # If no changes at all
     if not output_parts:
         return f"No changes found for {file_path}"
-    
+
     return "\n".join(output_parts)
 
 
@@ -512,9 +512,9 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: Optional[s
         if staged:
             cmd.append('--cached')
         cmd.append(file_path)
-        
+
         cwd = worktree_path if worktree_path else None
-        
+
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -522,20 +522,20 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: Optional[s
             check=True,
             cwd=cwd
         )
-        
+
         raw_diff = result.stdout
-        
+
         # If no diff content, return appropriate message
         if not raw_diff.strip():
             status = "staged" if staged else "unstaged"
             return f"No {status} changes for {file_path}"
-        
+
         # Try to format with delta for beautiful output
         try:
             delta_result = subprocess.run(
-                ['delta', 
-                 '--no-gitconfig', 
-                 '--side-by-side=never', 
+                ['delta',
+                 '--no-gitconfig',
+                 '--side-by-side=never',
                  '--width=70',
                  '--tabs=2',
                  '--wrap-max-lines=unlimited',
@@ -552,7 +552,7 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: Optional[s
         except (subprocess.CalledProcessError, FileNotFoundError):
             # Fallback to raw diff if delta fails or isn't available
             return raw_diff
-            
+
     except subprocess.CalledProcessError:
         return f"Error: Could not get diff for {file_path}"
 
@@ -703,7 +703,7 @@ def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: O
 
         logger.info(f"Creating worktree in repo {repo_root}: {' '.join(cmd)}")
 
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -738,7 +738,7 @@ def remove_worktree(path: str, force: bool = False) -> Tuple[bool, str]:
         if force:
             cmd.append('--force')
 
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,

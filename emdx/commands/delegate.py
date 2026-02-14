@@ -40,7 +40,6 @@ import typer
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
-
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
 
 
@@ -162,7 +161,7 @@ def _run_discovery(command: str) -> List[str]:
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
@@ -668,7 +667,7 @@ def delegate(
                 sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
         except Exception as e:
             sys.stderr.write(f"delegate: failed to create worktree: {e}\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     try:
         # 4. Route

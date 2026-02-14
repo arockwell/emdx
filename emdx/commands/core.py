@@ -36,8 +36,8 @@ from emdx.models.tags import (
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string
-from emdx.utils.text_formatting import truncate_title
 from emdx.utils.output import console
+from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer()
 
@@ -414,7 +414,7 @@ def find(
             # Regular search without tags (but might have date filters)
             # If we have no search query but have date filters, use a wildcard
             effective_query = search_query if search_query else "*"
-            
+
             results = search_documents(
                 effective_query, project=project, limit=limit, fuzzy=fuzzy,
                 created_after=created_after, created_before=created_before,
@@ -429,7 +429,7 @@ def find(
                 else:
                     console.print("[yellow]No results found matching the date filters[/yellow]")
                 return
-        
+
         # Batch fetch tags for all results to avoid N+1 queries
         doc_ids = [result["id"] for result in results]
         all_tags_map = get_tags_for_documents(doc_ids)
@@ -463,7 +463,7 @@ def find(
             for result in results:
                 print(result['id'])
             return
-        
+
         if json_output:
             # Output as JSON with all metadata
             output_results = []
@@ -481,19 +481,19 @@ def find(
                     "tags": doc_tags,
                     "access_count": result.get("access_count", 0),
                 }
-                
+
                 # Add search-specific metadata if available
                 if "rank" in result:
                     output_result["relevance"] = result["rank"]
                 elif "score" in result:
                     output_result["similarity"] = result["score"]
-                
+
                 if snippets and "snippet" in result:
                     # Clean snippet of HTML tags
                     output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
-                
+
                 output_results.append(output_result)
-            
+
             # Output as JSON
             print(json.dumps(output_results, indent=2))
             return
@@ -517,7 +517,7 @@ def find(
             if modified_before:
                 date_range.append(f"before {modified_before}")
             search_desc.append(f"modified {' and '.join(date_range)}")
-        
+
         search_description = " ".join(search_desc) if search_desc else "all documents"
         console.print(
             f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n"

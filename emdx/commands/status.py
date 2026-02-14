@@ -8,12 +8,11 @@ Provides a quick overview of:
 - Cascade queue
 """
 
-import typer
 from datetime import datetime, timedelta
 from typing import Optional
 
+import typer
 from rich.console import Console
-from rich.text import Text
 
 from ..database import db
 from ..models.tasks import (
@@ -91,7 +90,6 @@ def _show_active_tasks():
         if task_type in ("group", "chain"):
             child_count = task.get("child_count", 0)
             children_done = task.get("children_done", 0)
-            children_active = task.get("children_active", 0)
             progress = f"step {children_done + 1}/{child_count}" if child_count else ""
             console.print(
                 f"  [cyan]#{task_id}[/cyan]  {task_type:<7} "

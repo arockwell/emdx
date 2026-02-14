@@ -15,7 +15,7 @@ def _generate_build_id():
         # Get current file modification time
         current_file = Path(__file__)
         mtime = current_file.stat().st_mtime
-        
+
         # Create hash from timestamp and version
         build_data = f"{__version__}-{mtime}-{time.time()}"
         build_hash = hashlib.md5(build_data.encode()).hexdigest()[:8]

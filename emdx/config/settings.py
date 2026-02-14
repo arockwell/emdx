@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 # Re-export constants for backward compatibility
-from .constants import DEFAULT_CLAUDE_MODEL, EMDX_CONFIG_DIR
+from .constants import EMDX_CONFIG_DIR
 
 
 def get_db_path() -> Path:

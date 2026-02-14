@@ -23,7 +23,7 @@ from ..utils.emoji_aliases import EMOJI_ALIASES
 
 class AutoTagger:
     """Service for automatically suggesting and applying tags to documents."""
-    
+
     # Default pattern rules for auto-tagging
     DEFAULT_PATTERNS = {
         # Document types
@@ -51,7 +51,7 @@ class AutoTagger:
             'confidence': 0.8,
             'tags': ['docs']
         },
-        
+
         # Technical work
         'bug': {
             'title_patterns': [r'bug:', r'fix:', r'error:', r'issue:'],
@@ -77,7 +77,7 @@ class AutoTagger:
             'confidence': 0.9,
             'tags': ['test']
         },
-        
+
         # Status detection
         'done': {
             'title_patterns': [r'✓', r'done:', r'completed:'],
@@ -91,7 +91,7 @@ class AutoTagger:
             'confidence': 0.8,
             'tags': ['blocked']
         },
-        
+
         # Priority
         'urgent': {
             'title_patterns': [r'urgent:', r'urgent\s', r'critical:', r'critical\s', r'asap'],
@@ -100,7 +100,7 @@ class AutoTagger:
             'tags': ['urgent']
         }
     }
-    
+
     def __init__(
         self,
         db_path: Optional[Union[str, Path]] = None,
@@ -120,59 +120,59 @@ class AutoTagger:
             from ..config.tagging_rules import merge_with_defaults
 
             self.patterns = merge_with_defaults(None)
-    
+
     def analyze_document(
-        self, 
-        title: str, 
+        self,
+        title: str,
         content: Optional[str] = None,
         existing_tags: Optional[List[str]] = None
     ) -> List[Tuple[str, float]]:
         """
         Analyze a document and suggest tags with confidence scores.
-        
+
         Args:
             title: Document title
             content: Document content (optional)
             existing_tags: Currently assigned tags (to avoid duplicates)
-            
+
         Returns:
             List of tuples (tag, confidence) sorted by confidence
         """
         existing_tags = set(existing_tags or [])
         suggestions = defaultdict(float)
-        
+
         # Normalize text for matching
         title_lower = title.lower()
         content_lower = (content or '').lower()
-        
+
         # Check each pattern
-        for pattern_name, rules in self.patterns.items():
+        for _pattern_name, rules in self.patterns.items():
             confidence = 0.0
             base_confidence = rules['confidence']
-            
+
             # Check title patterns
             title_matches = 0
             for pattern in rules.get('title_patterns', []):
                 if re.search(pattern, title_lower, re.IGNORECASE):
                     title_matches += 1
-            
+
             if title_matches > 0:
                 confidence = base_confidence
-            
+
             # Check content patterns (if content provided)
             if content and rules.get('content_patterns'):
                 content_matches = 0
                 for pattern in rules['content_patterns']:
                     if re.search(pattern, content_lower, re.IGNORECASE):
                         content_matches += 1
-                
+
                 if content_matches > 0:
                     # Boost confidence if both title and content match
                     if title_matches > 0:
                         confidence = min(1.0, confidence + 0.1)
                     else:
                         confidence = base_confidence * 0.75  # Lower confidence for content-only match
-            
+
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:
                 for tag in rules['tags']:
@@ -180,11 +180,11 @@ class AutoTagger:
                     emoji_tag = EMOJI_ALIASES.get(tag, tag)
                     if emoji_tag not in existing_tags:
                         suggestions[emoji_tag] = max(suggestions[emoji_tag], confidence)
-        
+
         # Sort by confidence
         sorted_suggestions = sorted(suggestions.items(), key=lambda x: x[1], reverse=True)
         return sorted_suggestions
-    
+
     def suggest_tags(
         self,
         document_id: int,
@@ -225,7 +225,7 @@ class AutoTagger:
         suggestions = self.analyze_document(doc["title"], doc["content"], existing_tags)
 
         return suggestions[:max_suggestions]
-    
+
     def auto_tag_document(
         self,
         document_id: int,
@@ -275,7 +275,7 @@ class AutoTagger:
             conn.commit()
 
         return applied_tags
-    
+
     def batch_suggest(
         self,
         untagged_only: bool = True,
@@ -335,7 +335,7 @@ class AutoTagger:
                 suggestions[doc["id"]] = doc_suggestions
 
         return suggestions
-    
+
     def batch_auto_tag(
         self,
         document_ids: Optional[List[int]] = None,
@@ -347,7 +347,7 @@ class AutoTagger:
     ) -> Dict[str, Any]:
         """
         Apply auto-tagging to multiple documents.
-        
+
         Args:
             document_ids: Specific document IDs to tag (if None, process all)
             untagged_only: Only process documents without tags
@@ -355,7 +355,7 @@ class AutoTagger:
             confidence_threshold: Minimum confidence to apply tag
             max_tags_per_doc: Maximum tags per document
             dry_run: If True, don't actually apply tags
-            
+
         Returns:
             Summary of operations
         """
@@ -367,72 +367,72 @@ class AutoTagger:
                 'tags_applied': 0,
                 'documents': []
             }
-            
+
             for doc_id in document_ids:
                 suggestions = self.suggest_tags(doc_id, max_suggestions=max_tags_per_doc)
                 eligible_tags = [
-                    (tag, conf) for tag, conf in suggestions 
+                    (tag, conf) for tag, conf in suggestions
                     if conf >= confidence_threshold
                 ]
-                
+
                 if eligible_tags:
                     doc_result = {
                         'id': doc_id,
                         'suggested_tags': eligible_tags
                     }
-                    
+
                     if not dry_run:
                         applied = self.auto_tag_document(
-                            doc_id, 
-                            confidence_threshold, 
+                            doc_id,
+                            confidence_threshold,
                             max_tags_per_doc
                         )
                         doc_result['applied_tags'] = applied
                         results['tags_applied'] += len(applied)
                         if applied:
                             results['tagged'] += 1
-                    
+
                     results['documents'].append(doc_result)
-                
+
                 results['processed'] += 1
         else:
             # Batch process based on criteria
             suggestions = self.batch_suggest(untagged_only, project)
-            
+
             results = {
                 'processed': len(suggestions),
                 'tagged': 0,
                 'tags_applied': 0,
                 'documents': []
             }
-            
+
             for doc_id, doc_suggestions in suggestions.items():
                 eligible_tags = [
                     (tag, conf) for tag, conf in doc_suggestions[:max_tags_per_doc]
                     if conf >= confidence_threshold
                 ]
-                
+
                 if eligible_tags:
                     doc_result = {
                         'id': doc_id,
                         'suggested_tags': eligible_tags
                     }
-                    
+
                     if not dry_run:
                         applied = self.auto_tag_document(
-                            doc_id, 
-                            confidence_threshold, 
+                            doc_id,
+                            confidence_threshold,
                             max_tags_per_doc
                         )
                         doc_result['applied_tags'] = applied
                         results['tags_applied'] += len(applied)
                         if applied:
                             results['tagged'] += 1
-                    
+
                     results['documents'].append(doc_result)
-        
+
         return results
-    
+
     def add_custom_pattern(
         self,
         name: str,
@@ -443,7 +443,7 @@ class AutoTagger:
     ):
         """
         Add a custom pattern for auto-tagging.
-        
+
         Args:
             name: Pattern name
             title_patterns: Regex patterns for title matching
@@ -457,7 +457,7 @@ class AutoTagger:
             'tags': tags or [],
             'confidence': confidence
         }
-    
+
     def remove_pattern(self, name: str):
         """Remove a custom pattern."""
         if name in self.patterns:

@@ -79,7 +79,7 @@ class KeybindingExtractor:
 
     def _scan_module_members(self, module) -> None:
         """Scan a module's members for Widget classes with BINDINGS."""
-        for name, obj in inspect.getmembers(module, inspect.isclass):
+        for _name, obj in inspect.getmembers(module, inspect.isclass):
             # Skip if already scanned (class might be imported in multiple places)
             if obj in self.scanned_classes:
                 continue

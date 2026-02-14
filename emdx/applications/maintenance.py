@@ -410,7 +410,7 @@ class MaintenanceApplication:
 
             # Fast path: merge using pairs data directly
             merged_count = 0
-            for doc1_id, doc2_id, title1, title2, sim in pairs:
+            for doc1_id, doc2_id, _title1, _title2, _sim in pairs:
                 try:
                     with self._db.get_connection() as conn:
                         cursor = conn.cursor()

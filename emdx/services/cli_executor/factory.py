@@ -46,7 +46,7 @@ def get_cli_executor(cli_tool: Optional[Union[str, CliTool]] = None) -> CliExecu
             valid = ", ".join(t.value for t in CliTool)
             raise ValueError(
                 f"Unknown CLI tool: {cli_tool}. Valid options: {valid}"
-            )
+            ) from None
 
     # Get executor class and instantiate
     executor_class = _EXECUTORS.get(cli_tool)

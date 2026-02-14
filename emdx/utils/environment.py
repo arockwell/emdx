@@ -55,7 +55,7 @@ class EnvironmentValidator:
         if self.cli_tool in self.CLI_COMMANDS:
             commands.append(self.CLI_COMMANDS[self.cli_tool])
         return commands
-    
+
     def validate_all(self) -> bool:
         """Run all validation checks.
 
@@ -69,15 +69,15 @@ class EnvironmentValidator:
         self.check_cli_config()
 
         return len(self.errors) == 0
-    
+
     def check_python_version(self) -> None:
         """Check Python version compatibility."""
         version = sys.version_info
         self.info["python_version"] = f"{version.major}.{version.minor}.{version.micro}"
-        
+
         if version.major < 3 or (version.major == 3 and version.minor < 8):
             self.errors.append(f"Python 3.8+ required, found {self.info['python_version']}")
-    
+
     def check_commands(self) -> None:
         """Check if required commands are available."""
         for cmd in self.required_commands:
@@ -112,11 +112,11 @@ class EnvironmentValidator:
         elif cmd == "git":
             return ["git", "--version"]
         return None
-    
+
     def check_python_packages(self) -> None:
         """Check if required Python packages are installed."""
         import importlib.util
-        
+
         for package in self.REQUIRED_PYTHON_PACKAGES:
             spec = importlib.util.find_spec(package)
             if spec is None:
@@ -130,26 +130,26 @@ class EnvironmentValidator:
                 except Exception as e:
                     # Package version check failed
                     self.warnings.append(f"Could not get version for {package}: {str(e)}")
-    
+
     def check_paths(self) -> None:
         """Check PATH and important directories."""
         # Check PATH
         path_env = os.environ.get("PATH", "")
         self.info["path_dirs"] = str(len(path_env.split(os.pathsep)))
-        
+
         # Check if running in pipx environment
         if "pipx" in sys.executable:
             self.info["installation"] = "pipx"
             self.warnings.append("Running from pipx environment - ensure claude is accessible")
         else:
             self.info["installation"] = "standard"
-        
+
         # Check EMDX config directory
         if EMDX_CONFIG_DIR.exists():
             self.info["config_dir"] = str(EMDX_CONFIG_DIR)
         else:
             self.warnings.append(f"EMDX config directory not found: {EMDX_CONFIG_DIR}")
-        
+
         # Check log directory
         log_dir = EMDX_CONFIG_DIR / "logs"
         if not log_dir.exists():
@@ -158,7 +158,7 @@ class EnvironmentValidator:
                 self.info["log_dir"] = str(log_dir)
             except Exception as e:
                 self.warnings.append(f"Cannot create log directory: {e}")
-    
+
     def check_cli_config(self) -> None:
         """Check CLI-specific configuration."""
         if self.cli_tool == "claude":
@@ -215,7 +215,7 @@ class EnvironmentValidator:
                 self.info["cursor_authenticated"] = "yes"
         except Exception as e:
             self.warnings.append(f"Cannot verify cursor authentication: {e}")
-    
+
     def print_report(self, verbose: bool = False) -> None:
         """Print validation report."""
         if self.errors:
@@ -225,17 +225,17 @@ class EnvironmentValidator:
                 console.print(f"  • {error}")
         else:
             console.print("\n[bold green]✅ Environment Validation Passed[/bold green]")
-        
+
         if self.warnings:
             console.print("\n[yellow]Warnings:[/yellow]")
             for warning in self.warnings:
                 console.print(f"  • {warning}")
-        
+
         if verbose or self.errors:
             console.print("\n[cyan]Environment Info:[/cyan]")
             for key, value in self.info.items():
                 console.print(f"  {key}: {value}")
-    
+
     def get_environment_info(self) -> Dict[str, any]:
         """Get environment information for logging."""
         return {
@@ -277,11 +277,11 @@ def ensure_claude_in_path() -> None:
         Path.home() / ".local" / "bin",  # pip install --user
         Path.home() / ".npm" / "bin",  # npm global
     ]
-    
+
     # Add any missing paths that contain claude
     current_path = os.environ.get("PATH", "").split(os.pathsep)
     added_paths = []
-    
+
     for path in claude_paths:
         path = Path(path)
         if path.exists() and str(path) not in current_path:
@@ -289,7 +289,7 @@ def ensure_claude_in_path() -> None:
             if claude_exe.exists() and claude_exe.is_file():
                 current_path.append(str(path))
                 added_paths.append(str(path))
-    
+
     if added_paths:
         os.environ["PATH"] = os.pathsep.join(current_path)
         console.print(f"[dim]Added to PATH: {', '.join(added_paths)}[/dim]")

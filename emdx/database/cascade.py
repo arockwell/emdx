@@ -11,7 +11,7 @@ main documents table for efficiency (only ~1% of docs use cascade).
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection

@@ -43,7 +43,7 @@ def _get_model():
             raise ImportError(
                 "sentence-transformers is required for embedding features. "
                 "Install it with: pip install 'emdx[ai]'"
-            )
+            ) from None
 
         # all-MiniLM-L6-v2: Good balance of speed/quality
         # ~90MB download, ~80ms per doc, 384 dimensions
