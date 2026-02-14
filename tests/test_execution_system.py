@@ -1,198 +1,521 @@
-#!/usr/bin/env python3
-"""Test script for EMDX execution system fixes.
+"""Unit tests for the execution system.
 
-Run this manually to validate the fixes:
-    python tests/test_execution_system.py
+Tests the execution lifecycle: creating records, updating status,
+timeout handling, and log recording.
 """
 
-import subprocess
+import os
 import tempfile
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 
-@pytest.mark.integration  
-def test_execution_id_uniqueness():
-    """Test that execution IDs are unique (when environment allows)."""
-    print("\n=== Test: Execution ID Uniqueness ===")
-    
-    # Create test document
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-        f.write("print('Test')")
-        test_file = f.name
-    
-    try:
-        # Save document
-        result = subprocess.run(
-            ["emdx", "save", test_file, "--title", "Test Doc"],
-            capture_output=True,
-            text=True
+@pytest.fixture(autouse=True)
+def clear_executions(isolate_test_database):
+    """Clear executions table before each test."""
+    from emdx.database.connection import db_connection
+
+    with db_connection.get_connection() as conn:
+        conn.execute("DELETE FROM executions")
+        conn.commit()
+    yield
+
+
+class TestExecutionDataclass:
+    """Tests for the Execution dataclass and its properties."""
+
+    def test_execution_duration_completed(self):
+        """Test duration calculation for completed execution."""
+        from emdx.models.executions import Execution
+
+        started = datetime(2024, 1, 1, 10, 0, 0)
+        completed = datetime(2024, 1, 1, 10, 5, 30)
+
+        exec_obj = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="completed",
+            started_at=started,
+            completed_at=completed,
+            log_file="/tmp/test.log",
         )
-        
-        # Extract doc ID
-        doc_id = None
-        for line in result.stdout.split('\n'):
-            if 'Saved as #' in line:
-                # Format: "✅ Saved as #1758: Test Doc"
-                doc_id = line.split('#')[1].split(':')[0].strip()
-                break
-        
-        if not doc_id:
-            print("❌ Failed to create test document - skipping execution test")
-            print(f"Save result: {result.stdout}")
-            pytest.skip("Save failed due to environment issues - cannot run execution test")
-        
-        print(f"✅ Created test document #{doc_id}")
-        
-        # Start multiple executions rapidly
-        exec_ids = []
-        for i in range(3):
-            result = subprocess.run(
-                ["emdx", "claude", "execute", doc_id, "--background"],
-                capture_output=True,
-                text=True
+
+        assert exec_obj.duration == 330.0  # 5 min 30 sec
+
+    def test_execution_duration_running(self):
+        """Test duration is None when still running."""
+        from emdx.models.executions import Execution
+
+        exec_obj = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="running",
+            started_at=datetime.now(),
+            log_file="/tmp/test.log",
+        )
+
+        assert exec_obj.duration is None
+
+    def test_execution_is_running(self):
+        """Test is_running property."""
+        from emdx.models.executions import Execution
+
+        running = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="running",
+            started_at=datetime.now(),
+            log_file="/tmp/test.log",
+        )
+        completed = Execution(
+            id=2,
+            doc_id=100,
+            doc_title="Test",
+            status="completed",
+            started_at=datetime.now(),
+            log_file="/tmp/test.log",
+        )
+
+        assert running.is_running is True
+        assert completed.is_running is False
+
+    def test_execution_is_zombie_no_pid(self):
+        """Test is_zombie is False when no PID."""
+        from emdx.models.executions import Execution
+
+        exec_obj = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="running",
+            started_at=datetime.now(),
+            log_file="/tmp/test.log",
+            pid=None,
+        )
+
+        assert exec_obj.is_zombie is False
+
+    def test_execution_is_zombie_not_running(self):
+        """Test is_zombie is False when not running."""
+        from emdx.models.executions import Execution
+
+        exec_obj = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="completed",
+            started_at=datetime.now(),
+            log_file="/tmp/test.log",
+            pid=12345,
+        )
+
+        assert exec_obj.is_zombie is False
+
+    def test_execution_is_zombie_with_dead_process(self):
+        """Test is_zombie detects dead process."""
+        from emdx.models.executions import Execution
+
+        # Use a PID that definitely doesn't exist
+        exec_obj = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="running",
+            started_at=datetime.now(),
+            log_file="/tmp/test.log",
+            pid=999999999,  # Very unlikely to exist
+        )
+
+        assert exec_obj.is_zombie is True
+
+    def test_execution_log_path(self):
+        """Test log_path property returns Path object."""
+        from pathlib import Path
+
+        from emdx.models.executions import Execution
+
+        exec_obj = Execution(
+            id=1,
+            doc_id=100,
+            doc_title="Test",
+            status="running",
+            started_at=datetime.now(),
+            log_file="~/logs/test.log",
+        )
+
+        log_path = exec_obj.log_path
+        assert isinstance(log_path, Path)
+        assert "logs/test.log" in str(log_path)
+
+
+class TestExecutionCRUD:
+    """Tests for execution CRUD operations."""
+
+    def test_create_execution(self, isolate_test_database):
+        """Test creating an execution record."""
+        from emdx.models.executions import create_execution, get_execution
+
+        # Use doc_id=None to avoid foreign key constraint
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Test Execution",
+            log_file="/tmp/test.log",
+            working_dir="/tmp",
+            pid=12345,
+        )
+
+        assert exec_id is not None
+        assert isinstance(exec_id, int)
+
+        # Verify it was created
+        exec_obj = get_execution(exec_id)
+        assert exec_obj is not None
+        assert exec_obj.doc_id is None
+        assert exec_obj.doc_title == "Test Execution"
+        assert exec_obj.status == "running"
+        assert exec_obj.log_file == "/tmp/test.log"
+        assert exec_obj.working_dir == "/tmp"
+        assert exec_obj.pid == 12345
+
+    def test_create_execution_without_doc_id(self, isolate_test_database):
+        """Test creating execution without doc_id (standalone delegate)."""
+        from emdx.models.executions import create_execution, get_execution
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Delegate: task",
+            log_file="/tmp/delegate.log",
+        )
+
+        exec_obj = get_execution(exec_id)
+        assert exec_obj is not None
+        assert exec_obj.doc_id is None
+        assert exec_obj.doc_title == "Delegate: task"
+
+    def test_get_execution_not_found(self, isolate_test_database):
+        """Test getting non-existent execution returns None."""
+        from emdx.models.executions import get_execution
+
+        result = get_execution(999999)
+        assert result is None
+
+    def test_update_execution_status_completed(self, isolate_test_database):
+        """Test updating execution status to completed."""
+        from emdx.models.executions import (
+            create_execution,
+            get_execution,
+            update_execution_status,
+        )
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Test",
+            log_file="/tmp/test.log",
+        )
+
+        update_execution_status(exec_id, "completed", exit_code=0)
+
+        exec_obj = get_execution(exec_id)
+        assert exec_obj.status == "completed"
+        assert exec_obj.exit_code == 0
+        assert exec_obj.completed_at is not None
+
+    def test_update_execution_status_failed(self, isolate_test_database):
+        """Test updating execution status to failed."""
+        from emdx.models.executions import (
+            create_execution,
+            get_execution,
+            update_execution_status,
+        )
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Test",
+            log_file="/tmp/test.log",
+        )
+
+        update_execution_status(exec_id, "failed", exit_code=1)
+
+        exec_obj = get_execution(exec_id)
+        assert exec_obj.status == "failed"
+        assert exec_obj.exit_code == 1
+        assert exec_obj.completed_at is not None
+
+    def test_update_execution_generic_fields(self, isolate_test_database):
+        """Test updating arbitrary execution fields."""
+        from emdx.models.executions import create_execution, update_execution
+
+        from emdx.database.connection import db_connection
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Test",
+            log_file="/tmp/test.log",
+        )
+
+        update_execution(exec_id, cost_usd=0.05, tokens_used=1000)
+
+        # Verify with raw SQL since Execution dataclass doesn't have these fields
+        with db_connection.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT cost_usd, tokens_used FROM executions WHERE id = ?",
+                (exec_id,),
             )
-            
-            # Extract execution ID from output
-            for line in result.stdout.split('\n'):
-                if 'Execution ID:' in line:
-                    exec_id = line.split(':')[1].strip()
-                    exec_ids.append(exec_id)
-                    break
-        
-        # Check uniqueness
-        if len(exec_ids) == 0:
-            print("⚠️ No executions started - environment may not be configured")
-            pytest.skip("No executions started - environment may not be configured")
-        elif len(exec_ids) == len(set(exec_ids)):
-            print(f"✅ All {len(exec_ids)} execution IDs are unique")
-        else:
-            pytest.fail(f"Duplicate execution IDs found: {exec_ids}")
-    
-    finally:
-        # Clean up temp file
-        import os
-        try:
-            os.unlink(test_file)
-        except OSError:
-            pass
+            row = cursor.fetchone()
+            assert row[0] == 0.05
+            assert row[1] == 1000
+
+    def test_update_execution_pid(self, isolate_test_database):
+        """Test updating execution PID."""
+        from emdx.models.executions import (
+            create_execution,
+            get_execution,
+            update_execution_pid,
+        )
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Test",
+            log_file="/tmp/test.log",
+        )
+
+        update_execution_pid(exec_id, 54321)
+
+        exec_obj = get_execution(exec_id)
+        assert exec_obj.pid == 54321
+
+    def test_update_execution_working_dir(self, isolate_test_database):
+        """Test updating execution working directory."""
+        from emdx.models.executions import (
+            create_execution,
+            get_execution,
+            update_execution_working_dir,
+        )
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Test",
+            log_file="/tmp/test.log",
+        )
+
+        update_execution_working_dir(exec_id, "/new/working/dir")
+
+        exec_obj = get_execution(exec_id)
+        assert exec_obj.working_dir == "/new/working/dir"
 
 
-@pytest.mark.integration
-def test_maintenance_commands():
-    """Test maintenance commands exist and can run."""
-    print("\n=== Test: Maintenance Commands ===")
+class TestExecutionQueries:
+    """Tests for execution query operations."""
 
-    commands = [
-        # The maintain command help
-        ["emdx", "maintain", "--help"],
-        # Analyze command help (now under maintain)
-        ["emdx", "maintain", "analyze", "--help"],
-        # Exec commands
-        ["emdx", "exec", "--help"],
-        ["emdx", "exec", "stats"],
-    ]
+    def test_get_recent_executions(self, isolate_test_database):
+        """Test getting recent executions."""
+        from emdx.models.executions import create_execution, get_recent_executions
 
-    all_passed = True
-    for cmd in commands:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        # Accept commands that run but may have DB issues
-        if result.returncode == 0 or "OperationalError" in result.stderr or "DRY RUN MODE" in result.stdout:
-            print(f"✅ {' '.join(cmd[1:])}: OK (command exists and runs)")
-        else:
-            print(f"❌ {' '.join(cmd[1:])}: Failed")
-            print(f"  stdout: {result.stdout[:100]}...")
-            print(f"  stderr: {result.stderr[:100]}...")
-            all_passed = False
+        # Create a few executions
+        for i in range(5):
+            create_execution(
+                doc_id=None,
+                doc_title=f"Exec {i}",
+                log_file=f"/tmp/log{i}.log",
+            )
 
-    assert all_passed, "Some maintenance commands failed to run at all"
+        recent = get_recent_executions(limit=3)
+        assert len(recent) == 3
+        # Should be ordered by id DESC (most recent first)
+        assert recent[0].doc_title == "Exec 4"
+        assert recent[1].doc_title == "Exec 3"
 
+    def test_get_running_executions(self, isolate_test_database):
+        """Test getting running executions only."""
+        from emdx.models.executions import (
+            create_execution,
+            get_running_executions,
+            update_execution_status,
+        )
 
-@pytest.mark.integration
-def test_execution_monitoring():
-    """Test execution monitoring commands."""
-    print("\n=== Test: Execution Monitoring ===")
-    
-    commands = [
-        ["emdx", "exec", "list", "--limit", "5"],
-        ["emdx", "exec", "stats"],
-        ["emdx", "exec", "health"],
-        ["emdx", "exec", "monitor", "--no-follow"],
-    ]
-    
-    all_passed = True
-    for cmd in commands:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✅ {' '.join(cmd[2:])}: OK")
-        else:
-            print(f"❌ {' '.join(cmd[2:])}: Failed")
-            all_passed = False
-    
-    assert all_passed, "Some execution monitoring commands failed"
+        exec1 = create_execution(doc_id=None, doc_title="Running", log_file="/tmp/1.log")
+        exec2 = create_execution(doc_id=None, doc_title="Completed", log_file="/tmp/2.log")
+        exec3 = create_execution(doc_id=None, doc_title="Also Running", log_file="/tmp/3.log")
 
+        update_execution_status(exec2, "completed", exit_code=0)
 
-@pytest.mark.integration
-def test_environment_validation():
-    """Test environment validation."""
-    print("\n=== Test: Environment Validation ===")
+        running = get_running_executions()
+        assert len(running) == 2
+        titles = {e.doc_title for e in running}
+        assert "Running" in titles
+        assert "Also Running" in titles
+        assert "Completed" not in titles
 
-    result = subprocess.run(
-        ["emdx", "claude", "check-env"],
-        capture_output=True,
-        text=True
-    )
+    def test_get_execution_stats(self, isolate_test_database):
+        """Test getting execution statistics."""
+        from emdx.models.executions import (
+            create_execution,
+            get_execution_stats,
+            update_execution_status,
+        )
 
-    if "properly configured" in result.stdout:
-        print("✅ Environment is properly configured")
-        assert result.returncode == 0, "check-env should return 0 for properly configured environment"
-    else:
-        print("⚠️  Environment has issues (this may be expected)")
-        print(result.stdout)
-        pytest.skip("Environment has issues - skipping validation test")
+        # Create executions with various statuses
+        exec1 = create_execution(doc_id=None, doc_title="T1", log_file="/tmp/1.log")
+        exec2 = create_execution(doc_id=None, doc_title="T2", log_file="/tmp/2.log")
+        exec3 = create_execution(doc_id=None, doc_title="T3", log_file="/tmp/3.log")
+
+        update_execution_status(exec2, "completed", exit_code=0)
+        update_execution_status(exec3, "failed", exit_code=1)
+
+        stats = get_execution_stats()
+        assert stats["total"] >= 3
+        assert stats["running"] >= 1
+        assert stats["completed"] >= 1
+        assert stats["failed"] >= 1
+        assert "recent_24h" in stats
 
 
-def main():
-    """Run all tests."""
-    print("🧪 EMDX Execution System Test Suite")
-    print("=" * 50)
+class TestTimeoutHandling:
+    """Tests for stale execution detection (timeout handling)."""
 
-    tests = [
-        test_environment_validation,
-        test_execution_id_uniqueness,
-        test_maintenance_commands,
-        test_execution_monitoring,
-    ]
+    def test_get_stale_executions_validates_timeout(self, isolate_test_database):
+        """Test that invalid timeout values raise error."""
+        from emdx.models.executions import get_stale_executions
 
-    passed = 0
-    failed = 0
-    skipped = 0
+        with pytest.raises(ValueError):
+            get_stale_executions(timeout_seconds=-1)
 
-    for test_func in tests:
-        try:
-            test_func()
-            print(f"✅ {test_func.__name__} passed")
-            passed += 1
-        except pytest.skip.Exception as e:
-            print(f"⏭️  {test_func.__name__} skipped: {e}")
-            skipped += 1
-        except AssertionError as e:
-            print(f"❌ {test_func.__name__} failed assertion: {e}")
-            failed += 1
-        except Exception as e:
-            print(f"❌ {test_func.__name__} failed with exception: {e}")
-            failed += 1
+    @pytest.mark.skip(reason="last_heartbeat column removed in migration 013")
+    def test_get_stale_executions_no_stale(self, isolate_test_database):
+        """Test no stale executions when all are fresh.
 
-    print("\n" + "=" * 50)
-    print(f"✅ Passed: {passed}")
-    print(f"⏭️  Skipped: {skipped}")
-    print(f"❌ Failed: {failed}")
-    print(f"📊 Total: {passed + skipped + failed}")
+        Note: This test is skipped because migration 013 removed the
+        last_heartbeat column from the executions table.
+        """
+        from emdx.models.executions import create_execution, get_stale_executions
 
-    if failed == 0:
-        print("\n🎉 All tests passed!")
-    else:
-        print(f"\n⚠️  {failed} test(s) failed")
+        # Create a fresh execution
+        create_execution(
+            doc_id=None,
+            doc_title="Fresh",
+            log_file="/tmp/fresh.log",
+        )
+
+        # With a very long timeout, nothing should be stale
+        stale = get_stale_executions(timeout_seconds=86400)  # 24 hours
+        assert len(stale) == 0
+
+    def test_cleanup_old_executions(self, isolate_test_database):
+        """Test cleaning up old executions."""
+        from emdx.models.executions import (
+            cleanup_old_executions,
+            create_execution,
+            get_recent_executions,
+        )
+
+        # Create some executions
+        for i in range(3):
+            create_execution(
+                doc_id=None,
+                doc_title=f"Old {i}",
+                log_file=f"/tmp/old{i}.log",
+            )
+
+        # Clean with 0 days should delete recent ones too
+        # But 7 days should keep them
+        deleted = cleanup_old_executions(days=7)
+        assert deleted == 0  # Nothing older than 7 days
+
+        remaining = get_recent_executions(limit=10)
+        assert len(remaining) >= 3
+
+    @pytest.mark.skip(reason="last_heartbeat column removed in migration 013")
+    def test_update_execution_heartbeat(self, isolate_test_database):
+        """Test updating execution heartbeat.
+
+        Note: This test is skipped because migration 013 removed the
+        last_heartbeat column from the executions table.
+        """
+        from emdx.models.executions import (
+            create_execution,
+            update_execution_heartbeat,
+        )
+
+        from emdx.database.connection import db_connection
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Heartbeat Test",
+            log_file="/tmp/hb.log",
+        )
+
+        update_execution_heartbeat(exec_id)
+
+        # Verify heartbeat was updated
+        with db_connection.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT last_heartbeat FROM executions WHERE id = ?",
+                (exec_id,),
+            )
+            row = cursor.fetchone()
+            assert row[0] is not None
 
 
-if __name__ == "__main__":
-    main()
+class TestExecutionService:
+    """Tests for the execution service facade."""
+
+    def test_get_agent_executions(self, isolate_test_database):
+        """Test getting agent/delegate executions."""
+        from emdx.models.executions import create_execution
+        from emdx.services.execution_service import get_agent_executions
+
+        # Create agent and delegate executions
+        create_execution(
+            doc_id=None,
+            doc_title="Agent: test task",
+            log_file="/tmp/agent.log",
+        )
+        create_execution(
+            doc_id=None,
+            doc_title="Delegate: another task",
+            log_file="/tmp/delegate.log",
+        )
+        create_execution(
+            doc_id=None,
+            doc_title="Regular execution",
+            log_file="/tmp/regular.log",
+        )
+
+        # Get agent executions from recent time
+        from datetime import datetime, timezone
+
+        cutoff = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+        agents = get_agent_executions(cutoff, limit=10)
+
+        # Should only get Agent: and Delegate: prefixed ones
+        titles = [a["doc_title"] for a in agents]
+        assert any("Agent:" in t for t in titles)
+        assert any("Delegate:" in t for t in titles)
+        assert not any(t == "Regular execution" for t in titles)
+
+    def test_get_execution_log_file(self, isolate_test_database):
+        """Test getting log file for running execution."""
+        from emdx.models.executions import create_execution, update_execution_status
+        from emdx.services.execution_service import get_execution_log_file
+
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title="Agent: log test",
+            log_file="/tmp/agent_log.log",
+        )
+
+        # Should find running execution
+        log_file = get_execution_log_file("Agent: log%")
+        assert log_file == "/tmp/agent_log.log"
+
+        # Complete the execution
+        update_execution_status(exec_id, "completed", exit_code=0)
+
+        # Should not find it anymore (not running)
+        log_file = get_execution_log_file("Agent: log%")
+        assert log_file is None
