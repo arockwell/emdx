@@ -13,7 +13,8 @@ The original presenter handled:
 """
 
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
+from collections.abc import Awaitable, Callable
+from typing import Any, Dict, List, Set
 
 from emdx.services.document_service import (
     count_documents,
@@ -45,7 +46,7 @@ class DocumentBrowserPresenter:
     def __init__(
         self,
         on_list_update: Callable[[DocumentListVM], Awaitable[None]],
-        on_detail_update: Optional[Callable[[DocumentDetailVM], Awaitable[None]]] = None,
+        on_detail_update: Callable[[DocumentDetailVM], Awaitable[None]] | None = None,
     ):
         """Initialize the presenter."""
         self.on_list_update = on_list_update
@@ -408,7 +409,7 @@ class DocumentBrowserPresenter:
         except Exception as e:
             logger.error(f"Error removing tags from document {doc_id}: {e}")
 
-    def get_document_detail(self, doc_id: int) -> Optional[DocumentDetailVM]:
+    def get_document_detail(self, doc_id: int) -> DocumentDetailVM | None:
         """Get full document details for the detail panel."""
         try:
             if doc_id in self._doc_cache:
@@ -449,7 +450,7 @@ class DocumentBrowserPresenter:
         self,
         title: str,
         content: str,
-        tags: Optional[List[str]] = None,
+        tags: List[str] | None = None,
     ) -> int:
         """Save a new document."""
         project = get_git_project()
@@ -464,8 +465,8 @@ class DocumentBrowserPresenter:
     async def update_existing_document(
         self,
         doc_id: int,
-        title: Optional[str] = None,
-        content: Optional[str] = None,
+        title: str | None = None,
+        content: str | None = None,
     ) -> bool:
         """Update an existing document."""
         try:
@@ -485,13 +486,13 @@ class DocumentBrowserPresenter:
             logger.error(f"Error updating document {doc_id}: {e}")
             return False
 
-    def get_document_at_index(self, index: int) -> Optional[DocumentListItem]:
+    def get_document_at_index(self, index: int) -> DocumentListItem | None:
         """Get document at the given index in the filtered list."""
         if 0 <= index < len(self._filtered_documents):
             return self._filtered_documents[index]
         return None
 
-    def get_parent_document(self, doc: DocumentListItem) -> Optional[DocumentListItem]:
+    def get_parent_document(self, doc: DocumentListItem) -> DocumentListItem | None:
         """Get the parent document of a given document."""
         if doc.parent_id is None:
             return None

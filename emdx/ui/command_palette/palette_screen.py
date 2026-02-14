@@ -8,7 +8,7 @@ via keyboard-driven fuzzy search.
 import asyncio
 import logging
 import traceback
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -152,7 +152,7 @@ class CommandPaletteScreen(ModalScreen):
     def __init__(
         self,
         initial_query: str = "",
-        context: Optional[CommandContext] = None,
+        context: CommandContext | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

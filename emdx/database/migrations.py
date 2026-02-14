@@ -1,8 +1,8 @@
 """Database migration system for emdx."""
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Callable
 
 from ..config.settings import get_db_path
 

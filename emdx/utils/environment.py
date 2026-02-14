@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
@@ -103,7 +103,7 @@ class EnvironmentValidator:
             else:
                 self.errors.append(f"Required command '{cmd}' not found in PATH")
 
-    def _get_version_command(self, cmd: str) -> Optional[List[str]]:
+    def _get_version_command(self, cmd: str) -> List[str] | None:
         """Get the version command for a CLI tool."""
         if cmd == "claude":
             return ["claude", "--version"]
@@ -249,7 +249,7 @@ class EnvironmentValidator:
 def validate_execution_environment(
     verbose: bool = False,
     cli_tool: str = "claude"
-) -> Tuple[bool, Optional[Dict[str, any]]]:
+) -> Tuple[bool, Dict[str, any] | None]:
     """Validate the execution environment.
 
     Args:

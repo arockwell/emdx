@@ -2,7 +2,6 @@
 GUI interface for emdx - seamless textual browser
 """
 
-from typing import Optional
 
 import typer
 
@@ -10,7 +9,7 @@ from emdx.utils.output import console
 
 
 def gui(
-    theme: Optional[str] = typer.Option(
+    theme: str | None = typer.Option(
         None,
         "--theme",
         "-t",

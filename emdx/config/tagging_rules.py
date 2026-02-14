@@ -6,7 +6,7 @@ Allows users to define custom patterns for auto-tagging.
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
@@ -40,7 +40,7 @@ class TaggingConfig:
 
     DEFAULT_CONFIG_PATH = str(EMDX_CONFIG_DIR / "tagging.yaml")
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         self.config_path = Path(config_path or self.DEFAULT_CONFIG_PATH).expanduser()
         self.rules: Dict[str, TaggingRule] = {}
         self.load_config()
@@ -134,7 +134,7 @@ class TaggingConfig:
             return True
         return False
 
-    def get_rule(self, name: str) -> Optional[TaggingRule]:
+    def get_rule(self, name: str) -> TaggingRule | None:
         """Get a specific rule by name."""
         return self.rules.get(name)
 

@@ -1,7 +1,7 @@
 """Tag management operations for emdx."""
 
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 from emdx.database import db
 from emdx.utils.datetime_utils import parse_datetime
@@ -224,7 +224,7 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 
 
 def search_by_tags(
-    tag_names: list[str], mode: str = "all", project: Optional[str] = None, limit: int = 20,
+    tag_names: list[str], mode: str = "all", project: str | None = None, limit: int = 20,
     prefix_match: bool = True
 ) -> list[dict[str, Any]]:
     """Search documents by tags.

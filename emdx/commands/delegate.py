@@ -34,7 +34,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import typer
 
@@ -44,7 +44,7 @@ from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
 
 
-def _safe_create_task(**kwargs) -> Optional[int]:
+def _safe_create_task(**kwargs) -> int | None:
     """Create task, never fail delegate."""
     try:
         from ..models.tasks import create_task
@@ -54,7 +54,7 @@ def _safe_create_task(**kwargs) -> Optional[int]:
         return None
 
 
-def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
+def _safe_update_task(task_id: int | None, **kwargs) -> None:
     """Update task, never fail delegate."""
     if task_id is None:
         return
@@ -65,7 +65,7 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
 
-def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
+def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
     """Update execution record, never fail delegate."""
     if exec_id is None:
         return
@@ -226,7 +226,7 @@ def _run_discovery(command: str) -> List[str]:
         raise typer.Exit(1)
 
 
-def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
+def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
 
     If prompt provided: "Document #id (title):\n\n{content}\n\n---\n\nTask: {prompt}"
@@ -257,15 +257,15 @@ def _print_doc_content(doc_id: int) -> None:
 def _run_single(
     prompt: str,
     tags: List[str],
-    title: Optional[str],
-    model: Optional[str],
+    title: str | None,
+    model: str | None,
     quiet: bool,
     pr: bool = False,
-    working_dir: Optional[str] = None,
-    source_doc_id: Optional[int] = None,
-    parent_task_id: Optional[int] = None,
-    seq: Optional[int] = None,
-) -> tuple[Optional[int], Optional[int]]:
+    working_dir: str | None = None,
+    source_doc_id: int | None = None,
+    parent_task_id: int | None = None,
+    seq: int | None = None,
+) -> tuple[int | None, int | None]:
     """Run a single task via UnifiedExecutor. Returns (doc_id, task_id)."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
@@ -340,14 +340,14 @@ def _run_single(
 def _run_parallel(
     tasks: List[str],
     tags: List[str],
-    title: Optional[str],
-    jobs: Optional[int],
+    title: str | None,
+    jobs: int | None,
     synthesize: bool,
-    model: Optional[str],
+    model: str | None,
     quiet: bool,
     pr: bool = False,
     base_branch: str = "main",
-    source_doc_id: Optional[int] = None,
+    source_doc_id: int | None = None,
     worktree: bool = False,
 ) -> List[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
@@ -365,9 +365,9 @@ def _run_parallel(
     )
 
     # Results indexed by task position to preserve order
-    results: dict[int, tuple[Optional[int], Optional[int]]] = {}
+    results: dict[int, tuple[int | None, int | None]] = {}
 
-    def run_task(idx: int, task: str) -> tuple[int, tuple[Optional[int], Optional[int]]]:
+    def run_task(idx: int, task: str) -> tuple[int, tuple[int | None, int | None]]:
         task_title = title or f"Delegate: {task[:60]}"
         if len(tasks) > 1:
             task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
@@ -471,12 +471,12 @@ def _run_parallel(
 def _run_chain(
     tasks: List[str],
     tags: List[str],
-    title: Optional[str],
-    model: Optional[str],
+    title: str | None,
+    model: str | None,
     quiet: bool,
     pr: bool = False,
-    working_dir: Optional[str] = None,
-    source_doc_id: Optional[int] = None,
+    working_dir: str | None = None,
+    source_doc_id: int | None = None,
 ) -> List[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
@@ -585,11 +585,11 @@ def delegate(
         None,
         help="Task prompt(s) or document IDs. Numeric args load doc content.",
     ),
-    tags: Optional[List[str]] = typer.Option(
+    tags: List[str] | None = typer.Option(
         None, "--tags", "-t",
         help="Tags to apply to outputs (comma-separated)",
     ),
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None, "--title", "-T",
         help="Title for output document(s)",
     ),

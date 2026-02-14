@@ -5,7 +5,6 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -311,7 +310,7 @@ def tail(exec_id: int):
 
 
 @app.command(name="kill")
-def kill_execution(exec_id: Optional[int] = typer.Argument(None)):
+def kill_execution(exec_id: int | None = typer.Argument(None)):
     """Kill a running execution and mark it as completed.
 
     If no exec_id provided, shows running executions to choose from.

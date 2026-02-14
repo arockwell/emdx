@@ -7,7 +7,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from .logging_utils import get_logger
 
@@ -189,7 +189,7 @@ def discover_projects_from_main_repos() -> List[GitProject]:
     return projects
 
 
-def discover_projects_from_worktrees(worktree_dirs: Optional[List[str]] = None) -> List[GitProject]:
+def discover_projects_from_worktrees(worktree_dirs: List[str] | None = None) -> List[GitProject]:
     """
     Discover projects by grouping worktrees.
 
@@ -296,7 +296,7 @@ def discover_projects_from_worktrees(worktree_dirs: Optional[List[str]] = None) 
     return projects
 
 
-def discover_git_projects(search_paths: Optional[List[str]] = None, max_depth: int = 1) -> List[GitProject]:
+def discover_git_projects(search_paths: List[str] | None = None, max_depth: int = 1) -> List[GitProject]:
     """
     Discover git projects in common locations.
 
@@ -370,7 +370,7 @@ def discover_git_projects(search_paths: Optional[List[str]] = None, max_depth: i
     return projects
 
 
-def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
+def get_worktrees(project_path: str | None = None) -> List[GitWorktree]:
     """
     Get list of all git worktrees for a project.
 
@@ -424,7 +424,7 @@ def get_worktrees(project_path: Optional[str] = None) -> List[GitWorktree]:
         return []
 
 
-def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
+def get_git_status(worktree_path: str | None = None) -> List[GitFileStatus]:
     """Get git status for current directory or specified worktree."""
     try:
         cmd = ['git', 'status', '--porcelain']
@@ -479,7 +479,7 @@ def get_git_status(worktree_path: Optional[str] = None) -> List[GitFileStatus]:
         return []
 
 
-def get_comprehensive_git_diff(file_path: str, worktree_path: Optional[str] = None) -> str:
+def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None) -> str:
     """Get comprehensive diff showing both staged and unstaged changes."""
     staged_diff = get_git_diff(file_path, staged=True, worktree_path=worktree_path)
     unstaged_diff = get_git_diff(file_path, staged=False, worktree_path=worktree_path)
@@ -505,7 +505,7 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: Optional[str] = No
     return "\n".join(output_parts)
 
 
-def get_git_diff(file_path: str, staged: bool = False, worktree_path: Optional[str] = None) -> str:
+def get_git_diff(file_path: str, staged: bool = False, worktree_path: str | None = None) -> str:
     """Get git diff for a specific file with beautiful formatting."""
     try:
         cmd = ['git', 'diff']
@@ -557,7 +557,7 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: Optional[s
         return f"Error: Could not get diff for {file_path}"
 
 
-def is_git_repository(path: Optional[str] = None) -> bool:
+def is_git_repository(path: str | None = None) -> bool:
     """Check if directory is a git repository."""
     try:
         cwd = path if path else None
@@ -572,7 +572,7 @@ def is_git_repository(path: Optional[str] = None) -> bool:
         return False
 
 
-def get_current_branch(worktree_path: Optional[str] = None) -> str:
+def get_current_branch(worktree_path: str | None = None) -> str:
     """Get current git branch name."""
     try:
         cwd = worktree_path if worktree_path else None
@@ -588,7 +588,7 @@ def get_current_branch(worktree_path: Optional[str] = None) -> str:
         return "unknown"
 
 
-def get_repository_root(path: Optional[str] = None) -> Optional[str]:
+def get_repository_root(path: str | None = None) -> str | None:
     """Get the root directory of the git repository."""
     try:
         cwd = path if path else None
@@ -604,7 +604,7 @@ def get_repository_root(path: Optional[str] = None) -> Optional[str]:
         return None
 
 
-def git_stage_file(file_path: str, worktree_path: Optional[str] = None) -> bool:
+def git_stage_file(file_path: str, worktree_path: str | None = None) -> bool:
     """Stage a file for commit."""
     try:
         cwd = worktree_path if worktree_path else None
@@ -620,7 +620,7 @@ def git_stage_file(file_path: str, worktree_path: Optional[str] = None) -> bool:
         return False
 
 
-def git_unstage_file(file_path: str, worktree_path: Optional[str] = None) -> bool:
+def git_unstage_file(file_path: str, worktree_path: str | None = None) -> bool:
     """Unstage a file (remove from staging area)."""
     try:
         cwd = worktree_path if worktree_path else None
@@ -636,7 +636,7 @@ def git_unstage_file(file_path: str, worktree_path: Optional[str] = None) -> boo
         return False
 
 
-def git_commit(message: str, worktree_path: Optional[str] = None) -> Tuple[bool, str]:
+def git_commit(message: str, worktree_path: str | None = None) -> Tuple[bool, str]:
     """Commit staged changes with a message."""
     try:
         cwd = worktree_path if worktree_path else None
@@ -652,7 +652,7 @@ def git_commit(message: str, worktree_path: Optional[str] = None) -> Tuple[bool,
         return False, e.stderr.strip() if e.stderr else "Commit failed"
 
 
-def git_discard_changes(file_path: str, worktree_path: Optional[str] = None) -> bool:
+def git_discard_changes(file_path: str, worktree_path: str | None = None) -> bool:
     """Discard unstaged changes to a file."""
     try:
         cwd = worktree_path if worktree_path else None
@@ -668,7 +668,7 @@ def git_discard_changes(file_path: str, worktree_path: Optional[str] = None) -> 
         return False
 
 
-def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: Optional[str] = None, repo_path: Optional[str] = None) -> Tuple[bool, str, str]:
+def create_worktree(branch_name: str, path: str | None = None, base_branch: str | None = None, repo_path: str | None = None) -> Tuple[bool, str, str]:
     """
     Create a new git worktree.
 

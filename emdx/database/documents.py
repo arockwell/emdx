@@ -3,7 +3,7 @@ Document CRUD operations for emdx knowledge base
 """
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
@@ -24,9 +24,9 @@ def _parse_doc_datetimes(doc: dict[str, Any], fields: list[str] | None = None) -
 def save_document(
     title: str,
     content: str,
-    project: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    parent_id: Optional[int] = None,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    parent_id: int | None = None,
 ) -> int:
     """Save a document to the knowledge base"""
     with db_connection.get_connection() as conn:
@@ -49,7 +49,7 @@ def save_document(
         return doc_id
 
 
-def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
+def get_document(identifier: Union[str, int]) -> dict[str, Any] | None:
     """Get a document by ID or title"""
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
@@ -102,9 +102,9 @@ def get_document(identifier: Union[str, int]) -> Optional[dict[str, Any]]:
 
 
 def list_documents(
-    project: Optional[str] = None,
+    project: str | None = None,
     limit: int = 50,
-    parent_id: Optional[int] = None,
+    parent_id: int | None = None,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     """List documents with optional project and hierarchy filters.
@@ -165,8 +165,8 @@ def list_documents(
 
 
 def count_documents(
-    project: Optional[str] = None,
-    parent_id: Optional[int] = None,
+    project: str | None = None,
+    parent_id: int | None = None,
 ) -> int:
     """Count documents with optional project and hierarchy filters.
 
@@ -244,7 +244,7 @@ def get_children_count(
             list(doc_ids),
         )
 
-        result = {doc_id: 0 for doc_id in doc_ids}
+        result = dict.fromkeys(doc_ids, 0)
         for row in cursor.fetchall():
             result[row["parent_id"]] = row["child_count"]
         return result
@@ -335,7 +335,7 @@ def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
         return docs
 
 
-def get_stats(project: Optional[str] = None) -> dict[str, Any]:
+def get_stats(project: str | None = None) -> dict[str, Any]:
     """Get database statistics"""
     with db_connection.get_connection() as conn:
         if project:
@@ -404,7 +404,7 @@ def get_stats(project: Optional[str] = None) -> dict[str, Any]:
         return stats
 
 
-def list_deleted_documents(days: Optional[int] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_deleted_documents(days: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """List soft-deleted documents"""
     with db_connection.get_connection() as conn:
         if days:
@@ -467,7 +467,7 @@ def restore_document(identifier: Union[str, int]) -> bool:
         return cursor.rowcount > 0
 
 
-def purge_deleted_documents(older_than_days: Optional[int] = None) -> int:
+def purge_deleted_documents(older_than_days: int | None = None) -> int:
     """Permanently delete soft-deleted documents"""
     with db_connection.get_connection() as conn:
         if older_than_days:
@@ -493,11 +493,11 @@ def purge_deleted_documents(older_than_days: Optional[int] = None) -> int:
 
 def find_supersede_candidate(
     title: str,
-    project: Optional[str] = None,
+    project: str | None = None,
     title_threshold: float = 0.85,
-    content: Optional[str] = None,
+    content: str | None = None,
     content_threshold: float = 0.5,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Find a document that should be superseded by a new document with the given title.
 
     Uses title normalization and optional content similarity to find the best candidate.

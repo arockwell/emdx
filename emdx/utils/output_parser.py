@@ -9,12 +9,12 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 
-def extract_output_doc_id(log_file: Path) -> Optional[int]:
+def extract_output_doc_id(log_file: Path) -> int | None:
     """Extract output document ID from execution log.
 
     Looks for patterns like "Created document #123" or "Saved as #123"

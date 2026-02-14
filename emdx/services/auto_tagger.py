@@ -6,7 +6,7 @@ Analyzes document content and suggests appropriate tags based on patterns.
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 # Type alias for SQL parameters
 SqlParam = Union[str, int, float, None]
@@ -103,8 +103,8 @@ class AutoTagger:
 
     def __init__(
         self,
-        db_path: Optional[Union[str, Path]] = None,
-        patterns: Optional[Dict] = None,
+        db_path: Union[str, Path] | None = None,
+        patterns: Dict | None = None,
     ):
         # Use centralized database connection management
         if db_path is not None:
@@ -124,8 +124,8 @@ class AutoTagger:
     def analyze_document(
         self,
         title: str,
-        content: Optional[str] = None,
-        existing_tags: Optional[List[str]] = None
+        content: str | None = None,
+        existing_tags: List[str] | None = None
     ) -> List[Tuple[str, float]]:
         """
         Analyze a document and suggest tags with confidence scores.
@@ -279,8 +279,8 @@ class AutoTagger:
     def batch_suggest(
         self,
         untagged_only: bool = True,
-        project: Optional[str] = None,
-        limit: Optional[int] = None,
+        project: str | None = None,
+        limit: int | None = None,
     ) -> Dict[int, List[Tuple[str, float]]]:
         """
         Suggest tags for multiple documents.
@@ -338,9 +338,9 @@ class AutoTagger:
 
     def batch_auto_tag(
         self,
-        document_ids: Optional[List[int]] = None,
+        document_ids: List[int] | None = None,
         untagged_only: bool = True,
-        project: Optional[str] = None,
+        project: str | None = None,
         confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
         max_tags_per_doc: int = DEFAULT_MAX_TAGS_PER_DOC,
         dry_run: bool = True
@@ -436,8 +436,8 @@ class AutoTagger:
     def add_custom_pattern(
         self,
         name: str,
-        title_patterns: Optional[List[str]] = None,
-        content_patterns: Optional[List[str]] = None,
+        title_patterns: List[str] | None = None,
+        content_patterns: List[str] | None = None,
         tags: List[str] = None,
         confidence: float = DEFAULT_TAGGING_CONFIDENCE
     ):

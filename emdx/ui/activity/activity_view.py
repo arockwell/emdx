@@ -13,7 +13,7 @@ and cursor tracking by node reference — eliminating scroll jumping.
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -254,12 +254,12 @@ class ActivityView(HelpMixin, Widget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.activity_items: List[ActivityItem] = []
-        self.log_stream: Optional[LogStream] = None
+        self.log_stream: LogStream | None = None
         self.log_subscriber = AgentLogSubscriber(self)
-        self.streaming_item_id: Optional[int] = None
+        self.streaming_item_id: int | None = None
         self._fullscreen = False
         # Cache to prevent flickering during refresh
-        self._last_preview_key: Optional[tuple] = None  # (item_type, item_id, status)
+        self._last_preview_key: tuple | None = None  # (item_type, item_id, status)
         # Flag to only run zombie cleanup once on startup
         self._zombies_cleaned = False
         # Reentrance guard: prevents overlapping async refreshes
@@ -267,7 +267,7 @@ class ActivityView(HelpMixin, Widget):
         # Data loader (owns DB queries)
         self._data_loader = ActivityDataLoader()
 
-    def _get_selected_item(self) -> Optional[ActivityItem]:
+    def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the tree."""
         try:
             tree = self.query_one("#activity-tree", ActivityTree)

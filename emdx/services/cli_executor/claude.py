@@ -5,7 +5,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ...config.cli_config import CLI_CONFIGS, CliTool, resolve_model_alias
 from .base import CliCommand, CliExecutor, CliResult
@@ -26,11 +26,11 @@ class ClaudeCliExecutor(CliExecutor):
     def build_command(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        allowed_tools: Optional[List[str]] = None,
+        model: str | None = None,
+        allowed_tools: List[str] | None = None,
         output_format: str = "stream-json",
-        working_dir: Optional[str] = None,
-        timeout: Optional[int] = None,
+        working_dir: str | None = None,
+        timeout: int | None = None,
     ) -> CliCommand:
         """Build Claude CLI command.
 
@@ -131,7 +131,7 @@ class ClaudeCliExecutor(CliExecutor):
             exit_code=exit_code,
         )
 
-    def parse_stream_line(self, line: str) -> Optional[Dict[str, Any]]:
+    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
         """Parse a single line from Claude's stream-json output."""
         if not line.strip():
             return None
@@ -212,6 +212,6 @@ class ClaudeCliExecutor(CliExecutor):
 
         return len(info["errors"]) == 0, info
 
-    def get_binary_path(self) -> Optional[str]:
+    def get_binary_path(self) -> str | None:
         """Get path to claude binary."""
         return shutil.which("claude")

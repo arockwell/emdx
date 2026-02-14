@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -57,16 +57,16 @@ class DocumentMerger:
     SIMILARITY_THRESHOLD = 0.7  # Minimum similarity for merge candidates
     PREFILTER_THRESHOLD = 0.3   # Lower threshold for TF-IDF pre-filtering
 
-    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+    def __init__(self, db_path: Union[str, Path] | None = None):
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
         self._similarity_service = SimilarityService(self.db_path)
 
     def find_merge_candidates(
         self,
-        project: Optional[str] = None,
+        project: str | None = None,
         similarity_threshold: float = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Callable | None = None
     ) -> List[MergeCandidate]:
         """
         Find documents that are candidates for merging.
@@ -188,7 +188,7 @@ class DocumentMerger:
         candidates.sort(key=lambda c: c.similarity_score, reverse=True)
         return candidates
 
-    def _get_document_metadata(self, project: Optional[str] = None) -> Dict[int, Dict[str, Any]]:
+    def _get_document_metadata(self, project: str | None = None) -> Dict[int, Dict[str, Any]]:
         """
         Get metadata for all active documents.
 

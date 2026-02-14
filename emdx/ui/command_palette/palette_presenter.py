@@ -5,9 +5,10 @@ Handles search logic, result ranking, and action dispatch.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 from .palette_commands import CommandContext, PaletteCommand, get_command_registry
 
@@ -62,8 +63,8 @@ class PalettePresenter:
 
     def __init__(
         self,
-        on_state_update: Optional[Callable[[PaletteState], None]] = None,
-        context: Optional[CommandContext] = None,
+        on_state_update: Callable[[PaletteState], None] | None = None,
+        context: CommandContext | None = None,
     ):
         self.on_state_update = on_state_update
         self.context = context or CommandContext.GLOBAL
@@ -416,7 +417,7 @@ class PalettePresenter:
         self._state.selected_index = new_index
         self._notify_update()
 
-    def get_selected_result(self) -> Optional[PaletteResultItem]:
+    def get_selected_result(self) -> PaletteResultItem | None:
         """Get the currently selected result."""
         if not self._state.results:
             return None
@@ -433,7 +434,7 @@ class PalettePresenter:
         # Trim
         self._history = self._history[: self._max_history]
 
-    async def execute_selected(self, app) -> Optional[Dict[str, Any]]:
+    async def execute_selected(self, app) -> Dict[str, Any] | None:
         """
         Execute the selected result.
 

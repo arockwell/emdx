@@ -12,7 +12,7 @@ def load_prompt_template(template_name: str) -> str:
     return template_path.read_text()
 
 
-def build_prompt(template_name: Optional[str], content: str) -> str:
+def build_prompt(template_name: str | None, content: str) -> str:
     """Build a prompt from template and content."""
     if not template_name:
         return content

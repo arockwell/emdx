@@ -4,7 +4,7 @@ Modal screens for EMDX TUI.
 """
 
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -326,7 +326,7 @@ class DocumentPreviewModal(ModalScreen):
     def __init__(self, doc_id: int, **kwargs):
         super().__init__(**kwargs)
         self.doc_id = doc_id
-        self._doc_data: Optional[dict] = None
+        self._doc_data: dict | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="preview-dialog"):

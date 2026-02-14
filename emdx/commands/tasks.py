@@ -4,7 +4,6 @@ Agent-facing commands for creating and consuming work items.
 Delegate activity tracking is separate (shown via `emdx status`).
 """
 
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -20,8 +19,8 @@ ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗"}
 @app.command()
 def add(
     title: str = typer.Argument(..., help="Task title"),
-    doc: Optional[int] = typer.Option(None, "-d", "--doc", help="Link to document ID"),
-    description: Optional[str] = typer.Option(None, "-D", "--description", help="Task description"),
+    doc: int | None = typer.Option(None, "-d", "--doc", help="Link to document ID"),
+    description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
 ):
     """Add a task to the work queue.
 
@@ -66,7 +65,7 @@ def ready():
 @app.command()
 def done(
     task_id: int = typer.Argument(..., help="Task ID"),
-    note: Optional[str] = typer.Option(None, "-n", "--note", help="Completion note"),
+    note: str | None = typer.Option(None, "-n", "--note", help="Completion note"),
 ):
     """Mark a task as done.
 
@@ -89,7 +88,7 @@ def done(
 
 @app.command("list")
 def list_cmd(
-    status: Optional[str] = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
+    status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
 ):

@@ -6,7 +6,7 @@ Analyzes knowledge base health and provides actionable recommendations.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -53,7 +53,7 @@ class HealthMonitor:
         'growth': 0.10
     }
 
-    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+    def __init__(self, db_path: Union[str, Path] | None = None):
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
 
@@ -510,7 +510,7 @@ class HealthMonitor:
             recommendations=recommendations
         )
 
-    def get_project_health(self, limit: Optional[int] = None) -> List[ProjectHealth]:
+    def get_project_health(self, limit: int | None = None) -> List[ProjectHealth]:
         """
         Get health metrics for each project.
 
