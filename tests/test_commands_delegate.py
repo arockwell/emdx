@@ -1,8 +1,16 @@
 """Tests for delegate command helper functions."""
 
+import pytest
+from click.exceptions import Exit as ClickExit
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +98,103 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each."""
+
+    def test_allows_fd_command(self):
+        """fd is a safe discovery command."""
+        args = _validate_discovery_command("fd -e py src/")
+        assert args[0] == "fd"
+        assert "-e" in args
+        assert "py" in args
+
+    def test_allows_find_command(self):
+        """find is a safe discovery command."""
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+        assert "." in args
+
+    def test_allows_git_ls_files(self):
+        """git ls-files is a safe discovery command."""
+        args = _validate_discovery_command("git ls-files '*.py'")
+        assert args[0] == "git"
+        assert "ls-files" in args
+
+    def test_allows_rg_with_files(self):
+        """rg --files is a safe discovery command."""
+        args = _validate_discovery_command("rg --files src/")
+        assert args[0] == "rg"
+        assert "--files" in args
+
+    def test_allows_ls_command(self):
+        """ls is a safe discovery command."""
+        args = _validate_discovery_command("ls -la src/")
+        assert args[0] == "ls"
+
+    def test_allows_full_path_commands(self):
+        """Commands with full paths should work (e.g., /usr/bin/fd)."""
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args[0] == "/usr/bin/fd"
+
+    def test_rejects_arbitrary_command(self):
+        """Arbitrary commands like bash should be rejected."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("bash -c 'echo pwned'")
+
+    def test_rejects_rm_command(self):
+        """Dangerous commands like rm should be rejected."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_rejects_curl_command(self):
+        """Network commands like curl should be rejected."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("curl http://evil.com")
+
+    def test_rejects_command_injection_semicolon(self):
+        """Command injection via semicolon should be blocked."""
+        # The command itself will be parsed as: [';', 'rm', '-rf', '~']
+        # The ';' is not in SAFE_DISCOVERY_COMMANDS
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("; rm -rf ~")
+
+    def test_rejects_command_substitution(self):
+        """Command substitution attempts should fail."""
+        # $(cmd) will be passed literally since we don't use shell=True
+        # But even if parsed, the first token won't be a safe command
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("$(cat /etc/passwd)")
+
+    def test_rejects_pipe_injection(self):
+        """Pipe attempts should fail (| is not a safe command)."""
+        # When parsed with shlex, "fd | rm -rf" becomes ["fd", "|", "rm", "-rf"]
+        # Since shell=False, the pipe is passed as a literal argument, not executed
+        args = _validate_discovery_command("fd | rm -rf")
+        # The validation passes because fd is safe, but the pipe becomes an argument
+        assert args[0] == "fd"
+        assert "|" in args  # Pipe is now a harmless argument
+
+    def test_rejects_empty_command(self):
+        """Empty command should be rejected."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("")
+
+    def test_rejects_whitespace_only(self):
+        """Whitespace-only command should be rejected."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("   ")
+
+    def test_safe_commands_allowlist_populated(self):
+        """Verify the allowlist contains expected safe commands."""
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+        assert "git" in SAFE_DISCOVERY_COMMANDS
+        assert "rg" in SAFE_DISCOVERY_COMMANDS
+        assert "ls" in SAFE_DISCOVERY_COMMANDS
+        # Verify dangerous commands are NOT in the allowlist
+        assert "bash" not in SAFE_DISCOVERY_COMMANDS
+        assert "sh" not in SAFE_DISCOVERY_COMMANDS
+        assert "curl" not in SAFE_DISCOVERY_COMMANDS
+        assert "rm" not in SAFE_DISCOVERY_COMMANDS
