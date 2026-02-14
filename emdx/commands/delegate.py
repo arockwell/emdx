@@ -138,12 +138,56 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Safe commands for discovery - only these executables are allowed
+# These generate file lists or similar output suitable for --each
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find replacement
+    "find",         # Classic file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "rg",           # Ripgrep (with --files-with-matches)
+    "ls",           # List files
+    "eza",          # Modern ls replacement
+    "exa",          # Another ls replacement
+    "cat",          # Read file contents
+    "head",         # First N lines
+    "tail",         # Last N lines
+})
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a discovery command and return output lines as items.
+
+    Security: Only allows a restricted set of known-safe discovery commands
+    to prevent command injection. The command is parsed with shlex and
+    executed without a shell.
+    """
+    import shlex
+
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        allowed = ", ".join(sorted(SAFE_DISCOVERY_COMMANDS))
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not a safe discovery command\n"
+            f"delegate: allowed commands: {allowed}\n"
+            f"delegate: for arbitrary commands, pipe to: emdx delegate --each \"$(your-cmd)\"\n"
+        )
+        raise typer.Exit(1)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
             capture_output=True,
             text=True,
             timeout=30,
@@ -162,6 +206,9 @@ def _run_discovery(command: str) -> List[str]:
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        sys.stderr.write(f"delegate: command not found: {args[0]}\n")
         raise typer.Exit(1)
 
 
