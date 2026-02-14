@@ -13,7 +13,7 @@ from emdx.utils.datetime_utils import format_datetime as _format_datetime
 from emdx.utils.text_formatting import truncate_title
 from emdx.utils.output import console
 
-app = typer.Typer()
+app = typer.Typer(help="Browse documents and view statistics")
 
 
 @app.command()

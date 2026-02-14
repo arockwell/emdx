@@ -274,16 +274,22 @@ def add(
     elif plan:
         auto = True
         stop = "planned"
+
+    # Validate content is not empty
+    if not content or not content.strip():
+        console.print("[red]Error: Content cannot be empty[/red]")
+        raise typer.Exit(1)
+
     if stage not in STAGES:
-        console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
+        console.print(f"[red]Error: Invalid stage '{stage}'. Must be one of: {STAGES}[/red]")
         raise typer.Exit(1)
 
     if stop not in STAGES:
-        console.print(f"[red]Invalid stop stage: {stop}. Must be one of: {STAGES}[/red]")
+        console.print(f"[red]Error: Invalid stop stage '{stop}'. Must be one of: {STAGES}[/red]")
         raise typer.Exit(1)
 
     if STAGES.index(stop) <= STAGES.index(stage):
-        console.print(f"[red]Stop stage '{stop}' must be after start stage '{stage}'[/red]")
+        console.print(f"[red]Error: Stop stage '{stop}' must be after start stage '{stage}'[/red]")
         raise typer.Exit(1)
 
     doc_title = title or f"Cascade: {content[:50]}..."
@@ -320,7 +326,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
     for stage in stages_to_process:
         doc = get_document(str(current_doc_id))
         if not doc:
-            console.print(f"[red]Document #{current_doc_id} not found[/red]")
+            console.print(f"[red]Error: Document #{current_doc_id} not found[/red]")
             _update_cascade_run(cascade_run_id, status='failed', error_message=f"Document {current_doc_id} not found")
             raise typer.Exit(1)
 
@@ -400,7 +406,7 @@ def show(
 ):
     """Show documents at a specific stage."""
     if stage not in STAGES:
-        console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
+        console.print(f"[red]Error: Invalid stage '{stage}'. Must be one of: {STAGES}[/red]")
         raise typer.Exit(1)
 
     docs = cascade_db.list_documents_at_stage(stage, limit=limit)

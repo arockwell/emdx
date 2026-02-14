@@ -43,6 +43,9 @@ from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
 
+# Module-level verbose flag for task tracking error reporting
+_verbose_mode = False
+
 
 def _safe_create_task(**kwargs) -> Optional[int]:
     """Create task, never fail delegate."""
@@ -61,8 +64,9 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
     try:
         from ..models.tasks import update_task
         update_task(task_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        if _verbose_mode:
+            sys.stderr.write(f"delegate: task update failed for task {task_id}: {e}\n")
 
 
 def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
@@ -72,8 +76,9 @@ def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
     try:
         from ..models.executions import update_execution
         update_execution(exec_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        if _verbose_mode:
+            sys.stderr.write(f"delegate: execution update failed for exec {exec_id}: {e}\n")
 
 
 PR_INSTRUCTION = (
@@ -570,11 +575,15 @@ def delegate(
     ),
     each: str = typer.Option(
         None, "--each",
-        help="Shell command to discover items (one per line)",
+        help="Shell command to discover items (one per line). Use with --do to specify a template.",
     ),
     do: str = typer.Option(
         None, "--do",
-        help="Template for each discovered item (use {{item}})",
+        help="Template for --each items. Use {{item}} as placeholder for each discovered item.",
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v",
+        help="Show task tracking errors (normally suppressed)",
     ),
 ):
     """Delegate tasks to Claude agents with results on stdout.
@@ -616,6 +625,10 @@ def delegate(
     Quiet mode (just content, no metadata):
         emdx delegate -q "do something"
     """
+    # Set module-level verbose mode for task tracking error reporting
+    global _verbose_mode
+    _verbose_mode = verbose
+
     # Validate mutually exclusive options
     if chain and synthesize:
         typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)

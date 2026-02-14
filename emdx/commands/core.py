@@ -216,6 +216,11 @@ def save(
     # Step 1: Get input content
     input_content = get_input_content(input)
 
+    # Step 1.5: Validate content is not empty
+    if not input_content.content or not input_content.content.strip():
+        console.print("[red]Error: Content cannot be empty[/red]")
+        raise typer.Exit(1)
+
     # Step 2: Generate title
     final_title = generate_title(input_content, title)
 

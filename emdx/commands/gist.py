@@ -16,7 +16,7 @@ from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
 
-app = typer.Typer()
+app = typer.Typer(help="Create and manage GitHub gists from documents")
 
 
 def get_github_auth() -> Optional[str]:

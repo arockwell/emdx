@@ -24,7 +24,7 @@ from ..models.executions import (
 from ..utils.text_formatting import truncate_description
 from ..utils.output import console
 
-app = typer.Typer()
+app = typer.Typer(help="Monitor and manage execution processes")
 
 
 def tail_log_subprocess(log_path: Path, follow: bool = False, lines: int = 50) -> None:

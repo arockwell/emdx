@@ -111,7 +111,7 @@ def run_recipe(
     """
     recipe = _find_recipe(id_or_name)
     if not recipe:
-        console.print(f"[red]Recipe not found: {id_or_name}[/red]")
+        console.print(f"[red]Error: Recipe not found: {id_or_name}[/red]")
         raise typer.Exit(1)
 
     doc_id = recipe["id"]
@@ -155,7 +155,7 @@ def create_recipe(
     """
     path = Path(file)
     if not path.exists():
-        console.print(f"[red]File not found: {file}[/red]")
+        console.print(f"[red]Error: File not found: {file}[/red]")
         raise typer.Exit(1)
 
     cmd = ["emdx", "save", str(path), "--tags", "recipe"]
