@@ -43,8 +43,8 @@ class TestFileWatcherPolling:
             watcher.start()
 
             try:
-                # Wait for initial callback
-                time.sleep(0.6)
+                # Wait for initial callback (poll interval is 0.5s)
+                time.sleep(0.55)
 
                 # Modify the file
                 with open(temp_file, 'a') as f:
@@ -72,8 +72,8 @@ class TestFileWatcherPolling:
             watcher.start()
 
             try:
-                # Wait for initial callback
-                time.sleep(0.6)
+                # Wait for initial callback (poll interval is 0.5s)
+                time.sleep(0.55)
 
                 # Append to file to change size
                 with open(temp_file, 'a') as f:
@@ -94,8 +94,8 @@ class TestFileWatcherPolling:
             watcher.start()
 
             try:
-                # Let polling run for a bit
-                time.sleep(0.6)
+                # Let polling run for one cycle (poll interval is 0.5s)
+                time.sleep(0.55)
                 # Should not crash
             finally:
                 watcher.stop()
@@ -113,8 +113,8 @@ class TestFileWatcherPolling:
 
             watcher.stop()
 
-            # Give thread time to terminate
-            time.sleep(0.2)
+            # Give thread time to terminate (daemon thread, should be quick)
+            time.sleep(0.1)
             assert not watcher.polling_thread.is_alive()
 
 
@@ -174,7 +174,7 @@ class TestFileWatcherWatchdog:
 
         try:
             # Modify the file
-            time.sleep(0.2)  # Give observer time to start
+            time.sleep(0.1)  # Give observer time to start
             with open(temp_file, 'a') as f:
                 f.write("new content\n")
 
@@ -286,18 +286,18 @@ class TestFileWatcherIntegration:
             watcher.start()
 
             try:
-                # Wait for initial callback
-                time.sleep(0.6)
+                # Wait for initial callback (poll interval is 0.5s)
+                time.sleep(0.55)
                 initial_count = callback_count[0]
 
                 # Make multiple modifications
                 for i in range(3):
-                    time.sleep(0.6)  # Wait longer than poll interval
+                    time.sleep(0.55)  # Wait longer than poll interval (0.5s)
                     with open(temp_file, 'a') as f:
                         f.write(f"modification {i}\n")
 
-                # Wait for all callbacks
-                time.sleep(1.0)
+                # Wait for final callback
+                time.sleep(0.55)
 
                 # Should have more callbacks than initial
                 assert callback_count[0] > initial_count, "Expected callbacks for modifications"
@@ -313,9 +313,9 @@ class TestFileWatcherIntegration:
 
             # First cycle
             watcher.start()
-            time.sleep(0.2)
+            time.sleep(0.1)
             watcher.stop()
-            time.sleep(0.2)
+            time.sleep(0.1)
 
             # Reset stop event for second cycle
             watcher.stop_event.clear()
@@ -323,7 +323,7 @@ class TestFileWatcherIntegration:
 
             # Second cycle
             watcher.start()
-            time.sleep(0.2)
+            time.sleep(0.1)
             watcher.stop()
 
             # Should not crash
