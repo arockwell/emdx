@@ -61,8 +61,8 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
     try:
         from ..models.tasks import update_task
         update_task(task_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"delegate: task update failed for #{task_id}: {e}\n")
 
 
 def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
@@ -72,8 +72,8 @@ def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
     try:
         from ..models.executions import update_execution
         update_execution(exec_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"delegate: execution update failed for #{exec_id}: {e}\n")
 
 
 PR_INSTRUCTION = (
@@ -526,7 +526,7 @@ def delegate(
     ),
     tags: Optional[List[str]] = typer.Option(
         None, "--tags", "-t",
-        help="Tags to apply to outputs (comma-separated)",
+        help="Tags to apply to outputs (comma-separated or multiple -t flags)",
     ),
     title: Optional[str] = typer.Option(
         None, "--title", "-T",
