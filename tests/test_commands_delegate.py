@@ -2,7 +2,16 @@
 
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import click.exceptions
+import pytest
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +99,103 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each."""
+
+    def test_allows_fd_command(self):
+        args = _validate_discovery_command("fd -e py src/")
+        assert args == ["fd", "-e", "py", "src/"]
+
+    def test_allows_find_command(self):
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_allows_git_ls_files(self):
+        args = _validate_discovery_command("git ls-files '*.md'")
+        assert args == ["git", "ls-files", "*.md"]
+
+    def test_allows_rg_files_with_matches(self):
+        args = _validate_discovery_command("rg -l pattern")
+        assert args == ["rg", "-l", "pattern"]
+
+    def test_allows_grep_l(self):
+        args = _validate_discovery_command("grep -l TODO src/*.py")
+        assert args[0] == "grep"
+
+    def test_allows_ls_command(self):
+        args = _validate_discovery_command("ls -la src/")
+        assert args[0] == "ls"
+
+    def test_allows_eza_command(self):
+        args = _validate_discovery_command("eza --oneline src/")
+        assert args[0] == "eza"
+
+    def test_allows_full_path_to_allowed_command(self):
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args[0] == "/usr/bin/fd"
+
+    def test_rejects_rm_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("rm -rf ~")
+
+    def test_rejects_curl_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("curl http://evil.com")
+
+    def test_rejects_bash_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("bash -c 'rm -rf /'")
+
+    def test_rejects_python_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("python -c 'import os; os.system(\"rm -rf /\")'")
+
+    def test_rejects_pipe_operator(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_rejects_semicolon_chaining(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py; rm -rf ~")
+
+    def test_rejects_ampersand_chaining(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py & rm -rf ~")
+
+    def test_rejects_command_substitution_dollar(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd $(rm -rf ~)")
+
+    def test_rejects_command_substitution_backtick(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd `rm -rf ~`")
+
+    def test_rejects_redirect_output(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py > /etc/passwd")
+
+    def test_rejects_redirect_append(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py >> ~/.bashrc")
+
+    def test_rejects_redirect_input(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py < /dev/urandom")
+
+    def test_rejects_or_operator(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("false || rm -rf ~")
+
+    def test_rejects_and_operator(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("true && rm -rf ~")
+
+    def test_rejects_empty_command(self):
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("")
+
+    def test_safe_commands_constant_is_frozen(self):
+        # Ensure the allowlist cannot be modified at runtime
+        assert isinstance(SAFE_DISCOVERY_COMMANDS, frozenset)
