@@ -15,8 +15,21 @@ import typer
 from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
+from emdx.utils.retry import retry_subprocess
 
 app = typer.Typer()
+
+
+@retry_subprocess(max_retries=3)
+def _run_gh_auth_token() -> subprocess.CompletedProcess:
+    """Run gh auth token command with retry on timeout."""
+    return subprocess.run(
+        ["gh", "auth", "token"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10  # Prevent hanging
+    )
 
 
 def get_github_auth() -> Optional[str]:
@@ -34,13 +47,7 @@ def get_github_auth() -> Optional[str]:
     # Priority order:
     # 1. Try gh CLI first (preferred - uses secure credential storage)
     try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10  # Prevent hanging
-        )
+        result = _run_gh_auth_token()
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
@@ -60,6 +67,12 @@ def get_github_auth() -> Optional[str]:
     return None
 
 
+@retry_subprocess(max_retries=3)
+def _run_gh_gist_create(cmd: list, timeout: int = 30) -> subprocess.CompletedProcess:
+    """Run gh gist create command with retry on timeout."""
+    return subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=timeout)
+
+
 def create_gist_with_gh(
     content: str, filename: str, description: str, public: bool = False
 ) -> Optional[dict[str, str]]:
@@ -67,6 +80,7 @@ def create_gist_with_gh(
 
     Uses secure temp file handling to prevent race conditions.
     The temp file is kept open until after the command completes.
+    Includes retry logic for timeout errors.
     """
     import tempfile
 
@@ -86,8 +100,8 @@ def create_gist_with_gh(
         if public:
             cmd.append("--public")
 
-        # Execute command
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # Execute command with retry on timeout
+        result = _run_gh_gist_create(cmd)
 
         if result.returncode == 0:
             gist_url = result.stdout.strip()
@@ -107,10 +121,17 @@ def create_gist_with_gh(
     return None
 
 
+@retry_subprocess(max_retries=3)
+def _run_gh_gist_edit(cmd: list, timeout: int = 30) -> subprocess.CompletedProcess:
+    """Run gh gist edit command with retry on timeout."""
+    return subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=timeout)
+
+
 def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
     """Update an existing gist using gh CLI.
 
     Uses secure temp file handling to prevent race conditions.
+    Includes retry logic for timeout errors.
     """
     import tempfile
 
@@ -124,9 +145,9 @@ def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
         finally:
             os.close(fd)
 
-        # Execute gh command
+        # Execute gh command with retry on timeout
         cmd = ["gh", "gist", "edit", gist_id, temp_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = _run_gh_gist_edit(cmd)
 
         return result.returncode == 0
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:

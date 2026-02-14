@@ -16,11 +16,19 @@ try:
     import anthropic
 
     HAS_ANTHROPIC = True
+    # Anthropic API exceptions to retry on (transient errors)
+    ANTHROPIC_RETRY_EXCEPTIONS = (
+        anthropic.APIConnectionError,
+        anthropic.RateLimitError,
+        anthropic.InternalServerError,
+    )
 except ImportError:
     anthropic = None  # type: ignore[assignment]
     HAS_ANTHROPIC = False
+    ANTHROPIC_RETRY_EXCEPTIONS = ()  # type: ignore[assignment]
 
 from ..database import db
+from ..utils.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +256,38 @@ class AskService:
             logger.warning(f"Semantic search failed, falling back to keyword: {e}")
             return self._retrieve_keyword(question, limit, project)
 
+    def _call_claude_api(self, system: str, user_content: str) -> str:
+        """
+        Call Claude API with retry logic for transient errors.
+
+        Retries on connection errors, rate limits, and internal server errors.
+        Uses exponential backoff with 3 retries max.
+        """
+        client = self._get_client()
+
+        # Build retry decorator dynamically based on whether anthropic is available
+        if HAS_ANTHROPIC and ANTHROPIC_RETRY_EXCEPTIONS:
+            @retry_api_call(max_retries=3, additional_exceptions=ANTHROPIC_RETRY_EXCEPTIONS)
+            def _make_request() -> str:
+                response = client.messages.create(
+                    model=self.model,
+                    max_tokens=1000,
+                    system=system,
+                    messages=[{"role": "user", "content": user_content}],
+                )
+                return response.content[0].text
+
+            return _make_request()
+        else:
+            # No anthropic or no retry exceptions - call directly
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=1000,
+                system=system,
+                messages=[{"role": "user", "content": user_content}],
+            )
+            return response.content[0].text
+
     def _generate_answer(
         self, question: str, docs: List[tuple]
     ) -> Tuple[str, int]:
@@ -269,29 +309,21 @@ class AskService:
         context = "\n\n---\n\n".join(context_parts)
         context_size = len(context)
 
-        # Generate answer with Claude
-        try:
-            client = self._get_client()
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=1000,
-                system="""You answer questions using the provided knowledge base context.
+        system = """You answer questions using the provided knowledge base context.
 
 Rules:
 - Only answer based on the provided documents
 - Cite document IDs when referencing information (e.g., "According to Document #42...")
 - If the context doesn't contain relevant information, say so clearly
 - Be concise but complete
-- If documents contain conflicting information, note the discrepancy""",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}",
-                    }
-                ],
-            )
+- If documents contain conflicting information, note the discrepancy"""
 
-            return response.content[0].text, context_size
+        user_content = f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
+
+        # Generate answer with Claude (includes retry logic)
+        try:
+            answer_text = self._call_claude_api(system, user_content)
+            return answer_text, context_size
 
         except Exception as e:
             if HAS_ANTHROPIC and isinstance(e, anthropic.APIError):
@@ -326,30 +358,22 @@ Rules:
 
         context = "\n\n---\n\n".join(context_parts)
 
-        # Generate answer
-        try:
-            client = self._get_client()
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=1000,
-                system="""You answer questions using the provided context which may include:
+        system = """You answer questions using the provided context which may include:
 1. External resource data (Jira tickets, GitHub issues, etc.)
 2. Documents from the user's knowledge base
 
 Rules:
 - Cite sources clearly (Jira tickets by ID, documents by #ID)
 - If sources conflict, note the discrepancy
-- Be concise but complete""",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Context:\n\n{context}\n\n---\n\nQuestion: {question}",
-                    }
-                ],
-            )
+- Be concise but complete"""
 
+        user_content = f"Context:\n\n{context}\n\n---\n\nQuestion: {question}"
+
+        # Generate answer with Claude (includes retry logic)
+        try:
+            answer_text = self._call_claude_api(system, user_content)
             return Answer(
-                text=response.content[0].text,
+                text=answer_text,
                 sources=[d[0] for d in docs],
                 method=method,
                 context_size=len(context),
