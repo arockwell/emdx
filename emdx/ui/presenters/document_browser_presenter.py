@@ -61,6 +61,7 @@ class DocumentBrowserPresenter:
         self._loading_more: bool = False
         self._expanded_docs: Set[int] = set()
         self._tags_cache: Dict[int, List[str]] = {}
+        self._tags_cache_max: int = 200  # Limit tags cache size
         self._doc_cache: Dict[int, Dict[str, Any]] = {}
         self._doc_cache_max: int = 50
 
@@ -85,6 +86,18 @@ class DocumentBrowserPresenter:
             has_more=self._has_more,
             status_text=status_text,
         )
+
+    def _update_tags_cache(self, tags_dict: Dict[int, List[str]]) -> None:
+        """Update tags cache with eviction when size limit exceeded.
+
+        Uses FIFO eviction to keep the cache bounded.
+        """
+        for doc_id, tags in tags_dict.items():
+            # Evict oldest entries if at capacity
+            while len(self._tags_cache) >= self._tags_cache_max:
+                oldest_key = next(iter(self._tags_cache))
+                del self._tags_cache[oldest_key]
+            self._tags_cache[doc_id] = tags
 
     def _raw_doc_to_view_model(
         self,
@@ -133,7 +146,7 @@ class DocumentBrowserPresenter:
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-            self._tags_cache.update(all_tags)
+            self._update_tags_cache(all_tags)
 
             children_counts = get_children_count(doc_ids)
 
@@ -176,7 +189,7 @@ class DocumentBrowserPresenter:
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-            self._tags_cache.update(all_tags)
+            self._update_tags_cache(all_tags)
 
             children_counts = get_children_count(doc_ids)
 
@@ -309,7 +322,7 @@ class DocumentBrowserPresenter:
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-            self._tags_cache.update(all_tags)
+            self._update_tags_cache(all_tags)
 
             children_counts = get_children_count(doc_ids)
 
@@ -366,7 +379,7 @@ class DocumentBrowserPresenter:
         try:
             add_tags_to_document(doc_id, tags)
             new_tags = self._tags_cache.get(doc_id, []) + tags
-            self._tags_cache[doc_id] = list(set(new_tags))
+            self._update_tags_cache({doc_id: list(set(new_tags))})
 
             for doc in self._filtered_documents:
                 if doc.id == doc_id:
@@ -383,7 +396,7 @@ class DocumentBrowserPresenter:
         try:
             remove_tags_from_document(doc_id, tags)
             current_tags = self._tags_cache.get(doc_id, [])
-            self._tags_cache[doc_id] = [t for t in current_tags if t not in tags]
+            self._update_tags_cache({doc_id: [t for t in current_tags if t not in tags]})
 
             for doc in self._filtered_documents:
                 if doc.id == doc_id:
