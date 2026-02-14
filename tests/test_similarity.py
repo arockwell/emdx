@@ -1,7 +1,5 @@
 """Tests for the TF-IDF similarity service."""
 
-import json
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 

@@ -5,7 +5,7 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import List, Set, Tuple
 
 from emdx.utils.datetime_utils import parse_datetime
 

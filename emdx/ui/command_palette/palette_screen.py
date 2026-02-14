@@ -8,7 +8,6 @@ via keyboard-driven fuzzy search.
 import asyncio
 import logging
 import traceback
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from textual.app import ComposeResult
@@ -20,7 +19,7 @@ from textual.widgets import Input, ListView, ListItem, Static
 
 from emdx.config.constants import EMDX_CONFIG_DIR
 from .palette_commands import CommandContext
-from .palette_presenter import PalettePresenter, PaletteResultItem, PaletteState, ResultType
+from .palette_presenter import PalettePresenter, PaletteResultItem, PaletteState
 
 logger = logging.getLogger(__name__)
 

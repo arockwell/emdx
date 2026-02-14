@@ -1,6 +1,5 @@
 """Tests for the document merger service with TF-IDF pre-filtering."""
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

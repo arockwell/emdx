@@ -12,7 +12,7 @@ Each switch_to_X method handles the complete lifecycle:
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 from textual.containers import ScrollableContainer, Vertical
 from textual.widgets import RichLog

@@ -13,7 +13,6 @@ from emdx.services.cascade_service import (
     get_document,
     list_documents_at_stage,
     monitor_execution_completion,
-    update_cascade_stage,
 )
 from emdx.services.document_service import save_document
 from emdx.services.execution_service import create_execution

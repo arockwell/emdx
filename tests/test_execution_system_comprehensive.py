@@ -13,9 +13,6 @@ This script tests all the improvements made to the execution system:
 
 import subprocess
 import time
-import os
-import sys
-from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel

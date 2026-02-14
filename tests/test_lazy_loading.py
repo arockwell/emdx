@@ -1,10 +1,8 @@
 """Tests for lazy loading CLI commands."""
 
 import sys
-from unittest.mock import MagicMock, patch
 
 import click
-import pytest
 from typer.testing import CliRunner
 
 from emdx.utils.lazy_group import (

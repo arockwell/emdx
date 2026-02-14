@@ -8,7 +8,7 @@ import logging
 from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Vertical
+from textual.containers import Container
 from textual.reactive import reactive
 from textual.widget import Widget
 

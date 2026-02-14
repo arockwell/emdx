@@ -8,7 +8,7 @@ operations while this widget focuses on display and user interaction.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, Optional, Protocol
 
 from textual.app import ComposeResult
 from textual.binding import Binding

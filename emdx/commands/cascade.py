@@ -15,7 +15,6 @@ Key concepts:
 import re
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 import typer
@@ -25,7 +24,7 @@ from rich.table import Table
 from ..config.constants import EMDX_LOG_DIR
 from ..database.documents import get_document, save_document
 from ..database import cascade as cascade_db
-from ..services.claude_executor import execute_claude_detached, execute_claude_sync
+from ..services.claude_executor import execute_claude_detached, execute_cli_sync
 from ..database.connection import db_connection
 
 console = Console()
@@ -174,10 +173,11 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
     timeout = 1800 if stage == "planned" else 300
 
     try:
-        result = execute_claude_sync(
+        result = execute_cli_sync(
             task=prompt,
             execution_id=execution_id,
             log_file=log_file,
+            cli_tool="claude",
             doc_id=str(doc_id),
             timeout=timeout,
         )

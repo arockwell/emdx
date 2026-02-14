@@ -18,14 +18,13 @@ from typing import TYPE_CHECKING, Optional
 import typer
 
 if TYPE_CHECKING:
-    import psutil
+    pass
 from rich import box
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
 from ..applications import MaintenanceApplication
-from ..config.settings import get_db_path
 from ..utils.output import console
 
 logger = logging.getLogger(__name__)

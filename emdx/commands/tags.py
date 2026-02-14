@@ -24,7 +24,6 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import normalize_tag_to_emoji
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 

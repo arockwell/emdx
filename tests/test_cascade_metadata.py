@@ -1,7 +1,5 @@
 """Tests for cascade metadata extraction and the new cascade database module."""
 
-import os
-import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -327,7 +325,7 @@ class TestForeignKeyCascadeDelete:
     def test_cascade_delete_removes_metadata(self, setup_test_db):
         """Test that deleting a document removes its cascade metadata."""
         from emdx.database import cascade as cascade_db
-        from emdx.database.documents import save_document, delete_document
+        from emdx.database.documents import save_document
 
         doc_id = save_document("Test", "Content")
         cascade_db.update_cascade_stage(doc_id, "idea")

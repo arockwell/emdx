@@ -1,9 +1,7 @@
 """Tests for database/search.py FTS5 full-text search functionality."""
 
 import sqlite3
-import tempfile
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
