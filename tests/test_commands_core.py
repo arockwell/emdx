@@ -187,7 +187,8 @@ class TestFindCommand:
         ]
         mock_get_tags.return_value = {1: ["python"]}
 
-        result = runner.invoke(app, ["find", "hello"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "hello", "--mode", "keyword"])
         assert result.exit_code == 0
         assert "Found Doc" in _out(result)
 
@@ -206,7 +207,8 @@ class TestFindCommand:
         mock_db.ensure_schema = Mock()
         mock_search.return_value = []
 
-        result = runner.invoke(app, ["find", "nonexistent"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "nonexistent", "--mode", "keyword"])
         assert result.exit_code == 0
         assert "No results" in _out(result)
 
@@ -227,7 +229,8 @@ class TestFindCommand:
         ]
         mock_get_tags.return_value = {}
 
-        result = runner.invoke(app, ["find", "test", "--ids-only"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "test", "--ids-only", "--mode", "keyword"])
         assert result.exit_code == 0
         assert "42" in _out(result)
 
@@ -249,7 +252,8 @@ class TestFindCommand:
         ]
         mock_get_tags.return_value = {1: []}
 
-        result = runner.invoke(app, ["find", "test", "--json"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "test", "--json", "--mode", "keyword"])
         assert result.exit_code == 0
         assert '"id": 1' in _out(result)
 
