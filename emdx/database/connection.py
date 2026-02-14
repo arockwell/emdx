@@ -2,7 +2,9 @@
 Database connection management for emdx
 """
 
+import logging
 import os
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -11,6 +13,47 @@ from typing import Optional
 
 from ..config.constants import EMDX_CONFIG_DIR
 from . import migrations
+
+logger = logging.getLogger(__name__)
+
+# Keep up to 5 rolling daily backups
+_MAX_BACKUPS = 5
+
+
+def auto_backup(db_path: Path) -> None:
+    """Create a daily rolling backup of the database if it has data.
+
+    Backups are stored alongside the DB as knowledge.db.backup-YYYY-MM-DD.
+    Only one backup per day; older backups beyond _MAX_BACKUPS are pruned.
+    Skips backup for test databases or empty/missing files.
+    """
+    if os.environ.get("EMDX_TEST_DB"):
+        return
+    if not db_path.exists() or db_path.stat().st_size == 0:
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    backup_path = db_path.parent / f"{db_path.name}.backup-{today}"
+
+    if backup_path.exists():
+        return  # Already backed up today
+
+    try:
+        shutil.copy2(db_path, backup_path)
+        logger.debug("Auto-backup created: %s", backup_path.name)
+    except OSError as e:
+        logger.warning("Auto-backup failed: %s", e)
+        return
+
+    # Prune old rolling backups (keep _MAX_BACKUPS most recent)
+    pattern = f"{db_path.name}.backup-????-??-??"
+    backups = sorted(db_path.parent.glob(pattern), reverse=True)
+    for old_backup in backups[_MAX_BACKUPS:]:
+        try:
+            old_backup.unlink()
+            logger.debug("Pruned old backup: %s", old_backup.name)
+        except OSError:
+            pass
 
 
 def get_db_path() -> Path:
@@ -61,7 +104,9 @@ class DatabaseConnection:
 
         All schema creation is handled by the migrations system.
         This method simply runs any pending migrations.
+        Creates a daily rolling backup before running migrations.
         """
+        auto_backup(self.db_path)
         migrations.run_migrations(self.db_path)
 
 
