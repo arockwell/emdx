@@ -29,6 +29,8 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +140,85 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Commands allowed for --each discovery (security: prevents arbitrary command execution)
+ALLOWED_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find replacement
+    "find",         # POSIX find
+    "ls",           # List files
+    "git",          # Git operations (ls-files, diff --name-only, etc.)
+    "rg",           # Ripgrep (--files-with-matches)
+    "grep",         # Grep (for -l mode)
+    "emdx",         # Our own CLI (list, find, etc.)
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Parse and validate a discovery command, returning args list.
+
+    Security: Only allows a predefined set of safe commands to prevent
+    arbitrary command injection via the --each flag.
+
+    Raises typer.Exit(1) if the command is not allowed.
+    """
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in ALLOWED_DISCOVERY_COMMANDS:
+        allowed_list = ", ".join(sorted(ALLOWED_DISCOVERY_COMMANDS))
+        sys.stderr.write(
+            f"delegate: command '{base_cmd}' not allowed for --each\n"
+            f"delegate: allowed commands: {allowed_list}\n"
+            f"delegate: this restriction prevents command injection attacks\n"
+        )
+        raise typer.Exit(1)
+
+    # Block shell metacharacters that could escape even with shell=False
+    # These could be dangerous if the command itself interprets them
+    dangerous_patterns = [
+        r'\$\(',      # Command substitution $(...)
+        r'`',         # Backtick command substitution
+        r'\|\|',      # OR operator
+        r'&&',        # AND operator
+        r';',         # Command separator
+        r'\|',        # Pipe
+        r'>',         # Output redirection
+        r'<',         # Input redirection
+    ]
+    for pattern in dangerous_patterns:
+        if re.search(pattern, command):
+            sys.stderr.write(
+                f"delegate: shell metacharacters not allowed in --each commands\n"
+                f"delegate: found pattern matching: {pattern}\n"
+            )
+            raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated command and return output lines as items.
+
+    Security: The command is validated against an allowlist before execution.
+    Only safe file-discovery commands (fd, find, git ls-files, etc.) are permitted.
+    Commands are executed without shell=True to prevent injection.
+    """
+    # Validate and parse the command (exits on failure)
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
