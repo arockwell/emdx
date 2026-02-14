@@ -52,3 +52,50 @@ jobs:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
+
+  security:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Non-blocking initially
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.13"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: poetry install --no-interaction
+
+    - name: Install security tools
+      run: |
+        pip install bandit pip-audit
+
+    - name: Run bandit security scan
+      run: |
+        bandit -r emdx/ -f txt -o bandit-report.txt || true
+        cat bandit-report.txt
+        # Also output in SARIF format for GitHub Security tab (optional)
+        bandit -r emdx/ -f sarif -o bandit-results.sarif || true
+
+    - name: Run pip-audit for dependency vulnerabilities
+      run: |
+        poetry export -f requirements.txt --without-hashes -o requirements.txt
+        pip-audit -r requirements.txt --desc on || true
+
+    - name: Upload bandit results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-scan-results
+        path: |
+          bandit-report.txt
+          bandit-results.sarif
