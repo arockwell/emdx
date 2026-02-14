@@ -10,18 +10,33 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from ..config.constants import DEFAULT_GIT_BRANCH
+
 logger = logging.getLogger(__name__)
 
 
-def create_worktree(base_branch: str = "main") -> tuple[str, str]:
+def get_default_branch() -> str:
+    """Get the default git branch from environment or config.
+
+    Checks EMDX_DEFAULT_BRANCH env var first, then falls back to
+    DEFAULT_GIT_BRANCH constant.
+    """
+    return os.environ.get("EMDX_DEFAULT_BRANCH", DEFAULT_GIT_BRANCH)
+
+
+def create_worktree(base_branch: Optional[str] = None) -> tuple[str, str]:
     """Create a unique git worktree for isolated execution.
 
     Args:
-        base_branch: Branch to base the worktree on
+        base_branch: Branch to base the worktree on. If None, uses
+                     EMDX_DEFAULT_BRANCH env var or DEFAULT_GIT_BRANCH.
 
     Returns:
         Tuple of (worktree_path, branch_name)
     """
+    if base_branch is None:
+        base_branch = get_default_branch()
+
     # Get the repo root
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],

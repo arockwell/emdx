@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
 
+from .models import CLAUDE_OPUS, CLAUDE_SONNET
+
 
 # Default tools allowed for Claude CLI execution
 # These are the standard tools that most agents need for basic operations
@@ -77,7 +79,7 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
         default_output_format="stream-json",
         requires_verbose_for_stream=True,
         model_flag="--model",
-        default_model="claude-opus-4-5-20251101",
+        default_model=CLAUDE_OPUS,
         supports_allowed_tools=True,
         allowed_tools_flag="--allowedTools",
         force_flag=None,
@@ -107,19 +109,19 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
 # Use these aliases for portable commands that work with either CLI
 MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     "opus": {
-        "claude": "claude-opus-4-5-20251101",
+        "claude": CLAUDE_OPUS,
         "cursor": "opus-4.5",
     },
     "sonnet": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": CLAUDE_SONNET,
         "cursor": "sonnet-4.5",
     },
     "auto": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": CLAUDE_SONNET,
         "cursor": "auto",
     },
     "fast": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": CLAUDE_SONNET,
         "cursor": "auto",
     },
 }
@@ -174,8 +176,8 @@ def get_available_models(cli_tool: CliTool) -> List[str]:
     """
     if cli_tool == CliTool.CLAUDE:
         return [
-            "claude-opus-4-5-20251101",
-            "claude-sonnet-4-5-20250929",
+            CLAUDE_OPUS,
+            CLAUDE_SONNET,
             "opus",
             "sonnet",
         ]

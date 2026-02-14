@@ -20,6 +20,8 @@ except ImportError:
     anthropic = None  # type: ignore[assignment]
     HAS_ANTHROPIC = False
 
+from ..config.constants import DEFAULT_MAX_TOKENS, MIN_EMBEDDINGS_FOR_SEMANTIC
+from ..config.models import FAST_MODEL
 from ..database import db
 
 logger = logging.getLogger(__name__)
@@ -38,11 +40,8 @@ class Answer:
 class AskService:
     """Answer questions using your knowledge base."""
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
-    MIN_EMBEDDINGS_FOR_SEMANTIC = 50  # Use semantic only if we have enough coverage
-
     def __init__(self, model: Optional[str] = None):
-        self.model = model or self.DEFAULT_MODEL
+        self.model = model or FAST_MODEL
         self._client = None
         self._embedding_service = None
 
@@ -77,7 +76,7 @@ class AskService:
 
         try:
             stats = embedding_service.stats()
-            return stats.indexed_documents >= self.MIN_EMBEDDINGS_FOR_SEMANTIC
+            return stats.indexed_documents >= MIN_EMBEDDINGS_FOR_SEMANTIC
         except Exception as e:
             logger.debug(f"Could not check embedding stats: {e}")
             return False
@@ -274,7 +273,7 @@ class AskService:
             client = self._get_client()
             response = client.messages.create(
                 model=self.model,
-                max_tokens=1000,
+                max_tokens=DEFAULT_MAX_TOKENS,
                 system="""You answer questions using the provided knowledge base context.
 
 Rules:
@@ -331,7 +330,7 @@ Rules:
             client = self._get_client()
             response = client.messages.create(
                 model=self.model,
-                max_tokens=1000,
+                max_tokens=DEFAULT_MAX_TOKENS,
                 system="""You answer questions using the provided context which may include:
 1. External resource data (Jira tickets, GitHub issues, etc.)
 2. Documents from the user's knowledge base

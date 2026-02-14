@@ -41,6 +41,33 @@ EXECUTION_STALE_TIMEOUT_MINUTES = 30  # Minutes before execution marked stale
 DEFAULT_REFRESH_INTERVAL_SECONDS = 5  # UI auto-refresh interval
 
 # =============================================================================
+# DELEGATE & DISCOVERY TIMEOUTS (in seconds)
+# =============================================================================
+
+# Discovery command (--each) timeout
+TIMEOUT_DISCOVERY_SECONDS = 30
+
+# Default task execution timeout
+TIMEOUT_TASK_SECONDS = 600
+
+# Cascade stage timeouts
+TIMEOUT_PLANNED_STAGE_SECONDS = 1800  # 30 min for planned stages
+TIMEOUT_OTHER_STAGE_SECONDS = 300     # 5 min for other stages
+
+# External API timeouts
+TIMEOUT_GITHUB_API_SECONDS = 10
+TIMEOUT_VERSION_CHECK_SECONDS = 5
+TIMEOUT_AUTH_CHECK_SECONDS = 5
+
+# Process wait timeouts
+TIMEOUT_PROCESS_WAIT_SECONDS = 3
+TIMEOUT_PROCESS_WAIT_SHORT_SECONDS = 1
+
+# CLI auth check timeouts
+TIMEOUT_CLI_AUTH_INITIAL_SECONDS = 5
+TIMEOUT_CLI_AUTH_RETRY_SECONDS = 10
+
+# =============================================================================
 # CONCURRENCY & POOL SIZES
 # =============================================================================
 
@@ -190,4 +217,95 @@ DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
 # CLAUDE MODEL CONFIGURATION
 # =============================================================================
 
+# DEPRECATED: Use emdx.config.models instead for model constants
+# Kept for backwards compatibility
 DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+
+# =============================================================================
+# GIT DEFAULTS
+# =============================================================================
+
+# Default git branch - can be overridden with EMDX_DEFAULT_BRANCH env var
+DEFAULT_GIT_BRANCH = "main"
+
+# =============================================================================
+# EXIT CODES
+# =============================================================================
+
+# Standard Unix exit codes with descriptive names
+EXIT_SUCCESS = 0
+EXIT_GENERAL_ERROR = 1
+EXIT_TIMEOUT = 124        # Command timed out
+EXIT_NOT_FOUND = 127      # Command not found
+EXIT_INTERRUPTED = 130    # Interrupted by Ctrl+C (128 + SIGINT=2)
+EXIT_KILLED = 137         # Killed (128 + SIGKILL=9)
+
+# =============================================================================
+# DEFAULT EDITOR
+# =============================================================================
+
+# Fallback editor when EDITOR env var is not set
+DEFAULT_EDITOR = "nano"
+
+# =============================================================================
+# HEALTH SCORE DISPLAY THRESHOLDS
+# =============================================================================
+
+# For color-coding health scores in analysis commands
+HEALTH_SCORE_GOOD_THRESHOLD = 80    # Score >= 80 = green
+HEALTH_SCORE_WARNING_THRESHOLD = 60  # Score >= 60 = yellow, < 60 = red
+
+# =============================================================================
+# SEMANTIC SEARCH THRESHOLDS
+# =============================================================================
+
+# Minimum embeddings required before enabling semantic search
+MIN_EMBEDDINGS_FOR_SEMANTIC = 50
+
+# =============================================================================
+# API LIMITS
+# =============================================================================
+
+# Max tokens for API calls (used in ask_service)
+DEFAULT_MAX_TOKENS = 1000
+
+# =============================================================================
+# ENVIRONMENT VARIABLES
+# =============================================================================
+
+# Known EMDX environment variables and their allowed values
+# Use these for validation and documentation
+ENV_VARS = {
+    # Boolean flags (accepts: "0", "1", "true", "false", "yes", "no")
+    "EMDX_SAFE_MODE": {
+        "type": "bool",
+        "default": "0",
+        "description": "Disable execution commands (cascade, delegate, recipe)",
+    },
+    # String values
+    "EMDX_CLI_TOOL": {
+        "type": "string",
+        "default": "claude",
+        "allowed": ["claude", "cursor"],
+        "description": "Default CLI tool for agent execution",
+    },
+    "EMDX_DEFAULT_BRANCH": {
+        "type": "string",
+        "default": "main",
+        "description": "Default git branch for worktrees",
+    },
+    # API keys (no default, validated for presence only)
+    "ANTHROPIC_API_KEY": {
+        "type": "secret",
+        "description": "Anthropic API key for Claude",
+    },
+    "GITHUB_TOKEN": {
+        "type": "secret",
+        "description": "GitHub token for gist operations",
+    },
+}
+
+# Truthy values for boolean env vars
+BOOL_TRUTHY_VALUES = ("1", "true", "yes", "on")
+BOOL_FALSY_VALUES = ("0", "false", "no", "off", "")
+

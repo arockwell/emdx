@@ -44,7 +44,8 @@ def is_safe_mode() -> bool:
     Safe mode disables execution commands (cascade, delegate, recipe).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
-    return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
+    from emdx.config.constants import BOOL_TRUTHY_VALUES
+    return os.environ.get("EMDX_SAFE_MODE", "0").lower() in BOOL_TRUTHY_VALUES
 
 
 # Commands disabled in safe mode

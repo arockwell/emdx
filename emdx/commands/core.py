@@ -15,6 +15,7 @@ import typer
 from rich.markdown import Markdown
 from rich.table import Table
 
+from emdx.config.constants import DEFAULT_EDITOR
 from emdx.database import db
 from emdx.database.documents import (
     find_supersede_candidate,
@@ -676,7 +677,7 @@ def edit(
 
         # Determine editor to use
         if not editor:
-            editor = os.environ.get("EDITOR", "nano")
+            editor = os.environ.get("EDITOR", DEFAULT_EDITOR)
 
         # Create temporary file with current content
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp_file:

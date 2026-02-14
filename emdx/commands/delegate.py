@@ -37,6 +37,11 @@ from typing import List, Optional
 
 import typer
 
+from ..config.constants import (
+    DEFAULT_GIT_BRANCH,
+    TIMEOUT_DISCOVERY_SECONDS,
+    TIMEOUT_TASK_SECONDS,
+)
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
@@ -146,7 +151,7 @@ def _run_discovery(command: str) -> List[str]:
             shell=True,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=TIMEOUT_DISCOVERY_SECONDS,
         )
         if result.returncode != 0:
             sys.stderr.write(f"delegate: discovery failed: {result.stderr.strip()}\n")
@@ -161,7 +166,7 @@ def _run_discovery(command: str) -> List[str]:
         return lines
 
     except subprocess.TimeoutExpired:
-        sys.stderr.write("delegate: discovery command timed out after 30s\n")
+        sys.stderr.write(f"delegate: discovery command timed out after {TIMEOUT_DISCOVERY_SECONDS}s\n")
         raise typer.Exit(1)
 
 
@@ -240,7 +245,7 @@ def _run_single(
         title=doc_title,
         output_instruction=output_instruction,
         working_dir=working_dir or str(Path.cwd()),
-        timeout_seconds=600,
+        timeout_seconds=TIMEOUT_TASK_SECONDS,
         model=model,
     )
 
@@ -285,7 +290,7 @@ def _run_parallel(
     model: Optional[str],
     quiet: bool,
     pr: bool = False,
-    base_branch: str = "main",
+    base_branch: str = DEFAULT_GIT_BRANCH,
     source_doc_id: Optional[int] = None,
     worktree: bool = False,
 ) -> List[int]:
@@ -561,7 +566,7 @@ def delegate(
         help="Run in isolated git worktree",
     ),
     base_branch: str = typer.Option(
-        "main", "--base-branch",
+        DEFAULT_GIT_BRANCH, "--base-branch",
         help="Base branch for worktree (only with --worktree)",
     ),
     chain: bool = typer.Option(
