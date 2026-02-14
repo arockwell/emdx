@@ -27,7 +27,7 @@ from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
 from .log_browser_display import LogBrowserDisplayMixin
 from .log_browser_filtering import LogBrowserFilteringMixin
-from .log_browser_navigation import LogBrowserHost, LogBrowserNavigationMixin
+from .log_browser_navigation import LogBrowserNavigationMixin
 from .modals import HelpMixin
 
 logger = logging.getLogger(__name__)

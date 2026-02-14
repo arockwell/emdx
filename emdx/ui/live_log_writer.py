@@ -17,7 +17,6 @@ This replaces scattered log handling code across:
 """
 
 import logging
-from typing import Optional
 
 from textual.widgets import RichLog
 

@@ -5,13 +5,11 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
-import typer
 from datetime import datetime
 from typing import Optional
 
+import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
 
 from ..database import db
 from ..utils.git import get_git_project
@@ -339,5 +337,5 @@ def _get_cascade_status() -> dict:
 
 
 # Create typer app for the command
-app = typer.Typer()
+app = typer.Typer(help="Output priming context for Claude session injection")
 app.command()(prime)

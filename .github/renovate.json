@@ -1,0 +1,65 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate configuration for emdx - alternative to Dependabot with more features",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(chore)",
+    "group:allNonMajor"
+  ],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["before 10am on monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 5,
+  "packageRules": [
+    {
+      "description": "Python dependencies",
+      "matchManagers": ["poetry", "pip_requirements"],
+      "labels": ["dependencies", "python"],
+      "groupName": "python dependencies (non-major)",
+      "groupSlug": "python-minor",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "description": "Python major updates - separate PRs",
+      "matchManagers": ["poetry", "pip_requirements"],
+      "labels": ["dependencies", "python"],
+      "matchUpdateTypes": ["major"],
+      "groupName": null
+    },
+    {
+      "description": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "labels": ["dependencies", "github-actions"],
+      "groupName": "github actions",
+      "groupSlug": "github-actions"
+    },
+    {
+      "description": "Auto-merge patch updates for well-tested packages",
+      "matchPackageNames": [
+        "pytest",
+        "pytest-cov",
+        "black",
+        "ruff",
+        "mypy"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Dev dependencies - lower priority",
+      "matchDepTypes": ["devDependencies", "dev"],
+      "prPriority": -1
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security", "dependencies"],
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 10am on the first day of the month"]
+  }
+}

@@ -28,7 +28,6 @@ python = "^3.11"
 typer = {extras = ["all"], version = "^0.15.0"}
 click = ">=8.1.0"  # Typer 0.15+ requires click 8.1+
 rich = "^13.0.0"
-python-dotenv = "^1.0.0"
 textual = "^4.0.0"
 psutil = "^7.0.0"
 pyyaml = ">=6.0"
@@ -55,8 +54,7 @@ all = ["sentence-transformers", "scikit-learn", "numpy", "anthropic",
 pytest = "^7.0.0"
 pytest-cov = "^4.0.0"
 pytest-asyncio = "^0.21.0"
-black = "^23.0.0"
-ruff = "^0.1.0"
+ruff = "^0.15.0"
 mypy = "^1.0.0"
 pre-commit = "^3.0.0"
 
@@ -66,10 +64,6 @@ emdx = "emdx.main:run"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.black]
-line-length = 100
-target-version = ['py311']
 
 [tool.ruff]
 line-length = 100

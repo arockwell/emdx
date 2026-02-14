@@ -35,16 +35,16 @@ class SimpleVimLineNumbers(Static):
 
     def set_line_numbers(self, current_line, total_lines, text_area=None):
         """Set line numbers given current line (0-based) and total lines."""
-        
+
         # Store text area reference if provided
         if text_area:
             self.text_area = text_area
-        
+
         from rich.text import Text
-        
+
         # Check if text area has focus - only highlight current line if it does
         has_focus = self.text_area and self.text_area.has_focus if self.text_area else False
-        
+
         lines = []
         for i in range(total_lines):
             if i == current_line:
@@ -63,10 +63,10 @@ class SimpleVimLineNumbers(Static):
                 line_text = Text(f"{distance:>3}", style="dim cyan")
                 logger.debug(f"  Line {i}: distance {distance} -> dim cyan '{distance}'")
                 lines.append(line_text)
-        
+
         # Join with Rich Text newlines
         result = Text("\n").join(lines)
-        
+
         # Update widget content with Rich Text
         self.update(result)
-        
+

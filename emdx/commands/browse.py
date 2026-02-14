@@ -10,10 +10,10 @@ from rich.table import Table
 from emdx.database import db
 from emdx.models.documents import get_recent_documents, get_stats, list_documents
 from emdx.utils.datetime_utils import format_datetime as _format_datetime
-from emdx.utils.text_formatting import truncate_title
 from emdx.utils.output import console
+from emdx.utils.text_formatting import truncate_title
 
-app = typer.Typer()
+app = typer.Typer(help="Browse and list documents with statistics")
 
 
 @app.command()

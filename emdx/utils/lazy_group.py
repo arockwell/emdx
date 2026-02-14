@@ -77,7 +77,7 @@ class LazyCommand(click.MultiCommand):
             cmd_object = getattr(mod, obj_name)
             self._real_command = self._convert_to_click_command(cmd_object)
             return self._real_command
-        except ImportError as e:
+        except ImportError:
             # Create an error command
             @click.command(name=self.name)
             def error_cmd() -> None:
@@ -90,7 +90,7 @@ class LazyCommand(click.MultiCommand):
 
             self._real_command = error_cmd
             return self._real_command
-        except Exception as e:
+        except Exception:
             @click.command(name=self.name)
             def error_cmd() -> None:
                 click.echo(f"Command '{self.name}' failed to load: {e}", err=True)
