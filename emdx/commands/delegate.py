@@ -29,6 +29,8 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +140,83 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Safe discovery commands that can be used with --each
+# These are file-discovery tools that don't execute arbitrary code
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find alternative
+    "find",         # Standard file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "rg",           # Ripgrep (with --files-with-matches)
+    "ls",           # Directory listing
+    "eza",          # Modern ls alternative
+    "exa",          # Another ls alternative
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Validate and parse a discovery command for safe execution.
+
+    Security: Only allows known-safe file-discovery commands to prevent
+    command injection. The command is parsed with shlex and executed
+    without shell=True.
+
+    Args:
+        command: The discovery command string
+
+    Returns:
+        List of command arguments for subprocess
+
+    Raises:
+        typer.Exit: If the command is not allowed
+    """
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (handles paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not a safe discovery command\n"
+            f"Allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+            f"These commands safely list files without executing arbitrary code.\n"
+        )
+        raise typer.Exit(1)
+
+    # Additional validation for specific commands
+    # Block dangerous git subcommands
+    if base_cmd == "git" and len(args) > 1:
+        git_subcmd = args[1]
+        safe_git_subcommands = {"ls-files", "diff", "status", "log", "show", "branch", "tag"}
+        if git_subcmd not in safe_git_subcommands:
+            sys.stderr.write(
+                f"delegate: 'git {git_subcmd}' is not allowed for discovery\n"
+                f"Allowed git subcommands: {', '.join(sorted(safe_git_subcommands))}\n"
+            )
+            raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    Security: Commands are validated against a safelist and executed without
+    shell=True to prevent command injection attacks.
+    """
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
