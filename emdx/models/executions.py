@@ -23,6 +23,16 @@ class Execution:
     exit_code: Optional[int] = None
     working_dir: Optional[str] = None
     pid: Optional[int] = None
+    # Added by migration 031
+    cascade_run_id: Optional[int] = None
+    # Added by migration 036
+    task_id: Optional[int] = None
+    cost_usd: float = 0.0
+    tokens_used: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    # Added by migration 037
+    last_heartbeat: Optional[datetime] = None
 
     @property
     def duration(self) -> Optional[float]:
@@ -59,6 +69,46 @@ class Execution:
         return Path(self.log_file).expanduser()
 
 
+# SQL column list for SELECT queries - must match dataclass field order
+_EXECUTION_COLUMNS = """
+    id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code,
+    working_dir, pid, cascade_run_id, task_id, cost_usd, tokens_used, input_tokens,
+    output_tokens, last_heartbeat
+""".strip()
+
+
+def _row_to_execution(row) -> Execution:
+    """Convert a database row to an Execution object.
+
+    Handles missing columns gracefully for backward compatibility with
+    databases that haven't run all migrations yet.
+    """
+    # Parse timestamps
+    started_at = parse_timestamp(row[4])
+    completed_at = parse_timestamp(row[5]) if row[5] else None
+    last_heartbeat = parse_timestamp(row[16]) if len(row) > 16 and row[16] else None
+
+    return Execution(
+        id=int(row[0]),
+        doc_id=row[1],
+        doc_title=row[2],
+        status=row[3],
+        started_at=started_at,
+        completed_at=completed_at,
+        log_file=row[6] or "",
+        exit_code=row[7],
+        working_dir=row[8],
+        pid=row[9] if len(row) > 9 else None,
+        cascade_run_id=row[10] if len(row) > 10 else None,
+        task_id=row[11] if len(row) > 11 else None,
+        cost_usd=float(row[12]) if len(row) > 12 and row[12] else 0.0,
+        tokens_used=int(row[13]) if len(row) > 13 and row[13] else 0,
+        input_tokens=int(row[14]) if len(row) > 14 and row[14] else 0,
+        output_tokens=int(row[15]) if len(row) > 15 and row[15] else 0,
+        last_heartbeat=last_heartbeat,
+    )
+
+
 def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
                     working_dir: Optional[str] = None, pid: Optional[int] = None) -> int:
     """Create a new execution and return its ID.
@@ -88,97 +138,44 @@ def get_execution(exec_id: int) -> Optional[Execution]:
     """Get execution by ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+        cursor.execute(f"""
+            SELECT {_EXECUTION_COLUMNS}
             FROM executions WHERE id = ?
         """, (exec_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return None
 
-        # Parse timestamps with centralized datetime utility
-        started_at = parse_timestamp(row[4])
-        completed_at = parse_timestamp(row[5]) if row[5] else None
-
-        return Execution(
-            id=row[0],
-            doc_id=row[1],
-            doc_title=row[2],
-            status=row[3],
-            started_at=started_at,
-            completed_at=completed_at,
-            log_file=row[6],
-            exit_code=row[7],
-            working_dir=row[8],
-            pid=row[9] if len(row) > 9 else None  # Handle old records without PID
-        )
+        return _row_to_execution(row)
 
 
 def get_recent_executions(limit: int = 20) -> List[Execution]:
     """Get recent executions ordered by start time."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-            FROM executions 
-            ORDER BY id DESC 
+        cursor.execute(f"""
+            SELECT {_EXECUTION_COLUMNS}
+            FROM executions
+            ORDER BY id DESC
             LIMIT ?
         """, (limit,))
-        
-        executions = []
-        for row in cursor.fetchall():
-            # Parse timestamps with timezone handling
-            started_at = parse_timestamp(row[4])
-            completed_at = parse_timestamp(row[5]) if row[5] else None
-                
-            executions.append(Execution(
-                id=int(row[0]),  # Convert to int for numeric ID
-                doc_id=row[1],
-                doc_title=row[2],
-                status=row[3],
-                started_at=started_at,
-                completed_at=completed_at,
-                log_file=row[6],
-                exit_code=row[7],
-                working_dir=row[8],
-                pid=row[9] if len(row) > 9 else None
-            ))
-        
-        return executions
+
+        return [_row_to_execution(row) for row in cursor.fetchall()]
 
 
 def get_running_executions() -> List[Execution]:
     """Get all currently running executions."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-            FROM executions 
+        cursor.execute(f"""
+            SELECT {_EXECUTION_COLUMNS}
+            FROM executions
             WHERE status = 'running'
             ORDER BY started_at DESC
-        """, )
-        
-        executions = []
-        for row in cursor.fetchall():
-            # Parse timestamps with timezone handling
-            started_at = parse_timestamp(row[4])
-            completed_at = parse_timestamp(row[5]) if row[5] else None
-                
-            executions.append(Execution(
-                id=int(row[0]),  # Convert to int for numeric ID
-                doc_id=row[1],
-                doc_title=row[2],
-                status=row[3],
-                started_at=started_at,
-                completed_at=completed_at,
-                log_file=row[6],
-                exit_code=row[7],
-                working_dir=row[8],
-                pid=row[9] if len(row) > 9 else None
-            ))
-        
-        return executions
+        """)
+
+        return [_row_to_execution(row) for row in cursor.fetchall()]
 
 
 def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] = None) -> None:
@@ -201,11 +198,29 @@ def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] 
 
 
 def update_execution(exec_id: int, **kwargs) -> None:
-    """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.)."""
+    """Update execution fields.
+
+    Security Note:
+        Field names are interpolated into SQL but are restricted to a static
+        allowlist, preventing SQL injection. Values are always passed as
+        parameterized query arguments.
+    """
     if not kwargs:
         return
-    sets = [f"{k} = ?" for k in kwargs]
-    params = list(kwargs.values()) + [exec_id]
+
+    # SECURITY: Only these exact field names can be interpolated into SQL.
+    allowed_fields = {
+        "doc_id", "doc_title", "status", "completed_at", "exit_code",
+        "working_dir", "pid", "cascade_run_id", "task_id", "cost_usd",
+        "tokens_used", "input_tokens", "output_tokens", "last_heartbeat",
+    }
+
+    updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
+    if not updates:
+        return
+
+    sets = [f"{k} = ?" for k in updates]
+    params = list(updates.values()) + [exec_id]
     with db_connection.get_connection() as conn:
         conn.execute(
             f"UPDATE executions SET {', '.join(sets)} WHERE id = ?",
@@ -260,16 +275,12 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
     if not isinstance(timeout_seconds, int) or timeout_seconds < 0:
         raise ValueError("timeout_seconds must be a non-negative integer")
 
-    # Build the datetime modifier string in Python (safe from SQL injection)
-    timeout_modifier = f"+{timeout_seconds} seconds"
-
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
-        # Build interval string safely - timeout_seconds is validated as int by function signature
+        # Build interval string safely - timeout_seconds is validated as int above
         interval = f'+{int(timeout_seconds)} seconds'
-        cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at,
-                   log_file, exit_code, working_dir, pid
+        cursor.execute(f"""
+            SELECT {_EXECUTION_COLUMNS}
             FROM executions
             WHERE status = 'running'
             AND (
@@ -279,27 +290,8 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
             )
             ORDER BY started_at DESC
         """, (interval, interval))
-        
-        executions = []
-        for row in cursor.fetchall():
-            # Parse timestamps with timezone handling
-            started_at = parse_timestamp(row[4])
-            completed_at = parse_timestamp(row[5]) if row[5] else None
-                
-            executions.append(Execution(
-                id=int(row[0]),
-                doc_id=row[1],
-                doc_title=row[2],
-                status=row[3],
-                started_at=started_at,
-                completed_at=completed_at,
-                log_file=row[6],
-                exit_code=row[7],
-                working_dir=row[8],
-                pid=row[9] if len(row) > 9 else None
-            ))
-        
-        return executions
+
+        return [_row_to_execution(row) for row in cursor.fetchall()]
 
 
 def cleanup_old_executions(days: int = 7) -> int:

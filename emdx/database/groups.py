@@ -134,7 +134,14 @@ def update_group(group_id: int, **kwargs) -> bool:
 
     Returns:
         True if update succeeded
+
+    Security Note:
+        Field names are interpolated into SQL but are restricted to a static
+        allowlist, preventing SQL injection. Values are always passed as
+        parameterized query arguments.
     """
+    # SECURITY: Only these exact field names can be interpolated into SQL.
+    # Any field not in this set is silently ignored.
     allowed_fields = {
         "name", "description", "parent_group_id", "group_type",
         "project", "is_active",
