@@ -1955,6 +1955,168 @@ def migration_036_add_execution_metrics(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_037_add_on_delete_cascade(conn: sqlite3.Connection):
+    """Add ON DELETE CASCADE/SET NULL to foreign keys missing proper delete behavior.
+
+    Fixes orphan data risk by ensuring referential integrity is maintained when
+    parent rows are deleted. This migration recreates tables with corrected
+    foreign key constraints.
+
+    Tables fixed:
+    - executions: doc_id, task_id, cascade_run_id -> SET NULL
+    - tasks: execution_id, output_doc_id, source_doc_id, parent_task_id, retry_of -> SET NULL
+
+    SET NULL is used (rather than CASCADE) because:
+    - Execution history should be preserved even if the triggering doc/task is deleted
+    - Task history should be preserved even if related docs/executions are deleted
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # --- Fix executions table ---
+    # Get current columns to preserve any extra columns from other migrations
+    cursor.execute("PRAGMA table_info(executions)")
+    exec_cols = [row[1] for row in cursor.fetchall()]
+
+    cursor.execute("DROP TABLE IF EXISTS executions_new")
+    cursor.execute("""
+        CREATE TABLE executions_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id INTEGER,
+            doc_title TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            started_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP,
+            log_file TEXT NOT NULL,
+            exit_code INTEGER,
+            working_dir TEXT,
+            pid INTEGER,
+            cascade_run_id INTEGER,
+            task_id INTEGER,
+            cost_usd REAL DEFAULT 0.0,
+            tokens_used INTEGER DEFAULT 0,
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0,
+            FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE SET NULL,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+            FOREIGN KEY (cascade_run_id) REFERENCES cascade_runs(id) ON DELETE SET NULL
+        )
+    """)
+
+    # Build column list for INSERT (only include columns that exist in both)
+    new_exec_cols = ['id', 'doc_id', 'doc_title', 'status', 'started_at', 'completed_at',
+                     'log_file', 'exit_code', 'working_dir', 'pid', 'cascade_run_id',
+                     'task_id', 'cost_usd', 'tokens_used', 'input_tokens', 'output_tokens']
+    common_exec_cols = [c for c in new_exec_cols if c in exec_cols]
+    cols_str = ', '.join(common_exec_cols)
+
+    cursor.execute(f"""
+        INSERT INTO executions_new ({cols_str})
+        SELECT {cols_str} FROM executions
+    """)
+
+    cursor.execute("DROP TABLE executions")
+    cursor.execute("ALTER TABLE executions_new RENAME TO executions")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_task_id ON executions(task_id)")
+
+    # --- Fix tasks table ---
+    cursor.execute("PRAGMA table_info(tasks)")
+    task_cols = [row[1] for row in cursor.fetchall()]
+
+    cursor.execute("DROP TABLE IF EXISTS tasks_new")
+    cursor.execute("""
+        CREATE TABLE tasks_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'open',
+            priority INTEGER DEFAULT 3,
+            gameplan_id INTEGER,
+            project TEXT,
+            current_step TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            prompt TEXT,
+            type TEXT DEFAULT 'single',
+            execution_id INTEGER,
+            output_doc_id INTEGER,
+            source_doc_id INTEGER,
+            parent_task_id INTEGER,
+            seq INTEGER,
+            retry_of INTEGER,
+            error TEXT,
+            tags TEXT,
+            FOREIGN KEY (gameplan_id) REFERENCES documents(id) ON DELETE SET NULL,
+            FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE SET NULL,
+            FOREIGN KEY (output_doc_id) REFERENCES documents(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_doc_id) REFERENCES documents(id) ON DELETE SET NULL,
+            FOREIGN KEY (parent_task_id) REFERENCES tasks_new(id) ON DELETE SET NULL,
+            FOREIGN KEY (retry_of) REFERENCES tasks_new(id) ON DELETE SET NULL
+        )
+    """)
+
+    # Build column list for INSERT
+    new_task_cols = ['id', 'title', 'description', 'status', 'priority', 'gameplan_id',
+                     'project', 'current_step', 'created_at', 'updated_at', 'completed_at',
+                     'prompt', 'type', 'execution_id', 'output_doc_id', 'source_doc_id',
+                     'parent_task_id', 'seq', 'retry_of', 'error', 'tags']
+    common_task_cols = [c for c in new_task_cols if c in task_cols]
+    cols_str = ', '.join(common_task_cols)
+
+    cursor.execute(f"""
+        INSERT INTO tasks_new ({cols_str})
+        SELECT {cols_str} FROM tasks
+    """)
+
+    cursor.execute("DROP TABLE tasks")
+    cursor.execute("ALTER TABLE tasks_new RENAME TO tasks")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_gameplan ON tasks(gameplan_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_output_doc_id ON tasks(output_doc_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_execution_id ON tasks(execution_id)")
+
+    cursor.execute("PRAGMA foreign_keys = ON")
+    conn.commit()
+
+
+def migration_038_add_title_lower_index(conn: sqlite3.Connection):
+    """Add functional index on LOWER(title) for case-insensitive lookups.
+
+    SQLite supports functional indexes (expression indexes) since version 3.9.0.
+    This index enables efficient case-insensitive title searches without
+    requiring COLLATE NOCASE on the column definition.
+
+    Usage: WHERE LOWER(title) = LOWER('search term')
+    """
+    cursor = conn.cursor()
+
+    # Create functional index on documents.title
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_title_lower
+        ON documents(LOWER(title))
+    """)
+
+    # Also add to tasks.title for consistency
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tasks_title_lower
+        ON tasks(LOWER(title))
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1994,6 +2156,8 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
     (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
+    (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_on_delete_cascade),
+    (38, "Add LOWER(title) functional index", migration_038_add_title_lower_index),
 ]
 
 
