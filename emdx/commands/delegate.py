@@ -29,6 +29,7 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +139,66 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Allowlist of safe discovery commands that can be used with --each
+# These commands are designed to list files/items and don't modify the system
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find alternative
+    "find",         # Standard file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "ls",           # List files
+    "rg",           # Ripgrep (with --files-with-matches)
+    "grep",         # Grep (with -l for files)
+    "eza",          # Modern ls alternative
+    "exa",          # Another ls alternative
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Parse and validate a discovery command against the allowlist.
+
+    Returns the command as a list of arguments if valid.
+    Raises typer.Exit if the command is not allowed.
+
+    Security: Only allows commands from SAFE_DISCOVERY_COMMANDS to prevent
+    arbitrary command execution via --each flag.
+    """
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not an allowed discovery command\n"
+            f"Allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+            f"This restriction prevents command injection attacks.\n"
+        )
+        raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    Security: Commands are validated against SAFE_DISCOVERY_COMMANDS allowlist
+    and executed without shell=True to prevent command injection.
+    """
+    # Validate and parse the command
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,

