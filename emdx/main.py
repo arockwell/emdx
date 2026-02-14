@@ -185,6 +185,7 @@ def version():
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", "-V", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
     db_url: Optional[str] = typer.Option(
@@ -228,6 +229,11 @@ def main(
         [cyan]EMDX_SAFE_MODE=1 emdx --help[/cyan]
         [cyan]emdx --safe-mode cascade add "idea"[/cyan]  # Will show disabled message
     """
+    # Handle --version flag
+    if version:
+        typer.echo(f"emdx {__version__}")
+        raise typer.Exit()
+
     # Set up global state based on flags
     if verbose and quiet:
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
