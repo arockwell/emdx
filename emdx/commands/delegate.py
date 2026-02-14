@@ -41,7 +41,11 @@ from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
 
-app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
+app = typer.Typer(
+    name="delegate",
+    help="Delegate tasks to agents (stdout-friendly)",
+    context_settings={"allow_interspersed_args": True},
+)
 
 
 def _safe_create_task(**kwargs) -> Optional[int]:
