@@ -257,5 +257,5 @@ def status(
 
 
 # Create typer app for the command
-app = typer.Typer()
+app = typer.Typer(help="Show delegate activity and project status")
 app.command()(status)

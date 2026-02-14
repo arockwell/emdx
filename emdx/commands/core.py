@@ -39,7 +39,7 @@ from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 
-app = typer.Typer()
+app = typer.Typer(help="Core CRUD operations for documents")
 
 
 @dataclass
@@ -318,8 +318,8 @@ def save(
                             (doc_id, gist_id_str, gist_url, public),
                         )
                         conn.commit()
-                except Exception:
-                    pass  # Non-fatal — gist was still created
+                except Exception as e:
+                    console.print(f"   [dim]Warning: Failed to record gist in database: {e}[/dim]")
 
                 console.print(f"   [green]Gist:[/green] {gist_url}")
 

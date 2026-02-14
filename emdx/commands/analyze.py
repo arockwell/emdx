@@ -735,7 +735,7 @@ def _collect_projects_data() -> Dict[str, Any]:
 
 
 # Create typer app for this module
-app = typer.Typer()
+app = typer.Typer(help="Analyze documents and extract insights")
 app.command()(analyze)
 
 

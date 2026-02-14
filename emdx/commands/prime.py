@@ -337,5 +337,5 @@ def _get_cascade_status() -> dict:
 
 
 # Create typer app for the command
-app = typer.Typer()
+app = typer.Typer(help="Output priming context for Claude session injection")
 app.command()(prime)
