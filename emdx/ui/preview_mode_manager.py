@@ -12,7 +12,7 @@ Each switch_to_X method handles the complete lifecycle:
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 from textual.containers import ScrollableContainer, Vertical
 from textual.widgets import RichLog
@@ -21,8 +21,8 @@ from emdx.ui.markdown_config import MarkdownConfig
 
 if TYPE_CHECKING:
     from .inputs import TitleInput
-    from .vim_editor import VimEditor
     from .text_areas import SelectionTextArea
+    from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
 

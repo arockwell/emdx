@@ -6,11 +6,10 @@ or creating a new group.
 """
 
 import logging
-from typing import Callable, Optional
+from typing import Optional
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Horizontal
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, Static

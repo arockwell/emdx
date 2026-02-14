@@ -12,6 +12,7 @@ Organized database operations split into focused modules:
 This package maintains backward compatibility with the original sqlite_database.py API.
 """
 
+from . import cascade, groups
 from .connection import DatabaseConnection, db_connection
 from .documents import (
     delete_document,
@@ -26,8 +27,6 @@ from .documents import (
     update_document,
 )
 from .search import search_documents
-from . import groups
-from . import cascade
 
 
 class SQLiteDatabase:

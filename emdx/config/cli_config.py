@@ -5,10 +5,9 @@ that can be used to execute agent tasks.
 """
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
-
 
 # Default tools allowed for Claude CLI execution
 # These are the standard tools that most agents need for basic operations

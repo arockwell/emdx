@@ -388,7 +388,7 @@ class KeybindingRegistry:
     def summary(self) -> str:
         """Get a summary of the registry state."""
         lines = [
-            f"Keybinding Registry Summary:",
+            "Keybinding Registry Summary:",
             f"  Total bindings: {len(self.bindings)}",
             f"  Unique keys: {len(self.by_key)}",
             f"  Contexts: {len(self.by_context)}",
