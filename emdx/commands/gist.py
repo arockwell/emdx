@@ -52,11 +52,6 @@ def get_github_auth() -> Optional[str]:
     if token:
         return token
 
-    # 3. Check config file (future enhancement)
-    # config_path = Path.home() / '.config' / 'emdx' / 'config.yml'
-    # if config_path.exists():
-    #     # Load token from config
-
     return None
 
 

@@ -10,8 +10,6 @@ from datetime import datetime
 from typing import Optional
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
 
 from ..database import db
 from ..utils.git import get_git_project

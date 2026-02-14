@@ -703,7 +703,7 @@ def create_worktree(branch_name: str, path: Optional[str] = None, base_branch: O
 
         logger.info(f"Creating worktree in repo {repo_root}: {' '.join(cmd)}")
 
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -738,7 +738,7 @@ def remove_worktree(path: str, force: bool = False) -> Tuple[bool, str]:
         if force:
             cmd.append('--force')
 
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,

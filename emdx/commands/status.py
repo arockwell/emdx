@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from rich.console import Console
-from rich.text import Text
 
 from ..database import db
 from ..models.tasks import (

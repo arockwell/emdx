@@ -2,7 +2,6 @@
 Search functionality for emdx documents using FTS5
 """
 
-import re
 from typing import Any, Optional
 
 from ..utils.datetime_utils import parse_datetime

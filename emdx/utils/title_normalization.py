@@ -5,7 +5,6 @@ agent numbers, etc. to enable automatic supersede detection.
 """
 
 import re
-from typing import Optional
 
 
 def normalize_title(title: str) -> str:

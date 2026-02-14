@@ -260,9 +260,6 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
     if not isinstance(timeout_seconds, int) or timeout_seconds < 0:
         raise ValueError("timeout_seconds must be a non-negative integer")
 
-    # Build the datetime modifier string in Python (safe from SQL injection)
-    timeout_modifier = f"+{timeout_seconds} seconds"
-
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         # Build interval string safely - timeout_seconds is validated as int by function signature

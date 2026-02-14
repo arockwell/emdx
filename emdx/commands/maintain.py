@@ -25,7 +25,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
 from ..applications import MaintenanceApplication
-from ..config.settings import get_db_path
 from ..utils.output import console
 
 logger = logging.getLogger(__name__)

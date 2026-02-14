@@ -21,9 +21,8 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-from ..config.cli_config import CliTool, get_cli_config, DEFAULT_ALLOWED_TOOLS
-from ..config.settings import DEFAULT_CLAUDE_MODEL
-from ..utils.environment import ensure_claude_in_path, validate_execution_environment
+from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
+from ..utils.environment import ensure_claude_in_path
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
 
