@@ -1,9 +1,31 @@
 """Database migration system for emdx."""
 
 import sqlite3
+from contextlib import contextmanager
 from typing import Callable
 
 from ..config.settings import get_db_path
+
+
+@contextmanager
+def foreign_keys_disabled(conn: sqlite3.Connection):
+    """Context manager to temporarily disable foreign key constraints.
+
+    Used during migrations that need to recreate tables, which requires
+    foreign keys to be disabled to avoid constraint violations during
+    the table swap.
+
+    Usage:
+        with foreign_keys_disabled(conn):
+            # recreate table operations here
+            pass
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = OFF")
+    try:
+        yield
+    finally:
+        cursor.execute("PRAGMA foreign_keys = ON")
 
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
@@ -725,49 +747,44 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    # Temporarily disable foreign key checks for the table recreation
-    cursor.execute("PRAGMA foreign_keys = OFF")
+    with foreign_keys_disabled(conn):
+        # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
+        # recreate the table with the new constraint
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workflow_run_id INTEGER NOT NULL,
+                stage_name TEXT NOT NULL,
+                mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
+                target_runs INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+                runs_completed INTEGER DEFAULT 0,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                output_doc_id INTEGER,
+                synthesis_doc_id INTEGER,
+                error_message TEXT,
+                tokens_used INTEGER DEFAULT 0,
+                execution_time_ms INTEGER DEFAULT 0,
+                FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
+                FOREIGN KEY (output_doc_id) REFERENCES documents(id),
+                FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
+            )
+        """)
 
-    # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
-    # recreate the table with the new constraint
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS workflow_stage_runs_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workflow_run_id INTEGER NOT NULL,
-            stage_name TEXT NOT NULL,
-            mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
-            target_runs INTEGER NOT NULL DEFAULT 1,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
-            runs_completed INTEGER DEFAULT 0,
-            started_at TIMESTAMP,
-            completed_at TIMESTAMP,
-            output_doc_id INTEGER,
-            synthesis_doc_id INTEGER,
-            error_message TEXT,
-            tokens_used INTEGER DEFAULT 0,
-            execution_time_ms INTEGER DEFAULT 0,
-            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
-            FOREIGN KEY (output_doc_id) REFERENCES documents(id),
-            FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
-        )
-    """)
+        # Copy data from old table
+        cursor.execute("""
+            INSERT INTO workflow_stage_runs_new
+            SELECT * FROM workflow_stage_runs
+        """)
 
-    # Copy data from old table
-    cursor.execute("""
-        INSERT INTO workflow_stage_runs_new
-        SELECT * FROM workflow_stage_runs
-    """)
+        # Drop old table and rename new one
+        cursor.execute("DROP TABLE workflow_stage_runs")
+        cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
 
-    # Drop old table and rename new one
-    cursor.execute("DROP TABLE workflow_stage_runs")
-    cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
-
-    # Recreate indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
-
-    # Re-enable foreign key checks
-    cursor.execute("PRAGMA foreign_keys = ON")
+        # Recreate indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
 
     conn.commit()
 
@@ -805,45 +822,40 @@ def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    # Temporarily disable foreign key checks for the table recreation
-    cursor.execute("PRAGMA foreign_keys = OFF")
+    with foreign_keys_disabled(conn):
+        # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
+        # recreate the table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS executions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id INTEGER,
+                doc_title TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+                started_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP,
+                log_file TEXT NOT NULL,
+                exit_code INTEGER,
+                working_dir TEXT,
+                pid INTEGER,
+                FOREIGN KEY (doc_id) REFERENCES documents(id)
+            )
+        """)
 
-    # SQLite doesn't support ALTER TABLE to modify constraints, so we need to
-    # recreate the table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS executions_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            doc_id INTEGER,
-            doc_title TEXT NOT NULL,
-            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
-            started_at TIMESTAMP NOT NULL,
-            completed_at TIMESTAMP,
-            log_file TEXT NOT NULL,
-            exit_code INTEGER,
-            working_dir TEXT,
-            pid INTEGER,
-            FOREIGN KEY (doc_id) REFERENCES documents(id)
-        )
-    """)
+        # Copy data from old table
+        cursor.execute("""
+            INSERT INTO executions_new (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)
+            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            FROM executions
+        """)
 
-    # Copy data from old table
-    cursor.execute("""
-        INSERT INTO executions_new (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)
-        SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
-        FROM executions
-    """)
+        # Drop old table and rename new one
+        cursor.execute("DROP TABLE executions")
+        cursor.execute("ALTER TABLE executions_new RENAME TO executions")
 
-    # Drop old table and rename new one
-    cursor.execute("DROP TABLE executions")
-    cursor.execute("ALTER TABLE executions_new RENAME TO executions")
-
-    # Recreate indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
-
-    # Re-enable foreign key checks
-    cursor.execute("PRAGMA foreign_keys = ON")
+        # Recreate indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
 
     conn.commit()
 
@@ -856,47 +868,42 @@ def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    # Temporarily disable foreign key checks for the table recreation
-    cursor.execute("PRAGMA foreign_keys = OFF")
+    with foreign_keys_disabled(conn):
+        # Recreate table with corrected FK
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS workflow_individual_runs_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stage_run_id INTEGER NOT NULL,
+                run_number INTEGER NOT NULL,
+                agent_execution_id INTEGER,
+                prompt_used TEXT,
+                input_context TEXT,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+                output_doc_id INTEGER,
+                error_message TEXT,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                tokens_used INTEGER DEFAULT 0,
+                execution_time_ms INTEGER DEFAULT 0,
+                FOREIGN KEY (stage_run_id) REFERENCES workflow_stage_runs(id),
+                FOREIGN KEY (agent_execution_id) REFERENCES executions(id),
+                FOREIGN KEY (output_doc_id) REFERENCES documents(id)
+            )
+        """)
 
-    # Recreate table with corrected FK
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS workflow_individual_runs_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            stage_run_id INTEGER NOT NULL,
-            run_number INTEGER NOT NULL,
-            agent_execution_id INTEGER,
-            prompt_used TEXT,
-            input_context TEXT,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
-            output_doc_id INTEGER,
-            error_message TEXT,
-            started_at TIMESTAMP,
-            completed_at TIMESTAMP,
-            tokens_used INTEGER DEFAULT 0,
-            execution_time_ms INTEGER DEFAULT 0,
-            FOREIGN KEY (stage_run_id) REFERENCES workflow_stage_runs(id),
-            FOREIGN KEY (agent_execution_id) REFERENCES executions(id),
-            FOREIGN KEY (output_doc_id) REFERENCES documents(id)
-        )
-    """)
+        # Copy data from old table
+        cursor.execute("""
+            INSERT INTO workflow_individual_runs_new
+            SELECT * FROM workflow_individual_runs
+        """)
 
-    # Copy data from old table
-    cursor.execute("""
-        INSERT INTO workflow_individual_runs_new
-        SELECT * FROM workflow_individual_runs
-    """)
+        # Drop old table and rename new one
+        cursor.execute("DROP TABLE workflow_individual_runs")
+        cursor.execute("ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs")
 
-    # Drop old table and rename new one
-    cursor.execute("DROP TABLE workflow_individual_runs")
-    cursor.execute("ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs")
-
-    # Recreate indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)")
-
-    # Re-enable foreign key checks
-    cursor.execute("PRAGMA foreign_keys = ON")
+        # Recreate indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)")
 
     conn.commit()
 
@@ -1534,54 +1541,49 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    # Disable foreign key checks during schema change
-    cursor.execute("PRAGMA foreign_keys = OFF")
+    with foreign_keys_disabled(conn):
+        # Drop any leftover _new table from previous failed run
+        cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs_new")
 
-    # Drop any leftover _new table from previous failed run
-    cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs_new")
+        # Create new table with updated status constraint including 'synthesizing'
+        cursor.execute("""
+            CREATE TABLE workflow_stage_runs_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workflow_run_id INTEGER NOT NULL,
+                stage_name TEXT NOT NULL,
+                mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
+                target_runs INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'synthesizing', 'completed', 'failed', 'cancelled')),
+                runs_completed INTEGER DEFAULT 0,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                output_doc_id INTEGER,
+                synthesis_doc_id INTEGER,
+                error_message TEXT,
+                tokens_used INTEGER DEFAULT 0,
+                execution_time_ms INTEGER DEFAULT 0,
+                synthesis_cost_usd REAL DEFAULT 0.0,
+                synthesis_input_tokens INTEGER DEFAULT 0,
+                synthesis_output_tokens INTEGER DEFAULT 0,
+                FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
+                FOREIGN KEY (output_doc_id) REFERENCES documents(id),
+                FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
+            )
+        """)
 
-    # Create new table with updated status constraint including 'synthesizing'
-    cursor.execute("""
-        CREATE TABLE workflow_stage_runs_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workflow_run_id INTEGER NOT NULL,
-            stage_name TEXT NOT NULL,
-            mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
-            target_runs INTEGER NOT NULL DEFAULT 1,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'synthesizing', 'completed', 'failed', 'cancelled')),
-            runs_completed INTEGER DEFAULT 0,
-            started_at TIMESTAMP,
-            completed_at TIMESTAMP,
-            output_doc_id INTEGER,
-            synthesis_doc_id INTEGER,
-            error_message TEXT,
-            tokens_used INTEGER DEFAULT 0,
-            execution_time_ms INTEGER DEFAULT 0,
-            synthesis_cost_usd REAL DEFAULT 0.0,
-            synthesis_input_tokens INTEGER DEFAULT 0,
-            synthesis_output_tokens INTEGER DEFAULT 0,
-            FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id),
-            FOREIGN KEY (output_doc_id) REFERENCES documents(id),
-            FOREIGN KEY (synthesis_doc_id) REFERENCES documents(id)
-        )
-    """)
+        # Copy existing data
+        cursor.execute("""
+            INSERT INTO workflow_stage_runs_new
+            SELECT * FROM workflow_stage_runs
+        """)
 
-    # Copy existing data
-    cursor.execute("""
-        INSERT INTO workflow_stage_runs_new
-        SELECT * FROM workflow_stage_runs
-    """)
+        # Drop old table and rename new one
+        cursor.execute("DROP TABLE workflow_stage_runs")
+        cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
 
-    # Drop old table and rename new one
-    cursor.execute("DROP TABLE workflow_stage_runs")
-    cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
-
-    # Recreate indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
-
-    # Re-enable foreign key checks
-    cursor.execute("PRAGMA foreign_keys = ON")
+        # Recreate indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
 
     conn.commit()
 
@@ -1852,78 +1854,76 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    cursor.execute("PRAGMA foreign_keys = OFF")
+    with foreign_keys_disabled(conn):
+        # 1. Drop workflow tables (in FK dependency order)
+        cursor.execute("DROP TABLE IF EXISTS workflow_presets")
+        cursor.execute("DROP TABLE IF EXISTS workflow_individual_runs")
+        cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs")
+        cursor.execute("DROP TABLE IF EXISTS workflow_runs")
+        cursor.execute("DROP TABLE IF EXISTS workflows")
+        cursor.execute("DROP TABLE IF EXISTS document_sources")
 
-    # 1. Drop workflow tables (in FK dependency order)
-    cursor.execute("DROP TABLE IF EXISTS workflow_presets")
-    cursor.execute("DROP TABLE IF EXISTS workflow_individual_runs")
-    cursor.execute("DROP TABLE IF EXISTS workflow_stage_runs")
-    cursor.execute("DROP TABLE IF EXISTS workflow_runs")
-    cursor.execute("DROP TABLE IF EXISTS workflows")
-    cursor.execute("DROP TABLE IF EXISTS document_sources")
+        # 2. Recreate task_executions without workflow_run_id column
+        cursor.execute("DROP TABLE IF EXISTS task_executions_new")
+        cursor.execute("""
+            CREATE TABLE task_executions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
+                execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),
+                status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                notes TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO task_executions_new (id, task_id, execution_id, execution_type, status, started_at, completed_at, notes)
+            SELECT id, task_id, execution_id, execution_type, status, started_at, completed_at, notes
+            FROM task_executions
+        """)
+        cursor.execute("DROP TABLE task_executions")
+        cursor.execute("ALTER TABLE task_executions_new RENAME TO task_executions")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
 
-    # 2. Recreate task_executions without workflow_run_id column
-    cursor.execute("DROP TABLE IF EXISTS task_executions_new")
-    cursor.execute("""
-        CREATE TABLE task_executions_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-            execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
-            execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),
-            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
-            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            completed_at TIMESTAMP,
-            notes TEXT
-        )
-    """)
-    cursor.execute("""
-        INSERT INTO task_executions_new (id, task_id, execution_id, execution_type, status, started_at, completed_at, notes)
-        SELECT id, task_id, execution_id, execution_type, status, started_at, completed_at, notes
-        FROM task_executions
-    """)
-    cursor.execute("DROP TABLE task_executions")
-    cursor.execute("ALTER TABLE task_executions_new RENAME TO task_executions")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
+        # 3. Recreate document_groups without workflow_run_id column
+        cursor.execute("DROP TABLE IF EXISTS document_groups_new")
+        cursor.execute("""
+            CREATE TABLE document_groups_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                parent_group_id INTEGER,
+                group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),
+                project TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE,
+                doc_count INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                total_cost_usd REAL DEFAULT 0.0,
+                FOREIGN KEY (parent_group_id) REFERENCES document_groups_new(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO document_groups_new (id, name, description, parent_group_id, group_type, project,
+                created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd)
+            SELECT id, name, description, parent_group_id, group_type, project,
+                created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd
+            FROM document_groups
+        """)
+        cursor.execute("DROP TABLE document_groups")
+        cursor.execute("ALTER TABLE document_groups_new RENAME TO document_groups")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_name ON document_groups(name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_project ON document_groups(project)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_type ON document_groups(group_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_active ON document_groups(is_active)")
 
-    # 3. Recreate document_groups without workflow_run_id column
-    cursor.execute("DROP TABLE IF EXISTS document_groups_new")
-    cursor.execute("""
-        CREATE TABLE document_groups_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT,
-            parent_group_id INTEGER,
-            group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),
-            project TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_by TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_active BOOLEAN DEFAULT TRUE,
-            doc_count INTEGER DEFAULT 0,
-            total_tokens INTEGER DEFAULT 0,
-            total_cost_usd REAL DEFAULT 0.0,
-            FOREIGN KEY (parent_group_id) REFERENCES document_groups_new(id) ON DELETE CASCADE
-        )
-    """)
-    cursor.execute("""
-        INSERT INTO document_groups_new (id, name, description, parent_group_id, group_type, project,
-            created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd)
-        SELECT id, name, description, parent_group_id, group_type, project,
-            created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd
-        FROM document_groups
-    """)
-    cursor.execute("DROP TABLE document_groups")
-    cursor.execute("ALTER TABLE document_groups_new RENAME TO document_groups")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_name ON document_groups(name)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_project ON document_groups(project)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_type ON document_groups(group_type)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_active ON document_groups(is_active)")
-
-    cursor.execute("PRAGMA foreign_keys = ON")
     conn.commit()
 
 
@@ -2003,8 +2003,10 @@ def run_migrations(db_path=None):
         db_path = get_db_path()
     # Don't return early - we need to run migrations even for new databases
     # The database file will be created when we connect to it
-    
+
     conn = sqlite3.connect(db_path)
+    # Enable foreign keys for this connection (migrations use foreign_keys_disabled()
+    # context manager when they need to temporarily disable them for table recreation)
     conn.execute("PRAGMA foreign_keys = ON")
 
     try:
