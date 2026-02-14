@@ -29,6 +29,8 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,12 +140,93 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Allowlist of safe commands for --each discovery
+# These commands only list/find files and cannot execute arbitrary code
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find alternative
+    "find",         # Traditional file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "ls",           # List files
+    "eza",          # Modern ls alternative
+    "rg",           # ripgrep (with -l for file listing)
+    "grep",         # grep (with -l for file listing)
+    "cat",          # Read file lists from a file
+    "head",         # First N items from a list
+    "tail",         # Last N items from a list
+    "sort",         # Sort items
+    "uniq",         # Deduplicate items
+    "wc",           # Count items
+    "echo",         # Echo static list
+    "printf",       # Printf static list
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Validate and parse a discovery command for safe execution.
+
+    Returns the command as a list of arguments if safe, raises Exit if unsafe.
+
+    Security: Only allows commands from SAFE_DISCOVERY_COMMANDS allowlist.
+    Rejects shell metacharacters that could enable command injection.
+    """
+    # Reject obvious shell injection attempts
+    # These metacharacters allow chaining commands or redirecting output
+    dangerous_patterns = [
+        r'[;&|`$]',         # Command separators, subshell, variable expansion
+        r'>\s*/',           # Redirect to absolute path
+        r'>>\s*/',          # Append to absolute path
+        r'\$\(',            # Command substitution
+        r'\$\{',            # Variable expansion
+        r'<\(',             # Process substitution
+    ]
+
+    for pattern in dangerous_patterns:
+        if re.search(pattern, command):
+            sys.stderr.write(
+                f"delegate: discovery command contains unsafe characters\n"
+                f"  Rejected pattern: {pattern}\n"
+                f"  Command: {command}\n"
+            )
+            raise typer.Exit(1)
+
+    # Parse command into arguments
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid discovery command: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: discovery command '{base_cmd}' not in allowlist\n"
+            f"  Allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+            f"  Use --each with: fd, find, git ls-files, rg -l, etc.\n"
+        )
+        raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    Security: Commands are validated against an allowlist before execution.
+    Uses shell=False with parsed arguments to prevent injection.
+    """
+    # Validate and parse the command (exits if unsafe)
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,

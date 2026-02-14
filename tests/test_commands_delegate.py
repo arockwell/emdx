@@ -2,7 +2,16 @@
 
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import click.exceptions
+import pytest
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +99,93 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — security validation for --each."""
+
+    def test_safe_fd_command(self):
+        """fd is in the allowlist and should be accepted."""
+        args = _validate_discovery_command("fd -e py src/")
+        assert args[0] == "fd"
+        assert "-e" in args
+        assert "py" in args
+
+    def test_safe_find_command(self):
+        """find is in the allowlist and should be accepted."""
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_safe_git_command(self):
+        """git is in the allowlist and should be accepted."""
+        args = _validate_discovery_command("git ls-files '*.py'")
+        assert args[0] == "git"
+
+    def test_safe_rg_command(self):
+        """rg is in the allowlist and should be accepted."""
+        args = _validate_discovery_command("rg -l 'TODO' src/")
+        assert args[0] == "rg"
+
+    def test_safe_command_with_path(self):
+        """Commands specified with full path should work."""
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args[0] == "/usr/bin/fd"
+
+    def test_rejects_unlisted_command(self):
+        """Commands not in allowlist should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("curl http://evil.com")
+
+    def test_rejects_rm_command(self):
+        """Dangerous commands like rm should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_rejects_command_with_semicolon(self):
+        """Command chaining with semicolon should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py; rm -rf /")
+
+    def test_rejects_command_with_pipe(self):
+        """Command chaining with pipe should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_rejects_command_with_ampersand(self):
+        """Command chaining with && should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("fd -e py && rm -rf /")
+
+    def test_rejects_command_with_backticks(self):
+        """Command substitution with backticks should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("echo `rm -rf /`")
+
+    def test_rejects_command_with_dollar_paren(self):
+        """Command substitution with $() should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("echo $(rm -rf /)")
+
+    def test_rejects_command_with_variable_expansion(self):
+        """Variable expansion should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("echo ${PATH}")
+
+    def test_rejects_empty_command(self):
+        """Empty commands should be rejected."""
+        with pytest.raises(click.exceptions.Exit):
+            _validate_discovery_command("")
+
+    def test_safe_commands_allowlist_populated(self):
+        """The allowlist should contain expected safe commands."""
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+        assert "git" in SAFE_DISCOVERY_COMMANDS
+        assert "rg" in SAFE_DISCOVERY_COMMANDS
+        assert "grep" in SAFE_DISCOVERY_COMMANDS
+        # Dangerous commands should NOT be in allowlist
+        assert "rm" not in SAFE_DISCOVERY_COMMANDS
+        assert "curl" not in SAFE_DISCOVERY_COMMANDS
+        assert "wget" not in SAFE_DISCOVERY_COMMANDS
+        assert "bash" not in SAFE_DISCOVERY_COMMANDS
+        assert "sh" not in SAFE_DISCOVERY_COMMANDS
