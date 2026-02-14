@@ -1,8 +1,13 @@
 """Tests for delegate command helper functions."""
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+import subprocess
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import click
+import pytest
+import typer
+
+from emdx.commands.delegate import _slugify_title, _resolve_task, _run_discovery, PR_INSTRUCTION
 
 
 class TestSlugifyTitle:
@@ -90,3 +95,142 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestRunDiscovery:
+    """Tests for _run_discovery — runs shell commands safely."""
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_basic_discovery(self, mock_run):
+        """Test that a simple command returns output lines."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="file1.py\nfile2.py\nfile3.py\n",
+            stderr="",
+        )
+        result = _run_discovery("fd -e py")
+        assert result == ["file1.py", "file2.py", "file3.py"]
+        # Verify shell=False is used (security fix)
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs["shell"] is False
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_uses_shlex_split(self, mock_run):
+        """Test that command is parsed with shlex.split (not shell=True)."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="result\n",
+            stderr="",
+        )
+        _run_discovery('echo "hello world"')
+        # Should be called with a list of args
+        call_args = mock_run.call_args.args[0]
+        assert isinstance(call_args, list)
+        assert call_args == ["echo", "hello world"]
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_handles_quoted_strings(self, mock_run):
+        """Test that quoted strings in command are handled correctly."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="test.py\n",
+            stderr="",
+        )
+        _run_discovery('fd -e py "src dir"')
+        call_args = mock_run.call_args.args[0]
+        assert call_args == ["fd", "-e", "py", "src dir"]
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_filters_empty_lines(self, mock_run):
+        """Test that empty lines are filtered from output."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="file1.py\n\nfile2.py\n   \nfile3.py\n",
+            stderr="",
+        )
+        result = _run_discovery("fd -e py")
+        assert result == ["file1.py", "file2.py", "file3.py"]
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_command_failure_exits(self, mock_run):
+        """Test that a failing command raises click.exceptions.Exit."""
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="error: command failed",
+        )
+        with pytest.raises(click.exceptions.Exit):
+            _run_discovery("bad-command")
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_empty_output_exits(self, mock_run):
+        """Test that empty output raises click.exceptions.Exit."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="\n\n",
+            stderr="",
+        )
+        with pytest.raises(click.exceptions.Exit):
+            _run_discovery("fd --no-results")
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_timeout_exits(self, mock_run):
+        """Test that timeout raises click.exceptions.Exit."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="slow-cmd", timeout=30)
+        with pytest.raises(click.exceptions.Exit):
+            _run_discovery("slow-cmd")
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_command_not_found_exits(self, mock_run):
+        """Test that missing command raises click.exceptions.Exit."""
+        mock_run.side_effect = FileNotFoundError()
+        with pytest.raises(click.exceptions.Exit):
+            _run_discovery("nonexistent-cmd")
+
+    def test_invalid_syntax_exits(self):
+        """Test that invalid command syntax raises click.exceptions.Exit."""
+        # Unclosed quote is invalid shlex syntax
+        with pytest.raises(click.exceptions.Exit):
+            _run_discovery('fd "unclosed')
+
+    def test_empty_command_exits(self):
+        """Test that empty command raises click.exceptions.Exit."""
+        with pytest.raises(click.exceptions.Exit):
+            _run_discovery("")
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_security_no_shell_metacharacters(self, mock_run):
+        """Security: shell metacharacters should NOT be interpreted.
+
+        With shell=False and shlex.split(), shell metacharacters like ;, &&, ||,
+        $(), backticks etc. are treated as literal strings, not shell operators.
+        """
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="file.py\n",
+            stderr="",
+        )
+        # This would be dangerous with shell=True
+        # With shell=False, the semicolon is just a literal argument
+        _run_discovery("echo foo; rm -rf /")
+        call_args = mock_run.call_args.args[0]
+        # With shlex.split and shell=False, these are just literal args
+        assert call_args == ["echo", "foo;", "rm", "-rf", "/"]
+        # The key security property: shell=False
+        assert mock_run.call_args.kwargs["shell"] is False
+
+    @patch("emdx.commands.delegate.subprocess.run")
+    def test_security_no_command_substitution(self, mock_run):
+        """Security: command substitution should NOT be executed."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="file.py\n",
+            stderr="",
+        )
+        # This would execute 'whoami' with shell=True
+        _run_discovery("echo $(whoami)")
+        call_args = mock_run.call_args.args[0]
+        # With shlex.split, this is a literal string argument
+        assert call_args == ["echo", "$(whoami)"]
+        assert mock_run.call_args.kwargs["shell"] is False

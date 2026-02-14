@@ -29,6 +29,7 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -139,11 +140,28 @@ def _resolve_task(task: str, pr: bool = False) -> str:
 
 
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a discovery command and return output lines as items.
+
+    Security: Uses shlex.split() with shell=False to prevent command injection.
+    The command is parsed into arguments safely, preventing shell metacharacter
+    exploits like '; rm -rf ~' or '$(evil_cmd)'.
+    """
+    try:
+        # Parse command safely - this handles quoted strings and escapes properly
+        # but prevents shell metacharacters from being interpreted
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid discovery command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # Security: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
@@ -159,6 +177,10 @@ def _run_discovery(command: str) -> List[str]:
 
         sys.stderr.write(f"delegate: discovered {len(lines)} item(s)\n")
         return lines
+
+    except FileNotFoundError:
+        sys.stderr.write(f"delegate: discovery command not found: {args[0]}\n")
+        raise typer.Exit(1)
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
