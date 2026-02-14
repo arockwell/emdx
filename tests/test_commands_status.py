@@ -23,6 +23,10 @@ class TestParseTimestamp:
         result = _parse_timestamp("2026-01-15T10:30:00Z")
         assert result is not None
         assert result.year == 2026
+        assert result.month == 1
+        assert result.day == 15
+        assert result.hour == 10
+        assert result.minute == 30
 
     def test_invalid_string_returns_none(self):
         assert _parse_timestamp("not a date") is None

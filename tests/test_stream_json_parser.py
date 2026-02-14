@@ -276,6 +276,11 @@ class TestParseStreamJsonLineRich:
         event = parse_stream_json_line_rich(json.dumps(obj))
         assert event.event_type == "status"
         assert event.timestamp is not None
+        assert event.timestamp.year == 2025
+        assert event.timestamp.month == 1
+        assert event.timestamp.day == 10
+        assert "[DEBUG]" in event.content
+        assert "Processing" in event.content
 
     def test_structured_logger_with_z_suffix(self):
         obj = {
@@ -287,6 +292,11 @@ class TestParseStreamJsonLineRich:
         event = parse_stream_json_line_rich(json.dumps(obj))
         assert event.event_type == "status"
         assert event.timestamp is not None
+        assert event.timestamp.year == 2025
+        assert event.timestamp.hour == 10
+        assert event.timestamp.minute == 30
+        assert "[INFO]" in event.content
+        assert "Done" in event.content
 
     def test_structured_logger_invalid_timestamp(self):
         obj = {
@@ -491,8 +501,10 @@ class TestParseAndFormatLiveLogs:
         obj = {"type": "system", "subtype": "init", "model": "test"}
         # System init becomes a status event, not skip
         lines = parse_and_format_live_logs(json.dumps(obj))
-        # Should have something since system init becomes status
-        assert len(lines) >= 0
+        # Should have status line with model info
+        assert len(lines) == 1
+        assert "Session started" in lines[0]
+        assert "test" in lines[0]  # model name
 
     def test_formats_text(self):
         obj = {
