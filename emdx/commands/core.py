@@ -9,7 +9,6 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.markdown import Markdown
@@ -48,7 +47,7 @@ class InputContent:
 
     content: str
     source_type: str  # 'stdin', 'file', or 'direct'
-    source_path: Optional[Path] = None
+    source_path: Path | None = None
 
 
 @dataclass
@@ -56,11 +55,11 @@ class DocumentMetadata:
     """Container for document metadata"""
 
     title: str
-    project: Optional[str] = None
-    tags: Optional[list[str]] = None
+    project: str | None = None
+    tags: list[str] | None = None
 
 
-def get_input_content(input_arg: Optional[str]) -> InputContent:
+def get_input_content(input_arg: str | None) -> InputContent:
     """Handle input from stdin, file, or direct text"""
     import sys
 
@@ -96,7 +95,7 @@ def get_input_content(input_arg: Optional[str]) -> InputContent:
         raise typer.Exit(1)
 
 
-def generate_title(input_content: InputContent, provided_title: Optional[str]) -> str:
+def generate_title(input_content: InputContent, provided_title: str | None) -> str:
     """Generate appropriate title based on source and content"""
     if provided_title:
         return provided_title
@@ -116,7 +115,7 @@ def generate_title(input_content: InputContent, provided_title: Optional[str]) -
             return f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
 
-def detect_project(input_content: InputContent, provided_project: Optional[str]) -> Optional[str]:
+def detect_project(input_content: InputContent, provided_project: str | None) -> str | None:
     """Detect project from git repository"""
     if provided_project:
         return provided_project
@@ -135,7 +134,7 @@ def detect_project(input_content: InputContent, provided_project: Optional[str])
     return detected_project
 
 
-def create_document(title: str, content: str, project: Optional[str]) -> int:
+def create_document(title: str, content: str, project: str | None) -> int:
     """Save document to database and return document ID"""
     # Ensure database schema exists
     try:
@@ -153,7 +152,7 @@ def create_document(title: str, content: str, project: Optional[str]) -> int:
         raise typer.Exit(1) from e
 
 
-def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
+def apply_tags(doc_id: int, tags_str: str | None) -> list[str]:
     """Parse and apply tags to document"""
     if not tags_str:
         return []
@@ -170,7 +169,7 @@ def display_save_result(
     doc_id: int,
     metadata: DocumentMetadata,
     applied_tags: list[str],
-    supersede_target: Optional[dict] = None,
+    supersede_target: dict | None = None,
 ) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")

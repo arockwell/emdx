@@ -33,7 +33,6 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional
 
 import typer
 
@@ -44,7 +43,7 @@ from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
 
 
-def _safe_create_task(**kwargs) -> Optional[int]:
+def _safe_create_task(**kwargs: object) -> int | None:
     """Create task, never fail delegate."""
     try:
         from ..models.tasks import create_task
@@ -54,7 +53,7 @@ def _safe_create_task(**kwargs) -> Optional[int]:
         return None
 
 
-def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
+def _safe_update_task(task_id: int | None, **kwargs: object) -> None:
     """Update task, never fail delegate."""
     if task_id is None:
         return
@@ -65,7 +64,7 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
         pass
 
 
-def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
+def _safe_update_execution(exec_id: int | None, **kwargs: object) -> None:
     """Update execution record, never fail delegate."""
     if exec_id is None:
         return
@@ -138,7 +137,7 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
-def _run_discovery(command: str) -> List[str]:
+def _run_discovery(command: str) -> list[str]:
     """Run a shell command and return output lines as items."""
     try:
         result = subprocess.run(
@@ -165,7 +164,7 @@ def _run_discovery(command: str) -> List[str]:
         raise typer.Exit(1)
 
 
-def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
+def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
 
     If prompt provided: "Document #id (title):\n\n{content}\n\n---\n\nTask: {prompt}"
@@ -195,16 +194,16 @@ def _print_doc_content(doc_id: int) -> None:
 
 def _run_single(
     prompt: str,
-    tags: List[str],
-    title: Optional[str],
-    model: Optional[str],
+    tags: list[str],
+    title: str | None,
+    model: str | None,
     quiet: bool,
     pr: bool = False,
-    working_dir: Optional[str] = None,
-    source_doc_id: Optional[int] = None,
-    parent_task_id: Optional[int] = None,
-    seq: Optional[int] = None,
-) -> tuple[Optional[int], Optional[int]]:
+    working_dir: str | None = None,
+    source_doc_id: int | None = None,
+    parent_task_id: int | None = None,
+    seq: int | None = None,
+) -> tuple[int | None, int | None]:
     """Run a single task via UnifiedExecutor. Returns (doc_id, task_id)."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
@@ -277,18 +276,18 @@ def _run_single(
 
 
 def _run_parallel(
-    tasks: List[str],
-    tags: List[str],
-    title: Optional[str],
-    jobs: Optional[int],
+    tasks: list[str],
+    tags: list[str],
+    title: str | None,
+    jobs: int | None,
     synthesize: bool,
-    model: Optional[str],
+    model: str | None,
     quiet: bool,
     pr: bool = False,
     base_branch: str = "main",
-    source_doc_id: Optional[int] = None,
+    source_doc_id: int | None = None,
     worktree: bool = False,
-) -> List[int]:
+) -> list[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
 
@@ -408,15 +407,15 @@ def _run_parallel(
 
 
 def _run_chain(
-    tasks: List[str],
-    tags: List[str],
-    title: Optional[str],
-    model: Optional[str],
+    tasks: list[str],
+    tags: list[str],
+    title: str | None,
+    model: str | None,
     quiet: bool,
     pr: bool = False,
-    working_dir: Optional[str] = None,
-    source_doc_id: Optional[int] = None,
-) -> List[int]:
+    working_dir: str | None = None,
+    source_doc_id: int | None = None,
+) -> list[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
     Returns list of doc_ids from all steps.
@@ -520,15 +519,15 @@ def _run_chain(
 @app.callback(invoke_without_command=True)
 def delegate(
     ctx: typer.Context,
-    tasks: List[str] = typer.Argument(
+    tasks: list[str] = typer.Argument(
         None,
         help="Task prompt(s) or document IDs. Numeric args load doc content.",
     ),
-    tags: Optional[List[str]] = typer.Option(
+    tags: list[str] | None = typer.Option(
         None, "--tags", "-t",
         help="Tags to apply to outputs (comma-separated)",
     ),
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None, "--title", "-T",
         help="Title for output document(s)",
     ),

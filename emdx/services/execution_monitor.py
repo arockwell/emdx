@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
 
 import psutil
 
@@ -15,6 +14,7 @@ from ..models.executions import (
     get_stale_executions,
     update_execution_status,
 )
+from ..types import CleanupAction, ExecutionMetrics, ProcessHealthInfo
 
 
 class ExecutionMonitor:
@@ -28,16 +28,16 @@ class ExecutionMonitor:
         """
         self.stale_timeout = stale_timeout_seconds
     
-    def check_process_health(self, execution: Execution) -> Dict[str, Any]:
+    def check_process_health(self, execution: Execution) -> ProcessHealthInfo:
         """Check if an execution's process is still healthy.
-        
+
         Args:
             execution: Execution to check
-            
+
         Returns:
             Dictionary with health status
         """
-        health = {
+        health: ProcessHealthInfo = {
             'execution_id': execution.id,
             'is_zombie': False,
             'is_running': False,
@@ -78,16 +78,16 @@ class ExecutionMonitor:
         
         return health
     
-    def cleanup_stuck_executions(self, dry_run: bool = True) -> List[Dict[str, Any]]:
+    def cleanup_stuck_executions(self, dry_run: bool = True) -> list[CleanupAction]:
         """Find and clean up stuck executions.
-        
+
         Args:
             dry_run: If True, only report what would be done
-            
+
         Returns:
             List of actions taken/would be taken
         """
-        actions = []
+        actions: list[CleanupAction] = []
         
         # Get all running executions
         running = get_running_executions()
@@ -159,9 +159,9 @@ class ExecutionMonitor:
         
         return actions
     
-    def get_execution_metrics(self) -> Dict[str, Any]:
+    def get_execution_metrics(self) -> ExecutionMetrics:
         """Get metrics about executions.
-        
+
         Returns:
             Dictionary with execution metrics
         """
@@ -217,16 +217,16 @@ class ExecutionMonitor:
                 'metrics_timestamp': datetime.now(timezone.utc).isoformat()
             }
     
-    def kill_zombie_processes(self, dry_run: bool = True) -> List[Dict[str, Any]]:
+    def kill_zombie_processes(self, dry_run: bool = True) -> list[CleanupAction]:
         """Kill zombie execution processes.
-        
+
         Args:
             dry_run: If True, only report what would be done
-            
+
         Returns:
             List of actions taken/would be taken
         """
-        actions = []
+        actions: list[CleanupAction] = []
         running = get_running_executions()
         
         for execution in running:
