@@ -196,11 +196,15 @@ class ExecutionSystemTester:
                 self.tests_passed += 1
                 self.test_results.append(("Background execution", "✅ Passed"))
                 console.print("[green]✅ Background execution started[/green]")
-                
-                # Wait a bit for execution to start
-                time.sleep(2)
-                
-                # Check running executions
+
+                # Poll for execution to start (max 2s with early exit)
+                for _ in range(10):
+                    exit_code, stdout, stderr = self.run_command("emdx exec running")
+                    if "claude" in stdout.lower() or "running" in stdout.lower():
+                        break
+                    time.sleep(0.2)
+
+                # Check running executions (use last result from loop)
                 exit_code, stdout, stderr = self.run_command("emdx exec running")
                 if "claude" in stdout.lower() or "running" in stdout.lower():
                     self.tests_passed += 1
