@@ -26,9 +26,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "^3.11"
 typer = {extras = ["all"], version = "^0.15.0"}
-click = ">=8.1.0"  # Typer 0.15+ requires click 8.1+
 rich = "^13.0.0"
-python-dotenv = "^1.0.0"
 textual = "^4.0.0"
 psutil = "^7.0.0"
 
@@ -51,12 +49,11 @@ all = ["sentence-transformers", "scikit-learn", "numpy", "anthropic",
        "google-auth-oauthlib"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.0.0"
-pytest-cov = "^4.0.0"
-pytest-asyncio = "^0.21.0"
-black = "^23.0.0"
-ruff = "^0.1.0"
-mypy = "^1.0.0"
+pytest = "^8.0.0"
+pytest-cov = "^6.0.0"
+pytest-asyncio = "^0.24.0"
+ruff = "^0.14.0"
+mypy = "^1.8.0"
 pre-commit = "^3.0.0"
 
 [tool.poetry.scripts]
@@ -66,12 +63,14 @@ emdx = "emdx.main:run"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.black]
-line-length = 100
-target-version = ['py311']
-
 [tool.ruff]
 line-length = 100
+target-version = "py311"
+
+[tool.ruff.format]
+# Ruff format replaces black
+quote-style = "double"
+indent-style = "space"
 
 [tool.ruff.lint]
 select = [
@@ -96,7 +95,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-minversion = "7.0.0"
+minversion = "8.0.0"
 addopts = "-v --tb=short --strict-markers"
 testpaths = ["tests"]
 markers = [
