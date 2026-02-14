@@ -2,7 +2,17 @@
 
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import pytest
+import typer
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _run_discovery,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +100,88 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestSafeDiscoveryCommands:
+    """Tests for command injection protection in _run_discovery."""
+
+    def test_safe_commands_allowlist_exists(self):
+        """Verify expected safe commands are in the allowlist."""
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+        assert "git" in SAFE_DISCOVERY_COMMANDS
+        assert "ls" in SAFE_DISCOVERY_COMMANDS
+        assert "rg" in SAFE_DISCOVERY_COMMANDS
+
+    def test_validate_rejects_unsafe_commands(self):
+        """Commands not in allowlist should be rejected."""
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command(["bash", "-c", "echo pwned"])
+
+    def test_validate_rejects_shell_operators(self):
+        """Semicolon injection attempts should fail parsing or validation."""
+        # shlex.split handles this, but if someone passes a list directly
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command(["rm", "-rf", "/"])
+
+    def test_validate_accepts_safe_command(self):
+        """Safe commands should pass validation."""
+        # Should not raise
+        _validate_discovery_command(["fd", "-e", "py", "src/"])
+
+    def test_validate_accepts_absolute_paths_to_safe_commands(self):
+        """Absolute paths to safe commands should pass."""
+        # Should not raise
+        _validate_discovery_command(["/usr/bin/fd", "-e", "py"])
+        _validate_discovery_command(["/usr/bin/find", ".", "-name", "*.py"])
+
+    def test_validate_rejects_empty_command(self):
+        """Empty commands should be rejected."""
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command([])
+
+    @patch("subprocess.run")
+    def test_run_discovery_uses_safe_parsing(self, mock_run):
+        """_run_discovery should use shlex.split and shell=False by default."""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "file1.py\nfile2.py"
+        mock_run.return_value.stderr = ""
+
+        result = _run_discovery("fd -e py src/")
+
+        # Verify shell=False was used (secure mode)
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["shell"] is False
+
+        # Verify command was parsed as list
+        call_args = mock_run.call_args[0][0]
+        assert isinstance(call_args, list)
+        assert call_args == ["fd", "-e", "py", "src/"]
+
+        assert result == ["file1.py", "file2.py"]
+
+    @patch("subprocess.run")
+    def test_run_discovery_allow_shell_uses_shell_true(self, mock_run):
+        """With allow_shell=True, should use shell=True."""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "result"
+        mock_run.return_value.stderr = ""
+
+        _run_discovery("some | piped | command", allow_shell=True)
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["shell"] is True
+
+    def test_run_discovery_rejects_command_injection(self):
+        """Attempted command injection should be blocked."""
+        # These patterns would be dangerous with shell=True
+        dangerous_commands = [
+            "; rm -rf /",
+            "| cat /etc/passwd",
+            "&& echo pwned",
+            "$(evil_command)",
+        ]
+        for cmd in dangerous_commands:
+            with pytest.raises(typer.Exit):
+                _run_discovery(cmd)

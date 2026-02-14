@@ -29,6 +29,7 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -138,16 +139,74 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
-def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
+# Safe commands allowed for --each discovery without --allow-shell
+# These are common file-discovery tools that don't support arbitrary execution
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd", "find", "ls", "git", "rg", "grep", "eza", "tree", "locate",
+})
+
+
+def _validate_discovery_command(args: List[str]) -> None:
+    """Validate that a discovery command is safe to run.
+
+    Raises typer.Exit if the command is not in the allowlist.
+    """
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    cmd = args[0]
+    # Handle absolute paths like /usr/bin/fd
+    cmd_basename = Path(cmd).name
+
+    if cmd_basename not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{cmd_basename}' is not in the safe command allowlist.\n"
+            f"Allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+            f"Use --allow-shell to run arbitrary shell commands (security risk).\n"
         )
+        raise typer.Exit(1)
+
+
+def _run_discovery(command: str, allow_shell: bool = False) -> List[str]:
+    """Run a command and return output lines as items.
+
+    By default, uses shlex.split() and shell=False for security.
+    Only commands in SAFE_DISCOVERY_COMMANDS are allowed unless allow_shell=True.
+
+    Args:
+        command: The command string to run
+        allow_shell: If True, run with shell=True (security risk, requires explicit opt-in)
+    """
+    try:
+        if allow_shell:
+            # User explicitly requested shell execution - warn but proceed
+            sys.stderr.write("delegate: running discovery with shell=True (--allow-shell)\n")
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        else:
+            # Secure path: parse command and validate against allowlist
+            try:
+                args = shlex.split(command)
+            except ValueError as e:
+                sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+                raise typer.Exit(1)
+
+            _validate_discovery_command(args)
+
+            result = subprocess.run(
+                args,
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
         if result.returncode != 0:
             sys.stderr.write(f"delegate: discovery failed: {result.stderr.strip()}\n")
             raise typer.Exit(1)
@@ -570,11 +629,15 @@ def delegate(
     ),
     each: str = typer.Option(
         None, "--each",
-        help="Shell command to discover items (one per line)",
+        help="Command to discover items (one per line). Only safe commands allowed by default.",
     ),
     do: str = typer.Option(
         None, "--do",
         help="Template for each discovered item (use {{item}})",
+    ),
+    allow_shell: bool = typer.Option(
+        False, "--allow-shell",
+        help="Allow arbitrary shell commands in --each (security risk)",
     ),
 ):
     """Delegate tasks to Claude agents with results on stdout.
@@ -629,7 +692,7 @@ def delegate(
 
     # 0. Dynamic discovery: --each "cmd" --do "template {{item}}"
     if each:
-        items = _run_discovery(each)
+        items = _run_discovery(each, allow_shell=allow_shell)
         template = do or "{{item}}"
         discovered = [template.replace("{{item}}", item) for item in items]
         task_list = discovered + task_list  # discovered tasks + any explicit tasks
