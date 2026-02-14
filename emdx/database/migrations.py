@@ -1955,6 +1955,120 @@ def migration_036_add_execution_metrics(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_037_fix_orphan_prone_fks(conn: sqlite3.Connection):
+    """Fix foreign keys that don't specify ON DELETE behavior.
+
+    This migration fixes tables where FK constraints don't specify what happens
+    when the referenced document is deleted, leading to orphan records:
+
+    - gists: document_id → ON DELETE CASCADE
+    - gdocs: document_id → ON DELETE CASCADE
+    - export_history: document_id → ON DELETE CASCADE, profile_id → ON DELETE CASCADE
+    - cascade_runs: start_doc_id → ON DELETE SET NULL, current_doc_id → ON DELETE SET NULL
+
+    This is a schema integrity fix identified in the migration/schema debt audit.
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = OFF")
+
+    # 1. Fix gists table
+    cursor.execute("DROP TABLE IF EXISTS gists_new")
+    cursor.execute("""
+        CREATE TABLE gists_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            gist_id TEXT NOT NULL,
+            gist_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_public BOOLEAN DEFAULT 0,
+            FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        INSERT INTO gists_new SELECT * FROM gists
+    """)
+    cursor.execute("DROP TABLE gists")
+    cursor.execute("ALTER TABLE gists_new RENAME TO gists")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)")
+
+    # 2. Fix gdocs table
+    cursor.execute("DROP TABLE IF EXISTS gdocs_new")
+    cursor.execute("""
+        CREATE TABLE gdocs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            gdoc_id TEXT NOT NULL,
+            gdoc_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(document_id, gdoc_id),
+            FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        INSERT INTO gdocs_new SELECT * FROM gdocs
+    """)
+    cursor.execute("DROP TABLE gdocs")
+    cursor.execute("ALTER TABLE gdocs_new RENAME TO gdocs")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_document ON gdocs(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gdocs_gdoc_id ON gdocs(gdoc_id)")
+
+    # 3. Fix export_history table
+    cursor.execute("DROP TABLE IF EXISTS export_history_new")
+    cursor.execute("""
+        CREATE TABLE export_history_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            profile_id INTEGER NOT NULL,
+            dest_type TEXT NOT NULL,
+            dest_url TEXT,
+            exported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (profile_id) REFERENCES export_profiles(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        INSERT INTO export_history_new SELECT * FROM export_history
+    """)
+    cursor.execute("DROP TABLE export_history")
+    cursor.execute("ALTER TABLE export_history_new RENAME TO export_history")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")
+
+    # 4. Fix cascade_runs table - use SET NULL since we want to preserve run history
+    cursor.execute("DROP TABLE IF EXISTS cascade_runs_new")
+    cursor.execute("""
+        CREATE TABLE cascade_runs_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            start_doc_id INTEGER,
+            current_doc_id INTEGER,
+            start_stage TEXT NOT NULL,
+            stop_stage TEXT NOT NULL DEFAULT 'done',
+            current_stage TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'running'
+                CHECK (status IN ('running', 'completed', 'failed', 'paused')),
+            pr_url TEXT,
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_message TEXT,
+            FOREIGN KEY (start_doc_id) REFERENCES documents(id) ON DELETE SET NULL,
+            FOREIGN KEY (current_doc_id) REFERENCES documents(id) ON DELETE SET NULL
+        )
+    """)
+    cursor.execute("""
+        INSERT INTO cascade_runs_new SELECT * FROM cascade_runs
+    """)
+    cursor.execute("DROP TABLE cascade_runs")
+    cursor.execute("ALTER TABLE cascade_runs_new RENAME TO cascade_runs")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_status ON cascade_runs(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc ON cascade_runs(start_doc_id)")
+
+    cursor.execute("PRAGMA foreign_keys = ON")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -1994,6 +2108,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
     (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
+    (37, "Fix orphan-prone foreign keys", migration_037_fix_orphan_prone_fks),
 ]
 
 

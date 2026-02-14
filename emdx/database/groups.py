@@ -134,7 +134,17 @@ def update_group(group_id: int, **kwargs) -> bool:
 
     Returns:
         True if update succeeded
+
+    Security Note:
+        Field names are interpolated into SQL but protected by the allowed_fields
+        allowlist. Only columns explicitly listed below can be updated, preventing
+        SQL injection through kwargs. The allowlist pattern is safe because:
+        1. Field names come from a hardcoded set, not user input
+        2. Values are always parameterized (?)
+        3. New columns require explicit code changes to be updatable
     """
+    # SECURITY: This allowlist prevents SQL injection - only these field names
+    # can be interpolated into the SET clause. Values are always parameterized.
     allowed_fields = {
         "name", "description", "parent_group_id", "group_type",
         "project", "is_active",
