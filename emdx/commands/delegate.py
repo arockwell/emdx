@@ -138,12 +138,76 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Safe discovery commands - only these are allowed for --each
+# These are file-listing tools that don't execute arbitrary code
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find alternative
+    "find",         # Traditional file finder
+    "git",          # Git commands (ls-files, diff --name-only, etc.)
+    "ls",           # List files
+    "rg",           # Ripgrep (--files-with-matches)
+    "grep",         # Grep (--files-with-matches)
+    "eza",          # Modern ls alternative
+    "exa",          # Older name for eza
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Parse and validate a discovery command for safety.
+
+    Only allows commands from SAFE_DISCOVERY_COMMANDS.
+    Returns the command as a list of arguments (for shell=False execution).
+
+    Raises typer.Exit on invalid/unsafe commands.
+    """
+    import shlex
+
+    try:
+        parts = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not parts:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(parts[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: unsafe discovery command '{base_cmd}'\n"
+            f"delegate: allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+        )
+        raise typer.Exit(1)
+
+    # Check for shell metacharacters that could be used for injection
+    # even with shell=False (e.g., if someone tries to sneak in backticks)
+    dangerous_chars = set(";|&$`\\")
+    for part in parts[1:]:  # Skip the command itself
+        if any(c in part for c in dangerous_chars):
+            sys.stderr.write(
+                f"delegate: discovery arguments contain unsafe characters: {part}\n"
+            )
+            raise typer.Exit(1)
+
+    return parts
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    SECURITY: Only allows commands from SAFE_DISCOVERY_COMMANDS to prevent
+    command injection. Uses shell=False with argument list for safe execution.
+    """
+    # Validate and parse the command
+    cmd_parts = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            cmd_parts,
+            shell=False,  # SECURE: Never use shell=True with user input
             capture_output=True,
             text=True,
             timeout=30,
@@ -162,6 +226,9 @@ def _run_discovery(command: str) -> List[str]:
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        sys.stderr.write(f"delegate: command not found: {cmd_parts[0]}\n")
         raise typer.Exit(1)
 
 

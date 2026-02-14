@@ -1,9 +1,26 @@
 """Database migration system for emdx."""
 
+import re
 import sqlite3
 from typing import Callable
 
 from ..config.settings import get_db_path
+
+# Regex for valid SQL column names - alphanumeric and underscore, starting with letter/underscore
+_VALID_COLUMN_NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$", re.IGNORECASE)
+
+
+def _validate_column_name(name: str) -> str:
+    """Validate that a column name is safe for SQL interpolation.
+
+    SECURITY: This prevents SQL injection when column names must be interpolated
+    into SQL statements (parameterization doesn't work for identifiers).
+
+    Raises ValueError if the column name contains invalid characters.
+    """
+    if not _VALID_COLUMN_NAME_RE.match(name):
+        raise ValueError(f"Invalid column name: {name!r}")
+    return name
 
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
@@ -1822,6 +1839,8 @@ def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
 
     for col_name, col_def in new_columns:
         if col_name not in existing:
+            # SECURITY: Validate column name to prevent SQL injection
+            _validate_column_name(col_name)
             cursor.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_def}")
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)")
@@ -1948,6 +1967,8 @@ def migration_036_add_execution_metrics(conn: sqlite3.Connection):
 
     for col_name, col_def in new_columns:
         if col_name not in existing:
+            # SECURITY: Validate column name to prevent SQL injection
+            _validate_column_name(col_name)
             cursor.execute(f"ALTER TABLE executions ADD COLUMN {col_name} {col_def}")
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_task_id ON executions(task_id)")
