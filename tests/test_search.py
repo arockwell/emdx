@@ -534,10 +534,10 @@ class TestSearchEdgeCases:
 
         db.save_document("C++ Programming", "Learn C++ basics", "project1")
 
-        # Note: FTS5 handles special characters differently
-        # Search for just "C" should match
-        results = search_documents("C")
-        assert len(results) >= 0  # May or may not match depending on tokenizer
+        # Search for the full term "Programming" which should definitely match
+        results = search_documents("Programming")
+        assert len(results) == 1
+        assert results[0]["title"] == "C++ Programming"
 
     def test_search_with_phrase(self, mock_db_connection):
         """Test phrase search with FTS5."""
@@ -546,10 +546,10 @@ class TestSearchEdgeCases:
         db.save_document("Python Programming", "Learn Python web development", "project1")
         db.save_document("Web Development", "Learn web programming with Python", "project1")
 
-        # FTS5 phrase search with quotes
+        # FTS5 phrase search with quotes - should match first doc with exact phrase
         results = search_documents('"Python web"')
-        # Should match the first document which has "Python web" as a phrase
-        assert len(results) >= 0
+        assert len(results) == 1
+        assert results[0]["title"] == "Python Programming"
 
     def test_search_with_or_literal(self, mock_db_connection):
         """Test that 'OR' is treated as a literal word, not FTS operator.
