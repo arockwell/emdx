@@ -18,16 +18,11 @@ import typer
 from rich import box
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.table import Table
 
 from ..database import db
 from ..database.documents import save_document
-from ..models.tags import add_tags_to_document
 from ..services.similarity import SimilarityService
 from ..utils.output import console
-
-# Create typer app for this module
-app = typer.Typer(help="Dream Journal - KB consolidation and insights")
 
 
 @dataclass
@@ -503,7 +498,6 @@ def _setup_cron(hour: int = 3) -> bool:
         return False
 
 
-@app.command(name="dream")
 def dream(
     schedule: bool = typer.Option(
         False, "--schedule", "-s", help="Set up daily cron job at 3am"
@@ -668,27 +662,3 @@ def dream(
             console.print("[dim]View with: emdx dream --latest[/dim]")
 
 
-# Also expose dream as top-level function for direct import
-def dream_main(
-    schedule: bool = False,
-    digest_only: bool = False,
-    latest: bool = False,
-    days: int = 7,
-    threshold: float = 0.8,
-    quiet: bool = False,
-    json_output: bool = False,
-):
-    """Programmatic interface to dream command."""
-    dream(
-        schedule=schedule,
-        digest_only=digest_only,
-        latest=latest,
-        days=days,
-        threshold=threshold,
-        quiet=quiet,
-        json_output=json_output,
-    )
-
-
-if __name__ == "__main__":
-    app()
