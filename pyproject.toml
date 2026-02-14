@@ -39,7 +39,7 @@ sentence-transformers = {version = "^3.0.0", optional = true}
 anthropic = {version = "^0.40.0", optional = true}
 numpy = {version = "^1.26.0", optional = true}
 google-api-python-client = {version = "^2.100.0", optional = true}
-google-auth-httplib2 = {version = "^0.2.0", optional = true}
+google-auth-httplib2 = {version = "^0.3.0", optional = true}
 google-auth-oauthlib = {version = "^1.2.0", optional = true}
 
 [tool.poetry.extras]
