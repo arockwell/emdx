@@ -20,6 +20,7 @@ with auto-configuration (e.g., for modules that may run standalone).
 """
 
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -107,6 +108,7 @@ def setup_tui_logging(module_name: str) -> tuple[logging.Logger, logging.Logger]
 
         return main_logger, key_logger
 
-    except Exception:
-        # Fallback if logging setup fails
+    except Exception as e:
+        # Fallback if logging setup fails - use stderr since logging is broken
+        print(f"emdx: TUI logging setup failed: {e}", file=sys.stderr)
         return logging.getLogger(module_name), logging.getLogger("key_events")

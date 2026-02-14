@@ -29,6 +29,7 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import logging
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -36,6 +37,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+
+logger = logging.getLogger(__name__)
 
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
@@ -61,8 +64,8 @@ def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
     try:
         from ..models.tasks import update_task
         update_task(task_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to update task %s: %s", task_id, e)
 
 
 def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
@@ -72,8 +75,8 @@ def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
     try:
         from ..models.executions import update_execution
         update_execution(exec_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to update execution %s: %s", exec_id, e)
 
 
 PR_INSTRUCTION = (

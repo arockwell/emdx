@@ -262,7 +262,8 @@ class PalettePresenter:
                 ]
             return []
         except ValueError:
-            pass
+            # Query is not a numeric ID - continue with semantic search
+            logger.debug("Query '%s' is not a document ID, trying semantic search", query)
 
         # Check for similar: prefix
         if query.startswith("similar:"):

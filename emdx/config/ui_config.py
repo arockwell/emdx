@@ -6,8 +6,11 @@ Config is stored in ~/.config/emdx/ui_config.json
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from .constants import EMDX_CONFIG_DIR
 
@@ -58,9 +61,9 @@ def save_ui_config(config: dict[str, Any]) -> None:
     path = get_ui_config_path()
     try:
         path.write_text(json.dumps(config, indent=2) + "\n")
-    except OSError:
-        # Silently fail - config is non-critical
-        pass
+    except OSError as e:
+        # Config is non-critical but log for debugging
+        logger.debug("Failed to save UI config to %s: %s", path, e)
 
 
 def get_theme() -> str:
