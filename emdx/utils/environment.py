@@ -7,7 +7,13 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from emdx.config.constants import EMDX_CONFIG_DIR
+from emdx.config.constants import (
+    EMDX_CONFIG_DIR,
+    ENV_ANTHROPIC_API_KEY,
+    ENV_CURSOR_API_KEY,
+    VERSION_CHECK_TIMEOUT_SECONDS,
+    AUTH_CHECK_TIMEOUT_SECONDS,
+)
 from emdx.utils.output import console
 
 
@@ -93,7 +99,7 @@ class EnvironmentValidator:
                             version_cmd,
                             capture_output=True,
                             text=True,
-                            timeout=5
+                            timeout=VERSION_CHECK_TIMEOUT_SECONDS
                         )
                         if result.returncode == 0:
                             self.info[f"{cmd}_version"] = result.stdout.strip()
@@ -176,7 +182,7 @@ class EnvironmentValidator:
             self.warnings.append("Claude config file not found - claude might not be properly configured")
 
         # Check ANTHROPIC_API_KEY
-        if os.environ.get("ANTHROPIC_API_KEY"):
+        if os.environ.get(ENV_ANTHROPIC_API_KEY):
             self.info["api_key"] = "set"
         else:
             # Check if claude works without explicit API key
@@ -185,17 +191,17 @@ class EnvironmentValidator:
                     ["claude", "--version"],
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=VERSION_CHECK_TIMEOUT_SECONDS
                 )
                 if result.returncode != 0:
-                    self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
+                    self.warnings.append(f"{ENV_ANTHROPIC_API_KEY} not set and claude might not work")
             except Exception as e:
                 self.warnings.append(f"Cannot verify claude installation: {e}")
 
     def _check_cursor_config(self) -> None:
         """Check Cursor-specific configuration."""
         # Check CURSOR_API_KEY
-        if os.environ.get("CURSOR_API_KEY"):
+        if os.environ.get(ENV_CURSOR_API_KEY):
             self.info["cursor_api_key"] = "set"
 
         # Check authentication status
@@ -204,7 +210,7 @@ class EnvironmentValidator:
                 ["cursor", "agent", "status"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=AUTH_CHECK_TIMEOUT_SECONDS
             )
             if "Not logged in" in result.stdout:
                 self.warnings.append(

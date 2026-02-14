@@ -33,6 +33,18 @@ DEFAULT_BATCH_LIMIT = 100  # Large batch operations, document loading
 EXECUTION_TIMEOUT_SECONDS = 3600  # 1 hour - max time for agent execution
 STALE_EXECUTION_TIMEOUT_SECONDS = 1800  # 30 minutes - when to consider execution stale
 
+# Standard execution timeouts (used across CLI executors and commands)
+DEFAULT_TIMEOUT_SECONDS = 300  # 5 minutes - standard task timeout
+DELEGATE_TIMEOUT_SECONDS = 600  # 10 minutes - delegate command timeout
+IMPLEMENTATION_TIMEOUT_SECONDS = 1800  # 30 minutes - implementation/code generation tasks
+CASCADE_TIMEOUT_SECONDS = 300  # 5 minutes - cascade stage (non-implementation)
+CASCADE_IMPLEMENTATION_TIMEOUT_SECONDS = 1800  # 30 minutes - cascade implementation stage
+
+# Discovery and subprocess timeouts
+DISCOVERY_TIMEOUT_SECONDS = 30  # Command discovery (e.g., fd/find for items)
+VERSION_CHECK_TIMEOUT_SECONDS = 5  # CLI version checks
+AUTH_CHECK_TIMEOUT_SECONDS = 10  # Authentication status checks
+
 # Process monitoring
 MAX_PROCESS_RUNTIME_HOURS = 2  # Hours before a process is considered stuck
 EXECUTION_STALE_TIMEOUT_MINUTES = 30  # Minutes before execution marked stale
@@ -190,4 +202,94 @@ DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
 # CLAUDE MODEL CONFIGURATION
 # =============================================================================
 
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+# Primary model names - use these as the source of truth
+CLAUDE_OPUS_MODEL = "claude-opus-4-5-20251101"
+CLAUDE_SONNET_MODEL = "claude-sonnet-4-5-20250929"
+
+# Default model for general execution
+DEFAULT_CLAUDE_MODEL = CLAUDE_OPUS_MODEL
+
+# Model for lighter-weight tasks (Q&A, suggestions)
+DEFAULT_CLAUDE_FAST_MODEL = CLAUDE_SONNET_MODEL
+
+# =============================================================================
+# ENVIRONMENT VARIABLE NAMES
+# =============================================================================
+
+# Critical environment variables
+ENV_ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
+ENV_EMDX_DATABASE_URL = "EMDX_DATABASE_URL"
+ENV_EMDX_TEST_DB = "EMDX_TEST_DB"
+ENV_EMDX_CLI_TOOL = "EMDX_CLI_TOOL"
+ENV_CURSOR_API_KEY = "CURSOR_API_KEY"
+
+
+# =============================================================================
+# ENVIRONMENT VALIDATION
+# =============================================================================
+
+import os
+from typing import List, Optional, Tuple
+
+
+class EnvValidationError(Exception):
+    """Raised when required environment variables are missing."""
+    pass
+
+
+def validate_api_key(raise_on_missing: bool = False) -> Tuple[bool, Optional[str]]:
+    """Validate that ANTHROPIC_API_KEY is set.
+
+    Args:
+        raise_on_missing: If True, raises EnvValidationError when key is missing
+
+    Returns:
+        Tuple of (is_valid, error_message or None)
+
+    Raises:
+        EnvValidationError: If raise_on_missing=True and key is not set
+    """
+    api_key = os.environ.get(ENV_ANTHROPIC_API_KEY)
+    if api_key:
+        return True, None
+
+    error_msg = f"{ENV_ANTHROPIC_API_KEY} environment variable is not set"
+    if raise_on_missing:
+        raise EnvValidationError(error_msg)
+    return False, error_msg
+
+
+def validate_database_url() -> Tuple[bool, Optional[str]]:
+    """Validate EMDX_DATABASE_URL if set.
+
+    Returns:
+        Tuple of (is_valid, error_message or None)
+    """
+    db_url = os.environ.get(ENV_EMDX_DATABASE_URL)
+    if not db_url:
+        # Not set is OK - we use the default path
+        return True, None
+
+    # Basic validation - just check it's not empty
+    if db_url.strip():
+        return True, None
+
+    return False, f"{ENV_EMDX_DATABASE_URL} is set but empty"
+
+
+def get_required_env_vars() -> List[str]:
+    """Get list of environment variable names that are recommended.
+
+    These are not strictly required as Claude CLI may have its own auth,
+    but they should be validated when doing API operations directly.
+    """
+    return [ENV_ANTHROPIC_API_KEY]
+
+
+def get_optional_env_vars() -> List[str]:
+    """Get list of optional environment variable names."""
+    return [
+        ENV_EMDX_DATABASE_URL,
+        ENV_EMDX_CLI_TOOL,
+        ENV_CURSOR_API_KEY,
+    ]

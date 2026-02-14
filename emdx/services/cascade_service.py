@@ -11,6 +11,10 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
+from emdx.config.constants import (
+    CASCADE_TIMEOUT_SECONDS,
+    CASCADE_IMPLEMENTATION_TIMEOUT_SECONDS,
+)
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
 from emdx.database.documents import get_document
@@ -94,7 +98,7 @@ def monitor_execution_completion(
     from emdx.models.executions import get_execution, update_execution_status
 
     poll_interval = 2.0
-    max_wait = 1800 if stage == "planned" else 300
+    max_wait = CASCADE_IMPLEMENTATION_TIMEOUT_SECONDS if stage == "planned" else CASCADE_TIMEOUT_SECONDS
     start_time = time.time()
 
     while True:

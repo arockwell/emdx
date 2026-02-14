@@ -16,6 +16,14 @@ from .constants import (
     EXECUTION_TIMEOUT_SECONDS,
     STALE_EXECUTION_TIMEOUT_SECONDS,
     DEFAULT_REFRESH_INTERVAL_SECONDS,
+    DEFAULT_TIMEOUT_SECONDS,
+    DELEGATE_TIMEOUT_SECONDS,
+    IMPLEMENTATION_TIMEOUT_SECONDS,
+    CASCADE_TIMEOUT_SECONDS,
+    CASCADE_IMPLEMENTATION_TIMEOUT_SECONDS,
+    DISCOVERY_TIMEOUT_SECONDS,
+    VERSION_CHECK_TIMEOUT_SECONDS,
+    AUTH_CHECK_TIMEOUT_SECONDS,
     # Concurrency
     DEFAULT_MAX_CONCURRENT_STAGES,
     DEFAULT_MAX_AGENT_ITERATIONS,
@@ -34,8 +42,23 @@ from .constants import (
     EXECUTION_HISTORY_DAYS,
     # Task defaults
     DEFAULT_TASK_PRIORITY,
-    # Claude model
+    # Claude models
     DEFAULT_CLAUDE_MODEL,
+    CLAUDE_OPUS_MODEL,
+    CLAUDE_SONNET_MODEL,
+    DEFAULT_CLAUDE_FAST_MODEL,
+    # Environment variables
+    ENV_ANTHROPIC_API_KEY,
+    ENV_EMDX_DATABASE_URL,
+    ENV_EMDX_TEST_DB,
+    ENV_EMDX_CLI_TOOL,
+    ENV_CURSOR_API_KEY,
+    # Environment validation
+    EnvValidationError,
+    validate_api_key,
+    validate_database_url,
+    get_required_env_vars,
+    get_optional_env_vars,
 )
 
 __all__ = [
@@ -52,6 +75,14 @@ __all__ = [
     "EXECUTION_TIMEOUT_SECONDS",
     "STALE_EXECUTION_TIMEOUT_SECONDS",
     "DEFAULT_REFRESH_INTERVAL_SECONDS",
+    "DEFAULT_TIMEOUT_SECONDS",
+    "DELEGATE_TIMEOUT_SECONDS",
+    "IMPLEMENTATION_TIMEOUT_SECONDS",
+    "CASCADE_TIMEOUT_SECONDS",
+    "CASCADE_IMPLEMENTATION_TIMEOUT_SECONDS",
+    "DISCOVERY_TIMEOUT_SECONDS",
+    "VERSION_CHECK_TIMEOUT_SECONDS",
+    "AUTH_CHECK_TIMEOUT_SECONDS",
     # Concurrency
     "DEFAULT_MAX_CONCURRENT_STAGES",
     "DEFAULT_MAX_AGENT_ITERATIONS",
@@ -70,6 +101,21 @@ __all__ = [
     "EXECUTION_HISTORY_DAYS",
     # Task defaults
     "DEFAULT_TASK_PRIORITY",
-    # Claude model
+    # Claude models
     "DEFAULT_CLAUDE_MODEL",
+    "CLAUDE_OPUS_MODEL",
+    "CLAUDE_SONNET_MODEL",
+    "DEFAULT_CLAUDE_FAST_MODEL",
+    # Environment variables
+    "ENV_ANTHROPIC_API_KEY",
+    "ENV_EMDX_DATABASE_URL",
+    "ENV_EMDX_TEST_DB",
+    "ENV_EMDX_CLI_TOOL",
+    "ENV_CURSOR_API_KEY",
+    # Environment validation
+    "EnvValidationError",
+    "validate_api_key",
+    "validate_database_url",
+    "get_required_env_vars",
+    "get_optional_env_vars",
 ]

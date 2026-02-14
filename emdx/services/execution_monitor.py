@@ -8,6 +8,7 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
+from ..config.constants import STALE_EXECUTION_TIMEOUT_SECONDS
 from ..database.connection import db_connection
 from ..models.executions import (
     Execution,
@@ -20,11 +21,12 @@ from ..models.executions import (
 class ExecutionMonitor:
     """Monitor and manage execution lifecycle."""
     
-    def __init__(self, stale_timeout_seconds: int = 1800):
+    def __init__(self, stale_timeout_seconds: int = STALE_EXECUTION_TIMEOUT_SECONDS):
         """Initialize execution monitor.
-        
+
         Args:
-            stale_timeout_seconds: Seconds after which execution is considered stale (default 30 min)
+            stale_timeout_seconds: Seconds after which execution is considered stale
+                                   (default from STALE_EXECUTION_TIMEOUT_SECONDS)
         """
         self.stale_timeout = stale_timeout_seconds
     

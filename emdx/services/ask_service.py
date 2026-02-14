@@ -20,6 +20,7 @@ except ImportError:
     anthropic = None  # type: ignore[assignment]
     HAS_ANTHROPIC = False
 
+from ..config.constants import DEFAULT_CLAUDE_FAST_MODEL
 from ..database import db
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class Answer:
 class AskService:
     """Answer questions using your knowledge base."""
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+    DEFAULT_MODEL = DEFAULT_CLAUDE_FAST_MODEL
     MIN_EMBEDDINGS_FOR_SEMANTIC = 50  # Use semantic only if we have enough coverage
 
     def __init__(self, model: Optional[str] = None):

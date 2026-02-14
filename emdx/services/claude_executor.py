@@ -22,7 +22,7 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 from ..config.cli_config import CliTool, get_cli_config, DEFAULT_ALLOWED_TOOLS
-from ..config.settings import DEFAULT_CLAUDE_MODEL
+from ..config.constants import DEFAULT_CLAUDE_MODEL, DEFAULT_TIMEOUT_SECONDS
 from ..utils.environment import ensure_claude_in_path, validate_execution_environment
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
@@ -230,7 +230,7 @@ def execute_cli_sync(
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
     doc_id: Optional[str] = None,
-    timeout: int = 300,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict:
     """Execute a task with specified CLI tool synchronously, waiting for completion.
 
@@ -246,7 +246,7 @@ def execute_cli_sync(
         allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
         working_dir: Working directory for execution
         doc_id: Document ID (for logging)
-        timeout: Maximum seconds to wait (default 300 = 5 minutes)
+        timeout: Maximum seconds to wait (default from DEFAULT_TIMEOUT_SECONDS)
 
     Returns:
         Dict with 'success' (bool), 'output' (str) or 'error' (str), and 'exit_code' (int)
@@ -391,7 +391,7 @@ def execute_claude_sync(
     allowed_tools: Optional[List[str]] = None,
     working_dir: Optional[str] = None,
     doc_id: Optional[str] = None,
-    timeout: int = 300,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict:
     """Execute a task with Claude synchronously, waiting for completion.
 
@@ -405,7 +405,7 @@ def execute_claude_sync(
         allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
         working_dir: Working directory for execution
         doc_id: Document ID (for logging)
-        timeout: Maximum seconds to wait (default 300 = 5 minutes)
+        timeout: Maximum seconds to wait (default from DEFAULT_TIMEOUT_SECONDS)
 
     Returns:
         Dict with 'success' (bool) and 'output' (str) or 'error' (str)

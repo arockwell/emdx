@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+from ..config.constants import STALE_EXECUTION_TIMEOUT_SECONDS
 from ..database.connection import db_connection
 from ..utils.datetime_utils import parse_timestamp
 
@@ -247,11 +248,12 @@ def update_execution_heartbeat(exec_id: int) -> None:
         conn.commit()
 
 
-def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
+def get_stale_executions(timeout_seconds: int = STALE_EXECUTION_TIMEOUT_SECONDS) -> List[Execution]:
     """Get executions that haven't sent a heartbeat recently.
 
     Args:
-        timeout_seconds: Seconds after which an execution is considered stale (default 30 min)
+        timeout_seconds: Seconds after which an execution is considered stale
+                         (default from STALE_EXECUTION_TIMEOUT_SECONDS)
 
     Returns:
         List of stale executions
