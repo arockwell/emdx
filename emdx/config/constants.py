@@ -33,9 +33,21 @@ DEFAULT_BATCH_LIMIT = 100  # Large batch operations, document loading
 EXECUTION_TIMEOUT_SECONDS = 3600  # 1 hour - max time for agent execution
 STALE_EXECUTION_TIMEOUT_SECONDS = 1800  # 30 minutes - when to consider execution stale
 
+# Stage-specific execution timeouts
+CASCADE_IMPLEMENTATION_TIMEOUT = 1800  # 30 minutes - implementation stage (writes code)
+CASCADE_STAGE_TIMEOUT = 300  # 5 minutes - analysis/planning stages
+
 # Process monitoring
 MAX_PROCESS_RUNTIME_HOURS = 2  # Hours before a process is considered stuck
 EXECUTION_STALE_TIMEOUT_MINUTES = 30  # Minutes before execution marked stale
+
+# Subprocess timeouts (for quick CLI commands)
+CLI_VERSION_CHECK_TIMEOUT = 5  # Version/status checks
+CLI_AUTH_CHECK_TIMEOUT = 10  # Authentication verification
+DISCOVERY_COMMAND_TIMEOUT = 30  # Shell discovery commands (--each)
+GITHUB_AUTH_TIMEOUT = 10  # gh auth token retrieval
+PROCESS_TERMINATE_TIMEOUT = 3  # Graceful termination wait
+PROCESS_KILL_TIMEOUT = 1  # Force kill wait
 
 # UI refresh intervals
 DEFAULT_REFRESH_INTERVAL_SECONDS = 5  # UI auto-refresh interval
@@ -190,4 +202,58 @@ DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
 # CLAUDE MODEL CONFIGURATION
 # =============================================================================
 
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+# Primary model names (canonical form)
+CLAUDE_MODEL_OPUS = "claude-opus-4-5-20251101"
+CLAUDE_MODEL_SONNET = "claude-sonnet-4-5-20250929"
+
+# Default model for general use
+DEFAULT_CLAUDE_MODEL = CLAUDE_MODEL_OPUS
+
+# Default model for ask/Q&A service (uses sonnet for speed/cost)
+DEFAULT_ASK_MODEL = CLAUDE_MODEL_SONNET
+
+# Cursor model equivalents
+CURSOR_MODEL_OPUS = "opus-4.5"
+CURSOR_MODEL_SONNET = "sonnet-4.5"
+
+
+# =============================================================================
+# ENVIRONMENT VARIABLES
+# =============================================================================
+
+# Critical environment variables that affect behavior
+ENV_VAR_DEFINITIONS = {
+    "EMDX_CLI_TOOL": {
+        "description": "CLI tool to use for agent execution",
+        "valid_values": ["claude", "cursor"],
+        "default": "claude",
+    },
+    "EMDX_SAFE_MODE": {
+        "description": "Enable safe mode (skip risky operations)",
+        "valid_values": ["0", "1", "true", "false", "yes", "no"],
+        "default": "0",
+    },
+    "EMDX_TEST_DB": {
+        "description": "Path to test database (for testing only)",
+        "valid_values": None,  # Any path is valid
+        "default": None,
+    },
+    "ANTHROPIC_API_KEY": {
+        "description": "API key for Anthropic Claude",
+        "valid_values": None,  # Any string
+        "default": None,
+        "sensitive": True,
+    },
+    "CURSOR_API_KEY": {
+        "description": "API key for Cursor",
+        "valid_values": None,
+        "default": None,
+        "sensitive": True,
+    },
+    "GITHUB_TOKEN": {
+        "description": "GitHub personal access token for gist operations",
+        "valid_values": None,
+        "default": None,
+        "sensitive": True,
+    },
+}

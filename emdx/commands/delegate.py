@@ -37,6 +37,7 @@ from typing import List, Optional
 
 import typer
 
+from ..config.constants import DISCOVERY_COMMAND_TIMEOUT
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
@@ -146,7 +147,7 @@ def _run_discovery(command: str) -> List[str]:
             shell=True,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=DISCOVERY_COMMAND_TIMEOUT,
         )
         if result.returncode != 0:
             sys.stderr.write(f"delegate: discovery failed: {result.stderr.strip()}\n")
@@ -161,7 +162,7 @@ def _run_discovery(command: str) -> List[str]:
         return lines
 
     except subprocess.TimeoutExpired:
-        sys.stderr.write("delegate: discovery command timed out after 30s\n")
+        sys.stderr.write(f"delegate: discovery command timed out after {DISCOVERY_COMMAND_TIMEOUT}s\n")
         raise typer.Exit(1)
 
 

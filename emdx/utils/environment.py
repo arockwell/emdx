@@ -7,7 +7,11 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from emdx.config.constants import EMDX_CONFIG_DIR
+from emdx.config.constants import (
+    CLI_AUTH_CHECK_TIMEOUT,
+    CLI_VERSION_CHECK_TIMEOUT,
+    EMDX_CONFIG_DIR,
+)
 from emdx.utils.output import console
 
 
@@ -93,7 +97,7 @@ class EnvironmentValidator:
                             version_cmd,
                             capture_output=True,
                             text=True,
-                            timeout=5
+                            timeout=CLI_VERSION_CHECK_TIMEOUT
                         )
                         if result.returncode == 0:
                             self.info[f"{cmd}_version"] = result.stdout.strip()
@@ -185,7 +189,7 @@ class EnvironmentValidator:
                     ["claude", "--version"],
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=CLI_VERSION_CHECK_TIMEOUT
                 )
                 if result.returncode != 0:
                     self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
@@ -204,7 +208,7 @@ class EnvironmentValidator:
                 ["cursor", "agent", "status"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=CLI_AUTH_CHECK_TIMEOUT
             )
             if "Not logged in" in result.stdout:
                 self.warnings.append(

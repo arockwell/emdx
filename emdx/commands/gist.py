@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 import typer
 
+from emdx.config.constants import GITHUB_AUTH_TIMEOUT
 from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
@@ -39,7 +40,7 @@ def get_github_auth() -> Optional[str]:
             capture_output=True,
             text=True,
             check=True,
-            timeout=10  # Prevent hanging
+            timeout=GITHUB_AUTH_TIMEOUT  # Prevent hanging
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()

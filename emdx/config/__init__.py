@@ -1,6 +1,12 @@
 """Configuration module for emdx."""
 
-from .settings import get_db_path
+from .settings import (
+    get_db_path,
+    get_env_info,
+    get_env_var,
+    validate_all_env_vars,
+    validate_env_var,
+)
 
 # Re-export commonly used constants
 from .constants import (
@@ -12,9 +18,18 @@ from .constants import (
     DEFAULT_RECENT_LIMIT,
     DEFAULT_BROWSE_LIMIT,
     DEFAULT_BATCH_LIMIT,
-    # Timeouts
+    # Timeouts - Agent execution
     EXECUTION_TIMEOUT_SECONDS,
     STALE_EXECUTION_TIMEOUT_SECONDS,
+    CASCADE_IMPLEMENTATION_TIMEOUT,
+    CASCADE_STAGE_TIMEOUT,
+    # Timeouts - Subprocess
+    CLI_VERSION_CHECK_TIMEOUT,
+    CLI_AUTH_CHECK_TIMEOUT,
+    DISCOVERY_COMMAND_TIMEOUT,
+    GITHUB_AUTH_TIMEOUT,
+    PROCESS_TERMINATE_TIMEOUT,
+    PROCESS_KILL_TIMEOUT,
     DEFAULT_REFRESH_INTERVAL_SECONDS,
     # Concurrency
     DEFAULT_MAX_CONCURRENT_STAGES,
@@ -34,12 +49,23 @@ from .constants import (
     EXECUTION_HISTORY_DAYS,
     # Task defaults
     DEFAULT_TASK_PRIORITY,
-    # Claude model
+    # Claude models
     DEFAULT_CLAUDE_MODEL,
+    CLAUDE_MODEL_OPUS,
+    CLAUDE_MODEL_SONNET,
+    DEFAULT_ASK_MODEL,
+    CURSOR_MODEL_OPUS,
+    CURSOR_MODEL_SONNET,
+    # Environment
+    ENV_VAR_DEFINITIONS,
 )
 
 __all__ = [
     "get_db_path",
+    "get_env_var",
+    "get_env_info",
+    "validate_env_var",
+    "validate_all_env_vars",
     # Paths
     "EMDX_CONFIG_DIR",
     "EMDX_LOG_DIR",
@@ -48,9 +74,18 @@ __all__ = [
     "DEFAULT_RECENT_LIMIT",
     "DEFAULT_BROWSE_LIMIT",
     "DEFAULT_BATCH_LIMIT",
-    # Timeouts
+    # Timeouts - Agent execution
     "EXECUTION_TIMEOUT_SECONDS",
     "STALE_EXECUTION_TIMEOUT_SECONDS",
+    "CASCADE_IMPLEMENTATION_TIMEOUT",
+    "CASCADE_STAGE_TIMEOUT",
+    # Timeouts - Subprocess
+    "CLI_VERSION_CHECK_TIMEOUT",
+    "CLI_AUTH_CHECK_TIMEOUT",
+    "DISCOVERY_COMMAND_TIMEOUT",
+    "GITHUB_AUTH_TIMEOUT",
+    "PROCESS_TERMINATE_TIMEOUT",
+    "PROCESS_KILL_TIMEOUT",
     "DEFAULT_REFRESH_INTERVAL_SECONDS",
     # Concurrency
     "DEFAULT_MAX_CONCURRENT_STAGES",
@@ -70,6 +105,13 @@ __all__ = [
     "EXECUTION_HISTORY_DAYS",
     # Task defaults
     "DEFAULT_TASK_PRIORITY",
-    # Claude model
+    # Claude models
     "DEFAULT_CLAUDE_MODEL",
+    "CLAUDE_MODEL_OPUS",
+    "CLAUDE_MODEL_SONNET",
+    "DEFAULT_ASK_MODEL",
+    "CURSOR_MODEL_OPUS",
+    "CURSOR_MODEL_SONNET",
+    # Environment
+    "ENV_VAR_DEFINITIONS",
 ]

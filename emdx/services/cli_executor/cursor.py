@@ -7,6 +7,7 @@ import subprocess
 from typing import Any, Dict, List, Optional
 
 from ...config.cli_config import CLI_CONFIGS, CliTool, resolve_model_alias
+from ...config.constants import CLI_AUTH_CHECK_TIMEOUT, CLI_VERSION_CHECK_TIMEOUT
 from .base import CliCommand, CliExecutor, CliResult
 
 logger = logging.getLogger(__name__)
@@ -239,7 +240,7 @@ class CursorCliExecutor(CliExecutor):
                 ["cursor", "agent", "--version"],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=CLI_VERSION_CHECK_TIMEOUT,
             )
             if result.returncode == 0:
                 info["version"] = result.stdout.strip()
@@ -252,7 +253,7 @@ class CursorCliExecutor(CliExecutor):
                 ["cursor", "agent", "status"],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=CLI_AUTH_CHECK_TIMEOUT,
             )
             if "Not logged in" in result.stdout:
                 info["warnings"].append(

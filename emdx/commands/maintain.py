@@ -25,6 +25,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
 from ..applications import MaintenanceApplication
+from ..config.constants import PROCESS_KILL_TIMEOUT, PROCESS_TERMINATE_TIMEOUT
 from ..config.settings import get_db_path
 from ..utils.output import console
 
@@ -766,12 +767,12 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
                 # Try graceful termination first
                 proc.terminate()
                 try:
-                    proc.wait(timeout=3)
+                    proc.wait(timeout=PROCESS_TERMINATE_TIMEOUT)
                     terminated += 1
                 except psutil.TimeoutExpired:
                     # Force kill if terminate didn't work
                     proc.kill()
-                    proc.wait(timeout=1)
+                    proc.wait(timeout=PROCESS_KILL_TIMEOUT)
                     killed += 1
             except psutil.NoSuchProcess:
                 # Process already gone - count as success

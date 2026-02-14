@@ -22,7 +22,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ..config.constants import EMDX_LOG_DIR
+from ..config.constants import (
+    CASCADE_IMPLEMENTATION_TIMEOUT,
+    CASCADE_STAGE_TIMEOUT,
+    EMDX_LOG_DIR,
+)
 from ..database.documents import get_document, save_document
 from ..database import cascade as cascade_db
 from ..services.claude_executor import execute_claude_detached, execute_claude_sync
@@ -171,7 +175,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
         execution_id = cursor.lastrowid
 
     # Implementation stage needs longer timeout
-    timeout = 1800 if stage == "planned" else 300
+    timeout = CASCADE_IMPLEMENTATION_TIMEOUT if stage == "planned" else CASCADE_STAGE_TIMEOUT
 
     try:
         result = execute_claude_sync(

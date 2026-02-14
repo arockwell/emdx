@@ -9,6 +9,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
 
+from .constants import (
+    CLAUDE_MODEL_OPUS,
+    CLAUDE_MODEL_SONNET,
+    CURSOR_MODEL_OPUS,
+    CURSOR_MODEL_SONNET,
+)
+
 
 # Default tools allowed for Claude CLI execution
 # These are the standard tools that most agents need for basic operations
@@ -77,7 +84,7 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
         default_output_format="stream-json",
         requires_verbose_for_stream=True,
         model_flag="--model",
-        default_model="claude-opus-4-5-20251101",
+        default_model=CLAUDE_MODEL_OPUS,
         supports_allowed_tools=True,
         allowed_tools_flag="--allowedTools",
         force_flag=None,
@@ -107,19 +114,19 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
 # Use these aliases for portable commands that work with either CLI
 MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     "opus": {
-        "claude": "claude-opus-4-5-20251101",
-        "cursor": "opus-4.5",
+        "claude": CLAUDE_MODEL_OPUS,
+        "cursor": CURSOR_MODEL_OPUS,
     },
     "sonnet": {
-        "claude": "claude-sonnet-4-5-20250929",
-        "cursor": "sonnet-4.5",
+        "claude": CLAUDE_MODEL_SONNET,
+        "cursor": CURSOR_MODEL_SONNET,
     },
     "auto": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": CLAUDE_MODEL_SONNET,
         "cursor": "auto",
     },
     "fast": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": CLAUDE_MODEL_SONNET,
         "cursor": "auto",
     },
 }
@@ -174,17 +181,17 @@ def get_available_models(cli_tool: CliTool) -> List[str]:
     """
     if cli_tool == CliTool.CLAUDE:
         return [
-            "claude-opus-4-5-20251101",
-            "claude-sonnet-4-5-20250929",
+            CLAUDE_MODEL_OPUS,
+            CLAUDE_MODEL_SONNET,
             "opus",
             "sonnet",
         ]
     elif cli_tool == CliTool.CURSOR:
         return [
             "auto",
-            "opus-4.5",
+            CURSOR_MODEL_OPUS,
             "opus-4.5-thinking",
-            "sonnet-4.5",
+            CURSOR_MODEL_SONNET,
             "sonnet-4.5-thinking",
             "gpt-5.2",
             "gemini-3-pro",
