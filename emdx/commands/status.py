@@ -9,6 +9,7 @@ Provides a quick overview of:
 """
 
 from datetime import datetime, timedelta
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -20,6 +21,7 @@ from ..models.tasks import (
     get_failed_tasks,
     get_recent_completed_tasks,
 )
+from ..utils.output import print_json
 
 console = Console()
 
@@ -185,10 +187,8 @@ def _show_failed_tasks() -> None:
     console.print()
 
 
-def _show_cascade_status() -> None:
-    """Show cascade queue status."""
-    stages = ["idea", "prompt", "analyzed", "planned"]
-
+def _get_cascade_counts() -> dict[str, int]:
+    """Get cascade queue counts by stage."""
     try:
         with db.get_connection() as conn:
             cursor = conn.cursor()
@@ -199,21 +199,47 @@ def _show_cascade_status() -> None:
                 AND is_deleted = 0
                 GROUP BY cascade_stage
             """)
-            counts = dict(cursor.fetchall())
-
-        total = sum(counts.values())
-        if total > 0:
-            console.print("[bold magenta]🌊 Cascade Queue:[/bold magenta]")
-            parts = []
-            for stage in stages:
-                if counts.get(stage, 0) > 0:
-                    parts.append(f"{stage}: {counts[stage]}")
-            console.print("  " + " → ".join(parts))
-            console.print("  [dim]Run [cyan]emdx cascade process <stage>[/cyan] to advance[/dim]")
-            console.print()
+            return dict(cursor.fetchall())
     except Exception:
         # cascade_stage column may not exist in older databases
-        pass
+        return {}
+
+
+def _show_cascade_status() -> None:
+    """Show cascade queue status."""
+    stages = ["idea", "prompt", "analyzed", "planned"]
+    counts = _get_cascade_counts()
+
+    total = sum(counts.values())
+    if total > 0:
+        console.print("[bold magenta]🌊 Cascade Queue:[/bold magenta]")
+        parts = []
+        for stage in stages:
+            if counts.get(stage, 0) > 0:
+                parts.append(f"{stage}: {counts[stage]}")
+        console.print("  " + " → ".join(parts))
+        console.print("  [dim]Run [cyan]emdx cascade process <stage>[/cyan] to advance[/dim]")
+        console.print()
+
+
+def _collect_status_data() -> dict[str, Any]:
+    """Collect all status data for JSON output."""
+    active = get_active_delegate_tasks()
+    recent = get_recent_completed_tasks(limit=5)
+    failed = get_failed_tasks(limit=3)
+    cascade_counts = _get_cascade_counts()
+
+    # Enrich active tasks with children
+    for task in active:
+        if task.get("type") in ("group", "chain"):
+            task["children"] = get_children(task["id"])
+
+    return {
+        "active": active,
+        "recent": recent,
+        "failed": failed,
+        "cascade": cascade_counts,
+    }
 
 
 def status(
@@ -222,6 +248,7 @@ def status(
         "--verbose", "-v",
         help="Show additional details"
     ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """
     Show delegate activity index and project status.
@@ -233,6 +260,10 @@ def status(
         emdx status
         emdx status --verbose
     """
+    if json_output:
+        print_json(_collect_status_data())
+        return
+
     console.print()
 
     # Active delegate tasks
