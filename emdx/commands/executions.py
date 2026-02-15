@@ -67,7 +67,7 @@ def tail_log_python(log_path: Path, follow: bool = False, lines: int = 50) -> No
     with open(log_path, 'rb') as f:
         # Seek to end and work backwards
         f.seek(0, 2)  # Go to end
-        file_size = f.tell()
+        f.tell()
 
         # Read chunks from end until we have enough lines
         chunk_size = 8192

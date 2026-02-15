@@ -493,10 +493,10 @@ class DuplicateDetector:
 
         # Filter to groups with multiple documents and different content
         similar_title_groups = []
-        for title, group in title_groups.items():
+        for _title, group in title_groups.items():
             if len(group) > 1:
                 # Check if content is different
-                hashes = set(self._get_content_hash(doc['content']) for doc in group)
+                hashes = {self._get_content_hash(doc['content']) for doc in group}
                 if len(hashes) > 1:  # Different content
                     similar_title_groups.append(group)
 

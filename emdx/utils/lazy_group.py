@@ -77,11 +77,12 @@ class LazyCommand(click.MultiCommand):
             cmd_object = getattr(mod, obj_name)
             self._real_command = self._convert_to_click_command(cmd_object)
             return self._real_command
-        except ImportError:
+        except ImportError as e:
             # Create an error command
+            import_err = str(e)
             @click.command(name=self.name)
             def error_cmd() -> None:
-                click.echo(f"Command '{self.name}' is not available: {e}", err=True)
+                click.echo(f"Command '{self.name}' is not available: {import_err}", err=True)
                 click.echo(
                     "This might be due to missing optional dependencies.",
                     err=True,
@@ -90,10 +91,11 @@ class LazyCommand(click.MultiCommand):
 
             self._real_command = error_cmd
             return self._real_command
-        except Exception:
+        except Exception as e:
+            load_err = str(e)
             @click.command(name=self.name)
             def error_cmd() -> None:
-                click.echo(f"Command '{self.name}' failed to load: {e}", err=True)
+                click.echo(f"Command '{self.name}' failed to load: {load_err}", err=True)
                 raise SystemExit(1)
 
             self._real_command = error_cmd

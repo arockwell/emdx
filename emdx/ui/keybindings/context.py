@@ -176,7 +176,6 @@ class Context(Enum):
             "RunAgentModal": cls.MODAL_AGENT_RUN,
             "DeleteAgentModal": cls.MODAL_DELETE,
             "AgentSelectionModal": cls.MODAL_AGENT_SELECT,
-            "AgentHistoryModal": cls.MODAL_AGENT,
             "AgentListWidget": cls.AGENT_LIST_WIDGET,
             # Agent inputs - each gets its own context to avoid false conflicts
             "AgentNameInput": cls.INPUT_AGENT_NAME,

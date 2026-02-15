@@ -1,7 +1,12 @@
 """Event-driven log file streaming with file watching."""
+from __future__ import annotations
 
 import logging
 import threading
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .file_watcher import FileWatcher
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -31,7 +36,7 @@ class LogStream:
         self.path = log_file_path
         self.position = 0
         self.subscribers: List[LogStreamSubscriber] = []
-        self.watcher: FileWatcher | None = None
+        self.watcher: "FileWatcher | None" = None
         self.is_watching = False
         self._polling = False
         self._stopped = False

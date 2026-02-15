@@ -146,7 +146,7 @@ class AutoTagger:
         content_lower = (content or '').lower()
 
         # Check each pattern
-        for pattern_name, rules in self.patterns.items():
+        for _pattern_name, rules in self.patterns.items():
             confidence = 0.0
             base_confidence = rules['confidence']
 

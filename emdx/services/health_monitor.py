@@ -593,7 +593,7 @@ class HealthMonitor:
         recommendations = []
 
         # Collect all recommendations with priority
-        for metric_name, metric in health['metrics'].items():
+        for _metric_name, metric in health['metrics'].items():
             if metric.status in ['warning', 'critical']:
                 priority = 'HIGH' if metric.status == 'critical' else 'MEDIUM'
                 for rec in metric.recommendations:

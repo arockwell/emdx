@@ -38,6 +38,7 @@ from typing import List
 
 import typer
 
+from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
@@ -301,7 +302,7 @@ def _run_single(
         title=doc_title,
         output_instruction=output_instruction,
         working_dir=working_dir or str(Path.cwd()),
-        timeout_seconds=600,
+        timeout_seconds=DELEGATE_EXECUTION_TIMEOUT,
         model=model,
     )
 

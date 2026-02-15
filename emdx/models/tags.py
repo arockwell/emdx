@@ -301,7 +301,7 @@ def search_by_tags(
 
         docs = []
         for row in cursor.fetchall():
-            doc = dict(zip([col[0] for col in cursor.description], row))
+            doc = dict(zip([col[0] for col in cursor.description], row, strict=False))
             docs.append(doc)
 
         return docs

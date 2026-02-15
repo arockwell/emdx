@@ -1,7 +1,6 @@
 """Prompt template system for smart execution."""
 
 from pathlib import Path
-from typing import Optional
 
 
 def load_prompt_template(template_name: str) -> str:

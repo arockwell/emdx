@@ -168,6 +168,7 @@ class VimEditor(Vertical):
             else:
                 current_line = 0
 
+            total_lines = len(self.text_area.text.split('\n'))
             self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
             self._update_line_number_width()
             if hasattr(self.text_area, '_update_line_numbers'):

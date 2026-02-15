@@ -69,7 +69,7 @@ def list_recipes():
         first_line = content.split("\n")[0].strip().lstrip("# ") if content else ""
         if first_line == title:
             # Skip if first line is just the title
-            lines = [l.strip() for l in content.split("\n")[1:] if l.strip()]
+            lines = [line.strip() for line in content.split("\n")[1:] if line.strip()]
             first_line = lines[0] if lines else ""
         if len(first_line) > 70:
             first_line = first_line[:67] + "..."

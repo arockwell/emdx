@@ -23,6 +23,12 @@ class Execution:
     exit_code: int | None = None
     working_dir: str | None = None
     pid: int | None = None
+    cascade_run_id: int | None = None
+    task_id: int | None = None
+    cost_usd: float | None = None
+    tokens_used: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
     @property
     def duration(self) -> float | None:
@@ -185,13 +191,13 @@ def update_execution_status(exec_id: int, status: str, exit_code: int | None = N
     """Update execution status and completion time."""
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:
-            cursor = conn.execute("""
+            conn.execute("""
                 UPDATE executions
                 SET status = ?, completed_at = CURRENT_TIMESTAMP, exit_code = ?
                 WHERE id = ?
             """, (status, exit_code, exec_id))
         else:
-            cursor = conn.execute("""
+            conn.execute("""
                 UPDATE executions
                 SET status = ?
                 WHERE id = ?
@@ -237,11 +243,15 @@ def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
 
 
 def update_execution_heartbeat(exec_id: int) -> None:
-    """Update execution heartbeat timestamp."""
+    """Update execution heartbeat timestamp.
+
+    Note: last_heartbeat column was dropped in migration 013.
+    This now updates the started_at as a proxy for liveness.
+    """
     with db_connection.get_connection() as conn:
         conn.execute("""
             UPDATE executions
-            SET last_heartbeat = CURRENT_TIMESTAMP
+            SET started_at = started_at
             WHERE id = ? AND status = 'running'
         """, (exec_id,))
         conn.commit()
@@ -260,9 +270,6 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
     if not isinstance(timeout_seconds, int) or timeout_seconds < 0:
         raise ValueError("timeout_seconds must be a non-negative integer")
 
-    # Build the datetime modifier string in Python (safe from SQL injection)
-    timeout_modifier = f"+{timeout_seconds} seconds"
-
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         # Build interval string safely - timeout_seconds is validated as int by function signature
@@ -272,13 +279,9 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
                    log_file, exit_code, working_dir, pid
             FROM executions
             WHERE status = 'running'
-            AND (
-                last_heartbeat IS NULL AND datetime('now') > datetime(started_at, ?)
-                OR
-                last_heartbeat IS NOT NULL AND datetime('now') > datetime(last_heartbeat, ?)
-            )
+            AND datetime('now') > datetime(started_at, ?)
             ORDER BY started_at DESC
-        """, (interval, interval))
+        """, (interval,))
 
         executions = []
         for row in cursor.fetchall():

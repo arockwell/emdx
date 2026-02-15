@@ -471,7 +471,7 @@ def process(
     else:
         # Async execution - start and return immediately
         doc_id = doc["id"]
-        next_stage = NEXT_STAGE[stage]
+        NEXT_STAGE[stage]
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
         EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
