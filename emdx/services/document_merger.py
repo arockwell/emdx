@@ -342,7 +342,7 @@ class DocumentMerger:
                 elif days_since_access < 30:
                     score += 1
 
-        return score
+        return float(score)
 
     def _merge_content(
         self,
