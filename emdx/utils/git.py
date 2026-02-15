@@ -45,7 +45,7 @@ def create_worktree(base_branch: str = "main") -> tuple[str, str]:
     return str(worktree_dir), branch_name
 
 
-def cleanup_worktree(worktree_path: str):
+def cleanup_worktree(worktree_path: str) -> None:
     """Clean up a worktree after completion.
 
     Args:

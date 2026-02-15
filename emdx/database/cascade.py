@@ -208,7 +208,7 @@ def count_documents_at_stage(stage: str) -> int:
             """,
             (stage,),
         )
-        return cursor.fetchone()[0]
+        return int(cursor.fetchone()[0])
 
 
 def get_cascade_stats() -> dict[str, int]:

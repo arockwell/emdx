@@ -3,6 +3,8 @@
 Input widgets for EMDX TUI.
 """
 
+from typing import Any
+
 from textual import events
 from textual.widgets import Input
 
@@ -14,7 +16,7 @@ logger, _key_logger = setup_tui_logging(__name__)
 class TitleInput(Input):
     """Custom Input that handles Tab to switch to content editor."""
 
-    def __init__(self, app_instance, *args, **kwargs):
+    def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
         self._saved_cursor_position = 0

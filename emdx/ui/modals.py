@@ -4,7 +4,9 @@ Modal screens for EMDX TUI.
 """
 
 import logging
+from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import ScrollableContainer, Vertical
@@ -72,7 +74,11 @@ class KeybindingsHelpScreen(ModalScreen):
         ("q", "close", "Close"),
     ]
 
-    def __init__(self, bindings: list[tuple[str, str, str]] = None, title: str = "Keybindings"):
+    def __init__(
+        self,
+        bindings: list[tuple[str, str, str]] | None = None,
+        title: str = "Keybindings",
+    ):
         """Initialize help screen.
 
         Args:
@@ -119,7 +125,7 @@ class KeybindingsHelpScreen(ModalScreen):
     def action_close(self) -> None:
         self.dismiss()
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         # Close on any key for convenience
         if event.key not in ("escape", "question_mark", "q"):
             # Let specific bindings handle their keys
@@ -238,7 +244,7 @@ class HelpMixin:
         # Sort by category, then by key
         category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]  # noqa: E501
 
-        def sort_key(item):
+        def sort_key(item: tuple[str, str, str]) -> tuple[int, str]:
             cat = item[0]
             try:
                 return (category_order.index(cat), item[1])
@@ -258,7 +264,7 @@ class HelpMixin:
         """Show keybindings help modal."""
         bindings = self.get_help_bindings()
         title = getattr(self, 'HELP_TITLE', 'Keybindings')
-        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title=title))
+        self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title=title))  # type: ignore[attr-defined]
 
 class DocumentPreviewModal(ModalScreen):
     """Modal for previewing a document without leaving the current screen."""
@@ -319,7 +325,7 @@ class DocumentPreviewModal(ModalScreen):
         Binding("G", "scroll_bottom", "Bottom", show=False),
     ]
 
-    def __init__(self, doc_id: int, **kwargs):
+    def __init__(self, doc_id: int, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.doc_id = doc_id
         self._doc_data: dict | None = None

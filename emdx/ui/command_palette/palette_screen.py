@@ -10,11 +10,13 @@ import logging
 import traceback
 from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
+from textual.timer import Timer
 from textual.widgets import Input, ListItem, ListView, Static
 
 from emdx.config.constants import EMDX_CONFIG_DIR
@@ -46,7 +48,7 @@ class PaletteResultWidget(ListItem):
     }
     """
 
-    def __init__(self, result: PaletteResultItem, **kwargs):
+    def __init__(self, result: PaletteResultItem, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.result = result
 
@@ -150,15 +152,15 @@ class CommandPaletteScreen(ModalScreen):
         self,
         initial_query: str = "",
         context: CommandContext | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.initial_query = initial_query
         self.presenter = PalettePresenter(
             on_state_update=self._on_state_update,
             context=context or CommandContext.GLOBAL,
         )
-        self._debounce_timer = None
+        self._debounce_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="palette-container"):
@@ -281,7 +283,7 @@ class CommandPaletteScreen(ModalScreen):
         if result:
             self.dismiss(result)
 
-    async def on_key(self, event) -> None:
+    async def on_key(self, event: events.Key) -> None:
         """Handle key events."""
         key = event.key
         _debug_log(f"on_key: {key}")

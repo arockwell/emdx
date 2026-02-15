@@ -20,7 +20,7 @@ def list(
     project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum documents to show"),
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, csv"),
-):
+) -> None:
     """List all documents in the knowledge base"""
     try:
         import json
@@ -88,7 +88,7 @@ def list(
 @app.command()
 def recent(
     limit: int = typer.Argument(10, help="Number of recent documents to show"),
-):
+) -> None:
     """Show recently accessed documents"""
     try:
         # Ensure database schema exists
@@ -137,7 +137,7 @@ def stats(
         None, "--project", "-p", help="Show stats for specific project"
     ),
     detailed: bool = typer.Option(False, "--detailed", "-d", help="Show detailed statistics"),
-):
+) -> None:
     """Show knowledge base statistics"""
     try:
         # Ensure database schema exists

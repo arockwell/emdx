@@ -17,9 +17,10 @@ def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
     result = cursor.fetchone()
 
     if result:
-        return result[0]
+        return int(result[0])
 
     cursor.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
+    assert cursor.lastrowid is not None
     return cursor.lastrowid
 
 
@@ -274,7 +275,7 @@ def search_by_tags(
                 ",".join("?" * len(tag_names_lower))
             )
 
-            params = tag_names_lower + [len(tag_names_lower)]
+            params: list[Any] = list(tag_names_lower) + [len(tag_names_lower)]
         else:
             # Documents with ANY of the specified tags (or prefix matches)
             query = f"""
@@ -288,7 +289,7 @@ def search_by_tags(
                 AND ({tag_conditions})
             """
 
-            params = tag_params
+            params = list(tag_params)
 
         if project:
             query += " AND d.project = ?"

@@ -414,9 +414,10 @@ class DocumentBrowserPresenter:
             if doc_id in self._doc_cache:
                 doc = self._doc_cache[doc_id]
             else:
-                doc = get_document(doc_id)
-                if doc is None:
+                doc_result = get_document(doc_id)
+                if doc_result is None:
                     return None
+                doc = doc_result
 
                 if len(self._doc_cache) >= self._doc_cache_max:
                     oldest_key = next(iter(self._doc_cache))

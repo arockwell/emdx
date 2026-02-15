@@ -5,8 +5,9 @@ Extracted from main_browser.py to reduce technical debt.
 """
 
 import logging
+from typing import Any
 
-from textual.widgets import Static
+from textual.widgets import Static, TextArea
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,15 @@ class SimpleVimLineNumbers(Static):
         }
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.add_class("vim-line-numbers")
-        self.text_area = None  # Reference to associated text area
+        self.text_area: TextArea | None = None  # Reference to associated text area
 
-    def set_line_numbers(self, current_line, total_lines, text_area=None):
+    def set_line_numbers(
+        self, current_line: int, total_lines: int,
+        text_area: TextArea | None = None,
+    ) -> None:
         """Set line numbers given current line (0-based) and total lines."""
 
         # Store text area reference if provided

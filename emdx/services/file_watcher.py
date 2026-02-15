@@ -4,11 +4,12 @@ import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 # Try to use watchdog for efficient file watching
 try:
-    from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler  # type: ignore[import-not-found]
+    from watchdog.observers import Observer  # type: ignore[import-not-found]
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
@@ -22,8 +23,8 @@ class FileWatcher:
     def __init__(self, file_path: Path, callback: Callable[[], None]):
         self.file_path = file_path
         self.callback = callback
-        self.observer = None
-        self.polling_thread = None
+        self.observer: Any = None
+        self.polling_thread: threading.Thread | None = None
         self.stop_event = threading.Event()
 
     def start(self) -> None:
@@ -51,7 +52,7 @@ class FileWatcher:
                 self.file_path = file_path
                 self.callback = callback
 
-            def on_modified(self, event):
+            def on_modified(self, event: Any) -> None:
                 if not event.is_directory and Path(event.src_path) == self.file_path:
                     self.callback()
 
@@ -67,9 +68,9 @@ class FileWatcher:
 
     def _start_polling(self) -> None:
         """Fallback to polling-based watching."""
-        def poll():
-            last_mtime = 0
-            last_size = 0
+        def poll() -> None:
+            last_mtime: float = 0
+            last_size: int = 0
             while not self.stop_event.is_set():
                 try:
                     if self.file_path.exists():

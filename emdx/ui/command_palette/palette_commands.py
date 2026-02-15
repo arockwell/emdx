@@ -35,7 +35,7 @@ class PaletteCommand:
 class CommandRegistry:
     """Registry of available commands for the palette."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._commands: dict[str, PaletteCommand] = {}
         self._register_defaults()
 

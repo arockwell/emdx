@@ -12,7 +12,7 @@ Each switch_to_X method handles the complete lifecycle:
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from textual.containers import ScrollableContainer, Vertical
 from textual.widgets import RichLog
@@ -113,7 +113,7 @@ class PreviewModeManager:
         return preview_content
 
     async def switch_to_editing(
-        self, host, title: str, content: str, is_new: bool = False
+        self, host: Any, title: str, content: str, is_new: bool = False
     ) -> tuple["TitleInput", "VimEditor"]:
         """Switch to document editing mode.
 
@@ -153,7 +153,7 @@ class PreviewModeManager:
         self.mode = PreviewMode.CREATING if is_new else PreviewMode.EDITING
         return title_input, vim_editor
 
-    async def switch_to_selecting(self, host, content: str) -> "SelectionTextArea":
+    async def switch_to_selecting(self, host: Any, content: str) -> "SelectionTextArea":
         """Switch to text selection mode.
 
         Args:

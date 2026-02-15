@@ -38,7 +38,7 @@ def maintain(
     gc: bool = typer.Option(False, "--gc", "-g", help="Run garbage collection"),
     dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),  # noqa: E501
     threshold: float = typer.Option(0.7, "--threshold", help="Similarity threshold for merging"),
-):
+) -> None:
     """
     Maintain your knowledge base by fixing issues and optimizing content.
 
@@ -118,7 +118,7 @@ def maintain(
         console.print("\n[dim]Run with --execute to perform these actions[/dim]")
 
 
-def _interactive_wizard(dry_run: bool):
+def _interactive_wizard(dry_run: bool) -> None:
     """Run interactive maintenance wizard using MaintenanceApplication."""
     app = MaintenanceApplication()
 
@@ -152,7 +152,7 @@ def _interactive_wizard(dry_run: bool):
     console.print()
 
     # Ask what to fix - only run cheap checks, defer expensive ones
-    actions = []
+    actions: list[str | tuple[str, list[tuple[object, ...]]]] = []
 
     # Check for duplicates (cheap - based on recommendations)
     if "duplicate" in str(all_recommendations).lower():
@@ -181,7 +181,7 @@ def _interactive_wizard(dry_run: bool):
             ) as progress:
                 task = progress.add_task("Building index...", total=100, found=0)
 
-                def update_progress(current, total, found):
+                def update_progress(current: int, total: int, found: int) -> None:
                     if current < 50:
                         progress.update(task, description="Building TF-IDF index...", completed=current, found=found)  # noqa: E501
                     else:
@@ -409,7 +409,7 @@ def cleanup_main(
     age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
     max_runtime: int = typer.Option(2, "--max-runtime", help="Max process runtime in hours before considering stuck"),  # noqa: E501
     timeout_minutes: int = typer.Option(30, "--timeout", help="Minutes after which to consider execution stale"),  # noqa: E501
-):
+) -> None:
     """
     Clean up system resources used by EMDX executions.
 
@@ -650,7 +650,7 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> str | None:
         max_runtime_hours: Maximum runtime before considering a process stuck
     """
     # Lazy import - psutil is slow to import (~16ms)
-    import psutil
+    import psutil  # type: ignore[import-untyped]
 
     from ..models.executions import get_running_executions
 
@@ -949,7 +949,7 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
 def cleanup_temp_dirs(
     dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),  # noqa: E501
     age_hours: int = typer.Option(24, "--age", help="Clean directories older than N hours"),
-):
+) -> None:
     """
     Clean up temporary execution directories.
 

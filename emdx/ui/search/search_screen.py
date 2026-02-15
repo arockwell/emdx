@@ -10,11 +10,14 @@ Features:
 
 import asyncio
 import logging
+from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.reactive import reactive
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
@@ -131,10 +134,10 @@ class SearchScreen(HelpMixin, Widget):
     current_mode = reactive(SearchMode.FTS)
     is_empty_state = reactive(True)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.presenter = SearchPresenter(on_state_update=self._on_state_update)
-        self._debounce_timer = None
+        self._debounce_timer: Timer | None = None
         self._current_vm: SearchStateVM | None = None
 
     def compose(self) -> ComposeResult:
@@ -342,7 +345,7 @@ class SearchScreen(HelpMixin, Widget):
         debounce_ms = self.presenter.get_debounce_time()
 
         # Schedule search after debounce delay
-        def do_search():
+        def do_search() -> None:
             self._debounce_timer = None
             asyncio.create_task(self.presenter.search(query))
 
@@ -518,7 +521,7 @@ class SearchScreen(HelpMixin, Widget):
         if "query" in state and state["query"]:
             self.set_query(state["query"])
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         """Handle key events - block vim keys when input is focused."""
         # Check if the search input has focus
         try:

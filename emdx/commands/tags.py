@@ -34,7 +34,7 @@ def _add_tags_impl(
     tags: list[str] | None,
     auto: bool,
     suggest: bool,
-):
+) -> None:
     """Shared implementation for adding tags (used by both callback and add subcommand)."""
     try:
         # Ensure database schema exists
@@ -121,7 +121,7 @@ def _add_tags_impl(
 
 
 @app.callback()
-def tag_callback():
+def tag_callback() -> None:
     """Manage document tags.
 
     Subcommands: add, remove, list, rename, merge, batch.
@@ -136,7 +136,7 @@ def add(
     tags: list[str] | None = typer.Argument(None, help="Tags to add (space-separated)"),
     auto: bool = typer.Option(False, "--auto", "-a", help="Apply high-confidence auto-tags"),
     suggest: bool = typer.Option(False, "--suggest", "-s", help="Show tag suggestions"),
-):
+) -> None:
     """Add tags to a document with optional auto-tagging."""
     _add_tags_impl(doc_id, tags, auto, suggest)
 
@@ -145,7 +145,7 @@ def add(
 def remove(
     doc_id: int = typer.Argument(..., help="Document ID to untag"),
     tags: list[str] = typer.Argument(..., help="Tags to remove (space-separated)"),
-):
+) -> None:
     """Remove tags from a document."""
     try:
         # Ensure database schema exists
@@ -184,7 +184,7 @@ def remove(
 def list_tags(
     sort: str = typer.Option("usage", "--sort", "-s", help="Sort by: usage, name, created"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum tags to show"),
-):
+) -> None:
     """List all tags with statistics."""
     try:
         # Ensure database schema exists
@@ -229,7 +229,7 @@ def rename(
     old_tag: str = typer.Argument(..., help="Old tag name"),
     new_tag: str = typer.Argument(..., help="New tag name"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-):
+) -> None:
     """Rename a tag globally."""
     try:
         # Ensure database schema exists
@@ -273,7 +273,7 @@ def merge(
     source_tags: list[str] = typer.Argument(..., help="Source tags to merge"),
     target: str = typer.Option(..., "--into", "-i", help="Target tag to merge into"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-):
+) -> None:
     """Merge multiple tags into one."""
     try:
         # Ensure database schema exists
@@ -326,7 +326,7 @@ def batch(
     max_tags: int = typer.Option(3, "--max-tags", "-m", help="Maximum tags per document"),
     dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),  # noqa: E501
     limit: int | None = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
-):
+) -> None:
     """Batch auto-tag multiple documents."""
     try:
         # Ensure database schema exists
@@ -376,6 +376,8 @@ def batch(
             for doc_id, tag_list in eligible_docs[:sample_size]:
                 # Get document title
                 doc = get_document(str(doc_id))
+                if not doc:
+                    continue
                 title = truncate_title(doc['title'])
 
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")

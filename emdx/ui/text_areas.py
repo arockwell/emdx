@@ -4,6 +4,7 @@ Text area widgets for EMDX TUI.
 """
 
 import re
+from typing import Any
 
 from textual import events
 from textual.widgets import TextArea
@@ -17,7 +18,7 @@ logger, _key_logger = setup_tui_logging(__name__)
 class SelectionTextArea(TextArea):
     """TextArea that captures 's' key to exit selection mode."""
 
-    def __init__(self, app_instance, *args, **kwargs):
+    def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
 
@@ -63,12 +64,12 @@ class VimEditTextArea(TextArea):
     VIM_VISUAL_LINE = "V-LINE"
     VIM_COMMAND = "COMMAND"
 
-    def __init__(self, app_instance, *args, **kwargs):
+    def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
         self.vim_mode = self.VIM_NORMAL  # Start in normal mode like vim
-        self.visual_start = None
-        self.visual_end = None
+        self.visual_start: tuple[int, int] | None = None
+        self.visual_end: tuple[int, int] | None = None
         self.last_command = None
         self.pending_command = ""
         self.repeat_count = ""
@@ -82,7 +83,7 @@ class VimEditTextArea(TextArea):
         self.show_cursor = True
         self.cursor_blink = False
 
-    def _update_cursor_style(self):
+    def _update_cursor_style(self) -> None:
         """Update cursor style based on vim mode."""
         # Keep all cursors solid (non-blinking)
         self.cursor_blink = False
@@ -97,7 +98,7 @@ class VimEditTextArea(TextArea):
         else:
             self.add_class("vim-normal-mode")
 
-    def _update_line_numbers(self):
+    def _update_line_numbers(self) -> None:
         """Update line numbers widget if it exists."""
         try:
             if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
@@ -438,7 +439,7 @@ class VimEditTextArea(TextArea):
             self.command_buffer += event.character
             self.app_instance._update_vim_status(f"COMMAND {self.command_buffer}")
 
-    def _execute_vim_command(self):
+    def _execute_vim_command(self) -> None:
         """Execute the vim command in the buffer."""
         cmd = self.command_buffer[1:].strip()  # Remove the colon
 
@@ -643,7 +644,7 @@ class VimEditTextArea(TextArea):
             # Ignore if at end of document
             logger.debug("Could not delete right (at boundary): %s", e)
 
-    def _clear_title_selection(self, title_input) -> None:
+    def _clear_title_selection(self, title_input: Any) -> None:
         """Clear selection in title input."""
         try:
             # Position cursor at end without selection

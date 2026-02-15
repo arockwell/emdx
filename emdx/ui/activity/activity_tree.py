@@ -61,10 +61,10 @@ class ActivityTree(Tree[ActivityItem]):
     Rows are rendered with aligned columns via render_label().
     """
 
-    show_root = False
-    show_guides = False
-    guide_depth = GUIDE_DEPTH
-    auto_expand = False
+    show_root = False  # type: ignore[assignment]
+    show_guides = False  # type: ignore[assignment]
+    guide_depth = GUIDE_DEPTH  # type: ignore[assignment]
+    auto_expand = False  # type: ignore[assignment]
 
     # Suppress Tree's default expand icons — we render our own in render_label()
     ICON_NODE = ""
@@ -205,7 +205,7 @@ class ActivityTree(Tree[ActivityItem]):
 
         return text
 
-    def _add_children(
+    def add_activity_children(
         self, parent: TreeNode[ActivityItem], children: list[ActivityItem]
     ) -> None:
         """Add child items to a parent node."""

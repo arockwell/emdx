@@ -40,7 +40,7 @@ def parse_task_content(task: str) -> str:
     # Find all @filename references
     pattern = r'@([^\s]+)'
 
-    def replace_file_reference(match):
+    def replace_file_reference(match: re.Match[str]) -> str:
         filename = match.group(1)
         filepath = Path(filename)
 

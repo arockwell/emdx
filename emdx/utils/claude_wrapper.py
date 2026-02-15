@@ -37,7 +37,7 @@ def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
         stop_event.wait(30)
 
 
-def main():
+def main() -> None:
     """Main wrapper function."""
     if len(sys.argv) < 4:
         print("Usage: claude_wrapper.py <exec_id> <log_file> <command...>", file=sys.stderr)
@@ -51,7 +51,7 @@ def main():
     log_handle = open(log_file, 'w', buffering=1)  # Line buffered
 
     # Helper to write timestamped log entries
-    def write_log(message: str):
+    def write_log(message: str) -> None:
         timestamp = datetime.now().strftime('%H:%M:%S')
         log_handle.write(f"[{timestamp}] {message}\n")
         log_handle.flush()
@@ -106,7 +106,7 @@ def main():
 
         # Stream and format output
         lines_processed = 0
-        for line in process.stdout:
+        for line in (process.stdout or []):
             lines_processed += 1
             line = line.strip()
             if not line:

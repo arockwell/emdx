@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Self
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -42,7 +43,7 @@ class CascadeBrowser(Widget):
     #help-bar { height: 1; background: $surface; padding: 0 1; }
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.cascade_view: CascadeView | None = None
 
@@ -77,6 +78,7 @@ class CascadeBrowser(Widget):
             doc = docs[0]
             doc_id = doc["id"]
 
+        assert doc_id is not None  # Guaranteed by the if/else above
         self._update_status(f"[cyan]Processing #{doc_id}: {doc.get('title', '')[:40]}...[/cyan]")
 
         from emdx.commands.cascade import STAGE_PROMPTS
@@ -103,7 +105,7 @@ class CascadeBrowser(Widget):
             self._update_status(f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring...")  # noqa: E501
             if self.cascade_view:
                 self.cascade_view.refresh_all()
-            self._start_completion_monitor(exec_id, doc_id, doc, stage, log_file)
+            self._start_completion_monitor(exec_id, doc_id, doc, stage, str(log_file))
         except Exception as e:
             from emdx.services.execution_service import update_execution_status
             update_execution_status(exec_id, "failed", exit_code=1)
@@ -111,24 +113,27 @@ class CascadeBrowser(Widget):
             if self.cascade_view:
                 self.cascade_view.refresh_all()
 
-    def _start_completion_monitor(self, exec_id, doc_id, doc, stage, log_file):
+    def _start_completion_monitor(
+        self, exec_id: int, doc_id: int,
+        doc: dict[str, Any], stage: str, log_file: str,
+    ) -> None:
         """Monitor execution in a background thread, updating UI on completion."""
         import concurrent.futures
 
         app = self.app
         view = self.cascade_view
 
-        def on_update(status_markup: str):
-            def _apply():
+        def on_update(status_markup: str) -> None:
+            def _apply() -> None:
                 self._update_status(status_markup)
                 if view:
                     view.refresh_all()
             app.call_from_thread(_apply)
 
-        def run():
+        def run() -> None:
             monitor_execution_completion(
                 exec_id=exec_id, doc_id=doc_id, doc=doc, stage=stage,
-                log_file=log_file, next_stage_map=NEXT_STAGE,
+                log_file=Path(log_file), next_stage_map=NEXT_STAGE,
                 on_update=on_update, save_doc=save_document,
             )
 
@@ -159,6 +164,7 @@ class CascadeBrowser(Widget):
     def update_status(self, text: str) -> None:
         pass
 
-    def focus(self, scroll_visible: bool = True) -> None:
+    def focus(self, scroll_visible: bool = True) -> Self:  # type: ignore[override]
         if self.cascade_view:
             self.cascade_view.focus()
+        return self  # type: ignore[return-value]

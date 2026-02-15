@@ -24,8 +24,8 @@ from ..database import db
 logger = logging.getLogger(__name__)
 
 try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
+    from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
+    from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
 
     HAS_SKLEARN = True
 except ImportError:
@@ -459,8 +459,8 @@ class SimilarityService:
             return []
 
         import numpy as np
-        from sklearn.neighbors import NearestNeighbors
-        from sklearn.preprocessing import normalize
+        from sklearn.neighbors import NearestNeighbors  # type: ignore[import-untyped]
+        from sklearn.preprocessing import normalize  # type: ignore[import-untyped]
 
         n_docs = len(self._doc_ids)
 

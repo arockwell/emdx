@@ -16,7 +16,7 @@ def create(
     name: str = typer.Argument(..., help="Epic name"),
     cat: str = typer.Option(..., "--cat", "-c", help="Category key (e.g. SEC)"),
     description: str | None = typer.Option(None, "-D", "--description", help="Epic description"),
-):
+) -> None:
     """Create a new epic.
 
     Examples:
@@ -35,7 +35,7 @@ def create(
 def list_cmd(
     cat: str | None = typer.Option(None, "--cat", "-c", help="Filter by category"),
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
-):
+) -> None:
     """List epics with child task counts.
 
     Examples:
@@ -76,7 +76,7 @@ def list_cmd(
 @app.command()
 def view(
     epic_id: int = typer.Argument(..., help="Epic task ID"),
-):
+) -> None:
     """View an epic and its tasks.
 
     Examples:
@@ -114,7 +114,7 @@ def view(
 @app.command()
 def done(
     epic_id: int = typer.Argument(..., help="Epic task ID"),
-):
+) -> None:
     """Mark an epic as done.
 
     Examples:
@@ -132,7 +132,7 @@ def done(
 @app.command()
 def active(
     epic_id: int = typer.Argument(..., help="Epic task ID"),
-):
+) -> None:
     """Mark an epic as active.
 
     Examples:

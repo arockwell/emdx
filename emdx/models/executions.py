@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from ..database.connection import db_connection
 from ..utils.datetime_utils import parse_timestamp
@@ -85,6 +86,7 @@ def create_execution(doc_id: int | None, doc_title: str, log_file: str,
             VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?, ?)
         """, (doc_id, doc_title, log_file, working_dir, pid))
         conn.commit()
+        assert cursor.lastrowid is not None
         return cursor.lastrowid
 
 def get_execution(exec_id: int) -> Execution | None:
@@ -202,7 +204,7 @@ def update_execution_status(exec_id: int, status: str, exit_code: int | None = N
 
         conn.commit()
 
-def update_execution(exec_id: int, **kwargs) -> None:
+def update_execution(exec_id: int, **kwargs: Any) -> None:
     """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.)."""
     if not kwargs:
         return
@@ -307,9 +309,9 @@ def cleanup_old_executions(days: int = 7) -> int:
             WHERE started_at < datetime('now', ?)
         """, (interval,))
         conn.commit()
-        return cursor.rowcount
+        return int(cursor.rowcount)
 
-def get_execution_stats() -> dict:
+def get_execution_stats() -> dict[str, Any]:
     """Get execution statistics."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()

@@ -70,7 +70,7 @@ def load_config() -> dict[str, Any]:
         return {"overrides": []}
 
     try:
-        import yaml
+        import yaml  # type: ignore[import-untyped]
 
         with open(config_path) as f:
             config = yaml.safe_load(f)
@@ -78,7 +78,7 @@ def load_config() -> dict[str, Any]:
         if config is None:
             return {"overrides": []}
 
-        return config
+        return dict(config)
 
     except ImportError:
         logger.warning("PyYAML not installed, skipping keybinding config")
@@ -120,7 +120,7 @@ def parse_overrides(config: dict[str, Any]) -> list[KeybindingEntry]:
     Returns:
         List of KeybindingEntry objects for overrides
     """
-    entries = []
+    entries: list[KeybindingEntry] = []
     overrides = config.get("overrides", [])
 
     if not overrides:

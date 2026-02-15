@@ -16,7 +16,7 @@ def create(
     description: str | None = typer.Option(
         None, "-D", "--description", help="Category description"
     ),
-):
+) -> None:
     """Create a new category.
 
     Examples:
@@ -37,7 +37,7 @@ def create(
 
 
 @app.command("list")
-def list_cmd():
+def list_cmd() -> None:
     """List all categories with task counts.
 
     Examples:
@@ -74,7 +74,7 @@ def list_cmd():
 def adopt(
     key: str = typer.Argument(..., help="Category key to adopt tasks for"),
     name: str | None = typer.Option(None, "--name", "-n", help="Set category name"),
-):
+) -> None:
     """Backfill existing tasks with KEY-N: titles into the category system.
 
     Scans tasks matching the KEY-N: pattern and sets their epic_key/epic_seq.

@@ -6,6 +6,7 @@ or creating a new group.
 """
 
 import logging
+from typing import Any
 
 from textual import events
 from textual.app import ComposeResult
@@ -20,7 +21,7 @@ try:
     from emdx.services import group_service as groups_db
     HAS_GROUPS = True
 except ImportError:
-    groups_db = None
+    groups_db = None  # type: ignore[assignment]
     HAS_GROUPS = False
 
 
@@ -110,7 +111,7 @@ class GroupPicker(Widget):
     }
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.groups: list[dict] = []
         self.filtered_groups: list[dict] = []

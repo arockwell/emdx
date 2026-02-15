@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any
 
 try:
-    from datasketch import MinHash, MinHashLSH
+    from datasketch import MinHash, MinHashLSH  # type: ignore[import-untyped]
 
     HAS_DATASKETCH = True
 except ImportError:
@@ -416,7 +416,7 @@ class DuplicateDetector:
                     SET is_deleted = 1, deleted_at = ?
                     WHERE id IN ({placeholders})
                     AND is_deleted = 0
-                """, [timestamp] + batch)
+                """, [timestamp, *batch])
 
                 deleted_count += cursor.rowcount
 

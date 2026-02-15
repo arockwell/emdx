@@ -109,14 +109,21 @@ def _create_cascade_run(doc_id: int, start_stage: str, stop_stage: str) -> int:
             (doc_id, doc_id, start_stage, stop_stage, start_stage),
         )
         conn.commit()
+        assert cursor.lastrowid is not None
         return cursor.lastrowid
 
 
-def _update_cascade_run(run_id: int, current_doc_id: int = None, current_stage: str = None,
-                        status: str = None, pr_url: str = None, error_message: str = None):
+def _update_cascade_run(
+    run_id: int,
+    current_doc_id: int | None = None,
+    current_stage: str | None = None,
+    status: str | None = None,
+    pr_url: str | None = None,
+    error_message: str | None = None,
+) -> None:
     """Update a cascade run record."""
-    updates = []
-    params = []
+    updates: list[str] = []
+    params: list[int | str] = []
 
     if current_doc_id is not None:
         updates.append("current_doc_id = ?")
@@ -143,7 +150,9 @@ def _update_cascade_run(run_id: int, current_doc_id: int = None, current_stage: 
             conn.commit()
 
 
-def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[bool, int, str]:
+def _process_stage(
+    doc: dict, stage: str, cascade_run_id: int | None = None,
+) -> tuple[bool, int, str | None]:
     """Process a single stage for a document.
 
     Returns: (success, new_doc_id, pr_url or None)
@@ -174,6 +183,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
             (doc_id, doc["title"], str(log_file), cascade_run_id),
         )
         conn.commit()
+        assert cursor.lastrowid is not None
         execution_id = cursor.lastrowid
 
     # Implementation stage needs longer timeout
@@ -263,7 +273,7 @@ def add(
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (default: done)"),
     analyze: bool = typer.Option(False, "--analyze", help="Shortcut for --auto --stop analyzed"),
     plan: bool = typer.Option(False, "--plan", help="Shortcut for --auto --stop planned"),
-):
+) -> None:
     """Add a new document to the cascade and optionally run it.
 
     Examples:
@@ -306,7 +316,7 @@ def add(
         _run_auto(doc_id, stage, stop)
 
 
-def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
+def _run_auto(doc_id: int, start_stage: str, stop_stage: str) -> None:
     """Run a document through stages automatically."""
     stages_to_process = _get_stages_between(start_stage, stop_stage)
 
@@ -365,7 +375,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
 
 
 @app.command()
-def status():
+def status() -> None:
     """Show cascade status - documents at each stage."""
     stats = cascade_db.get_cascade_stats()
 
@@ -404,7 +414,7 @@ def status():
 def show(
     stage: str = typer.Argument(..., help="Stage to show documents from"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to show"),
-):
+) -> None:
     """Show documents at a specific stage."""
     if stage not in STAGES:
         console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
@@ -434,7 +444,7 @@ def process(
     doc_id: int | None = typer.Option(None, "--doc", "-d", help="Specific document ID"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be processed"),
     sync: bool = typer.Option(True, "--sync/--async", "-s", help="Wait for completion (default: sync)"),  # noqa: E501
-):
+) -> None:
     """Process one document at a stage.
 
     Picks up the oldest document at the given stage, runs it through Claude,
@@ -491,6 +501,7 @@ def process(
                 (doc_id, doc["title"], str(log_file)),
             )
             conn.commit()
+            assert cursor.lastrowid is not None
             execution_id = cursor.lastrowid
 
         pid = execute_claude_detached(
@@ -511,7 +522,7 @@ def run(
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (with --auto)"),
     once: bool = typer.Option(False, "--once", help="Run one iteration then exit"),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between checks"),
-):
+) -> None:
     """Run the cascade continuously or in auto mode.
 
     Examples:
@@ -578,7 +589,7 @@ def run(
 def advance(
     doc_id: int = typer.Argument(..., help="Document ID to advance"),
     to_stage: str | None = typer.Option(None, "--to", help="Target stage (default: next stage)"),
-):
+) -> None:
     """Manually advance a document to the next stage.
 
     Useful for testing or when you want to skip processing.
@@ -615,7 +626,7 @@ def advance(
 @app.command()
 def remove(
     doc_id: int = typer.Argument(..., help="Document ID to remove from cascade"),
-):
+) -> None:
     """Remove a document from the cascade (keeps the document).
 
     Sets the stage to NULL, removing it from cascade processing
@@ -640,7 +651,7 @@ def synthesize(
     title: str | None = typer.Option(None, "--title", "-t", help="Title for synthesized document"),
     next_stage: str = typer.Option("planned", "--next", "-n", help="Stage for the synthesized doc"),
     keep: bool = typer.Option(False, "--keep", "-k", help="Keep source docs in current stage"),
-):
+) -> None:
     """Combine multiple documents at a stage into one synthesized document.
 
     This is useful when you want to analyze multiple ideas separately,
@@ -675,6 +686,8 @@ def synthesize(
     combined_content = f"# Synthesized from {len(docs)} documents\n\n"
     for doc in docs:
         full_doc = get_document(str(doc["id"]))
+        if not full_doc:
+            continue
         combined_content += f"## From: {full_doc['title']}\n\n"
         combined_content += full_doc["content"]
         combined_content += "\n\n---\n\n"
@@ -702,10 +715,10 @@ def synthesize(
 def runs(
     limit: int = typer.Option(10, "--limit", "-n", help="Max runs to show"),
     status_filter: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
-):
+) -> None:
     """Show cascade run history."""
     query = "SELECT id, start_doc_id, start_stage, stop_stage, current_stage, status, pr_url, started_at, completed_at FROM cascade_runs"  # noqa: E501
-    params = []
+    params: list[str | int] = []
 
     if status_filter:
         query += " WHERE status = ?"

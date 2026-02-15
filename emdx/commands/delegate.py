@@ -34,6 +34,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -47,7 +48,7 @@ app = typer.Typer(
     context_settings={"allow_interspersed_args": False},
 )
 
-def _safe_create_task(**kwargs) -> int | None:
+def _safe_create_task(**kwargs: Any) -> int | None:
     """Create task, never fail delegate."""
     try:
         from ..models.tasks import create_task
@@ -56,7 +57,7 @@ def _safe_create_task(**kwargs) -> int | None:
         sys.stderr.write(f"delegate: task tracking failed: {e}\n")
         return None
 
-def _safe_update_task(task_id: int | None, **kwargs) -> None:
+def _safe_update_task(task_id: int | None, **kwargs: Any) -> None:
     """Update task, never fail delegate."""
     if task_id is None:
         return
@@ -66,7 +67,7 @@ def _safe_update_task(task_id: int | None, **kwargs) -> None:
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
-def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
+def _safe_update_execution(exec_id: int | None, **kwargs: Any) -> None:
     """Update execution record, never fail delegate."""
     if exec_id is None:
         return
@@ -407,8 +408,11 @@ def _run_parallel(
             idx, result_pair = future.result()
             results[idx] = result_pair
 
-    # Collect doc_ids in original task order
-    doc_ids = [results[i][0] for i in range(len(tasks)) if results.get(i) and results[i][0] is not None]  # noqa: E501
+    # Collect doc_ids in original task order (filter out None values)
+    doc_ids: list[int] = [
+        did for i in range(len(tasks))
+        if results.get(i) and (did := results[i][0]) is not None
+    ]
 
     if not doc_ids:
         sys.stderr.write("delegate: parallel run completed but no output documents found\n")
@@ -642,7 +646,7 @@ def delegate(
         None, "--cat", "-c",
         help="Category key for auto-numbered tasks",
     ),
-):
+) -> None:
     """Delegate tasks to Claude agents with results on stdout.
 
     The single command for all one-shot AI execution. Results print to stdout

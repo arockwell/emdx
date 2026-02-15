@@ -26,8 +26,8 @@ try:
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
-    doc_svc = None
-    group_svc = None
+    doc_svc = None  # type: ignore[assignment]
+    group_svc = None  # type: ignore[assignment]
     HAS_DOCS = False
     HAS_GROUPS = False
 
@@ -225,7 +225,7 @@ class ActivityDataLoader:
                     title = f"🔗 {title}"
 
                 # Use CascadeStageItem for individual cascade executions (backward compat)
-                item = CascadeStageItem(
+                stage_item = CascadeStageItem(
                     item_id=exec_id,
                     title=title,
                     status=status or "unknown",
@@ -233,7 +233,7 @@ class ActivityDataLoader:
                     doc_id=doc_id,
                     stage=stage or "",
                 )
-                items.append(item)
+                items.append(stage_item)
 
         except Exception as e:
             logger.error(f"Error loading cascade executions: {e}", exc_info=True)
