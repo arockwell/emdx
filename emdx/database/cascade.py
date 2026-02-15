@@ -62,8 +62,15 @@ def update_cascade_stage(doc_id: int, stage: str | None) -> bool:
         stage: New stage (or None to remove from cascade)
 
     Returns:
-        True if update was successful
+        True if update was successful, False if stage is invalid or DB operation failed
+
+    Raises:
+        ValueError: If stage is not a valid cascade stage
     """
+    # Validate stage before attempting database operation
+    if stage is not None and stage not in STAGES:
+        raise ValueError(f"Invalid cascade stage '{stage}'. Valid stages: {STAGES}")
+
     with db_connection.get_connection() as conn:
         if stage is None:
             # Remove from cascade
@@ -84,7 +91,7 @@ def update_cascade_stage(doc_id: int, stage: str | None) -> bool:
                 (doc_id, stage),
             )
         conn.commit()
-        return cursor.rowcount > 0 or stage is not None
+        return cursor.rowcount > 0
 
 
 def update_cascade_pr_url(doc_id: int, pr_url: str) -> bool:
