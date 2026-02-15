@@ -29,10 +29,12 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import re
 import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -77,13 +79,43 @@ def _safe_update_execution(exec_id: int | None, **kwargs: Any) -> None:
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
 
-PR_INSTRUCTION = (
+PR_INSTRUCTION_GENERIC = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
     "2. Commit your changes with a clear message\n"
     "3. Push and create a PR using: gh pr create --title \"...\" --body \"...\"\n"
     "4. Report the PR URL that was created."
 )
+
+# Regex to find PR URLs in agent output
+_PR_URL_RE = re.compile(r'https://github\.com/[^/]+/[^/]+/pull/\d+')
+
+
+def _make_pr_instruction(branch_name: str | None = None) -> str:
+    """Build a structured PR instruction for the agent.
+
+    When branch_name is provided, the instruction tells the agent exactly
+    which branch to use. Otherwise falls back to the generic instruction.
+    """
+    if not branch_name:
+        return PR_INSTRUCTION_GENERIC
+    return (
+        "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
+        f"1. You are already on branch `{branch_name}` — commit your changes there\n"
+        "2. Write a clear commit message summarizing the changes\n"
+        f"3. Push: git push -u origin {branch_name}\n"
+        "4. Create the PR: gh pr create --title \"<short title>\" "
+        "--body \"<description of changes>\"\n"
+        "5. Report the PR URL in your output (e.g. https://github.com/.../pull/123)"
+    )
+
+
+def _extract_pr_url(text: str | None) -> str | None:
+    """Extract a GitHub PR URL from text, if present."""
+    if not text:
+        return None
+    match = _PR_URL_RE.search(text)
+    return match.group(0) if match else None
 
 def _slugify_title(title: str) -> str:
     """Convert a document title to a git branch slug.
@@ -247,6 +279,14 @@ def _print_doc_content(doc_id: int) -> None:
         sys.stdout.write(doc.get("content", ""))
         sys.stdout.write("\n")
 
+@dataclass
+class SingleResult:
+    """Result from a single delegate execution."""
+    doc_id: int | None = None
+    task_id: int | None = None
+    pr_url: str | None = None
+
+
 def _run_single(
     prompt: str,
     tags: list[str],
@@ -254,13 +294,14 @@ def _run_single(
     model: str | None,
     quiet: bool,
     pr: bool = False,
+    pr_branch: str | None = None,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
     seq: int | None = None,
     epic_key: str | None = None,
-) -> tuple[int | None, int | None]:
-    """Run a single task via UnifiedExecutor. Returns (doc_id, task_id)."""
+) -> SingleResult:
+    """Run a single task via UnifiedExecutor. Returns SingleResult."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
     # Create task before execution
@@ -289,7 +330,7 @@ def _run_single(
     )
 
     if pr:
-        output_instruction += PR_INSTRUCTION
+        output_instruction += _make_pr_instruction(pr_branch)
 
     config = ExecutionConfig(
         prompt=prompt,
@@ -308,18 +349,28 @@ def _run_single(
     if not result.success:
         sys.stderr.write(f"delegate: task failed: {result.error_message}\n")
         _safe_update_task(task_id, status="failed", error=result.error_message)
-        return None, task_id
+        return SingleResult(task_id=task_id)
+
+    # Extract PR URL from output content
+    pr_url = _extract_pr_url(result.output_content)
 
     doc_id = result.output_doc_id
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
         # Write doc_id back to execution so activity browser can show the output
         _safe_update_execution(result.execution_id, doc_id=doc_id)
+        # Also try to extract PR URL from saved doc content
+        if not pr_url:
+            doc = get_document(doc_id)
+            if doc:
+                pr_url = _extract_pr_url(doc.get("content", ""))
         _print_doc_content(doc_id)
         if not quiet:
+            pr_info = f" pr:{pr_url}" if pr_url else ""
             sys.stderr.write(
                 f"task_id:{task_id} doc_id:{doc_id} tokens:{result.tokens_used} "
-                f"cost:${result.cost_usd:.4f} duration:{result.execution_time_ms / 1000:.1f}s\n"
+                f"cost:${result.cost_usd:.4f} "
+                f"duration:{result.execution_time_ms / 1000:.1f}s{pr_info}\n"
             )
     else:
         _safe_update_task(task_id, status="done")
@@ -329,7 +380,25 @@ def _run_single(
             sys.stdout.write("\n")
         sys.stderr.write("delegate: agent completed but no document was saved\n")
 
-    return doc_id, task_id
+    return SingleResult(doc_id=doc_id, task_id=task_id, pr_url=pr_url)
+
+def _print_pr_summary(
+    tasks: list[str], results: dict[int, SingleResult],
+) -> None:
+    """Print a summary table of PRs created by parallel tasks."""
+    pr_results = [
+        (i, results[i]) for i in sorted(results)
+        if results[i].pr_url
+    ]
+    if not pr_results:
+        return
+
+    sys.stderr.write(f"\ndelegate: {len(pr_results)} PR(s) created:\n")
+    for i, sr in pr_results:
+        label = tasks[i][:60] if i < len(tasks) else "?"
+        sys.stderr.write(f"  [{i + 1}] {sr.pr_url}  {label}\n")
+    sys.stderr.write("\n")
+
 
 def _run_parallel(
     tasks: list[str],
@@ -360,10 +429,17 @@ def _run_parallel(
         tags=flat_tags,
     )
 
-    # Results indexed by task position to preserve order
-    results: dict[int, tuple[int | None, int | None]] = {}
+    # Pre-generate branch names for --pr tasks so agents get deterministic names
+    branch_names: list[str | None] = [None] * len(tasks)
+    if pr:
+        for i, task in enumerate(tasks):
+            slug = _slugify_title(task) or f"task-{i + 1}"
+            branch_names[i] = f"fix/{slug}-{i + 1}"
 
-    def run_task(idx: int, task: str) -> tuple[int, tuple[int | None, int | None]]:
+    # Results indexed by task position to preserve order
+    results: dict[int, SingleResult] = {}
+
+    def run_task(idx: int, task: str) -> tuple[int, SingleResult]:
         task_title = title or f"Delegate: {task[:60]}"
         if len(tasks) > 1:
             task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
@@ -375,10 +451,16 @@ def _run_parallel(
             try:
                 task_worktree_path, _ = create_worktree(base_branch)
                 if not quiet:
-                    sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")  # noqa: E501
+                    sys.stderr.write(
+                        f"delegate: worktree [{idx + 1}/{len(tasks)}] "
+                        f"created at {task_worktree_path}\n"
+                    )
             except Exception as e:
-                sys.stderr.write(f"delegate: failed to create worktree for task {idx + 1}: {e}\n")
-                return idx, (None, None)
+                sys.stderr.write(
+                    f"delegate: failed to create worktree "
+                    f"for task {idx + 1}: {e}\n"
+                )
+                return idx, SingleResult()
 
         try:
             return idx, _run_single(
@@ -388,6 +470,7 @@ def _run_parallel(
                 model=model,
                 quiet=True,  # suppress per-task metadata in parallel mode
                 pr=pr,
+                pr_branch=branch_names[idx],
                 working_dir=task_worktree_path,
                 parent_task_id=parent_task_id,
                 seq=idx + 1,
@@ -405,19 +488,27 @@ def _run_parallel(
             for i, task in enumerate(tasks)
         }
         for future in as_completed(futures):
-            idx, result_pair = future.result()
-            results[idx] = result_pair
+            idx, single_result = future.result()
+            results[idx] = single_result
 
     # Collect doc_ids in original task order (filter out None values)
     doc_ids: list[int] = [
-        did for i in range(len(tasks))
-        if results.get(i) and (did := results[i][0]) is not None
+        results[i].doc_id for i in range(len(tasks))
+        if results.get(i) and results[i].doc_id is not None
     ]
 
     if not doc_ids:
-        sys.stderr.write("delegate: parallel run completed but no output documents found\n")
-        _safe_update_task(parent_task_id, status="failed", error="no output documents")
+        sys.stderr.write(
+            "delegate: parallel run completed but no output documents found\n"
+        )
+        _safe_update_task(
+            parent_task_id, status="failed", error="no output documents",
+        )
         raise typer.Exit(1) from None
+
+    # Print PR summary if any PRs were created
+    if pr:
+        _print_pr_summary(tasks, results)
 
     # Update parent task
     if synthesize and len(doc_ids) > 1:
@@ -426,7 +517,10 @@ def _run_parallel(
         for i, doc_id in enumerate(doc_ids):
             doc = get_document(doc_id)
             if doc:
-                combined.append(f"## Task {i + 1}: {tasks[i][:80]}\n\n{doc.get('content', '')}")
+                combined.append(
+                    f"## Task {i + 1}: {tasks[i][:80]}\n\n"
+                    f"{doc.get('content', '')}"
+                )
 
         synthesis_prompt = (
             "Synthesize the following task results into a unified summary. "
@@ -434,7 +528,7 @@ def _run_parallel(
             + "\n\n---\n\n".join(combined)
         )
         synthesis_title = title or "Delegate synthesis"
-        synthesis_doc_id, _ = _run_single(
+        synthesis_result = _run_single(
             prompt=synthesis_prompt,
             tags=tags,
             title=f"{synthesis_title} [synthesis]",
@@ -442,27 +536,35 @@ def _run_parallel(
             quiet=True,
             parent_task_id=parent_task_id,
         )
-        if synthesis_doc_id:
-            doc_ids.append(synthesis_doc_id)
+        if synthesis_result.doc_id:
+            doc_ids.append(synthesis_result.doc_id)
             # Print just the synthesis
-            _print_doc_content(synthesis_doc_id)
-        _safe_update_task(parent_task_id, status="done", output_doc_id=synthesis_doc_id)
+            _print_doc_content(synthesis_result.doc_id)
+        _safe_update_task(
+            parent_task_id, status="done",
+            output_doc_id=synthesis_result.doc_id,
+        )
         if not quiet:
             sys.stderr.write(
-                f"task_id:{parent_task_id} doc_ids:{','.join(str(d) for d in doc_ids)} "
-                f"synthesis_id:{synthesis_doc_id or 'none'}\n"
+                f"task_id:{parent_task_id} "
+                f"doc_ids:{','.join(str(d) for d in doc_ids)} "
+                f"synthesis_id:{synthesis_result.doc_id or 'none'}\n"
             )
     else:
         _safe_update_task(parent_task_id, status="done")
         # Print each result separated
         for i, doc_id in enumerate(doc_ids):
             if len(doc_ids) > 1:
-                sys.stdout.write(f"\n=== Task {i + 1}: {tasks[i] if i < len(tasks) else '?'} ===\n")
+                sys.stdout.write(
+                    f"\n=== Task {i + 1}: "
+                    f"{tasks[i] if i < len(tasks) else '?'} ===\n"
+                )
             _print_doc_content(doc_id)
 
         if not quiet:
             sys.stderr.write(
-                f"task_id:{parent_task_id} doc_ids:{','.join(str(d) for d in doc_ids)}\n"
+                f"task_id:{parent_task_id} "
+                f"doc_ids:{','.join(str(d) for d in doc_ids)}\n"
             )
 
     return doc_ids
@@ -536,7 +638,7 @@ def _run_chain(
 
         step_title = title or f"Delegate chain step {step_num}/{total_steps}"
 
-        doc_id, _ = _run_single(
+        step_result = _run_single(
             prompt=prompt,
             tags=tags,
             title=f"{step_title} [{step_num}/{total_steps}]",
@@ -548,6 +650,7 @@ def _run_chain(
             seq=step_num,
             epic_key=epic_key,
         )
+        doc_id = step_result.doc_id
 
         if doc_id is None:
             sys.stderr.write(f"delegate: chain aborted at step {step_num}/{total_steps}\n")
@@ -785,7 +888,7 @@ def delegate(
                 epic_parent_id=epic_parent_id,
             )
         elif len(task_list) == 1:
-            doc_id, _ = _run_single(
+            single_result = _run_single(
                 prompt=task_list[0],
                 tags=flat_tags,
                 title=title,
@@ -797,7 +900,9 @@ def delegate(
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
             )
-            if doc_id is None:
+            if single_result.pr_url and not quiet:
+                sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
+            if single_result.doc_id is None:
                 raise typer.Exit(1) from None
         else:
             _run_parallel(
