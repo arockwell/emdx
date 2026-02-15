@@ -1,9 +1,8 @@
 """Tests for task CLI commands (add, list, ready, done, delete)."""
 
 import re
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import typer
 from typer.testing import CliRunner
 
 from emdx.commands.tasks import app
@@ -220,25 +219,61 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_tasks(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open task", "status": "open", "source_doc_id": None},
-            {"id": 2, "title": "Active task", "status": "active", "source_doc_id": 10},
-            {"id": 3, "title": "Done task", "status": "done", "source_doc_id": None},
+            {"id": 1, "title": "Open task", "status": "open", "epic_key": None},
+            {"id": 2, "title": "Active task", "status": "active", "epic_key": None},
+            {"id": 3, "title": "Blocked task", "status": "blocked", "epic_key": None},
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         out = _out(result)
-        assert "1" in out
         assert "Open task" in out
-        assert "2" in out
         assert "Active task" in out
-        assert "3" in out
-        assert "Done task" in out
+        assert "Blocked task" in out
         assert "3 task(s)" in out
 
     @patch("emdx.commands.tasks.tasks")
-    def test_list_excludes_delegate_by_default(self, mock_tasks):
+    def test_list_shows_status_text(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = [
+            {"id": 1, "title": "Task", "status": "active", "epic_key": None},
+        ]
+        result = runner.invoke(app, ["list"])
+        out = _out(result)
+        assert "active" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_shows_category_column(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = [
+            {"id": 1, "title": "SEC-1: Harden auth", "status": "open", "epic_key": "SEC"},
+            {"id": 2, "title": "Plain task", "status": "open", "epic_key": None},
+        ]
+        result = runner.invoke(app, ["list"])
+        out = _out(result)
+        assert "Cat" in out
+        assert "SEC" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_hides_category_column_when_none(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = [
+            {"id": 1, "title": "Plain task", "status": "open", "epic_key": None},
+        ]
+        result = runner.invoke(app, ["list"])
+        out = _out(result)
+        assert "Cat" not in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_defaults_to_actionable_statuses(self, mock_tasks):
         mock_tasks.list_tasks.return_value = []
         result = runner.invoke(app, ["list"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["open", "active", "blocked"], limit=20, exclude_delegate=True,
+            epic_key=None, parent_task_id=None,
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_done_flag_shows_all_statuses(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "--done"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
             status=None, limit=20, exclude_delegate=True,
@@ -251,7 +286,7 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=False,
+            status=["open", "active", "blocked"], limit=20, exclude_delegate=False,
             epic_key=None, parent_task_id=None,
         )
 
@@ -261,7 +296,7 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-a"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=False,
+            status=["open", "active", "blocked"], limit=20, exclude_delegate=False,
             epic_key=None, parent_task_id=None,
         )
 
@@ -291,7 +326,7 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--limit", "5"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=5, exclude_delegate=True,
+            status=["open", "active", "blocked"], limit=5, exclude_delegate=True,
             epic_key=None, parent_task_id=None,
         )
 
@@ -301,23 +336,35 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-n", "10"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=10, exclude_delegate=True,
+            status=["open", "active", "blocked"], limit=10, exclude_delegate=True,
             epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_displays_status_icons(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open", "status": "open", "source_doc_id": None},
-            {"id": 2, "title": "Active", "status": "active", "source_doc_id": None},
-            {"id": 3, "title": "Done", "status": "done", "source_doc_id": None},
-            {"id": 4, "title": "Failed", "status": "failed", "source_doc_id": None},
+            {"id": 1, "title": "Open", "status": "open", "epic_key": None},
+            {"id": 2, "title": "Active", "status": "active", "epic_key": None},
+            {"id": 3, "title": "Done", "status": "done", "epic_key": None},
+            {"id": 4, "title": "Failed", "status": "failed", "epic_key": None},
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         out = _out(result)
         # Status icons should be present (○ open, ● active, ✓ done, ✗ failed)
         assert "○" in out or "●" in out or "✓" in out or "✗" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_does_not_truncate_title(self, mock_tasks):
+        long_title = "This is a very long task title that exceeds fifty characters by quite a bit"
+        mock_tasks.list_tasks.return_value = [
+            {"id": 1, "title": long_title, "status": "open", "epic_key": None},
+        ]
+        result = runner.invoke(app, ["list"])
+        out = _out(result)
+        # Full title should be present (may be line-wrapped by Rich)
+        # Old behavior truncated at 50 chars; verify the end is present
+        assert "quite a bit" in out
 
 
 class TestTaskDelete:

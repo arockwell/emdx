@@ -13,7 +13,7 @@ from emdx.utils.output import console
 
 app = typer.Typer(help="Agent work queue")
 
-ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘"}
+ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘", "closed": "✓"}
 
 
 @app.command()
@@ -288,23 +288,31 @@ def blocked(
 def list_cmd(
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
+    done: bool = typer.Option(False, "--done", help="Include done/failed tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
     epic: int | None = typer.Option(None, "-e", "--epic", help="Filter by epic ID"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
 ):
     """List tasks.
 
-    By default only shows manually created tasks (not delegate activity).
-    Use --all to include everything.
+    By default shows open, active, and blocked tasks (hides done/failed).
+    Use --done to include completed tasks, --all to include delegate tasks.
 
     Examples:
         emdx task list
+        emdx task list --done
         emdx task list --all
         emdx task list -s open,active
         emdx task list --cat SEC
         emdx task list --epic 510
     """
-    status_list = [s.strip() for s in status.split(",")] if status else None
+    if status:
+        status_list = [s.strip() for s in status.split(",")]
+    elif not done:
+        status_list = ["open", "active", "blocked"]
+    else:
+        status_list = None
+
     exclude_delegate = not all
     task_list = tasks.list_tasks(
         status=status_list,
@@ -318,20 +326,37 @@ def list_cmd(
         console.print("[yellow]No tasks[/yellow]")
         return
 
+    # Check if any tasks have categories to decide whether to show Cat column
+    has_cats = any(t.get("epic_key") for t in task_list)
+
     table = Table()
     table.add_column("", width=2)
     table.add_column("ID", width=5)
+    table.add_column("Status", width=7)
+    if has_cats:
+        table.add_column("Cat", width=6)
     table.add_column("Title")
-    table.add_column("Doc", width=5)
+
+    STATUS_STYLE = {
+        "open": "default",
+        "active": "blue",
+        "blocked": "yellow",
+        "done": "green",
+        "failed": "red",
+        "closed": "green",
+    }
 
     for t in task_list:
-        doc = str(t["source_doc_id"]) if t.get("source_doc_id") else ""
-        table.add_row(
+        style = STATUS_STYLE.get(t["status"], "default")
+        row = [
             ICONS.get(t["status"], "?"),
             str(t["id"]),
-            t["title"][:50],
-            doc,
-        )
+            f"[{style}]{t['status']}[/{style}]",
+        ]
+        if has_cats:
+            row.append(t.get("epic_key") or "")
+        row.append(t["title"])
+        table.add_row(*row)
 
     console.print(table)
     console.print(f"\n[dim]{len(task_list)} task(s)[/dim]")
