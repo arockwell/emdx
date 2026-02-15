@@ -46,7 +46,7 @@ class TestExpandAliases:
 
     def test_all_document_types(self):
         result = expand_aliases(["gameplan", "analysis", "notes", "docs", "architecture"])
-        assert result == ["\U0001f3af", "\U0001f50d", "\U0001f4dd", "\U0001f4da", "\U0001f3d7\ufe0f"]
+        assert result == ["\U0001f3af", "\U0001f50d", "\U0001f4dd", "\U0001f4da", "\U0001f3d7\ufe0f"]  # noqa: E501
 
     def test_all_workflow_statuses(self):
         result = expand_aliases(["active", "done", "blocked"])
@@ -207,7 +207,7 @@ class TestGetCategoryEmojis:
             assert cat in cats
 
     def test_category_values_are_lists(self):
-        for cat, emojis in get_category_emojis().items():
+        for _cat, emojis in get_category_emojis().items():
             assert isinstance(emojis, list)
             assert len(emojis) > 0
 

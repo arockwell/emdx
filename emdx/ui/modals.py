@@ -4,7 +4,6 @@ Modal screens for EMDX TUI.
 """
 
 import logging
-from typing import List, Tuple
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -13,7 +12,6 @@ from textual.screen import ModalScreen
 from textual.widgets import RichLog, Static
 
 logger = logging.getLogger(__name__)
-
 
 class KeybindingsHelpScreen(ModalScreen):
     """Modal screen showing available keybindings."""
@@ -74,7 +72,7 @@ class KeybindingsHelpScreen(ModalScreen):
         ("q", "close", "Close"),
     ]
 
-    def __init__(self, bindings: List[Tuple[str, str, str]] = None, title: str = "Keybindings"):
+    def __init__(self, bindings: list[tuple[str, str, str]] = None, title: str = "Keybindings"):
         """Initialize help screen.
 
         Args:
@@ -86,7 +84,7 @@ class KeybindingsHelpScreen(ModalScreen):
         self.title = title
         self.bindings_data = bindings or self._default_bindings()
 
-    def _default_bindings(self) -> List[Tuple[str, str, str]]:
+    def _default_bindings(self) -> list[tuple[str, str, str]]:
         """Default keybindings for Activity view."""
         return [
             ("Navigation", "j / k", "Move down / up"),
@@ -126,7 +124,6 @@ class KeybindingsHelpScreen(ModalScreen):
         if event.key not in ("escape", "question_mark", "q"):
             # Let specific bindings handle their keys
             pass
-
 
 class HelpMixin:
     """Mixin to add ? keybinding help to any widget.
@@ -197,7 +194,7 @@ class HelpMixin:
         "space": "Space",
     }
 
-    def get_help_bindings(self) -> List[Tuple[str, str, str]]:
+    def get_help_bindings(self) -> list[tuple[str, str, str]]:
         """Get bindings formatted for help display.
 
         Returns list of (category, key, description) tuples.
@@ -239,7 +236,7 @@ class HelpMixin:
             bindings_list.append((category, display_key, description))
 
         # Sort by category, then by key
-        category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]
+        category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]  # noqa: E501
 
         def sort_key(item):
             cat = item[0]
@@ -262,7 +259,6 @@ class HelpMixin:
         bindings = self.get_help_bindings()
         title = getattr(self, 'HELP_TITLE', 'Keybindings')
         self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title=title))
-
 
 class DocumentPreviewModal(ModalScreen):
     """Modal for previewing a document without leaving the current screen."""
@@ -353,7 +349,7 @@ class DocumentPreviewModal(ModalScreen):
 
             self._doc_data = get_document(self.doc_id)
             if not self._doc_data:
-                self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")
+                self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")  # noqa: E501
                 return
 
             # Update header

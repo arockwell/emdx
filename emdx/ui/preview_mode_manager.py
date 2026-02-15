@@ -12,7 +12,7 @@ Each switch_to_X method handles the complete lifecycle:
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 from textual.containers import ScrollableContainer, Vertical
 from textual.widgets import RichLog
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 class PreviewMode(Enum):
     """Preview container states."""
 
@@ -34,7 +33,6 @@ class PreviewMode(Enum):
     EDITING = "editing"  # Editing existing document
     CREATING = "creating"  # Creating new document
     SELECTING = "selecting"  # Text selection mode
-
 
 class PreviewModeManager:
     """Manages DocumentBrowser preview container state transitions.
@@ -116,7 +114,7 @@ class PreviewModeManager:
 
     async def switch_to_editing(
         self, host, title: str, content: str, is_new: bool = False
-    ) -> Tuple["TitleInput", "VimEditor"]:
+    ) -> tuple["TitleInput", "VimEditor"]:
         """Switch to document editing mode.
 
         Creates the edit structure:

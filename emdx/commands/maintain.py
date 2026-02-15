@@ -16,9 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
-
-if TYPE_CHECKING:
-    pass
 from rich import box
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -27,16 +24,19 @@ from rich.prompt import Confirm
 from ..applications import MaintenanceApplication
 from ..utils.output import console
 
+if TYPE_CHECKING:
+    pass
+
 logger = logging.getLogger(__name__)
 
 
 def maintain(
     auto: bool = typer.Option(False, "--auto", "-a", help="Automatically fix all issues"),
-    clean: bool = typer.Option(False, "--clean", "-c", help="Remove duplicates and empty documents"),
+    clean: bool = typer.Option(False, "--clean", "-c", help="Remove duplicates and empty documents"),  # noqa: E501
     merge: bool = typer.Option(False, "--merge", "-m", help="Merge similar documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Auto-tag untagged documents"),
     gc: bool = typer.Option(False, "--gc", "-g", help="Run garbage collection"),
-    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
+    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),  # noqa: E501
     threshold: float = typer.Option(0.7, "--threshold", help="Similarity threshold for merging"),
 ):
     """
@@ -133,7 +133,7 @@ def _interactive_wizard(dry_run: bool):
         "red"
     )
 
-    console.print(f"\n[bold]Current Health: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")
+    console.print(f"\n[bold]Current Health: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")  # noqa: E501
 
     # Collect all recommendations
     all_recommendations = []
@@ -183,9 +183,9 @@ def _interactive_wizard(dry_run: bool):
 
                 def update_progress(current, total, found):
                     if current < 50:
-                        progress.update(task, description="Building TF-IDF index...", completed=current, found=found)
+                        progress.update(task, description="Building TF-IDF index...", completed=current, found=found)  # noqa: E501
                     else:
-                        progress.update(task, description="Finding duplicates...", completed=current, found=found)
+                        progress.update(task, description="Finding duplicates...", completed=current, found=found)  # noqa: E501
 
                 # Get all pairs at 70% threshold
                 similarity_service = SimilarityService()
@@ -206,13 +206,13 @@ def _interactive_wizard(dry_run: bool):
             med_sim = [(p, s) for p in all_pairs if 0.70 <= p[4] < 0.95]   # 70-95% - review
 
             console.print("\n[bold]Duplicate Analysis:[/bold]")
-            console.print(f"  [red]• {len(high_sim)} obvious duplicates[/red] (>95% similar) - safe to auto-delete")
-            console.print(f"  [yellow]• {len(med_sim)} similar documents[/yellow] (70-95%) - need review")
+            console.print(f"  [red]• {len(high_sim)} obvious duplicates[/red] (>95% similar) - safe to auto-delete")  # noqa: E501
+            console.print(f"  [yellow]• {len(med_sim)} similar documents[/yellow] (70-95%) - need review")  # noqa: E501
 
             # Handle high similarity (auto-delete)
             if high_sim:
                 console.print("\n[dim]Obvious duplicates (will delete the less-viewed copy):[/dim]")
-                for (_id1, _id2, t1, t2, sim), _ in high_sim[:5]:
+                for (_id1, _id2, t1, _t2, sim), _ in high_sim[:5]:
                     console.print(f"  [dim]• {t1[:40]}... ({sim:.0%})[/dim]")
                 if len(high_sim) > 5:
                     console.print(f"  [dim]  ...and {len(high_sim) - 5} more[/dim]")
@@ -229,7 +229,7 @@ def _interactive_wizard(dry_run: bool):
                     console.print(f"  [dim]  ...and {len(med_sim) - 8} more[/dim]")
 
                 console.print("\n[yellow]These need manual review - skipping for now.[/yellow]")
-                console.print("[dim]Use 'emdx ai similar <doc_id>' to review individual documents.[/dim]")
+                console.print("[dim]Use 'emdx ai similar <doc_id>' to review individual documents.[/dim]")  # noqa: E501
 
     # Garbage collection (cheap check)
     gc_preview = app.garbage_collect(dry_run=True)
@@ -400,15 +400,15 @@ def _garbage_collect(dry_run: bool) -> str | None:
 
 
 def cleanup_main(
-    branches: bool = typer.Option(False, "--branches", "-b", help="Clean up old execution branches"),
+    branches: bool = typer.Option(False, "--branches", "-b", help="Clean up old execution branches"),  # noqa: E501
     processes: bool = typer.Option(False, "--processes", "-p", help="Clean up zombie processes"),
     executions: bool = typer.Option(False, "--executions", "-e", help="Clean up stuck executions"),
     all: bool = typer.Option(False, "--all", "-a", help="Clean up everything"),
-    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
+    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),  # noqa: E501
     force: bool = typer.Option(False, "--force", "-f", help="Force delete unmerged branches"),
     age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
-    max_runtime: int = typer.Option(2, "--max-runtime", help="Max process runtime in hours before considering stuck"),
-    timeout_minutes: int = typer.Option(30, "--timeout", help="Minutes after which to consider execution stale"),
+    max_runtime: int = typer.Option(2, "--max-runtime", help="Max process runtime in hours before considering stuck"),  # noqa: E501
+    timeout_minutes: int = typer.Option(30, "--timeout", help="Minutes after which to consider execution stale"),  # noqa: E501
 ):
     """
     Clean up system resources used by EMDX executions.
@@ -530,7 +530,7 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         main_check = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/main"])
         if main_check.returncode != 0:
             # Try master
-            master_check = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/master"])
+            master_check = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/master"])  # noqa: E501
             if master_check.returncode == 0:
                 main_branch = "master"
 
@@ -615,7 +615,7 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         ) as progress:
             task = progress.add_task("Deleting branches...", total=len(branches_to_delete))
 
-            for branch, reason, age in branches_to_delete:
+            for branch, reason, _age in branches_to_delete:
                 try:
                     # Use -D for force delete if needed
                     delete_flag = "-D" if force and reason != "merged" else "-d"
@@ -761,7 +761,7 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> str | None:
     ) as progress:
         task = progress.add_task("Terminating processes...", total=len(all_procs))
 
-        for proc, reason in all_procs:
+        for proc, _reason in all_procs:
             try:
                 # Try graceful termination first
                 proc.terminate()
@@ -795,7 +795,7 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> str | None:
     return f"Terminated {total_removed} processes" if total_removed > 0 else None
 
 
-def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbeat: bool = True) -> str | None:
+def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbeat: bool = True) -> str | None:  # noqa: E501
     """Clean up stuck executions in the database.
 
     Args:
@@ -881,15 +881,15 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
             console.print(f"  • {len(no_pid_old)} old executions without PID")
 
     if long_running:
-        console.print(f"\n  [yellow]Found {len(long_running)} long-running executions (may be normal):[/yellow]")
+        console.print(f"\n  [yellow]Found {len(long_running)} long-running executions (may be normal):[/yellow]")  # noqa: E501
 
     if dry_run:
         # Show details
         if all_stuck:
             console.print("\n  Executions to mark as failed:")
             for exec, reason in all_stuck[:10]:
-                age_minutes = int((datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60)
-                console.print(f"    • #{exec.id}: {exec.doc_title[:30]}... ({reason}, {age_minutes}m old)")
+                age_minutes = int((datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60)  # noqa: E501
+                console.print(f"    • #{exec.id}: {exec.doc_title[:30]}... ({reason}, {age_minutes}m old)")  # noqa: E501
             if len(all_stuck) > 10:
                 console.print(f"    ... and {len(all_stuck) - 10} more")
 
@@ -941,13 +941,13 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
 
     # Also report on long-running for awareness
     if long_running:
-        console.print(f"  [dim]Note: {len(long_running)} long-running executions left untouched[/dim]")
+        console.print(f"  [dim]Note: {len(long_running)} long-running executions left untouched[/dim]")  # noqa: E501
 
     return f"Marked {updated} executions as failed" if updated > 0 else None
 
 
 def cleanup_temp_dirs(
-    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
+    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),  # noqa: E501
     age_hours: int = typer.Option(24, "--age", help="Clean directories older than N hours"),
 ):
     """
@@ -1007,7 +1007,7 @@ def cleanup_temp_dirs(
     # Sort by age
     old_dirs.sort(key=lambda x: x[1])
 
-    console.print(f"Found [yellow]{len(old_dirs)}[/yellow] directories older than {age_hours} hours")
+    console.print(f"Found [yellow]{len(old_dirs)}[/yellow] directories older than {age_hours} hours")  # noqa: E501
     console.print(f"Total space used: [cyan]{total_size / 1024 / 1024:.1f} MB[/cyan]\n")
 
     # Show preview
@@ -1062,11 +1062,11 @@ app = typer.Typer(help="Database maintenance and cleanup operations")
 def maintain_callback(
     ctx: typer.Context,
     auto: bool = typer.Option(False, "--auto", "-a", help="Automatically fix all issues"),
-    clean: bool = typer.Option(False, "--clean", "-c", help="Remove duplicates and empty documents"),
+    clean: bool = typer.Option(False, "--clean", "-c", help="Remove duplicates and empty documents"),  # noqa: E501
     merge: bool = typer.Option(False, "--merge", "-m", help="Merge similar documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Auto-tag untagged documents"),
     gc: bool = typer.Option(False, "--gc", "-g", help="Run garbage collection"),
-    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),
+    dry_run: bool = typer.Option(True, "--execute/--dry-run", help="Execute actions (default: dry run)"),  # noqa: E501
     threshold: float = typer.Option(0.7, "--threshold", help="Similarity threshold for merging"),
 ) -> None:
     """
@@ -1089,7 +1089,8 @@ app.command(name="cleanup")(cleanup_main)
 app.command(name="cleanup-dirs")(cleanup_temp_dirs)
 
 # Import and register analyze as a subcommand of maintain
-from emdx.commands.analyze import analyze as analyze_cmd
+# Late import to avoid circular dependencies
+from emdx.commands.analyze import analyze as analyze_cmd  # noqa: E402
 
 app.command(name="analyze")(analyze_cmd)
 

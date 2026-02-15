@@ -33,9 +33,11 @@ app = typer.Typer(help="Cascade ideas through stages to working code")
 # Stage configuration
 STAGES = ["idea", "prompt", "analyzed", "planned", "done"]
 STAGE_PROMPTS = {
-    "idea": """Convert this idea into a well-formed prompt that could be given to an AI assistant.
+    "idea": """Convert this idea into a well-formed prompt that could be given to an AI
+assistant.
 
-IMPORTANT: Do NOT create any files. Just output the prompt text directly - your output will be captured automatically.
+IMPORTANT: Do NOT create any files. Just output the prompt text directly - your output
+will be captured automatically.
 
 Idea to convert:
 {content}""",
@@ -45,18 +47,22 @@ Idea to convert:
 - What are potential challenges or edge cases?
 - What context or information is needed?
 
-IMPORTANT: Do NOT create any files. Just output your analysis directly - your output will be captured automatically.
+IMPORTANT: Do NOT create any files. Just output your analysis directly - your output
+will be captured automatically.
 
 Prompt to analyze:
 {content}""",
-    "analyzed": """Based on this analysis, create a detailed implementation gameplan. Include:
+    "analyzed": """Based on this analysis, create a detailed implementation gameplan.
+Include:
 - Step-by-step implementation plan
 - Files that need to be modified
 - Key design decisions
 - Testing approach
 - Potential risks
 
-IMPORTANT: Do NOT create any files (no GAMEPLAN.md, no markdown files). Just output the gameplan directly as text - your output will be captured automatically and saved to the knowledge base.
+IMPORTANT: Do NOT create any files (no GAMEPLAN.md, no markdown files). Just output
+the gameplan directly as text - your output will be captured automatically and saved
+to the knowledge base.
 
 Analysis to plan from:
 {content}""",
@@ -83,7 +89,7 @@ NEXT_STAGE = {
 
 
 def _get_stages_between(start: str, stop: str) -> list[str]:
-    """Get list of stages to process between start and stop (inclusive of start, exclusive of stop)."""
+    """Get list of stages to process between start and stop (inclusive of start, exclusive of stop)."""  # noqa: E501
     start_idx = STAGES.index(start)
     stop_idx = STAGES.index(stop)
     # Return stages from start up to (but not including) stop
@@ -95,7 +101,9 @@ def _create_cascade_run(doc_id: int, start_stage: str, stop_stage: str) -> int:
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO cascade_runs (start_doc_id, current_doc_id, start_stage, stop_stage, current_stage, status)
+            INSERT INTO cascade_runs
+                (start_doc_id, current_doc_id, start_stage,
+                 stop_stage, current_stage, status)
             VALUES (?, ?, ?, ?, ?, 'running')
             """,
             (doc_id, doc_id, start_stage, stop_stage, start_stage),
@@ -150,11 +158,11 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
     prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
     if stage == "planned":
-        console.print("[bold yellow]⚡ Implementation mode - Claude will write code and create a PR[/bold yellow]")
+        console.print("[bold yellow]⚡ Implementation mode - Claude will write code and create a PR[/bold yellow]")  # noqa: E501
 
     # Set up logging
     EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_file = EMDX_LOG_DIR / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_file = EMDX_LOG_DIR / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"  # noqa: E501
 
     # Create execution record
     with db_connection.get_connection() as conn:
@@ -219,7 +227,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
             # Mark execution complete
             with db_connection.get_connection() as conn:
                 conn.execute(
-                    "UPDATE executions SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "UPDATE executions SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",  # noqa: E501
                     (execution_id,),
                 )
                 conn.commit()
@@ -229,7 +237,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
             console.print("[red]✗ Processing failed[/red]")
             with db_connection.get_connection() as conn:
                 conn.execute(
-                    "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",  # noqa: E501
                     (execution_id,),
                 )
                 conn.commit()
@@ -239,7 +247,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
         console.print(f"[red]Error: {e}[/red]")
         with db_connection.get_connection() as conn:
             conn.execute(
-                "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",  # noqa: E501
                 (execution_id,),
             )
             conn.commit()
@@ -303,7 +311,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
     stages_to_process = _get_stages_between(start_stage, stop_stage)
 
     if not stages_to_process:
-        console.print(f"[yellow]No stages to process between {start_stage} and {stop_stage}[/yellow]")
+        console.print(f"[yellow]No stages to process between {start_stage} and {stop_stage}[/yellow]")  # noqa: E501
         return
 
     console.print(f"\n[bold cyan]Auto-running: {start_stage} → {stop_stage}[/bold cyan]")
@@ -320,12 +328,12 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
         doc = get_document(str(current_doc_id))
         if not doc:
             console.print(f"[red]Document #{current_doc_id} not found[/red]")
-            _update_cascade_run(cascade_run_id, status='failed', error_message=f"Document {current_doc_id} not found")
+            _update_cascade_run(cascade_run_id, status='failed', error_message=f"Document {current_doc_id} not found")  # noqa: E501
             raise typer.Exit(1)
 
         # Verify document is at expected stage
         if doc.get("stage") != stage:
-            console.print(f"[red]Document #{current_doc_id} is at '{doc.get('stage')}', expected '{stage}'[/red]")
+            console.print(f"[red]Document #{current_doc_id} is at '{doc.get('stage')}', expected '{stage}'[/red]")  # noqa: E501
             _update_cascade_run(cascade_run_id, status='failed', error_message="Stage mismatch")
             raise typer.Exit(1)
 
@@ -342,7 +350,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
 
         # Update cascade run progress
         next_stage = NEXT_STAGE[stage]
-        _update_cascade_run(cascade_run_id, current_doc_id=current_doc_id, current_stage=next_stage, pr_url=pr_url)
+        _update_cascade_run(cascade_run_id, current_doc_id=current_doc_id, current_stage=next_stage, pr_url=pr_url)  # noqa: E501
 
         console.print()  # Blank line between stages
 
@@ -378,12 +386,12 @@ def status():
     if total > 0:
         console.print(f"\nTotal documents in cascade: {total}")
     else:
-        console.print("\n[dim]Cascade is empty. Add ideas with: emdx cascade add \"your idea\"[/dim]")
+        console.print("\n[dim]Cascade is empty. Add ideas with: emdx cascade add \"your idea\"[/dim]")  # noqa: E501
 
     # Show active cascade runs
     with db_connection.get_connection() as conn:
         runs = conn.execute(
-            "SELECT id, start_stage, stop_stage, current_stage, status FROM cascade_runs WHERE status = 'running' ORDER BY started_at DESC LIMIT 5"
+            "SELECT id, start_stage, stop_stage, current_stage, status FROM cascade_runs WHERE status = 'running' ORDER BY started_at DESC LIMIT 5"  # noqa: E501
         ).fetchall()
 
     if runs:
@@ -425,7 +433,7 @@ def process(
     stage: str = typer.Argument(..., help="Stage to process"),
     doc_id: int | None = typer.Option(None, "--doc", "-d", help="Specific document ID"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be processed"),
-    sync: bool = typer.Option(True, "--sync/--async", "-s", help="Wait for completion (default: sync)"),
+    sync: bool = typer.Option(True, "--sync/--async", "-s", help="Wait for completion (default: sync)"),  # noqa: E501
 ):
     """Process one document at a stage.
 
@@ -442,7 +450,7 @@ def process(
         raise typer.Exit(1)
 
     if stage not in STAGE_PROMPTS:
-        console.print(f"[red]Invalid stage: {stage}. Processable stages: {list(STAGE_PROMPTS.keys())}[/red]")
+        console.print(f"[red]Invalid stage: {stage}. Processable stages: {list(STAGE_PROMPTS.keys())}[/red]")  # noqa: E501
         raise typer.Exit(1)
 
     # Get document to process
@@ -452,7 +460,7 @@ def process(
             console.print(f"[red]Document #{doc_id} not found[/red]")
             raise typer.Exit(1)
         if doc.get("stage") != stage:
-            console.print(f"[red]Document #{doc_id} is at stage '{doc.get('stage')}', not '{stage}'[/red]")
+            console.print(f"[red]Document #{doc_id} is at stage '{doc.get('stage')}', not '{stage}'[/red]")  # noqa: E501
             raise typer.Exit(1)
     else:
         doc = cascade_db.get_oldest_at_stage(stage)
@@ -475,11 +483,11 @@ def process(
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
         EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
-        log_file = EMDX_LOG_DIR / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        log_file = EMDX_LOG_DIR / f"cascade_{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"  # noqa: E501
 
         with db_connection.get_connection() as conn:
             cursor = conn.execute(
-                "INSERT INTO executions (doc_id, doc_title, status, started_at, log_file) VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?)",
+                "INSERT INTO executions (doc_id, doc_title, status, started_at, log_file) VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?)",  # noqa: E501
                 (doc_id, doc["title"], str(log_file)),
             )
             conn.commit()
@@ -499,7 +507,7 @@ def process(
 
 @app.command()
 def run(
-    auto: bool = typer.Option(False, "--auto", "-a", help="Process documents end-to-end automatically"),
+    auto: bool = typer.Option(False, "--auto", "-a", help="Process documents end-to-end automatically"),  # noqa: E501
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (with --auto)"),
     once: bool = typer.Option(False, "--once", help="Run one iteration then exit"),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between checks"),
@@ -679,7 +687,7 @@ def synthesize(
         stage=next_stage,
     )
 
-    console.print(f"\n[green]✓[/green] Created synthesized document #{new_doc_id} at '{next_stage}'")
+    console.print(f"\n[green]✓[/green] Created synthesized document #{new_doc_id} at '{next_stage}'")  # noqa: E501
 
     # Optionally advance source docs to done
     if not keep:
@@ -696,7 +704,7 @@ def runs(
     status_filter: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
 ):
     """Show cascade run history."""
-    query = "SELECT id, start_doc_id, start_stage, stop_stage, current_stage, status, pr_url, started_at, completed_at FROM cascade_runs"
+    query = "SELECT id, start_doc_id, start_stage, stop_stage, current_stage, status, pr_url, started_at, completed_at FROM cascade_runs"  # noqa: E501
     params = []
 
     if status_filter:
@@ -722,7 +730,7 @@ def runs(
     table.add_column("Started")
 
     for row in rows:
-        run_id, start_doc, start_stage, stop_stage, current_stage, status, pr_url, started, completed = row
+        run_id, start_doc, start_stage, stop_stage, current_stage, status, pr_url, started, completed = row  # noqa: E501
 
         path = f"{start_stage}→{stop_stage}"
         if status == "running":
@@ -737,7 +745,7 @@ def runs(
 
         pr_display = "🔗" if pr_url else ""
         if started:
-            started_str = started.strftime("%Y-%m-%d %H:%M") if hasattr(started, 'strftime') else str(started)[:16]
+            started_str = started.strftime("%Y-%m-%d %H:%M") if hasattr(started, 'strftime') else str(started)[:16]  # noqa: E501
         else:
             started_str = ""
 

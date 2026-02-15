@@ -79,7 +79,7 @@ class TestCLIBasics:
             "by_project": {},
             "recent_activity": []
         }
-        
+
         result = runner.invoke(app, ["stats"])
         # Should show some statistics
         assert result.exit_code == 0
@@ -151,7 +151,6 @@ class TestTrailingHelpConversion:
     def test_trailing_help_conversion(self):
         """Test that run() converts trailing 'help' to '--help'."""
         import sys
-        from unittest.mock import patch
 
         # Test the conversion logic directly
         original_argv = sys.argv.copy()

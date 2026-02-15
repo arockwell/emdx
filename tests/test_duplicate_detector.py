@@ -9,13 +9,14 @@ Tests cover:
 
 import pytest
 
-datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")
+# Skip all tests if datasketch not installed - must come before module imports
+datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")  # noqa: E501
 
-from emdx.services.duplicate_detector import (
-    DuplicateDetector,
-    _tokenize,
-    _create_minhash,
+from emdx.services.duplicate_detector import (  # noqa: E402
     DEFAULT_NUM_PERM,
+    DuplicateDetector,
+    _create_minhash,
+    _tokenize,
 )
 
 
@@ -148,7 +149,7 @@ class TestDuplicateDetector:
             conn.execute(
                 """INSERT INTO documents (title, content, project, is_deleted)
                    VALUES (?, ?, ?, 0)""",
-                ("Test Doc", "This is a test document with enough content to be indexed." * 5, "test"),
+                ("Test Doc", "This is a test document with enough content to be indexed." * 5, "test"),  # noqa: E501
             )
             conn.commit()
 
@@ -190,7 +191,7 @@ class TestDuplicateDetector:
         result = detector.find_near_duplicates(threshold=0.7)
         assert len(result) >= 1
         # Check that similarity is above threshold
-        for doc1, doc2, similarity in result:
+        for _doc1, _doc2, similarity in result:
             assert similarity >= 0.7
 
     def test_find_near_duplicates_ignores_short_docs(self, detector, clean_db):
@@ -214,8 +215,8 @@ class TestDuplicateDetector:
         from emdx.database import db
 
         # Create documents with moderate similarity
-        content1 = "Python is a programming language. It is widely used for data science and web development." * 5
-        content2 = "JavaScript is a programming language. It is widely used for web development and frontend." * 5
+        content1 = "Python is a programming language. It is widely used for data science and web development." * 5  # noqa: E501
+        content2 = "JavaScript is a programming language. It is widely used for web development and frontend." * 5  # noqa: E501
 
         with db.get_connection() as conn:
             conn.execute(
@@ -301,8 +302,8 @@ class TestMinHashSimilarityAccuracy:
     def test_minhash_approximates_jaccard(self):
         """MinHash similarity approximates true Jaccard similarity."""
         # Create sets with known overlap
-        set1 = set(f"word{i}" for i in range(100))
-        set2 = set(f"word{i}" for i in range(50, 150))
+        set1 = {f"word{i}" for i in range(100)}
+        set2 = {f"word{i}" for i in range(50, 150)}
         # True Jaccard: |intersection| / |union| = 50 / 150 ≈ 0.333
 
         mh1 = _create_minhash(set1, num_perm=256)

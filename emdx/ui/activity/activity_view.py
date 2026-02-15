@@ -13,7 +13,6 @@ and cursor tracking by node reference — eliminating scroll jumping.
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -33,7 +32,6 @@ from .sparkline import sparkline
 
 logger = logging.getLogger(__name__)
 
-
 try:
     from emdx.services import document_service as doc_db
     from emdx.services import group_service as groups_db
@@ -47,7 +45,6 @@ except ImportError:
     HAS_DOCS = False
     HAS_GROUPS = False
 
-
 def format_tokens(tokens: int) -> str:
     """Format token count with K/M abbreviations."""
     if tokens is None or tokens == 0:
@@ -58,7 +55,6 @@ def format_tokens(tokens: int) -> str:
         return f"{tokens / 1_000:.0f}K"
     return str(tokens)
 
-
 def format_cost(cost: float) -> str:
     """Format cost in dollars."""
     if not cost or cost == 0:
@@ -66,7 +62,6 @@ def format_cost(cost: float) -> str:
     if cost < 0.01:
         return f"${cost:.3f}"
     return f"${cost:.2f}"
-
 
 def format_time_ago(dt: datetime) -> str:
     """Format datetime as relative time."""
@@ -102,10 +97,8 @@ def format_time_ago(dt: datetime) -> str:
     days = int(seconds / 86400)
     return f"{days}d"
 
-
 # Re-export ActivityItem base class from activity_items for type annotations
 ActivityItem = ActivityItemBase
-
 
 class AgentLogSubscriber(LogStreamSubscriber):
     """Forwards log content to the activity view."""
@@ -118,7 +111,6 @@ class AgentLogSubscriber(LogStreamSubscriber):
 
     def on_log_error(self, error: Exception) -> None:
         logger.error(f"Log stream error: {error}")
-
 
 class ActivityView(HelpMixin, Widget):
     """Activity View - Mission Control for EMDX."""
@@ -253,7 +245,7 @@ class ActivityView(HelpMixin, Widget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.activity_items: List[ActivityItem] = []
+        self.activity_items: list[ActivityItem] = []
         self.log_stream: LogStream | None = None
         self.log_subscriber = AgentLogSubscriber(self)
         self.streaming_item_id: int | None = None
@@ -295,13 +287,13 @@ class ActivityView(HelpMixin, Widget):
                 with Vertical(id="context-section"):
                     yield Static("DETAILS", id="context-header")
                     with ScrollableContainer(id="context-scroll"):
-                        yield RichLog(id="context-content", highlight=True, markup=True, wrap=True, auto_scroll=False)
+                        yield RichLog(id="context-content", highlight=True, markup=True, wrap=True, auto_scroll=False)  # noqa: E501
 
             # Right: Preview (document content)
             with Vertical(id="preview-panel"):
                 yield Static("PREVIEW", id="preview-header")
                 with ScrollableContainer(id="preview-scroll"):
-                    yield RichLog(id="preview-content", highlight=True, markup=True, wrap=True, auto_scroll=False)
+                    yield RichLog(id="preview-content", highlight=True, markup=True, wrap=True, auto_scroll=False)  # noqa: E501
                 yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
 
         # Group picker (inline at bottom, hidden by default)
@@ -397,7 +389,7 @@ class ActivityView(HelpMixin, Widget):
 
         status_bar.update(" │ ".join(parts))
 
-    def _get_week_activity_data(self) -> List[int]:
+    def _get_week_activity_data(self) -> list[int]:
         """Get activity counts for each day of the past week."""
         today = datetime.now().date()
         counts = []
@@ -482,7 +474,7 @@ class ActivityView(HelpMixin, Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    # Check if content already has a markdown title header (may have leading whitespace)
+                    # Check if content already has a markdown title header (may have leading whitespace)  # noqa: E501
                     content_stripped = content.lstrip()
                     has_title_header = (
                         content_stripped.startswith(f"# {title}") or
@@ -615,7 +607,7 @@ class ActivityView(HelpMixin, Widget):
                 return
 
             header.update(f"📦 {group['name']}")
-            content.write(f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]")
+            content.write(f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]")  # noqa: E501
 
             if group.get("description"):
                 content.write(f"{group['description'][:100]}")
@@ -671,7 +663,7 @@ class ActivityView(HelpMixin, Widget):
                         "session": "💾",
                     }
                     icon = type_icons.get(cg.get("group_type", ""), "📁")
-                    lines.append(f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)")
+                    lines.append(f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)")  # noqa: E501
                 if len(child_groups) > 10:
                     lines.append(f"*... and {len(child_groups) - 10} more*")
 
@@ -681,7 +673,7 @@ class ActivityView(HelpMixin, Widget):
                 lines.append("## Documents")
                 for m in members[:15]:
                     role = m.get("role", "member")
-                    role_icons = {"primary": "★", "synthesis": "📝", "exploration": "◇", "variant": "≈"}
+                    role_icons = {"primary": "★", "synthesis": "📝", "exploration": "◇", "variant": "≈"}  # noqa: E501
                     role_icon = role_icons.get(role, "•")
                     lines.append(f"- {role_icon} #{m['id']} {m['title'][:40]} ({role})")
                 if len(members) > 15:
@@ -854,7 +846,7 @@ class ActivityView(HelpMixin, Widget):
                 tree._add_children(node, item.children)
                 node.expand()
             except Exception as e:
-                logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)
+                logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)  # noqa: E501
 
     async def action_expand(self) -> None:
         """Expand current item."""
@@ -875,7 +867,7 @@ class ActivityView(HelpMixin, Widget):
                 tree._add_children(node, item.children)
                 node.expand()
             except Exception as e:
-                logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)
+                logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)  # noqa: E501
 
     async def action_collapse(self) -> None:
         """Collapse current item or go to parent."""
@@ -941,7 +933,7 @@ class ActivityView(HelpMixin, Widget):
                 tree = self.query_one("#activity-tree", ActivityTree)
                 tree._add_children(node, item.children)
             except Exception as e:
-                logger.error(f"Error loading children for {item.item_type} #{item.item_id}: {e}", exc_info=True)
+                logger.error(f"Error loading children for {item.item_type} #{item.item_id}: {e}", exc_info=True)  # noqa: E501
 
     def on_tree_node_collapsed(self, event: Tree.NodeCollapsed) -> None:
         """Track collapse state on the item."""

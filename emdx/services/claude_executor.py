@@ -17,18 +17,16 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
-
-logger = logging.getLogger(__name__)
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..utils.environment import ensure_claude_in_path
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
 
-# Re-export for backward compatibility - prefer importing from cli_config
-__all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]
+logger = logging.getLogger(__name__)
 
+# Re-export for backward compatibility - prefer importing from cli_config
+__all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]  # noqa: E501
 
 def parse_task_content(task: str) -> str:
     """Parse task string, expanding @filename references.
@@ -60,12 +58,11 @@ def parse_task_content(task: str) -> str:
     expanded = re.sub(pattern, replace_file_reference, task)
     return expanded
 
-
 def execute_claude_detached(
     task: str,
     execution_id: int,
     log_file: Path,
-    allowed_tools: List[str] | None = None,
+    allowed_tools: list[str] | None = None,
     working_dir: str | None = None,
     doc_id: str | None = None,
     cli_tool: str = "claude",
@@ -188,7 +185,7 @@ def execute_claude_detached(
         # Return immediately - don't wait or read from pipes
         # Note: Don't use console.print here as stdout might be redirected
         # Print to stderr instead to avoid log pollution
-        print(f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr)
+        print(f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr)  # noqa: E501
         print(f"Monitor with: emdx exec show {execution_id}", file=sys.stderr)
 
         return process.pid
@@ -213,11 +210,10 @@ def execute_claude_detached(
             log_handle.close()
 
             # Print to stderr to avoid log pollution
-            print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)
+            print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)  # noqa: E501
             return process.pid
         else:
             raise
-
 
 def execute_cli_sync(
     task: str,
@@ -225,7 +221,7 @@ def execute_cli_sync(
     log_file: Path,
     cli_tool: str = "claude",
     model: str | None = None,
-    allowed_tools: List[str] | None = None,
+    allowed_tools: list[str] | None = None,
     working_dir: str | None = None,
     doc_id: str | None = None,
     timeout: int = 300,

@@ -18,7 +18,7 @@ def ask_question(
     question: str = typer.Argument(..., help="Your question"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to search"),
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
-    keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),
+    keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),  # noqa: E501
     show_sources: bool = typer.Option(True, "--sources/--no-sources", help="Show source documents"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
 ):
@@ -41,7 +41,7 @@ def ask_question(
             result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Display answer
     console.print()
@@ -53,7 +53,7 @@ def ask_question(
         console.print(f"[dim]Sources: {', '.join(f'#{id}' for id in result.sources)}[/dim]")
 
     if verbose:
-        console.print(f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]")
+        console.print(f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]")  # noqa: E501
 
 
 @app.command("context")
@@ -62,7 +62,7 @@ def get_context(
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to retrieve"),
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search"),
-    include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),
+    include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),  # noqa: E501
 ):
     """
     Retrieve context for a question (for piping to claude CLI).
@@ -88,11 +88,11 @@ def get_context(
             docs, method = service._retrieve_semantic(question, limit, project)
     except ImportError as e:
         console.print(f"[red]{e}[/red]", highlight=False)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not docs:
         print("No relevant documents found.", file=sys.stderr)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Build context output
     output_parts = []
@@ -136,7 +136,7 @@ def build_index(
 
         # Show current stats
         stats = service.stats()
-        console.print(f"[dim]Current index: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+        console.print(f"[dim]Current index: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")  # noqa: E501
 
         if stats.indexed_documents == stats.total_documents and not force:
             console.print("[green]Index is already up to date![/green]")
@@ -156,10 +156,10 @@ def build_index(
 
         # Show updated stats
         stats = service.stats()
-        console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
+        console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")  # noqa: E501
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command("search")
@@ -184,23 +184,23 @@ def semantic_search(
         service = EmbeddingService()
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Check if we have embeddings
     stats = service.stats()
     if stats.indexed_documents == 0:
         console.print("[yellow]No documents indexed. Run 'emdx ai index' first.[/yellow]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     try:
         with console.status("[bold blue]Searching...", spinner="dots"):
             results = service.search(query, limit=limit, threshold=threshold)
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not results:
-        console.print(f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]")
+        console.print(f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]")  # noqa: E501
         return
 
     # Filter by project if specified
@@ -239,7 +239,7 @@ def find_similar(
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     from ..database import db
 
     service = EmbeddingService()
@@ -251,7 +251,7 @@ def find_similar(
         row = cursor.fetchone()
         if not row:
             console.print(f"[red]Document {doc_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         source_title = row[0]
 
     try:
@@ -259,7 +259,7 @@ def find_similar(
             results = service.find_similar(doc_id, limit=limit)
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not results:
         console.print("[yellow]No similar documents found[/yellow]")
@@ -286,7 +286,7 @@ def show_stats():
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     service = EmbeddingService()
     stats = service.stats()
@@ -317,7 +317,7 @@ def clear_index(
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not confirm:
         confirm = typer.confirm("This will delete all embeddings. Continue?")

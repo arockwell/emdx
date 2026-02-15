@@ -6,7 +6,7 @@ Analyzes knowledge base health and provides actionable recommendations.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -21,8 +21,7 @@ class HealthMetric:
     weight: float  # Importance weight
     status: str  # 'good', 'warning', 'critical'
     details: str
-    recommendations: List[str]
-
+    recommendations: list[str]
 
 @dataclass
 class ProjectHealth:
@@ -34,7 +33,6 @@ class ProjectHealth:
     activity_score: float
     organization_score: float
     overall_score: float
-
 
 class HealthMonitor:
     """Service for monitoring knowledge base health."""
@@ -57,7 +55,7 @@ class HealthMonitor:
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
 
-    def calculate_overall_health(self) -> Dict[str, Any]:
+    def calculate_overall_health(self) -> dict[str, Any]:
         """
         Calculate comprehensive health score for the knowledge base.
 
@@ -96,7 +94,7 @@ class HealthMonitor:
             'timestamp': datetime.now().isoformat()
         }
 
-    def _get_basic_stats(self) -> Dict[str, Any]:
+    def _get_basic_stats(self) -> dict[str, Any]:
         """Get basic statistics about the knowledge base."""
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -106,7 +104,7 @@ class HealthMonitor:
             total_docs = cursor.fetchone()[0]
 
             # Total projects
-            cursor.execute("SELECT COUNT(DISTINCT project) FROM documents WHERE is_deleted = 0 AND project IS NOT NULL")
+            cursor.execute("SELECT COUNT(DISTINCT project) FROM documents WHERE is_deleted = 0 AND project IS NOT NULL")  # noqa: E501
             total_projects = cursor.fetchone()[0]
 
             # Total tags
@@ -114,7 +112,7 @@ class HealthMonitor:
             total_tags = cursor.fetchone()[0]
 
             # Database size
-            cursor.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+            cursor.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")  # noqa: E501
             db_size = cursor.fetchone()[0]
 
         return {
@@ -202,7 +200,7 @@ class HealthMonitor:
         # Generate recommendations
         recommendations = []
         if stats['total_duplicates'] > 0:
-            recommendations.append(f"Remove {stats['total_duplicates']} duplicates with 'emdx clean duplicates'")
+            recommendations.append(f"Remove {stats['total_duplicates']} duplicates with 'emdx clean duplicates'")  # noqa: E501
             if stats['space_wasted'] > 1024 * 1024:  # 1MB
                 mb_wasted = stats['space_wasted'] / 1024 / 1024
                 recommendations.append(f"Save {mb_wasted:.1f}MB by removing duplicates")
@@ -212,7 +210,7 @@ class HealthMonitor:
             value=health_value,
             weight=self.WEIGHTS['duplicate_ratio'],
             status=status,
-            details=f"{stats['total_duplicates']} duplicates found ({duplicate_ratio:.1%} of total)",
+            details=f"{stats['total_duplicates']} duplicates found ({duplicate_ratio:.1%} of total)",  # noqa: E501
             recommendations=recommendations
         )
 
@@ -358,7 +356,7 @@ class HealthMonitor:
         if week_active < total * 0.1:
             recommendations.append("Knowledge base is underutilized - review and update content")
         if new_last_month == 0:
-            recommendations.append("No new documents in the last month - consider capturing new knowledge")
+            recommendations.append("No new documents in the last month - consider capturing new knowledge")  # noqa: E501
 
         stale_count = total - quarter_active
         if stale_count > total * 0.5:
@@ -510,7 +508,7 @@ class HealthMonitor:
             recommendations=recommendations
         )
 
-    def get_project_health(self, limit: int | None = None) -> List[ProjectHealth]:
+    def get_project_health(self, limit: int | None = None) -> list[ProjectHealth]:
         """
         Get health metrics for each project.
 
@@ -530,7 +528,8 @@ class HealthMonitor:
                     COUNT(*) as doc_count,
                     COUNT(DISTINCT dt.document_id) as tagged_count,
                     AVG(julianday('now') - julianday(d.created_at)) as avg_age,
-                    SUM(CASE WHEN julianday('now') - julianday(d.accessed_at) < 30 THEN 1 ELSE 0 END) as recent_access
+                    SUM(CASE WHEN julianday('now') - julianday(d.accessed_at) < 30
+                        THEN 1 ELSE 0 END) as recent_access
                 FROM documents d
                 LEFT JOIN document_tags dt ON d.id = dt.document_id
                 WHERE d.is_deleted = 0 AND d.project IS NOT NULL
@@ -582,7 +581,7 @@ class HealthMonitor:
             return projects[:limit]
         return projects
 
-    def get_maintenance_recommendations(self) -> List[Tuple[str, str, str]]:
+    def get_maintenance_recommendations(self) -> list[tuple[str, str, str]]:
         """
         Get prioritized maintenance recommendations.
 
@@ -639,7 +638,7 @@ class HealthMonitor:
         # Metrics breakdown
         report.append("## Health Metrics")
         for metric_name, metric in health['metrics'].items():
-            status_emoji = "🟢" if metric.status == 'good' else "🟡" if metric.status == 'warning' else "🔴"
+            status_emoji = "🟢" if metric.status == 'good' else "🟡" if metric.status == 'warning' else "🔴"  # noqa: E501
             report.append(f"\n### {metric_name.replace('_', ' ').title()} {status_emoji}")
             report.append(f"- **Score**: {metric.value:.0%}")
             report.append(f"- **Status**: {metric.status}")

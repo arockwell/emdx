@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from emdx.services.file_watcher import FileWatcher, WATCHDOG_AVAILABLE
+from emdx.services.file_watcher import WATCHDOG_AVAILABLE, FileWatcher
 
 
 class TestFileWatcherPolling:
@@ -53,7 +53,7 @@ class TestFileWatcherPolling:
                 # Wait for callback to be triggered
                 result = callback_called.wait(timeout=2.0)
                 assert result, "Callback was not triggered after file modification"
-                assert callback_count[0] >= 2, "Expected at least 2 callbacks (initial + modification)"
+                assert callback_count[0] >= 2, "Expected at least 2 callbacks (initial + modification)"  # noqa: E501
             finally:
                 watcher.stop()
 

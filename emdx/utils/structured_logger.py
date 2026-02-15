@@ -14,7 +14,7 @@ import threading
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Union
 
 
 class LogLevel(Enum):
@@ -25,14 +25,12 @@ class LogLevel(Enum):
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
 
-
 class ProcessType(Enum):
     """Types of processes that write logs."""
     MAIN = "main"
     WRAPPER = "wrapper"
     CLAUDE = "claude"
     TUI = "tui"
-
 
 class StructuredLogger:
     """Thread-safe structured logger for EMDX processes."""
@@ -55,7 +53,7 @@ class StructuredLogger:
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
     def _create_entry(self, level: LogLevel, message: str,
-                      context: Dict[str, Any] | None = None) -> Dict[str, Any]:
+                      context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Create a structured log entry.
 
         Args:
@@ -82,7 +80,7 @@ class StructuredLogger:
 
         return entry
 
-    def _write_entry(self, entry: Dict[str, Any]) -> None:
+    def _write_entry(self, entry: dict[str, Any]) -> None:
         """Write a log entry atomically to the log file.
 
         Args:
@@ -105,7 +103,7 @@ class StructuredLogger:
                 print(f"Failed to write log entry: {e}", file=sys.stderr)
 
     def log(self, level: LogLevel, message: str,
-            context: Dict[str, Any] | None = None) -> None:
+            context: dict[str, Any] | None = None) -> None:
         """Write a log entry.
 
         Args:
@@ -116,27 +114,27 @@ class StructuredLogger:
         entry = self._create_entry(level, message, context)
         self._write_entry(entry)
 
-    def debug(self, message: str, context: Dict[str, Any] | None = None) -> None:
+    def debug(self, message: str, context: dict[str, Any] | None = None) -> None:
         """Write a debug log entry."""
         self.log(LogLevel.DEBUG, message, context)
 
-    def info(self, message: str, context: Dict[str, Any] | None = None) -> None:
+    def info(self, message: str, context: dict[str, Any] | None = None) -> None:
         """Write an info log entry."""
         self.log(LogLevel.INFO, message, context)
 
-    def warning(self, message: str, context: Dict[str, Any] | None = None) -> None:
+    def warning(self, message: str, context: dict[str, Any] | None = None) -> None:
         """Write a warning log entry."""
         self.log(LogLevel.WARNING, message, context)
 
-    def error(self, message: str, context: Dict[str, Any] | None = None) -> None:
+    def error(self, message: str, context: dict[str, Any] | None = None) -> None:
         """Write an error log entry."""
         self.log(LogLevel.ERROR, message, context)
 
-    def critical(self, message: str, context: Dict[str, Any] | None = None) -> None:
+    def critical(self, message: str, context: dict[str, Any] | None = None) -> None:
         """Write a critical log entry."""
         self.log(LogLevel.CRITICAL, message, context)
 
-    def log_claude_output(self, json_data: Dict[str, Any]) -> None:
+    def log_claude_output(self, json_data: dict[str, Any]) -> None:
         """Log Claude's JSON output with proper formatting.
 
         Args:
@@ -182,10 +180,10 @@ class StructuredLogger:
             # Final result
             subtype = json_data.get("subtype", "unknown")
             if subtype == "success":
-                self.info("Task completed successfully", {"claude_type": "result", "subtype": "success"})
+                self.info("Task completed successfully", {"claude_type": "result", "subtype": "success"})  # noqa: E501
             else:
                 result = json_data.get('result', 'Unknown error')
-                self.error(f"Task failed: {result}", {"claude_type": "result", "subtype": "failure"})
+                self.error(f"Task failed: {result}", {"claude_type": "result", "subtype": "failure"})  # noqa: E501
         else:
             # Unknown type - log for debugging
             self.debug(f"Unknown Claude message type: {msg_type}", {"claude_data": json_data})
@@ -210,11 +208,10 @@ class StructuredLogger:
             "duration_seconds": duration
         })
 
-    def log_process_lifecycle(self, event: str, details: Dict[str, Any] | None = None) -> None:
+    def log_process_lifecycle(self, event: str, details: dict[str, Any] | None = None) -> None:
         """Log process lifecycle events (start, heartbeat, stop)."""
         self.info(f"Process {event}", {
             "event": f"process_{event}",
             "details": details or {}
         })
-
 

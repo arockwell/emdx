@@ -7,7 +7,7 @@ replacing the stringly-typed item_type field with proper polymorphism.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -19,7 +19,7 @@ class ActivityItem(ABC):
     timestamp: datetime
     depth: int = 0
     expanded: bool = False
-    children: List["ActivityItem"] = field(default_factory=list)
+    children: list["ActivityItem"] = field(default_factory=list)
     status: str = "completed"  # Default status for items that don't track status
     doc_id: int | None = None  # Document ID if this item has associated content
     cost: float = 0.0  # Cost in USD if tracked
@@ -48,7 +48,7 @@ class ActivityItem(ABC):
         ...
 
     @abstractmethod
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> list["ActivityItem"]:
         """Load child items from database."""
         ...
 
@@ -60,7 +60,6 @@ class ActivityItem(ABC):
             Tuple of (content_markdown, header_text)
         """
         ...
-
 
 @dataclass
 class DocumentItem(ActivityItem):
@@ -84,7 +83,7 @@ class DocumentItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.has_children
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> list["ActivityItem"]:
         """Load child documents."""
         children = []
 
@@ -142,7 +141,6 @@ class DocumentItem(ActivityItem):
 
         return "", "PREVIEW"
 
-
 @dataclass
 class CascadeRunItem(ActivityItem):
     """A cascade run in the activity stream.
@@ -151,7 +149,7 @@ class CascadeRunItem(ActivityItem):
     with all associated stage transitions shown as children.
     """
 
-    cascade_run: Dict[str, Any] = field(default_factory=dict)
+    cascade_run: dict[str, Any] = field(default_factory=dict)
     status: str = "running"
     pipeline_name: str = "default"
     current_stage: str = ""
@@ -178,7 +176,7 @@ class CascadeRunItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.execution_count > 0 or len(self.children) > 0
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> list["ActivityItem"]:
         """Load cascade stage executions as children."""
         from emdx.services.cascade_service import get_cascade_run_executions
 
@@ -225,7 +223,7 @@ class CascadeRunItem(ActivityItem):
         run = self.cascade_run
 
         content_parts = [f"# Cascade Run #{run.get('id', '?')}\n"]
-        content_parts.append(f"\n**Pipeline:** {run.get('pipeline_display_name', run.get('pipeline_name', 'default'))}")
+        content_parts.append(f"\n**Pipeline:** {run.get('pipeline_display_name', run.get('pipeline_name', 'default'))}")  # noqa: E501
         content_parts.append(f"\n**Status:** {self.status}")
 
         if self.current_stage:
@@ -245,7 +243,6 @@ class CascadeRunItem(ActivityItem):
 
         content = "".join(content_parts)
         return content, f"🌊 Cascade #{run.get('id', '?')}"
-
 
 @dataclass
 class CascadeStageItem(ActivityItem):
@@ -285,7 +282,7 @@ class CascadeStageItem(ActivityItem):
     def can_expand(self) -> bool:
         return False
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> list["ActivityItem"]:
         """Stage items don't have children."""
         return []
 
@@ -298,12 +295,11 @@ class CascadeStageItem(ActivityItem):
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
 
-
 @dataclass
 class GroupItem(ActivityItem):
     """A document group (batch, round, initiative) in the activity stream."""
 
-    group: Dict[str, Any] = field(default_factory=dict)
+    group: dict[str, Any] = field(default_factory=dict)
     doc_count: int = 0
     total_cost: float = 0.0
     total_tokens: int = 0
@@ -331,7 +327,7 @@ class GroupItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.doc_count > 0 or self.child_group_count > 0 or len(self.children) > 0
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> list["ActivityItem"]:
         """Load child groups and member documents."""
         from emdx.services import group_service as groups
 
@@ -429,7 +425,6 @@ class GroupItem(ActivityItem):
         content = "".join(content_parts)
         return content, f"{self.type_icon} Group #{self.group.get('id', '?')}"
 
-
 @dataclass
 class AgentExecutionItem(ActivityItem):
     """A standalone agent execution (from `emdx delegate` command).
@@ -437,7 +432,7 @@ class AgentExecutionItem(ActivityItem):
     These are direct CLI delegate runs not part of any workflow or cascade.
     """
 
-    execution: Dict[str, Any] = field(default_factory=dict)
+    execution: dict[str, Any] = field(default_factory=dict)
     status: str = "running"
     doc_id: int | None = None
     log_file: str = ""
@@ -466,7 +461,7 @@ class AgentExecutionItem(ActivityItem):
     def can_expand(self) -> bool:
         return False
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db) -> list["ActivityItem"]:
         """Agent executions don't have children."""
         return []
 
@@ -495,5 +490,4 @@ class AgentExecutionItem(ActivityItem):
                     pass
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
-
 

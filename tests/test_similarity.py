@@ -1,15 +1,14 @@
 """Tests for the TF-IDF similarity service."""
 
-import json
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-sklearn = pytest.importorskip("sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')")
+# Skip all tests if sklearn not installed - must come before module imports
+sklearn = pytest.importorskip("sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')")  # noqa: E501
 
-from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService
+from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService  # noqa: E402
 
 
 @pytest.fixture

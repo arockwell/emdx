@@ -7,12 +7,10 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
 
 from .logging_utils import get_logger
 
 logger = get_logger(__name__)
-
 
 @dataclass
 class GitWorktree:
@@ -27,13 +25,12 @@ class GitWorktree:
         """Get a display name for the worktree."""
         return Path(self.path).name
 
-
 @dataclass
 class GitProject:
     """Represents a git project with its worktrees."""
     name: str
     main_path: str
-    worktrees: List['GitWorktree'] = None
+    worktrees: list['GitWorktree'] = None
 
     def __post_init__(self):
         if self.worktrees is None:
@@ -48,7 +45,6 @@ class GitProject:
     def display_name(self) -> str:
         """Get a display name for the project."""
         return f"{self.name} ({self.worktree_count} worktrees)"
-
 
 @dataclass
 class GitFileStatus:
@@ -82,7 +78,6 @@ class GitFileStatus:
             '??': 'Untracked',
         }
         return descriptions.get(self.status, 'Unknown')
-
 
 def extract_project_name_from_worktree(worktree_path: str) -> str:
     """
@@ -121,8 +116,7 @@ def extract_project_name_from_worktree(worktree_path: str) -> str:
     # Fallback: return the whole name
     return name
 
-
-def discover_projects_from_main_repos() -> List[GitProject]:
+def discover_projects_from_main_repos() -> list[GitProject]:
     """
     Discover projects by scanning ~/dev/ for main repos.
 
@@ -188,8 +182,7 @@ def discover_projects_from_main_repos() -> List[GitProject]:
     logger.info(f"Discovered {len(projects)} projects from main repos")
     return projects
 
-
-def discover_projects_from_worktrees(worktree_dirs: List[str] | None = None) -> List[GitProject]:
+def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> list[GitProject]:
     """
     Discover projects by grouping worktrees.
 
@@ -295,14 +288,15 @@ def discover_projects_from_worktrees(worktree_dirs: List[str] | None = None) -> 
     projects.sort(key=lambda p: p.name.lower())
     return projects
 
-
-def discover_git_projects(search_paths: List[str] | None = None, max_depth: int = 1) -> List[GitProject]:
+def discover_git_projects(search_paths: list[str] | None = None, max_depth: int = 1) -> list[GitProject]:  # noqa: E501
     """
     Discover git projects in common locations.
 
     Args:
-        search_paths: Optional list of paths to search. Defaults to ~/dev/worktrees and parent of current dir.
-        max_depth: Maximum directory depth to search (default 1 = only immediate children)
+        search_paths: Optional list of paths to search. Defaults to
+            ~/dev/worktrees and parent of current dir.
+        max_depth: Maximum directory depth to search (default 1 = only
+            immediate children)
 
     Returns:
         List of GitProject objects
@@ -369,8 +363,7 @@ def discover_git_projects(search_paths: List[str] | None = None, max_depth: int 
     projects.sort(key=lambda p: p.name.lower())
     return projects
 
-
-def get_worktrees(project_path: str | None = None) -> List[GitWorktree]:
+def get_worktrees(project_path: str | None = None) -> list[GitWorktree]:
     """
     Get list of all git worktrees for a project.
 
@@ -423,8 +416,7 @@ def get_worktrees(project_path: str | None = None) -> List[GitWorktree]:
         logger.debug("Failed to get worktree list: %s", e)
         return []
 
-
-def get_git_status(worktree_path: str | None = None) -> List[GitFileStatus]:
+def get_git_status(worktree_path: str | None = None) -> list[GitFileStatus]:
     """Get git status for current directory or specified worktree."""
     try:
         cmd = ['git', 'status', '--porcelain']
@@ -478,7 +470,6 @@ def get_git_status(worktree_path: str | None = None) -> List[GitFileStatus]:
         logger.debug("Failed to get git status: %s", e)
         return []
 
-
 def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None) -> str:
     """Get comprehensive diff showing both staged and unstaged changes."""
     staged_diff = get_git_diff(file_path, staged=True, worktree_path=worktree_path)
@@ -487,13 +478,13 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None)
     output_parts = []
 
     # Add staged changes if they exist
-    if staged_diff and not staged_diff.startswith("No staged changes") and not staged_diff.startswith("Error:"):
+    if staged_diff and not staged_diff.startswith("No staged changes") and not staged_diff.startswith("Error:"):  # noqa: E501
         output_parts.append("[bold green]📦 STAGED CHANGES[/bold green]")
         output_parts.append(staged_diff)
         output_parts.append("")
 
     # Add unstaged changes if they exist
-    if unstaged_diff and not unstaged_diff.startswith("No unstaged changes") and not unstaged_diff.startswith("Error:"):
+    if unstaged_diff and not unstaged_diff.startswith("No unstaged changes") and not unstaged_diff.startswith("Error:"):  # noqa: E501
         output_parts.append("[bold yellow]📝 UNSTAGED CHANGES[/bold yellow]")
         output_parts.append(unstaged_diff)
         output_parts.append("")
@@ -503,7 +494,6 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None)
         return f"No changes found for {file_path}"
 
     return "\n".join(output_parts)
-
 
 def get_git_diff(file_path: str, staged: bool = False, worktree_path: str | None = None) -> str:
     """Get git diff for a specific file with beautiful formatting."""
@@ -556,7 +546,6 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: str | None
     except subprocess.CalledProcessError:
         return f"Error: Could not get diff for {file_path}"
 
-
 def is_git_repository(path: str | None = None) -> bool:
     """Check if directory is a git repository."""
     try:
@@ -570,7 +559,6 @@ def is_git_repository(path: str | None = None) -> bool:
         return True
     except subprocess.CalledProcessError:
         return False
-
 
 def get_current_branch(worktree_path: str | None = None) -> str:
     """Get current git branch name."""
@@ -587,7 +575,6 @@ def get_current_branch(worktree_path: str | None = None) -> str:
     except subprocess.CalledProcessError:
         return "unknown"
 
-
 def get_repository_root(path: str | None = None) -> str | None:
     """Get the root directory of the git repository."""
     try:
@@ -602,7 +589,6 @@ def get_repository_root(path: str | None = None) -> str | None:
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
-
 
 def git_stage_file(file_path: str, worktree_path: str | None = None) -> bool:
     """Stage a file for commit."""
@@ -619,7 +605,6 @@ def git_stage_file(file_path: str, worktree_path: str | None = None) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-
 def git_unstage_file(file_path: str, worktree_path: str | None = None) -> bool:
     """Unstage a file (remove from staging area)."""
     try:
@@ -635,8 +620,7 @@ def git_unstage_file(file_path: str, worktree_path: str | None = None) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-
-def git_commit(message: str, worktree_path: str | None = None) -> Tuple[bool, str]:
+def git_commit(message: str, worktree_path: str | None = None) -> tuple[bool, str]:
     """Commit staged changes with a message."""
     try:
         cwd = worktree_path if worktree_path else None
@@ -650,7 +634,6 @@ def git_commit(message: str, worktree_path: str | None = None) -> Tuple[bool, st
         return True, result.stdout.strip()
     except subprocess.CalledProcessError as e:
         return False, e.stderr.strip() if e.stderr else "Commit failed"
-
 
 def git_discard_changes(file_path: str, worktree_path: str | None = None) -> bool:
     """Discard unstaged changes to a file."""
@@ -667,8 +650,7 @@ def git_discard_changes(file_path: str, worktree_path: str | None = None) -> boo
     except subprocess.CalledProcessError:
         return False
 
-
-def create_worktree(branch_name: str, path: str | None = None, base_branch: str | None = None, repo_path: str | None = None) -> Tuple[bool, str, str]:
+def create_worktree(branch_name: str, path: str | None = None, base_branch: str | None = None, repo_path: str | None = None) -> tuple[bool, str, str]:  # noqa: E501
     """
     Create a new git worktree.
 
@@ -686,7 +668,7 @@ def create_worktree(branch_name: str, path: str | None = None, base_branch: str 
         # Use provided repo_path or current directory
         repo_root = get_repository_root(repo_path)
         if not repo_root:
-            return False, "", f"Not in a git repository (checked path: {repo_path or 'current directory'})"
+            return False, "", f"Not in a git repository (checked path: {repo_path or 'current directory'})"  # noqa: E501
 
         # Auto-generate path if not provided
         if not path:
@@ -721,8 +703,7 @@ def create_worktree(branch_name: str, path: str | None = None, base_branch: str 
         logger.error(f"Exception creating worktree: {e}", exc_info=True)
         return False, "", str(e)
 
-
-def remove_worktree(path: str, force: bool = False) -> Tuple[bool, str]:
+def remove_worktree(path: str, force: bool = False) -> tuple[bool, str]:
     """
     Remove a git worktree.
 

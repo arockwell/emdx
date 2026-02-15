@@ -28,7 +28,7 @@ def create(
         console.print(f"[green]Created epic #{epic_id}: {name} ({cat.upper()})[/green]")
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command("list")
@@ -88,7 +88,10 @@ def view(
         raise typer.Exit(1)
 
     cat_label = f" ({epic['epic_key']})" if epic.get("epic_key") else ""
-    console.print(f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold] — {epic['status']}")
+    console.print(
+        f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold]"
+        f" — {epic['status']}"
+    )
     if epic.get("description"):
         console.print(f"[dim]{epic['description']}[/dim]")
     console.print(f"[dim]Created: {epic.get('created_at', 'unknown')}[/dim]\n")

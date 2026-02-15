@@ -156,7 +156,7 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] Docs │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] Docs │ "  # noqa: E501
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
             id="search-nav"
         )
@@ -235,7 +235,7 @@ class SearchScreen(HelpMixin, Widget):
             shown = len(results_to_show)
             count_text = f"{shown} of {total_found}" if total_found > shown else str(shown)
             self.query_one("#search-status", Static).update(
-                f"{count_text} results | {state.mode.value.upper()} | {state.search_time_ms}ms | j/k=nav | Enter=view"
+                f"{count_text} results | {state.mode.value.upper()} | {state.search_time_ms}ms | j/k=nav | Enter=view"  # noqa: E501
             )
         except Exception as e:
             logger.error(f"Error rendering results: {e}")
@@ -268,7 +268,7 @@ class SearchScreen(HelpMixin, Widget):
         """Format the snippet showing WHY this matched, with rich highlighting."""
         if result.snippet:
             # Convert <b> tags to rich markup highlights
-            snippet = result.snippet.replace("<b>", "[yellow bold]").replace("</b>", "[/yellow bold]")
+            snippet = result.snippet.replace("<b>", "[yellow bold]").replace("</b>", "[/yellow bold]")  # noqa: E501
             # Clean up whitespace but keep it readable
             snippet = " ".join(snippet.split())
             # Allow longer snippets now that we have more space
@@ -279,7 +279,7 @@ class SearchScreen(HelpMixin, Widget):
         # Fallback explanations for different match types
         if "semantic" in result.source:
             score_pct = int(result.score * 100)
-            return f"[magenta]🧠 {score_pct}% semantic similarity[/magenta] - conceptually related to your search"
+            return f"[magenta]🧠 {score_pct}% semantic similarity[/magenta] - conceptually related to your search"  # noqa: E501
         if "tags" in result.source:
             return f"[cyan]🏷️ Matched tags:[/cyan] {' '.join(result.tags[:5])}"
         if "fuzzy" in result.source:
@@ -294,7 +294,7 @@ class SearchScreen(HelpMixin, Widget):
         """Get icon based on match source."""
         if "+" in source:
             return "🔀"
-        return {"fts": "📝", "tags": "🏷️", "semantic": "🧠", "fuzzy": "🔍", "recent": "🕐", "id": "🆔"}.get(source, "📄")
+        return {"fts": "📝", "tags": "🏷️", "semantic": "🧠", "fuzzy": "🔍", "recent": "🕐", "id": "🆔"}.get(source, "📄")  # noqa: E501
 
     def _format_time(self, time_str: str) -> str:
         """Format timestamp as relative time."""
@@ -413,7 +413,7 @@ class SearchScreen(HelpMixin, Widget):
         else:
             # Check if embeddings are available before enabling semantic search
             if not self.presenter.search_service.has_embeddings():
-                self.notify("No embeddings indexed. Run 'emdx ai index' first.", severity="warning", timeout=3)
+                self.notify("No embeddings indexed. Run 'emdx ai index' first.", severity="warning", timeout=3)  # noqa: E501
                 return
             self.presenter.set_mode(SearchMode.SEMANTIC)
             self.current_mode = SearchMode.SEMANTIC
@@ -526,7 +526,7 @@ class SearchScreen(HelpMixin, Widget):
             if search_input.has_focus:
                 # When input is focused, don't let vim keys trigger actions
                 # Let them pass through to the input widget
-                vim_keys = {"j", "k", "g", "G", "e", "t", "T", "r", "space", "slash", "1", "2", "3", "4"}
+                vim_keys = {"j", "k", "g", "G", "e", "t", "T", "r", "space", "slash", "1", "2", "3", "4"}  # noqa: E501
                 if event.key in vim_keys:
                     # Don't stop - let the input handle it
                     return

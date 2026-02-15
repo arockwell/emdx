@@ -5,13 +5,12 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ...config.cli_config import CLI_CONFIGS, CliTool, resolve_model_alias
 from .base import CliCommand, CliExecutor, CliResult
 
 logger = logging.getLogger(__name__)
-
 
 class ClaudeCliExecutor(CliExecutor):
     """Executor for Claude Code CLI."""
@@ -27,7 +26,7 @@ class ClaudeCliExecutor(CliExecutor):
         self,
         prompt: str,
         model: str | None = None,
-        allowed_tools: List[str] | None = None,
+        allowed_tools: list[str] | None = None,
         output_format: str = "stream-json",
         working_dir: str | None = None,
         timeout: int | None = None,
@@ -35,7 +34,8 @@ class ClaudeCliExecutor(CliExecutor):
         """Build Claude CLI command.
 
         Claude command format:
-            claude --print "prompt" --model <model> --output-format <format> [--verbose] [--allowedTools X,Y,Z]
+            claude --print "prompt" --model <model> --output-format <format>
+                   [--verbose] [--allowedTools X,Y,Z]
         """
         # Start with binary
         cmd = list(self.config.binary)
@@ -131,7 +131,7 @@ class ClaudeCliExecutor(CliExecutor):
             exit_code=exit_code,
         )
 
-    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
+    def parse_stream_line(self, line: str) -> dict[str, Any] | None:
         """Parse a single line from Claude's stream-json output."""
         if not line.strip():
             return None
@@ -178,9 +178,9 @@ class ClaudeCliExecutor(CliExecutor):
             logger.debug(f"Failed to parse line as JSON: {line[:100]}")
             return None
 
-    def validate_environment(self) -> tuple[bool, Dict[str, Any]]:
+    def validate_environment(self) -> tuple[bool, dict[str, Any]]:
         """Validate Claude CLI is installed and configured."""
-        info: Dict[str, Any] = {"cli": "claude", "errors": [], "warnings": []}
+        info: dict[str, Any] = {"cli": "claude", "errors": [], "warnings": []}
 
         # Check if binary exists
         binary_path = self.get_binary_path()

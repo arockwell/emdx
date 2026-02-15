@@ -332,9 +332,12 @@ def get_active_delegate_tasks() -> list[dict[str, Any]]:
     with db.get_connection() as conn:
         cursor = conn.execute("""
             SELECT t.*,
-                (SELECT COUNT(*) FROM tasks c WHERE c.parent_task_id = t.id) as child_count,
-                (SELECT COUNT(*) FROM tasks c WHERE c.parent_task_id = t.id AND c.status = 'done') as children_done,
-                (SELECT COUNT(*) FROM tasks c WHERE c.parent_task_id = t.id AND c.status = 'active') as children_active
+                (SELECT COUNT(*) FROM tasks c
+                 WHERE c.parent_task_id = t.id) as child_count,
+                (SELECT COUNT(*) FROM tasks c
+                 WHERE c.parent_task_id = t.id AND c.status = 'done') as children_done,
+                (SELECT COUNT(*) FROM tasks c
+                 WHERE c.parent_task_id = t.id AND c.status = 'active') as children_active
             FROM tasks t
             WHERE t.status = 'active' AND t.parent_task_id IS NULL
             ORDER BY t.updated_at DESC
@@ -396,7 +399,8 @@ def list_epics(
         cursor = conn.execute(f"""
             SELECT t.*,
                 COUNT(c.id) as child_count,
-                COUNT(CASE WHEN c.status IN ('open', 'active', 'blocked') THEN 1 END) as children_open,
+                COUNT(CASE WHEN c.status IN ('open', 'active', 'blocked')
+                    THEN 1 END) as children_open,
                 COUNT(CASE WHEN c.status = 'done' THEN 1 END) as children_done
             FROM tasks t
             LEFT JOIN tasks c ON c.parent_task_id = t.id AND c.type != 'epic'

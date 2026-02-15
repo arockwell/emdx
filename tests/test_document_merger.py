@@ -1,6 +1,5 @@
 """Tests for the document merger service with TF-IDF pre-filtering."""
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -212,7 +211,7 @@ class TestDocumentMergerIntegration:
         db = merger_documents["db"]
         doc_ids = merger_documents["doc_ids"]
 
-        with patch("emdx.services.similarity.db") as mock_sim_db, \
+        with patch("emdx.services.similarity.db"), \
              patch("emdx.services.document_merger.SimilarityService") as MockSimilarityService:
 
             # Set up mock similarity service
@@ -237,11 +236,11 @@ class TestDocumentMergerIntegration:
             # Mock _get_document_metadata
             def mock_metadata(project=None):
                 return {
-                    doc_ids[0]: {"title": "Python Machine Learning Guide", "content": "ML content", "project": "ml-project", "access_count": 5},
-                    doc_ids[1]: {"title": "Python Machine Learning Tutorial", "content": "ML tutorial", "project": "ml-project", "access_count": 3},
-                    doc_ids[2]: {"title": "Docker Container Guide", "content": "Docker content", "project": "devops-project", "access_count": 10},
-                    doc_ids[3]: {"title": "Docker Container Tutorial", "content": "Docker tutorial", "project": "devops-project", "access_count": 2},
-                    doc_ids[4]: {"title": "Git Version Control", "content": "Git content", "project": "tools-project", "access_count": 1},
+                    doc_ids[0]: {"title": "Python Machine Learning Guide", "content": "ML content", "project": "ml-project", "access_count": 5},  # noqa: E501
+                    doc_ids[1]: {"title": "Python Machine Learning Tutorial", "content": "ML tutorial", "project": "ml-project", "access_count": 3},  # noqa: E501
+                    doc_ids[2]: {"title": "Docker Container Guide", "content": "Docker content", "project": "devops-project", "access_count": 10},  # noqa: E501
+                    doc_ids[3]: {"title": "Docker Container Tutorial", "content": "Docker tutorial", "project": "devops-project", "access_count": 2},  # noqa: E501
+                    doc_ids[4]: {"title": "Git Version Control", "content": "Git content", "project": "tools-project", "access_count": 1},  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -280,10 +279,10 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 all_docs = {
-                    doc_ids[0]: {"title": "Python ML Guide", "content": "content", "project": "ml-project", "access_count": 5},
-                    doc_ids[1]: {"title": "Python ML Tutorial", "content": "content", "project": "ml-project", "access_count": 3},
-                    doc_ids[2]: {"title": "Docker Guide", "content": "content", "project": "devops-project", "access_count": 10},
-                    doc_ids[3]: {"title": "Docker Tutorial", "content": "content", "project": "devops-project", "access_count": 2},
+                    doc_ids[0]: {"title": "Python ML Guide", "content": "content", "project": "ml-project", "access_count": 5},  # noqa: E501
+                    doc_ids[1]: {"title": "Python ML Tutorial", "content": "content", "project": "ml-project", "access_count": 3},  # noqa: E501
+                    doc_ids[2]: {"title": "Docker Guide", "content": "content", "project": "devops-project", "access_count": 10},  # noqa: E501
+                    doc_ids[3]: {"title": "Docker Tutorial", "content": "content", "project": "devops-project", "access_count": 2},  # noqa: E501
                 }
                 if project:
                     return {k: v for k, v in all_docs.items() if v["project"] == project}
@@ -327,8 +326,8 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    doc_ids[0]: {"title": "Popular Guide A", "content": "content", "project": "test-project", "access_count": 100},
-                    doc_ids[1]: {"title": "Popular Guide B", "content": "content", "project": "test-project", "access_count": 75},
+                    doc_ids[0]: {"title": "Popular Guide A", "content": "content", "project": "test-project", "access_count": 100},  # noqa: E501
+                    doc_ids[1]: {"title": "Popular Guide B", "content": "content", "project": "test-project", "access_count": 75},  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -343,7 +342,7 @@ class TestDocumentMergerIntegration:
     ):
         """Test that progress callback is called correctly."""
         db = merger_documents["db"]
-        doc_ids = merger_documents["doc_ids"]
+        merger_documents["doc_ids"]
 
         progress_calls = []
 
@@ -377,7 +376,7 @@ class TestDocumentMergerIntegration:
     ):
         """Test that merge reason correctly identifies similar titles."""
         db = merger_documents["db"]
-        doc_ids = merger_documents["doc_ids"]
+        merger_documents["doc_ids"]
 
         with patch("emdx.services.document_merger.SimilarityService") as MockSimilarityService:
             mock_service = MagicMock()
@@ -396,8 +395,8 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    1: {"title": "Python Machine Learning Guide", "content": "a" * 100, "project": "ml", "access_count": 5},
-                    2: {"title": "Python Machine Learning Guide", "content": "b" * 50, "project": "ml", "access_count": 3},
+                    1: {"title": "Python Machine Learning Guide", "content": "a" * 100, "project": "ml", "access_count": 5},  # noqa: E501
+                    2: {"title": "Python Machine Learning Guide", "content": "b" * 50, "project": "ml", "access_count": 3},  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -430,8 +429,8 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    1: {"title": "Doc A", "content": "content", "project": "test", "access_count": 20},
-                    2: {"title": "Doc B", "content": "content", "project": "test", "access_count": 5},
+                    1: {"title": "Doc A", "content": "content", "project": "test", "access_count": 20},  # noqa: E501
+                    2: {"title": "Doc B", "content": "content", "project": "test", "access_count": 5},  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -464,8 +463,8 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    1: {"title": "Doc A", "content": "a" * 500, "project": "test", "access_count": 5},
-                    2: {"title": "Doc B", "content": "b" * 100, "project": "test", "access_count": 5},
+                    1: {"title": "Doc A", "content": "a" * 500, "project": "test", "access_count": 5},  # noqa: E501
+                    2: {"title": "Doc B", "content": "b" * 100, "project": "test", "access_count": 5},  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata

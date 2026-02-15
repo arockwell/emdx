@@ -34,7 +34,6 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List
 
 import typer
 
@@ -42,13 +41,11 @@ from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
-
 app = typer.Typer(
     name="delegate",
     help="Delegate tasks to agents (stdout-friendly)",
     context_settings={"allow_interspersed_args": False},
 )
-
 
 def _safe_create_task(**kwargs) -> int | None:
     """Create task, never fail delegate."""
@@ -58,7 +55,6 @@ def _safe_create_task(**kwargs) -> int | None:
     except Exception as e:
         sys.stderr.write(f"delegate: task tracking failed: {e}\n")
         return None
-
 
 def _safe_update_task(task_id: int | None, **kwargs) -> None:
     """Update task, never fail delegate."""
@@ -70,7 +66,6 @@ def _safe_update_task(task_id: int | None, **kwargs) -> None:
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
-
 def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
     """Update execution record, never fail delegate."""
     if exec_id is None:
@@ -81,7 +76,6 @@ def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
 
-
 PR_INSTRUCTION = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
@@ -89,7 +83,6 @@ PR_INSTRUCTION = (
     "3. Push and create a PR using: gh pr create --title \"...\" --body \"...\"\n"
     "4. Report the PR URL that was created."
 )
-
 
 def _slugify_title(title: str) -> str:
     """Convert a document title to a git branch slug.
@@ -100,14 +93,13 @@ def _slugify_title(title: str) -> str:
     """
     import re
     # Remove common prefixes like "Gameplan #1:", "Feature:", etc.
-    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()
+    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()  # noqa: E501
     # Keep only alphanumeric and spaces/hyphens
     slug = re.sub(r'[^a-zA-Z0-9\s-]', '', slug)
     # Collapse whitespace to hyphens, lowercase
     slug = re.sub(r'\s+', '-', slug).strip('-').lower()
     # Truncate to reasonable branch name length
     return slug[:50].rstrip('-') or 'feature'
-
 
 def _resolve_task(task: str, pr: bool = False) -> str:
     """Resolve a task argument — if it's a numeric doc ID, load the document content.
@@ -143,7 +135,6 @@ def _resolve_task(task: str, pr: bool = False) -> str:
 
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
-
 # Allowlist of safe discovery commands that can be used with --each
 # These commands are designed for file/directory discovery and are safe to execute
 SAFE_DISCOVERY_COMMANDS = frozenset({
@@ -163,8 +154,7 @@ SAFE_DISCOVERY_COMMANDS = frozenset({
     "seq",          # Generate sequences
 })
 
-
-def _validate_discovery_command(command: str) -> List[str]:
+def _validate_discovery_command(command: str) -> list[str]:
     """Parse and validate a discovery command against the allowlist.
 
     Args:
@@ -180,11 +170,11 @@ def _validate_discovery_command(command: str) -> List[str]:
         args = shlex.split(command)
     except ValueError as e:
         sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not args:
         sys.stderr.write("delegate: empty discovery command\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Extract the base command (handle paths like /usr/bin/fd)
     base_cmd = Path(args[0]).name
@@ -194,12 +184,11 @@ def _validate_discovery_command(command: str) -> List[str]:
             f"delegate: '{base_cmd}' is not an allowed discovery command\n"
             f"delegate: allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     return args
 
-
-def _run_discovery(command: str) -> List[str]:
+def _run_discovery(command: str) -> list[str]:
     """Run a validated discovery command and return output lines as items.
 
     Security: Uses shlex.split() with shell=False and validates the command
@@ -217,20 +206,19 @@ def _run_discovery(command: str) -> List[str]:
         )
         if result.returncode != 0:
             sys.stderr.write(f"delegate: discovery failed: {result.stderr.strip()}\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         lines = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
         if not lines:
             sys.stderr.write("delegate: discovery returned no items\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         sys.stderr.write(f"delegate: discovered {len(lines)} item(s)\n")
         return lines
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
-        raise typer.Exit(1)
-
+        raise typer.Exit(1) from None
 
 def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
@@ -241,7 +229,7 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     doc = get_document(doc_id)
     if not doc:
         sys.stderr.write(f"delegate: document #{doc_id} not found\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     title = doc.get("title", f"Document #{doc_id}")
     content = doc.get("content", "")
@@ -251,7 +239,6 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     else:
         return f"Execute the following document:\n\n# {title}\n\n{content}"
 
-
 def _print_doc_content(doc_id: int) -> None:
     """Print a document's content to stdout."""
     doc = get_document(doc_id)
@@ -259,10 +246,9 @@ def _print_doc_content(doc_id: int) -> None:
         sys.stdout.write(doc.get("content", ""))
         sys.stdout.write("\n")
 
-
 def _run_single(
     prompt: str,
-    tags: List[str],
+    tags: list[str],
     title: str | None,
     model: str | None,
     quiet: bool,
@@ -344,10 +330,9 @@ def _run_single(
 
     return doc_id, task_id
 
-
 def _run_parallel(
-    tasks: List[str],
-    tags: List[str],
+    tasks: list[str],
+    tags: list[str],
     title: str | None,
     jobs: int | None,
     synthesize: bool,
@@ -359,7 +344,7 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
-) -> List[int]:
+) -> list[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
 
@@ -389,7 +374,7 @@ def _run_parallel(
             try:
                 task_worktree_path, _ = create_worktree(base_branch)
                 if not quiet:
-                    sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")
+                    sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")  # noqa: E501
             except Exception as e:
                 sys.stderr.write(f"delegate: failed to create worktree for task {idx + 1}: {e}\n")
                 return idx, (None, None)
@@ -423,12 +408,12 @@ def _run_parallel(
             results[idx] = result_pair
 
     # Collect doc_ids in original task order
-    doc_ids = [results[i][0] for i in range(len(tasks)) if results.get(i) and results[i][0] is not None]
+    doc_ids = [results[i][0] for i in range(len(tasks)) if results.get(i) and results[i][0] is not None]  # noqa: E501
 
     if not doc_ids:
         sys.stderr.write("delegate: parallel run completed but no output documents found\n")
         _safe_update_task(parent_task_id, status="failed", error="no output documents")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Update parent task
     if synthesize and len(doc_ids) > 1:
@@ -478,10 +463,9 @@ def _run_parallel(
 
     return doc_ids
 
-
 def _run_chain(
-    tasks: List[str],
-    tags: List[str],
+    tasks: list[str],
+    tags: list[str],
     title: str | None,
     model: str | None,
     quiet: bool,
@@ -490,7 +474,7 @@ def _run_chain(
     source_doc_id: int | None = None,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
-) -> List[int]:
+) -> list[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
     Returns list of doc_ids from all steps.
@@ -591,15 +575,14 @@ def _run_chain(
 
     return doc_ids
 
-
 @app.callback(invoke_without_command=True)
 def delegate(
     ctx: typer.Context,
-    tasks: List[str] = typer.Argument(
+    tasks: list[str] = typer.Argument(
         None,
         help="Task prompt(s) or document IDs. Numeric args load doc content.",
     ),
-    tags: List[str] | None = typer.Option(
+    tags: list[str] | None = typer.Option(
         None, "--tags", "-t",
         help="Tags to apply to outputs (comma-separated)",
     ),
@@ -702,11 +685,11 @@ def delegate(
     # Validate mutually exclusive options
     if chain and synthesize:
         typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if each and not do:
         typer.echo("Error: --each requires --do", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     task_list = list(tasks) if tasks else []
 
@@ -746,7 +729,7 @@ def delegate(
     if not task_list:
         typer.echo("Error: No tasks provided", err=True)
         typer.echo('Usage: emdx delegate "task description"', err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Flatten tags
     flat_tags = []
@@ -780,7 +763,7 @@ def delegate(
                 sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
         except Exception as e:
             sys.stderr.write(f"delegate: failed to create worktree: {e}\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     try:
         # 4. Route
@@ -811,7 +794,7 @@ def delegate(
                 epic_key=epic_key,
             )
             if doc_id is None:
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
         else:
             _run_parallel(
                 tasks=task_list,

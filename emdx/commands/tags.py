@@ -52,7 +52,7 @@ def _add_tags_impl(
             applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
             if applied:
                 console.print(
-                    f"[green]Auto-tagged #{doc_id} with:[/green] [cyan]{format_tags(applied)}[/cyan]"
+                    f"[green]Auto-tagged #{doc_id} with:[/green] [cyan]{format_tags(applied)}[/cyan]"  # noqa: E501
                 )
             else:
                 console.print("[yellow]No tags met confidence threshold for auto-tagging[/yellow]")
@@ -77,7 +77,7 @@ def _add_tags_impl(
 
                 for tag_name, confidence in suggestions:
                     conf_percent = f"{confidence:.0%}"
-                    apply_hint = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"
+                    apply_hint = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"  # noqa: E501
                     table.add_row(tag_name, conf_percent, apply_hint)
 
                 console.print(table)
@@ -207,8 +207,8 @@ def list_tags(
         table.add_column("Last Used", style="magenta")
 
         for tag_entry in all_tags[:limit]:
-            created = tag_entry["created_at"].strftime("%Y-%m-%d") if tag_entry["created_at"] else "Unknown"
-            last_used = tag_entry["last_used"].strftime("%Y-%m-%d") if tag_entry["last_used"] else "Never"
+            created = tag_entry["created_at"].strftime("%Y-%m-%d") if tag_entry["created_at"] else "Unknown"  # noqa: E501
+            last_used = tag_entry["last_used"].strftime("%Y-%m-%d") if tag_entry["last_used"] else "Never"  # noqa: E501
 
             table.add_row(tag_entry["name"], str(tag_entry["count"]), created, last_used)
 
@@ -320,11 +320,11 @@ def merge(
 
 @app.command()
 def batch(
-    untagged_only: bool = typer.Option(True, "--untagged/--all", help="Only process untagged documents"),
+    untagged_only: bool = typer.Option(True, "--untagged/--all", help="Only process untagged documents"),  # noqa: E501
     project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
-    confidence: float = typer.Option(0.7, "--confidence", "-c", help="Minimum confidence threshold"),
+    confidence: float = typer.Option(0.7, "--confidence", "-c", help="Minimum confidence threshold"),  # noqa: E501
     max_tags: int = typer.Option(3, "--max-tags", "-m", help="Maximum tags per document"),
-    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),
+    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),  # noqa: E501
     limit: int | None = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
 ):
     """Batch auto-tag multiple documents."""
@@ -384,15 +384,15 @@ def batch(
                 console.print()
 
             if len(eligible_docs) > sample_size:
-                console.print(f"[dim]... and {len(eligible_docs) - sample_size} more documents[/dim]\n")
+                console.print(f"[dim]... and {len(eligible_docs) - sample_size} more documents[/dim]\n")  # noqa: E501
 
         if dry_run:
             console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]")
-            console.print(f"Would apply {total_tags_to_apply} tags to {len(eligible_docs)} documents")
+            console.print(f"Would apply {total_tags_to_apply} tags to {len(eligible_docs)} documents")  # noqa: E501
             console.print("\n[dim]Run with --execute to apply tags[/dim]")
         else:
             # Confirm
-            if not typer.confirm(f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"):
+            if not typer.confirm(f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"):  # noqa: E501
                 console.print("[red]Batch tagging cancelled[/red]")
                 return
 
@@ -407,7 +407,7 @@ def batch(
             ) as progress:
                 task = progress.add_task("Applying tags...", total=len(eligible_docs))
 
-                for doc_id, tag_list in eligible_docs:
+                for doc_id, _tag_list in eligible_docs:
                     applied = tagger.auto_tag_document(
                         doc_id,
                         confidence_threshold=confidence,

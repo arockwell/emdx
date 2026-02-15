@@ -4,7 +4,6 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 from ..database.connection import db_connection
 from ..utils.datetime_utils import parse_timestamp
@@ -64,7 +63,6 @@ class Execution:
         """Get Path object for log file."""
         return Path(self.log_file).expanduser()
 
-
 def create_execution(doc_id: int | None, doc_title: str, log_file: str,
                     working_dir: str | None = None, pid: int | None = None) -> int:
     """Create a new execution and return its ID.
@@ -89,13 +87,13 @@ def create_execution(doc_id: int | None, doc_title: str, log_file: str,
         conn.commit()
         return cursor.lastrowid
 
-
 def get_execution(exec_id: int) -> Execution | None:
     """Get execution by ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
             FROM executions WHERE id = ?
         """, (exec_id,))
 
@@ -120,13 +118,13 @@ def get_execution(exec_id: int) -> Execution | None:
             pid=row[9] if len(row) > 9 else None  # Handle old records without PID
         )
 
-
-def get_recent_executions(limit: int = 20) -> List[Execution]:
+def get_recent_executions(limit: int = 20) -> list[Execution]:
     """Get recent executions ordered by start time."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
             FROM executions
             ORDER BY id DESC
             LIMIT ?
@@ -153,13 +151,13 @@ def get_recent_executions(limit: int = 20) -> List[Execution]:
 
         return executions
 
-
-def get_running_executions() -> List[Execution]:
+def get_running_executions() -> list[Execution]:
     """Get all currently running executions."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
             FROM executions
             WHERE status = 'running'
             ORDER BY started_at DESC
@@ -186,7 +184,6 @@ def get_running_executions() -> List[Execution]:
 
         return executions
 
-
 def update_execution_status(exec_id: int, status: str, exit_code: int | None = None) -> None:
     """Update execution status and completion time."""
     with db_connection.get_connection() as conn:
@@ -205,7 +202,6 @@ def update_execution_status(exec_id: int, status: str, exit_code: int | None = N
 
         conn.commit()
 
-
 def update_execution(exec_id: int, **kwargs) -> None:
     """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.)."""
     if not kwargs:
@@ -219,7 +215,6 @@ def update_execution(exec_id: int, **kwargs) -> None:
         )
         conn.commit()
 
-
 def update_execution_pid(exec_id: int, pid: int) -> None:
     """Update execution PID."""
     with db_connection.get_connection() as conn:
@@ -230,7 +225,6 @@ def update_execution_pid(exec_id: int, pid: int) -> None:
         """, (pid, exec_id))
         conn.commit()
 
-
 def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
     """Update execution working directory."""
     with db_connection.get_connection() as conn:
@@ -240,7 +234,6 @@ def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
             WHERE id = ?
         """, (working_dir, exec_id))
         conn.commit()
-
 
 def update_execution_heartbeat(exec_id: int) -> None:
     """Update execution heartbeat timestamp.
@@ -256,8 +249,7 @@ def update_execution_heartbeat(exec_id: int) -> None:
         """, (exec_id,))
         conn.commit()
 
-
-def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
+def get_stale_executions(timeout_seconds: int = 1800) -> list[Execution]:
     """Get executions that haven't sent a heartbeat recently.
 
     Args:
@@ -304,7 +296,6 @@ def get_stale_executions(timeout_seconds: int = 1800) -> List[Execution]:
 
         return executions
 
-
 def cleanup_old_executions(days: int = 7) -> int:
     """Clean up executions older than specified days."""
     with db_connection.get_connection() as conn:
@@ -317,7 +308,6 @@ def cleanup_old_executions(days: int = 7) -> int:
         """, (interval,))
         conn.commit()
         return cursor.rowcount
-
 
 def get_execution_stats() -> dict:
     """Get execution statistics."""

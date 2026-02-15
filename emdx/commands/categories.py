@@ -13,7 +13,9 @@ app = typer.Typer(help="Manage task categories")
 def create(
     key: str = typer.Argument(..., help="Category key (2-8 uppercase letters, e.g. SEC)"),
     name: str = typer.Argument(..., help="Category name (e.g. Security)"),
-    description: str | None = typer.Option(None, "-D", "--description", help="Category description"),
+    description: str | None = typer.Option(
+        None, "-D", "--description", help="Category description"
+    ),
 ):
     """Create a new category.
 
@@ -26,11 +28,11 @@ def create(
         console.print(f"[green]Created category {result_key}: {name}[/green]")
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         if "UNIQUE constraint" in str(e):
             console.print(f"[red]Category {key.upper()} already exists[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         raise
 
 
@@ -86,7 +88,7 @@ def adopt(
         result = categories.adopt_category(key, name)
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(f"[green]Adopted {result['adopted']} task(s) into {key.upper()}[/green]")
     if result["skipped"]:

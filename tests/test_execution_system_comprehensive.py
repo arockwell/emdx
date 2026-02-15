@@ -13,25 +13,23 @@ This script tests all the improvements made to the execution system:
 
 import subprocess
 import time
-import os
-import sys
-from pathlib import Path
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
+
 from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 
 
 class ExecutionSystemTester:
     """Test suite for EMDX execution system."""
-    
+
     def __init__(self):
         self.tests_passed = 0
         self.tests_failed = 0
         self.test_results = []
-    
+
     def run_command(self, cmd: str) -> tuple[int, str, str]:
         """Run a command and return exit code, stdout, stderr."""
         try:
@@ -47,14 +45,14 @@ class ExecutionSystemTester:
             return -1, "", "Command timed out"
         except Exception as e:
             return -1, "", str(e)
-    
+
     def test_environment_validation(self):
         """Test environment validation."""
         console.print("\n[bold cyan]Testing Environment Validation...[/bold cyan]")
-        
+
         # Test check-env command
         exit_code, stdout, stderr = self.run_command("emdx claude check-env")
-        
+
         if exit_code == 0:
             self.tests_passed += 1
             self.test_results.append(("Environment validation", "✅ Passed"))
@@ -63,11 +61,11 @@ class ExecutionSystemTester:
             self.tests_failed += 1
             self.test_results.append(("Environment validation", "❌ Failed"))
             console.print(f"[red]❌ Environment validation failed: {stderr}[/red]")
-    
+
     def test_cleanup_utilities(self):
         """Test cleanup utilities."""
         console.print("\n[bold cyan]Testing Cleanup Utilities...[/bold cyan]")
-        
+
         # For now, test with available maintain options
         # Test clean (duplicates and empty docs)
         exit_code, stdout, stderr = self.run_command("emdx maintain --clean --dry-run")
@@ -79,7 +77,7 @@ class ExecutionSystemTester:
             self.tests_failed += 1
             self.test_results.append(("Document cleanup", "❌ Failed"))
             console.print(f"[red]❌ Document cleanup failed: {stderr}[/red]")
-        
+
         # Test garbage collection
         exit_code, stdout, stderr = self.run_command("emdx maintain --gc --dry-run")
         if exit_code == 0:
@@ -90,14 +88,14 @@ class ExecutionSystemTester:
             self.tests_failed += 1
             self.test_results.append(("Garbage collection", "❌ Failed"))
             console.print(f"[red]❌ Garbage collection failed: {stderr}[/red]")
-        
+
         # Note: The cleanup commands are internal functions, not exposed as CLI
         self.test_results.append(("Execution cleanup utilities", "⚠️  Internal functions"))
-    
+
     def test_execution_monitoring(self):
         """Test execution monitoring commands."""
         console.print("\n[bold cyan]Testing Execution Monitoring...[/bold cyan]")
-        
+
         # Test execution list
         exit_code, stdout, stderr = self.run_command("emdx exec list --limit 5")
         if exit_code == 0:
@@ -108,7 +106,7 @@ class ExecutionSystemTester:
             self.tests_failed += 1
             self.test_results.append(("Execution list", "❌ Failed"))
             console.print(f"[red]❌ Execution list failed: {stderr}[/red]")
-        
+
         # Test execution stats
         exit_code, stdout, stderr = self.run_command("emdx exec stats")
         if exit_code == 0:
@@ -119,7 +117,7 @@ class ExecutionSystemTester:
             self.tests_failed += 1
             self.test_results.append(("Execution stats", "❌ Failed"))
             console.print(f"[red]❌ Execution stats failed: {stderr}[/red]")
-        
+
         # Test execution health
         exit_code, stdout, stderr = self.run_command("emdx exec health")
         if exit_code == 0:
@@ -130,23 +128,23 @@ class ExecutionSystemTester:
             self.tests_failed += 1
             self.test_results.append(("Execution health", "❌ Failed"))
             console.print(f"[red]❌ Execution health failed: {stderr}[/red]")
-    
+
     def test_execution_creation(self):
         """Test creating and managing an execution."""
         console.print("\n[bold cyan]Testing Execution Creation...[/bold cyan]")
-        
+
         # Create a test document
         test_content = "Test execution at " + time.strftime("%Y-%m-%d %H:%M:%S")
         exit_code, stdout, stderr = self.run_command(
             f'echo "{test_content}" | emdx save --title "Test Execution"'
         )
-        
+
         if exit_code != 0:
             self.tests_failed += 1
             self.test_results.append(("Document creation", "❌ Failed"))
             console.print(f"[red]❌ Failed to create test document: {stderr}[/red]")
             return
-        
+
         # Extract document ID - look for different patterns
         import re
         # Try multiple patterns
@@ -159,14 +157,14 @@ class ExecutionSystemTester:
             r'Saved as #\x1b\[0m\x1b\[1;32m(\d+)\x1b\[0m',  # Another ANSI pattern
             r'Saved as #.*?(\d+)',  # Generic pattern to catch ID
         ]
-        
+
         doc_id = None
         for pattern in patterns:
             match = re.search(pattern, stdout)
             if match:
                 doc_id = match.group(1)
                 break
-        
+
         if not doc_id:
             # Try to get the most recent document
             exit_code2, stdout2, stderr2 = self.run_command("emdx list --limit 1")
@@ -174,7 +172,7 @@ class ExecutionSystemTester:
                 match2 = re.search(r'#(\d+):', stdout2)
                 if match2:
                     doc_id = match2.group(1)
-        
+
         if not doc_id:
             self.tests_failed += 1
             self.test_results.append(("Document ID extraction", "❌ Failed"))
@@ -183,7 +181,7 @@ class ExecutionSystemTester:
         console.print(f"[green]✅ Created test document #{doc_id}[/green]")
         self.tests_passed += 1
         self.test_results.append(("Document creation", "✅ Passed"))
-        
+
         # Test execution in background (if claude is available)
         exit_code, stdout, stderr = self.run_command("which claude")
         if exit_code == 0:
@@ -191,7 +189,7 @@ class ExecutionSystemTester:
             exit_code, stdout, stderr = self.run_command(
                 f"emdx claude execute {doc_id} --background --smart"
             )
-            
+
             if exit_code == 0:
                 self.tests_passed += 1
                 self.test_results.append(("Background execution", "✅ Passed"))
@@ -221,24 +219,24 @@ class ExecutionSystemTester:
         else:
             console.print("[yellow]⚠️  Claude not available, skipping execution test[/yellow]")
             self.test_results.append(("Background execution", "⚠️  Skipped"))
-    
+
     def test_cleanup_dirs(self):
         """Test temporary directory cleanup."""
         console.print("\n[bold cyan]Testing Directory Cleanup...[/bold cyan]")
-        
+
         # Directory cleanup is also an internal function, not exposed
         self.test_results.append(("Directory cleanup", "⚠️  Internal function"))
         console.print("[yellow]⚠️  Directory cleanup is an internal function[/yellow]")
-    
+
     def print_summary(self):
         """Print test summary."""
         console.print("\n" + "=" * 80)
-        
+
         # Create summary table
         table = Table(title="Test Results Summary", box=box.ROUNDED)
         table.add_column("Test", style="cyan")
         table.add_column("Result", style="bold")
-        
+
         for test_name, result in self.test_results:
             if "✅" in result:
                 style = "green"
@@ -247,14 +245,14 @@ class ExecutionSystemTester:
             else:
                 style = "yellow"
             table.add_row(test_name, f"[{style}]{result}[/{style}]")
-        
+
         console.print(table)
-        
+
         # Overall summary
         total_tests = self.tests_passed + self.tests_failed
         if total_tests > 0:
             success_rate = (self.tests_passed / total_tests) * 100
-            
+
             if success_rate == 100:
                 panel_style = "green"
                 status = "All Tests Passed! 🎉"
@@ -264,7 +262,7 @@ class ExecutionSystemTester:
             else:
                 panel_style = "red"
                 status = "Tests Failed"
-            
+
             console.print(Panel(
                 f"[bold]{status}[/bold]\n\n"
                 f"Passed: [green]{self.tests_passed}[/green]\n"
@@ -290,16 +288,16 @@ def main():
         "• Directory cleanup",
         box=box.DOUBLE
     ))
-    
+
     tester = ExecutionSystemTester()
-    
+
     # Run all tests
     tester.test_environment_validation()
     tester.test_cleanup_utilities()
     tester.test_execution_monitoring()
     tester.test_execution_creation()
     tester.test_cleanup_dirs()
-    
+
     # Print summary
     tester.print_summary()
 

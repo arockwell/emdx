@@ -1,15 +1,12 @@
 """Tests for core CRUD commands (save, view, edit, delete, restore, etc.)."""
 
 import re
-import tempfile
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-import typer
 from typer.testing import CliRunner
 
-from emdx.commands.core import app, get_input_content, generate_title, InputContent
+from emdx.commands.core import InputContent, app, generate_title, get_input_content
 
 runner = CliRunner()
 
@@ -121,7 +118,7 @@ class TestSaveCommand:
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
-    def test_save_with_title_and_project(self, mock_detect, mock_create, mock_tags, mock_display, tmp_path):
+    def test_save_with_title_and_project(self, mock_detect, mock_create, mock_tags, mock_display, tmp_path):  # noqa: E501
         """Save with explicit --title and --project."""
         f = tmp_path / "note.md"
         f.write_text("content")
@@ -507,8 +504,8 @@ class TestDeleteCommand:
 
         def side_effect(identifier):
             docs = {
-                "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},
-                "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},
+                "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},  # noqa: E501
+                "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},  # noqa: E501
             }
             return docs.get(identifier)
 
@@ -528,8 +525,10 @@ class TestDeleteCommand:
 # ---------------------------------------------------------------------------
 # trash command (now a subcommand group: emdx trash [list|restore|purge])
 # Uses main_app since trash is registered as a typer subgroup there.
+# Late import to avoid circular dependency with main module
 # ---------------------------------------------------------------------------
-from emdx.main import app as main_app
+from emdx.main import app as main_app  # noqa: E402
+
 
 class TestTrashCommand:
     """Tests for the trash command."""
@@ -652,7 +651,7 @@ class TestPurgeCommand:
     def test_purge_with_force(self, mock_db, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
         mock_db.ensure_schema = Mock()
-        mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]
+        mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]  # noqa: E501
         mock_purge.return_value = 1
 
         result = runner.invoke(main_app, ["trash", "purge", "--force"])

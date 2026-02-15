@@ -23,8 +23,8 @@ from typer.testing import CliRunner
 
 from emdx.commands.cascade import (
     NEXT_STAGE,
-    STAGES,
     STAGE_PROMPTS,
+    STAGES,
     _create_cascade_run,
     _get_stages_between,
     _update_cascade_run,
@@ -70,10 +70,10 @@ def setup_cascade_db(test_db_path, monkeypatch):
     conn_instance = DatabaseConnection(test_db_path)
 
     # Patch the global db_connection in all relevant modules
+    import emdx.commands.cascade as cascade_cmd_module
     import emdx.database.cascade as cascade_module
     import emdx.database.connection as conn_module
     import emdx.database.documents as docs_module
-    import emdx.commands.cascade as cascade_cmd_module
 
     original_conn = conn_module.db_connection
 
@@ -278,7 +278,7 @@ class TestCascadeStatus:
     @patch("emdx.commands.cascade.cascade_db")
     def test_status_shows_active_runs(self, mock_cascade_db, mock_db_conn):
         """Test status shows active cascade runs."""
-        mock_cascade_db.get_cascade_stats.return_value = {"idea": 1, "prompt": 0, "analyzed": 0, "planned": 0, "done": 0}
+        mock_cascade_db.get_cascade_stats.return_value = {"idea": 1, "prompt": 0, "analyzed": 0, "planned": 0, "done": 0}  # noqa: E501
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [
             (1, "idea", "done", "prompt", "running"),
@@ -713,7 +713,7 @@ class TestCascadeRuns:
         """Test runs displays run history."""
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [
-            (1, 42, "idea", "done", "done", "completed", "https://github.com/test/repo/pull/1", datetime.now(), datetime.now()),
+            (1, 42, "idea", "done", "done", "completed", "https://github.com/test/repo/pull/1", datetime.now(), datetime.now()),  # noqa: E501
             (2, 43, "idea", "planned", "analyzed", "running", None, datetime.now(), None),
         ]
         mock_db_conn.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
@@ -816,7 +816,6 @@ class TestCascadeIntegration:
 
     def test_add_and_show_integration(self, setup_cascade_db):
         """Test adding and showing cascade documents."""
-        from emdx.database import cascade as cascade_db
 
         # Add a document
         result = runner.invoke(app, ["add", "Build a REST API"])

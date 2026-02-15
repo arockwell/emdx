@@ -9,10 +9,11 @@ similarity via efficient matrix operations.
 
 import difflib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -22,7 +23,6 @@ from ..utils.datetime_utils import parse_datetime
 from .similarity import SimilarityService
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class MergeCandidate:
@@ -35,7 +35,6 @@ class MergeCandidate:
     merge_reason: str
     recommended_action: str
 
-
 @dataclass
 class MergeStrategy:
     """Strategy for merging two documents."""
@@ -43,9 +42,8 @@ class MergeStrategy:
     merge_doc_id: int
     merged_title: str
     merged_content: str
-    merged_tags: List[str]
-    preserve_metadata: Dict[str, Any]
-
+    merged_tags: list[str]
+    preserve_metadata: dict[str, Any]
 
 class DocumentMerger:
     """Service for intelligently merging related documents.
@@ -67,7 +65,7 @@ class DocumentMerger:
         project: str | None = None,
         similarity_threshold: float = None,
         progress_callback: Callable | None = None
-    ) -> List[MergeCandidate]:
+    ) -> list[MergeCandidate]:
         """
         Find documents that are candidates for merging.
 
@@ -102,7 +100,7 @@ class DocumentMerger:
         prefilter_threshold = min(self.PREFILTER_THRESHOLD, threshold * 0.5)
         similar_pairs = self._similarity_service.find_all_duplicate_pairs(
             min_similarity=prefilter_threshold,
-            progress_callback=lambda c, t, f: progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None
+            progress_callback=lambda c, t, f: progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None  # noqa: E501
         )
 
         if progress_callback:
@@ -188,7 +186,7 @@ class DocumentMerger:
         candidates.sort(key=lambda c: c.similarity_score, reverse=True)
         return candidates
 
-    def _get_document_metadata(self, project: str | None = None) -> Dict[int, Dict[str, Any]]:
+    def _get_document_metadata(self, project: str | None = None) -> dict[int, dict[str, Any]]:
         """
         Get metadata for all active documents.
 
@@ -316,7 +314,7 @@ class DocumentMerger:
             preserve_metadata=preserve_metadata
         )
 
-    def _calculate_document_score(self, doc: Dict[str, Any], tags: List[str]) -> float:
+    def _calculate_document_score(self, doc: dict[str, Any], tags: list[str]) -> float:
         """Calculate a quality score for a document."""
         score = 0.0
 
@@ -449,7 +447,7 @@ class DocumentMerger:
         self,
         doc_id: int,
         limit: int = 5
-    ) -> List[Tuple[int, str, float]]:
+    ) -> list[tuple[int, str, float]]:
         """
         Find documents related to a specific document.
 
