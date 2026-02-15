@@ -211,7 +211,7 @@ def has_children(doc_id: int) -> bool:
     """
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
-            "SELECT 1 FROM documents WHERE is_deleted = FALSE AND parent_id = ? AND archived_at IS NULL LIMIT 1",
+            "SELECT 1 FROM documents WHERE is_deleted = FALSE AND parent_id = ? AND archived_at IS NULL LIMIT 1",  # noqa: E501
             (doc_id,),
         )
         return cursor.fetchone() is not None

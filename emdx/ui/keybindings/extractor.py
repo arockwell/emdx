@@ -9,7 +9,6 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from typing import List, Type
 
 from textual.binding import Binding
 from textual.widget import Widget
@@ -18,7 +17,6 @@ from .context import Context
 from .registry import KeybindingEntry
 
 logger = logging.getLogger(__name__)
-
 
 class KeybindingExtractor:
     """
@@ -29,10 +27,10 @@ class KeybindingExtractor:
     """
 
     def __init__(self):
-        self.entries: List[KeybindingEntry] = []
+        self.entries: list[KeybindingEntry] = []
         self.scanned_classes: set = set()
 
-    def scan_module(self, module_name: str = "emdx.ui") -> List[KeybindingEntry]:
+    def scan_module(self, module_name: str = "emdx.ui") -> list[KeybindingEntry]:
         """
         Scan a module and all submodules for widgets with BINDINGS.
 
@@ -98,7 +96,7 @@ class KeybindingExtractor:
             if hasattr(obj, "BINDINGS") and obj.BINDINGS:
                 self._extract_bindings(obj)
 
-    def _extract_bindings(self, widget_class: Type[Widget]) -> None:
+    def _extract_bindings(self, widget_class: type[Widget]) -> None:
         """Extract BINDINGS from a widget class."""
         bindings = widget_class.BINDINGS
 
@@ -117,7 +115,7 @@ class KeybindingExtractor:
                     self.entries.append(entry)
 
     def _binding_to_entry(
-        self, binding: Binding, widget_class: Type[Widget], context: Context
+        self, binding: Binding, widget_class: type[Widget], context: Context
     ) -> KeybindingEntry | None:
         """Convert a Textual Binding to a KeybindingEntry."""
         try:
@@ -137,7 +135,7 @@ class KeybindingExtractor:
             return None
 
     def _tuple_to_entry(
-        self, binding: tuple, widget_class: Type[Widget], context: Context
+        self, binding: tuple, widget_class: type[Widget], context: Context
     ) -> KeybindingEntry | None:
         """Convert a legacy tuple binding to a KeybindingEntry."""
         try:
@@ -159,8 +157,7 @@ class KeybindingExtractor:
             )
             return None
 
-
-def extract_all_keybindings() -> List[KeybindingEntry]:
+def extract_all_keybindings() -> list[KeybindingEntry]:
     """
     Convenience function to extract all keybindings from emdx.ui.
 

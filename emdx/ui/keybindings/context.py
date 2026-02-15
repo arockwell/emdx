@@ -6,7 +6,6 @@ They form a hierarchy where child contexts inherit from parent contexts.
 """
 
 from enum import Enum
-from typing import List
 
 
 class Context(Enum):
@@ -75,7 +74,7 @@ class Context(Enum):
     AGENT_LIST_WIDGET = "widget:agent_list"
 
     @classmethod
-    def get_parent_contexts(cls, context: "Context") -> List["Context"]:
+    def get_parent_contexts(cls, context: "Context") -> list["Context"]:
         """
         Get parent contexts in inheritance hierarchy.
 

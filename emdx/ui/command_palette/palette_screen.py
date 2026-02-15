@@ -8,7 +8,7 @@ via keyboard-driven fuzzy search.
 import asyncio
 import logging
 import traceback
-from typing import Any, Dict
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 # Debug log file for catching crashes
 DEBUG_LOG = EMDX_CONFIG_DIR / "palette_debug.log"
 
-
 def _debug_log(msg: str) -> None:
     """Write debug message to file."""
     try:
@@ -36,7 +35,6 @@ def _debug_log(msg: str) -> None:
             f.write(f"{msg}\n")
     except Exception:
         pass
-
 
 class PaletteResultWidget(ListItem):
     """Widget for a single palette result."""
@@ -67,7 +65,6 @@ class PaletteResultWidget(ListItem):
             subtitle = subtitle[:32] + "..."
 
         yield Static(f"{icon} {title}  [dim]{subtitle}[/dim]")
-
 
 class CommandPaletteScreen(ModalScreen):
     """
@@ -145,7 +142,7 @@ class CommandPaletteScreen(ModalScreen):
     class ResultSelected(Message):
         """Message when a result is selected."""
 
-        def __init__(self, result: Dict[str, Any]):
+        def __init__(self, result: dict[str, Any]):
             super().__init__()
             self.result = result
 
@@ -211,7 +208,7 @@ class CommandPaletteScreen(ModalScreen):
             _debug_log(f"Skipping stale render {render_id}")
             return
 
-        _debug_log(f"_render_results called with {len(state.results)} results (render_id={render_id})")
+        _debug_log(f"_render_results called with {len(state.results)} results (render_id={render_id})")  # noqa: E501
         try:
             results_view = self.query_one("#palette-results", ListView)
             await results_view.clear()

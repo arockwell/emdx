@@ -6,12 +6,12 @@ import pytest
 import typer
 
 from emdx.commands.delegate import (
-    _slugify_title,
-    _resolve_task,
-    _validate_discovery_command,
-    _run_discovery,
     PR_INSTRUCTION,
     SAFE_DISCOVERY_COMMANDS,
+    _resolve_task,
+    _run_discovery,
+    _slugify_title,
+    _validate_discovery_command,
 )
 
 

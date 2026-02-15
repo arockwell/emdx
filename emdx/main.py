@@ -87,21 +87,22 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 
 # =============================================================================
 # EAGER IMPORTS - Core KB commands (fast, always needed)
+# Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
-from emdx.commands.browse import app as browse_app
-from emdx.commands.core import app as core_app
-from emdx.commands.executions import app as executions_app
-from emdx.commands.gist import app as gist_app
-from emdx.commands.groups import app as groups_app
-from emdx.commands.epics import app as epics_app
-from emdx.commands.categories import app as categories_app
-from emdx.commands.maintain import app as maintain_app
-from emdx.commands.prime import prime as prime_command
-from emdx.commands.status import status as status_command
-from emdx.commands.tags import app as tag_app
-from emdx.commands.tasks import app as tasks_app
-from emdx.commands.trash import app as trash_app
-from emdx.ui.gui import gui as gui_command
+from emdx.commands.browse import app as browse_app  # noqa: E402
+from emdx.commands.categories import app as categories_app  # noqa: E402
+from emdx.commands.core import app as core_app  # noqa: E402
+from emdx.commands.epics import app as epics_app  # noqa: E402
+from emdx.commands.executions import app as executions_app  # noqa: E402
+from emdx.commands.gist import app as gist_app  # noqa: E402
+from emdx.commands.groups import app as groups_app  # noqa: E402
+from emdx.commands.maintain import app as maintain_app  # noqa: E402
+from emdx.commands.prime import prime as prime_command  # noqa: E402
+from emdx.commands.status import status as status_command  # noqa: E402
+from emdx.commands.tags import app as tag_app  # noqa: E402
+from emdx.commands.tasks import app as tasks_app  # noqa: E402
+from emdx.commands.trash import app as trash_app  # noqa: E402
+from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
 app = typer.Typer(

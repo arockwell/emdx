@@ -1,7 +1,5 @@
 """Tests for cascade metadata extraction and the new cascade database module."""
 
-import os
-import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -32,8 +30,8 @@ def setup_test_db(test_db_path, monkeypatch):
     monkeypatch.setenv("EMDX_TEST_DB", str(test_db_path))
 
     # Import and run migrations
-    from emdx.database.migrations import run_migrations
     from emdx.database.connection import DatabaseConnection
+    from emdx.database.migrations import run_migrations
 
     run_migrations(test_db_path)
 
@@ -41,9 +39,9 @@ def setup_test_db(test_db_path, monkeypatch):
     conn_instance = DatabaseConnection(test_db_path)
 
     # Patch the global db_connection in all relevant modules
+    import emdx.database.cascade as cascade_module
     import emdx.database.connection as conn_module
     import emdx.database.documents as docs_module
-    import emdx.database.cascade as cascade_module
 
     original_conn = conn_module.db_connection
 
@@ -67,7 +65,7 @@ class TestMigrationCreatesTable:
         """Test that document_cascade_metadata table is created."""
         with setup_test_db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='document_cascade_metadata'"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='document_cascade_metadata'"  # noqa: E501
             )
             result = cursor.fetchone()
             assert result is not None
@@ -90,7 +88,7 @@ class TestMigrationCreatesTable:
         """Test that partial indexes are created."""
         with setup_test_db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='document_cascade_metadata'"
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='document_cascade_metadata'"  # noqa: E501
             )
             indexes = {row[0] for row in cursor.fetchall()}
 
@@ -115,7 +113,7 @@ class TestCascadeMetadataBackfill:
 
             # Manually insert into cascade metadata (simulating what migration does)
             conn.execute(
-                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, stage) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, stage) VALUES (?, ?)",  # noqa: E501
                 (doc_id, "idea"),
             )
             conn.commit()
@@ -141,7 +139,7 @@ class TestCascadeMetadataBackfill:
 
             # Manually insert
             conn.execute(
-                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, pr_url) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, pr_url) VALUES (?, ?)",  # noqa: E501
                 (doc_id, "https://github.com/test/repo/pull/1"),
             )
             conn.commit()
@@ -242,9 +240,10 @@ class TestCascadeStageQueries:
 
     def test_get_oldest_at_stage(self, setup_test_db):
         """Test getting oldest document at stage."""
+        import time
+
         from emdx.database import cascade as cascade_db
         from emdx.database.documents import save_document
-        import time
 
         # Create documents with slight time difference
         doc1 = save_document("First", "Content 1")
@@ -327,7 +326,7 @@ class TestForeignKeyCascadeDelete:
     def test_cascade_delete_removes_metadata(self, setup_test_db):
         """Test that deleting a document removes its cascade metadata."""
         from emdx.database import cascade as cascade_db
-        from emdx.database.documents import save_document, delete_document
+        from emdx.database.documents import save_document
 
         doc_id = save_document("Test", "Content")
         cascade_db.update_cascade_stage(doc_id, "idea")
@@ -375,7 +374,7 @@ class TestSaveDocumentToCascade:
     def test_save_to_cascade_with_parent(self, setup_test_db):
         """Test saving cascade document with parent."""
         from emdx.database import cascade as cascade_db
-        from emdx.database.documents import save_document, get_document
+        from emdx.database.documents import get_document, save_document
 
         parent_id = save_document("Parent", "Parent content")
 

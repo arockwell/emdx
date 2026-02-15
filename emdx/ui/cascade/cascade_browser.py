@@ -50,8 +50,8 @@ class CascadeBrowser(Widget):
         self.cascade_view = CascadeView(id="cascade-view")
         yield self.cascade_view
         yield Static(
-            "[dim]1[/dim] Activity \u2502 [bold]2[/bold] Cascade \u2502 [dim]3[/dim] Search \u2502 [dim]4[/dim] Docs \u2502 "
-            "[dim]n[/dim] new idea \u2502 [dim]a[/dim] advance \u2502 [dim]p[/dim] process \u2502 [dim]s[/dim] synthesize",
+            "[dim]1[/dim] Activity \u2502 [bold]2[/bold] Cascade \u2502 [dim]3[/dim] Search \u2502 [dim]4[/dim] Docs \u2502 "  # noqa: E501
+            "[dim]n[/dim] new idea \u2502 [dim]a[/dim] advance \u2502 [dim]p[/dim] process \u2502 [dim]s[/dim] synthesize",  # noqa: E501
             id="help-bar",
         )
 
@@ -87,7 +87,7 @@ class CascadeBrowser(Widget):
         log_dir = Path.cwd() / ".emdx" / "logs" / "cascade"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        log_file.write_text(f"# Cascade: {stage} processing for doc #{doc_id}\n# Started: {datetime.now().isoformat()}\n")
+        log_file.write_text(f"# Cascade: {stage} processing for doc #{doc_id}\n# Started: {datetime.now().isoformat()}\n")  # noqa: E501
 
         exec_id = create_execution(
             doc_id=doc_id, doc_title=f"Cascade: {doc.get('title', '')}",
@@ -100,7 +100,7 @@ class CascadeBrowser(Widget):
                 allowed_tools=list(DEFAULT_ALLOWED_TOOLS), working_dir=str(Path.cwd()),
                 doc_id=str(doc_id),
             )
-            self._update_status(f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring...")
+            self._update_status(f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring...")  # noqa: E501
             if self.cascade_view:
                 self.cascade_view.refresh_all()
             self._start_completion_monitor(exec_id, doc_id, doc, stage, log_file)

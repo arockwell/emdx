@@ -7,7 +7,7 @@ import json
 
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 import typer
 from rich import box
@@ -25,7 +25,7 @@ from ..utils.output import console
 def analyze(
     health: bool = typer.Option(False, "--health", "-h", help="Show detailed health metrics"),
     duplicates: bool = typer.Option(False, "--duplicates", "-d", help="Find duplicate documents"),
-    similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),
+    similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),  # noqa: E501
     empty: bool = typer.Option(False, "--empty", "-e", help="Find empty documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Analyze tag coverage and patterns"),
     projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
@@ -121,7 +121,6 @@ def analyze(
     if projects:
         _analyze_projects()
 
-
 def _analyze_health():
     """Show detailed health metrics."""
     monitor = HealthMonitor()
@@ -141,7 +140,7 @@ def _analyze_health():
         "red"
     )
 
-    console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")
+    console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")  # noqa: E501
 
     # Detailed metrics
     console.print("\n[bold]Health Metrics:[/bold]")
@@ -209,7 +208,6 @@ def _analyze_health():
             console.print(f"  • {rec}")
         console.print("\n[dim]Run 'emdx maintain' to fix these issues[/dim]")
 
-
 def _analyze_duplicates():
     """Find duplicate documents."""
     detector = DuplicateDetector()
@@ -231,7 +229,7 @@ def _analyze_duplicates():
     # Exact duplicates
     if exact_dupes:
         total_exact = sum(len(group) - 1 for group in exact_dupes)
-        console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")
+        console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")  # noqa: E501
 
         # Show a few examples
         for i, group in enumerate(exact_dupes[:3], 1):
@@ -239,14 +237,13 @@ def _analyze_duplicates():
 
     # Near duplicates
     if near_dupes:
-        console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")
+        console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")  # noqa: E501
 
         # Show a few examples
-        for i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
+        for _i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
             console.print(f"    • '{doc1['title']}' ↔ '{doc2['title']}' ({similarity:.0%} similar)")
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")
-
 
 def _analyze_similar():
     """Find similar documents for merging."""
@@ -279,7 +276,6 @@ def _analyze_similar():
 
     console.print("\n[dim]Run 'emdx maintain --merge' to merge similar documents[/dim]")
 
-
 def _analyze_empty():
     """Find empty documents."""
     with db_connection.get_connection() as conn:
@@ -306,13 +302,12 @@ def _analyze_empty():
     # Show examples
     console.print("\n  Examples:")
     for doc in empty_docs[:5]:
-        console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")
+        console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")  # noqa: E501
 
     if len(empty_docs) > 5:
         console.print(f"    [dim]... and {len(empty_docs) - 5} more[/dim]")
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
-
 
 def _analyze_tags(project: str | None = None):
     """Analyze tag coverage and patterns."""
@@ -324,9 +319,11 @@ def _analyze_tags(project: str | None = None):
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
-                    AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+                    AVG(CASE WHEN dt.document_id IS NOT NULL
+                        THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
                 LEFT JOIN (
                     SELECT document_id, COUNT(*) as tag_count
@@ -341,7 +338,8 @@ def _analyze_tags(project: str | None = None):
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
                     AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
@@ -362,9 +360,9 @@ def _analyze_tags(project: str | None = None):
         if project:
             console.print(f"  [dim]Project: {project}[/dim]")
 
-        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
 
-        console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")
+        console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")  # noqa: E501
         console.print(f"  Total Documents: {stats['total_docs']:,}")
         console.print(f"  Tagged Documents: {stats['tagged_docs']:,}")
         console.print(f"  Unique Tags: {stats['unique_tags']}")
@@ -403,7 +401,6 @@ def _analyze_tags(project: str | None = None):
         if untagged > 0:
             console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
             console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
-
 
 def _analyze_projects():
     """Show project-level analysis."""
@@ -452,7 +449,6 @@ def _analyze_projects():
 
     console.print(table)
 
-
 def _get_status_emoji(score: float) -> str:
     """Get status emoji based on score."""
     if score >= 80:
@@ -461,7 +457,6 @@ def _get_status_emoji(score: float) -> str:
         return "⚠️"
     else:
         return "❌"
-
 
 def _get_coverage_color(coverage: float) -> str:
     """Get color based on coverage percentage."""
@@ -472,9 +467,8 @@ def _get_coverage_color(coverage: float) -> str:
     else:
         return "red"
 
-
 # JSON collection functions
-def _collect_health_data() -> Dict[str, Any]:
+def _collect_health_data() -> dict[str, Any]:
     """Collect health metrics as structured data."""
     monitor = HealthMonitor()
     try:
@@ -505,8 +499,7 @@ def _collect_health_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_duplicates_data() -> Dict[str, Any]:
+def _collect_duplicates_data() -> dict[str, Any]:
     """Collect duplicate analysis data."""
     detector = DuplicateDetector()
     exact_dupes = detector.find_duplicates()
@@ -545,8 +538,7 @@ def _collect_duplicates_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_similar_data() -> Dict[str, Any]:
+def _collect_similar_data() -> dict[str, Any]:
     """Collect similar documents data."""
     merger = DocumentMerger()
     try:
@@ -569,8 +561,7 @@ def _collect_similar_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_empty_data() -> Dict[str, Any]:
+def _collect_empty_data() -> dict[str, Any]:
     """Collect empty documents data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -601,8 +592,7 @@ def _collect_empty_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
+def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
     """Collect tag analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -612,7 +602,8 @@ def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
                     AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
@@ -629,7 +620,8 @@ def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
                     AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
@@ -644,7 +636,7 @@ def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
             """)
 
         stats = cursor.fetchone()
-        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
 
         result = {
             "project": project,
@@ -689,8 +681,7 @@ def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
 
     return result
 
-
-def _collect_projects_data() -> Dict[str, Any]:
+def _collect_projects_data() -> dict[str, Any]:
     """Collect project analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -733,11 +724,9 @@ def _collect_projects_data() -> Dict[str, Any]:
 
     return result
 
-
 # Create typer app for this module
 app = typer.Typer(help="Analyze documents and extract insights")
 app.command()(analyze)
-
 
 if __name__ == "__main__":
     app()

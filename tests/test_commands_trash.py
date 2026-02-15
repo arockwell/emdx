@@ -1,10 +1,9 @@
 """Tests for trash management commands (list, restore, purge)."""
 
 import re
-from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import datetime
+from unittest.mock import patch
 
-import typer
 from typer.testing import CliRunner
 
 from emdx.commands.trash import app

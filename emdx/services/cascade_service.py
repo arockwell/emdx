@@ -10,7 +10,7 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
@@ -27,8 +27,7 @@ update_cascade_stage = cascade_db.update_cascade_stage
 save_document_to_cascade = cascade_db.save_document_to_cascade
 get_document = get_document
 
-
-def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
+def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
     """Get recent pipeline activity — executions with their input/output docs."""
     PREV_STAGE = {"prompt": "idea", "analyzed": "prompt", "planned": "analyzed", "done": "planned"}
 
@@ -50,7 +49,7 @@ def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
         results = []
         for row in cursor.fetchall():
             output_stage, input_stage = row[9], row[10]
-            from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")
+            from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")  # noqa: E501
             results.append({
                 "exec_id": row[0], "input_id": row[1], "input_title": row[2],
                 "status": row[3], "started_at": row[4], "completed_at": row[5],
@@ -59,8 +58,7 @@ def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
             })
         return results
 
-
-def get_child_info(parent_id: int) -> Dict[str, Any] | None:
+def get_child_info(parent_id: int) -> dict[str, Any] | None:
     """Get info about the first child document of a parent."""
     with db_connection.get_connection() as conn:
         row = conn.execute(
@@ -69,13 +67,11 @@ def get_child_info(parent_id: int) -> Dict[str, Any] | None:
         ).fetchone()
         return {"id": row[0], "title": row[1], "stage": row[2]} if row else None
 
-
 def get_document_pr_url(doc_id: int) -> str | None:
     """Get PR URL for a document."""
     with db_connection.get_connection() as conn:
         row = conn.execute("SELECT pr_url FROM documents WHERE id = ?", (doc_id,)).fetchone()
         return row[0] if row and row[0] else None
-
 
 def monitor_execution_completion(
     exec_id: int,
@@ -134,7 +130,7 @@ def monitor_execution_completion(
                                 )
                                 update_cascade_stage(new_id, next_stage)
                                 update_cascade_stage(doc_id, "done")
-                                on_update(f"[green]\u2713 Done![/green] Created #{new_id} at {next_stage}")
+                                on_update(f"[green]\u2713 Done![/green] Created #{new_id} at {next_stage}")  # noqa: E501
                             else:
                                 on_update("[green]\u2713 Completed[/green]")
                         return

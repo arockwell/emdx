@@ -30,7 +30,7 @@ def normalize_title(title: str) -> str:
     result = title
 
     # Remove ISO timestamps with optional timezone: - 2026-01-11T00:05:45.123456+00:00
-    result = re.sub(r'\s*-?\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?', '', result)
+    result = re.sub(r'\s*-?\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?', '', result)  # noqa: E501
 
     # Remove dates in parentheses: (2025-01-10)
     result = re.sub(r'\s*\(\d{4}-\d{2}-\d{2}\)', '', result)

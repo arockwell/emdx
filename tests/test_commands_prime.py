@@ -6,9 +6,9 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from emdx.commands.prime import (
-    app,
-    _task_label,
     _format_epic_line,
+    _task_label,
+    app,
 )
 
 runner = CliRunner()
@@ -301,7 +301,9 @@ class TestPrimeVerbose:
                                               mock_epics, mock_docs, mock_cascade, _):
         mock_project.return_value = None
         mock_epics.return_value = []
-        mock_ready.return_value = [_make_task(id=1, title="Task", description="Detailed explanation")]
+        mock_ready.return_value = [
+            _make_task(id=1, title="Task", description="Detailed explanation")
+        ]
         mock_ip.return_value = []
         mock_docs.return_value = []
         mock_cascade.return_value = {"idea": 0, "prompt": 0, "analyzed": 0, "planned": 0, "done": 0}
@@ -361,7 +363,9 @@ class TestPrimeJson:
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_json_non_verbose_excludes_extras(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_json_non_verbose_excludes_extras(
+        self, mock_project, mock_ip, mock_ready, mock_epics, _
+    ):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []

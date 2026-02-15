@@ -4,13 +4,12 @@ import json
 import logging
 import shutil
 import subprocess
-from typing import Any, Dict, List
+from typing import Any
 
 from ...config.cli_config import CLI_CONFIGS, CliTool, resolve_model_alias
 from .base import CliCommand, CliExecutor, CliResult
 
 logger = logging.getLogger(__name__)
-
 
 class CursorCliExecutor(CliExecutor):
     """Executor for Cursor Agent CLI."""
@@ -26,7 +25,7 @@ class CursorCliExecutor(CliExecutor):
         self,
         prompt: str,
         model: str | None = None,
-        allowed_tools: List[str] | None = None,
+        allowed_tools: list[str] | None = None,
         output_format: str = "stream-json",
         working_dir: str | None = None,
         timeout: int | None = None,
@@ -34,7 +33,8 @@ class CursorCliExecutor(CliExecutor):
         """Build Cursor CLI command.
 
         Cursor command format:
-            cursor agent -p --output-format <format> --model <model> [--force] [--workspace <path>] "prompt"
+            cursor agent -p --output-format <format> --model <model>
+                   [--force] [--workspace <path>] "prompt"
 
         Note: Cursor uses positional prompt at the end with -p flag.
         """
@@ -156,7 +156,7 @@ class CursorCliExecutor(CliExecutor):
             return "Model not available for your account"
         return error_text
 
-    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
+    def parse_stream_line(self, line: str) -> dict[str, Any] | None:
         """Parse a single line from Cursor's stream-json output."""
         if not line.strip():
             return None
@@ -221,9 +221,9 @@ class CursorCliExecutor(CliExecutor):
             logger.debug(f"Failed to parse line as JSON: {line[:100]}")
             return None
 
-    def validate_environment(self) -> tuple[bool, Dict[str, Any]]:
+    def validate_environment(self) -> tuple[bool, dict[str, Any]]:
         """Validate Cursor CLI is installed and authenticated."""
-        info: Dict[str, Any] = {"cli": "cursor", "errors": [], "warnings": []}
+        info: dict[str, Any] = {"cli": "cursor", "errors": [], "warnings": []}
 
         # Check if binary exists
         binary_path = self.get_binary_path()

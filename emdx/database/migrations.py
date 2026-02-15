@@ -1,4 +1,7 @@
 """Database migration system for emdx."""
+# ruff: noqa: E501
+# SQL schema definitions contain long lines for readability; breaking them
+# would make the migration scripts harder to understand and maintain.
 
 import sqlite3
 from collections.abc import Callable

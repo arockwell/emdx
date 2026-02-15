@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
 
 try:
     import anthropic
@@ -24,16 +23,14 @@ from ..database import db
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class Answer:
     """An answer from the knowledge base."""
 
     text: str
-    sources: List[int]  # Document IDs used
+    sources: list[int]  # Document IDs used
     method: str  # "semantic" or "keyword"
     context_size: int  # Characters of context used
-
 
 class AskService:
     """Answer questions using your knowledge base."""
@@ -113,7 +110,7 @@ class AskService:
 
     def _retrieve_keyword(
         self, question: str, limit: int, project: str | None = None
-    ) -> Tuple[List[tuple], str]:
+    ) -> tuple[list[tuple], str]:
         """Retrieve documents using FTS keyword search."""
         docs = []
         seen = set()
@@ -209,7 +206,7 @@ class AskService:
 
     def _retrieve_semantic(
         self, question: str, limit: int, project: str | None = None
-    ) -> Tuple[List[tuple], str]:
+    ) -> tuple[list[tuple], str]:
         """Retrieve documents using semantic (embedding) search."""
         embedding_service = self._get_embedding_service()
         if embedding_service is None:
@@ -249,8 +246,8 @@ class AskService:
             return self._retrieve_keyword(question, limit, project)
 
     def _generate_answer(
-        self, question: str, docs: List[tuple]
-    ) -> Tuple[str, int]:
+        self, question: str, docs: list[tuple]
+    ) -> tuple[str, int]:
         """Generate answer from retrieved documents using Claude."""
         if not docs:
             return (
@@ -286,7 +283,7 @@ Rules:
                 messages=[
                     {
                         "role": "user",
-                        "content": f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}",
+                        "content": f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}",  # noqa: E501
                     }
                 ],
             )

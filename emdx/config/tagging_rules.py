@@ -6,7 +6,7 @@ Allows users to define custom patterns for auto-tagging.
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -14,26 +14,24 @@ from .constants import DEFAULT_TAGGING_CONFIDENCE, EMDX_CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class TaggingRule:
     """Represents a single tagging rule."""
     name: str
-    title_patterns: List[str]
-    content_patterns: List[str]
-    tags: List[str]
+    title_patterns: list[str]
+    content_patterns: list[str]
+    tags: list[str]
     confidence: float = DEFAULT_TAGGING_CONFIDENCE
     enabled: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TaggingRule':
+    def from_dict(cls, data: dict[str, Any]) -> 'TaggingRule':
         """Create from dictionary."""
         return cls(**data)
-
 
 class TaggingConfig:
     """Manages tagging configuration and custom rules."""
@@ -42,7 +40,7 @@ class TaggingConfig:
 
     def __init__(self, config_path: str | None = None):
         self.config_path = Path(config_path or self.DEFAULT_CONFIG_PATH).expanduser()
-        self.rules: Dict[str, TaggingRule] = {}
+        self.rules: dict[str, TaggingRule] = {}
         self.load_config()
 
     def load_config(self):
@@ -138,7 +136,7 @@ class TaggingConfig:
         """Get a specific rule by name."""
         return self.rules.get(name)
 
-    def list_rules(self) -> List[TaggingRule]:
+    def list_rules(self) -> list[TaggingRule]:
         """List all active rules."""
         return [rule for rule in self.rules.values() if rule.enabled]
 
@@ -158,7 +156,7 @@ class TaggingConfig:
             return True
         return False
 
-    def export_rules(self) -> Dict[str, Any]:
+    def export_rules(self) -> dict[str, Any]:
         """Export rules as a dictionary compatible with AutoTagger."""
         return {
             name: {
@@ -171,7 +169,7 @@ class TaggingConfig:
             if rule.enabled
         }
 
-    def import_rules(self, rules_data: Dict[str, Any]):
+    def import_rules(self, rules_data: dict[str, Any]):
         """Import rules from a dictionary."""
         for name, rule_data in rules_data.items():
             self.rules[name] = TaggingRule(
@@ -184,7 +182,7 @@ class TaggingConfig:
             )
         self.save_config()
 
-    def validate_rule(self, rule: TaggingRule) -> List[str]:
+    def validate_rule(self, rule: TaggingRule) -> list[str]:
         """Validate a tagging rule and return any errors."""
         errors = []
 
@@ -210,13 +208,11 @@ class TaggingConfig:
 
         return errors
 
-
 def get_default_config() -> TaggingConfig:
     """Get the default tagging configuration."""
     return TaggingConfig()
 
-
-def merge_with_defaults(custom_patterns: Dict[str, Any]) -> Dict[str, Any]:
+def merge_with_defaults(custom_patterns: dict[str, Any]) -> dict[str, Any]:
     """
     Merge custom patterns with default AutoTagger patterns.
     Custom patterns take precedence.

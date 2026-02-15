@@ -4,7 +4,9 @@ Test the optimized project discovery.
 """
 
 import time
+
 from emdx.utils.git_ops import discover_projects_from_main_repos, discover_projects_from_worktrees
+
 
 def main():
     print("🔍 Testing Project Discovery Performance")

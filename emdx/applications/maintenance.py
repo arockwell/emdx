@@ -9,12 +9,11 @@ into a dedicated application service layer.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Union
-
-logger = logging.getLogger(__name__)
+from typing import Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -24,6 +23,8 @@ from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.similarity import SimilarityService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -206,7 +207,7 @@ class MaintenanceApplication:
                 success=True,
                 items_processed=total,
                 items_affected=total,
-                message=f"Would remove {total} documents ({duplicate_count} duplicates, {empty_count} empty)",
+                message=f"Would remove {total} documents ({duplicate_count} duplicates, {empty_count} empty)",  # noqa: E501
             )
 
         # Remove duplicates
@@ -379,7 +380,7 @@ class MaintenanceApplication:
                     for doc1_id, doc2_id, title1, title2, sim in pairs[:5]:
                         # Get access counts to determine which would be kept
                         cursor.execute(
-                            "SELECT id, access_count, LENGTH(content) as len FROM documents WHERE id IN (?, ?)",
+                            "SELECT id, access_count, LENGTH(content) as len FROM documents WHERE id IN (?, ?)",  # noqa: E501
                             (doc1_id, doc2_id)
                         )
                         docs = {row['id']: row for row in cursor.fetchall()}
@@ -410,7 +411,7 @@ class MaintenanceApplication:
 
             # Fast path: merge using pairs data directly
             merged_count = 0
-            for doc1_id, doc2_id, title1, title2, sim in pairs:
+            for doc1_id, doc2_id, _title1, _title2, _sim in pairs:
                 try:
                     with self._db.get_connection() as conn:
                         cursor = conn.cursor()
@@ -486,7 +487,7 @@ class MaintenanceApplication:
             preview = []
             for candidate in candidates[:3]:
                 preview.append(
-                    f"'{candidate.doc1['title']}' ↔ '{candidate.doc2['title']}' ({candidate.similarity:.0%})"
+                    f"'{candidate.doc1['title']}' ↔ '{candidate.doc2['title']}' ({candidate.similarity:.0%})"  # noqa: E501
                 )
 
             return MaintenanceResult(
@@ -543,7 +544,9 @@ class MaintenanceApplication:
                     conn.commit()
                 merged_count += 1
             except Exception as e:
-                logger.warning("Failed to merge documents %s and %s: %s", keep["id"], remove["id"], e)
+                logger.warning(
+                    "Failed to merge documents %s and %s: %s", keep["id"], remove["id"], e
+                )
                 continue
 
         return MaintenanceResult(
@@ -586,7 +589,7 @@ class MaintenanceApplication:
                 success=True,
                 items_processed=total_items,
                 items_affected=total_items,
-                message=f"Would clean {total_items} items ({analysis['orphaned_tags']} orphaned tags, {analysis['old_trash']} old trash)",
+                message=f"Would clean {total_items} items ({analysis['orphaned_tags']} orphaned tags, {analysis['old_trash']} old trash)",  # noqa: E501
             )
 
         # Perform cleanup

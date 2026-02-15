@@ -8,7 +8,7 @@ operations while this widget focuses on display and user interaction.
 """
 
 import logging
-from typing import Any, Dict, Protocol
+from typing import Any, Protocol
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -26,7 +26,6 @@ from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
 
-
 class TextAreaHost(Protocol):
     """Protocol defining what VimEditTextArea and SelectionTextArea expect from their host."""
 
@@ -41,7 +40,6 @@ class TextAreaHost(Protocol):
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (for SelectionTextArea)."""
         ...
-
 
 class DocumentBrowser(HelpMixin, Widget):
     """Document browser widget that can host text areas."""
@@ -125,7 +123,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     table_container.styles.min_height = 10
                     table_container.styles.padding = (1, 0, 0, 0)  # Top padding for spacing
                     yield DataTable(id="doc-table")
-                with Vertical(id="details-container", classes="details-section") as details_container:
+                with Vertical(id="details-container", classes="details-section") as details_container:  # noqa: E501
                     # Apply direct styles - 1/3 of sidebar
                     details_container.styles.height = "34%"
                     details_container.styles.min_height = 8
@@ -151,7 +149,7 @@ class DocumentBrowser(HelpMixin, Widget):
         yield Static("Ready", id="browser-status", classes="browser-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [bold]4[/bold] Docs │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [bold]4[/bold] Docs │ "  # noqa: E501
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] view │ [dim]e[/dim] edit",
             id="nav-bar", classes="nav-bar"
         )
@@ -309,9 +307,9 @@ class DocumentBrowser(HelpMixin, Widget):
         """
         await self._render_document_list()
 
-    def save_state(self) -> Dict[str, Any]:
+    def save_state(self) -> dict[str, Any]:
         """Save current state for restoration."""
-        state: Dict[str, Any] = {
+        state: dict[str, Any] = {
             "mode": self.mode,
             "current_search": self._current_vm.search_query if self._current_vm else "",
         }
@@ -325,7 +323,7 @@ class DocumentBrowser(HelpMixin, Widget):
 
         return state
 
-    def restore_state(self, state: Dict[str, Any]) -> None:
+    def restore_state(self, state: dict[str, Any]) -> None:
         """Restore saved state."""
         self.mode = state.get("mode", "NORMAL")
         # Search query will be applied when load_documents is called
@@ -919,7 +917,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     status_text = f"{vm.filtered_count}/{vm.total_count} docs"
                 else:
                     status_text = "0/0 docs"
-                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"  # noqa: E501
                 app.update_status(status_text)
         except (LookupError, AttributeError) as e:
             logger.debug(
@@ -1051,7 +1049,6 @@ class DocumentBrowser(HelpMixin, Widget):
                 details_panel.write(f"📄 Document {detail_vm.id}: {detail_vm.title}")
             except Exception as e2:
                 logger.debug("Fallback details panel also failed: %s", e2)
-
 
     async def on_input_submitted(self, event) -> None:
         """Handle input submission."""

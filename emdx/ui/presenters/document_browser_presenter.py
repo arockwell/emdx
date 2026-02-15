@@ -14,7 +14,7 @@ The original presenter handled:
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, List, Set
+from typing import Any
 
 from emdx.services.document_service import (
     count_documents,
@@ -39,7 +39,6 @@ from ..viewmodels import DocumentDetailVM, DocumentListItem, DocumentListVM
 
 logger = logging.getLogger(__name__)
 
-
 class DocumentBrowserPresenter:
     """Presenter for document browser business logic."""
 
@@ -53,17 +52,17 @@ class DocumentBrowserPresenter:
         self.on_detail_update = on_detail_update
 
         # Internal state
-        self._documents: List[DocumentListItem] = []
-        self._filtered_documents: List[DocumentListItem] = []
+        self._documents: list[DocumentListItem] = []
+        self._filtered_documents: list[DocumentListItem] = []
         self._search_query: str = ""
         self._total_count: int = 0
         self._current_offset: int = 0
         self._has_more: bool = False
         self._loading_more: bool = False
-        self._expanded_docs: Set[int] = set()
-        self._tags_cache: Dict[int, List[str]] = {}
+        self._expanded_docs: set[int] = set()
+        self._tags_cache: dict[int, list[str]] = {}
         self._tags_cache_max: int = 200  # Limit tags cache size
-        self._doc_cache: Dict[int, Dict[str, Any]] = {}
+        self._doc_cache: dict[int, dict[str, Any]] = {}
         self._doc_cache_max: int = 50
 
     def _create_list_vm(self) -> DocumentListVM:
@@ -88,7 +87,7 @@ class DocumentBrowserPresenter:
             status_text=status_text,
         )
 
-    def _update_tags_cache(self, tags_dict: Dict[int, List[str]]) -> None:
+    def _update_tags_cache(self, tags_dict: dict[int, list[str]]) -> None:
         """Update tags cache with eviction when size limit exceeded.
 
         Uses FIFO eviction to keep the cache bounded.
@@ -102,8 +101,8 @@ class DocumentBrowserPresenter:
 
     def _raw_doc_to_view_model(
         self,
-        doc: Dict[str, Any],
-        tags: List[str],
+        doc: dict[str, Any],
+        tags: list[str],
         has_children: bool,
         depth: int = 0,
     ) -> DocumentListItem:
@@ -181,7 +180,7 @@ class DocumentBrowserPresenter:
 
     async def _load_children(
         self, parent_id: int, parent_depth: int
-    ) -> List[DocumentListItem]:
+    ) -> list[DocumentListItem]:
         """Load children of a document."""
         try:
             raw_docs = db_list_documents(
@@ -375,7 +374,7 @@ class DocumentBrowserPresenter:
             logger.error(f"Error deleting document {doc_id}: {e}")
             return False
 
-    async def add_tags(self, doc_id: int, tags: List[str]) -> None:
+    async def add_tags(self, doc_id: int, tags: list[str]) -> None:
         """Add tags to a document."""
         try:
             add_tags_to_document(doc_id, tags)
@@ -392,7 +391,7 @@ class DocumentBrowserPresenter:
         except Exception as e:
             logger.error(f"Error adding tags to document {doc_id}: {e}")
 
-    async def remove_tags(self, doc_id: int, tags: List[str]) -> None:
+    async def remove_tags(self, doc_id: int, tags: list[str]) -> None:
         """Remove tags from a document."""
         try:
             remove_tags_from_document(doc_id, tags)
@@ -450,7 +449,7 @@ class DocumentBrowserPresenter:
         self,
         title: str,
         content: str,
-        tags: List[str] | None = None,
+        tags: list[str] | None = None,
     ) -> int:
         """Save a new document."""
         project = get_git_project()

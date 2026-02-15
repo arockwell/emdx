@@ -7,11 +7,10 @@ that can be used to execute agent tasks.
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
 
 # Default tools allowed for Claude CLI execution
 # These are the standard tools that most agents need for basic operations
-DEFAULT_ALLOWED_TOOLS: List[str] = [
+DEFAULT_ALLOWED_TOOLS: list[str] = [
     "Bash",
     "Edit",
     "Glob",
@@ -27,20 +26,18 @@ DEFAULT_ALLOWED_TOOLS: List[str] = [
     "Write",
 ]
 
-
 class CliTool(str, Enum):
     """Supported CLI tools."""
 
     CLAUDE = "claude"
     CURSOR = "cursor"
 
-
 @dataclass
 class CliConfig:
     """Configuration for a CLI tool."""
 
     # Command structure
-    binary: List[str]  # e.g., ["claude"] or ["cursor", "agent"]
+    binary: list[str]  # e.g., ["claude"] or ["cursor", "agent"]
     prompt_flag: str  # e.g., "--print" or "-p"
     prompt_is_positional: bool  # True if prompt goes at end (Cursor)
 
@@ -65,9 +62,8 @@ class CliConfig:
     config_path: str | None  # Path to CLI config file
     api_key_env: str | None  # Environment variable for API key
 
-
 # CLI configurations
-CLI_CONFIGS: Dict[CliTool, CliConfig] = {
+CLI_CONFIGS: dict[CliTool, CliConfig] = {
     CliTool.CLAUDE: CliConfig(
         binary=["claude"],
         prompt_flag="--print",
@@ -104,7 +100,7 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
 
 # Model aliases for cross-CLI compatibility
 # Use these aliases for portable commands that work with either CLI
-MODEL_ALIASES: Dict[str, Dict[str, str]] = {
+MODEL_ALIASES: dict[str, dict[str, str]] = {
     "opus": {
         "claude": "claude-opus-4-5-20251101",
         "cursor": "opus-4.5",
@@ -123,7 +119,6 @@ MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     },
 }
 
-
 def get_default_cli_tool() -> CliTool:
     """Get the default CLI tool from environment or fallback to Claude.
 
@@ -134,7 +129,6 @@ def get_default_cli_tool() -> CliTool:
         return CliTool(env_value)
     except ValueError:
         return CliTool.CLAUDE
-
 
 def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     """Get configuration for a CLI tool.
@@ -148,7 +142,6 @@ def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     if cli_tool is None:
         cli_tool = get_default_cli_tool()
     return CLI_CONFIGS[cli_tool]
-
 
 def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     """Resolve a model alias to the actual model name for a CLI.
@@ -164,8 +157,7 @@ def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
         return MODEL_ALIASES[alias].get(cli_tool.value, alias)
     return alias
 
-
-def get_available_models(cli_tool: CliTool) -> List[str]:
+def get_available_models(cli_tool: CliTool) -> list[str]:
     """Get list of known models for a CLI tool.
 
     Returns:

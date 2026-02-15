@@ -1,19 +1,16 @@
 """Tests for lazy loading CLI commands."""
 
 import sys
-from unittest.mock import MagicMock, patch
 
 import click
-import pytest
 from typer.testing import CliRunner
 
 from emdx.utils.lazy_group import (
+    _LAZY_REGISTRY,
     LazyCommand,
     LazyTyperGroup,
     register_lazy_commands,
-    _LAZY_REGISTRY,
 )
-
 
 runner = CliRunner()
 
@@ -207,6 +204,7 @@ class TestCLIIntegration:
 
         # Import and run help - reimport to ensure fresh registry
         import importlib
+
         import emdx.main
         importlib.reload(emdx.main)
         from emdx.main import app
@@ -224,6 +222,7 @@ class TestCLIIntegration:
         """Test that lazy commands appear in --help output."""
         # Reimport to ensure fresh registry
         import importlib
+
         import emdx.main
         importlib.reload(emdx.main)
         from emdx.main import app

@@ -1,7 +1,5 @@
 """Stage summary bar widget for cascade browser."""
 
-from typing import Dict
-
 from textual.app import ComposeResult
 from textual.reactive import reactive
 from textual.widget import Widget
@@ -38,7 +36,7 @@ class StageSummaryBar(Widget):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.stats: Dict[str, int] = {}
+        self.stats: dict[str, int] = {}
 
     def compose(self) -> ComposeResult:
         yield Static("", id="stage-bar")
@@ -73,6 +71,6 @@ class StageSummaryBar(Widget):
         # Show detail for current stage
         count = self.stats.get(self.current_stage, 0)
         if count > 0:
-            detail.update(f"[bold]\u2190 h[/bold] prev stage \u2502 [bold]l \u2192[/bold] next stage \u2502 {count} document{'s' if count != 1 else ''} at {self.current_stage}")
+            detail.update(f"[bold]\u2190 h[/bold] prev stage \u2502 [bold]l \u2192[/bold] next stage \u2502 {count} document{'s' if count != 1 else ''} at {self.current_stage}")  # noqa: E501
         else:
-            detail.update(f"[bold]\u2190 h[/bold] prev stage \u2502 [bold]l \u2192[/bold] next stage \u2502 No documents at {self.current_stage}")
+            detail.update(f"[bold]\u2190 h[/bold] prev stage \u2502 [bold]l \u2192[/bold] next stage \u2502 No documents at {self.current_stage}")  # noqa: E501

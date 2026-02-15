@@ -1,14 +1,13 @@
 """Tests for the UnifiedExecutor service."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from emdx.services.unified_executor import (
-    UnifiedExecutor,
+    DEFAULT_ALLOWED_TOOLS,
     ExecutionConfig,
     ExecutionResult,
-    DEFAULT_ALLOWED_TOOLS,
+    UnifiedExecutor,
 )
 
 
@@ -115,8 +114,8 @@ class TestUnifiedExecutor:
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))
-        mock_executor.parse_output.return_value = CliResult(success=True, output='Done', exit_code=0)
+        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
+        mock_executor.parse_output.return_value = CliResult(success=True, output='Done', exit_code=0)  # noqa: E501
         mock_get_executor.return_value = mock_executor
 
         # Setup mock process
@@ -149,8 +148,8 @@ class TestUnifiedExecutor:
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))
-        mock_executor.parse_output.return_value = CliResult(success=False, output='', error='Failed', exit_code=1)
+        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
+        mock_executor.parse_output.return_value = CliResult(success=False, output='', error='Failed', exit_code=1)  # noqa: E501
         mock_get_executor.return_value = mock_executor
 
         # Setup mock process
@@ -183,8 +182,8 @@ class TestUnifiedExecutor:
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))
-        mock_executor.parse_output.return_value = CliResult(success=True, output='Done', exit_code=0)
+        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
+        mock_executor.parse_output.return_value = CliResult(success=True, output='Done', exit_code=0)  # noqa: E501
         mock_get_executor.return_value = mock_executor
 
         # Setup mock process
@@ -219,7 +218,7 @@ class TestUnifiedExecutor:
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))
+        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
         mock_get_executor.return_value = mock_executor
 
         # Make Popen raise an exception
@@ -239,7 +238,7 @@ class TestDefaultAllowedTools:
     """Test default allowed tools."""
 
     def test_default_tools_list(self):
-        expected = ["Bash", "Edit", "Glob", "Grep", "LS", "MultiEdit", "Read", "Task", "TodoRead", "TodoWrite", "WebFetch", "WebSearch", "Write"]
+        expected = ["Bash", "Edit", "Glob", "Grep", "LS", "MultiEdit", "Read", "Task", "TodoRead", "TodoWrite", "WebFetch", "WebSearch", "Write"]  # noqa: E501
         assert DEFAULT_ALLOWED_TOOLS == expected
 
     def test_config_gets_copy(self):

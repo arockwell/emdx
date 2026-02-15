@@ -68,14 +68,14 @@ class TitleInput(Input):
                     vim_editor.text_area._has_been_focused = True
                     # For NEW documents, start in INSERT mode
                     # For EDIT documents, start in NORMAL mode
-                    if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
+                    if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:  # noqa: E501
                         vim_editor.text_area.vim_mode = "INSERT"
                     else:
                         vim_editor.text_area.vim_mode = "NORMAL"
 
                 vim_editor.text_area._update_cursor_style()
                 mode_name = vim_editor.text_area.vim_mode
-                self.app_instance._update_vim_status(f"{mode_name} | Tab=switch to title | Ctrl+S=save | ESC=exit")
+                self.app_instance._update_vim_status(f"{mode_name} | Tab=switch to title | Ctrl+S=save | ESC=exit")  # noqa: E501
                 event.stop()
                 event.prevent_default()
                 return

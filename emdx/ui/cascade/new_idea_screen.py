@@ -51,7 +51,7 @@ class NewIdeaScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="idea-dialog"):
-            yield Label("\U0001f4a1 Enter new idea for the cascade (Ctrl+Enter to submit):", id="idea-label")
+            yield Label("\U0001f4a1 Enter new idea for the cascade (Ctrl+Enter to submit):", id="idea-label")  # noqa: E501
             yield TextArea(id="idea-input")
             with Horizontal(id="idea-buttons"):
                 yield Button("Add Idea", variant="primary", id="add-btn")

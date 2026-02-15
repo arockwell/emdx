@@ -1,11 +1,11 @@
 """Tests for recipe management commands."""
 
 import re
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from emdx.commands.recipe import app, _find_recipe
+from emdx.commands.recipe import _find_recipe, app
 
 runner = CliRunner()
 
@@ -72,7 +72,7 @@ class TestRecipeList:
     @patch("emdx.commands.recipe.search_by_tags")
     def test_list_shows_recipes(self, mock_tags):
         mock_tags.return_value = [
-            {"id": 42, "title": "Security Audit", "content": "# Security Audit\nCheck all endpoints"},
+            {"id": 42, "title": "Security Audit", "content": "# Security Audit\nCheck all endpoints"},  # noqa: E501
             {"id": 43, "title": "Code Review", "content": "Review code quality"},
         ]
         result = runner.invoke(app, ["list"])
@@ -99,7 +99,7 @@ class TestRecipeRun:
     def test_run_builds_delegate_command(self, mock_find, mock_subprocess):
         mock_find.return_value = {"id": 42, "title": "My Recipe", "content": "..."}
         mock_subprocess.run.return_value = MagicMock(returncode=0)
-        result = runner.invoke(app, ["run", "42"])
+        runner.invoke(app, ["run", "42"])
         # Verify delegate was called with --doc 42
         call_args = mock_subprocess.run.call_args[0][0]
         assert "delegate" in call_args
@@ -111,7 +111,7 @@ class TestRecipeRun:
     def test_run_with_pr_flag(self, mock_find, mock_subprocess):
         mock_find.return_value = {"id": 42, "title": "My Recipe", "content": "..."}
         mock_subprocess.run.return_value = MagicMock(returncode=0)
-        result = runner.invoke(app, ["run", "42", "--pr"])
+        runner.invoke(app, ["run", "42", "--pr"])
         call_args = mock_subprocess.run.call_args[0][0]
         assert "--pr" in call_args
 
@@ -120,7 +120,7 @@ class TestRecipeRun:
     def test_run_with_extra_args(self, mock_find, mock_subprocess):
         mock_find.return_value = {"id": 42, "title": "My Recipe", "content": "..."}
         mock_subprocess.run.return_value = MagicMock(returncode=0)
-        result = runner.invoke(app, ["run", "42", "--", "analyze", "auth"])
+        runner.invoke(app, ["run", "42", "--", "analyze", "auth"])
         call_args = mock_subprocess.run.call_args[0][0]
         # Extra args should be incorporated into the prompt
         prompt_args = [a for a in call_args if "analyze" in a or "auth" in a]
@@ -140,7 +140,7 @@ class TestRecipeCreate:
         recipe_file = tmp_path / "recipe.md"
         recipe_file.write_text("# My Recipe\nDo stuff")
         mock_subprocess.run.return_value = MagicMock(returncode=0)
-        result = runner.invoke(app, ["create", str(recipe_file)])
+        runner.invoke(app, ["create", str(recipe_file)])
         call_args = mock_subprocess.run.call_args[0][0]
         assert "save" in call_args
         assert "--tags" in call_args

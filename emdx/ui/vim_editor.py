@@ -9,12 +9,9 @@ import logging
 from textual.containers import Horizontal, Vertical
 
 from .text_areas import VimEditTextArea
+from .vim_line_numbers import SimpleVimLineNumbers
 
 logger = logging.getLogger(__name__)
-
-
-# Import line numbers implementation
-from .vim_line_numbers import SimpleVimLineNumbers
 
 
 class VimEditor(Vertical):

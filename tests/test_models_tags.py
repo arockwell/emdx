@@ -906,7 +906,7 @@ class TestMergeTags:
         doc_id = _create_document()
         add_tags_to_document(doc_id, ["source", "target"])
 
-        merged_count = merge_tags(["source"], "target")
+        merge_tags(["source"], "target")
         # The document_tags entry for source->doc should be replaced by target->doc
         # but since target->doc already exists, UPDATE OR IGNORE skips it
 

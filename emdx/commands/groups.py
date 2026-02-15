@@ -42,7 +42,7 @@ def create(
             parent_group = groups.get_group(parent)
             if not parent_group:
                 console.print(f"[red]Error: Parent group #{parent} not found[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
         group_id = groups.create_group(
             name=name,
@@ -62,10 +62,10 @@ def create(
 
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error creating group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -85,7 +85,7 @@ def add(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         added = []
         already_in = []
@@ -122,7 +122,7 @@ def add(
 
     except Exception as e:
         console.print(f"[red]Error adding documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -138,7 +138,7 @@ def remove(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         removed = []
         not_in = []
@@ -162,7 +162,7 @@ def remove(
 
     except Exception as e:
         console.print(f"[red]Error removing documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command(name="list")
@@ -232,7 +232,7 @@ def list_groups_cmd(
 
     except Exception as e:
         console.print(f"[red]Error listing groups: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def _display_groups_tree(project: str | None, include_inactive: bool) -> None:
@@ -267,7 +267,7 @@ def _add_group_to_tree(parent_tree: Tree, group: dict, include_inactive: bool) -
     }
     icon = type_icons.get(group['group_type'], '📁')
 
-    label = f"{icon} [cyan]#{group['id']}[/cyan] {group['name']} [dim]({group['doc_count']} docs)[/dim]"
+    label = f"{icon} [cyan]#{group['id']}[/cyan] {group['name']} [dim]({group['doc_count']} docs)[/dim]"  # noqa: E501
     branch = parent_tree.add(label)
 
     # Add child groups
@@ -297,7 +297,7 @@ def show(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         # Header
         type_icons = {
@@ -309,7 +309,7 @@ def show(
         }
         icon = type_icons.get(group['group_type'], '📁')
 
-        console.print(f"\n{icon} [bold cyan]#{group['id']}:[/bold cyan] [bold]{group['name']}[/bold]")
+        console.print(f"\n{icon} [bold cyan]#{group['id']}:[/bold cyan] [bold]{group['name']}[/bold]")  # noqa: E501
         console.print("=" * 50)
 
         # Metadata
@@ -340,16 +340,16 @@ def show(
             console.print(f"\n[bold]Child Groups ({len(children)}):[/bold]")
             for child in children:
                 child_icon = type_icons.get(child['group_type'], '📁')
-                console.print(f"  {child_icon} #{child['id']} {child['name']} ({child['doc_count']} docs)")
+                console.print(f"  {child_icon} #{child['id']} {child['name']} ({child['doc_count']} docs)")  # noqa: E501
 
         # Members
         members = groups.get_group_members(group_id)
         if members:
             console.print(f"\n[bold]Documents ({len(members)}):[/bold]")
             for m in members[:20]:
-                role_icon = {'primary': '★', 'synthesis': '📝', 'exploration': '◇', 'variant': '≈'}.get(m['role'], '•')
+                role_icon = {'primary': '★', 'synthesis': '📝', 'exploration': '◇', 'variant': '≈'}.get(m['role'], '•')  # noqa: E501
                 title = m['title'][:40] if len(m['title']) > 40 else m['title']
-                console.print(f"  {role_icon} [cyan]#{m['id']}[/cyan] {title} [dim]({m['role']})[/dim]")
+                console.print(f"  {role_icon} [cyan]#{m['id']}[/cyan] {title} [dim]({m['role']})[/dim]")  # noqa: E501
             if len(members) > 20:
                 console.print(f"  [dim]... and {len(members) - 20} more documents[/dim]")
         else:
@@ -357,7 +357,7 @@ def show(
 
     except Exception as e:
         console.print(f"[red]Error showing group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -373,7 +373,7 @@ def delete(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         # Check for children
         children = groups.get_child_groups(group_id)
@@ -382,9 +382,9 @@ def delete(
         if not force:
             console.print(f"\n[bold]Will delete group:[/bold] #{group_id} ({group['name']})")
             if children:
-                console.print(f"[yellow]Warning: This group has {len(children)} child group(s) that will also be deleted[/yellow]")
+                console.print(f"[yellow]Warning: This group has {len(children)} child group(s) that will also be deleted[/yellow]")  # noqa: E501
             if members:
-                console.print(f"[dim]Note: {len(members)} document(s) will be removed from group (documents not deleted)[/dim]")
+                console.print(f"[dim]Note: {len(members)} document(s) will be removed from group (documents not deleted)[/dim]")  # noqa: E501
 
             if not typer.confirm("Continue?"):
                 raise typer.Abort()
@@ -395,13 +395,13 @@ def delete(
             console.print(f"[green]✅ {action} group #{group_id} ({group['name']})[/green]")
         else:
             console.print("[red]Error: Failed to delete group[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     except typer.Abort:
         console.print("[yellow]Cancelled[/yellow]")
     except Exception as e:
         console.print(f"[red]Error deleting group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -409,7 +409,7 @@ def edit(
     group_id: int = typer.Argument(..., help="Group ID to edit"),
     name: str | None = typer.Option(None, "--name", "-n", help="New name"),
     description: str | None = typer.Option(None, "--description", "-d", help="New description"),
-    parent: int | None = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),
+    parent: int | None = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),  # noqa: E501
     group_type: str | None = typer.Option(None, "--type", "-t", help="New group type"),
 ) -> None:
     """Edit group properties."""
@@ -419,7 +419,7 @@ def edit(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         updates = {}
         if name is not None:
@@ -442,11 +442,11 @@ def edit(
                 console.print(f"   [dim]{key}: {value}[/dim]")
         else:
             console.print("[red]Error: Failed to update group[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error editing group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

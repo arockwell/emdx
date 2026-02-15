@@ -7,13 +7,13 @@ import os
 import subprocess
 import webbrowser
 
-logger = logging.getLogger(__name__)
-
 import typer
 
 from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="GitHub Gist integration")
 

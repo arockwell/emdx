@@ -17,7 +17,6 @@ aligned across all rows regardless of depth.
 """
 
 import logging
-from typing import Dict, List, Tuple
 
 from rich.style import Style
 from rich.text import Text
@@ -29,7 +28,7 @@ from .activity_items import ActivityItem
 logger = logging.getLogger(__name__)
 
 # Type alias for the key that uniquely identifies an item
-ItemKey = Tuple[str, int]  # (item_type, item_id)
+ItemKey = tuple[str, int]  # (item_type, item_id)
 
 # guide_depth=2 is the minimum Textual allows.
 # With show_root=False, a node at depth d gets (d+1)*2 chars of guide prefix.
@@ -39,11 +38,9 @@ GUIDE_DEPTH = 2
 TIME_WIDTH = 3   # "2m", "1h", "3d" — compact
 ID_WIDTH = 6     # " #5921" / "   #42" right-aligned
 
-
 def _item_key(item: ActivityItem) -> ItemKey:
     """Return a unique key for an ActivityItem."""
     return (item.item_type, item.item_id)
-
 
 def _node_depth(node: TreeNode) -> int:
     """Compute depth of a node (0 = direct child of root)."""
@@ -53,7 +50,6 @@ def _node_depth(node: TreeNode) -> int:
         depth += 1
         n = n._parent
     return depth
-
 
 class ActivityTree(Tree[ActivityItem]):
     """Tree widget for the activity stream.
@@ -210,7 +206,7 @@ class ActivityTree(Tree[ActivityItem]):
         return text
 
     def _add_children(
-        self, parent: TreeNode[ActivityItem], children: List[ActivityItem]
+        self, parent: TreeNode[ActivityItem], children: list[ActivityItem]
     ) -> None:
         """Add child items to a parent node."""
         for child in children:
@@ -219,7 +215,7 @@ class ActivityTree(Tree[ActivityItem]):
             else:
                 parent.add_leaf(self._make_label(child), data=child)
 
-    def populate_from_items(self, items: List[ActivityItem]) -> None:
+    def populate_from_items(self, items: list[ActivityItem]) -> None:
         """Initial full load: clear tree and add all top-level items."""
         self.clear()
         for item in items:
@@ -229,7 +225,7 @@ class ActivityTree(Tree[ActivityItem]):
             else:
                 node = self.root.add_leaf(self._make_label(item), data=item)
 
-    def refresh_from_items(self, items: List[ActivityItem]) -> None:
+    def refresh_from_items(self, items: list[ActivityItem]) -> None:
         """Diff-based periodic refresh.
 
         Updates existing nodes in-place via set_label() (no scroll disruption).
@@ -239,7 +235,7 @@ class ActivityTree(Tree[ActivityItem]):
         self._refresh_children(self.root, items)
 
     def _refresh_children(
-        self, parent: TreeNode[ActivityItem], fresh_items: List[ActivityItem]
+        self, parent: TreeNode[ActivityItem], fresh_items: list[ActivityItem]
     ) -> None:
         """Diff and update children of a parent node.
 
@@ -248,7 +244,7 @@ class ActivityTree(Tree[ActivityItem]):
         at the top).
         """
         # Build map of existing children by item key
-        existing: Dict[ItemKey, TreeNode[ActivityItem]] = {}
+        existing: dict[ItemKey, TreeNode[ActivityItem]] = {}
         for child in parent.children:
             if child.data is not None:
                 existing[_item_key(child.data)] = child
@@ -275,7 +271,7 @@ class ActivityTree(Tree[ActivityItem]):
         if has_new or has_removed or order_changed:
             # Structural change — save expanded/cursor state, repopulate
             expanded_keys: set[ItemKey] = set()
-            expanded_children: Dict[ItemKey, List[ActivityItem]] = {}
+            expanded_children: dict[ItemKey, list[ActivityItem]] = {}
             for child in parent.children:
                 if child.data is not None and child.is_expanded:
                     key = _item_key(child.data)

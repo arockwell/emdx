@@ -7,8 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
-
-logger = logging.getLogger(__name__)
 from rich import box
 from rich.panel import Panel
 from rich.table import Table
@@ -22,6 +20,8 @@ from ..models.executions import (
 )
 from ..utils.output import console
 from ..utils.text_formatting import truncate_description
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Manage and monitor task executions")
 
@@ -125,7 +125,7 @@ def display_execution_metadata(execution) -> None:
 
     # Check for zombie process
     if execution.is_zombie:
-        console.print(f"Status: [{status_style}]{execution.status}[/{status_style}] [red](process dead - zombie!)[/red]")
+        console.print(f"Status: [{status_style}]{execution.status}[/{status_style}] [red](process dead - zombie!)[/red]")  # noqa: E501
     else:
         console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
 
@@ -485,7 +485,7 @@ def monitor_executions(
             running = get_running_executions()
 
             # Header
-            console.print(f"[bold]📊 Execution Monitor[/bold] - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            console.print(f"[bold]📊 Execution Monitor[/bold] - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")  # noqa: E501
             console.print("-" * 80)
 
             if not running:
@@ -550,7 +550,7 @@ def monitor_executions(
                 break
 
             # Wait for next update
-            console.print(f"\n[dim]Refreshing every {interval} seconds. Press Ctrl+C to stop.[/dim]")
+            console.print(f"\n[dim]Refreshing every {interval} seconds. Press Ctrl+C to stop.[/dim]")  # noqa: E501
             time.sleep(interval)
 
     except KeyboardInterrupt:
