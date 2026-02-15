@@ -1,9 +1,10 @@
 """Category operations for task epic numbering."""
 
 import re
-from typing import Any
+from typing import cast
 
 from emdx.database import db
+from emdx.models.types import CategoryDict, CategoryWithStatsDict
 
 
 def create_category(key: str, name: str, description: str = "") -> str:
@@ -24,16 +25,16 @@ def create_category(key: str, name: str, description: str = "") -> str:
     return key
 
 
-def get_category(key: str) -> dict[str, Any] | None:
+def get_category(key: str) -> CategoryDict | None:
     """Get category by key."""
     key = key.upper()
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM categories WHERE key = ?", (key,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return cast(CategoryDict, dict(row)) if row else None
 
 
-def list_categories() -> list[dict[str, Any]]:
+def list_categories() -> list[CategoryWithStatsDict]:
     """List categories with task count breakdowns."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -51,7 +52,7 @@ def list_categories() -> list[dict[str, Any]]:
             GROUP BY c.key
             ORDER BY c.key
         """)
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(CategoryWithStatsDict, dict(row)) for row in cursor.fetchall()]
 
 
 def ensure_category(key: str) -> str:

@@ -230,12 +230,13 @@ def _collect_status_data() -> dict[str, Any]:
     cascade_counts = _get_cascade_counts()
 
     # Enrich active tasks with children
-    for task in active:
+    enriched: list[dict[str, Any]] = [dict(t) for t in active]
+    for task in enriched:
         if task.get("type") in ("group", "chain"):
             task["children"] = get_children(task["id"])
 
     return {
-        "active": active,
+        "active": enriched,
         "recent": recent,
         "failed": failed,
         "cascade": cascade_counts,
