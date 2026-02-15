@@ -23,7 +23,7 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console
+from emdx.utils.output import console, print_json
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Manage document tags")
@@ -184,6 +184,7 @@ def remove(
 def list_tags(
     sort: str = typer.Option("usage", "--sort", "-s", help="Sort by: usage, name, created"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum tags to show"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List all tags with statistics."""
     try:
@@ -192,6 +193,10 @@ def list_tags(
 
         # Get all tags
         all_tags = list_all_tags(sort_by=sort)
+
+        if json_output:
+            print_json(all_tags[:limit])
+            return
 
         if not all_tags:
             console.print("[yellow]No tags found[/yellow]")

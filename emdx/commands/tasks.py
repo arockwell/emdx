@@ -9,7 +9,7 @@ import typer
 from rich.table import Table
 
 from emdx.models import tasks
-from emdx.utils.output import console
+from emdx.utils.output import console, print_json
 
 app = typer.Typer(help="Agent work queue")
 
@@ -62,7 +62,9 @@ def add(
 
 
 @app.command()
-def ready() -> None:
+def ready(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
     """Show tasks ready to work on.
 
     Lists open tasks that aren't blocked by dependencies.
@@ -72,6 +74,10 @@ def ready() -> None:
         emdx task ready
     """
     ready_tasks = tasks.get_ready_tasks()
+
+    if json_output:
+        print_json(ready_tasks)
+        return
 
     if not ready_tasks:
         console.print("[yellow]No ready tasks[/yellow]")
@@ -87,6 +93,7 @@ def ready() -> None:
 def done(
     task_id: int = typer.Argument(..., help="Task ID"),
     note: str | None = typer.Option(None, "-n", "--note", help="Completion note"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark a task as done.
 
@@ -96,7 +103,10 @@ def done(
     """
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        if json_output:
+            print_json({"error": f"Task #{task_id} not found"})
+        else:
+            console.print(f"[red]Task #{task_id} not found[/red]")
         raise typer.Exit(1)
 
     kwargs = {"status": "done"}
@@ -104,7 +114,10 @@ def done(
     if note:
         tasks.log_progress(task_id, note)
 
-    console.print(f"[green]✓ Done:[/green] #{task_id} {task['title']}")
+    if json_output:
+        print_json({"id": task_id, "title": task["title"], "status": "done"})
+    else:
+        console.print(f"[green]✓ Done:[/green] #{task_id} {task['title']}")
 
 
 @app.command("list")
@@ -114,6 +127,7 @@ def list_cmd(
     limit: int = typer.Option(20, "-n", "--limit"),
     epic: int | None = typer.Option(None, "-e", "--epic", help="Filter by epic ID"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List tasks.
 
@@ -136,6 +150,10 @@ def list_cmd(
         epic_key=cat,
         parent_task_id=epic,
     )
+
+    if json_output:
+        print_json(task_list)
+        return
 
     if not task_list:
         console.print("[yellow]No tasks[/yellow]")
