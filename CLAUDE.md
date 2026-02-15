@@ -26,6 +26,24 @@ poetry run emdx --help  # Always use poetry run in project dir
 poetry run pytest tests/ -x -q  # Run tests
 ```
 
+## Code Quality — MANDATORY
+
+**Before every commit, run lint and fix errors:**
+
+```bash
+poetry run ruff check . --fix   # Auto-fix what it can
+poetry run ruff check .         # Verify zero errors remain
+```
+
+**Rules:**
+- Line length limit: **100 characters** (configured in pyproject.toml)
+- Enabled rule sets: E, W, F, I, B, C4, UP (pycodestyle, pyflakes, isort, bugbear, comprehensions, pyupgrade)
+- B904: Always use `raise ... from err` or `raise ... from None` inside `except` blocks
+- B008 is ignored (typer pattern for function call defaults)
+- `ruff check` must pass with **zero errors** before pushing any branch
+- When writing SQL strings that exceed 100 chars, break across lines or use implicit string concatenation
+- All `--flags` must come BEFORE positional arguments in `emdx delegate` calls
+
 ## Claude Code Integration - MANDATORY
 
 ### Session Start Protocol
