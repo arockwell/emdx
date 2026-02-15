@@ -92,12 +92,12 @@ class ActivityDataLoader:
                     item_id=group_id,
                     title=group["name"],
                     timestamp=created,
-                    group=group,
-                    doc_count=group.get("doc_count", 0),
-                    total_cost=group.get("total_cost_usd", 0) or 0,
-                    total_tokens=group.get("total_tokens", 0) or 0,
-                    child_group_count=group.get("child_group_count", 0),
-                    cost=group.get("total_cost_usd", 0) or 0,
+                    group=dict(group),
+                    doc_count=group["doc_count"],
+                    total_cost=group["total_cost_usd"] or 0,
+                    total_tokens=group["total_tokens"],
+                    child_group_count=group["child_group_count"],
+                    cost=group["total_cost_usd"] or 0,
                 )
 
                 items.append(item)

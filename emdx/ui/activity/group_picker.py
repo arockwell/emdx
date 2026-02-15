@@ -113,8 +113,8 @@ class GroupPicker(Widget):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.groups: list[dict] = []
-        self.filtered_groups: list[dict] = []
+        self.groups: list[dict[str, Any]] = []
+        self.filtered_groups: list[dict[str, Any]] = []
         self.selected_index: int = 0
         self.doc_id: int | None = None
         self.source_group_id: int | None = None  # When nesting a group
@@ -166,9 +166,11 @@ class GroupPicker(Widget):
             all_groups = groups_db.list_groups(include_inactive=False)
             # Exclude the source group if nesting (can't nest under itself)
             if self.source_group_id:
-                self.groups = [g for g in all_groups if g["id"] != self.source_group_id]
+                self.groups = [
+                    dict(g) for g in all_groups if g["id"] != self.source_group_id
+                ]
             else:
-                self.groups = all_groups
+                self.groups = [dict(g) for g in all_groups]
             self.filtered_groups = self.groups.copy()
             self.selected_index = 0
         except Exception as e:
