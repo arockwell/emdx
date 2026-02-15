@@ -20,6 +20,7 @@ except ImportError:
     anthropic = None  # type: ignore[assignment]
     HAS_ANTHROPIC = False
 
+from ..config.constants import DEFAULT_ASK_MODEL
 from ..database import db
 
 logger = logging.getLogger(__name__)
@@ -38,11 +39,10 @@ class Answer:
 class AskService:
     """Answer questions using your knowledge base."""
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
     MIN_EMBEDDINGS_FOR_SEMANTIC = 50  # Use semantic only if we have enough coverage
 
     def __init__(self, model: Optional[str] = None):
-        self.model = model or self.DEFAULT_MODEL
+        self.model = model or DEFAULT_ASK_MODEL
         self._client = None
         self._embedding_service = None
 

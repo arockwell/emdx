@@ -187,7 +187,55 @@ DATE_GROUP_TODAY_SECONDS = 3600  # Show as "today" if within 1 hour
 DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
 
 # =============================================================================
+# TIMEOUT CONSTANTS (in seconds)
+# =============================================================================
+
+# CLI execution timeouts
+DEFAULT_CLI_TIMEOUT_SECONDS = 300  # 5 minutes - default for CLI operations
+DELEGATE_TIMEOUT_SECONDS = 600  # 10 minutes - delegate command execution
+IMPLEMENTATION_TIMEOUT_SECONDS = 1800  # 30 minutes - planned stage/implementation
+DISCOVERY_TIMEOUT_SECONDS = 30  # Discovery command timeout
+
+# Subprocess timeouts
+SUBPROCESS_SHORT_TIMEOUT_SECONDS = 5  # Version checks, quick commands
+SUBPROCESS_MEDIUM_TIMEOUT_SECONDS = 10  # Auth status checks
+
+# =============================================================================
 # CLAUDE MODEL CONFIGURATION
 # =============================================================================
 
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+# Primary model identifiers
+CLAUDE_OPUS_MODEL = "claude-opus-4-5-20251101"
+CLAUDE_SONNET_MODEL = "claude-sonnet-4-5-20250929"
+
+# Default model for various operations
+DEFAULT_CLAUDE_MODEL = CLAUDE_OPUS_MODEL
+DEFAULT_ASK_MODEL = CLAUDE_SONNET_MODEL  # Used for Q&A service
+
+# =============================================================================
+# ENVIRONMENT CONFIGURATION
+# =============================================================================
+
+# Required environment variables
+ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
+
+
+def validate_environment() -> tuple[bool, list[str]]:
+    """Check for required environment variables.
+
+    Returns:
+        Tuple of (is_valid, list of missing/error messages)
+    """
+    import os
+
+    errors = []
+
+    # Check ANTHROPIC_API_KEY
+    api_key = os.environ.get(ANTHROPIC_API_KEY_ENV)
+    if not api_key:
+        errors.append(
+            f"{ANTHROPIC_API_KEY_ENV} environment variable is not set. "
+            "Set it to use Claude API features."
+        )
+
+    return len(errors) == 0, errors
