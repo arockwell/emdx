@@ -417,6 +417,71 @@ class TestRunSingle:
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_single_task_with_pr_draft_true(
+        self, mock_executor_cls, mock_create, mock_update, mock_print
+    ):
+        """Test that pr=True with draft=True includes --draft flag."""
+        mock_create.return_value = 1
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=100,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=42,
+        )
+        mock_executor_cls.return_value = mock_executor
+
+        _run_single(
+            prompt="fix bug",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            pr=True,
+            draft=True,
+        )
+
+        call_args = mock_executor.execute.call_args
+        config = call_args[0][0]
+        assert "--draft" in config.output_instruction
+
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_single_task_with_pr_draft_false(
+        self, mock_executor_cls, mock_create, mock_update, mock_print
+    ):
+        """Test that pr=True with draft=False omits --draft flag."""
+        mock_create.return_value = 1
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=100,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=42,
+        )
+        mock_executor_cls.return_value = mock_executor
+
+        _run_single(
+            prompt="fix bug",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            pr=True,
+            draft=False,
+        )
+
+        call_args = mock_executor.execute.call_args
+        config = call_args[0][0]
+        assert "--draft" not in config.output_instruction
+        assert "gh pr create" in config.output_instruction
+
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
     def test_single_task_with_working_dir(
         self, mock_executor_cls, mock_create, mock_update, mock_print
     ):
@@ -731,6 +796,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -760,6 +826,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -787,6 +854,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=True,
@@ -864,6 +932,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -898,6 +967,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=42,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -928,6 +998,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=True,
             base_branch="main",
             chain=False,
@@ -959,6 +1030,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=True,
+            draft=False,
             worktree=False,  # Not explicitly set, but should be implied
             base_branch="develop",
             chain=False,
@@ -989,6 +1061,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -998,6 +1071,103 @@ class TestDelegateCommand:
 
         call_kwargs = mock_run_parallel.call_args[1]
         assert call_kwargs["synthesize"] is True
+
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._run_single")
+    def test_draft_flag_passed_to_run_single(
+        self, mock_run_single, mock_create_wt, mock_cleanup_wt
+    ):
+        """Test that --draft flag is passed to _run_single."""
+        mock_create_wt.return_value = ("/tmp/worktree", "branch")
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["fix bug"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=True,
+            draft=True,
+            worktree=False,
+            base_branch="main",
+            chain=False,
+            each=None,
+            do=None,
+        )
+
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["draft"] is True
+
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._run_single")
+    def test_no_draft_flag_passed_to_run_single(
+        self, mock_run_single, mock_create_wt, mock_cleanup_wt
+    ):
+        """Test that --no-draft flag is passed to _run_single as draft=False."""
+        mock_create_wt.return_value = ("/tmp/worktree", "branch")
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["fix bug"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=True,
+            draft=False,  # --no-draft
+            worktree=False,
+            base_branch="main",
+            chain=False,
+            each=None,
+            do=None,
+        )
+
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["draft"] is False
+
+    @patch("emdx.commands.delegate._run_parallel")
+    def test_draft_flag_passed_to_run_parallel(self, mock_run_parallel):
+        """Test that --draft flag is passed to _run_parallel."""
+        mock_run_parallel.return_value = [10, 20]
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["task1", "task2"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=True,
+            draft=False,  # --no-draft
+            worktree=True,
+            base_branch="main",
+            chain=False,
+            each=None,
+            do=None,
+        )
+
+        call_kwargs = mock_run_parallel.call_args[1]
+        assert call_kwargs["draft"] is False
 
     def test_no_tasks_exits(self):
         """Test that command exits when no tasks provided."""
@@ -1016,6 +1186,7 @@ class TestDelegateCommand:
                 quiet=False,
                 doc=None,
                 pr=False,
+                draft=False,
                 worktree=False,
                 base_branch="main",
                 chain=False,
@@ -1047,6 +1218,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -1077,6 +1249,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -1109,6 +1282,10 @@ class TestPRInstruction:
         text = PR_INSTRUCTION_GENERIC.lower()
         assert "push" in text
 
+    def test_generic_instruction_no_draft_by_default(self):
+        """Test that PR_INSTRUCTION_GENERIC does not include --draft flag."""
+        assert "--draft" not in PR_INSTRUCTION_GENERIC
+
     def test_make_pr_instruction_with_branch(self):
         result = _make_pr_instruction("fix/my-branch-1")
         assert "fix/my-branch-1" in result
@@ -1116,8 +1293,33 @@ class TestPRInstruction:
         assert "git push" in result
 
     def test_make_pr_instruction_without_branch(self):
+        """Test that without branch uses generic instruction (no draft by default)."""
         result = _make_pr_instruction(None)
-        assert result == PR_INSTRUCTION_GENERIC
+        # Without branch, draft defaults to False
+        assert "--draft" not in result
+        assert "gh pr create" in result
+
+    def test_make_pr_instruction_with_draft_true(self):
+        """Test that draft=True adds --draft flag."""
+        result = _make_pr_instruction("fix/my-branch", draft=True)
+        assert "--draft" in result
+        assert "gh pr create --draft" in result
+
+    def test_make_pr_instruction_with_draft_false(self):
+        """Test that draft=False omits --draft flag."""
+        result = _make_pr_instruction("fix/my-branch", draft=False)
+        assert "--draft" not in result
+        assert "gh pr create --title" in result
+
+    def test_make_pr_instruction_no_branch_draft_true(self):
+        """Test without branch with draft=True."""
+        result = _make_pr_instruction(None, draft=True)
+        assert "--draft" in result
+
+    def test_make_pr_instruction_no_branch_draft_false(self):
+        """Test without branch with draft=False."""
+        result = _make_pr_instruction(None, draft=False)
+        assert "--draft" not in result
 
     def test_extract_pr_url_found(self):
         text = "Created PR: https://github.com/user/repo/pull/123 done"

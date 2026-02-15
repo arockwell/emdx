@@ -91,20 +91,33 @@ PR_INSTRUCTION_GENERIC = (
 _PR_URL_RE = re.compile(r'https://github\.com/[^/]+/[^/]+/pull/\d+')
 
 
-def _make_pr_instruction(branch_name: str | None = None) -> str:
+def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) -> str:
     """Build a structured PR instruction for the agent.
 
     When branch_name is provided, the instruction tells the agent exactly
     which branch to use. Otherwise falls back to the generic instruction.
+
+    Args:
+        branch_name: The branch name to use (if pre-created).
+        draft: Whether to create the PR as a draft (default True).
     """
+    draft_flag = " --draft" if draft else ""
     if not branch_name:
-        return PR_INSTRUCTION_GENERIC
+        # Return modified generic instruction based on draft flag
+        return (
+            "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
+            "1. Create a new branch with a descriptive name\n"
+            "2. Commit your changes with a clear message\n"
+            f"3. Push and create a PR using: gh pr create{draft_flag} --title \"...\" "
+            "--body \"...\"\n"
+            "4. Report the PR URL that was created."
+        )
     return (
         "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
         f"1. You are already on branch `{branch_name}` — commit your changes there\n"
         "2. Write a clear commit message summarizing the changes\n"
         f"3. Push: git push -u origin {branch_name}\n"
-        "4. Create the PR: gh pr create --title \"<short title>\" "
+        f"4. Create the PR: gh pr create{draft_flag} --title \"<short title>\" "
         "--body \"<description of changes>\"\n"
         "5. Report the PR URL in your output (e.g. https://github.com/.../pull/123)"
     )
@@ -295,6 +308,7 @@ def _run_single(
     quiet: bool,
     pr: bool = False,
     pr_branch: str | None = None,
+    draft: bool = True,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
@@ -334,7 +348,7 @@ def _run_single(
     )
 
     if pr:
-        output_instruction += _make_pr_instruction(pr_branch)
+        output_instruction += _make_pr_instruction(pr_branch, draft=draft)
 
     config = ExecutionConfig(
         prompt=prompt,
@@ -413,6 +427,7 @@ def _run_parallel(
     model: str | None,
     quiet: bool,
     pr: bool = False,
+    draft: bool = True,
     base_branch: str = "main",
     source_doc_id: int | None = None,
     worktree: bool = False,
@@ -475,6 +490,7 @@ def _run_parallel(
                 quiet=True,  # suppress per-task metadata in parallel mode
                 pr=pr,
                 pr_branch=branch_names[idx],
+                draft=draft,
                 working_dir=task_worktree_path,
                 parent_task_id=parent_task_id,
                 seq=idx + 1,
@@ -580,6 +596,7 @@ def _run_chain(
     model: str | None,
     quiet: bool,
     pr: bool = False,
+    draft: bool = True,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     epic_key: str | None = None,
@@ -649,6 +666,7 @@ def _run_chain(
             model=model,
             quiet=quiet,
             pr=step_pr,
+            draft=draft,
             working_dir=working_dir,
             parent_task_id=parent_task_id,
             seq=step_num,
@@ -724,6 +742,10 @@ def delegate(
     pr: bool = typer.Option(
         False, "--pr",
         help="Instruct agent to create a PR (implies --worktree)",
+    ),
+    draft: bool = typer.Option(
+        False, "--draft/--no-draft",
+        help="Create PR as draft (default: False, use --draft for draft PRs)",
     ),
     worktree: bool = typer.Option(
         False, "--worktree", "-w",
@@ -807,9 +829,9 @@ def delegate(
     # Guard: detect flags accidentally consumed as task arguments.
     # This can happen if allow_interspersed_args is misconfigured or bypassed.
     known_flags = {"--tags", "-t", "--title", "-T", "--synthesize", "-s", "--jobs", "-j",
-                   "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--worktree",
-                   "-w", "--base-branch", "--chain", "--each", "--do", "--epic", "-e",
-                   "--cat", "-c"}
+                   "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--draft",
+                   "--no-draft", "--worktree", "-w", "--base-branch", "--chain", "--each",
+                   "--do", "--epic", "-e", "--cat", "-c"}
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
         sys.stderr.write(
@@ -886,6 +908,7 @@ def delegate(
                 model=model,
                 quiet=quiet,
                 pr=pr,
+                draft=draft,
                 working_dir=worktree_path,
                 source_doc_id=doc,
                 epic_key=epic_key,
@@ -899,6 +922,7 @@ def delegate(
                 model=model,
                 quiet=quiet,
                 pr=pr,
+                draft=draft,
                 working_dir=worktree_path,
                 source_doc_id=doc,
                 parent_task_id=epic_parent_id,
@@ -918,6 +942,7 @@ def delegate(
                 model=model,
                 quiet=quiet,
                 pr=pr,
+                draft=draft,
                 base_branch=base_branch,
                 source_doc_id=doc,
                 worktree=use_worktree,
