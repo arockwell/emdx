@@ -36,7 +36,7 @@ def _find_recipe(id_or_name: str) -> dict[str, Any] | None:
     recipes = search_by_tags(["📋"], limit=50, prefix_match=False)
     for r in recipes:
         if id_or_name.lower() in r.get("title", "").lower():
-            return r
+            return dict(r)
     if recipes:
         # Fall back to text search within recipes
         results = search_documents(id_or_name, limit=20)
@@ -59,10 +59,11 @@ def list_recipes() -> None:
         return
 
     console.print("[bold]Recipes[/bold]\n")
-    for doc in results:
+    for result in results:
+        doc: dict[str, Any] = dict(result)
         doc_id = doc["id"]
         title = doc.get("title", "Untitled")
-        content = doc.get("content", "")
+        content = str(doc.get("content", ""))
         # Show first line of content as description
         first_line = content.split("\n")[0].strip().lstrip("# ") if content else ""
         if first_line == title:
