@@ -45,7 +45,7 @@ class NewIdeaScreen(ModalScreen):
         ("ctrl+enter", "submit", "Submit"),
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.idea_text = ""
 

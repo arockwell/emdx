@@ -7,7 +7,9 @@ including code syntax highlighting themes and formatting options.
 """
 
 import os
+from typing import Any
 
+from rich.console import Console
 from rich.markdown import Markdown
 
 from ..utils.output import console as shared_console
@@ -17,7 +19,7 @@ class MarkdownConfig:
     """Configuration for markdown rendering."""
 
     # Code themes that work well for different terminal backgrounds
-    THEMES = {
+    THEMES: dict[str, dict[str, Any]] = {
         "dark": {
             "default": "monokai",
             "alternatives": ["dracula", "nord", "one-dark", "gruvbox-dark"],
@@ -29,7 +31,7 @@ class MarkdownConfig:
     }
 
     @staticmethod
-    def get_code_theme():
+    def get_code_theme() -> str:
         """Get the appropriate code theme based on UI config or terminal background."""
         # Check environment variable for user preference (highest priority)
         theme = os.environ.get("EMDX_CODE_THEME")
@@ -45,11 +47,11 @@ class MarkdownConfig:
             code_theme = config.get("code_theme", "auto")
 
             if code_theme != "auto":
-                return code_theme
+                return str(code_theme)
 
             # Auto mode: derive from main UI theme
             main_theme = config.get("theme", "emdx-dark")
-            return get_theme_code_theme(main_theme)
+            return str(get_theme_code_theme(main_theme))
         except ImportError:
             pass  # Fall back to terminal detection
 
@@ -58,12 +60,12 @@ class MarkdownConfig:
 
         # If background is light (15 is white in many terminals)
         if terminal_bg == "15":
-            return MarkdownConfig.THEMES["light"]["default"]
+            return str(MarkdownConfig.THEMES["light"]["default"])
         else:
-            return MarkdownConfig.THEMES["dark"]["default"]
+            return str(MarkdownConfig.THEMES["dark"]["default"])
 
     @staticmethod
-    def create_markdown(content, code_theme=None):
+    def create_markdown(content: str, code_theme: str | None = None) -> Markdown:
         """Create a Rich Markdown object with optimal settings."""
         if code_theme is None:
             code_theme = MarkdownConfig.get_code_theme()
@@ -76,7 +78,11 @@ class MarkdownConfig:
         )
 
     @staticmethod
-    def render_markdown(content, console=None, code_theme=None):
+    def render_markdown(
+        content: str,
+        console: Console | None = None,
+        code_theme: str | None = None,
+    ) -> Console:
         """Render markdown content to console with optimal settings."""
         if console is None:
             console = shared_console
@@ -86,7 +92,7 @@ class MarkdownConfig:
         return console
 
 
-def render_enhanced_markdown(content, code_theme=None):
+def render_enhanced_markdown(content: str, code_theme: str | None = None) -> Console:
     """
     Render markdown with enhanced formatting.
 
@@ -96,7 +102,7 @@ def render_enhanced_markdown(content, code_theme=None):
     return MarkdownConfig.render_markdown(content, shared_console, code_theme)
 
 
-def list_available_themes():
+def list_available_themes() -> None:
     """List all available code themes for both dark and light terminals."""
     print("Available code themes:")
     print("\nFor dark terminals:")

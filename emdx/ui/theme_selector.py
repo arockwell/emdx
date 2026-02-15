@@ -61,7 +61,7 @@ class ThemeSelectorScreen(ModalScreen):
     }
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.themes = get_theme_display_info()
         self.current_theme = get_theme()

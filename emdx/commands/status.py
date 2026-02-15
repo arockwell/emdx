@@ -24,7 +24,7 @@ from ..models.tasks import (
 console = Console()
 
 
-def _parse_timestamp(value) -> datetime | None:
+def _parse_timestamp(value: object) -> datetime | None:
     """Parse a timestamp that may be a datetime, string, or None."""
     if value is None:
         return None
@@ -36,7 +36,7 @@ def _parse_timestamp(value) -> datetime | None:
         return None
 
 
-def _relative_time(timestamp) -> str:
+def _relative_time(timestamp: object) -> str:
     """Format a timestamp as relative time (e.g. '4m ago', '2h ago')."""
     dt = _parse_timestamp(timestamp)
     if dt is None:
@@ -53,7 +53,7 @@ def _relative_time(timestamp) -> str:
     return f"{age.days}d ago"
 
 
-def _running_duration(timestamp) -> str:
+def _running_duration(timestamp: object) -> str:
     """Format how long something has been running."""
     dt = _parse_timestamp(timestamp)
     if dt is None:
@@ -73,7 +73,7 @@ def _running_duration(timestamp) -> str:
     return f"{hours}h{mins:02d}m"
 
 
-def _show_active_tasks():
+def _show_active_tasks() -> None:
     """Show active delegate tasks with children."""
     active = get_active_delegate_tasks()
     if not active:
@@ -140,7 +140,7 @@ def _show_active_tasks():
     console.print()
 
 
-def _show_recent_tasks():
+def _show_recent_tasks() -> None:
     """Show recent completed top-level tasks."""
     recent = get_recent_completed_tasks(limit=5)
     if not recent:
@@ -160,7 +160,7 @@ def _show_recent_tasks():
     console.print()
 
 
-def _show_failed_tasks():
+def _show_failed_tasks() -> None:
     """Show failed top-level tasks with retry hints."""
     failed = get_failed_tasks(limit=3)
     if not failed:
@@ -185,7 +185,7 @@ def _show_failed_tasks():
     console.print()
 
 
-def _show_cascade_status():
+def _show_cascade_status() -> None:
     """Show cascade queue status."""
     stages = ["idea", "prompt", "analyzed", "planned"]
 
@@ -222,7 +222,7 @@ def status(
         "--verbose", "-v",
         help="Show additional details"
     ),
-):
+) -> None:
     """
     Show delegate activity index and project status.
 

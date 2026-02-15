@@ -1,6 +1,7 @@
 """Activity Browser - wraps ActivityView for the browser container."""
 
 import logging
+from typing import Self
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -39,7 +40,7 @@ class ActivityBrowser(Widget):
     }
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.activity_view: ActivityView | None = None
 
@@ -89,7 +90,7 @@ class ActivityBrowser(Widget):
         """Update status - for compatibility with browser container."""
         pass
 
-    def focus(self, scroll_visible: bool = True) -> None:
+    def focus(self, scroll_visible: bool = True) -> Self:  # type: ignore[override]
         """Focus the activity view."""
         if self.activity_view:
             try:
@@ -99,6 +100,7 @@ class ActivityBrowser(Widget):
             except Exception:
                 # Widget not mounted yet, will focus on mount
                 pass
+        return self  # type: ignore[return-value]
 
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Select and show a document by its ID in the activity view."""

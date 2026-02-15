@@ -40,6 +40,7 @@ def save_document(
 
         conn.commit()
         doc_id = cursor.lastrowid
+        assert doc_id is not None
 
         # Add tags if provided
         if tags:
@@ -197,7 +198,7 @@ def count_documents(
             f"SELECT COUNT(*) FROM documents WHERE {where_clause}",
             params,
         )
-        return cursor.fetchone()[0]
+        return int(cursor.fetchone()[0])
 
 
 def has_children(doc_id: int) -> bool:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 try:
     import numpy as np
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Lazy load - model is ~90MB, loads in ~2 seconds
 _model = None
 
-def _get_model():
+def _get_model() -> Any:
     """Lazy load the embedding model."""
     global _model
     if _model is None:
@@ -75,10 +76,11 @@ class EmbeddingService:
     MODEL_NAME = "all-MiniLM-L6-v2"
     EMBEDDING_DIM = 384
 
-    def embed_text(self, text: str):
+    def embed_text(self, text: str) -> np.ndarray:
         """Embed arbitrary text."""
         model = _get_model()
-        return model.encode(text, convert_to_numpy=True, normalize_embeddings=True)
+        result: np.ndarray = model.encode(text, convert_to_numpy=True, normalize_embeddings=True)
+        return result
 
     def embed_document(self, doc_id: int, force: bool = False) -> np.ndarray:
         """Embed a document (cached in database)."""

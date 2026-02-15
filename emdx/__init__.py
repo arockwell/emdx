@@ -9,7 +9,7 @@ from pathlib import Path
 __version__ = "0.14.0"
 
 # Generate a unique build identifier based on current timestamp and file modification times
-def _generate_build_id():
+def _generate_build_id() -> str:
     """Generate a unique build identifier for version tracking."""
     try:
         # Get current file modification time

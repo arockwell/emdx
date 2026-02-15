@@ -127,7 +127,7 @@ def restore(
             restored = []
             not_found = []
 
-            for identifier in identifiers:
+            for identifier in (identifiers or []):
                 if restore_document(identifier):
                     restored.append(identifier)
                 else:

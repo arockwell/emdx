@@ -63,7 +63,7 @@ class DocumentMerger:
     def find_merge_candidates(
         self,
         project: str | None = None,
-        similarity_threshold: float = None,
+        similarity_threshold: float | None = None,
         progress_callback: Callable | None = None
     ) -> list[MergeCandidate]:
         """
@@ -112,7 +112,7 @@ class DocumentMerger:
         if progress_callback:
             progress_callback(75, 100, len(similar_pairs))
 
-        candidates = []
+        candidates: list[MergeCandidate] = []
         total_pairs = len(similar_pairs)
 
         for i, (doc1_id, doc2_id, doc1_title, doc2_title, tfidf_sim) in enumerate(similar_pairs):
@@ -342,7 +342,7 @@ class DocumentMerger:
                 elif days_since_access < 30:
                     score += 1
 
-        return score
+        return float(score)
 
     def _merge_content(
         self,

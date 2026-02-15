@@ -21,7 +21,7 @@ def ask_question(
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),  # noqa: E501
     show_sources: bool = typer.Option(True, "--sources/--no-sources", help="Show source documents"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
-):
+) -> None:
     """
     Ask a question about your knowledge base.
 
@@ -63,7 +63,7 @@ def get_context(
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search"),
     include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),  # noqa: E501
-):
+) -> None:
     """
     Retrieve context for a question (for piping to claude CLI).
 
@@ -118,7 +118,7 @@ def get_context(
 def build_index(
     force: bool = typer.Option(False, "--force", "-f", help="Reindex all documents"),
     batch_size: int = typer.Option(50, "--batch-size", "-b", help="Documents per batch"),
-):
+) -> None:
     """
     Build or update the semantic search index.
 
@@ -168,7 +168,7 @@ def semantic_search(
     limit: int = typer.Option(10, "--limit", "-n", help="Max results"),
     threshold: float = typer.Option(0.3, "--threshold", "-t", help="Minimum similarity (0-1)"),
     project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
-):
+) -> None:
     """
     Semantic search across your documents.
 
@@ -227,7 +227,7 @@ def semantic_search(
 def find_similar(
     doc_id: int = typer.Argument(..., help="Document ID to find similar docs for"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
-):
+) -> None:
     """
     Find documents similar to a given document.
 
@@ -280,7 +280,7 @@ def find_similar(
 
 
 @app.command("stats")
-def show_stats():
+def show_stats() -> None:
     """Show embedding index statistics."""
     try:
         from ..services.embedding_service import EmbeddingService
@@ -311,7 +311,7 @@ Index size: {format_bytes(stats.index_size_bytes)}
 @app.command("clear")
 def clear_index(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
-):
+) -> None:
     """Clear the embedding index (requires reindexing)."""
     try:
         from ..services.embedding_service import EmbeddingService

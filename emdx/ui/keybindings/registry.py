@@ -40,10 +40,10 @@ class KeybindingEntry:
     show: bool = True  # Whether to show in help
     allow_override: bool = True  # Can user override in config
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.key, self.action, self.context.value, self.widget_class))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, KeybindingEntry):
             return False
         return (

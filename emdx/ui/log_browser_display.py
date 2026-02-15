@@ -18,7 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 class LogBrowserDisplayMixin:
-    """Mixin class for log display functionality in LogBrowser."""
+    """Mixin class for log display functionality in LogBrowser.
+
+    Expects to be mixed into a Widget subclass with query_one, is_live_mode,
+    and _filter_log_content methods available.
+    """
 
     def format_execution_metadata(self, execution: "Execution") -> str:
         """Format execution metadata for details panel display."""
@@ -62,7 +66,7 @@ class LogBrowserDisplayMixin:
     async def update_details_panel(self, execution: "Execution") -> None:
         """Update the details panel with execution metadata."""
         try:
-            details_panel = self.query_one("#log-details", RichLog)
+            details_panel = self.query_one("#log-details", RichLog)  # type: ignore[attr-defined]
             details_panel.clear()
 
             # Format and display metadata
@@ -76,13 +80,13 @@ class LogBrowserDisplayMixin:
         """Handle new log content from stream."""
         try:
             if new_content:
-                filtered_content = self._filter_log_content(new_content)
+                filtered_content = self._filter_log_content(new_content)  # type: ignore[attr-defined]
                 if filtered_content.strip():
-                    log_content = self.query_one("#log-content", RichLog)
+                    log_content = self.query_one("#log-content", RichLog)  # type: ignore[attr-defined]
                     log_content.write(filtered_content)
 
                     # Auto-scroll to bottom in live mode
-                    if self.is_live_mode:
+                    if self.is_live_mode:  # type: ignore[attr-defined]
                         log_content.scroll_end(animate=False)
         except Exception as e:
             logger.error(f"Error displaying new log content: {e}")
@@ -90,7 +94,7 @@ class LogBrowserDisplayMixin:
     def _handle_log_error(self, error: Exception) -> None:
         """Handle log streaming errors."""
         try:
-            log_content = self.query_one("#log-content", RichLog)
+            log_content = self.query_one("#log-content", RichLog)  # type: ignore[attr-defined]
             error_msg = f"❌ Log streaming error: {error}"
             log_content.write(error_msg)
             logger.error(f"Log streaming error: {error}")
@@ -100,7 +104,7 @@ class LogBrowserDisplayMixin:
     def update_status(self, text: str) -> None:
         """Update the status bar."""
         try:
-            status = self.query_one(".log-status", Static)
+            status = self.query_one(".log-status", Static)  # type: ignore[attr-defined]
             status.update(text)
         except Exception:
             pass

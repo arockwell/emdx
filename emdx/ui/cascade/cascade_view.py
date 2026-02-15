@@ -86,17 +86,17 @@ class CascadeView(Widget):
     current_stage_idx = reactive(0)
     AUTO_REFRESH_INTERVAL = 2.0
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.summary: StageSummaryBar | None = None
         self.doc_list: DocumentList | None = None
-        self.pipeline_table: DataTable | None = None
+        self.pipeline_table: DataTable[str] | None = None
         self._pipeline_data: list[dict[str, Any]] = []
         self._selected_pipeline_idx: int | None = None
         self._pipeline_view_mode: str = "output"
-        self._auto_refresh_timer = None
-        self._log_stream = None
-        self._log_subscriber = None
+        self._auto_refresh_timer: Any = None
+        self._log_stream: Any = None
+        self._log_subscriber: Any = None
         self._selected_exec: dict[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
@@ -266,8 +266,8 @@ class CascadeView(Widget):
         log_file = exec_record.log_file if exec_record else None
 
         # Auto-fix zombie processes
-        if exec_record and exec_record.is_zombie:
-            update_execution_status(exec_id, "failed", -1)
+        if exec_record and exec_record.is_zombie and exec_id is not None:
+            update_execution_status(int(exec_id), "failed", -1)
             is_running = False
             exec_data["status"] = "failed"
 
@@ -280,8 +280,8 @@ class CascadeView(Widget):
             if log_path.exists():
                 header.update(f"[green]\u25cf LIVE[/green] [bold]#{exec_id}[/bold]")
                 self._start_log_stream(log_path, log_widget)
-            else:
-                update_execution_status(exec_id, "failed", -1)
+            elif exec_id is not None:
+                update_execution_status(int(exec_id), "failed", -1)
                 header.update(f"[red]\u25cf STALE[/red] [bold]#{exec_id}[/bold]")
                 log_widget.write("[red]Execution was stale - automatically marked as failed[/red]")
                 log_widget.write(f"[dim]Log file not found: {log_file}[/dim]")
@@ -297,8 +297,8 @@ class CascadeView(Widget):
             else:
                 log_widget.write("[dim]No log file[/dim]")
 
-    def _start_log_stream(self, log_path: Path, log_widget) -> None:
-        from emdx.services.log_stream import LogStream
+    def _start_log_stream(self, log_path: Path, log_widget: Any) -> None:
+        from emdx.services.log_stream import LogStream, LogStreamSubscriber
         from emdx.ui.live_log_writer import LiveLogWriter
         from emdx.utils.stream_json_parser import parse_and_format_live_logs
 
@@ -311,15 +311,18 @@ class CascadeView(Widget):
 
         view = self
 
-        class _Subscriber:
-            def __init__(self, w):
+        class _Subscriber(LogStreamSubscriber):
+            def __init__(self, w: Any) -> None:
                 self.w = w
-            def on_log_content(self, content):
+            def on_log_content(self, content: str) -> None:
                 try:
-                    view.app.call_from_thread(lambda: (LiveLogWriter(self.w, auto_scroll=True).write(content), self.w.refresh()))  # noqa: E501
+                    def _apply(c: str = content) -> None:
+                        LiveLogWriter(self.w, auto_scroll=True).write(c)
+                        self.w.refresh()
+                    view.app.call_from_thread(_apply)
                 except Exception as e:
                     logger.error(f"call_from_thread failed: {e}")
-            def on_log_error(self, error):
+            def on_log_error(self, error: Exception) -> None:
                 logger.error(f"Log stream error: {error}")
 
         self._log_subscriber = _Subscriber(log_widget)

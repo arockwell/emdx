@@ -8,7 +8,7 @@ from ..utils.logging_utils import setup_tui_logging
 logger, _key_logger = setup_tui_logging(__name__)
 
 
-def run_browser(theme: str | None = None):
+def run_browser(theme: str | None = None) -> None:
     """Run the browser container.
 
     Args:

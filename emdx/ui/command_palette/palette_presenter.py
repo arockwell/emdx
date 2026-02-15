@@ -66,12 +66,12 @@ class PalettePresenter:
         self.context = context or CommandContext.GLOBAL
         self._state = PaletteState()
         self._command_registry = get_command_registry()
-        self._search_service = None  # Lazy load
+        self._search_service: Any = None  # Lazy load
         self._history: list[PaletteResultItem] = []
         self._max_history = 10
 
     @property
-    def search_service(self):
+    def search_service(self) -> Any:
         """Lazy load the unified search service."""
         if self._search_service is None:
             try:
@@ -430,7 +430,7 @@ class PalettePresenter:
         # Trim
         self._history = self._history[: self._max_history]
 
-    async def execute_selected(self, app) -> dict[str, Any] | None:
+    async def execute_selected(self, app: Any) -> dict[str, Any] | None:
         """
         Execute the selected result.
 
@@ -444,7 +444,7 @@ class PalettePresenter:
         self.add_to_history(result)
 
         if result.type == ResultType.COMMAND:
-            cmd: PaletteCommand = result.data.get("command")
+            cmd: PaletteCommand | None = result.data.get("command")
             if cmd:
                 return {"action": "command", "command_id": cmd.id}
 
@@ -454,9 +454,9 @@ class PalettePresenter:
                 return {"action": "view_document", "doc_id": doc_id}
 
         elif result.type == ResultType.SCREEN:
-            cmd: PaletteCommand = result.data.get("command")
-            if cmd:
-                return {"action": "command", "command_id": cmd.id}
+            nav_cmd: PaletteCommand | None = result.data.get("command")
+            if nav_cmd:
+                return {"action": "command", "command_id": nav_cmd.id}
 
         elif result.type == ResultType.TAG:
             tag = result.data.get("tag")

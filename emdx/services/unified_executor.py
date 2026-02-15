@@ -24,6 +24,19 @@ from .cli_executor import get_cli_executor
 
 logger = logging.getLogger(__name__)
 
+
+class ProcResult:
+    """Mock result object for subprocess compatibility."""
+    stdout: str
+    stderr: str
+    returncode: int | None
+
+    def __init__(self) -> None:
+        self.stdout = ''
+        self.stderr = ''
+        self.returncode = None
+
+
 # Tool emojis for log formatting
 TOOL_EMOJIS = {
     "Read": "📖", "Write": "📝", "Edit": "✏️", "MultiEdit": "✏️",
@@ -323,8 +336,6 @@ class UnifiedExecutor:
                     exit_code = process.returncode
 
                 # Create a mock result object for compatibility
-                class ProcResult:
-                    pass
                 proc_result = ProcResult()
                 proc_result.stdout = ''.join(stdout_lines)
                 proc_result.stderr = ''.join(stderr_lines)
@@ -396,8 +407,6 @@ class UnifiedExecutor:
                     exit_code = process.returncode
 
                 # Create a mock result object for compatibility
-                class ProcResult:
-                    pass
                 proc_result = ProcResult()
                 proc_result.stdout = ''.join(stdout_lines)
                 proc_result.stderr = ''.join(stderr_lines)
@@ -441,9 +450,9 @@ class UnifiedExecutor:
             if result.tokens_used == 0 and log_file.exists():
                 usage = extract_token_usage_detailed(log_file)
                 if usage.get('total', 0) > 0:
-                    result.tokens_used = usage.get('total', 0)
-                    result.input_tokens = usage.get('input', 0) + usage.get('cache_in', 0) + usage.get('cache_create', 0)  # noqa: E501
-                    result.output_tokens = usage.get('output', 0)
+                    result.tokens_used = int(usage.get('total', 0))
+                    result.input_tokens = int(usage.get('input', 0)) + int(usage.get('cache_in', 0)) + int(usage.get('cache_create', 0))  # noqa: E501
+                    result.output_tokens = int(usage.get('output', 0))
                     result.cost_usd = usage.get('cost_usd', 0.0)
 
             # Persist metrics to execution record

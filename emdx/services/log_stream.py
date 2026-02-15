@@ -142,7 +142,7 @@ class LogStream:
         self._polling = True
         self.is_watching = True
 
-        def poll_loop():
+        def poll_loop() -> None:
             while self._polling and not self._stopped:
                 try:
                     content = self._read_new_content()

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ClaudeCliExecutor(CliExecutor):
     """Executor for Claude Code CLI."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = CLI_CONFIGS[CliTool.CLAUDE]
 
     @property
@@ -57,7 +57,7 @@ class ClaudeCliExecutor(CliExecutor):
             cmd.append("--verbose")
 
         # Add allowed tools if supported and provided
-        if allowed_tools and self.config.supports_allowed_tools:
+        if allowed_tools and self.config.supports_allowed_tools and self.config.allowed_tools_flag:
             cmd.extend([self.config.allowed_tools_flag, ",".join(allowed_tools)])
 
         return CliCommand(args=cmd, cwd=working_dir)
@@ -172,7 +172,7 @@ class ClaudeCliExecutor(CliExecutor):
                     "usage": data.get("usage", {}),
                 }
 
-            return data
+            return dict(data)
 
         except json.JSONDecodeError:
             logger.debug(f"Failed to parse line as JSON: {line[:100]}")
@@ -204,7 +204,7 @@ class ClaudeCliExecutor(CliExecutor):
             info["warnings"].append(f"Could not get version: {e}")
 
         # Check config file
-        config_path = Path(self.config.config_path).expanduser()
+        config_path = Path(self.config.config_path or "~/.claude").expanduser()
         if config_path.exists():
             info["config_path"] = str(config_path)
         else:

@@ -69,7 +69,7 @@ def get_theme() -> str:
     Returns:
         Theme name string
     """
-    return load_ui_config().get("theme", "emdx-dark")
+    return str(load_ui_config().get("theme", "emdx-dark"))
 
 
 def set_theme(theme_name: str) -> None:
@@ -91,7 +91,7 @@ def get_code_theme() -> str:
     Returns:
         Code theme name, or "auto" for automatic detection
     """
-    return load_ui_config().get("code_theme", "auto")
+    return str(load_ui_config().get("code_theme", "auto"))
 
 
 def set_code_theme(theme_name: str) -> None:

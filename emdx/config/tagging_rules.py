@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .constants import DEFAULT_TAGGING_CONFIDENCE, EMDX_CONFIG_DIR
 
@@ -43,7 +43,7 @@ class TaggingConfig:
         self.rules: dict[str, TaggingRule] = {}
         self.load_config()
 
-    def load_config(self):
+    def load_config(self) -> None:
         """Load configuration from file."""
         if self.config_path.exists():
             try:
@@ -64,7 +64,7 @@ class TaggingConfig:
             # Create default config
             self.create_default_config()
 
-    def save_config(self):
+    def save_config(self) -> None:
         """Save configuration to file."""
         # Ensure directory exists
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +84,7 @@ class TaggingConfig:
         with open(self.config_path, 'w') as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
-    def create_default_config(self):
+    def create_default_config(self) -> None:
         """Create default configuration with example rules."""
         self.rules = {
             'meeting_notes': TaggingRule(
@@ -169,7 +169,7 @@ class TaggingConfig:
             if rule.enabled
         }
 
-    def import_rules(self, rules_data: dict[str, Any]):
+    def import_rules(self, rules_data: dict[str, Any]) -> None:
         """Import rules from a dictionary."""
         for name, rule_data in rules_data.items():
             self.rules[name] = TaggingRule(
