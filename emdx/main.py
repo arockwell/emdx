@@ -90,6 +90,7 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # EAGER IMPORTS - Core KB commands (fast, always needed)
 # Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
+from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.browse import app as browse_app  # noqa: E402
 from emdx.commands.categories import app as categories_app  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
@@ -163,6 +164,9 @@ app.command(name="prime")(prime_command)
 
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
+
+# Add the briefing command for activity summary
+app.command(name="briefing")(briefing_command)
 
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
