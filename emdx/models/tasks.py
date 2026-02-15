@@ -1,7 +1,7 @@
 """Task operations for emdx."""
 
 import sqlite3
-from typing import Any
+from typing import Any, cast
 
 from emdx.config.constants import (
     DEFAULT_BROWSE_LIMIT,
@@ -113,7 +113,7 @@ def get_task(task_id: int) -> TaskDict | None:
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return cast(TaskDict, dict(row)) if row else None
 
 
 def list_tasks(
@@ -170,7 +170,7 @@ def list_tasks(
                 created_at DESC
             LIMIT ?
         """, params)
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 # Allowed columns for task updates (prevents SQL injection via column names)
@@ -233,7 +233,7 @@ def get_dependencies(task_id: int) -> list[TaskDict]:
             JOIN task_deps d ON t.id = d.depends_on
             WHERE d.task_id = ?
         """, (task_id,))
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_dependents(task_id: int) -> list[TaskDict]:
@@ -244,7 +244,7 @@ def get_dependents(task_id: int) -> list[TaskDict]:
             JOIN task_deps d ON t.id = d.task_id
             WHERE d.depends_on = ?
         """, (task_id,))
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_ready_tasks(
@@ -281,7 +281,7 @@ def get_ready_tasks(
             )
             ORDER BY t.priority, t.created_at
         """, params)
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def add_dependency(task_id: int, depends_on: int) -> bool:
@@ -351,7 +351,7 @@ def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLo
             SELECT * FROM task_log WHERE task_id = ?
             ORDER BY created_at DESC LIMIT ?
         """, (task_id, limit))
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskLogEntryDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_gameplan_stats(gameplan_id: int) -> GameplanStatsDict:
@@ -384,7 +384,7 @@ def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
             WHERE t.status = 'active' AND t.parent_task_id IS NULL
             ORDER BY t.updated_at DESC
         """)
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(ActiveDelegateTaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_children(parent_task_id: int) -> list[TaskDict]:
@@ -395,7 +395,7 @@ def get_children(parent_task_id: int) -> list[TaskDict]:
             WHERE parent_task_id = ?
             ORDER BY seq, id
         """, (parent_task_id,))
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
@@ -407,7 +407,7 @@ def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
             ORDER BY completed_at DESC
             LIMIT ?
         """, (limit,))
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_failed_tasks(limit: int = 5) -> list[TaskDict]:
@@ -419,7 +419,7 @@ def get_failed_tasks(limit: int = 5) -> list[TaskDict]:
             ORDER BY updated_at DESC
             LIMIT ?
         """, (limit,))
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def list_epics(
@@ -450,24 +450,29 @@ def list_epics(
             GROUP BY t.id
             ORDER BY t.created_at DESC
         """, params)
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(EpicTaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_epic_view(epic_id: int) -> EpicViewDict | None:
     """Get epic task + its children."""
     with db.get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM tasks WHERE id = ? AND type = 'epic'", (epic_id,))
+        cursor = conn.execute(
+            "SELECT * FROM tasks WHERE id = ? AND type = 'epic'",
+            (epic_id,),
+        )
         epic_row = cursor.fetchone()
         if not epic_row:
             return None
 
-        epic = dict(epic_row)
+        raw: dict[str, Any] = dict(epic_row)
 
         child_cursor = conn.execute("""
             SELECT * FROM tasks
             WHERE parent_task_id = ?
             ORDER BY epic_seq, seq, id
         """, (epic_id,))
-        epic["children"] = [dict(row) for row in child_cursor.fetchall()]
+        raw["children"] = [
+            cast(TaskDict, dict(row)) for row in child_cursor.fetchall()
+        ]
 
-        return epic
+        return cast(EpicViewDict, raw)

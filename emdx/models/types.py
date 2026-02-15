@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal, TypedDict
 
 TaskStatus = Literal['open', 'active', 'blocked', 'done', 'failed']
@@ -80,8 +81,8 @@ class TagStatsDict(TypedDict):
     id: int
     name: str
     count: int
-    created_at: str | None
-    last_used: str | None
+    created_at: datetime | None
+    last_used: datetime | None
 
 
 class TagSearchResultDict(TypedDict):

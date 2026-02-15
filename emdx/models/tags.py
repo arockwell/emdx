@@ -1,7 +1,7 @@
 """Tag management operations for emdx."""
 
 import sqlite3
-from typing import Any
+from typing import Any, cast
 
 from emdx.database import db
 from emdx.models.types import TagSearchResultDict, TagStatsDict
@@ -229,15 +229,13 @@ def list_all_tags(sort_by: str = "usage") -> list[TagStatsDict]:
             # Normalize tag name to emoji for display
             normalized_name = normalize_tag_to_emoji(row[1])
 
-            tags.append(
-                {
-                    "id": row[0],
-                    "name": normalized_name,
-                    "count": row[2],
-                    "created_at": created_at,
-                    "last_used": last_used,
-                }
-            )
+            tags.append(cast(TagStatsDict, {
+                "id": row[0],
+                "name": normalized_name,
+                "count": row[2],
+                "created_at": created_at,
+                "last_used": last_used,
+            }))
 
         return tags
 
@@ -320,8 +318,10 @@ def search_by_tags(
 
         docs = []
         for row in cursor.fetchall():
-            doc = dict(zip([col[0] for col in cursor.description], row, strict=False))
-            docs.append(doc)
+            doc = dict(zip(
+                [col[0] for col in cursor.description], row, strict=False,
+            ))
+            docs.append(cast(TagSearchResultDict, doc))
 
         return docs
 
