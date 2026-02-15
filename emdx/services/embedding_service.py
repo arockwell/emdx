@@ -556,7 +556,7 @@ class EmbeddingService:
                     "SELECT COUNT(*) FROM chunk_embeddings WHERE model_name = ?",
                     (self.MODEL_NAME,),
                 )
-                count = cursor.fetchone()[0]
+                count: int = cursor.fetchone()[0]
                 return count > 0
         except Exception:
             return False

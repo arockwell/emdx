@@ -11,10 +11,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from ..database import db
 from ..database.search import search_documents
 from ..models.tags import get_tags_for_documents
+
+if TYPE_CHECKING:
+    from .embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +71,11 @@ def normalize_fts5_score(rank: float) -> float:
 class HybridSearchService:
     """Combines FTS5 and semantic search into a unified search experience."""
 
-    def __init__(self):
-        self._embedding_service = None
+    def __init__(self) -> None:
+        self._embedding_service: EmbeddingService | None = None
 
     @property
-    def embedding_service(self):
+    def embedding_service(self) -> EmbeddingService | None:
         """Lazy load the embedding service."""
         if self._embedding_service is None:
             try:
@@ -89,7 +93,7 @@ class HybridSearchService:
             with db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
-                count = cursor.fetchone()[0]
+                count: int = cursor.fetchone()[0]
                 return count > 0
         except Exception:
             return False
@@ -100,7 +104,7 @@ class HybridSearchService:
             with db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM chunk_embeddings LIMIT 1")
-                count = cursor.fetchone()[0]
+                count: int = cursor.fetchone()[0]
                 return count > 0
         except Exception:
             return False
@@ -166,7 +170,7 @@ class HybridSearchService:
                     keyword_score=score,
                     semantic_score=0.0,
                     source="keyword",
-                    snippet=doc.get("snippet", "")[:200] if doc.get("snippet") else "",
+                    snippet=(doc.get("snippet") or "")[:200],
                 )
             )
 
@@ -235,7 +239,7 @@ class HybridSearchService:
 
         # Deduplicate by document, keeping highest-scoring chunk per doc
         seen_docs: set[int] = set()
-        results = []
+        results: list[HybridSearchResult] = []
 
         for match in matches:
             if match.doc_id in seen_docs:

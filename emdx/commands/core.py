@@ -6,9 +6,11 @@ import json
 import os
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.markdown import Markdown
@@ -169,7 +171,7 @@ def display_save_result(
     doc_id: int,
     metadata: DocumentMetadata,
     applied_tags: list[str],
-    supersede_target: dict | None = None,
+    supersede_target: Mapping[str, Any] | None = None,
 ) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
@@ -578,7 +580,10 @@ def _find_keyword_search(
             )
 
             # Combine: only show documents that match both criteria
-            results = [doc for doc in search_results if doc["id"] in tag_doc_ids][:limit]
+            results: list[dict[str, Any]] = [
+                dict(doc) for doc in search_results
+                if doc["id"] in tag_doc_ids
+            ][:limit]
 
             if not results:
                 console.print(
@@ -588,7 +593,11 @@ def _find_keyword_search(
                 return
         else:
             # Tag-only search
-            results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+            results = [
+                dict(d) for d in search_by_tags(
+                    tag_list, mode=tag_mode, project=project, limit=limit,
+                )
+            ]
             if not results:
                 mode_desc = "all" if not any_tags else "any"
                 console.print(
@@ -602,11 +611,11 @@ def _find_keyword_search(
         # If we have no search query but have date filters, use a wildcard
         effective_query = search_query if search_query else "*"
 
-        results = search_documents(
+        results = [dict(r) for r in search_documents(
             effective_query, project=project, limit=limit, fuzzy=fuzzy,
             created_after=created_after, created_before=created_before,
             modified_after=modified_after, modified_before=modified_before
-        )
+        )]
 
         if not results:
             if search_query:
@@ -664,8 +673,8 @@ def _find_keyword_search(
                 "id": result["id"],
                 "title": result["title"],
                 "project": result.get("project"),
-                "created_at": result["created_at"].isoformat(),
-                "updated_at": result.get("updated_at", result["created_at"]).isoformat(),
+                "created_at": str(result["created_at"] or ""),
+                "updated_at": str(result.get("updated_at") or result["created_at"] or ""),
                 "tags": doc_tags,
                 "access_count": result.get("access_count", 0),
             }
@@ -676,9 +685,13 @@ def _find_keyword_search(
             elif "score" in result:
                 output_result["similarity"] = result["score"]
 
-            if snippets and "snippet" in result:
+            if snippets and result.get("snippet"):
                 # Clean snippet of HTML tags
-                output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
+                snippet = result["snippet"]
+                if snippet:
+                    output_result["snippet"] = (
+                        snippet.replace("<b>", "").replace("</b>", "")
+                    )
 
             output_results.append(output_result)
 
@@ -719,7 +732,10 @@ def _find_keyword_search(
         metadata = []
         if result["project"]:
             metadata.append(f"[green]{result['project']}[/green]")
-        metadata.append(f"[yellow]{result['created_at'].strftime('%Y-%m-%d')}[/yellow]")
+        created = result["created_at"]
+        if created:
+            date_str = str(created)[:10]
+            metadata.append(f"[yellow]{date_str}[/yellow]")
 
         if "rank" in result:
             metadata.append(f"[dim]relevance: {result['rank']:.3f}[/dim]")
@@ -734,10 +750,11 @@ def _find_keyword_search(
             console.print(f"[dim]Tags: {format_tags(doc_tags)}[/dim]")
 
         # Display snippet if requested
-        if snippets and "snippet" in result:
+        if snippets and result.get("snippet"):
             # Clean up the snippet (remove HTML tags from highlighting)
+            raw_snippet = result["snippet"] or ""
             snippet = (
-                result["snippet"]
+                raw_snippet
                 .replace("<b>", "[bold yellow]")
                 .replace("</b>", "[/bold yellow]")
             )
@@ -778,7 +795,7 @@ def view(
                 console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
                 console.print("=" * 60)
                 console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                console.print(f"[dim]Created:[/dim] {str(doc['created_at'] or '')[:16]}")
                 console.print(f"[dim]Views:[/dim] {doc['access_count']}")
                 # Show tags
                 doc_tags = get_document_tags(doc["id"])
@@ -804,7 +821,7 @@ def view(
                     console.print("=" * 60)
                     console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
                     console.print(
-                        f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}"
+                        f"[dim]Created:[/dim] {str(doc['created_at'] or '')[:16]}"
                     )
                     console.print(f"[dim]Views:[/dim] {doc['access_count']}")
                     # Show tags
@@ -867,7 +884,7 @@ def edit(
             # Write header comment
             tmp_file.write(f"# Editing: {doc['title']} (ID: {doc['id']})\n")
             tmp_file.write(f"# Project: {doc['project'] or 'None'}\n")
-            tmp_file.write(f"# Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}\n")
+            tmp_file.write(f"# Created: {str(doc['created_at'] or '')[:16]}\n")
             tmp_file.write("# Lines starting with '#' will be removed\n")
             tmp_file.write("#\n")
             tmp_file.write("# First line (after comments) will be used as the title\n")
@@ -996,7 +1013,7 @@ def delete(
                 str(doc["id"]),
                 doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
                 doc["project"] or "[dim]None[/dim]",
-                doc["created_at"].strftime("%Y-%m-%d"),
+                str(doc["created_at"] or "")[:10],
                 "[red]PERMANENT[/red]" if hard else "[yellow]Soft delete[/yellow]",
             )
 
