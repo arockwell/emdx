@@ -109,9 +109,6 @@ class ChildDocInfo(TypedDict):
     stage: str | None
 
 
-# ── Document types ─────────────────────────────────────────────────────
-
-
 # ── Group types ────────────────────────────────────────────────────────
 
 

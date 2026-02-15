@@ -605,8 +605,9 @@ class ActivityView(HelpMixin, Widget):
             header.update(f"📦 {group['name']}")
             content.write(f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]")  # noqa: E501
 
-            if group.get("description"):
-                content.write(f"{group['description'][:100]}")
+            desc = group.get("description")
+            if desc:
+                content.write(f"{desc[:100]}")
 
         except Exception as e:
             logger.error(f"Error showing group context: {e}")
@@ -632,8 +633,9 @@ class ActivityView(HelpMixin, Widget):
 
             lines = [f"# {group['name']}", ""]
 
-            if group.get("description"):
-                lines.append(group["description"])
+            desc = group.get("description")
+            if desc:
+                lines.append(desc)
                 lines.append("")
 
             lines.append(f"**Type:** {group.get('group_type', 'batch')}")

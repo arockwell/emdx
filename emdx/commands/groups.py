@@ -5,6 +5,8 @@ into batches, rounds, and initiatives.
 """
 
 
+from typing import Any
+
 import typer
 from rich.table import Table
 from rich.tree import Tree
@@ -253,12 +255,12 @@ def _display_groups_tree(project: str | None, include_inactive: bool) -> None:
     tree = Tree("📁 [bold]Document Groups[/bold]")
 
     for g in top_groups:
-        _add_group_to_tree(tree, g, include_inactive)
+        _add_group_to_tree(tree, dict(g), include_inactive)
 
     console.print(tree)
 
 
-def _add_group_to_tree(parent_tree: Tree, group: dict, include_inactive: bool) -> None:
+def _add_group_to_tree(parent_tree: Tree, group: dict[str, Any], include_inactive: bool) -> None:
     """Recursively add a group and its children to the tree."""
     type_icons = {
         'initiative': '📋',
@@ -276,7 +278,7 @@ def _add_group_to_tree(parent_tree: Tree, group: dict, include_inactive: bool) -
     children = groups.get_child_groups(group['id'])
     for child in children:
         if include_inactive or child.get('is_active', True):
-            _add_group_to_tree(branch, child, include_inactive)
+            _add_group_to_tree(branch, dict(child), include_inactive)
 
     # Add member documents (limited to 5)
     members = groups.get_group_members(group['id'])
