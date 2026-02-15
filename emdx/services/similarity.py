@@ -11,8 +11,9 @@ comparison, where k is the average number of similar documents per doc.
 
 from __future__ import annotations
 
+import json
 import logging
-import pickle
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +25,7 @@ from ..database import db
 logger = logging.getLogger(__name__)
 
 try:
+    import scipy.sparse  # type: ignore[import-untyped]
     from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
     from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
 
@@ -76,10 +78,10 @@ class SimilarityService:
         Args:
             db_path: Optional database path (unused, kept for API compatibility)
         """
-        # Get cache directory
+        # Get cache directory - now using a directory instead of a single .pkl file
         self._cache_dir = EMDX_CONFIG_DIR
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        self._cache_path = self._cache_dir / "similarity_cache.pkl"
+        self._cache_path = self._cache_dir / "similarity_cache"  # Directory, not .pkl file
 
         # Index state
         self._vectorizer: TfidfVectorizer | None = None
@@ -93,42 +95,117 @@ class SimilarityService:
     def _load_cache(self) -> bool:
         """Load the cached index if it exists.
 
+        Uses safe serialization: JSON for metadata and scipy.sparse for the matrix.
+        The TfidfVectorizer is rebuilt from stored vocabulary rather than deserialized.
+
         Returns:
             True if cache was loaded successfully, False otherwise
         """
-        if not self._cache_path.exists():
+        metadata_path = self._cache_path / "metadata.json"
+        matrix_path = self._cache_path / "tfidf_matrix.npz"
+
+        if not self._cache_path.exists() or not metadata_path.exists():
             return False
 
         try:
-            with open(self._cache_path, 'rb') as f:
-                cache_data = pickle.load(f)
+            # Load metadata from JSON
+            with open(metadata_path, encoding="utf-8") as f:
+                cache_data = json.load(f)
 
-            self._vectorizer = cache_data['vectorizer']
-            self._tfidf_matrix = cache_data['tfidf_matrix']
             self._doc_ids = cache_data['doc_ids']
             self._doc_titles = cache_data['doc_titles']
             self._doc_projects = cache_data['doc_projects']
-            self._doc_tags = cache_data['doc_tags']
-            self._last_built = cache_data.get('last_built')
+            # Convert tag lists back to sets
+            self._doc_tags = [set(tags) for tags in cache_data['doc_tags']]
+
+            # Parse last_built datetime
+            last_built_str = cache_data.get('last_built')
+            if last_built_str:
+                self._last_built = datetime.fromisoformat(last_built_str)
+            else:
+                self._last_built = None
+
+            # Load TF-IDF matrix from scipy sparse format
+            if matrix_path.exists():
+                self._tfidf_matrix = scipy.sparse.load_npz(matrix_path)
+            else:
+                self._tfidf_matrix = None
+
+            # Rebuild TfidfVectorizer from stored vocabulary
+            vocabulary = cache_data.get('vocabulary')
+            if vocabulary is not None:
+                self._vectorizer = TfidfVectorizer(
+                    max_features=self.MAX_FEATURES,
+                    min_df=1,  # Use 1 since we're restoring existing vocabulary
+                    max_df=self.MAX_DF,
+                    stop_words='english',
+                    ngram_range=(1, 2),
+                    sublinear_tf=True,
+                    vocabulary=vocabulary,
+                )
+                # Mark vectorizer as fitted by setting required attributes
+                # The vocabulary is already set, we just need to set idf_ if available
+                idf_weights = cache_data.get('idf_weights')
+                if idf_weights is not None:
+                    import numpy as np
+                    self._vectorizer.idf_ = np.array(idf_weights)
+                    # _tfidf is a TfidfTransformer inside the vectorizer
+                    if hasattr(self._vectorizer, '_tfidf'):
+                        self._vectorizer._tfidf.idf_ = self._vectorizer.idf_
+            else:
+                self._vectorizer = None
+
             return True
-        except (OSError, pickle.UnpicklingError, KeyError) as e:
+        except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
             logger.debug("Failed to load similarity cache: %s", e)
             return False
 
     def _save_cache(self) -> None:
-        """Save the current index to cache."""
+        """Save the current index to cache.
+
+        Uses safe serialization: JSON for metadata and scipy.sparse for the matrix.
+        The TfidfVectorizer is stored as vocabulary + IDF weights for reconstruction.
+        """
+        # Create cache directory if it doesn't exist
+        self._cache_path.mkdir(parents=True, exist_ok=True)
+
+        metadata_path = self._cache_path / "metadata.json"
+        matrix_path = self._cache_path / "tfidf_matrix.npz"
+
+        # Extract vocabulary and IDF weights from vectorizer for later reconstruction
+        vocabulary = None
+        idf_weights = None
+        if self._vectorizer is not None:
+            try:
+                vocabulary = self._vectorizer.vocabulary_
+                if hasattr(self._vectorizer, 'idf_'):
+                    idf_weights = self._vectorizer.idf_.tolist()
+            except AttributeError:
+                # Vectorizer not fitted yet
+                pass
+
+        # Prepare metadata (all JSON-serializable)
         cache_data = {
-            'vectorizer': self._vectorizer,
-            'tfidf_matrix': self._tfidf_matrix,
             'doc_ids': self._doc_ids,
             'doc_titles': self._doc_titles,
             'doc_projects': self._doc_projects,
-            'doc_tags': self._doc_tags,
-            'last_built': self._last_built
+            # Convert sets to lists for JSON serialization
+            'doc_tags': [list(tags) for tags in self._doc_tags],
+            'last_built': self._last_built.isoformat() if self._last_built else None,
+            'vocabulary': vocabulary,
+            'idf_weights': idf_weights,
         }
 
-        with open(self._cache_path, 'wb') as f:
-            pickle.dump(cache_data, f)
+        # Save metadata as JSON
+        with open(metadata_path, 'w', encoding="utf-8") as f:
+            json.dump(cache_data, f)
+
+        # Save TF-IDF matrix using scipy sparse format (safe, no arbitrary code exec)
+        if self._tfidf_matrix is not None:
+            scipy.sparse.save_npz(matrix_path, self._tfidf_matrix)
+        elif matrix_path.exists():
+            # Remove old matrix file if matrix is now None
+            matrix_path.unlink()
 
     def _ensure_index(self) -> None:
         """Ensure the index is loaded, building if necessary."""
@@ -393,8 +470,11 @@ class SimilarityService:
             Statistics about the index
         """
         cache_size = 0
-        if self._cache_path.exists():
-            cache_size = self._cache_path.stat().st_size
+        if self._cache_path.exists() and self._cache_path.is_dir():
+            # Sum up all files in the cache directory
+            for cache_file in self._cache_path.iterdir():
+                if cache_file.is_file():
+                    cache_size += cache_file.stat().st_size
 
         cache_age = 0.0
         if self._last_built:
@@ -418,8 +498,8 @@ class SimilarityService:
 
     def invalidate_cache(self) -> None:
         """Clear the cached index (force rebuild on next query)."""
-        if self._cache_path.exists():
-            self._cache_path.unlink()
+        if self._cache_path.exists() and self._cache_path.is_dir():
+            shutil.rmtree(self._cache_path)
 
         self._vectorizer = None
         self._tfidf_matrix = None
