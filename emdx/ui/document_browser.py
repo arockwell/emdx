@@ -86,6 +86,9 @@ class DocumentBrowser(HelpMixin, Widget):
         self._pending_preview_doc_id: int | None = None
         self._preview_timer: Timer | None = None
 
+        # Guard against double-save race condition
+        self._save_in_progress: bool = False
+
         # Current ViewModel (updated by presenter callbacks)
         self._current_vm: DocumentListVM | None = None
 
@@ -461,17 +464,22 @@ class DocumentBrowser(HelpMixin, Widget):
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
         logger.debug("action_save_and_exit_edit called")
+
+        # Prevent re-entry / double-save race condition
+        if self._save_in_progress:
+            logger.debug("Save already in progress, ignoring duplicate call")
+            return
+
+        self._save_in_progress = True
         try:
             # Use call_after_refresh to avoid timing issues
             self.call_after_refresh(self._async_save_and_exit_edit_mode)
         except Exception as e:
             logger.error(f"Error in action_save_and_exit_edit: {e}")
-            # Fallback - try direct call
-            try:
-                import asyncio
-                asyncio.create_task(self.save_and_exit_edit_mode())
-            except Exception as e2:
-                logger.debug("Fallback async save also failed: %s", e2)
+            # Only attempt fallback if we haven't already started saving
+            # The flag being True means call_after_refresh was called,
+            # so don't create a duplicate task
+            self._save_in_progress = False
 
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
@@ -483,7 +491,14 @@ class DocumentBrowser(HelpMixin, Widget):
         """Async wrapper for save_and_exit_edit_mode."""
         logger.debug("_async_save_and_exit_edit_mode")
         import asyncio
-        asyncio.create_task(self.save_and_exit_edit_mode())
+
+        async def _save_wrapper() -> None:
+            try:
+                await self.save_and_exit_edit_mode()
+            finally:
+                self._save_in_progress = False
+
+        asyncio.create_task(_save_wrapper())
 
     async def save_and_exit_edit_mode(self) -> None:
         """Save the document and exit edit mode."""
