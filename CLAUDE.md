@@ -84,8 +84,8 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 | Discover + process | `emdx delegate --each "cmd" --do "Review {{item}}"` |
 | Doc as input | `emdx delegate --doc 42 "implement this"` |
 | Code changes with PR | `emdx delegate --pr "fix the bug"` |
-| Idea to PR pipeline | `emdx cascade add "idea" --auto` |
-| Run saved recipe | `emdx recipe run 42` |
+| Idea to PR pipeline | `emdx cascade add "idea" --auto` (experimental) |
+| Run saved recipe | `emdx recipe run 42` (experimental) |
 
 ### Auto-Tagging Guidelines
 
@@ -122,8 +122,14 @@ emdx ai context "question" | claude
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
-For cascade docs, see [Cascade](docs/cascade.md).
 For AI system docs, see [AI System](docs/ai-system.md).
+
+## Experimental Commands
+
+These commands work but are not yet stable:
+
+- **`emdx cascade`** — Autonomous idea-to-code pipeline. See [Cascade](docs/cascade.md).
+- **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
 ## Release Process
 
