@@ -7,7 +7,7 @@ replacing the stringly-typed item_type field with proper polymorphism.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -19,7 +19,7 @@ class ActivityItem(ABC):
     timestamp: datetime
     depth: int = 0
     expanded: bool = False
-    children: List["ActivityItem"] = field(default_factory=list)
+    children: list["ActivityItem"] = field(default_factory=list)
     status: str = "completed"  # Default status for items that don't track status
     doc_id: int | None = None  # Document ID if this item has associated content
     cost: float = 0.0  # Cost in USD if tracked
@@ -48,12 +48,12 @@ class ActivityItem(ABC):
         ...
 
     @abstractmethod
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db: Any) -> list["ActivityItem"]:
         """Load child items from database."""
         ...
 
     @abstractmethod
-    async def get_preview_content(self, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
         """Get content and header for preview pane.
 
         Returns:
@@ -84,9 +84,9 @@ class DocumentItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.has_children
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db: Any) -> list["ActivityItem"]:
         """Load child documents."""
-        children = []
+        children: list[ActivityItem] = []
 
         if not doc_db:
             return children
@@ -120,7 +120,7 @@ class DocumentItem(ActivityItem):
 
         return children
 
-    async def get_preview_content(self, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
         """Get document content for preview."""
         if not doc_db:
             return "", "PREVIEW"
@@ -151,7 +151,7 @@ class CascadeRunItem(ActivityItem):
     with all associated stage transitions shown as children.
     """
 
-    cascade_run: Dict[str, Any] = field(default_factory=dict)
+    cascade_run: dict[str, Any] = field(default_factory=dict)
     status: str = "running"
     pipeline_name: str = "default"
     current_stage: str = ""
@@ -178,11 +178,11 @@ class CascadeRunItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.execution_count > 0 or len(self.children) > 0
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db: Any) -> list["ActivityItem"]:
         """Load cascade stage executions as children."""
         from emdx.services.cascade_service import get_cascade_run_executions
 
-        children = []
+        children: list[ActivityItem] = []
 
         if not self.cascade_run:
             return children
@@ -220,7 +220,7 @@ class CascadeRunItem(ActivityItem):
 
         return children
 
-    async def get_preview_content(self, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
         """Get cascade run preview - status and stage info."""
         run = self.cascade_run
 
@@ -285,11 +285,11 @@ class CascadeStageItem(ActivityItem):
     def can_expand(self) -> bool:
         return False
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db: Any) -> list["ActivityItem"]:
         """Stage items don't have children."""
         return []
 
-    async def get_preview_content(self, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
         """Get stage execution output."""
         if self.doc_id and doc_db:
             doc = doc_db.get_document(self.doc_id)
@@ -303,7 +303,7 @@ class CascadeStageItem(ActivityItem):
 class GroupItem(ActivityItem):
     """A document group (batch, round, initiative) in the activity stream."""
 
-    group: Dict[str, Any] = field(default_factory=dict)
+    group: dict[str, Any] = field(default_factory=dict)
     doc_count: int = 0
     total_cost: float = 0.0
     total_tokens: int = 0
@@ -331,11 +331,11 @@ class GroupItem(ActivityItem):
     def can_expand(self) -> bool:
         return self.doc_count > 0 or self.child_group_count > 0 or len(self.children) > 0
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db: Any) -> list["ActivityItem"]:
         """Load child groups and member documents."""
         from emdx.services import group_service as groups
 
-        children = []
+        children: list[ActivityItem] = []
 
         if not self.group:
             return children
@@ -394,7 +394,7 @@ class GroupItem(ActivityItem):
 
         return children
 
-    async def get_preview_content(self, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
         """Show group summary in preview."""
         from emdx.services import group_service as groups
 
@@ -437,7 +437,7 @@ class AgentExecutionItem(ActivityItem):
     These are direct CLI delegate runs not part of any workflow or cascade.
     """
 
-    execution: Dict[str, Any] = field(default_factory=dict)
+    execution: dict[str, Any] = field(default_factory=dict)
     status: str = "running"
     doc_id: int | None = None
     log_file: str = ""
@@ -466,11 +466,11 @@ class AgentExecutionItem(ActivityItem):
     def can_expand(self) -> bool:
         return False
 
-    async def load_children(self, doc_db) -> List["ActivityItem"]:
+    async def load_children(self, doc_db: Any) -> list["ActivityItem"]:
         """Agent executions don't have children."""
         return []
 
-    async def get_preview_content(self, doc_db) -> tuple[str, str]:
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
         """Show execution log content in preview."""
         from pathlib import Path
 

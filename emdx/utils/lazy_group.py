@@ -8,6 +8,8 @@ Heavy commands (cascade, delegate, ai, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
 
+from __future__ import annotations
+
 import importlib
 from typing import Any
 
@@ -39,7 +41,7 @@ def register_lazy_commands(
     _LAZY_REGISTRY["help"] = help_strings
 
 
-class LazyCommand(click.MultiCommand):
+class LazyCommand(click.MultiCommand):  # type: ignore[misc,valid-type]
     """A placeholder command that loads the real command on invocation.
 
     This command appears in help listings with pre-defined help text,
@@ -51,16 +53,16 @@ class LazyCommand(click.MultiCommand):
         name: str,
         import_path: str,
         help_text: str,
-        parent_group: "LazyTyperGroup",
+        parent_group: LazyTyperGroup,
     ) -> None:
         super().__init__(name=name, help=help_text)
         self.import_path = import_path
         self.help_text = help_text
         self.short_help = help_text  # For --help listings
         self.parent_group = parent_group
-        self._real_command: click.BaseCommand | None = None
+        self._real_command: Any = None
 
-    def _load_real_command(self) -> click.BaseCommand:
+    def _load_real_command(self) -> Any:
         """Load the actual command."""
         if self._real_command is not None:
             return self._real_command
@@ -101,7 +103,7 @@ class LazyCommand(click.MultiCommand):
             self._real_command = error_cmd
             return self._real_command
 
-    def _convert_to_click_command(self, cmd_object: Any) -> click.BaseCommand:
+    def _convert_to_click_command(self, cmd_object: Any) -> Any:
         """Convert a command object to a Click command."""
         import typer
 
@@ -114,14 +116,14 @@ class LazyCommand(click.MultiCommand):
                 len(cmd_object.registered_commands) > 1
                 or cmd_object.registered_groups
             ):
-                cmd = get_group(cmd_object)
+                result: Any = get_group(cmd_object)
             else:
-                cmd = get_command(cmd_object)
-            cmd.name = self.name
-            return cmd
+                result = get_command(cmd_object)
+            result.name = self.name
+            return result
 
         # Check if it's already a Click command
-        if isinstance(cmd_object, click.BaseCommand):
+        if isinstance(cmd_object, click.BaseCommand):  # type: ignore[arg-type]
             cmd_object.name = self.name
             return cmd_object
 
@@ -142,15 +144,15 @@ class LazyCommand(click.MultiCommand):
     def list_commands(self, ctx: click.Context) -> list[str]:
         """List subcommands (delegates to real command if it's a group)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.MultiCommand):
-            return real_cmd.list_commands(ctx)
+        if isinstance(real_cmd, click.MultiCommand):  # type: ignore[arg-type]
+            return list(real_cmd.list_commands(ctx))
         return []
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         """Get a subcommand (delegates to real command if it's a group)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.MultiCommand):
-            return real_cmd.get_command(ctx, cmd_name)
+        if isinstance(real_cmd, click.MultiCommand):  # type: ignore[arg-type]
+            return real_cmd.get_command(ctx, cmd_name)  # type: ignore[no-any-return]
         return None
 
     def invoke(self, ctx: click.Context) -> Any:
@@ -164,7 +166,7 @@ class LazyCommand(click.MultiCommand):
     def get_params(self, ctx: click.Context) -> list[click.Parameter]:
         """Get parameters (loads the real command first for accurate params)."""
         real_cmd = self._load_real_command()
-        return real_cmd.get_params(ctx)
+        return list(real_cmd.get_params(ctx))
 
     def main(self, *args: Any, **kwargs: Any) -> Any:
         """Run as main entry point."""
@@ -211,7 +213,7 @@ class LazyTyperGroup(TyperGroup):
         else:
             self.lazy_help = _LAZY_REGISTRY["help"].copy()
 
-        self._loaded_commands: dict[str, click.BaseCommand] = {}
+        self._loaded_commands: dict[str, Any] = {}
         self._lazy_placeholders: dict[str, LazyCommand] = {}
 
     def list_commands(self, ctx: click.Context) -> list[str]:
@@ -222,7 +224,7 @@ class LazyTyperGroup(TyperGroup):
         all_commands = base + [cmd for cmd in lazy if cmd not in base]
         return sorted(all_commands)
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.BaseCommand | None:
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:  # type: ignore[override]
         """Get command, returning a lazy placeholder if needed.
 
         For lazy commands, this returns a LazyCommand placeholder that:
@@ -231,7 +233,7 @@ class LazyTyperGroup(TyperGroup):
         """
         # Check if we've already loaded the real command
         if cmd_name in self._loaded_commands:
-            return self._loaded_commands[cmd_name]
+            return self._loaded_commands[cmd_name]  # type: ignore[return-value,no-any-return]
 
         # Check if this is a lazy command
         if cmd_name in self.lazy_subcommands:

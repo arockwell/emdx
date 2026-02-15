@@ -15,6 +15,7 @@ Key concepts:
 import re
 import time
 from datetime import datetime
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -101,14 +102,23 @@ def _create_cascade_run(doc_id: int, start_stage: str, stop_stage: str) -> int:
             (doc_id, doc_id, start_stage, stop_stage, start_stage),
         )
         conn.commit()
-        return cursor.lastrowid
+        lastrowid: int | None = cursor.lastrowid
+        if lastrowid is None:
+            raise RuntimeError("Failed to create cascade run")
+        return lastrowid
 
 
-def _update_cascade_run(run_id: int, current_doc_id: int = None, current_stage: str = None,
-                        status: str = None, pr_url: str = None, error_message: str = None):
+def _update_cascade_run(
+    run_id: int,
+    current_doc_id: int | None = None,
+    current_stage: str | None = None,
+    status: str | None = None,
+    pr_url: str | None = None,
+    error_message: str | None = None,
+) -> None:
     """Update a cascade run record."""
-    updates = []
-    params = []
+    updates: list[str] = []
+    params: list[int | str] = []
 
     if current_doc_id is not None:
         updates.append("current_doc_id = ?")
@@ -135,15 +145,18 @@ def _update_cascade_run(run_id: int, current_doc_id: int = None, current_stage: 
             conn.commit()
 
 
-def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[bool, int, str]:
+def _process_stage(
+    doc: dict[str, Any], stage: str, cascade_run_id: int | None = None
+) -> tuple[bool, int, str | None]:
     """Process a single stage for a document.
 
     Returns: (success, new_doc_id, pr_url or None)
     """
-    doc_id = doc["id"]
+    doc_id: int = doc["id"]
     next_stage = NEXT_STAGE[stage]
+    doc_title: str = doc["title"]
 
-    console.print(f"[cyan]Processing #{doc_id}: {doc['title'][:50]}[/cyan]")
+    console.print(f"[cyan]Processing #{doc_id}: {doc_title[:50]}[/cyan]")
     console.print(f"  Stage: {stage} → {next_stage}")
 
     # Build the prompt
@@ -163,7 +176,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
             INSERT INTO executions (doc_id, doc_title, status, started_at, log_file, cascade_run_id)
             VALUES (?, ?, 'running', CURRENT_TIMESTAMP, ?, ?)
             """,
-            (doc_id, doc["title"], str(log_file), cascade_run_id),
+            (doc_id, doc_title, str(log_file), cascade_run_id),
         )
         conn.commit()
         execution_id = cursor.lastrowid
@@ -183,8 +196,8 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
 
         if result.get("success"):
             output = result.get("output", "")
-            pr_url = None
-            new_doc_id = doc_id
+            pr_url: str | None = None
+            new_doc_id: int = doc_id
 
             if output:
                 # For planned stage, extract PR URL
@@ -195,11 +208,12 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
                         console.print(f"[bold green]🔗 PR Created: {pr_url}[/bold green]")
 
                 # Create child document
-                child_title = f"{doc['title']} [{stage}→{next_stage}]"
+                child_title = f"{doc_title} [{stage}→{next_stage}]"
+                project: str | None = doc.get("project")
                 new_doc_id = save_document(
                     title=child_title,
                     content=output,
-                    project=doc.get("project"),
+                    project=project,
                     parent_id=doc_id,
                 )
                 cascade_db.update_cascade_stage(new_doc_id, next_stage)
@@ -255,7 +269,7 @@ def add(
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (default: done)"),
     analyze: bool = typer.Option(False, "--analyze", help="Shortcut for --auto --stop analyzed"),
     plan: bool = typer.Option(False, "--plan", help="Shortcut for --auto --stop planned"),
-):
+) -> None:
     """Add a new document to the cascade and optionally run it.
 
     Examples:
@@ -298,7 +312,7 @@ def add(
         _run_auto(doc_id, stage, stop)
 
 
-def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
+def _run_auto(doc_id: int, start_stage: str, stop_stage: str) -> None:
     """Run a document through stages automatically."""
     stages_to_process = _get_stages_between(start_stage, stop_stage)
 
@@ -357,7 +371,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
 
 
 @app.command()
-def status():
+def status() -> None:
     """Show cascade status - documents at each stage."""
     stats = cascade_db.get_cascade_stats()
 
@@ -396,7 +410,7 @@ def status():
 def show(
     stage: str = typer.Argument(..., help="Stage to show documents from"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to show"),
-):
+) -> None:
     """Show documents at a specific stage."""
     if stage not in STAGES:
         console.print(f"[red]Invalid stage: {stage}. Must be one of: {STAGES}[/red]")
@@ -426,7 +440,7 @@ def process(
     doc_id: int | None = typer.Option(None, "--doc", "-d", help="Specific document ID"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be processed"),
     sync: bool = typer.Option(True, "--sync/--async", "-s", help="Wait for completion (default: sync)"),
-):
+) -> None:
     """Process one document at a stage.
 
     Picks up the oldest document at the given stage, runs it through Claude,
@@ -503,7 +517,7 @@ def run(
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (with --auto)"),
     once: bool = typer.Option(False, "--once", help="Run one iteration then exit"),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between checks"),
-):
+) -> None:
     """Run the cascade continuously or in auto mode.
 
     Examples:
@@ -570,7 +584,7 @@ def run(
 def advance(
     doc_id: int = typer.Argument(..., help="Document ID to advance"),
     to_stage: str | None = typer.Option(None, "--to", help="Target stage (default: next stage)"),
-):
+) -> None:
     """Manually advance a document to the next stage.
 
     Useful for testing or when you want to skip processing.
@@ -607,7 +621,7 @@ def advance(
 @app.command()
 def remove(
     doc_id: int = typer.Argument(..., help="Document ID to remove from cascade"),
-):
+) -> None:
     """Remove a document from the cascade (keeps the document).
 
     Sets the stage to NULL, removing it from cascade processing
@@ -632,7 +646,7 @@ def synthesize(
     title: str | None = typer.Option(None, "--title", "-t", help="Title for synthesized document"),
     next_stage: str = typer.Option("planned", "--next", "-n", help="Stage for the synthesized doc"),
     keep: bool = typer.Option(False, "--keep", "-k", help="Keep source docs in current stage"),
-):
+) -> None:
     """Combine multiple documents at a stage into one synthesized document.
 
     This is useful when you want to analyze multiple ideas separately,
@@ -667,8 +681,11 @@ def synthesize(
     combined_content = f"# Synthesized from {len(docs)} documents\n\n"
     for doc in docs:
         full_doc = get_document(str(doc["id"]))
+        if full_doc is None:
+            console.print(f"[red]Document #{doc['id']} not found[/red]")
+            raise typer.Exit(1)
         combined_content += f"## From: {full_doc['title']}\n\n"
-        combined_content += full_doc["content"]
+        combined_content += str(full_doc["content"])
         combined_content += "\n\n---\n\n"
 
     # Create the synthesized document
@@ -694,10 +711,10 @@ def synthesize(
 def runs(
     limit: int = typer.Option(10, "--limit", "-n", help="Max runs to show"),
     status_filter: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
-):
+) -> None:
     """Show cascade run history."""
     query = "SELECT id, start_doc_id, start_stage, stop_stage, current_stage, status, pr_url, started_at, completed_at FROM cascade_runs"
-    params = []
+    params: list[str | int] = []
 
     if status_filter:
         query += " WHERE status = ?"

@@ -2,8 +2,11 @@
 Database connection management for emdx
 """
 
+from __future__ import annotations
+
 import os
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -29,14 +32,16 @@ def get_db_path() -> Path:
 class DatabaseConnection:
     """SQLite database connection manager for emdx"""
 
-    def __init__(self, db_path: Path | None = None):
+    def __init__(self, db_path: Path | str | None = None) -> None:
         if db_path is None:
             self.db_path = get_db_path()
+        elif isinstance(db_path, str):
+            self.db_path = Path(db_path)
         else:
             self.db_path = db_path
 
     @contextmanager
-    def get_connection(self):
+    def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Get a database connection with context manager"""
         conn = sqlite3.connect(
             self.db_path, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
@@ -55,7 +60,7 @@ class DatabaseConnection:
         finally:
             conn.close()
 
-    def ensure_schema(self):
+    def ensure_schema(self) -> None:
         """Ensure the database schema is up to date.
 
         All schema creation is handled by the migrations system.
