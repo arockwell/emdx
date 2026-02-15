@@ -46,7 +46,7 @@ from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 app = typer.Typer(
     name="delegate",
     help="Delegate tasks to agents (stdout-friendly)",
-    context_settings={"allow_interspersed_args": True},
+    context_settings={"allow_interspersed_args": False},
 )
 
 
@@ -709,6 +709,21 @@ def delegate(
         raise typer.Exit(1)
 
     task_list = list(tasks) if tasks else []
+
+    # Guard: detect flags accidentally consumed as task arguments.
+    # This can happen if allow_interspersed_args is misconfigured or bypassed.
+    known_flags = {"--tags", "-t", "--title", "-T", "--synthesize", "-s", "--jobs", "-j",
+                   "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--worktree",
+                   "-w", "--base-branch", "--chain", "--each", "--do", "--epic", "-e",
+                   "--cat", "-c"}
+    consumed_flags = [t for t in task_list if t in known_flags]
+    if consumed_flags:
+        sys.stderr.write(
+            f"delegate: error: flags {consumed_flags} were parsed as task arguments.\n"
+            f"Place all --flags BEFORE the task arguments.\n"
+            f"Example: emdx delegate --tags 'x' --title 'y' \"task1\" \"task2\"\n"
+        )
+        raise typer.Exit(1)
 
     # 0. Dynamic discovery: --each "cmd" --do "template {{item}}"
     if each:
