@@ -49,7 +49,7 @@ def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
         results = []
         for row in cursor.fetchall():
             output_stage, input_stage = row[9], row[10]
-            from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")
+            from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")  # noqa: E501
             results.append({
                 "exec_id": row[0], "input_id": row[1], "input_title": row[2],
                 "status": row[3], "started_at": row[4], "completed_at": row[5],
@@ -130,7 +130,7 @@ def monitor_execution_completion(
                                 )
                                 update_cascade_stage(new_id, next_stage)
                                 update_cascade_stage(doc_id, "done")
-                                on_update(f"[green]\u2713 Done![/green] Created #{new_id} at {next_stage}")
+                                on_update(f"[green]\u2713 Done![/green] Created #{new_id} at {next_stage}")  # noqa: E501
                             else:
                                 on_update("[green]\u2713 Completed[/green]")
                         return

@@ -180,10 +180,10 @@ class StructuredLogger:
             # Final result
             subtype = json_data.get("subtype", "unknown")
             if subtype == "success":
-                self.info("Task completed successfully", {"claude_type": "result", "subtype": "success"})
+                self.info("Task completed successfully", {"claude_type": "result", "subtype": "success"})  # noqa: E501
             else:
                 result = json_data.get('result', 'Unknown error')
-                self.error(f"Task failed: {result}", {"claude_type": "result", "subtype": "failure"})
+                self.error(f"Task failed: {result}", {"claude_type": "result", "subtype": "failure"})  # noqa: E501
         else:
             # Unknown type - log for debugging
             self.debug(f"Unknown Claude message type: {msg_type}", {"claude_data": json_data})

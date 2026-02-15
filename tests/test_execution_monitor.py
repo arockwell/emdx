@@ -353,7 +353,7 @@ class TestKillZombieProcesses:
     @patch("emdx.services.execution_monitor.get_running_executions")
     @patch("psutil.Process", side_effect=psutil.NoSuchProcess(999))
     def test_nosuchprocess_during_zombie_check(self, mock_proc_cls, mock_running):
-        """NoSuchProcess in kill_zombie_processes is handled (bug: uses `pid` instead of `execution.pid`)."""
+        """NoSuchProcess in kill_zombie_processes is handled (bug: uses `pid` instead of `execution.pid`)."""  # noqa: E501
         execution = _make_execution(id=5, pid=999)
         mock_running.return_value = [execution]
         # This may raise NameError due to bug at line 262 (pid not defined).

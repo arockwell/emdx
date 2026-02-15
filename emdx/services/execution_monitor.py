@@ -24,7 +24,8 @@ class ExecutionMonitor:
         """Initialize execution monitor.
 
         Args:
-            stale_timeout_seconds: Seconds after which execution is considered stale (default 30 min)
+            stale_timeout_seconds: Seconds after which execution is considered
+                stale (default 30 min)
         """
         self.stale_timeout = stale_timeout_seconds
 
@@ -63,7 +64,7 @@ class ExecutionMonitor:
                 health['process_exists'] = False
                 health['reason'] = 'Process not found'
             except psutil.AccessDenied:
-                logger.debug("Access denied to process %s for execution %s", execution.pid, execution.id)
+                logger.debug("Access denied to process %s for execution %s", execution.pid, execution.id)  # noqa: E501
                 health['process_exists'] = True  # Assume it exists if we can't access
                 health['reason'] = 'Access denied to process'
         else:

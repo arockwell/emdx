@@ -128,9 +128,9 @@ class DocumentList(Widget):
         count = len(self.selected_ids)
         if count > 0:
             ids = ", ".join(f"#{id}" for id in sorted(self.selected_ids))
-            status.update(f"[bold cyan]Selected ({count}):[/] {ids} \u2502 [dim]Space[/dim] toggle \u2502 [dim]s[/dim] synthesize selected")
+            status.update(f"[bold cyan]Selected ({count}):[/] {ids} \u2502 [dim]Space[/dim] toggle \u2502 [dim]s[/dim] synthesize selected")  # noqa: E501
         else:
-            status.update("[dim]Space to select docs for synthesis \u2502 s synthesizes all if none selected[/dim]")
+            status.update("[dim]Space to select docs for synthesis \u2502 s synthesizes all if none selected[/dim]")  # noqa: E501
 
     def toggle_selection(self) -> None:
         """Toggle selection of current document."""

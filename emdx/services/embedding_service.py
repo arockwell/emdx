@@ -115,7 +115,7 @@ class EmbeddingService:
         with db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT embedding FROM document_embeddings WHERE document_id = ? AND model_name = ?",
+                "SELECT embedding FROM document_embeddings WHERE document_id = ? AND model_name = ?",  # noqa: E501
                 (doc_id, self.MODEL_NAME),
             )
             row = cursor.fetchone()

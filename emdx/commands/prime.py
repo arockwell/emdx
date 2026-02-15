@@ -66,7 +66,37 @@ def prime(
 # Text output
 # ---------------------------------------------------------------------------
 
-def _output_text(project: str | None, verbose: bool, quiet: bool):
+def _get_execution_methods_json() -> list[dict]:
+    """Return execution methods as structured data for JSON output."""
+    return [
+        {
+            "command": "emdx delegate",
+            "usage": 'emdx delegate "task" --tags analysis',
+            "when": "All one-shot AI execution (single, parallel, chain, PR, worktree)",
+            "key_flags": [
+                "--doc", "--each/--do", "--chain",
+                "--pr", "--worktree", "--synthesize", "--tags",
+            ],
+        },
+        {
+            "command": "emdx recipe",
+            "usage": "emdx recipe run 42",
+            "when": "Run a saved recipe (document tagged 📋) via delegate",
+            "key_flags": ["--pr", "--worktree", "--model"],
+        },
+        {
+            "command": "emdx cascade",
+            "usage": 'emdx cascade add "idea" --auto',
+            "when": "Transform idea into working code with PR autonomously",
+            "key_flags": ["--auto", "--stop", "--sync"],
+        },
+    ]
+
+
+def _output_text(
+    project: str | None, verbose: bool, quiet: bool,
+    markdown: bool, execution: bool,
+):
     """Output priming context as text."""
     lines = []
 
@@ -100,7 +130,9 @@ def _output_text(project: str | None, verbose: bool, quiet: bool):
             doc = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
             lines.append(f"  {label}  {task['title']}{doc}")
             if task.get('description') and verbose:
-                desc = task['description'][:100] + "..." if len(task['description']) > 100 else task['description']
+                desc = task['description'][:100]
+                if len(task['description']) > 100:
+                    desc += "..."
                 lines.append(f"         {desc}")
         lines.append("")
     else:
@@ -228,8 +260,9 @@ def _get_ready_tasks() -> list:
         rows = cursor.fetchall()
         return [
             {
-                "id": r[0], "title": r[1], "description": r[2], "priority": r[3],
-                "status": r[4], "source_doc_id": r[5], "epic_key": r[6], "epic_seq": r[7],
+                "id": r[0], "title": r[1], "description": r[2],
+                "priority": r[3], "status": r[4], "source_doc_id": r[5],
+                "epic_key": r[6], "epic_seq": r[7],
             }
             for r in rows
         ]

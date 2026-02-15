@@ -33,7 +33,8 @@ class CursorCliExecutor(CliExecutor):
         """Build Cursor CLI command.
 
         Cursor command format:
-            cursor agent -p --output-format <format> --model <model> [--force] [--workspace <path>] "prompt"
+            cursor agent -p --output-format <format> --model <model>
+                   [--force] [--workspace <path>] "prompt"
 
         Note: Cursor uses positional prompt at the end with -p flag.
         """

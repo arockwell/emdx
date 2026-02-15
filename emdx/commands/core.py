@@ -201,13 +201,13 @@ def save(
         help="Role in group (primary, exploration, synthesis, variant, member)"
     ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
-    suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
+    suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),  # noqa: E501
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
-    gist: bool = typer.Option(False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"),
+    gist: bool = typer.Option(False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"),  # noqa: E501
     public: bool = typer.Option(False, "--public", help="Make gist public (default: secret)"),
-    secret: bool = typer.Option(False, "--secret", help="Make gist secret (default, for explicitness)"),
+    secret: bool = typer.Option(False, "--secret", help="Make gist secret (default, for explicitness)"),  # noqa: E501
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
 ) -> None:
@@ -294,7 +294,7 @@ def save(
 
         token = get_github_auth()
         if not token:
-            console.print("[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]")
+            console.print("[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]")  # noqa: E501
         else:
             filename = sanitize_filename(metadata.title)
             description = f"{metadata.title} - emdx knowledge base"
@@ -313,7 +313,7 @@ def save(
                 try:
                     with db.get_connection() as conn:
                         conn.execute(
-                            "INSERT INTO gists (document_id, gist_id, gist_url, is_public) VALUES (?, ?, ?, ?)",
+                            "INSERT INTO gists (document_id, gist_id, gist_url, is_public) VALUES (?, ?, ?, ?)",  # noqa: E501
                             (doc_id, gist_id_str, gist_url, public),
                         )
                         conn.commit()
@@ -332,7 +332,7 @@ def save(
                     wb.open(gist_url)
                     console.print("   [green]✓ Opened in browser[/green]")
             else:
-                console.print("[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]")
+                console.print("[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]")  # noqa: E501
 
 
 @app.command()
@@ -349,12 +349,12 @@ def find(
     ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
     no_tags: str | None = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
-    ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),
+    ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),  # noqa: E501
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
-    created_after: str | None = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),
-    created_before: str | None = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),
-    modified_after: str | None = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),
-    modified_before: str | None = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),
+    created_after: str | None = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),  # noqa: E501
+    created_before: str | None = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),  # noqa: E501
+    modified_after: str | None = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),  # noqa: E501
+    modified_before: str | None = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),  # noqa: E501
 ) -> None:
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query) if query else ""
@@ -452,7 +452,7 @@ def find(
 
                 if not results:
                     console.print(
-                        f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"
+                        f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"  # noqa: E501
                     )
                     return
 
@@ -489,7 +489,7 @@ def find(
 
                 if snippets and "snippet" in result:
                     # Clean snippet of HTML tags
-                    output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
+                    output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")  # noqa: E501
 
                 output_results.append(output_result)
 
@@ -854,7 +854,7 @@ def delete(
         # Report results
         if deleted_count > 0:
             if hard:
-                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")
+                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")  # noqa: E501
             else:
                 console.print(f"\n[green]✅ Moved {deleted_count} document(s) to trash[/green]")
                 console.print("[dim]💡 Use 'emdx trash' to view deleted documents[/dim]")

@@ -10,7 +10,7 @@ Tests cover:
 import pytest
 
 # Skip all tests if datasketch not installed - must come before module imports
-datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")
+datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")  # noqa: E501
 
 from emdx.services.duplicate_detector import (  # noqa: E402
     DEFAULT_NUM_PERM,
@@ -149,7 +149,7 @@ class TestDuplicateDetector:
             conn.execute(
                 """INSERT INTO documents (title, content, project, is_deleted)
                    VALUES (?, ?, ?, 0)""",
-                ("Test Doc", "This is a test document with enough content to be indexed." * 5, "test"),
+                ("Test Doc", "This is a test document with enough content to be indexed." * 5, "test"),  # noqa: E501
             )
             conn.commit()
 
@@ -215,8 +215,8 @@ class TestDuplicateDetector:
         from emdx.database import db
 
         # Create documents with moderate similarity
-        content1 = "Python is a programming language. It is widely used for data science and web development." * 5
-        content2 = "JavaScript is a programming language. It is widely used for web development and frontend." * 5
+        content1 = "Python is a programming language. It is widely used for data science and web development." * 5  # noqa: E501
+        content2 = "JavaScript is a programming language. It is widely used for web development and frontend." * 5  # noqa: E501
 
         with db.get_connection() as conn:
             conn.execute(

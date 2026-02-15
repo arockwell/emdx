@@ -269,7 +269,7 @@ class KeybindingRegistry:
                     binding2=binding2,
                     conflict_type=ConflictType.SAME_CONTEXT,
                     # Downgrade to INFO if actions do the same thing
-                    severity=ConflictSeverity.INFO if similar_actions else ConflictSeverity.CRITICAL,
+                    severity=ConflictSeverity.INFO if similar_actions else ConflictSeverity.CRITICAL,  # noqa: E501
                 )
             # Same action = duplicate, not a conflict
             return None

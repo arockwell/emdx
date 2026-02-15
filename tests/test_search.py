@@ -487,7 +487,7 @@ class TestSearchResultFields:
         """Test that search snippet contains context around the match."""
         db = mock_db_connection
 
-        db.save_document("Python Guide", "This is a comprehensive guide to Python programming", "project1")
+        db.save_document("Python Guide", "This is a comprehensive guide to Python programming", "project1")  # noqa: E501
 
         results = search_documents("Python")
         assert len(results) == 1

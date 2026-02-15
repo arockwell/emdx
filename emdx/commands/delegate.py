@@ -93,7 +93,7 @@ def _slugify_title(title: str) -> str:
     """
     import re
     # Remove common prefixes like "Gameplan #1:", "Feature:", etc.
-    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()
+    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()  # noqa: E501
     # Keep only alphanumeric and spaces/hyphens
     slug = re.sub(r'[^a-zA-Z0-9\s-]', '', slug)
     # Collapse whitespace to hyphens, lowercase
@@ -374,7 +374,7 @@ def _run_parallel(
             try:
                 task_worktree_path, _ = create_worktree(base_branch)
                 if not quiet:
-                    sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")
+                    sys.stderr.write(f"delegate: worktree [{idx + 1}/{len(tasks)}] created at {task_worktree_path}\n")  # noqa: E501
             except Exception as e:
                 sys.stderr.write(f"delegate: failed to create worktree for task {idx + 1}: {e}\n")
                 return idx, (None, None)
@@ -408,7 +408,7 @@ def _run_parallel(
             results[idx] = result_pair
 
     # Collect doc_ids in original task order
-    doc_ids = [results[i][0] for i in range(len(tasks)) if results.get(i) and results[i][0] is not None]
+    doc_ids = [results[i][0] for i in range(len(tasks)) if results.get(i) and results[i][0] is not None]  # noqa: E501
 
     if not doc_ids:
         sys.stderr.write("delegate: parallel run completed but no output documents found\n")

@@ -54,7 +54,7 @@ def list_recipes():
     if not results:
         console.print("[dim]No recipes found. Create one with:[/dim]")
         console.print('  [cyan]emdx recipe create recipe.md[/cyan]')
-        console.print('  [cyan]echo "instructions" | emdx save --title "My Recipe" --tags "recipe"[/cyan]')
+        console.print('  [cyan]echo "instructions" | emdx save --title "My Recipe" --tags "recipe"[/cyan]')  # noqa: E501
         return
 
     console.print("[bold]Recipes[/bold]\n")

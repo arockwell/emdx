@@ -223,7 +223,7 @@ class CascadeRunItem(ActivityItem):
         run = self.cascade_run
 
         content_parts = [f"# Cascade Run #{run.get('id', '?')}\n"]
-        content_parts.append(f"\n**Pipeline:** {run.get('pipeline_display_name', run.get('pipeline_name', 'default'))}")
+        content_parts.append(f"\n**Pipeline:** {run.get('pipeline_display_name', run.get('pipeline_name', 'default'))}")  # noqa: E501
         content_parts.append(f"\n**Status:** {self.status}")
 
         if self.current_stage:

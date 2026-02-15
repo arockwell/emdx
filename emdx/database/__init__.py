@@ -134,7 +134,7 @@ class SQLiteDatabase:
             else:
                 conn.execute(
                     "UPDATE documents SET accessed_at = CURRENT_TIMESTAMP, "
-                    "access_count = access_count + 1 WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",
+                    "access_count = access_count + 1 WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",  # noqa: E501
                     (identifier_str,),
                 )
                 cursor = conn.execute(
@@ -173,7 +173,7 @@ class SQLiteDatabase:
 
         with self._connection.get_connection() as conn:
             cursor = conn.execute(
-                "UPDATE documents SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE documents SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",  # noqa: E501
                 (title, content, doc_id),
             )
             conn.commit()
@@ -194,7 +194,7 @@ class SQLiteDatabase:
                     )
                 else:
                     cursor = conn.execute(
-                        "DELETE FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",
+                        "DELETE FROM documents WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE",  # noqa: E501
                         (identifier_str,),
                     )
             else:
@@ -241,7 +241,7 @@ class SQLiteDatabase:
                 )
             else:
                 cursor = conn.execute(
-                    "SELECT COUNT(*) as total_documents, COUNT(DISTINCT project) as total_projects, "
+                    "SELECT COUNT(*) as total_documents, COUNT(DISTINCT project) as total_projects, "  # noqa: E501
                     "SUM(access_count) as total_views, AVG(access_count) as avg_views "
                     "FROM documents WHERE is_deleted = FALSE"
                 )
@@ -256,7 +256,7 @@ class SQLiteDatabase:
             if days:
                 cursor = conn.execute(
                     "SELECT id, title, project, deleted_at, access_count FROM documents "
-                    "WHERE is_deleted = TRUE AND deleted_at >= datetime('now', '-' || ? || ' days') "
+                    "WHERE is_deleted = TRUE AND deleted_at >= datetime('now', '-' || ? || ' days') "  # noqa: E501
                     "ORDER BY deleted_at DESC LIMIT ?",
                     (days, limit),
                 )

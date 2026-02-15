@@ -50,7 +50,7 @@ def isolate_test_database(tmp_path_factory):
         # SAFETY CHECK: Verify we're using the test database, not the real one
         real_db = Path.home() / ".config" / "emdx" / "knowledge.db"
         assert str(conn_module.db_connection.db_path) != str(real_db), \
-            f"CRITICAL: Test is using real database! Expected temp path, got {conn_module.db_connection.db_path}"
+            f"CRITICAL: Test is using real database! Expected temp path, got {conn_module.db_connection.db_path}"  # noqa: E501
 
         # Run migrations on the test database
         conn_module.db_connection.ensure_schema()
@@ -81,7 +81,7 @@ def isolate_test_database(tmp_path_factory):
 
         # Final safety verification
         assert str(conn_module.db_connection.db_path) == str(test_db_path), \
-            f"Database path mismatch: expected {test_db_path}, got {conn_module.db_connection.db_path}"
+            f"Database path mismatch: expected {test_db_path}, got {conn_module.db_connection.db_path}"  # noqa: E501
 
     except ImportError:
         pass  # Module not imported yet, will pick up env var on first import

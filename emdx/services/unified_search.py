@@ -106,7 +106,7 @@ class UnifiedSearchService:
                 query.tag_mode = "any"
             tag_str = tags_match.group(2)
             query.tags = [t.strip() for t in tag_str.split(",") if t.strip()]
-            remaining_text = remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]
+            remaining_text = remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]  # noqa: E501
 
         # Extract @tag patterns (alternative syntax)
         at_tags = re.findall(r"@(\w+)", remaining_text)
@@ -123,25 +123,25 @@ class UnifiedSearchService:
         after_match = re.search(r"after:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if after_match:
             query.created_after = parse_datetime(after_match.group(1))
-            remaining_text = remaining_text[: after_match.start()] + remaining_text[after_match.end() :]
+            remaining_text = remaining_text[: after_match.start()] + remaining_text[after_match.end() :]  # noqa: E501
 
         # Extract before: date
         before_match = re.search(r"before:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if before_match:
             query.created_before = parse_datetime(before_match.group(1))
-            remaining_text = remaining_text[: before_match.start()] + remaining_text[before_match.end() :]
+            remaining_text = remaining_text[: before_match.start()] + remaining_text[before_match.end() :]  # noqa: E501
 
         # Extract modified: date
         modified_match = re.search(r"modified:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if modified_match:
             query.modified_after = parse_datetime(modified_match.group(1))
-            remaining_text = remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]
+            remaining_text = remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]  # noqa: E501
 
         # Extract project: filter
         project_match = re.search(r"project:(\S+)", remaining_text, re.IGNORECASE)
         if project_match:
             query.project = project_match.group(1)
-            remaining_text = remaining_text[: project_match.start()] + remaining_text[project_match.end() :]
+            remaining_text = remaining_text[: project_match.start()] + remaining_text[project_match.end() :]  # noqa: E501
 
         # Clean up remaining text
         query.text = " ".join(remaining_text.split()).strip()

@@ -65,7 +65,7 @@ class TestMigrationCreatesTable:
         """Test that document_cascade_metadata table is created."""
         with setup_test_db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='document_cascade_metadata'"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='document_cascade_metadata'"  # noqa: E501
             )
             result = cursor.fetchone()
             assert result is not None
@@ -88,7 +88,7 @@ class TestMigrationCreatesTable:
         """Test that partial indexes are created."""
         with setup_test_db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='document_cascade_metadata'"
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='document_cascade_metadata'"  # noqa: E501
             )
             indexes = {row[0] for row in cursor.fetchall()}
 
@@ -113,7 +113,7 @@ class TestCascadeMetadataBackfill:
 
             # Manually insert into cascade metadata (simulating what migration does)
             conn.execute(
-                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, stage) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, stage) VALUES (?, ?)",  # noqa: E501
                 (doc_id, "idea"),
             )
             conn.commit()
@@ -139,7 +139,7 @@ class TestCascadeMetadataBackfill:
 
             # Manually insert
             conn.execute(
-                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, pr_url) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO document_cascade_metadata (document_id, pr_url) VALUES (?, ?)",  # noqa: E501
                 (doc_id, "https://github.com/test/repo/pull/1"),
             )
             conn.commit()

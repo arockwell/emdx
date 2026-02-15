@@ -218,7 +218,7 @@ def parse_stream_json_line_rich(line: str) -> StreamEvent:
                                     for t in todos[:5]:  # Show up to 5 todos
                                         status = t.get("status", "pending")
                                         content = t.get("content", "")[:40]
-                                        icon = "✅" if status == "completed" else "⏳" if status == "in_progress" else "○"
+                                        icon = "✅" if status == "completed" else "⏳" if status == "in_progress" else "○"  # noqa: E501
                                         todo_lines.append(f"{icon} {content}")
                                     summary = " | ".join(todo_lines)
                                     if len(todos) > 5:

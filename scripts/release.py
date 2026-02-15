@@ -212,12 +212,12 @@ def main():
         print("=== Features ===")
         for f in categories["features"][:20]:
             print(f"  - {f}")
-        print(f"\n  ... and {len(categories['features']) - 20} more" if len(categories["features"]) > 20 else "")
+        print(f"\n  ... and {len(categories['features']) - 20} more" if len(categories["features"]) > 20 else "")  # noqa: E501
 
         print("\n=== Fixes ===")
         for f in categories["fixes"][:20]:
             print(f"  - {f}")
-        print(f"\n  ... and {len(categories['fixes']) - 20} more" if len(categories["fixes"]) > 20 else "")
+        print(f"\n  ... and {len(categories['fixes']) - 20} more" if len(categories["fixes"]) > 20 else "")  # noqa: E501
 
         print(f"\nTotal: {len(categories['features'])} features, {len(categories['fixes'])} fixes")
 

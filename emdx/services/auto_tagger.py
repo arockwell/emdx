@@ -171,7 +171,7 @@ class AutoTagger:
                     if title_matches > 0:
                         confidence = min(1.0, confidence + 0.1)
                     else:
-                        confidence = base_confidence * 0.75  # Lower confidence for content-only match
+                        confidence = base_confidence * 0.75  # Lower confidence for content-only match  # noqa: E501
 
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:

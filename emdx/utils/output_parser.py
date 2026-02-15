@@ -46,7 +46,7 @@ def extract_output_doc_id(log_file: Path) -> int | None:
             r'saved as document #(\d+)',  # Agent natural language
             r'Saved as #(\d+)',           # CLI output
             r'Created document #(\d+)',
-            r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',  # Agent output (with optional "created" and markdown bold)
+            r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',  # Agent output (with optional "created" and markdown bold)  # noqa: E501
             r'\*\*Document ID:\*\*\s*(\d+)',  # Cursor markdown: **Document ID:** 5714
             r'document ID[:\s]+#?(\d+)',
             r'doc_id[:\s]+(\d+)',
@@ -67,7 +67,7 @@ def extract_output_doc_id(log_file: Path) -> int | None:
         logger.debug(f"Could not read log file {log_file}: {type(e).__name__}: {e}")
         return None
     except Exception as e:
-        logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
+        logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")  # noqa: E501
         return None
 
 def extract_token_usage(log_file: Path) -> int:
@@ -150,5 +150,5 @@ def extract_token_usage_detailed(log_file: Path) -> dict[str, int]:
         logger.debug(f"Could not read log file {log_file}: {type(e).__name__}: {e}")
         return empty
     except Exception as e:
-        logger.warning(f"Unexpected error extracting tokens from {log_file}: {type(e).__name__}: {e}")
+        logger.warning(f"Unexpected error extracting tokens from {log_file}: {type(e).__name__}: {e}")  # noqa: E501
         return empty

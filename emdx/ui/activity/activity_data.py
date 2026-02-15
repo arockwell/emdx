@@ -198,7 +198,8 @@ class ActivityDataLoader:
                     LEFT JOIN documents d ON e.doc_id = d.id
                     WHERE e.doc_id IS NOT NULL
                       AND e.started_at > ?
-                      AND (e.cascade_run_id IS NULL OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
+                      AND (e.cascade_run_id IS NULL
+                           OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
                       AND e.id = (
                           SELECT MAX(e2.id) FROM executions e2
                           WHERE e2.doc_id = e.doc_id
@@ -211,7 +212,7 @@ class ActivityDataLoader:
                 rows = cursor.fetchall()
 
             for row in rows:
-                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url, run_id = row
+                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url, run_id = row  # noqa: E501
 
                 if run_id and run_id in seen_run_ids:
                     continue

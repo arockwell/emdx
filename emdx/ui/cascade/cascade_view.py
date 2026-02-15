@@ -149,20 +149,20 @@ class CascadeView(Widget):
         if self.summary:
             self.summary.refresh_stats()
         if self.doc_list:
-            stage = STAGES[self.current_stage_idx] if self.current_stage_idx < len(STAGES) else "idea"
+            stage = STAGES[self.current_stage_idx] if self.current_stage_idx < len(STAGES) else "idea"  # noqa: E501
             self.doc_list.load_stage(stage)
         # Refresh preview if a running execution just completed
-        if self._selected_pipeline_idx is not None and self._selected_pipeline_idx < len(self._pipeline_data):
+        if self._selected_pipeline_idx is not None and self._selected_pipeline_idx < len(self._pipeline_data):  # noqa: E501
             act = self._pipeline_data[self._selected_pipeline_idx]
             if act.get("output_id") and self._pipeline_view_mode == "output":
-                if self._selected_exec and self._selected_exec.get("status") == "running" and act.get("status") != "running":
+                if self._selected_exec and self._selected_exec.get("status") == "running" and act.get("status") != "running":  # noqa: E501
                     self._show_pipeline_preview(act)
 
     # ── Pipeline table ────────────────────────────────────────────
 
     def _setup_pipeline_table(self) -> None:
         if self.pipeline_table:
-            for label, w in [("Exec", 6), ("Time", 8), ("Input", 7), ("\u2192", 14), ("Output", 7), ("Status", 10)]:
+            for label, w in [("Exec", 6), ("Time", 8), ("Input", 7), ("\u2192", 14), ("Output", 7), ("Status", 10)]:  # noqa: E501
                 self.pipeline_table.add_column(label, width=w)
 
     def refresh_all(self) -> None:
@@ -176,7 +176,7 @@ class CascadeView(Widget):
             if doc_id:
                 self._show_document_preview(doc_id)
         self._refresh_pipeline_table()
-        self._update_status("[green]\u25cf[/green] Auto-refresh \u2502 [dim]h/l[/dim] stages \u2502 [dim]j/k[/dim] docs \u2502 [dim]a[/dim] advance \u2502 [dim]p[/dim] process \u2502 [dim]s[/dim] synthesize")
+        self._update_status("[green]\u25cf[/green] Auto-refresh \u2502 [dim]h/l[/dim] stages \u2502 [dim]j/k[/dim] docs \u2502 [dim]a[/dim] advance \u2502 [dim]p[/dim] process \u2502 [dim]s[/dim] synthesize")  # noqa: E501
 
     def _refresh_pipeline_table(self) -> None:
         if not self.pipeline_table:
@@ -185,19 +185,19 @@ class CascadeView(Widget):
         self.pipeline_table.clear()
         self._pipeline_data = get_recent_pipeline_activity(limit=10)
 
-        STATUS_DISPLAY = {"completed": "[green]\u2713 done[/green]", "running": "[yellow]\u27f3 run[/yellow]", "failed": "[red]\u2717 fail[/red]"}
+        STATUS_DISPLAY = {"completed": "[green]\u2713 done[/green]", "running": "[yellow]\u27f3 run[/yellow]", "failed": "[red]\u2717 fail[/red]"}  # noqa: E501
 
         for act in self._pipeline_data:
             exec_id = act.get("exec_id")
             ts = act.get("completed_at") or act.get("started_at")
             try:
-                time_str = (ts.strftime("%H:%M:%S") if isinstance(ts, datetime) else datetime.fromisoformat(str(ts)).strftime("%H:%M:%S")) if ts else ""
+                time_str = (ts.strftime("%H:%M:%S") if isinstance(ts, datetime) else datetime.fromisoformat(str(ts)).strftime("%H:%M:%S")) if ts else ""  # noqa: E501
             except Exception:
                 time_str = "?"
 
             from_stage, to_stage = act.get("from_stage", "?"), act.get("output_stage", "?")
             fe, te = STAGE_EMOJI.get(from_stage, ""), STAGE_EMOJI.get(to_stage, "")
-            transition = f"{fe}{from_stage}\u2192{te}{to_stage}" if to_stage and to_stage != "?" else f"{fe}{from_stage}\u2192..."
+            transition = f"{fe}{from_stage}\u2192{te}{to_stage}" if to_stage and to_stage != "?" else f"{fe}{from_stage}\u2192..."  # noqa: E501
             output_id = act.get("output_id")
             status = act.get("status", "?")
 
@@ -316,7 +316,7 @@ class CascadeView(Widget):
                 self.w = w
             def on_log_content(self, content):
                 try:
-                    view.app.call_from_thread(lambda: (LiveLogWriter(self.w, auto_scroll=True).write(content), self.w.refresh()))
+                    view.app.call_from_thread(lambda: (LiveLogWriter(self.w, auto_scroll=True).write(content), self.w.refresh()))  # noqa: E501
                 except Exception as e:
                     logger.error(f"call_from_thread failed: {e}")
             def on_log_error(self, error):
@@ -392,7 +392,7 @@ class CascadeView(Widget):
     def _move_cursor_and_preview(self, direction: int) -> None:
         """Move cursor in the focused table and update preview."""
         if self.pipeline_table and self.pipeline_table.has_focus:
-            (self.pipeline_table.action_cursor_down if direction > 0 else self.pipeline_table.action_cursor_up)()
+            (self.pipeline_table.action_cursor_down if direction > 0 else self.pipeline_table.action_cursor_up)()  # noqa: E501
             row_idx = self.pipeline_table.cursor_row
             if row_idx < len(self._pipeline_data):
                 self._selected_pipeline_idx = row_idx
@@ -431,7 +431,7 @@ class CascadeView(Widget):
         input_id = act.get("input_id")
         if input_id:
             self._show_document_preview(input_id)
-            self._update_status(f"[cyan]Input mode[/cyan] - showing #{input_id} (press 'o' for output)")
+            self._update_status(f"[cyan]Input mode[/cyan] - showing #{input_id} (press 'o' for output)")  # noqa: E501
         else:
             self._update_status("[yellow]No input document[/yellow]")
 
@@ -443,7 +443,7 @@ class CascadeView(Widget):
         output_id = act.get("output_id")
         if output_id:
             self._show_document_preview(output_id)
-            self._update_status(f"[cyan]Output mode[/cyan] - showing #{output_id} (press 'i' for input)")
+            self._update_status(f"[cyan]Output mode[/cyan] - showing #{output_id} (press 'i' for input)")  # noqa: E501
         else:
             self._show_execution_preview(act)
             self._update_status("[yellow]No output yet - showing execution log[/yellow]")
@@ -512,7 +512,7 @@ class CascadeView(Widget):
         if not selected_ids:
             selected_ids = [d["id"] for d in list_documents_at_stage(stage)]
         if len(selected_ids) < 2:
-            self._update_status(f"[yellow]Need 2+ docs to synthesize (selected: {len(selected_ids)})[/yellow]")
+            self._update_status(f"[yellow]Need 2+ docs to synthesize (selected: {len(selected_ids)})[/yellow]")  # noqa: E501
             return
 
         parts = []

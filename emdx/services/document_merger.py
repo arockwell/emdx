@@ -99,7 +99,7 @@ class DocumentMerger:
         prefilter_threshold = min(self.PREFILTER_THRESHOLD, threshold * 0.5)
         similar_pairs = self._similarity_service.find_all_duplicate_pairs(
             min_similarity=prefilter_threshold,
-            progress_callback=lambda c, t, f: progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None
+            progress_callback=lambda c, t, f: progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None  # noqa: E501
         )
 
         if progress_callback:

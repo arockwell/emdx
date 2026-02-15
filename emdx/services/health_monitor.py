@@ -104,7 +104,7 @@ class HealthMonitor:
             total_docs = cursor.fetchone()[0]
 
             # Total projects
-            cursor.execute("SELECT COUNT(DISTINCT project) FROM documents WHERE is_deleted = 0 AND project IS NOT NULL")
+            cursor.execute("SELECT COUNT(DISTINCT project) FROM documents WHERE is_deleted = 0 AND project IS NOT NULL")  # noqa: E501
             total_projects = cursor.fetchone()[0]
 
             # Total tags
@@ -112,7 +112,7 @@ class HealthMonitor:
             total_tags = cursor.fetchone()[0]
 
             # Database size
-            cursor.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+            cursor.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")  # noqa: E501
             db_size = cursor.fetchone()[0]
 
         return {
@@ -200,7 +200,7 @@ class HealthMonitor:
         # Generate recommendations
         recommendations = []
         if stats['total_duplicates'] > 0:
-            recommendations.append(f"Remove {stats['total_duplicates']} duplicates with 'emdx clean duplicates'")
+            recommendations.append(f"Remove {stats['total_duplicates']} duplicates with 'emdx clean duplicates'")  # noqa: E501
             if stats['space_wasted'] > 1024 * 1024:  # 1MB
                 mb_wasted = stats['space_wasted'] / 1024 / 1024
                 recommendations.append(f"Save {mb_wasted:.1f}MB by removing duplicates")
@@ -210,7 +210,7 @@ class HealthMonitor:
             value=health_value,
             weight=self.WEIGHTS['duplicate_ratio'],
             status=status,
-            details=f"{stats['total_duplicates']} duplicates found ({duplicate_ratio:.1%} of total)",
+            details=f"{stats['total_duplicates']} duplicates found ({duplicate_ratio:.1%} of total)",  # noqa: E501
             recommendations=recommendations
         )
 
@@ -356,7 +356,7 @@ class HealthMonitor:
         if week_active < total * 0.1:
             recommendations.append("Knowledge base is underutilized - review and update content")
         if new_last_month == 0:
-            recommendations.append("No new documents in the last month - consider capturing new knowledge")
+            recommendations.append("No new documents in the last month - consider capturing new knowledge")  # noqa: E501
 
         stale_count = total - quarter_active
         if stale_count > total * 0.5:
@@ -528,7 +528,8 @@ class HealthMonitor:
                     COUNT(*) as doc_count,
                     COUNT(DISTINCT dt.document_id) as tagged_count,
                     AVG(julianday('now') - julianday(d.created_at)) as avg_age,
-                    SUM(CASE WHEN julianday('now') - julianday(d.accessed_at) < 30 THEN 1 ELSE 0 END) as recent_access
+                    SUM(CASE WHEN julianday('now') - julianday(d.accessed_at) < 30
+                        THEN 1 ELSE 0 END) as recent_access
                 FROM documents d
                 LEFT JOIN document_tags dt ON d.id = dt.document_id
                 WHERE d.is_deleted = 0 AND d.project IS NOT NULL
@@ -637,7 +638,7 @@ class HealthMonitor:
         # Metrics breakdown
         report.append("## Health Metrics")
         for metric_name, metric in health['metrics'].items():
-            status_emoji = "🟢" if metric.status == 'good' else "🟡" if metric.status == 'warning' else "🔴"
+            status_emoji = "🟢" if metric.status == 'good' else "🟡" if metric.status == 'warning' else "🔴"  # noqa: E501
             report.append(f"\n### {metric_name.replace('_', ' ').title()} {status_emoji}")
             report.append(f"- **Score**: {metric.value:.0%}")
             report.append(f"- **Status**: {metric.status}")

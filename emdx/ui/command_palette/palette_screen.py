@@ -208,7 +208,7 @@ class CommandPaletteScreen(ModalScreen):
             _debug_log(f"Skipping stale render {render_id}")
             return
 
-        _debug_log(f"_render_results called with {len(state.results)} results (render_id={render_id})")
+        _debug_log(f"_render_results called with {len(state.results)} results (render_id={render_id})")  # noqa: E501
         try:
             results_view = self.query_one("#palette-results", ListView)
             await results_view.clear()

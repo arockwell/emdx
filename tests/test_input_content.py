@@ -14,10 +14,10 @@ class TestGetInputContent:
     """Test the get_input_content function, especially the stdin/file path bug fix."""
 
     def test_file_path_with_empty_stdin_in_subprocess_context(self):
-        """Test that file paths work when stdin appears available but is empty (like in poetry run)."""
+        """Test that file paths work when stdin appears available but is empty (like in poetry run)."""  # noqa: E501
         # Create a temporary file with content
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-            temp_file.write("# Test Content\n\nThis should be read from file, not from empty stdin.")
+            temp_file.write("# Test Content\n\nThis should be read from file, not from empty stdin.")  # noqa: E501
             temp_file_path = temp_file.name
 
         try:

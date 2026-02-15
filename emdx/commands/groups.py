@@ -267,7 +267,7 @@ def _add_group_to_tree(parent_tree: Tree, group: dict, include_inactive: bool) -
     }
     icon = type_icons.get(group['group_type'], '📁')
 
-    label = f"{icon} [cyan]#{group['id']}[/cyan] {group['name']} [dim]({group['doc_count']} docs)[/dim]"
+    label = f"{icon} [cyan]#{group['id']}[/cyan] {group['name']} [dim]({group['doc_count']} docs)[/dim]"  # noqa: E501
     branch = parent_tree.add(label)
 
     # Add child groups
@@ -309,7 +309,7 @@ def show(
         }
         icon = type_icons.get(group['group_type'], '📁')
 
-        console.print(f"\n{icon} [bold cyan]#{group['id']}:[/bold cyan] [bold]{group['name']}[/bold]")
+        console.print(f"\n{icon} [bold cyan]#{group['id']}:[/bold cyan] [bold]{group['name']}[/bold]")  # noqa: E501
         console.print("=" * 50)
 
         # Metadata
@@ -340,16 +340,16 @@ def show(
             console.print(f"\n[bold]Child Groups ({len(children)}):[/bold]")
             for child in children:
                 child_icon = type_icons.get(child['group_type'], '📁')
-                console.print(f"  {child_icon} #{child['id']} {child['name']} ({child['doc_count']} docs)")
+                console.print(f"  {child_icon} #{child['id']} {child['name']} ({child['doc_count']} docs)")  # noqa: E501
 
         # Members
         members = groups.get_group_members(group_id)
         if members:
             console.print(f"\n[bold]Documents ({len(members)}):[/bold]")
             for m in members[:20]:
-                role_icon = {'primary': '★', 'synthesis': '📝', 'exploration': '◇', 'variant': '≈'}.get(m['role'], '•')
+                role_icon = {'primary': '★', 'synthesis': '📝', 'exploration': '◇', 'variant': '≈'}.get(m['role'], '•')  # noqa: E501
                 title = m['title'][:40] if len(m['title']) > 40 else m['title']
-                console.print(f"  {role_icon} [cyan]#{m['id']}[/cyan] {title} [dim]({m['role']})[/dim]")
+                console.print(f"  {role_icon} [cyan]#{m['id']}[/cyan] {title} [dim]({m['role']})[/dim]")  # noqa: E501
             if len(members) > 20:
                 console.print(f"  [dim]... and {len(members) - 20} more documents[/dim]")
         else:
@@ -382,9 +382,9 @@ def delete(
         if not force:
             console.print(f"\n[bold]Will delete group:[/bold] #{group_id} ({group['name']})")
             if children:
-                console.print(f"[yellow]Warning: This group has {len(children)} child group(s) that will also be deleted[/yellow]")
+                console.print(f"[yellow]Warning: This group has {len(children)} child group(s) that will also be deleted[/yellow]")  # noqa: E501
             if members:
-                console.print(f"[dim]Note: {len(members)} document(s) will be removed from group (documents not deleted)[/dim]")
+                console.print(f"[dim]Note: {len(members)} document(s) will be removed from group (documents not deleted)[/dim]")  # noqa: E501
 
             if not typer.confirm("Continue?"):
                 raise typer.Abort()
@@ -409,7 +409,7 @@ def edit(
     group_id: int = typer.Argument(..., help="Group ID to edit"),
     name: str | None = typer.Option(None, "--name", "-n", help="New name"),
     description: str | None = typer.Option(None, "--description", "-d", help="New description"),
-    parent: int | None = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),
+    parent: int | None = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),  # noqa: E501
     group_type: str | None = typer.Option(None, "--type", "-t", help="New group type"),
 ) -> None:
     """Edit group properties."""

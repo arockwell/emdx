@@ -154,7 +154,7 @@ def main():
                                 write_log("🛠️ Tools available:")
                                 for i, tool in enumerate(basic_tools, 1):
                                     write_log(f"    {i:2d}. {tool}")
-                                if len(basic_tools) > 20:  # Only show first 20 to keep logs readable
+                                if len(basic_tools) > 20:  # Only show first 20 to keep logs readable  # noqa: E501
                                     write_log(f"         ...and {len(basic_tools) - 20} more")
 
                             if mcp_tools:

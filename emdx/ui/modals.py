@@ -236,7 +236,7 @@ class HelpMixin:
             bindings_list.append((category, display_key, description))
 
         # Sort by category, then by key
-        category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]
+        category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]  # noqa: E501
 
         def sort_key(item):
             cat = item[0]
@@ -349,7 +349,7 @@ class DocumentPreviewModal(ModalScreen):
 
             self._doc_data = get_document(self.doc_id)
             if not self._doc_data:
-                self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")
+                self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")  # noqa: E501
                 return
 
             # Update header

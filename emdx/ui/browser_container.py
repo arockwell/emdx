@@ -114,7 +114,7 @@ class BrowserContainer(App):
         register_all_themes(self)
 
         # Use CLI theme if provided, otherwise load from config
-        if self._initial_theme and (self._initial_theme in get_theme_names() or self._initial_theme in self.available_themes):
+        if self._initial_theme and (self._initial_theme in get_theme_names() or self._initial_theme in self.available_themes):  # noqa: E501
             self.theme = self._initial_theme
         else:
             saved_theme = get_theme()
@@ -199,7 +199,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{escape(str(e))}")
+                    self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{escape(str(e))}")  # noqa: E501
             elif browser_type == "log":
                 from .log_browser import LogBrowser
                 self.browsers[browser_type] = LogBrowser()
@@ -211,7 +211,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
             elif browser_type == "document":
                 try:
                     from .document_browser import DocumentBrowser
@@ -220,7 +220,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
             elif browser_type == "search":
                 try:
                     from .search import SearchScreen
@@ -229,7 +229,7 @@ class BrowserContainer(App):
                 except Exception as e:
                     logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Search screen failed to load:\n{escape(str(e))}\n\nCheck logs for details.")
+                    self.browsers[browser_type] = Static(f"Search screen failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
             else:
                 # Unknown browser type - fallback to document
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
@@ -366,7 +366,7 @@ class BrowserContainer(App):
 
         def dump_widget(widget, indent=0):
             prefix = "  " * indent
-            lines.append(f"{prefix}{widget.__class__.__name__} id={widget.id} region={widget.region}")
+            lines.append(f"{prefix}{widget.__class__.__name__} id={widget.id} region={widget.region}")  # noqa: E501
             for child in widget.children:
                 dump_widget(child, indent + 1)
 

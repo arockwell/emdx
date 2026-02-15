@@ -171,7 +171,7 @@ class EnvironmentValidator:
         if claude_config.exists():
             self.info["claude_config"] = str(claude_config)
         else:
-            self.warnings.append("Claude config file not found - claude might not be properly configured")
+            self.warnings.append("Claude config file not found - claude might not be properly configured")  # noqa: E501
 
         # Check ANTHROPIC_API_KEY
         if os.environ.get("ANTHROPIC_API_KEY"):

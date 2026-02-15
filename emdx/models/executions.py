@@ -92,7 +92,8 @@ def get_execution(exec_id: int) -> Execution | None:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
             FROM executions WHERE id = ?
         """, (exec_id,))
 
@@ -122,7 +123,8 @@ def get_recent_executions(limit: int = 20) -> list[Execution]:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
             FROM executions
             ORDER BY id DESC
             LIMIT ?
@@ -154,7 +156,8 @@ def get_running_executions() -> list[Execution]:
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
+            SELECT id, doc_id, doc_title, status, started_at, completed_at,
+                   log_file, exit_code, working_dir, pid
             FROM executions
             WHERE status = 'running'
             ORDER BY started_at DESC

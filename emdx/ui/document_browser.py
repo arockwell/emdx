@@ -123,7 +123,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     table_container.styles.min_height = 10
                     table_container.styles.padding = (1, 0, 0, 0)  # Top padding for spacing
                     yield DataTable(id="doc-table")
-                with Vertical(id="details-container", classes="details-section") as details_container:
+                with Vertical(id="details-container", classes="details-section") as details_container:  # noqa: E501
                     # Apply direct styles - 1/3 of sidebar
                     details_container.styles.height = "34%"
                     details_container.styles.min_height = 8
@@ -149,7 +149,7 @@ class DocumentBrowser(HelpMixin, Widget):
         yield Static("Ready", id="browser-status", classes="browser-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [bold]4[/bold] Docs │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [bold]4[/bold] Docs │ "  # noqa: E501
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] view │ [dim]e[/dim] edit",
             id="nav-bar", classes="nav-bar"
         )
@@ -917,7 +917,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     status_text = f"{vm.filtered_count}/{vm.total_count} docs"
                 else:
                     status_text = "0/0 docs"
-                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"
+                status_text += " | e=edit | n=new | /=search | t=tag | x=execute | r=refresh | q=quit"  # noqa: E501
                 app.update_status(status_text)
         except (LookupError, AttributeError) as e:
             logger.debug(

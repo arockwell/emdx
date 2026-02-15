@@ -195,9 +195,9 @@ class GroupPicker(Widget):
         if not self.filtered_groups:
             input_widget = self.query_one("#group-input", Input)
             if input_widget.value:
-                list_widget.update(f"  [dim]Press Tab to create '[/dim]{input_widget.value}[dim]'[/dim]")
+                list_widget.update(f"  [dim]Press Tab to create '[/dim]{input_widget.value}[dim]'[/dim]")  # noqa: E501
             else:
-                list_widget.update("  [dim]No groups yet. Type a name and press Tab to create.[/dim]")
+                list_widget.update("  [dim]No groups yet. Type a name and press Tab to create.[/dim]")  # noqa: E501
             return
 
         lines = []

@@ -72,7 +72,7 @@ class TestRecipeList:
     @patch("emdx.commands.recipe.search_by_tags")
     def test_list_shows_recipes(self, mock_tags):
         mock_tags.return_value = [
-            {"id": 42, "title": "Security Audit", "content": "# Security Audit\nCheck all endpoints"},
+            {"id": 42, "title": "Security Audit", "content": "# Security Audit\nCheck all endpoints"},  # noqa: E501
             {"id": 43, "title": "Code Review", "content": "Review code quality"},
         ]
         result = runner.invoke(app, ["list"])

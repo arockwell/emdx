@@ -34,7 +34,8 @@ class ClaudeCliExecutor(CliExecutor):
         """Build Claude CLI command.
 
         Claude command format:
-            claude --print "prompt" --model <model> --output-format <format> [--verbose] [--allowedTools X,Y,Z]
+            claude --print "prompt" --model <model> --output-format <format>
+                   [--verbose] [--allowedTools X,Y,Z]
         """
         # Start with binary
         cmd = list(self.config.binary)

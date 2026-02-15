@@ -288,13 +288,15 @@ def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> 
     projects.sort(key=lambda p: p.name.lower())
     return projects
 
-def discover_git_projects(search_paths: list[str] | None = None, max_depth: int = 1) -> list[GitProject]:
+def discover_git_projects(search_paths: list[str] | None = None, max_depth: int = 1) -> list[GitProject]:  # noqa: E501
     """
     Discover git projects in common locations.
 
     Args:
-        search_paths: Optional list of paths to search. Defaults to ~/dev/worktrees and parent of current dir.
-        max_depth: Maximum directory depth to search (default 1 = only immediate children)
+        search_paths: Optional list of paths to search. Defaults to
+            ~/dev/worktrees and parent of current dir.
+        max_depth: Maximum directory depth to search (default 1 = only
+            immediate children)
 
     Returns:
         List of GitProject objects
@@ -476,13 +478,13 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None)
     output_parts = []
 
     # Add staged changes if they exist
-    if staged_diff and not staged_diff.startswith("No staged changes") and not staged_diff.startswith("Error:"):
+    if staged_diff and not staged_diff.startswith("No staged changes") and not staged_diff.startswith("Error:"):  # noqa: E501
         output_parts.append("[bold green]📦 STAGED CHANGES[/bold green]")
         output_parts.append(staged_diff)
         output_parts.append("")
 
     # Add unstaged changes if they exist
-    if unstaged_diff and not unstaged_diff.startswith("No unstaged changes") and not unstaged_diff.startswith("Error:"):
+    if unstaged_diff and not unstaged_diff.startswith("No unstaged changes") and not unstaged_diff.startswith("Error:"):  # noqa: E501
         output_parts.append("[bold yellow]📝 UNSTAGED CHANGES[/bold yellow]")
         output_parts.append(unstaged_diff)
         output_parts.append("")
@@ -648,7 +650,7 @@ def git_discard_changes(file_path: str, worktree_path: str | None = None) -> boo
     except subprocess.CalledProcessError:
         return False
 
-def create_worktree(branch_name: str, path: str | None = None, base_branch: str | None = None, repo_path: str | None = None) -> tuple[bool, str, str]:
+def create_worktree(branch_name: str, path: str | None = None, base_branch: str | None = None, repo_path: str | None = None) -> tuple[bool, str, str]:  # noqa: E501
     """
     Create a new git worktree.
 
@@ -666,7 +668,7 @@ def create_worktree(branch_name: str, path: str | None = None, base_branch: str 
         # Use provided repo_path or current directory
         repo_root = get_repository_root(repo_path)
         if not repo_root:
-            return False, "", f"Not in a git repository (checked path: {repo_path or 'current directory'})"
+            return False, "", f"Not in a git repository (checked path: {repo_path or 'current directory'})"  # noqa: E501
 
         # Auto-generate path if not provided
         if not path:

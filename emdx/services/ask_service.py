@@ -283,7 +283,7 @@ Rules:
                 messages=[
                     {
                         "role": "user",
-                        "content": f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}",
+                        "content": f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}",  # noqa: E501
                     }
                 ],
             )

@@ -13,7 +13,7 @@ def gui(
         None,
         "--theme",
         "-t",
-        help="Theme to use (emdx-dark, emdx-light, emdx-nord, emdx-solarized-dark, emdx-solarized-light)",
+        help="Theme to use (emdx-dark, emdx-light, emdx-nord, emdx-solarized-dark, emdx-solarized-light)",  # noqa: E501
     ),
 ):
     """TUI browser for the EMDX knowledge base."""

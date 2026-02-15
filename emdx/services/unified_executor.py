@@ -116,9 +116,9 @@ def format_stream_line(line: str, timestamp: float) -> str | None:
             duration = data.get("duration_ms", 0)
             if is_error:
                 result_text = data.get("result", "Unknown error")[:100]
-                return f"{format_timestamp(timestamp)} ❌ Failed ({duration}ms): {result_text}\n__RAW_RESULT_JSON__:{line}"
+                return f"{format_timestamp(timestamp)} ❌ Failed ({duration}ms): {result_text}\n__RAW_RESULT_JSON__:{line}"  # noqa: E501
             else:
-                return f"{format_timestamp(timestamp)} ✅ Completed ({duration}ms)\n__RAW_RESULT_JSON__:{line}"
+                return f"{format_timestamp(timestamp)} ✅ Completed ({duration}ms)\n__RAW_RESULT_JSON__:{line}"  # noqa: E501
 
         elif msg_type == "error":
             error = data.get("error", {}).get("message", "Unknown error")
@@ -442,7 +442,7 @@ class UnifiedExecutor:
                 usage = extract_token_usage_detailed(log_file)
                 if usage.get('total', 0) > 0:
                     result.tokens_used = usage.get('total', 0)
-                    result.input_tokens = usage.get('input', 0) + usage.get('cache_in', 0) + usage.get('cache_create', 0)
+                    result.input_tokens = usage.get('input', 0) + usage.get('cache_in', 0) + usage.get('cache_create', 0)  # noqa: E501
                     result.output_tokens = usage.get('output', 0)
                     result.cost_usd = usage.get('cost_usd', 0.0)
 

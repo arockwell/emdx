@@ -76,7 +76,7 @@ class VimEditTextArea(TextArea):
         self.yanked_text = ""
         self.command_buffer = ""  # For vim commands like :w, :q, etc.
         # Store original content to detect changes
-        self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''
+        self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''  # noqa: E501
 
         # Set initial cursor style for NORMAL mode (solid, non-blinking)
         self.show_cursor = True
@@ -335,10 +335,10 @@ class VimEditTextArea(TextArea):
                 title_input = self.app_instance.query_one("#title-input")
                 title_input.focus()
                 # Update status based on mode
-                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
-                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:  # noqa: E501
+                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")  # noqa: E501
                 else:
-                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
+                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")  # noqa: E501
                 event.stop()
                 return
             except Exception as e:
@@ -363,10 +363,10 @@ class VimEditTextArea(TextArea):
                 title_input = self.app_instance.query_one("#title-input")
                 title_input.focus()
                 # Update status based on mode
-                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:
-                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")
+                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:  # noqa: E501
+                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")  # noqa: E501
                 else:
-                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
+                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")  # noqa: E501
                 event.stop()
                 return
             except Exception as e:
@@ -433,7 +433,7 @@ class VimEditTextArea(TextArea):
                 self._update_cursor_style()
                 self.command_buffer = ""
                 self.app_instance._update_vim_status("NORMAL | ESC=exit")
-        elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:
+        elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:  # noqa: E501
             # Add character to command buffer
             self.command_buffer += event.character
             self.app_instance._update_vim_status(f"COMMAND {self.command_buffer}")
@@ -460,7 +460,7 @@ class VimEditTextArea(TextArea):
             # Quit without saving (check for changes)
             if self.text != self.original_content:
                 # Show error - changes not saved
-                self.app_instance._update_vim_status("No write since last change (add ! to override)")
+                self.app_instance._update_vim_status("No write since last change (add ! to override)")  # noqa: E501
                 self.command_buffer = ""
                 return
             else:

@@ -80,14 +80,14 @@ class TestVimLineNumbers:
         """Test that exactly one line shows the current line's absolute number."""
         for total_lines in range(1, 10):
             for cursor_pos in range(total_lines):
-                result = calculate_vim_line_numbers(current_line=cursor_pos, total_lines=total_lines)
+                result = calculate_vim_line_numbers(current_line=cursor_pos, total_lines=total_lines)  # noqa: E501
 
                 # The current line should show its absolute number
                 expected_current_line_number = f"{cursor_pos+1:>3}"
                 current_line_display = result[cursor_pos]
 
                 assert current_line_display == expected_current_line_number, \
-                    f"Line {cursor_pos} should show '{expected_current_line_number}', got '{current_line_display}'"
+                    f"Line {cursor_pos} should show '{expected_current_line_number}', got '{current_line_display}'"  # noqa: E501
 
                 # All other lines should show distances (not their absolute numbers)
                 for i in range(total_lines):
@@ -97,7 +97,7 @@ class TestVimLineNumbers:
                         expected_distance_str = f"{expected_distance:>3}"
 
                         assert line_display == expected_distance_str, \
-                            f"Line {i} should show distance '{expected_distance_str}', got '{line_display}'"
+                            f"Line {i} should show distance '{expected_distance_str}', got '{line_display}'"  # noqa: E501
 
     def test_distance_calculation(self):
         """Test that distances are calculated correctly."""

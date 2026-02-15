@@ -25,7 +25,7 @@ from ..utils.output import console
 def analyze(
     health: bool = typer.Option(False, "--health", "-h", help="Show detailed health metrics"),
     duplicates: bool = typer.Option(False, "--duplicates", "-d", help="Find duplicate documents"),
-    similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),
+    similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),  # noqa: E501
     empty: bool = typer.Option(False, "--empty", "-e", help="Find empty documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Analyze tag coverage and patterns"),
     projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
@@ -140,7 +140,7 @@ def _analyze_health():
         "red"
     )
 
-    console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")
+    console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")  # noqa: E501
 
     # Detailed metrics
     console.print("\n[bold]Health Metrics:[/bold]")
@@ -229,7 +229,7 @@ def _analyze_duplicates():
     # Exact duplicates
     if exact_dupes:
         total_exact = sum(len(group) - 1 for group in exact_dupes)
-        console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")
+        console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")  # noqa: E501
 
         # Show a few examples
         for i, group in enumerate(exact_dupes[:3], 1):
@@ -237,7 +237,7 @@ def _analyze_duplicates():
 
     # Near duplicates
     if near_dupes:
-        console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")
+        console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")  # noqa: E501
 
         # Show a few examples
         for _i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
@@ -302,7 +302,7 @@ def _analyze_empty():
     # Show examples
     console.print("\n  Examples:")
     for doc in empty_docs[:5]:
-        console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")
+        console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")  # noqa: E501
 
     if len(empty_docs) > 5:
         console.print(f"    [dim]... and {len(empty_docs) - 5} more[/dim]")
@@ -319,9 +319,11 @@ def _analyze_tags(project: str | None = None):
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
-                    AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
+                    AVG(CASE WHEN dt.document_id IS NOT NULL
+                        THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
                 LEFT JOIN (
                     SELECT document_id, COUNT(*) as tag_count
@@ -336,7 +338,8 @@ def _analyze_tags(project: str | None = None):
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
                     AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
@@ -357,9 +360,9 @@ def _analyze_tags(project: str | None = None):
         if project:
             console.print(f"  [dim]Project: {project}[/dim]")
 
-        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
 
-        console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")
+        console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")  # noqa: E501
         console.print(f"  Total Documents: {stats['total_docs']:,}")
         console.print(f"  Tagged Documents: {stats['tagged_docs']:,}")
         console.print(f"  Unique Tags: {stats['unique_tags']}")
@@ -599,7 +602,8 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
                     AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
@@ -616,7 +620,8 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
             cursor.execute("""
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
-                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL THEN d.id END) as tagged_docs,
+                    COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                        THEN d.id END) as tagged_docs,
                     COUNT(DISTINCT t.id) as unique_tags,
                     AVG(CASE WHEN dt.document_id IS NOT NULL THEN tag_count ELSE 0 END) as avg_tags
                 FROM documents d
@@ -631,7 +636,7 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
             """)
 
         stats = cursor.fetchone()
-        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0
+        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
 
         result = {
             "project": project,

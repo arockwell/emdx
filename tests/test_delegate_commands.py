@@ -460,9 +460,9 @@ class TestRunParallel:
         mock_executor = MagicMock()
         # Each call returns a different doc_id
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),
-            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),
+            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
+            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
+            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -492,10 +492,10 @@ class TestRunParallel:
         mock_executor = MagicMock()
         # 3 tasks + 1 synthesis
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),
-            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),
-            ExecutionResult(success=True, execution_id=4, log_file=Path("/tmp/4.log"), output_doc_id=99),  # synthesis
+            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
+            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
+            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),  # noqa: E501
+            ExecutionResult(success=True, execution_id=4, log_file=Path("/tmp/4.log"), output_doc_id=99),  # synthesis  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -591,9 +591,9 @@ class TestRunChain:
         mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Step output"}
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),
-            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),
+            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
+            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
+            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -617,11 +617,11 @@ class TestRunChain:
     ):
         """Verify that output from one step is passed to the next."""
         mock_create.return_value = 1
-        mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Previous step output content"}
+        mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Previous step output content"}  # noqa: E501
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),
+            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
+            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -648,8 +648,8 @@ class TestRunChain:
         mock_create.return_value = 1
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),
-            ExecutionResult(success=False, execution_id=2, log_file=Path("/tmp/2.log"), error_message="Failed"),
+            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
+            ExecutionResult(success=False, execution_id=2, log_file=Path("/tmp/2.log"), error_message="Failed"),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
         mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Step output"}
@@ -678,8 +678,8 @@ class TestRunChain:
         mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Content"}
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),
+            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
+            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 

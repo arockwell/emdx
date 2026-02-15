@@ -263,7 +263,7 @@ class TestCustomPatterns:
             confidence=0.85
         )
 
-        suggestions = tagger.analyze_document("Meeting: Sprint planning", "Action items: Plan tasks")
+        suggestions = tagger.analyze_document("Meeting: Sprint planning", "Action items: Plan tasks")  # noqa: E501
         assert any(tag == "📝" for tag, _ in suggestions)
 
     def test_remove_pattern(self, tagger):
