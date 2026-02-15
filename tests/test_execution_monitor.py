@@ -10,15 +10,13 @@ NOTE: The source has a bug at lines 262-263 where `pid` should be `execution.pid
 in the except handlers. Tests are written to work with the existing code.
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock, PropertyMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import psutil
 
 from emdx.models.executions import Execution
 from emdx.services.execution_monitor import ExecutionMonitor
-
 
 # ---------------------------------------------------------------------------
 # Helpers

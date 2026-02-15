@@ -1,6 +1,5 @@
 """Tests for the document merger service with TF-IDF pre-filtering."""
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -212,7 +211,7 @@ class TestDocumentMergerIntegration:
         db = merger_documents["db"]
         doc_ids = merger_documents["doc_ids"]
 
-        with patch("emdx.services.similarity.db") as mock_sim_db, \
+        with patch("emdx.services.similarity.db"), \
              patch("emdx.services.document_merger.SimilarityService") as MockSimilarityService:
 
             # Set up mock similarity service
@@ -343,7 +342,7 @@ class TestDocumentMergerIntegration:
     ):
         """Test that progress callback is called correctly."""
         db = merger_documents["db"]
-        doc_ids = merger_documents["doc_ids"]
+        merger_documents["doc_ids"]
 
         progress_calls = []
 
@@ -377,7 +376,7 @@ class TestDocumentMergerIntegration:
     ):
         """Test that merge reason correctly identifies similar titles."""
         db = merger_documents["db"]
-        doc_ids = merger_documents["doc_ids"]
+        merger_documents["doc_ids"]
 
         with patch("emdx.services.document_merger.SimilarityService") as MockSimilarityService:
             mock_service = MagicMock()

@@ -1,7 +1,6 @@
 """Tests for group management CLI commands."""
 
 import re
-from datetime import datetime
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner

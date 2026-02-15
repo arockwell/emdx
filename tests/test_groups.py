@@ -177,7 +177,7 @@ class TestGroupListing:
         active_baseline = len(groups_db.list_groups())
         all_baseline = len(groups_db.list_groups(include_inactive=True))
 
-        group_id = groups_db.create_group(name="Active Group")
+        groups_db.create_group(name="Active Group")
         inactive_id = groups_db.create_group(name="Inactive Group")
         groups_db.delete_group(inactive_id, hard=False)  # Soft delete
 
@@ -554,7 +554,7 @@ class TestGroupRoles:
         group_id = groups_db.create_group(name="Role Test Group")
         roles = ["primary", "exploration", "synthesis", "variant", "member"]
 
-        for i, role in enumerate(roles):
+        for _i, role in enumerate(roles):
             doc_id = save_document(
                 title=f"Doc with {role} role",
                 content="Content",

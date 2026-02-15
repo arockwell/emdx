@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from emdx.services.file_watcher import FileWatcher, WATCHDOG_AVAILABLE
+from emdx.services.file_watcher import WATCHDOG_AVAILABLE, FileWatcher
 
 
 class TestFileWatcherPolling:

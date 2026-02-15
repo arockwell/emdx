@@ -23,16 +23,16 @@ class TestGetInputContent:
         try:
             # Mock subprocess context where stdin.isatty() returns False but stdin is empty
             empty_stdin = io.StringIO("")
-            
+
             with patch('sys.stdin', empty_stdin):
                 with patch('sys.stdin.isatty', return_value=False):
                     result = get_input_content(temp_file_path)
-            
+
             # Should read from file, not empty stdin
             assert result.source_type == "file"
             assert "This should be read from file" in result.content
             assert result.source_path == Path(temp_file_path)
-            
+
         finally:
             # Clean up
             Path(temp_file_path).unlink()
@@ -41,11 +41,11 @@ class TestGetInputContent:
         """Test that stdin content is used when it actually contains data."""
         stdin_content = "# Stdin Content\n\nThis comes from stdin and should take priority."
         mock_stdin = io.StringIO(stdin_content)
-        
+
         with patch('sys.stdin', mock_stdin):
             with patch('sys.stdin.isatty', return_value=False):
                 result = get_input_content("some_file.md")
-        
+
         # Should use stdin content, not file
         assert result.source_type == "stdin"
         assert "This comes from stdin" in result.content
@@ -61,16 +61,16 @@ class TestGetInputContent:
         try:
             # Mock stdin with only whitespace
             whitespace_stdin = io.StringIO("   \n\t  \n  ")
-            
+
             with patch('sys.stdin', whitespace_stdin):
                 with patch('sys.stdin.isatty', return_value=False):
                     result = get_input_content(temp_file_path)
-            
+
             # Should read from file since stdin only has whitespace
             assert result.source_type == "file"
             assert "This should be used when stdin" in result.content
             assert result.source_path == Path(temp_file_path)
-            
+
         finally:
             Path(temp_file_path).unlink()
 
@@ -85,12 +85,12 @@ class TestGetInputContent:
             # Mock interactive terminal (stdin.isatty() returns True)
             with patch('sys.stdin.isatty', return_value=True):
                 result = get_input_content(temp_file_path)
-            
+
             # Should read from file in interactive mode
             assert result.source_type == "file"
             assert "This should be used in interactive mode" in result.content
             assert result.source_path == Path(temp_file_path)
-            
+
         finally:
             Path(temp_file_path).unlink()
 
@@ -98,7 +98,7 @@ class TestGetInputContent:
         """Test that nonexistent file path is treated as direct text input."""
         with patch('sys.stdin.isatty', return_value=True):
             result = get_input_content("This is direct text input")
-        
+
         assert result.source_type == "direct"
         assert result.content == "This is direct text input"
         assert result.source_path is None
@@ -106,7 +106,7 @@ class TestGetInputContent:
     def test_no_input_raises_exit(self):
         """Test that no input raises typer.Exit."""
         import typer
-        
+
         with patch('sys.stdin.isatty', return_value=True):
             with pytest.raises(typer.Exit):
                 get_input_content(None)
@@ -114,12 +114,12 @@ class TestGetInputContent:
     def test_regression_poetry_run_context(self):
         """
         Regression test for the specific bug: poetry run context with empty stdin.
-        
+
         This simulates the exact conditions that caused the bug:
         - sys.stdin.isatty() returns False (subprocess context)
         - sys.stdin.read() returns empty string
         - File path argument provided
-        
+
         Before fix: would return empty content from stdin
         After fix: should fall through to file reading
         """
@@ -131,16 +131,16 @@ class TestGetInputContent:
         try:
             # Exact conditions from poetry run that caused the bug
             empty_stdin = io.StringIO("")
-            
+
             with patch('sys.stdin', empty_stdin):
                 with patch('sys.stdin.isatty', return_value=False):  # subprocess context
                     result = get_input_content(temp_file_path)
-            
+
             # After fix: should read file content, not empty stdin
             assert result.source_type == "file"
             assert len(result.content.strip()) > 0  # Not empty!
             assert "This content should be saved" in result.content
             assert result.source_path == Path(temp_file_path)
-            
+
         finally:
             Path(temp_file_path).unlink()

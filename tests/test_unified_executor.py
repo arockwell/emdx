@@ -1,14 +1,13 @@
 """Tests for the UnifiedExecutor service."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from emdx.services.unified_executor import (
-    UnifiedExecutor,
+    DEFAULT_ALLOWED_TOOLS,
     ExecutionConfig,
     ExecutionResult,
-    DEFAULT_ALLOWED_TOOLS,
+    UnifiedExecutor,
 )
 
 

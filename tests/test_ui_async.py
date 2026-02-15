@@ -5,16 +5,11 @@ Tests critical async functions in document_browser.py, cascade_view.py,
 and document_browser_presenter.py using pytest-asyncio.
 """
 
-import tempfile
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from emdx.ui.viewmodels import DocumentDetailVM, DocumentListItem, DocumentListVM
-
 
 # ============================================================================
 # DocumentBrowserPresenter Tests
@@ -517,7 +512,7 @@ class TestCascadeViewAsync:
 
     def test_cascade_view_stage_navigation_bounds(self):
         """Test stage navigation respects bounds."""
-        from emdx.ui.cascade.cascade_view import CascadeView, STAGES
+        from emdx.ui.cascade.cascade_view import STAGES, CascadeView
 
         view = CascadeView()
         view.current_stage_idx = 0

@@ -1,9 +1,8 @@
 """Tests for task CLI commands (add, list, ready, done, delete)."""
 
 import re
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import typer
 from typer.testing import CliRunner
 
 from emdx.commands.tasks import app

@@ -23,8 +23,8 @@ from typer.testing import CliRunner
 
 from emdx.commands.cascade import (
     NEXT_STAGE,
-    STAGES,
     STAGE_PROMPTS,
+    STAGES,
     _create_cascade_run,
     _get_stages_between,
     _update_cascade_run,
@@ -70,10 +70,10 @@ def setup_cascade_db(test_db_path, monkeypatch):
     conn_instance = DatabaseConnection(test_db_path)
 
     # Patch the global db_connection in all relevant modules
+    import emdx.commands.cascade as cascade_cmd_module
     import emdx.database.cascade as cascade_module
     import emdx.database.connection as conn_module
     import emdx.database.documents as docs_module
-    import emdx.commands.cascade as cascade_cmd_module
 
     original_conn = conn_module.db_connection
 
@@ -816,7 +816,6 @@ class TestCascadeIntegration:
 
     def test_add_and_show_integration(self, setup_cascade_db):
         """Test adding and showing cascade documents."""
-        from emdx.database import cascade as cascade_db
 
         # Add a document
         result = runner.invoke(app, ["add", "Build a REST API"])

@@ -12,10 +12,10 @@ import pytest
 datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")
 
 from emdx.services.duplicate_detector import (
-    DuplicateDetector,
-    _tokenize,
-    _create_minhash,
     DEFAULT_NUM_PERM,
+    DuplicateDetector,
+    _create_minhash,
+    _tokenize,
 )
 
 
@@ -190,7 +190,7 @@ class TestDuplicateDetector:
         result = detector.find_near_duplicates(threshold=0.7)
         assert len(result) >= 1
         # Check that similarity is above threshold
-        for doc1, doc2, similarity in result:
+        for _doc1, _doc2, similarity in result:
             assert similarity >= 0.7
 
     def test_find_near_duplicates_ignores_short_docs(self, detector, clean_db):
@@ -301,8 +301,8 @@ class TestMinHashSimilarityAccuracy:
     def test_minhash_approximates_jaccard(self):
         """MinHash similarity approximates true Jaccard similarity."""
         # Create sets with known overlap
-        set1 = set(f"word{i}" for i in range(100))
-        set2 = set(f"word{i}" for i in range(50, 150))
+        set1 = {f"word{i}" for i in range(100)}
+        set2 = {f"word{i}" for i in range(50, 150)}
         # True Jaccard: |intersection| / |union| = 50 / 150 ≈ 0.333
 
         mh1 = _create_minhash(set1, num_perm=256)

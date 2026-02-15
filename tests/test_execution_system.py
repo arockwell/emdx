@@ -4,10 +4,7 @@ Tests the execution lifecycle: creating records, updating status,
 timeout handling, and log recording.
 """
 
-import os
-import tempfile
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from datetime import datetime
 
 import pytest
 
@@ -248,9 +245,8 @@ class TestExecutionCRUD:
 
     def test_update_execution_generic_fields(self, isolate_test_database):
         """Test updating arbitrary execution fields."""
-        from emdx.models.executions import create_execution, update_execution
-
         from emdx.database.connection import db_connection
+        from emdx.models.executions import create_execution, update_execution
 
         exec_id = create_execution(
             doc_id=None,
@@ -338,9 +334,9 @@ class TestExecutionQueries:
             update_execution_status,
         )
 
-        exec1 = create_execution(doc_id=None, doc_title="Running", log_file="/tmp/1.log")
+        create_execution(doc_id=None, doc_title="Running", log_file="/tmp/1.log")
         exec2 = create_execution(doc_id=None, doc_title="Completed", log_file="/tmp/2.log")
-        exec3 = create_execution(doc_id=None, doc_title="Also Running", log_file="/tmp/3.log")
+        create_execution(doc_id=None, doc_title="Also Running", log_file="/tmp/3.log")
 
         update_execution_status(exec2, "completed", exit_code=0)
 
@@ -360,7 +356,7 @@ class TestExecutionQueries:
         )
 
         # Create executions with various statuses
-        exec1 = create_execution(doc_id=None, doc_title="T1", log_file="/tmp/1.log")
+        create_execution(doc_id=None, doc_title="T1", log_file="/tmp/1.log")
         exec2 = create_execution(doc_id=None, doc_title="T2", log_file="/tmp/2.log")
         exec3 = create_execution(doc_id=None, doc_title="T3", log_file="/tmp/3.log")
 
@@ -436,12 +432,11 @@ class TestTimeoutHandling:
         Note: This test is skipped because migration 013 removed the
         last_heartbeat column from the executions table.
         """
+        from emdx.database.connection import db_connection
         from emdx.models.executions import (
             create_execution,
             update_execution_heartbeat,
         )
-
-        from emdx.database.connection import db_connection
 
         exec_id = create_execution(
             doc_id=None,

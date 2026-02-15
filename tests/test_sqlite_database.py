@@ -15,7 +15,7 @@ class TestSQLiteDatabase:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
             db = SQLiteDatabase(db_path)
-            
+
             # Trigger database creation by getting a connection
             with db.get_connection():
                 pass

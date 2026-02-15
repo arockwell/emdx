@@ -181,7 +181,7 @@ def update_changelog(entry: str) -> None:
         # No existing entries, add after any header text
         lines = content.split("\n")
         header_lines = []
-        for i, line in enumerate(lines):
+        for _i, line in enumerate(lines):
             if line.startswith("## "):
                 break
             header_lines.append(line)
@@ -192,7 +192,7 @@ def update_changelog(entry: str) -> None:
         new_content = content[:header_end] + "\n" + entry + "\n" + content[header_end:]
 
     changelog.write_text(new_content)
-    print(f"Updated CHANGELOG.md")
+    print("Updated CHANGELOG.md")
 
 
 def main():
@@ -245,10 +245,10 @@ def main():
 
         print(f"\nRelease {new_version} prepared!")
         print("Next steps:")
-        print(f"  1. Review CHANGELOG.md")
+        print("  1. Review CHANGELOG.md")
         print(f"  2. git add -A && git commit -m 'chore: release v{new_version}'")
         print(f"  3. git tag v{new_version}")
-        print(f"  4. git push && git push --tags")
+        print("  4. git push && git push --tags")
 
     else:
         print(f"Unknown command: {command}")

@@ -36,7 +36,7 @@ class LogStream:
         self.path = log_file_path
         self.position = 0
         self.subscribers: List[LogStreamSubscriber] = []
-        self.watcher: "FileWatcher | None" = None
+        self.watcher: FileWatcher | None = None
         self.is_watching = False
         self._polling = False
         self._stopped = False

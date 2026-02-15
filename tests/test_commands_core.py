@@ -1,15 +1,12 @@
 """Tests for core CRUD commands (save, view, edit, delete, restore, etc.)."""
 
 import re
-import tempfile
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-import typer
 from typer.testing import CliRunner
 
-from emdx.commands.core import app, get_input_content, generate_title, InputContent
+from emdx.commands.core import InputContent, app, generate_title, get_input_content
 
 runner = CliRunner()
 
@@ -530,6 +527,7 @@ class TestDeleteCommand:
 # Uses main_app since trash is registered as a typer subgroup there.
 # ---------------------------------------------------------------------------
 from emdx.main import app as main_app
+
 
 class TestTrashCommand:
     """Tests for the trash command."""

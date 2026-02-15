@@ -207,7 +207,7 @@ class TestGetCategoryEmojis:
             assert cat in cats
 
     def test_category_values_are_lists(self):
-        for cat, emojis in get_category_emojis().items():
+        for _cat, emojis in get_category_emojis().items():
             assert isinstance(emojis, list)
             assert len(emojis) > 0
 

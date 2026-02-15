@@ -12,9 +12,8 @@ Tests cover:
 """
 
 import subprocess
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
@@ -30,8 +29,7 @@ from emdx.commands.delegate import (
     _slugify_title,
     delegate,
 )
-from emdx.services.unified_executor import ExecutionConfig, ExecutionResult
-
+from emdx.services.unified_executor import ExecutionResult
 
 # =============================================================================
 # Fixtures
