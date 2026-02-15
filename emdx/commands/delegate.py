@@ -83,7 +83,7 @@ PR_INSTRUCTION_GENERIC = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
     "2. Commit your changes with a clear message\n"
-    "3. Push and create a PR using: gh pr create --draft --title \"...\" --body \"...\"\n"
+    "3. Push and create a PR using: gh pr create --title \"...\" --body \"...\"\n"
     "4. Report the PR URL that was created."
 )
 
@@ -91,7 +91,7 @@ PR_INSTRUCTION_GENERIC = (
 _PR_URL_RE = re.compile(r'https://github\.com/[^/]+/[^/]+/pull/\d+')
 
 
-def _make_pr_instruction(branch_name: str | None = None, draft: bool = True) -> str:
+def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) -> str:
     """Build a structured PR instruction for the agent.
 
     When branch_name is provided, the instruction tells the agent exactly
@@ -744,8 +744,8 @@ def delegate(
         help="Instruct agent to create a PR (implies --worktree)",
     ),
     draft: bool = typer.Option(
-        True, "--draft/--no-draft",
-        help="Create PR as draft (default: True, use --no-draft for ready PRs)",
+        False, "--draft/--no-draft",
+        help="Create PR as draft (default: False, use --draft for draft PRs)",
     ),
     worktree: bool = typer.Option(
         False, "--worktree", "-w",

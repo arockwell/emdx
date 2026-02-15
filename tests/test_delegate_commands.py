@@ -796,7 +796,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -826,7 +826,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -854,7 +854,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=True,
@@ -932,7 +932,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -967,7 +967,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=42,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -998,7 +998,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=True,
             base_branch="main",
             chain=False,
@@ -1030,7 +1030,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=True,
-            draft=True,
+            draft=False,
             worktree=False,  # Not explicitly set, but should be implied
             base_branch="develop",
             chain=False,
@@ -1061,7 +1061,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -1186,7 +1186,7 @@ class TestDelegateCommand:
                 quiet=False,
                 doc=None,
                 pr=False,
-                draft=True,
+                draft=False,
                 worktree=False,
                 base_branch="main",
                 chain=False,
@@ -1218,7 +1218,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -1249,7 +1249,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
-            draft=True,
+            draft=False,
             worktree=False,
             base_branch="main",
             chain=False,
@@ -1282,9 +1282,9 @@ class TestPRInstruction:
         text = PR_INSTRUCTION_GENERIC.lower()
         assert "push" in text
 
-    def test_generic_instruction_includes_draft_flag(self):
-        """Test that PR_INSTRUCTION_GENERIC includes --draft flag."""
-        assert "--draft" in PR_INSTRUCTION_GENERIC
+    def test_generic_instruction_no_draft_by_default(self):
+        """Test that PR_INSTRUCTION_GENERIC does not include --draft flag."""
+        assert "--draft" not in PR_INSTRUCTION_GENERIC
 
     def test_make_pr_instruction_with_branch(self):
         result = _make_pr_instruction("fix/my-branch-1")
@@ -1293,10 +1293,10 @@ class TestPRInstruction:
         assert "git push" in result
 
     def test_make_pr_instruction_without_branch(self):
-        """Test that without branch uses generic instruction (with draft)."""
+        """Test that without branch uses generic instruction (no draft by default)."""
         result = _make_pr_instruction(None)
-        # Without branch, draft defaults to True
-        assert "--draft" in result
+        # Without branch, draft defaults to False
+        assert "--draft" not in result
         assert "gh pr create" in result
 
     def test_make_pr_instruction_with_draft_true(self):
