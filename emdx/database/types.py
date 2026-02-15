@@ -6,6 +6,113 @@ from datetime import datetime
 from typing import TypedDict
 
 
+# ── Cascade types ──────────────────────────────────────────────────────
+
+
+class CascadeMetadata(TypedDict):
+    """Cascade metadata for a document."""
+
+    id: int
+    document_id: int
+    stage: str
+    pr_url: str | None
+    created_at: str | None
+    updated_at: str | None
+
+
+class CascadeDocumentListItem(TypedDict):
+    """Document item in cascade stage listings."""
+
+    id: int
+    title: str
+    project: str | None
+    created_at: str | None
+    updated_at: str | None
+    parent_id: int | None
+    stage: str
+    pr_url: str | None
+
+
+class CascadeRun(TypedDict):
+    """Cascade run record."""
+
+    id: int
+    start_doc_id: int | None
+    started_at: str | None
+    completed_at: str | None
+    status: str
+    error_message: str | None
+    initial_doc_title: str | None
+
+
+class CascadeRunExecution(TypedDict):
+    """Execution record linked to a cascade run."""
+
+    id: int
+    doc_id: int | None
+    doc_title: str
+    status: str
+    started_at: str | None
+    completed_at: str | None
+    log_file: str
+    exit_code: int | None
+    working_dir: str | None
+    pid: int | None
+    cascade_run_id: int | None
+    doc_stage: str | None
+
+
+class CascadeStats(TypedDict):
+    """Document counts at each cascade stage."""
+
+    idea: int
+    prompt: int
+    analyzed: int
+    planned: int
+    done: int
+
+
+class OrphanedCascadeExecution(TypedDict):
+    """Execution that is not linked to a cascade run."""
+
+    id: int
+    doc_id: int | None
+    doc_title: str | None
+    status: str | None
+    started_at: str | None
+    completed_at: str | None
+    stage: str | None
+    pr_url: str | None
+    cascade_run_id: int | None
+
+
+class PipelineActivityItem(TypedDict):
+    """Pipeline activity record for recent executions."""
+
+    exec_id: int
+    input_id: int | None
+    input_title: str | None
+    status: str | None
+    started_at: str | None
+    completed_at: str | None
+    log_file: str | None
+    output_id: int | None
+    output_title: str | None
+    output_stage: str | None
+    from_stage: str
+
+
+class ChildDocInfo(TypedDict):
+    """Basic info about a child document."""
+
+    id: int
+    title: str
+    stage: str | None
+
+
+# ── Document types ─────────────────────────────────────────────────────
+
+
 class DocumentRow(TypedDict):
     """Full document row from the documents table.
 

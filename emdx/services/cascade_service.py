@@ -10,11 +10,11 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
 from emdx.database.documents import get_document
+from emdx.database.types import ChildDocInfo, PipelineActivityItem
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ update_cascade_stage = cascade_db.update_cascade_stage
 save_document_to_cascade = cascade_db.save_document_to_cascade
 get_document = get_document
 
-def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_pipeline_activity(limit: int = 10) -> list[PipelineActivityItem]:
     """Get recent pipeline activity — executions with their input/output docs."""
     PREV_STAGE = {"prompt": "idea", "analyzed": "prompt", "planned": "analyzed", "done": "planned"}
 
@@ -58,7 +58,7 @@ def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
             })
         return results
 
-def get_child_info(parent_id: int) -> dict[str, Any] | None:
+def get_child_info(parent_id: int) -> ChildDocInfo | None:
     """Get info about the first child document of a parent."""
     with db_connection.get_connection() as conn:
         row = conn.execute(

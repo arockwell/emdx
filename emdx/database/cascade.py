@@ -15,6 +15,14 @@ from typing import Any
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
+from .types import (
+    CascadeDocumentListItem,
+    CascadeMetadata,
+    CascadeRun,
+    CascadeRunExecution,
+    CascadeStats,
+    DocumentRow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +38,7 @@ def _parse_cascade_datetimes(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def get_cascade_metadata(doc_id: int) -> dict[str, Any] | None:
+def get_cascade_metadata(doc_id: int) -> CascadeMetadata | None:
     """Get cascade metadata for a document.
 
     Args:
@@ -137,7 +145,7 @@ def get_cascade_pr_url(doc_id: int) -> str | None:
         return row[0] if row and row[0] else None
 
 
-def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
+def get_oldest_at_stage(stage: str) -> DocumentRow | None:
     """Get the oldest document at a given cascade stage.
 
     This is the core primitive for the patrol system - each patrol watches
@@ -171,7 +179,7 @@ def get_oldest_at_stage(stage: str) -> dict[str, Any] | None:
         return None
 
 
-def list_documents_at_stage(stage: str, limit: int = 50) -> list[dict[str, Any]]:
+def list_documents_at_stage(stage: str, limit: int = 50) -> list[CascadeDocumentListItem]:
     """List all documents at a given cascade stage.
 
     Args:
@@ -218,7 +226,7 @@ def count_documents_at_stage(stage: str) -> int:
         return int(cursor.fetchone()[0])
 
 
-def get_cascade_stats() -> dict[str, int]:
+def get_cascade_stats() -> CascadeStats:
     """Get counts of documents at each cascade stage.
 
     Returns:
@@ -315,7 +323,7 @@ def save_document_to_cascade(
     return doc_id
 
 
-def list_cascade_runs(limit: int = 20) -> list[dict[str, Any]]:
+def list_cascade_runs(limit: int = 20) -> list[CascadeRun]:
     """List recent cascade runs.
 
     Args:
@@ -338,7 +346,7 @@ def list_cascade_runs(limit: int = 20) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_cascade_run_executions(run_id: int) -> list[dict[str, Any]]:
+def get_cascade_run_executions(run_id: int) -> list[CascadeRunExecution]:
     """Get all executions for a cascade run.
 
     Args:
