@@ -1,15 +1,13 @@
 """Tests for the epics model and CLI."""
 
 import re
-from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
-from emdx.models import tasks, categories
 from emdx.commands.epics import app as epics_app
-from emdx.commands.tasks import app as tasks_app, ICONS
-
+from emdx.commands.tasks import ICONS
+from emdx.commands.tasks import app as tasks_app
+from emdx.models import categories, tasks
 
 runner = CliRunner()
 
