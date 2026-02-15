@@ -6,7 +6,7 @@ Loads user keybinding customizations from ~/.config/emdx/keybindings.yaml
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from emdx.config.constants import EMDX_CONFIG_DIR
 
@@ -158,7 +158,7 @@ def parse_overrides(config: Dict[str, Any]) -> List[KeybindingEntry]:
     return entries
 
 
-def _parse_context(context_str: str) -> Optional[Context]:
+def _parse_context(context_str: str) -> Context | None:
     """Parse a context string into a Context enum value."""
     # Try direct match
     for ctx in Context:
@@ -189,7 +189,7 @@ class KeybindingConfig:
             new_action = config.get_override("t", Context.DOCUMENT_NORMAL)
     """
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Path | None = None):
         self.config_path = config_path or get_config_path()
         self.config: Dict[str, Any] = {}
         self.overrides: List[KeybindingEntry] = []
@@ -218,7 +218,7 @@ class KeybindingConfig:
         """Check if a key is overridden in a context."""
         return (key, context) in self._override_map
 
-    def get_override(self, key: str, context: Context) -> Optional[KeybindingEntry]:
+    def get_override(self, key: str, context: Context) -> KeybindingEntry | None:
         """Get the override for a key in a context."""
         return self._override_map.get((key, context))
 

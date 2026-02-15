@@ -6,7 +6,6 @@ or creating a new group.
 """
 
 import logging
-from typing import Optional
 
 from textual import events
 from textual.app import ComposeResult
@@ -40,8 +39,8 @@ class GroupPicker(Widget):
             self,
             group_id: int,
             group_name: str,
-            doc_id: Optional[int],
-            source_group_id: Optional[int],
+            doc_id: int | None,
+            source_group_id: int | None,
         ) -> None:
             self.group_id = group_id
             self.group_name = group_name
@@ -55,8 +54,8 @@ class GroupPicker(Widget):
             self,
             group_id: int,
             group_name: str,
-            doc_id: Optional[int],
-            source_group_id: Optional[int],
+            doc_id: int | None,
+            source_group_id: int | None,
         ) -> None:
             self.group_id = group_id
             self.group_name = group_name
@@ -116,8 +115,8 @@ class GroupPicker(Widget):
         self.groups: list[dict] = []
         self.filtered_groups: list[dict] = []
         self.selected_index: int = 0
-        self.doc_id: Optional[int] = None
-        self.source_group_id: Optional[int] = None  # When nesting a group
+        self.doc_id: int | None = None
+        self.source_group_id: int | None = None  # When nesting a group
         self._visible = False
 
     def compose(self) -> ComposeResult:
@@ -127,8 +126,8 @@ class GroupPicker(Widget):
 
     def show(
         self,
-        doc_id: Optional[int] = None,
-        source_group_id: Optional[int] = None,
+        doc_id: int | None = None,
+        source_group_id: int | None = None,
     ) -> None:
         """Show the picker for a document or group.
 

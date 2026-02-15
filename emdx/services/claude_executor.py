@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +65,11 @@ def execute_claude_detached(
     task: str,
     execution_id: int,
     log_file: Path,
-    allowed_tools: Optional[List[str]] = None,
-    working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None,
+    allowed_tools: List[str] | None = None,
+    working_dir: str | None = None,
+    doc_id: str | None = None,
     cli_tool: str = "claude",
-    model: Optional[str] = None,
+    model: str | None = None,
 ) -> int:
     """Execute a task with a CLI tool in a fully detached background process.
 
@@ -224,10 +224,10 @@ def execute_cli_sync(
     execution_id: int,
     log_file: Path,
     cli_tool: str = "claude",
-    model: Optional[str] = None,
-    allowed_tools: Optional[List[str]] = None,
-    working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None,
+    model: str | None = None,
+    allowed_tools: List[str] | None = None,
+    working_dir: str | None = None,
+    doc_id: str | None = None,
     timeout: int = 300,
 ) -> dict:
     """Execute a task with specified CLI tool synchronously, waiting for completion.

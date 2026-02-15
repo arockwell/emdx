@@ -8,7 +8,6 @@ Consolidates trash, restore, and purge into a subcommand group:
     emdx trash purge     → permanently delete trash
 """
 
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -27,7 +26,7 @@ app = typer.Typer(help="Manage deleted documents (trash)")
 @app.callback(invoke_without_command=True)
 def trash_callback(
     ctx: typer.Context,
-    days: Optional[int] = typer.Option(
+    days: int | None = typer.Option(
         None, "--days", "-d", help="Show items deleted in last N days"
     ),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
@@ -41,7 +40,7 @@ def trash_callback(
 
 @app.command("list")
 def list_cmd(
-    days: Optional[int] = typer.Option(
+    days: int | None = typer.Option(
         None, "--days", "-d", help="Show items deleted in last N days"
     ),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
@@ -50,7 +49,7 @@ def list_cmd(
     _list_trash(days=days, limit=limit)
 
 
-def _list_trash(days: Optional[int] = None, limit: int = 50) -> None:
+def _list_trash(days: int | None = None, limit: int = 50) -> None:
     """Shared implementation for listing trash."""
     try:
         db.ensure_schema()
@@ -96,7 +95,7 @@ def _list_trash(days: Optional[int] = None, limit: int = 50) -> None:
 
 @app.command()
 def restore(
-    identifiers: Optional[list[str]] = typer.Argument(
+    identifiers: list[str] | None = typer.Argument(
         default=None, help="Document ID(s) or title(s) to restore"
     ),
     all: bool = typer.Option(False, "--all", help="Restore all deleted documents"),
@@ -154,7 +153,7 @@ def restore(
 
 @app.command()
 def purge(
-    older_than: Optional[int] = typer.Option(
+    older_than: int | None = typer.Option(
         None, "--older-than", help="Only purge items deleted more than N days ago"
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),

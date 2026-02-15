@@ -227,7 +227,7 @@ def get_cascade_stats() -> dict[str, int]:
             GROUP BY cm.stage
             """
         )
-        results = {stage: 0 for stage in STAGES}
+        results = dict.fromkeys(STAGES, 0)
         for row in cursor.fetchall():
             results[row["stage"]] = row["count"]
         return results

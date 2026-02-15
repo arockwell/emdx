@@ -8,7 +8,7 @@ at startup before they can cause runtime crashes.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 from .context import Context
 
@@ -250,7 +250,7 @@ class KeybindingRegistry:
 
     def _check_conflict(
         self, key: str, binding1: KeybindingEntry, binding2: KeybindingEntry
-    ) -> Optional[ConflictReport]:
+    ) -> ConflictReport | None:
         """
         Check if two bindings for the same key conflict.
 
@@ -363,7 +363,7 @@ class KeybindingRegistry:
 
     def get_binding_for_key(
         self, key: str, context: Context
-    ) -> Optional[KeybindingEntry]:
+    ) -> KeybindingEntry | None:
         """
         Get the active binding for a key in a context.
 

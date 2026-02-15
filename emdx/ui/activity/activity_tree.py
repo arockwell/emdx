@@ -17,7 +17,7 @@ aligned across all rows regardless of depth.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from rich.style import Style
 from rich.text import Text
@@ -315,11 +315,11 @@ class ActivityTree(Tree[ActivityItem]):
 
     def find_node_by_item_key(
         self, item_type: str, item_id: int
-    ) -> Optional[TreeNode[ActivityItem]]:
+    ) -> TreeNode[ActivityItem] | None:
         """Walk the tree to find a node matching (item_type, item_id)."""
         target_key = (item_type, item_id)
 
-        def _search(node: TreeNode[ActivityItem]) -> Optional[TreeNode[ActivityItem]]:
+        def _search(node: TreeNode[ActivityItem]) -> TreeNode[ActivityItem] | None:
             if node.data is not None and _item_key(node.data) == target_key:
                 return node
             for child in node.children:
@@ -332,10 +332,10 @@ class ActivityTree(Tree[ActivityItem]):
 
     def find_node_by_doc_id(
         self, doc_id: int
-    ) -> Optional[TreeNode[ActivityItem]]:
+    ) -> TreeNode[ActivityItem] | None:
         """Walk the tree to find a node with a matching doc_id."""
 
-        def _search(node: TreeNode[ActivityItem]) -> Optional[TreeNode[ActivityItem]]:
+        def _search(node: TreeNode[ActivityItem]) -> TreeNode[ActivityItem] | None:
             if node.data is not None:
                 if getattr(node.data, "doc_id", None) == doc_id:
                     return node

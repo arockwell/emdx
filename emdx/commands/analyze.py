@@ -7,7 +7,7 @@ import json
 
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import typer
 from rich import box
@@ -30,7 +30,7 @@ def analyze(
     tags: bool = typer.Option(False, "--tags", "-t", help="Analyze tag coverage and patterns"),
     projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
     all_analyses: bool = typer.Option(False, "--all", "-a", help="Run all analyses"),
-    project: Optional[str] = typer.Option(None, "--project", help="Filter by specific project"),
+    project: str | None = typer.Option(None, "--project", help="Filter by specific project"),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
 ):
     """
@@ -314,7 +314,7 @@ def _analyze_empty():
     console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
 
 
-def _analyze_tags(project: Optional[str] = None):
+def _analyze_tags(project: str | None = None):
     """Analyze tag coverage and patterns."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -602,7 +602,7 @@ def _collect_empty_data() -> Dict[str, Any]:
     return result
 
 
-def _collect_tags_data(project: Optional[str] = None) -> Dict[str, Any]:
+def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
     """Collect tag analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()

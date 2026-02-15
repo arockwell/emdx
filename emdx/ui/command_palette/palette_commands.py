@@ -5,10 +5,11 @@ Manages available commands that can be invoked from the palette.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,9 @@ class PaletteCommand:
     name: str  # Display name: "Go to Activity"
     description: str  # What it does
     keywords: List[str] = field(default_factory=list)  # For fuzzy matching
-    action: Optional[Callable] = None  # Function to execute (app) -> None
+    action: Callable | None = None  # Function to execute (app) -> None
     context: CommandContext = CommandContext.GLOBAL  # Where available
-    shortcut: Optional[str] = None  # Keyboard shortcut hint
+    shortcut: str | None = None  # Keyboard shortcut hint
     category: str = "General"  # For grouping in UI
 
 
@@ -54,11 +55,11 @@ class CommandRegistry:
             return True
         return False
 
-    def get(self, command_id: str) -> Optional[PaletteCommand]:
+    def get(self, command_id: str) -> PaletteCommand | None:
         """Get a command by ID."""
         return self._commands.get(command_id)
 
-    def get_all(self, context: Optional[CommandContext] = None) -> List[PaletteCommand]:
+    def get_all(self, context: CommandContext | None = None) -> List[PaletteCommand]:
         """Get all commands, optionally filtered by context."""
         commands = list(self._commands.values())
         if context:
@@ -70,7 +71,7 @@ class CommandRegistry:
     def search(
         self,
         query: str,
-        context: Optional[CommandContext] = None,
+        context: CommandContext | None = None,
         limit: int = 10,
         threshold: float = 0.3,
     ) -> List[PaletteCommand]:
@@ -295,7 +296,7 @@ class CommandRegistry:
 
 
 # Global registry instance
-_registry: Optional[CommandRegistry] = None
+_registry: CommandRegistry | None = None
 
 
 def get_command_registry() -> CommandRegistry:

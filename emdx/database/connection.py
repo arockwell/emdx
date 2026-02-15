@@ -7,7 +7,6 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from ..config.constants import EMDX_CONFIG_DIR
 from . import migrations
@@ -30,7 +29,7 @@ def get_db_path() -> Path:
 class DatabaseConnection:
     """SQLite database connection manager for emdx"""
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         if db_path is None:
             self.db_path = get_db_path()
         else:

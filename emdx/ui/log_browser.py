@@ -14,7 +14,6 @@ The LogBrowser uses mixins for separation of concerns:
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -138,7 +137,7 @@ class LogBrowser(
         super().__init__(*args, **kwargs)
         self.executions: list[Execution] = []
         self.selection_mode = False
-        self.current_stream: Optional[LogStream] = None
+        self.current_stream: LogStream | None = None
         self.is_live_mode = False
         self.stream_subscriber = LogBrowserSubscriber(self)
 

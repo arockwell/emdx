@@ -6,7 +6,6 @@ import logging
 import os
 import subprocess
 import webbrowser
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ from emdx.utils.output import console
 app = typer.Typer(help="GitHub Gist integration")
 
 
-def get_github_auth() -> Optional[str]:
+def get_github_auth() -> str | None:
     """Get GitHub authentication token.
 
     SECURITY NOTE: GitHub tokens are sensitive credentials.
@@ -62,7 +61,7 @@ def get_github_auth() -> Optional[str]:
 
 def create_gist_with_gh(
     content: str, filename: str, description: str, public: bool = False
-) -> Optional[dict[str, str]]:
+) -> dict[str, str] | None:
     """Create a gist using gh CLI.
 
     Uses secure temp file handling to prevent race conditions.
@@ -179,10 +178,10 @@ def create(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     public: bool = typer.Option(False, "--public", help="Create public gist"),
     secret: bool = typer.Option(False, "--secret", help="Create secret gist (default)"),
-    description: Optional[str] = typer.Option(None, "--desc", "-d", help="Gist description"),
+    description: str | None = typer.Option(None, "--desc", "-d", help="Gist description"),
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
-    update: Optional[str] = typer.Option(None, "--update", "-u", help="Update existing gist ID"),
+    update: str | None = typer.Option(None, "--update", "-u", help="Update existing gist ID"),
 ):
     """Create or update a GitHub Gist from a document."""
     # Ensure database schema is up to date

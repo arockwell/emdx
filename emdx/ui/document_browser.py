@@ -8,7 +8,7 @@ operations while this widget focuses on display and user interaction.
 """
 
 import logging
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict, Protocol
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -78,15 +78,15 @@ class DocumentBrowser(HelpMixin, Widget):
         super().__init__(*args, **kwargs)
         # UI state
         self.edit_mode: bool = False
-        self.editing_doc_id: Optional[int] = None
-        self.tag_action: Optional[str] = None
+        self.editing_doc_id: int | None = None
+        self.tag_action: str | None = None
 
         # Debounce preview updates
-        self._pending_preview_doc_id: Optional[int] = None
+        self._pending_preview_doc_id: int | None = None
         self._preview_timer = None
 
         # Current ViewModel (updated by presenter callbacks)
-        self._current_vm: Optional[DocumentListVM] = None
+        self._current_vm: DocumentListVM | None = None
 
         # Initialize presenter with update callbacks
         self.presenter = DocumentBrowserPresenter(
@@ -1090,7 +1090,7 @@ class DocumentBrowser(HelpMixin, Widget):
         table = self.query_one("#doc-table", DataTable)
         table.focus()
 
-    async def apply_search(self, query: Optional[str] = None) -> None:
+    async def apply_search(self, query: str | None = None) -> None:
         """Apply current search filter via presenter.
 
         Args:

@@ -4,7 +4,6 @@ Document groups provide hierarchical organization of related documents
 into batches, rounds, and initiatives.
 """
 
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -24,13 +23,13 @@ def create(
         "batch", "--type", "-t",
         help="Group type: batch, initiative, round, session, custom"
     ),
-    parent: Optional[int] = typer.Option(
+    parent: int | None = typer.Option(
         None, "--parent", "-p", help="Parent group ID for nesting"
     ),
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None, "--project", help="Associated project name"
     ),
-    description: Optional[str] = typer.Option(
+    description: str | None = typer.Option(
         None, "--description", "-d", help="Group description"
     ),
 ) -> None:
@@ -168,13 +167,13 @@ def remove(
 
 @app.command(name="list")
 def list_groups_cmd(
-    parent: Optional[int] = typer.Option(
+    parent: int | None = typer.Option(
         None, "--parent", "-p", help="Filter by parent group ID (-1 for top-level)"
     ),
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None, "--project", help="Filter by project"
     ),
-    group_type: Optional[str] = typer.Option(
+    group_type: str | None = typer.Option(
         None, "--type", "-t", help="Filter by type"
     ),
     tree: bool = typer.Option(
@@ -236,7 +235,7 @@ def list_groups_cmd(
         raise typer.Exit(1)
 
 
-def _display_groups_tree(project: Optional[str], include_inactive: bool) -> None:
+def _display_groups_tree(project: str | None, include_inactive: bool) -> None:
     """Display groups as a tree structure."""
     # Get top-level groups
     top_groups = groups.list_groups(
@@ -408,10 +407,10 @@ def delete(
 @app.command()
 def edit(
     group_id: int = typer.Argument(..., help="Group ID to edit"),
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="New name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="New description"),
-    parent: Optional[int] = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),
-    group_type: Optional[str] = typer.Option(None, "--type", "-t", help="New group type"),
+    name: str | None = typer.Option(None, "--name", "-n", help="New name"),
+    description: str | None = typer.Option(None, "--description", "-d", help="New description"),
+    parent: int | None = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),
+    group_type: str | None = typer.Option(None, "--type", "-t", help="New group type"),
 ) -> None:
     """Edit group properties."""
     try:

@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -45,7 +44,7 @@ class CascadeBrowser(Widget):
 
     def __init__(self):
         super().__init__()
-        self.cascade_view: Optional[CascadeView] = None
+        self.cascade_view: CascadeView | None = None
 
     def compose(self) -> ComposeResult:
         self.cascade_view = CascadeView(id="cascade-view")

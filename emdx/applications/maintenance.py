@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Callable, Union
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class MaintenanceApplication:
         result = app.clean_duplicates(dry_run=False)
     """
 
-    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+    def __init__(self, db_path: Union[str, Path] | None = None):
         """
         Initialize maintenance application with optional database path.
 
@@ -103,10 +103,10 @@ class MaintenanceApplication:
         self._db = DatabaseConnection(self._db_path)
 
         # Lazily initialize services
-        self._duplicate_detector: Optional[DuplicateDetector] = None
-        self._auto_tagger: Optional[AutoTagger] = None
-        self._document_merger: Optional[DocumentMerger] = None
-        self._health_monitor: Optional[HealthMonitor] = None
+        self._duplicate_detector: DuplicateDetector | None = None
+        self._auto_tagger: AutoTagger | None = None
+        self._document_merger: DocumentMerger | None = None
+        self._health_monitor: HealthMonitor | None = None
 
     @property
     def duplicate_detector(self) -> DuplicateDetector:
@@ -338,7 +338,7 @@ class MaintenanceApplication:
 
     def merge_similar(
         self, dry_run: bool = True, threshold: float = 0.7,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Callable | None = None,
         use_tfidf: bool = True,
     ) -> MaintenanceResult:
         """

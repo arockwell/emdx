@@ -5,7 +5,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,11 @@ class LogStream:
         self.path = log_file_path
         self.position = 0
         self.subscribers: List[LogStreamSubscriber] = []
-        self.watcher: Optional['FileWatcher'] = None
+        self.watcher: FileWatcher | None = None
         self.is_watching = False
         self._polling = False
         self._stopped = False
-        self._poll_thread: Optional[threading.Thread] = None
+        self._poll_thread: threading.Thread | None = None
         self._poll_interval = 1.0
 
     def subscribe(self, subscriber: LogStreamSubscriber) -> None:

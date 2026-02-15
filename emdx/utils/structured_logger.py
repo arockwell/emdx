@@ -14,7 +14,7 @@ import threading
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 
 
 class LogLevel(Enum):
@@ -38,7 +38,7 @@ class StructuredLogger:
     """Thread-safe structured logger for EMDX processes."""
 
     def __init__(self, log_file: Union[str, Path], process_type: ProcessType,
-                 process_id: Optional[int] = None):
+                 process_id: int | None = None):
         """Initialize the structured logger.
 
         Args:
@@ -55,7 +55,7 @@ class StructuredLogger:
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
     def _create_entry(self, level: LogLevel, message: str,
-                      context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                      context: Dict[str, Any] | None = None) -> Dict[str, Any]:
         """Create a structured log entry.
 
         Args:
@@ -105,7 +105,7 @@ class StructuredLogger:
                 print(f"Failed to write log entry: {e}", file=sys.stderr)
 
     def log(self, level: LogLevel, message: str,
-            context: Optional[Dict[str, Any]] = None) -> None:
+            context: Dict[str, Any] | None = None) -> None:
         """Write a log entry.
 
         Args:
@@ -116,23 +116,23 @@ class StructuredLogger:
         entry = self._create_entry(level, message, context)
         self._write_entry(entry)
 
-    def debug(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def debug(self, message: str, context: Dict[str, Any] | None = None) -> None:
         """Write a debug log entry."""
         self.log(LogLevel.DEBUG, message, context)
 
-    def info(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def info(self, message: str, context: Dict[str, Any] | None = None) -> None:
         """Write an info log entry."""
         self.log(LogLevel.INFO, message, context)
 
-    def warning(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def warning(self, message: str, context: Dict[str, Any] | None = None) -> None:
         """Write a warning log entry."""
         self.log(LogLevel.WARNING, message, context)
 
-    def error(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def error(self, message: str, context: Dict[str, Any] | None = None) -> None:
         """Write an error log entry."""
         self.log(LogLevel.ERROR, message, context)
 
-    def critical(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def critical(self, message: str, context: Dict[str, Any] | None = None) -> None:
         """Write a critical log entry."""
         self.log(LogLevel.CRITICAL, message, context)
 
@@ -210,7 +210,7 @@ class StructuredLogger:
             "duration_seconds": duration
         })
 
-    def log_process_lifecycle(self, event: str, details: Optional[Dict[str, Any]] = None) -> None:
+    def log_process_lifecycle(self, event: str, details: Dict[str, Any] | None = None) -> None:
         """Log process lifecycle events (start, heartbeat, stop)."""
         self.info(f"Process {event}", {
             "event": f"process_{event}",

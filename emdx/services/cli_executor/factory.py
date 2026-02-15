@@ -1,7 +1,7 @@
 """Factory for creating CLI executors."""
 
 import os
-from typing import Optional, Union
+from typing import Union
 
 from ...config.cli_config import CliTool
 from .base import CliExecutor
@@ -15,7 +15,7 @@ _EXECUTORS = {
 }
 
 
-def get_cli_executor(cli_tool: Optional[Union[str, CliTool]] = None) -> CliExecutor:
+def get_cli_executor(cli_tool: Union[str, CliTool] | None = None) -> CliExecutor:
     """Get the appropriate CLI executor.
 
     Args:
@@ -65,7 +65,7 @@ def get_available_cli_tools() -> list[str]:
     return [tool.value for tool in _EXECUTORS.keys()]
 
 
-def detect_available_cli() -> Optional[CliTool]:
+def detect_available_cli() -> CliTool | None:
     """Detect which CLI tools are available on the system.
 
     Checks for installed CLIs in order of preference (Claude first).

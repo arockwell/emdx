@@ -13,7 +13,7 @@ import time
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import typer
 
@@ -259,7 +259,7 @@ def _interactive_wizard(dry_run: bool):
         console.print()
 
 
-def _clean_documents(dry_run: bool) -> Optional[str]:
+def _clean_documents(dry_run: bool) -> str | None:
     """Clean duplicates and empty documents using MaintenanceApplication."""
     app = MaintenanceApplication()
     try:
@@ -283,7 +283,7 @@ def _clean_documents(dry_run: bool) -> Optional[str]:
     return result.message
 
 
-def _auto_tag_documents(dry_run: bool) -> Optional[str]:
+def _auto_tag_documents(dry_run: bool) -> str | None:
     """Auto-tag untagged documents using MaintenanceApplication."""
     app = MaintenanceApplication()
     result = app.auto_tag_documents(dry_run=dry_run)
@@ -306,7 +306,7 @@ def _auto_tag_documents(dry_run: bool) -> Optional[str]:
     return result.message
 
 
-def _merge_documents(dry_run: bool, threshold: float = 0.7) -> Optional[str]:
+def _merge_documents(dry_run: bool, threshold: float = 0.7) -> str | None:
     """Merge similar documents using MaintenanceApplication."""
     app = MaintenanceApplication()
     try:
@@ -333,7 +333,7 @@ def _merge_documents(dry_run: bool, threshold: float = 0.7) -> Optional[str]:
     return result.message
 
 
-def _deduplicate_pairs(pairs: list) -> Optional[str]:
+def _deduplicate_pairs(pairs: list) -> str | None:
     """Delete duplicate documents from similarity pairs.
 
     For each pair, keeps the document with more views (or longer content as tiebreaker)
@@ -379,7 +379,7 @@ def _deduplicate_pairs(pairs: list) -> Optional[str]:
     return f"Deleted {deleted_count} duplicates"
 
 
-def _garbage_collect(dry_run: bool) -> Optional[str]:
+def _garbage_collect(dry_run: bool) -> str | None:
     """Run garbage collection using MaintenanceApplication."""
     app = MaintenanceApplication()
     result = app.garbage_collect(dry_run=dry_run)
@@ -479,7 +479,7 @@ def cleanup_main(
         console.print("\n[dim]Run with --execute to perform these actions[/dim]")
 
 
-def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int = 7) -> Optional[str]:
+def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int = 7) -> str | None:
     """Clean up old execution branches.
 
     Args:
@@ -642,7 +642,7 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         return None
 
 
-def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[str]:
+def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> str | None:
     """Clean up zombie and stuck EMDX processes.
 
     Args:
@@ -795,7 +795,7 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> Optional[st
     return f"Terminated {total_removed} processes" if total_removed > 0 else None
 
 
-def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbeat: bool = True) -> Optional[str]:
+def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbeat: bool = True) -> str | None:
     """Clean up stuck executions in the database.
 
     Args:

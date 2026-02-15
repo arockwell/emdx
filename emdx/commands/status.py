@@ -9,7 +9,6 @@ Provides a quick overview of:
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -25,7 +24,7 @@ from ..models.tasks import (
 console = Console()
 
 
-def _parse_timestamp(value) -> Optional[datetime]:
+def _parse_timestamp(value) -> datetime | None:
     """Parse a timestamp that may be a datetime, string, or None."""
     if value is None:
         return None

@@ -1,11 +1,11 @@
 """Sparkline utilities for terminal visualization."""
 
-from typing import List, Optional
+from typing import List
 
 BLOCKS = "▁▂▃▄▅▆▇█"
 
 
-def sparkline(values: List[float], width: Optional[int] = None) -> str:
+def sparkline(values: List[float], width: int | None = None) -> str:
     """Generate a sparkline string from values.
 
     Args:

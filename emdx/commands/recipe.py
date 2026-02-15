@@ -10,7 +10,7 @@ instructions for Claude to follow via `emdx delegate`.
 
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import typer
 
@@ -22,7 +22,7 @@ from ..utils.output import console
 app = typer.Typer(help="Manage and run EMDX recipes")
 
 
-def _find_recipe(id_or_name: str) -> Optional[dict]:
+def _find_recipe(id_or_name: str) -> dict | None:
     """Find a recipe by ID or title search."""
     # Try as numeric ID first
     try:
@@ -82,13 +82,13 @@ def list_recipes():
 @app.command("run")
 def run_recipe(
     id_or_name: str = typer.Argument(..., help="Recipe ID or title search"),
-    extra: Optional[List[str]] = typer.Argument(
+    extra: List[str] | None = typer.Argument(
         None, help="Extra arguments passed to the recipe"
     ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress metadata on stderr"
     ),
-    model: Optional[str] = typer.Option(
+    model: str | None = typer.Option(
         None, "--model", "-m", help="Model to use"
     ),
     pr: bool = typer.Option(
@@ -144,7 +144,7 @@ def run_recipe(
 @app.command("create")
 def create_recipe(
     file: str = typer.Argument(..., help="Markdown file to save as a recipe"),
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None, "--title", "-T", help="Custom title (default: filename)"
     ),
 ):

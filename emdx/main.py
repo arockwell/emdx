@@ -9,7 +9,6 @@ actually invoked.
 """
 
 import os
-from typing import Optional
 
 import typer
 
@@ -188,7 +187,7 @@ def main(
     version: bool = typer.Option(False, "--version", "-V", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
-    db_url: Optional[str] = typer.Option(
+    db_url: str | None = typer.Option(
         None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
     ),
     safe_mode: bool = typer.Option(

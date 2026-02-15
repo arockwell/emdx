@@ -7,7 +7,7 @@ that can be used to execute agent tasks.
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 # Default tools allowed for Claude CLI execution
 # These are the standard tools that most agents need for basic operations
@@ -55,15 +55,15 @@ class CliConfig:
 
     # Tool control
     supports_allowed_tools: bool  # Claude has --allowedTools
-    allowed_tools_flag: Optional[str]  # "--allowedTools"
-    force_flag: Optional[str]  # Cursor uses "--force"
+    allowed_tools_flag: str | None  # "--allowedTools"
+    force_flag: str | None  # Cursor uses "--force"
 
     # Workspace
-    workspace_flag: Optional[str]  # Cursor has "--workspace"
+    workspace_flag: str | None  # Cursor has "--workspace"
 
     # Environment
-    config_path: Optional[str]  # Path to CLI config file
-    api_key_env: Optional[str]  # Environment variable for API key
+    config_path: str | None  # Path to CLI config file
+    api_key_env: str | None  # Environment variable for API key
 
 
 # CLI configurations
@@ -136,7 +136,7 @@ def get_default_cli_tool() -> CliTool:
         return CliTool.CLAUDE
 
 
-def get_cli_config(cli_tool: Optional[CliTool] = None) -> CliConfig:
+def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     """Get configuration for a CLI tool.
 
     Args:

@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from ..database.connection import db_connection
 from ..utils.datetime_utils import parse_timestamp
@@ -14,18 +14,18 @@ from ..utils.datetime_utils import parse_timestamp
 class Execution:
     """Represents a Claude execution."""
     id: int  # Now numeric auto-incrementing ID
-    doc_id: Optional[int]  # Can be None for standalone delegate executions
+    doc_id: int | None  # Can be None for standalone delegate executions
     doc_title: str
     status: str  # 'running', 'completed', 'failed'
     started_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     log_file: str = ""
-    exit_code: Optional[int] = None
-    working_dir: Optional[str] = None
-    pid: Optional[int] = None
+    exit_code: int | None = None
+    working_dir: str | None = None
+    pid: int | None = None
 
     @property
-    def duration(self) -> Optional[float]:
+    def duration(self) -> float | None:
         """Get execution duration in seconds."""
         if self.completed_at:
             return (self.completed_at - self.started_at).total_seconds()
@@ -59,8 +59,8 @@ class Execution:
         return Path(self.log_file).expanduser()
 
 
-def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
-                    working_dir: Optional[str] = None, pid: Optional[int] = None) -> int:
+def create_execution(doc_id: int | None, doc_title: str, log_file: str,
+                    working_dir: str | None = None, pid: int | None = None) -> int:
     """Create a new execution and return its ID.
 
     Args:
@@ -84,7 +84,7 @@ def create_execution(doc_id: Optional[int], doc_title: str, log_file: str,
         return cursor.lastrowid
 
 
-def get_execution(exec_id: int) -> Optional[Execution]:
+def get_execution(exec_id: int) -> Execution | None:
     """Get execution by ID."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -181,7 +181,7 @@ def get_running_executions() -> List[Execution]:
         return executions
 
 
-def update_execution_status(exec_id: int, status: str, exit_code: Optional[int] = None) -> None:
+def update_execution_status(exec_id: int, status: str, exit_code: int | None = None) -> None:
     """Update execution status and completion time."""
     with db_connection.get_connection() as conn:
         if status in ['completed', 'failed']:

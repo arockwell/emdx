@@ -2,8 +2,8 @@
 
 import logging
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 # Try to use watchdog for efficient file watching
 try:

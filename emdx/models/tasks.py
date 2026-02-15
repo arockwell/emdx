@@ -1,7 +1,7 @@
 """Task operations for emdx."""
 
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 from emdx.config.constants import (
     DEFAULT_BROWSE_LIMIT,
@@ -18,19 +18,19 @@ def create_task(
     title: str,
     description: str = "",
     priority: int = DEFAULT_TASK_PRIORITY,
-    gameplan_id: Optional[int] = None,
-    project: Optional[str] = None,
-    depends_on: Optional[list[int]] = None,
+    gameplan_id: int | None = None,
+    project: str | None = None,
+    depends_on: list[int] | None = None,
     # Delegate activity tracking fields
-    prompt: Optional[str] = None,
+    prompt: str | None = None,
     task_type: str = "single",
-    execution_id: Optional[int] = None,
-    output_doc_id: Optional[int] = None,
-    source_doc_id: Optional[int] = None,
-    parent_task_id: Optional[int] = None,
-    seq: Optional[int] = None,
-    retry_of: Optional[int] = None,
-    tags: Optional[str] = None,
+    execution_id: int | None = None,
+    output_doc_id: int | None = None,
+    source_doc_id: int | None = None,
+    parent_task_id: int | None = None,
+    seq: int | None = None,
+    retry_of: int | None = None,
+    tags: str | None = None,
     status: str = "open",
 ) -> int:
     """Create task and return its ID."""
@@ -60,7 +60,7 @@ def create_task(
         return task_id
 
 
-def get_task(task_id: int) -> Optional[dict[str, Any]]:
+def get_task(task_id: int) -> dict[str, Any] | None:
     """Get task by ID."""
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
@@ -69,9 +69,9 @@ def get_task(task_id: int) -> Optional[dict[str, Any]]:
 
 
 def list_tasks(
-    status: Optional[list[str]] = None,
-    gameplan_id: Optional[int] = None,
-    project: Optional[str] = None,
+    status: list[str] | None = None,
+    gameplan_id: int | None = None,
+    project: str | None = None,
     limit: int = DEFAULT_BROWSE_LIMIT,
     exclude_delegate: bool = False,
 ) -> list[dict[str, Any]]:
@@ -160,7 +160,7 @@ def get_dependents(task_id: int) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_ready_tasks(gameplan_id: Optional[int] = None, exclude_delegate: bool = True) -> list[dict[str, Any]]:
+def get_ready_tasks(gameplan_id: int | None = None, exclude_delegate: bool = True) -> list[dict[str, Any]]:
     """Get tasks ready to work (open + all deps done).
 
     Args:

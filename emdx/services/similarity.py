@@ -16,7 +16,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Callable, List, Set
 
 from ..config.constants import EMDX_CONFIG_DIR
 
@@ -47,7 +47,7 @@ class SimilarDocument:
     """Represents a document similar to a query document."""
     doc_id: int
     title: str
-    project: Optional[str]
+    project: str | None
     similarity_score: float
     content_similarity: float
     tag_similarity: float
@@ -61,7 +61,7 @@ class IndexStats:
     vocabulary_size: int
     cache_size_bytes: int
     cache_age_seconds: float
-    last_built: Optional[datetime]
+    last_built: datetime | None
 
 
 class SimilarityService:
@@ -74,7 +74,7 @@ class SimilarityService:
     CONTENT_WEIGHT = 0.6      # Content similarity weight
     TAG_WEIGHT = 0.4          # Tag similarity weight
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """Initialize the similarity service.
 
         Args:
@@ -86,13 +86,13 @@ class SimilarityService:
         self._cache_path = self._cache_dir / "similarity_cache.pkl"
 
         # Index state
-        self._vectorizer: Optional[TfidfVectorizer] = None
+        self._vectorizer: TfidfVectorizer | None = None
         self._tfidf_matrix = None
         self._doc_ids: List[int] = []
         self._doc_titles: List[str] = []
-        self._doc_projects: List[Optional[str]] = []
+        self._doc_projects: List[str | None] = []
         self._doc_tags: List[Set[str]] = []
-        self._last_built: Optional[datetime] = None
+        self._last_built: datetime | None = None
 
     def _load_cache(self) -> bool:
         """Load the cached index if it exists.
@@ -436,7 +436,7 @@ class SimilarityService:
     def find_all_duplicate_pairs(
         self,
         min_similarity: float = 0.7,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Callable | None = None,
     ) -> List[tuple]:
         """Find all pairs of similar documents efficiently using radius neighbors.
 
@@ -462,9 +462,9 @@ class SimilarityService:
         if not self._doc_ids or self._tfidf_matrix is None:
             return []
 
+        import numpy as np
         from sklearn.neighbors import NearestNeighbors
         from sklearn.preprocessing import normalize
-        import numpy as np
 
         n_docs = len(self._doc_ids)
 

@@ -5,7 +5,7 @@ This module defines the abstract interface that all CLI executors must implement
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -14,7 +14,7 @@ class CliCommand:
 
     args: List[str]  # Command arguments
     env: Dict[str, str] = field(default_factory=dict)  # Additional env vars
-    cwd: Optional[str] = None  # Working directory
+    cwd: str | None = None  # Working directory
 
 
 @dataclass
@@ -23,7 +23,7 @@ class CliResult:
 
     success: bool
     output: str
-    error: Optional[str] = None
+    error: str | None = None
     exit_code: int = 0
 
     # Token usage (may be unavailable for some CLIs)
@@ -40,7 +40,7 @@ class CliResult:
     duration_api_ms: int = 0
 
     # Session tracking
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
     @property
     def total_tokens(self) -> int:
@@ -70,11 +70,11 @@ class CliExecutor(ABC):
     def build_command(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        allowed_tools: Optional[List[str]] = None,
+        model: str | None = None,
+        allowed_tools: List[str] | None = None,
         output_format: str = "stream-json",
-        working_dir: Optional[str] = None,
-        timeout: Optional[int] = None,
+        working_dir: str | None = None,
+        timeout: int | None = None,
     ) -> CliCommand:
         """Build the CLI command to execute.
 
@@ -111,7 +111,7 @@ class CliExecutor(ABC):
         pass
 
     @abstractmethod
-    def parse_stream_line(self, line: str) -> Optional[Dict[str, Any]]:
+    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
         """Parse a single line from stream-json output.
 
         Args:
@@ -132,7 +132,7 @@ class CliExecutor(ABC):
         pass
 
     @abstractmethod
-    def get_binary_path(self) -> Optional[str]:
+    def get_binary_path(self) -> str | None:
         """Get the path to the CLI binary.
 
         Returns:
