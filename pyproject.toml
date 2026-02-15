@@ -101,3 +101,20 @@ markers = [
 
 [tool.coverage.run]
 source = ["emdx"]
+
+[tool.bandit]
+# Skip common false positives in CLI applications
+skips = [
+    "B101",  # assert_used - asserts are fine in non-production code
+    "B110",  # try_except_pass - intentional silent exception handling in UI code
+    "B301",  # pickle - used for local cache files only, not untrusted data
+    "B311",  # random - used for non-security purposes (branch names, etc.)
+    "B324",  # hashlib_insecure_hash - MD5 used for non-security hashing (build IDs)
+    "B403",  # import_pickle - used for local cache files only
+    "B404",  # blacklist import subprocess - necessary for CLI tools
+    "B603",  # subprocess_without_shell_equals_true - safe when using list args
+    "B607",  # start_process_with_partial_path - tools like 'git' are expected in PATH
+    "B608",  # hardcoded_sql_expressions - using parameterized queries with dynamic conditionals
+]
+# Exclude test files from security scanning
+exclude_dirs = ["tests"]
