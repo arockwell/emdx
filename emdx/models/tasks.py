@@ -157,9 +157,10 @@ def list_tasks(
 
 # Allowed columns for task updates (prevents SQL injection via column names)
 ALLOWED_UPDATE_COLUMNS = frozenset({
-    'title', 'description', 'priority', 'status', 'gameplan_id', 'project',
-    'prompt', 'type', 'execution_id', 'output_doc_id', 'source_doc_id',
-    'parent_task_id', 'seq', 'retry_of', 'tags', 'epic_key', 'epic_seq',
+    'title', 'description', 'priority', 'status', 'error', 'gameplan_id',
+    'project', 'prompt', 'type', 'execution_id', 'output_doc_id',
+    'source_doc_id', 'parent_task_id', 'seq', 'retry_of', 'tags',
+    'epic_key', 'epic_seq',
 })
 
 
