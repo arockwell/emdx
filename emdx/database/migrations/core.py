@@ -1,0 +1,264 @@
+"""Core schema migrations for documents, tags, and executions.
+
+These migrations establish the foundational tables:
+- documents and FTS
+- tags system
+- executions tracking
+- document relationships
+"""
+
+import sqlite3
+
+
+def migration_000_create_documents_table(conn: sqlite3.Connection):
+    """Create the initial documents table and related schema."""
+    cursor = conn.cursor()
+
+    # Create documents table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            project TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            access_count INTEGER DEFAULT 0,
+            deleted_at TIMESTAMP,
+            is_deleted BOOLEAN DEFAULT FALSE
+        )
+        """
+    )
+
+    # Create FTS5 virtual table for full-text search
+    cursor.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+            title, content, project, content=documents, content_rowid=id,
+            tokenize='porter unicode61'
+        )
+        """
+    )
+
+    # Create triggers to keep FTS in sync
+    cursor.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
+            INSERT INTO documents_fts(rowid, title, content, project)
+            VALUES (new.id, new.title, new.content, new.project);
+        END
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
+            UPDATE documents_fts
+            SET title = new.title, content = new.content, project = new.project
+            WHERE rowid = old.id;
+        END
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
+            DELETE FROM documents_fts WHERE rowid = old.id;
+        END
+        """
+    )
+
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_documents_accessed ON documents(accessed_at DESC)"
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_documents_deleted ON documents(
+            is_deleted, deleted_at
+        )
+        """
+    )
+
+    # Create gists table for tracking document-gist relationships
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            gist_id TEXT NOT NULL,
+            gist_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_public BOOLEAN DEFAULT 0,
+            FOREIGN KEY (document_id) REFERENCES documents (id)
+        )
+        """
+    )
+
+    # Create indexes for gists table
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gists_document ON gists(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gists_gist_id ON gists(gist_id)")
+
+    conn.commit()
+
+
+def migration_001_add_tags(conn: sqlite3.Connection):
+    """Add tags tables for tag system support."""
+    cursor = conn.cursor()
+
+    # Create tags table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            usage_count INTEGER DEFAULT 0
+        )
+    """
+    )
+
+    # Create document_tags junction table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_tags (
+            document_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (document_id, tag_id),
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        )
+    """
+    )
+
+    # Create indexes for performance
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_tags_tag_id ON document_tags(tag_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON document_tags(document_id)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name)")
+
+    conn.commit()
+
+
+def migration_002_add_executions(conn: sqlite3.Connection):
+    """Add executions table for tracking Claude executions."""
+    cursor = conn.cursor()
+
+    # Create executions table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS executions (
+            id TEXT PRIMARY KEY,
+            doc_id INTEGER NOT NULL,
+            doc_title TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            started_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP,
+            log_file TEXT NOT NULL,
+            exit_code INTEGER,
+            working_dir TEXT,
+            FOREIGN KEY (doc_id) REFERENCES documents(id)
+        )
+    """
+    )
+
+    # Create indexes for efficient queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
+
+    conn.commit()
+
+
+def migration_003_add_document_relationships(conn: sqlite3.Connection):
+    """Add parent_id column to track document generation relationships."""
+    cursor = conn.cursor()
+
+    # Add parent_id column to documents table
+    cursor.execute("ALTER TABLE documents ADD COLUMN parent_id INTEGER")
+
+    # Add foreign key constraint (SQLite doesn't support adding FK constraints later)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_parent_id ON documents(parent_id)")
+
+    conn.commit()
+
+
+def migration_004_add_execution_pid(conn: sqlite3.Connection):
+    """Add process ID tracking to executions table."""
+    cursor = conn.cursor()
+
+    # Add pid column to executions table
+    cursor.execute("ALTER TABLE executions ADD COLUMN pid INTEGER")
+
+    conn.commit()
+
+
+def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
+    """Add heartbeat tracking to executions table."""
+    cursor = conn.cursor()
+
+    # Add last_heartbeat column to executions table
+    cursor.execute("ALTER TABLE executions ADD COLUMN last_heartbeat TIMESTAMP")
+
+    # Create index for efficient heartbeat queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
+
+    conn.commit()
+
+
+def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
+    """Convert executions table to use numeric IDs."""
+    cursor = conn.cursor()
+
+    # Check if we need to migrate (if id column is still TEXT)
+    cursor.execute("PRAGMA table_info(executions)")
+    columns = cursor.fetchall()
+    id_col = next((col for col in columns if col[1] == 'id'), None)
+
+    if id_col and id_col[2] == 'TEXT':
+        # Create new table with numeric ID
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS executions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id INTEGER NOT NULL,
+                doc_title TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+                started_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP,
+                log_file TEXT NOT NULL,
+                exit_code INTEGER,
+                working_dir TEXT,
+                pid INTEGER,
+                last_heartbeat TIMESTAMP,
+                old_id TEXT,  -- Keep old ID for reference
+                FOREIGN KEY (doc_id) REFERENCES documents(id)
+            )
+        """)
+
+        # Copy data from old table
+        cursor.execute("""
+            INSERT INTO executions_new
+            (doc_id, doc_title, status, started_at, completed_at, log_file,
+             exit_code, working_dir, pid, last_heartbeat, old_id)
+            SELECT doc_id, doc_title, status, started_at, completed_at, log_file,
+                   exit_code, working_dir, pid, NULL, id
+            FROM executions
+        """)
+
+        # Drop old table and rename new one
+        cursor.execute("DROP TABLE executions")
+        cursor.execute("ALTER TABLE executions_new RENAME TO executions")
+
+        # Recreate indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
+
+    conn.commit()
