@@ -13,23 +13,23 @@ and cursor tracking by node reference — eliminating scroll jumping.
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import Static, RichLog, Tree
+from textual.widgets import RichLog, Static, Tree
 
 from emdx.utils.datetime_utils import parse_datetime
 
-from .sparkline import sparkline
-from .activity_items import ActivityItem as ActivityItemBase
+from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
+from .activity_items import ActivityItem as ActivityItemBase
 from .activity_tree import ActivityTree
 from .group_picker import GroupPicker
-from ..modals import HelpMixin
+from .sparkline import sparkline
 
 logger = logging.getLogger(__name__)
 
@@ -720,7 +720,7 @@ class ActivityView(HelpMixin, Widget):
                     log_path = Path(log_file)
 
             if not log_path:
-                preview_log.write(f"[yellow]⏳ Waiting for log...[/yellow]")
+                preview_log.write("[yellow]⏳ Waiting for log...[/yellow]")
                 preview_log.write(f"[dim]item_type={item.item_type}[/dim]")
                 return
 
@@ -1151,7 +1151,7 @@ class ActivityView(HelpMixin, Widget):
         # First check if already visible in tree
         node = tree.find_node_by_doc_id(doc_id)
         if node:
-            logger.debug(f"Found document node directly in tree")
+            logger.debug("Found document node directly in tree")
             tree.move_cursor(node)
             tree.scroll_to_node(node)
             await self._update_preview(force=True)

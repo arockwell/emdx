@@ -11,98 +11,98 @@ from typing import Dict, List, Set
 EMOJI_ALIASES: Dict[str, str] = {
     # Document Types
     "gameplan": "🎯",
-    "plan": "🎯", 
+    "plan": "🎯",
     "strategy": "🎯",
     "goal": "🎯",
-    
+
     "analysis": "🔍",
     "investigate": "🔍",
     "research": "🔍",
     "explore": "🔍",
-    
+
     "notes": "📝",
     "note": "📝",
     "memo": "📝",
     "thoughts": "📝",
-    
+
     "docs": "📚",
     "documentation": "📚",
     "readme": "📚",
     "guide": "📚",
-    
+
     "architecture": "🏗️",
     "arch": "🏗️",
     "design": "🏗️",
     "structure": "🏗️",
-    
+
     # Workflow Status
     "active": "🚀",
     "current": "🚀",
     "working": "🚀",
     "wip": "🚀",
-    
+
     "done": "✅",
     "complete": "✅",
     "finished": "✅",
     "completed": "✅",
-    
+
     "blocked": "🚧",
     "stuck": "🚧",
     "waiting": "🚧",
     "pending": "🚧",
-    
+
     # Outcomes (Success Tracking)
     "success": "🎉",
     "works": "🎉",
     "good": "🎉",
-    
+
     "failed": "❌",
     "broken": "❌",
     "error": "❌",
     "bad": "❌",
-    
+
     "partial": "⚡",
     "mixed": "⚡",
     "halfway": "⚡",
     "some": "⚡",
-    
+
     # Technical Work
     "refactor": "🔧",
     "refactoring": "🔧",
     "cleanup": "🔧",
     "improve": "🔧",
-    
+
     "test": "🧪",
     "testing": "🧪",
     "tests": "🧪",
     "qa": "🧪",
-    
+
     "bug": "🐛",
     "fix": "🐛",
     "issue": "🐛",
     "problem": "🐛",
-    
+
     "feature": "✨",
     "new": "✨",
     "add": "✨",
     "enhancement": "✨",
-    
+
     "quality": "💎",
     "code-quality": "💎",
     "codequality": "💎",
     "clean": "💎",
-    
+
     # Priority
     "urgent": "🚨",
     "important": "🚨",
     "critical": "🚨",
     "asap": "🚨",
-    
+
     "low": "🐌",
     "later": "🐌",
     "someday": "🐌",
     "maybe": "🐌",
-    
+
     # Project Management
     "project": "📊",
     "management": "📊",
@@ -129,13 +129,13 @@ EMOJI_TAGS: Set[str] = set(EMOJI_ALIASES.values())
 def expand_aliases(tags: List[str]) -> List[str]:
     """
     Expand text aliases to emojis in a list of tags.
-    
+
     Args:
         tags: List of tag strings (mix of text aliases and emojis)
-        
+
     Returns:
         List of tags with aliases expanded to emojis
-        
+
     Examples:
         >>> expand_aliases(["gameplan", "active", "🔧"])
         ["🎯", "🚀", "🔧"]
@@ -156,13 +156,13 @@ def expand_aliases(tags: List[str]) -> List[str]:
 def expand_alias_string(tag_string: str) -> str:
     """
     Expand aliases in a comma-separated tag string.
-    
+
     Args:
         tag_string: Comma-separated string of tags
-        
+
     Returns:
         Comma-separated string with aliases expanded
-        
+
     Examples:
         >>> expand_alias_string("gameplan, active, refactor")
         "🎯, 🚀, 🔧"
@@ -171,7 +171,7 @@ def expand_alias_string(tag_string: str) -> str:
     """
     if not tag_string:
         return ""
-    
+
     tags = [t.strip() for t in tag_string.split(",") if t.strip()]
     expanded = expand_aliases(tags)
     return ", ".join(expanded)
@@ -180,13 +180,13 @@ def expand_alias_string(tag_string: str) -> str:
 def get_aliases_for_emoji(emoji: str) -> List[str]:
     """
     Get all text aliases for a given emoji.
-    
+
     Args:
         emoji: The emoji tag
-        
+
     Returns:
         List of text aliases for the emoji
-        
+
     Examples:
         >>> get_aliases_for_emoji("🎯")
         ["gameplan", "plan", "strategy", "goal"]
@@ -197,10 +197,10 @@ def get_aliases_for_emoji(emoji: str) -> List[str]:
 def is_emoji_tag(tag: str) -> bool:
     """
     Check if a tag is a known emoji tag.
-    
+
     Args:
         tag: The tag to check
-        
+
     Returns:
         True if the tag is a known emoji
     """
@@ -210,10 +210,10 @@ def is_emoji_tag(tag: str) -> bool:
 def is_text_alias(tag: str) -> bool:
     """
     Check if a tag is a known text alias.
-    
+
     Args:
         tag: The tag to check
-        
+
     Returns:
         True if the tag is a known text alias
     """
@@ -223,13 +223,13 @@ def is_text_alias(tag: str) -> bool:
 def normalize_tag_to_emoji(tag: str) -> str:
     """
     Convert a tag to its emoji equivalent if it's a known text alias.
-    
+
     Args:
         tag: The tag to normalize (could be text alias or already emoji)
-        
+
     Returns:
         Emoji version of the tag, or original tag if no alias exists
-        
+
     Examples:
         >>> normalize_tag_to_emoji("gameplan")
         "🎯"
@@ -245,7 +245,7 @@ def normalize_tag_to_emoji(tag: str) -> str:
 def get_all_aliases() -> Dict[str, str]:
     """
     Get all emoji aliases.
-    
+
     Returns:
         Dictionary mapping text aliases to emojis
     """
@@ -255,7 +255,7 @@ def get_all_aliases() -> Dict[str, str]:
 def get_category_emojis() -> Dict[str, List[str]]:
     """
     Get emojis organized by category.
-    
+
     Returns:
         Dictionary mapping categories to lists of emojis
     """
@@ -274,22 +274,22 @@ def get_category_emojis() -> Dict[str, List[str]]:
 def suggest_aliases(partial: str) -> List[str]:
     """
     Suggest aliases based on partial input.
-    
+
     Args:
         partial: Partial text to match against
-        
+
     Returns:
         List of matching aliases
     """
     partial = partial.lower().strip()
     if not partial:
         return []
-    
+
     matches = []
     for alias in EMOJI_ALIASES.keys():
         if alias.startswith(partial):
             matches.append(alias)
-    
+
     # Sort by length (shorter matches first) then alphabetically
     matches.sort(key=lambda x: (len(x), x))
     return matches[:10]  # Limit to 10 suggestions

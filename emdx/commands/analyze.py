@@ -35,18 +35,18 @@ def analyze(
 ):
     """
     Analyze your knowledge base to discover patterns, issues, and insights.
-    
+
     This command provides comprehensive read-only analysis without making any changes.
     Use it to understand the current state of your knowledge base and identify
     opportunities for improvement.
-    
+
     Examples:
         emdx maintain analyze              # Show health overview with recommendations
         emdx maintain analyze --health     # Detailed health metrics
         emdx maintain analyze --duplicates # Find duplicate documents
         emdx maintain analyze --all        # Run all analyses
     """
-    
+
     # If no specific analysis requested, show health overview
     if not any([health, duplicates, similar, empty, tags, projects, all_analyses]):
         health = True
@@ -54,39 +54,39 @@ def analyze(
     # If --all is specified, enable everything
     if all_analyses:
         health = duplicates = similar = empty = tags = projects = True
-    
+
     # Collect results if JSON output is requested
     if json_output:
         results = {}
-        
+
         if health:
             results["health"] = _collect_health_data()
-        
+
         if duplicates:
             results["duplicates"] = _collect_duplicates_data()
-        
+
         if similar:
             results["similar"] = _collect_similar_data()
-        
+
         if empty:
             results["empty"] = _collect_empty_data()
-        
+
         if tags:
             results["tags"] = _collect_tags_data(project)
 
         if projects:
             results["projects"] = _collect_projects_data()
-        
+
         # Output as JSON
         print(json.dumps(results, indent=2))
         return
-    
+
     # Header for human-readable output
     console.print(Panel(
         "[bold cyan]📊 Knowledge Base Analysis[/bold cyan]",
         box=box.DOUBLE
     ))
-    
+
     # Health Analysis
     if health:
         _analyze_health()
@@ -132,7 +132,7 @@ def _analyze_health():
     except ImportError as e:
         console.print(f"  [red]{e}[/red]")
         return
-    
+
     # Overall health score
     overall_score = metrics["overall_score"] * 100  # Convert to percentage
     health_color = (
@@ -140,18 +140,18 @@ def _analyze_health():
         "yellow" if overall_score >= 60 else
         "red"
     )
-    
+
     console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")
-    
+
     # Detailed metrics
     console.print("\n[bold]Health Metrics:[/bold]")
-    
+
     metrics_table = Table(show_header=False, box=box.SIMPLE)
     metrics_table.add_column("Metric", style="cyan")
     metrics_table.add_column("Score", justify="right")
     metrics_table.add_column("Status")
     metrics_table.add_column("Details")
-    
+
     # Tag Coverage
     tag_metric = metrics["metrics"]["tag_coverage"]
     tag_score = tag_metric.value * 100  # Convert to percentage
@@ -162,7 +162,7 @@ def _analyze_health():
         _get_status_emoji(tag_score),
         tag_metric.details
     )
-    
+
     # Duplicate Ratio
     dup_metric = metrics["metrics"]["duplicate_ratio"]
     dup_score = dup_metric.value * 100
@@ -173,7 +173,7 @@ def _analyze_health():
         _get_status_emoji(dup_score),
         dup_metric.details
     )
-    
+
     # Organization
     org_metric = metrics["metrics"]["organization"]
     org_score = org_metric.value * 100
@@ -184,7 +184,7 @@ def _analyze_health():
         _get_status_emoji(org_score),
         org_metric.details
     )
-    
+
     # Activity
     act_metric = metrics["metrics"]["activity"]
     act_score = act_metric.value * 100
@@ -195,14 +195,14 @@ def _analyze_health():
         _get_status_emoji(act_score),
         act_metric.details
     )
-    
+
     console.print(metrics_table)
-    
+
     # Collect all recommendations
     all_recommendations = []
     for metric in metrics["metrics"].values():
         all_recommendations.extend(metric.recommendations)
-    
+
     if all_recommendations:
         console.print("\n[bold]Recommendations:[/bold]")
         for rec in all_recommendations:
@@ -221,30 +221,30 @@ def _analyze_duplicates():
     except ImportError as e:
         console.print(f"  [red]{e}[/red]")
         return
-    
+
     console.print("[bold]Duplicate Analysis:[/bold]")
-    
+
     if not exact_dupes and not near_dupes:
         console.print("  ✨ [green]No duplicate documents found![/green]")
         return
-    
+
     # Exact duplicates
     if exact_dupes:
         total_exact = sum(len(group) - 1 for group in exact_dupes)
         console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")
-        
+
         # Show a few examples
         for i, group in enumerate(exact_dupes[:3], 1):
             console.print(f"    • Group {i}: '{group[0]['title']}' ({len(group)} copies)")
-    
+
     # Near duplicates
     if near_dupes:
         console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")
-        
+
         # Show a few examples
         for i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
             console.print(f"    • '{doc1['title']}' ↔ '{doc2['title']}' ({similarity:.0%} similar)")
-    
+
     console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")
 
 
@@ -258,25 +258,25 @@ def _analyze_similar():
     except ImportError as e:
         console.print(f"  [red]{e}[/red]")
         return
-    
+
     console.print("[bold]Similar Documents (Merge Candidates):[/bold]")
-    
+
     if not candidates:
         console.print("  ✨ [green]No similar documents found![/green]")
         return
-    
+
     console.print(f"\n  Found {len(candidates)} merge candidates:")
-    
+
     # Show top candidates
     for i, candidate in enumerate(candidates[:5], 1):
         console.print(f"\n  [{i}] [cyan]{candidate.doc1['title']}[/cyan]")
         console.print(f"      ↔ [cyan]{candidate.doc2['title']}[/cyan]")
         console.print(f"      [dim]Similarity: {candidate.similarity:.0%} | "
                      f"Combined length: {candidate.combined_length:,} chars[/dim]")
-    
+
     if len(candidates) > 5:
         console.print(f"\n  [dim]... and {len(candidates) - 5} more[/dim]")
-    
+
     console.print("\n[dim]Run 'emdx maintain --merge' to merge similar documents[/dim]")
 
 
@@ -294,23 +294,23 @@ def _analyze_empty():
         """)
 
         empty_docs = cursor.fetchall()
-    
+
     console.print("[bold]Empty Documents Analysis:[/bold]")
-    
+
     if not empty_docs:
         console.print("  ✨ [green]No empty documents found![/green]")
         return
-    
+
     console.print(f"\n  [yellow]Found {len(empty_docs)} empty documents[/yellow]")
-    
+
     # Show examples
     console.print("\n  Examples:")
     for doc in empty_docs[:5]:
         console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")
-    
+
     if len(empty_docs) > 5:
         console.print(f"    [dim]... and {len(empty_docs) - 5} more[/dim]")
-    
+
     console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
 
 
@@ -428,7 +428,7 @@ def _analyze_projects():
         projects = cursor.fetchall()
 
     console.print("[bold]Project Analysis:[/bold]\n")
-    
+
     table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
     table.add_column("Project", style="cyan")
     table.add_column("Docs", justify="right")
@@ -436,7 +436,7 @@ def _analyze_projects():
     table.add_column("Views", justify="right")
     table.add_column("Tags", justify="right")
     table.add_column("Last Updated")
-    
+
     for proj in projects:
         last_updated = parse_datetime(proj['last_updated'])
         days_ago = (datetime.now() - last_updated).days if last_updated else 0
@@ -449,7 +449,7 @@ def _analyze_projects():
             str(proj['unique_tags']),
             f"{days_ago}d ago"
         )
-    
+
     console.print(table)
 
 
@@ -481,7 +481,7 @@ def _collect_health_data() -> Dict[str, Any]:
         metrics = monitor.calculate_overall_health()
     except ImportError as e:
         return {"error": str(e)}
-    
+
     # Convert HealthMetric objects to dictionaries
     result = {
         "overall_score": metrics["overall_score"],
@@ -490,7 +490,7 @@ def _collect_health_data() -> Dict[str, Any]:
         "statistics": metrics.get("statistics", {}),
         "timestamp": metrics.get("timestamp", datetime.now().isoformat())
     }
-    
+
     # Convert each metric
     for key, metric in metrics["metrics"].items():
         result["metrics"][key] = {
@@ -502,7 +502,7 @@ def _collect_health_data() -> Dict[str, Any]:
             "details": metric.details,
             "recommendations": metric.recommendations
         }
-    
+
     return result
 
 
@@ -514,7 +514,7 @@ def _collect_duplicates_data() -> Dict[str, Any]:
         near_dupes = detector.find_near_duplicates(threshold=0.85)
     except ImportError:
         near_dupes = []
-    
+
     result = {
         "exact_duplicates": {
             "count": len(exact_dupes),
@@ -526,7 +526,7 @@ def _collect_duplicates_data() -> Dict[str, Any]:
             "pairs": []
         }
     }
-    
+
     # Add exact duplicate groups
     for group in exact_dupes[:10]:  # Limit to 10 groups
         result["exact_duplicates"]["groups"].append({
@@ -534,7 +534,7 @@ def _collect_duplicates_data() -> Dict[str, Any]:
             "count": len(group),
             "ids": [doc['id'] for doc in group]
         })
-    
+
     # Add near duplicate pairs
     for doc1, doc2, similarity in near_dupes[:10]:  # Limit to 10 pairs
         result["near_duplicates"]["pairs"].append({
@@ -542,7 +542,7 @@ def _collect_duplicates_data() -> Dict[str, Any]:
             "doc2": {"id": doc2['id'], "title": doc2['title']},
             "similarity": similarity
         })
-    
+
     return result
 
 
@@ -553,12 +553,12 @@ def _collect_similar_data() -> Dict[str, Any]:
         candidates = merger.find_merge_candidates(similarity_threshold=0.7)
     except ImportError as e:
         return {"error": str(e), "count": 0, "candidates": []}
-    
+
     result = {
         "count": len(candidates),
         "candidates": []
     }
-    
+
     for candidate in candidates[:20]:  # Limit to 20
         result["candidates"].append({
             "doc1": {"id": candidate.doc1['id'], "title": candidate.doc1['title']},
@@ -566,7 +566,7 @@ def _collect_similar_data() -> Dict[str, Any]:
             "similarity": candidate.similarity,
             "combined_length": candidate.combined_length
         })
-    
+
     return result
 
 
@@ -735,7 +735,7 @@ def _collect_projects_data() -> Dict[str, Any]:
 
 
 # Create typer app for this module
-app = typer.Typer()
+app = typer.Typer(help="Analyze documents and extract insights")
 app.command()(analyze)
 
 

@@ -11,7 +11,6 @@ from typing import Any
 
 from .constants import EMDX_CONFIG_DIR
 
-
 DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "emdx-dark",
     "code_theme": "auto",

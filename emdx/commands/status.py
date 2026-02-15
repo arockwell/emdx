@@ -8,12 +8,11 @@ Provides a quick overview of:
 - Cascade queue
 """
 
-import typer
 from datetime import datetime, timedelta
 from typing import Optional
 
+import typer
 from rich.console import Console
-from rich.text import Text
 
 from ..database import db
 from ..models.tasks import (
@@ -258,5 +257,5 @@ def status(
 
 
 # Create typer app for the command
-app = typer.Typer()
+app = typer.Typer(help="Show delegate activity and project status")
 app.command()(status)
