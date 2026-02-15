@@ -5,7 +5,6 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, Set, Tuple
 
 from emdx.utils.datetime_utils import parse_datetime
 
@@ -32,14 +31,13 @@ except ImportError:
     HAS_DOCS = False
     HAS_GROUPS = False
 
-
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
     def __init__(self) -> None:
         pass
 
-    async def load_all(self, zombies_cleaned: bool = True) -> List[ActivityItem]:
+    async def load_all(self, zombies_cleaned: bool = True) -> list[ActivityItem]:
         """Load all activity items, sorted.
 
         Args:
@@ -48,7 +46,7 @@ class ActivityDataLoader:
         Returns:
             Sorted list of typed ActivityItem instances.
         """
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
 
         if HAS_GROUPS:
             items.extend(await self._load_groups())
@@ -72,12 +70,12 @@ class ActivityDataLoader:
         items.sort(key=sort_key)
         return items
 
-    async def _load_groups(self) -> List[ActivityItem]:
+    async def _load_groups(self) -> list[ActivityItem]:
         """Load document groups into typed GroupItem instances.
 
         Uses a single batched query instead of N+1 per-group lookups.
         """
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
         try:
             top_groups = group_svc.list_top_groups_with_counts()
         except Exception as e:
@@ -108,10 +106,10 @@ class ActivityDataLoader:
 
         return items
 
-    async def _load_direct_saves(self) -> List[ActivityItem]:
+    async def _load_direct_saves(self) -> list[ActivityItem]:
         """Load documents not added to groups (standalone saves)."""
-        items: List[ActivityItem] = []
-        grouped_doc_ids: Set[int] = set()
+        items: list[ActivityItem] = []
+        grouped_doc_ids: set[int] = set()
         if HAS_GROUPS:
             try:
                 grouped_doc_ids = group_svc.get_all_grouped_document_ids()
@@ -151,15 +149,15 @@ class ActivityDataLoader:
 
         return items
 
-    async def _load_cascade_executions(self) -> List[ActivityItem]:
+    async def _load_cascade_executions(self) -> list[ActivityItem]:
         """Load cascade executions into CascadeRunItem instances."""
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
         try:
             from emdx.database.connection import db_connection
             from emdx.services.cascade_service import get_cascade_run_executions, list_cascade_runs
 
             cutoff = datetime.now() - timedelta(days=7)
-            seen_run_ids: Set[int] = set()
+            seen_run_ids: set[int] = set()
 
             # Load cascade runs (grouped view)
             try:
@@ -241,9 +239,9 @@ class ActivityDataLoader:
 
         return items
 
-    async def _load_agent_executions(self) -> List[ActivityItem]:
+    async def _load_agent_executions(self) -> list[ActivityItem]:
         """Load standalone agent executions."""
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
         try:
             from emdx.services.execution_service import get_agent_executions
 

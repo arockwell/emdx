@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any
 
 from ..database import db
 from ..database.search import search_documents
@@ -19,13 +19,12 @@ from ..utils.datetime_utils import parse_datetime
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class SearchQuery:
     """Represents a parsed search query with all filter options."""
 
     text: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     tag_mode: str = "all"  # "all" or "any"
     semantic: bool = False
     created_after: datetime | None = None
@@ -34,7 +33,6 @@ class SearchQuery:
     modified_before: datetime | None = None
     project: str | None = None
     limit: int = 50
-
 
 @dataclass
 class SearchResult:
@@ -45,11 +43,10 @@ class SearchResult:
     snippet: str
     score: float  # Normalized 0-1
     source: str  # "fts", "tags", "semantic", "fuzzy"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     project: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
-
 
 class UnifiedSearchService:
     """
@@ -175,7 +172,7 @@ class UnifiedSearchService:
 
         return " ".join(prepared_words)
 
-    async def search(self, query: SearchQuery) -> List[SearchResult]:
+    async def search(self, query: SearchQuery) -> list[SearchResult]:
         """
         Execute search across all specified modes.
 
@@ -186,10 +183,10 @@ class UnifiedSearchService:
         # Run blocking search in thread pool to avoid blocking event loop
         return await asyncio.to_thread(self._search_sync, query)
 
-    def _search_sync(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_sync(self, query: SearchQuery) -> list[SearchResult]:
         """Synchronous search implementation (runs in thread pool)."""
-        results: List[SearchResult] = []
-        seen_ids: Set[int] = set()
+        results: list[SearchResult] = []
+        seen_ids: set[int] = set()
 
         # Collect results from different sources
         if query.text:
@@ -260,7 +257,7 @@ class UnifiedSearchService:
 
         return results
 
-    def _search_fts(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_fts(self, query: SearchQuery) -> list[SearchResult]:
         """Execute FTS5 full-text search."""
         # Build date filter strings
         created_after_str = query.created_after.isoformat() if query.created_after else None
@@ -304,7 +301,7 @@ class UnifiedSearchService:
 
         return results
 
-    def _search_tags(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_tags(self, query: SearchQuery) -> list[SearchResult]:
         """Execute tag-based search."""
         docs = search_by_tags(
             tag_names=query.tags,
@@ -330,7 +327,7 @@ class UnifiedSearchService:
 
         return results
 
-    def _search_semantic(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_semantic(self, query: SearchQuery) -> list[SearchResult]:
         """Execute semantic similarity search (sync version)."""
         if not self.embedding_service:
             return []
@@ -347,7 +344,7 @@ class UnifiedSearchService:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
-    async def _search_semantic_async(self, query: SearchQuery) -> List[SearchResult]:
+    async def _search_semantic_async(self, query: SearchQuery) -> list[SearchResult]:
         """Execute semantic similarity search (async version - runs in thread pool)."""
         if not self.embedding_service:
             return []
@@ -364,7 +361,7 @@ class UnifiedSearchService:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
-    def _convert_semantic_matches(self, matches) -> List[SearchResult]:
+    def _convert_semantic_matches(self, matches) -> list[SearchResult]:
         """Convert semantic matches to SearchResult objects."""
         results = []
         for match in matches:
@@ -385,8 +382,8 @@ class UnifiedSearchService:
         query: str,
         limit: int = 20,
         threshold: float = 0.4,
-        exclude_ids: Set[int] | None = None,
-    ) -> List[SearchResult]:
+        exclude_ids: set[int] | None = None,
+    ) -> list[SearchResult]:
         """
         Fuzzy search document titles using SequenceMatcher.
 
@@ -409,7 +406,7 @@ class UnifiedSearchService:
             rows = cursor.fetchall()
 
         query_lower = query.lower()
-        scored: List[Tuple[float, Dict[str, Any]]] = []
+        scored: list[tuple[float, dict[str, Any]]] = []
 
         for row in rows:
             doc_id = row[0]
@@ -477,7 +474,7 @@ class UnifiedSearchService:
 
         return results
 
-    def get_recent_documents(self, limit: int = 10) -> List[SearchResult]:
+    def get_recent_documents(self, limit: int = 10) -> list[SearchResult]:
         """Get recently accessed documents for empty state suggestions."""
         with db.get_connection() as conn:
             cursor = conn.cursor()
@@ -518,7 +515,7 @@ class UnifiedSearchService:
 
         return results
 
-    def get_popular_tags(self, limit: int = 15) -> List[Dict[str, Any]]:
+    def get_popular_tags(self, limit: int = 15) -> list[dict[str, Any]]:
         """Get popular tags for empty state suggestions."""
         with db.get_connection() as conn:
             cursor = conn.cursor()

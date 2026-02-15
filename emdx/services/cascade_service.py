@@ -10,7 +10,7 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
@@ -27,8 +27,7 @@ update_cascade_stage = cascade_db.update_cascade_stage
 save_document_to_cascade = cascade_db.save_document_to_cascade
 get_document = get_document
 
-
-def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
+def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
     """Get recent pipeline activity — executions with their input/output docs."""
     PREV_STAGE = {"prompt": "idea", "analyzed": "prompt", "planned": "analyzed", "done": "planned"}
 
@@ -59,8 +58,7 @@ def get_recent_pipeline_activity(limit: int = 10) -> List[Dict[str, Any]]:
             })
         return results
 
-
-def get_child_info(parent_id: int) -> Dict[str, Any] | None:
+def get_child_info(parent_id: int) -> dict[str, Any] | None:
     """Get info about the first child document of a parent."""
     with db_connection.get_connection() as conn:
         row = conn.execute(
@@ -69,13 +67,11 @@ def get_child_info(parent_id: int) -> Dict[str, Any] | None:
         ).fetchone()
         return {"id": row[0], "title": row[1], "stage": row[2]} if row else None
 
-
 def get_document_pr_url(doc_id: int) -> str | None:
     """Get PR URL for a document."""
     with db_connection.get_connection() as conn:
         row = conn.execute("SELECT pr_url FROM documents WHERE id = ?", (doc_id,)).fetchone()
         return row[0] if row and row[0] else None
-
 
 def monitor_execution_completion(
     exec_id: int,

@@ -9,10 +9,8 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict
 
 logger = logging.getLogger(__name__)
-
 
 def extract_output_doc_id(log_file: Path) -> int | None:
     """Extract output document ID from execution log.
@@ -72,7 +70,6 @@ def extract_output_doc_id(log_file: Path) -> int | None:
         logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
         return None
 
-
 def extract_token_usage(log_file: Path) -> int:
     """Extract total token usage from Claude execution log.
 
@@ -88,8 +85,7 @@ def extract_token_usage(log_file: Path) -> int:
     usage = extract_token_usage_detailed(log_file)
     return usage.get('total', 0)
 
-
-def extract_token_usage_detailed(log_file: Path) -> Dict[str, int]:
+def extract_token_usage_detailed(log_file: Path) -> dict[str, int]:
     """Extract detailed token usage from Claude execution log.
 
     Parses the log file looking for the raw result JSON that was embedded

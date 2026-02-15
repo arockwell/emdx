@@ -1,9 +1,6 @@
 """Tag display utilities for consistent ordering and formatting."""
 
-from typing import List, Tuple
-
-
-def order_tags(tags: List[str]) -> List[str]:
+def order_tags(tags: list[str]) -> list[str]:
     """
     Order tags according to category: Document Type -> Status -> Other
 
@@ -25,8 +22,7 @@ def order_tags(tags: List[str]) -> List[str]:
     # Combine in order
     return doc_type_tags + status_list + other_tags
 
-
-def format_tags(tags: List[str]) -> str:
+def format_tags(tags: list[str]) -> str:
     """
     Format tags for display with proper ordering and spacing.
 
@@ -42,8 +38,7 @@ def format_tags(tags: List[str]) -> str:
     ordered = order_tags(tags)
     return " ".join(ordered)
 
-
-def truncate_emoji_safe(text: str, max_chars: int) -> Tuple[str, bool]:
+def truncate_emoji_safe(text: str, max_chars: int) -> tuple[str, bool]:
     """
     Truncate text at emoji boundaries to avoid breaking multi-char emojis.
 

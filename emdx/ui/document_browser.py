@@ -8,7 +8,7 @@ operations while this widget focuses on display and user interaction.
 """
 
 import logging
-from typing import Any, Dict, Protocol
+from typing import Any, Protocol
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -26,7 +26,6 @@ from .vim_editor import VimEditor
 
 logger = logging.getLogger(__name__)
 
-
 class TextAreaHost(Protocol):
     """Protocol defining what VimEditTextArea and SelectionTextArea expect from their host."""
 
@@ -41,7 +40,6 @@ class TextAreaHost(Protocol):
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (for SelectionTextArea)."""
         ...
-
 
 class DocumentBrowser(HelpMixin, Widget):
     """Document browser widget that can host text areas."""
@@ -309,9 +307,9 @@ class DocumentBrowser(HelpMixin, Widget):
         """
         await self._render_document_list()
 
-    def save_state(self) -> Dict[str, Any]:
+    def save_state(self) -> dict[str, Any]:
         """Save current state for restoration."""
-        state: Dict[str, Any] = {
+        state: dict[str, Any] = {
             "mode": self.mode,
             "current_search": self._current_vm.search_query if self._current_vm else "",
         }
@@ -325,7 +323,7 @@ class DocumentBrowser(HelpMixin, Widget):
 
         return state
 
-    def restore_state(self, state: Dict[str, Any]) -> None:
+    def restore_state(self, state: dict[str, Any]) -> None:
         """Restore saved state."""
         self.mode = state.get("mode", "NORMAL")
         # Search query will be applied when load_documents is called
@@ -1051,7 +1049,6 @@ class DocumentBrowser(HelpMixin, Widget):
                 details_panel.write(f"📄 Document {detail_vm.id}: {detail_vm.title}")
             except Exception as e2:
                 logger.debug("Fallback details panel also failed: %s", e2)
-
 
     async def on_input_submitted(self, event) -> None:
         """Handle input submission."""

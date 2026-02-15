@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 import psutil
 
@@ -28,7 +28,7 @@ class ExecutionMonitor:
         """
         self.stale_timeout = stale_timeout_seconds
 
-    def check_process_health(self, execution: Execution) -> Dict[str, Any]:
+    def check_process_health(self, execution: Execution) -> dict[str, Any]:
         """Check if an execution's process is still healthy.
 
         Args:
@@ -78,7 +78,7 @@ class ExecutionMonitor:
 
         return health
 
-    def cleanup_stuck_executions(self, dry_run: bool = True) -> List[Dict[str, Any]]:
+    def cleanup_stuck_executions(self, dry_run: bool = True) -> list[dict[str, Any]]:
         """Find and clean up stuck executions.
 
         Args:
@@ -159,7 +159,7 @@ class ExecutionMonitor:
 
         return actions
 
-    def get_execution_metrics(self) -> Dict[str, Any]:
+    def get_execution_metrics(self) -> dict[str, Any]:
         """Get metrics about executions.
 
         Returns:
@@ -217,7 +217,7 @@ class ExecutionMonitor:
                 'metrics_timestamp': datetime.now(timezone.utc).isoformat()
             }
 
-    def kill_zombie_processes(self, dry_run: bool = True) -> List[Dict[str, Any]]:
+    def kill_zombie_processes(self, dry_run: bool = True) -> list[dict[str, Any]]:
         """Kill zombie execution processes.
 
         Args:

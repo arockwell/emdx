@@ -9,10 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Dict, List
 
 logger = logging.getLogger(__name__)
-
 
 class CommandContext(Enum):
     """Contexts where commands are available."""
@@ -21,7 +19,6 @@ class CommandContext(Enum):
     DOCUMENT_BROWSER = "document_browser"
     ACTIVITY = "activity"
 
-
 @dataclass
 class PaletteCommand:
     """A command that can be executed from the palette."""
@@ -29,18 +26,17 @@ class PaletteCommand:
     id: str  # Unique identifier, e.g., "nav.activity"
     name: str  # Display name: "Go to Activity"
     description: str  # What it does
-    keywords: List[str] = field(default_factory=list)  # For fuzzy matching
+    keywords: list[str] = field(default_factory=list)  # For fuzzy matching
     action: Callable | None = None  # Function to execute (app) -> None
     context: CommandContext = CommandContext.GLOBAL  # Where available
     shortcut: str | None = None  # Keyboard shortcut hint
     category: str = "General"  # For grouping in UI
 
-
 class CommandRegistry:
     """Registry of available commands for the palette."""
 
     def __init__(self):
-        self._commands: Dict[str, PaletteCommand] = {}
+        self._commands: dict[str, PaletteCommand] = {}
         self._register_defaults()
 
     def register(self, command: PaletteCommand) -> None:
@@ -59,7 +55,7 @@ class CommandRegistry:
         """Get a command by ID."""
         return self._commands.get(command_id)
 
-    def get_all(self, context: CommandContext | None = None) -> List[PaletteCommand]:
+    def get_all(self, context: CommandContext | None = None) -> list[PaletteCommand]:
         """Get all commands, optionally filtered by context."""
         commands = list(self._commands.values())
         if context:
@@ -74,7 +70,7 @@ class CommandRegistry:
         context: CommandContext | None = None,
         limit: int = 10,
         threshold: float = 0.3,
-    ) -> List[PaletteCommand]:
+    ) -> list[PaletteCommand]:
         """
         Fuzzy search commands by name and keywords.
 
@@ -91,7 +87,7 @@ class CommandRegistry:
             return self.get_all(context)[:limit]
 
         query_lower = query.lower().strip()
-        scored: List[tuple[float, PaletteCommand]] = []
+        scored: list[tuple[float, PaletteCommand]] = []
 
         for cmd in self._commands.values():
             # Filter by context
@@ -294,10 +290,8 @@ class CommandRegistry:
             )
         )
 
-
 # Global registry instance
 _registry: CommandRegistry | None = None
-
 
 def get_command_registry() -> CommandRegistry:
     """Get the global command registry instance."""

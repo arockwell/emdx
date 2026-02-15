@@ -8,12 +8,10 @@ at startup before they can cause runtime crashes.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Set
 
 from .context import Context
 
 logger = logging.getLogger(__name__)
-
 
 class ConflictType(Enum):
     """Types of keybinding conflicts."""
@@ -22,14 +20,12 @@ class ConflictType(Enum):
     PARENT_CHILD = "parent_child"  # Child overrides parent (usually OK)
     SIBLING = "sibling"  # Different contexts that might overlap
 
-
 class ConflictSeverity(Enum):
     """Severity levels for conflicts."""
 
     CRITICAL = "critical"  # Will likely crash
     WARNING = "warning"  # Might cause issues
     INFO = "info"  # Intentional override, just informational
-
 
 @dataclass
 class KeybindingEntry:
@@ -68,7 +64,6 @@ class KeybindingEntry:
             "priority": self.priority,
         }
 
-
 @dataclass
 class ConflictReport:
     """Describes a keybinding conflict."""
@@ -102,7 +97,6 @@ class ConflictReport:
             "binding2": self.binding2.to_dict(),
         }
 
-
 @dataclass
 class KeybindingRegistry:
     """
@@ -129,19 +123,19 @@ class KeybindingRegistry:
     """
 
     # All registered bindings
-    bindings: List[KeybindingEntry] = field(default_factory=list)
+    bindings: list[KeybindingEntry] = field(default_factory=list)
 
     # Bindings indexed by context for fast lookup
-    by_context: Dict[Context, List[KeybindingEntry]] = field(default_factory=dict)
+    by_context: dict[Context, list[KeybindingEntry]] = field(default_factory=dict)
 
     # Bindings indexed by key for conflict detection
-    by_key: Dict[str, List[KeybindingEntry]] = field(default_factory=dict)
+    by_key: dict[str, list[KeybindingEntry]] = field(default_factory=dict)
 
     # Detected conflicts
-    conflicts: List[ConflictReport] = field(default_factory=list)
+    conflicts: list[ConflictReport] = field(default_factory=list)
 
     # User overrides from config
-    overrides: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def register(self, entry: KeybindingEntry) -> None:
         """
@@ -166,7 +160,7 @@ class KeybindingRegistry:
             self.by_key[entry.key] = []
         self.by_key[entry.key].append(entry)
 
-    def register_many(self, entries: List[KeybindingEntry]) -> None:
+    def register_many(self, entries: list[KeybindingEntry]) -> None:
         """Register multiple keybindings at once."""
         for entry in entries:
             self.register(entry)
@@ -217,7 +211,7 @@ class KeybindingRegistry:
 
         return False
 
-    def detect_conflicts(self) -> List[ConflictReport]:
+    def detect_conflicts(self) -> list[ConflictReport]:
         """
         Detect all keybinding conflicts.
 
@@ -326,7 +320,7 @@ class KeybindingRegistry:
 
     def get_bindings_for_context(
         self, context: Context, include_parents: bool = True
-    ) -> List[KeybindingEntry]:
+    ) -> list[KeybindingEntry]:
         """
         Get all bindings active in a context.
 
@@ -357,7 +351,7 @@ class KeybindingRegistry:
 
         return bindings
 
-    def get_all_keys(self) -> Set[str]:
+    def get_all_keys(self) -> set[str]:
         """Get all registered keys."""
         return set(self.by_key.keys())
 
@@ -377,7 +371,7 @@ class KeybindingRegistry:
 
     def get_conflicts_by_severity(
         self, severity: ConflictSeverity
-    ) -> List[ConflictReport]:
+    ) -> list[ConflictReport]:
         """Get conflicts filtered by severity."""
         return [c for c in self.conflicts if c.severity == severity]
 

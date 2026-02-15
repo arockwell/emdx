@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -28,7 +28,6 @@ from .new_idea_screen import NewIdeaScreen
 from .stage_summary_bar import StageSummaryBar
 
 logger = logging.getLogger(__name__)
-
 
 class CascadeView(Widget):
     """Main pipeline view with stage navigation and preview."""
@@ -92,13 +91,13 @@ class CascadeView(Widget):
         self.summary: StageSummaryBar | None = None
         self.doc_list: DocumentList | None = None
         self.pipeline_table: DataTable | None = None
-        self._pipeline_data: List[Dict[str, Any]] = []
+        self._pipeline_data: list[dict[str, Any]] = []
         self._selected_pipeline_idx: int | None = None
         self._pipeline_view_mode: str = "output"
         self._auto_refresh_timer = None
         self._log_stream = None
         self._log_subscriber = None
-        self._selected_exec: Dict[str, Any] | None = None
+        self._selected_exec: dict[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
         from textual.containers import ScrollableContainer
@@ -245,7 +244,7 @@ class CascadeView(Widget):
         else:
             content.write("[dim]No content[/dim]")
 
-    def _show_execution_preview(self, exec_data: Dict[str, Any]) -> None:
+    def _show_execution_preview(self, exec_data: dict[str, Any]) -> None:
         """Show execution log in preview pane — live if running."""
         self._stop_log_stream()
         self._selected_exec = exec_data
@@ -334,7 +333,7 @@ class CascadeView(Widget):
 
     # ── Pipeline preview routing ──────────────────────────────────
 
-    def _show_pipeline_preview(self, act: Dict[str, Any]) -> None:
+    def _show_pipeline_preview(self, act: dict[str, Any]) -> None:
         if self._pipeline_view_mode == "input":
             input_id = act.get("input_id")
             if input_id:
@@ -416,7 +415,7 @@ class CascadeView(Widget):
             if doc_id:
                 self.post_message(self.ViewDocument(doc_id))
 
-    def _get_selected_pipeline_act(self) -> Dict[str, Any] | None:
+    def _get_selected_pipeline_act(self) -> dict[str, Any] | None:
         if self._selected_pipeline_idx is None:
             self._update_status("[yellow]Select a pipeline row first[/yellow]")
             return None

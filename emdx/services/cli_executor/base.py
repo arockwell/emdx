@@ -5,17 +5,16 @@ This module defines the abstract interface that all CLI executors must implement
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
 class CliCommand:
     """Represents a CLI command to execute."""
 
-    args: List[str]  # Command arguments
-    env: Dict[str, str] = field(default_factory=dict)  # Additional env vars
+    args: list[str]  # Command arguments
+    env: dict[str, str] = field(default_factory=dict)  # Additional env vars
     cwd: str | None = None  # Working directory
-
 
 @dataclass
 class CliResult:
@@ -52,7 +51,6 @@ class CliResult:
             + self.cache_create_tokens
         )
 
-
 class CliExecutor(ABC):
     """Abstract base class for CLI executors.
 
@@ -71,7 +69,7 @@ class CliExecutor(ABC):
         self,
         prompt: str,
         model: str | None = None,
-        allowed_tools: List[str] | None = None,
+        allowed_tools: list[str] | None = None,
         output_format: str = "stream-json",
         working_dir: str | None = None,
         timeout: int | None = None,
@@ -111,7 +109,7 @@ class CliExecutor(ABC):
         pass
 
     @abstractmethod
-    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
+    def parse_stream_line(self, line: str) -> dict[str, Any] | None:
         """Parse a single line from stream-json output.
 
         Args:
@@ -123,7 +121,7 @@ class CliExecutor(ABC):
         pass
 
     @abstractmethod
-    def validate_environment(self) -> tuple[bool, Dict[str, Any]]:
+    def validate_environment(self) -> tuple[bool, dict[str, Any]]:
         """Validate that the CLI is properly installed and configured.
 
         Returns:
@@ -140,7 +138,7 @@ class CliExecutor(ABC):
         """
         pass
 
-    def extract_text_content(self, content: List[Dict[str, Any]]) -> str:
+    def extract_text_content(self, content: list[dict[str, Any]]) -> str:
         """Extract text from message content array.
 
         This is common to both Claude and Cursor formats.

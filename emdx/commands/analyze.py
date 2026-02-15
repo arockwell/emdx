@@ -7,7 +7,7 @@ import json
 
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 import typer
 from rich import box
@@ -121,7 +121,6 @@ def analyze(
     if projects:
         _analyze_projects()
 
-
 def _analyze_health():
     """Show detailed health metrics."""
     monitor = HealthMonitor()
@@ -209,7 +208,6 @@ def _analyze_health():
             console.print(f"  • {rec}")
         console.print("\n[dim]Run 'emdx maintain' to fix these issues[/dim]")
 
-
 def _analyze_duplicates():
     """Find duplicate documents."""
     detector = DuplicateDetector()
@@ -247,7 +245,6 @@ def _analyze_duplicates():
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")
 
-
 def _analyze_similar():
     """Find similar documents for merging."""
     merger = DocumentMerger()
@@ -278,7 +275,6 @@ def _analyze_similar():
         console.print(f"\n  [dim]... and {len(candidates) - 5} more[/dim]")
 
     console.print("\n[dim]Run 'emdx maintain --merge' to merge similar documents[/dim]")
-
 
 def _analyze_empty():
     """Find empty documents."""
@@ -312,7 +308,6 @@ def _analyze_empty():
         console.print(f"    [dim]... and {len(empty_docs) - 5} more[/dim]")
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
-
 
 def _analyze_tags(project: str | None = None):
     """Analyze tag coverage and patterns."""
@@ -404,7 +399,6 @@ def _analyze_tags(project: str | None = None):
             console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
             console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
 
-
 def _analyze_projects():
     """Show project-level analysis."""
     with db_connection.get_connection() as conn:
@@ -452,7 +446,6 @@ def _analyze_projects():
 
     console.print(table)
 
-
 def _get_status_emoji(score: float) -> str:
     """Get status emoji based on score."""
     if score >= 80:
@@ -461,7 +454,6 @@ def _get_status_emoji(score: float) -> str:
         return "⚠️"
     else:
         return "❌"
-
 
 def _get_coverage_color(coverage: float) -> str:
     """Get color based on coverage percentage."""
@@ -472,9 +464,8 @@ def _get_coverage_color(coverage: float) -> str:
     else:
         return "red"
 
-
 # JSON collection functions
-def _collect_health_data() -> Dict[str, Any]:
+def _collect_health_data() -> dict[str, Any]:
     """Collect health metrics as structured data."""
     monitor = HealthMonitor()
     try:
@@ -505,8 +496,7 @@ def _collect_health_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_duplicates_data() -> Dict[str, Any]:
+def _collect_duplicates_data() -> dict[str, Any]:
     """Collect duplicate analysis data."""
     detector = DuplicateDetector()
     exact_dupes = detector.find_duplicates()
@@ -545,8 +535,7 @@ def _collect_duplicates_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_similar_data() -> Dict[str, Any]:
+def _collect_similar_data() -> dict[str, Any]:
     """Collect similar documents data."""
     merger = DocumentMerger()
     try:
@@ -569,8 +558,7 @@ def _collect_similar_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_empty_data() -> Dict[str, Any]:
+def _collect_empty_data() -> dict[str, Any]:
     """Collect empty documents data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -601,8 +589,7 @@ def _collect_empty_data() -> Dict[str, Any]:
 
     return result
 
-
-def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
+def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
     """Collect tag analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -689,8 +676,7 @@ def _collect_tags_data(project: str | None = None) -> Dict[str, Any]:
 
     return result
 
-
-def _collect_projects_data() -> Dict[str, Any]:
+def _collect_projects_data() -> dict[str, Any]:
     """Collect project analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -733,11 +719,9 @@ def _collect_projects_data() -> Dict[str, Any]:
 
     return result
 
-
 # Create typer app for this module
 app = typer.Typer(help="Analyze documents and extract insights")
 app.command()(analyze)
-
 
 if __name__ == "__main__":
     app()

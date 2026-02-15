@@ -13,7 +13,7 @@ import hashlib
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any
 
 try:
     from datasketch import MinHash, MinHashLSH
@@ -33,13 +33,11 @@ def _require_datasketch() -> None:
             "Install it with: pip install 'emdx[similarity]'"
         )
 
-
 # Default parameters for MinHash/LSH
 DEFAULT_NUM_PERM = 128  # Number of permutations for MinHash (higher = more accurate)
 DEFAULT_LSH_THRESHOLD = 0.5  # Lower threshold for LSH candidate generation
 
-
-def _tokenize(text: str) -> Set[str]:
+def _tokenize(text: str) -> set[str]:
     """
     Tokenize text into word n-grams for MinHash computation.
 
@@ -75,8 +73,7 @@ def _tokenize(text: str) -> Set[str]:
 
     return tokens
 
-
-def _create_minhash(tokens: Set[str], num_perm: int = DEFAULT_NUM_PERM) -> MinHash:
+def _create_minhash(tokens: set[str], num_perm: int = DEFAULT_NUM_PERM) -> MinHash:
     """
     Create a MinHash signature from a set of tokens.
 
@@ -92,7 +89,6 @@ def _create_minhash(tokens: Set[str], num_perm: int = DEFAULT_NUM_PERM) -> MinHa
         mh.update(token.encode('utf-8'))
     return mh
 
-
 class DuplicateDetector:
     """Service for detecting and managing duplicate documents."""
 
@@ -106,7 +102,7 @@ class DuplicateDetector:
             return "empty"
         return hashlib.md5(content.encode('utf-8')).hexdigest()
 
-    def find_duplicates(self) -> List[List[Dict[str, Any]]]:
+    def find_duplicates(self) -> list[list[dict[str, Any]]]:
         """
         Find all duplicate documents based on content hash.
 
@@ -164,7 +160,7 @@ class DuplicateDetector:
         threshold: float = 0.85,
         num_perm: int = DEFAULT_NUM_PERM,
         max_documents: int | None = None,
-    ) -> List[Tuple[Dict, Dict, float]]:
+    ) -> list[tuple[Dict, Dict, float]]:
         """
         Find near-duplicate documents based on content similarity using MinHash/LSH.
 
@@ -223,8 +219,8 @@ class DuplicateDetector:
 
         # Build MinHash signatures for all documents
         # O(n * document_size) - linear in total content
-        doc_minhashes: Dict[int, MinHash] = {}
-        doc_tokens: Dict[int, Set[str]] = {}
+        doc_minhashes: dict[int, MinHash] = {}
+        doc_tokens: dict[int, set[str]] = {}
 
         for doc in documents:
             tokens = _tokenize(doc['content'] or '')
@@ -243,7 +239,7 @@ class DuplicateDetector:
             lsh.insert(str(doc_id), mh)
 
         # Find candidate pairs using LSH - O(n) average case
-        candidate_pairs: Set[Tuple[int, int]] = set()
+        candidate_pairs: set[tuple[int, int]] = set()
 
         for doc_id, mh in doc_minhashes.items():
             # Query returns similar documents in O(1) average time
@@ -278,7 +274,7 @@ class DuplicateDetector:
 
     def find_near_duplicates_exact(
         self, threshold: float = 0.85, max_documents: int = 200
-    ) -> List[Tuple[Dict, Dict, float]]:
+    ) -> list[tuple[Dict, Dict, float]]:
         """
         Find near-duplicate documents using exact pairwise comparison.
 
@@ -342,7 +338,7 @@ class DuplicateDetector:
         near_duplicates.sort(key=lambda x: x[2], reverse=True)
         return near_duplicates
 
-    def sort_by_strategy(self, group: List[Dict[str, Any]], strategy: str) -> List[Dict[str, Any]]:
+    def sort_by_strategy(self, group: list[dict[str, Any]], strategy: str) -> list[dict[str, Any]]:
         """
         Sort a duplicate group by the given strategy.
         The first document in the sorted list should be kept.
@@ -368,9 +364,9 @@ class DuplicateDetector:
 
     def get_documents_to_delete(
         self,
-        duplicate_groups: List[List[Dict[str, Any]]],
+        duplicate_groups: list[list[dict[str, Any]]],
         strategy: str = 'highest-views'
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Get list of document IDs to delete based on strategy.
 
@@ -390,7 +386,7 @@ class DuplicateDetector:
 
         return docs_to_delete
 
-    def delete_documents(self, doc_ids: List[int]) -> int:
+    def delete_documents(self, doc_ids: list[int]) -> int:
         """
         Soft delete the specified documents.
 
@@ -428,7 +424,7 @@ class DuplicateDetector:
 
         return deleted_count
 
-    def get_duplicate_stats(self) -> Dict[str, Any]:
+    def get_duplicate_stats(self) -> dict[str, Any]:
         """
         Get statistics about duplicates in the knowledge base.
 
@@ -460,7 +456,7 @@ class DuplicateDetector:
             'most_duplicated': most_duplicated
         }
 
-    def find_similar_titles(self) -> List[List[Dict[str, Any]]]:
+    def find_similar_titles(self) -> list[list[dict[str, Any]]]:
         """
         Find documents with identical titles but different content.
 

@@ -10,7 +10,6 @@ instructions for Claude to follow via `emdx delegate`.
 
 import subprocess
 from pathlib import Path
-from typing import List
 
 import typer
 
@@ -20,7 +19,6 @@ from ..models.tags import search_by_tags
 from ..utils.output import console
 
 app = typer.Typer(help="Manage and run EMDX recipes")
-
 
 def _find_recipe(id_or_name: str) -> dict | None:
     """Find a recipe by ID or title search."""
@@ -47,7 +45,6 @@ def _find_recipe(id_or_name: str) -> dict | None:
                 return r
 
     return None
-
 
 @app.command("list")
 def list_recipes():
@@ -78,11 +75,10 @@ def list_recipes():
         if first_line:
             console.print(f"        [dim]{first_line}[/dim]")
 
-
 @app.command("run")
 def run_recipe(
     id_or_name: str = typer.Argument(..., help="Recipe ID or title search"),
-    extra: List[str] | None = typer.Argument(
+    extra: list[str] | None = typer.Argument(
         None, help="Extra arguments passed to the recipe"
     ),
     quiet: bool = typer.Option(
@@ -139,7 +135,6 @@ def run_recipe(
     # Execute delegate as subprocess so stdout/stderr pass through
     result = subprocess.run(cmd)
     raise typer.Exit(result.returncode)
-
 
 @app.command("create")
 def create_recipe(

@@ -17,7 +17,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,6 @@ from .cli_executor import get_cli_executor
 
 # Re-export for backward compatibility - prefer importing from cli_config
 __all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]
-
 
 def parse_task_content(task: str) -> str:
     """Parse task string, expanding @filename references.
@@ -60,12 +58,11 @@ def parse_task_content(task: str) -> str:
     expanded = re.sub(pattern, replace_file_reference, task)
     return expanded
 
-
 def execute_claude_detached(
     task: str,
     execution_id: int,
     log_file: Path,
-    allowed_tools: List[str] | None = None,
+    allowed_tools: list[str] | None = None,
     working_dir: str | None = None,
     doc_id: str | None = None,
     cli_tool: str = "claude",
@@ -218,14 +215,13 @@ def execute_claude_detached(
         else:
             raise
 
-
 def execute_cli_sync(
     task: str,
     execution_id: int,
     log_file: Path,
     cli_tool: str = "claude",
     model: str | None = None,
-    allowed_tools: List[str] | None = None,
+    allowed_tools: list[str] | None = None,
     working_dir: str | None = None,
     doc_id: str | None = None,
     timeout: int = 300,

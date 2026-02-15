@@ -16,7 +16,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, List, Set
+from typing import Callable
 
 from ..config.constants import EMDX_CONFIG_DIR
 
@@ -41,7 +41,6 @@ def _require_sklearn() -> None:
             "Install it with: pip install 'emdx[similarity]'"
         )
 
-
 @dataclass
 class SimilarDocument:
     """Represents a document similar to a query document."""
@@ -51,8 +50,7 @@ class SimilarDocument:
     similarity_score: float
     content_similarity: float
     tag_similarity: float
-    common_tags: List[str]
-
+    common_tags: list[str]
 
 @dataclass
 class IndexStats:
@@ -62,7 +60,6 @@ class IndexStats:
     cache_size_bytes: int
     cache_age_seconds: float
     last_built: datetime | None
-
 
 class SimilarityService:
     """TF-IDF-based document similarity service."""
@@ -88,10 +85,10 @@ class SimilarityService:
         # Index state
         self._vectorizer: TfidfVectorizer | None = None
         self._tfidf_matrix = None
-        self._doc_ids: List[int] = []
-        self._doc_titles: List[str] = []
-        self._doc_projects: List[str | None] = []
-        self._doc_tags: List[Set[str]] = []
+        self._doc_ids: list[int] = []
+        self._doc_titles: list[str] = []
+        self._doc_projects: list[str | None] = []
+        self._doc_tags: list[set[str]] = []
         self._last_built: datetime | None = None
 
     def _load_cache(self) -> bool:
@@ -235,7 +232,7 @@ class SimilarityService:
 
         return self.get_index_stats()
 
-    def _calculate_tag_similarity(self, tags1: Set[str], tags2: Set[str]) -> float:
+    def _calculate_tag_similarity(self, tags1: set[str], tags2: set[str]) -> float:
         """Calculate Jaccard similarity between two tag sets.
 
         Args:
@@ -263,7 +260,7 @@ class SimilarityService:
         content_only: bool = False,
         tags_only: bool = False,
         same_project: bool = False
-    ) -> List[SimilarDocument]:
+    ) -> list[SimilarDocument]:
         """Find documents similar to the given document.
 
         Args:
@@ -347,7 +344,7 @@ class SimilarityService:
         text: str,
         limit: int = 5,
         min_similarity: float = 0.1
-    ) -> List[SimilarDocument]:
+    ) -> list[SimilarDocument]:
         """Find documents similar to arbitrary text.
 
         Args:
@@ -437,7 +434,7 @@ class SimilarityService:
         self,
         min_similarity: float = 0.7,
         progress_callback: Callable | None = None,
-    ) -> List[tuple]:
+    ) -> list[tuple]:
         """Find all pairs of similar documents efficiently using radius neighbors.
 
         Uses sklearn NearestNeighbors with radius_neighbors for O(n*k) complexity
@@ -549,7 +546,6 @@ class SimilarityService:
             progress_callback(100, 100, len(pairs))
 
         return pairs
-
 
 def compute_content_similarity(content1: str, content2: str) -> float:
     """Compute TF-IDF cosine similarity between two pieces of content.

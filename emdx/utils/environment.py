@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
@@ -18,7 +17,6 @@ def get_subprocess_env() -> dict:
     CLAUDECODE which blocks Claude Code from running inside another session.
     """
     return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-
 
 class EnvironmentValidator:
     """Validates execution environment before running CLI tools.
@@ -44,12 +42,12 @@ class EnvironmentValidator:
             cli_tool: Which CLI to validate ("claude" or "cursor")
         """
         self.cli_tool = cli_tool
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
-        self.info: Dict[str, str] = {}
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.info: dict[str, str] = {}
 
     @property
-    def required_commands(self) -> List[str]:
+    def required_commands(self) -> list[str]:
         """Get required commands for the configured CLI tool."""
         commands = list(self.BASE_REQUIRED_COMMANDS)
         if self.cli_tool in self.CLI_COMMANDS:
@@ -103,7 +101,7 @@ class EnvironmentValidator:
             else:
                 self.errors.append(f"Required command '{cmd}' not found in PATH")
 
-    def _get_version_command(self, cmd: str) -> List[str] | None:
+    def _get_version_command(self, cmd: str) -> list[str] | None:
         """Get the version command for a CLI tool."""
         if cmd == "claude":
             return ["claude", "--version"]
@@ -236,7 +234,7 @@ class EnvironmentValidator:
             for key, value in self.info.items():
                 console.print(f"  {key}: {value}")
 
-    def get_environment_info(self) -> Dict[str, any]:
+    def get_environment_info(self) -> dict[str, any]:
         """Get environment information for logging."""
         return {
             "valid": len(self.errors) == 0,
@@ -245,11 +243,10 @@ class EnvironmentValidator:
             "info": self.info
         }
 
-
 def validate_execution_environment(
     verbose: bool = False,
     cli_tool: str = "claude"
-) -> Tuple[bool, Dict[str, any] | None]:
+) -> tuple[bool, dict[str, any] | None]:
     """Validate the execution environment.
 
     Args:
@@ -266,7 +263,6 @@ def validate_execution_environment(
         validator.print_report(verbose)
 
     return is_valid, validator.get_environment_info()
-
 
 def ensure_claude_in_path() -> None:
     """Ensure claude command is in PATH for subprocess calls."""

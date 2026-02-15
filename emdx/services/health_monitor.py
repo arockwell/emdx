@@ -6,7 +6,7 @@ Analyzes knowledge base health and provides actionable recommendations.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -21,8 +21,7 @@ class HealthMetric:
     weight: float  # Importance weight
     status: str  # 'good', 'warning', 'critical'
     details: str
-    recommendations: List[str]
-
+    recommendations: list[str]
 
 @dataclass
 class ProjectHealth:
@@ -34,7 +33,6 @@ class ProjectHealth:
     activity_score: float
     organization_score: float
     overall_score: float
-
 
 class HealthMonitor:
     """Service for monitoring knowledge base health."""
@@ -57,7 +55,7 @@ class HealthMonitor:
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
 
-    def calculate_overall_health(self) -> Dict[str, Any]:
+    def calculate_overall_health(self) -> dict[str, Any]:
         """
         Calculate comprehensive health score for the knowledge base.
 
@@ -96,7 +94,7 @@ class HealthMonitor:
             'timestamp': datetime.now().isoformat()
         }
 
-    def _get_basic_stats(self) -> Dict[str, Any]:
+    def _get_basic_stats(self) -> dict[str, Any]:
         """Get basic statistics about the knowledge base."""
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -510,7 +508,7 @@ class HealthMonitor:
             recommendations=recommendations
         )
 
-    def get_project_health(self, limit: int | None = None) -> List[ProjectHealth]:
+    def get_project_health(self, limit: int | None = None) -> list[ProjectHealth]:
         """
         Get health metrics for each project.
 
@@ -582,7 +580,7 @@ class HealthMonitor:
             return projects[:limit]
         return projects
 
-    def get_maintenance_recommendations(self) -> List[Tuple[str, str, str]]:
+    def get_maintenance_recommendations(self) -> list[tuple[str, str, str]]:
         """
         Get prioritized maintenance recommendations.
 

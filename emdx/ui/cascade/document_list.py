@@ -1,6 +1,6 @@
 """Document list widget for cascade browser."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.message import Message
@@ -46,13 +46,13 @@ class DocumentList(Widget):
 
     class SelectionChanged(Message):
         """Fired when multi-selection changes."""
-        def __init__(self, selected_ids: List[int]):
+        def __init__(self, selected_ids: list[int]):
             self.selected_ids = selected_ids
             super().__init__()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.docs: List[Dict[str, Any]] = []
+        self.docs: list[dict[str, Any]] = []
         self.current_stage = "idea"
         self.selected_ids: set[int] = set()  # Multi-select tracking
 
@@ -158,7 +158,7 @@ class DocumentList(Widget):
         self._update_selection_status()
         self.post_message(self.SelectionChanged([]))
 
-    def get_selected_ids(self) -> List[int]:
+    def get_selected_ids(self) -> list[int]:
         """Get list of selected document IDs."""
         return list(self.selected_ids)
 

@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..config.constants import EMDX_LOG_DIR
@@ -31,12 +31,10 @@ TOOL_EMOJIS = {
     "Task": "📋", "TodoWrite": "✅", "WebFetch": "🌐", "WebSearch": "🔍",
 }
 
-
 def format_timestamp(ts: float) -> str:
     """Format timestamp as [HH:MM:SS]."""
     dt = datetime.fromtimestamp(ts)
     return f"[{dt.strftime('%H:%M:%S')}]"
-
 
 def format_stream_line(line: str, timestamp: float) -> str | None:
     """Format a stream-json line into readable log output.
@@ -135,7 +133,6 @@ def format_stream_line(line: str, timestamp: float) -> str | None:
             return f"{format_timestamp(timestamp)} 💬 {line}"
         return None
 
-
 @dataclass
 class ExecutionConfig:
     """Configuration for a CLI execution."""
@@ -144,12 +141,11 @@ class ExecutionConfig:
     title: str = "CLI Execution"
     doc_id: int | None = None
     output_instruction: str | None = None
-    allowed_tools: List[str] = field(default_factory=lambda: DEFAULT_ALLOWED_TOOLS.copy())
+    allowed_tools: list[str] = field(default_factory=lambda: DEFAULT_ALLOWED_TOOLS.copy())
     timeout_seconds: int = 300
     cli_tool: str = "claude"  # "claude" or "cursor"
     model: str | None = None  # Override default model for the CLI
     verbose: bool = False  # Stream output in real-time
-
 
 @dataclass
 class ExecutionResult:
@@ -168,7 +164,7 @@ class ExecutionResult:
     exit_code: int | None = None
     cli_tool: str = "claude"  # Which CLI was used
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             'success': self.success,
             'execution_id': self.execution_id,
@@ -184,7 +180,6 @@ class ExecutionResult:
             'exit_code': self.exit_code,
             'cli_tool': self.cli_tool,
         }
-
 
 class UnifiedExecutor:
     """Unified executor for all CLI execution paths.

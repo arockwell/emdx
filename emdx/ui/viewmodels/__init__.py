@@ -7,7 +7,6 @@ The full presenter/viewmodel pattern was removed as dead code.
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -16,7 +15,7 @@ class DocumentListItem:
 
     id: int
     title: str
-    tags: List[str]
+    tags: list[str]
     tags_display: str
     project: str
     access_count: int
@@ -27,7 +26,6 @@ class DocumentListItem:
     depth: int = 0
     relationship: str | None = None
 
-
 @dataclass
 class DocumentDetailVM:
     """ViewModel for document detail view (stub)."""
@@ -36,7 +34,7 @@ class DocumentDetailVM:
     title: str
     content: str
     project: str
-    tags: List[str]
+    tags: list[str]
     tags_formatted: str
     created_at: str | None = None
     updated_at: str | None = None
@@ -46,20 +44,18 @@ class DocumentDetailVM:
     char_count: int = 0
     line_count: int = 0
 
-
 @dataclass
 class DocumentListVM:
     """ViewModel for the document list (stub)."""
 
-    documents: List[DocumentListItem] = field(default_factory=list)
-    filtered_documents: List[DocumentListItem] = field(default_factory=list)
+    documents: list[DocumentListItem] = field(default_factory=list)
+    filtered_documents: list[DocumentListItem] = field(default_factory=list)
     search_query: str = ""
     total_count: int = 0
     filtered_count: int = 0
     current_offset: int = 0
     has_more: bool = False
     status_text: str = ""
-
 
 __all__ = [
     "DocumentListItem",

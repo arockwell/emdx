@@ -34,7 +34,6 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List
 
 import typer
 
@@ -48,7 +47,6 @@ app = typer.Typer(
     context_settings={"allow_interspersed_args": False},
 )
 
-
 def _safe_create_task(**kwargs) -> int | None:
     """Create task, never fail delegate."""
     try:
@@ -57,7 +55,6 @@ def _safe_create_task(**kwargs) -> int | None:
     except Exception as e:
         sys.stderr.write(f"delegate: task tracking failed: {e}\n")
         return None
-
 
 def _safe_update_task(task_id: int | None, **kwargs) -> None:
     """Update task, never fail delegate."""
@@ -69,7 +66,6 @@ def _safe_update_task(task_id: int | None, **kwargs) -> None:
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
-
 def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
     """Update execution record, never fail delegate."""
     if exec_id is None:
@@ -80,7 +76,6 @@ def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
 
-
 PR_INSTRUCTION = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
@@ -88,7 +83,6 @@ PR_INSTRUCTION = (
     "3. Push and create a PR using: gh pr create --title \"...\" --body \"...\"\n"
     "4. Report the PR URL that was created."
 )
-
 
 def _slugify_title(title: str) -> str:
     """Convert a document title to a git branch slug.
@@ -106,7 +100,6 @@ def _slugify_title(title: str) -> str:
     slug = re.sub(r'\s+', '-', slug).strip('-').lower()
     # Truncate to reasonable branch name length
     return slug[:50].rstrip('-') or 'feature'
-
 
 def _resolve_task(task: str, pr: bool = False) -> str:
     """Resolve a task argument — if it's a numeric doc ID, load the document content.
@@ -142,7 +135,6 @@ def _resolve_task(task: str, pr: bool = False) -> str:
 
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
-
 # Allowlist of safe discovery commands that can be used with --each
 # These commands are designed for file/directory discovery and are safe to execute
 SAFE_DISCOVERY_COMMANDS = frozenset({
@@ -162,8 +154,7 @@ SAFE_DISCOVERY_COMMANDS = frozenset({
     "seq",          # Generate sequences
 })
 
-
-def _validate_discovery_command(command: str) -> List[str]:
+def _validate_discovery_command(command: str) -> list[str]:
     """Parse and validate a discovery command against the allowlist.
 
     Args:
@@ -197,8 +188,7 @@ def _validate_discovery_command(command: str) -> List[str]:
 
     return args
 
-
-def _run_discovery(command: str) -> List[str]:
+def _run_discovery(command: str) -> list[str]:
     """Run a validated discovery command and return output lines as items.
 
     Security: Uses shlex.split() with shell=False and validates the command
@@ -230,7 +220,6 @@ def _run_discovery(command: str) -> List[str]:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
         raise typer.Exit(1)
 
-
 def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
 
@@ -250,7 +239,6 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     else:
         return f"Execute the following document:\n\n# {title}\n\n{content}"
 
-
 def _print_doc_content(doc_id: int) -> None:
     """Print a document's content to stdout."""
     doc = get_document(doc_id)
@@ -258,10 +246,9 @@ def _print_doc_content(doc_id: int) -> None:
         sys.stdout.write(doc.get("content", ""))
         sys.stdout.write("\n")
 
-
 def _run_single(
     prompt: str,
-    tags: List[str],
+    tags: list[str],
     title: str | None,
     model: str | None,
     quiet: bool,
@@ -343,10 +330,9 @@ def _run_single(
 
     return doc_id, task_id
 
-
 def _run_parallel(
-    tasks: List[str],
-    tags: List[str],
+    tasks: list[str],
+    tags: list[str],
     title: str | None,
     jobs: int | None,
     synthesize: bool,
@@ -358,7 +344,7 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
-) -> List[int]:
+) -> list[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
 
@@ -477,10 +463,9 @@ def _run_parallel(
 
     return doc_ids
 
-
 def _run_chain(
-    tasks: List[str],
-    tags: List[str],
+    tasks: list[str],
+    tags: list[str],
     title: str | None,
     model: str | None,
     quiet: bool,
@@ -489,7 +474,7 @@ def _run_chain(
     source_doc_id: int | None = None,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
-) -> List[int]:
+) -> list[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
     Returns list of doc_ids from all steps.
@@ -590,15 +575,14 @@ def _run_chain(
 
     return doc_ids
 
-
 @app.callback(invoke_without_command=True)
 def delegate(
     ctx: typer.Context,
-    tasks: List[str] = typer.Argument(
+    tasks: list[str] = typer.Argument(
         None,
         help="Task prompt(s) or document IDs. Numeric args load doc content.",
     ),
-    tags: List[str] | None = typer.Option(
+    tags: list[str] | None = typer.Option(
         None, "--tags", "-t",
         help="Tags to apply to outputs (comma-separated)",
     ),

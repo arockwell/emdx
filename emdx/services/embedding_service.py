@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
 
 try:
     import numpy as np
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Lazy load - model is ~90MB, loads in ~2 seconds
 _model = None
-
 
 def _get_model():
     """Lazy load the embedding model."""
@@ -51,7 +49,6 @@ def _get_model():
         logger.info("Loaded embedding model: all-MiniLM-L6-v2")
     return _model
 
-
 @dataclass
 class SemanticMatch:
     """A semantically similar document."""
@@ -62,7 +59,6 @@ class SemanticMatch:
     similarity: float
     snippet: str
 
-
 @dataclass
 class EmbeddingStats:
     """Statistics about the embedding index."""
@@ -72,7 +68,6 @@ class EmbeddingStats:
     coverage_percent: float
     model_name: str
     index_size_bytes: int
-
 
 class EmbeddingService:
     """Manages document embeddings for semantic search."""
@@ -219,13 +214,13 @@ class EmbeddingService:
 
     def search(
         self, query: str, limit: int = 10, threshold: float = 0.3
-    ) -> List[SemanticMatch]:
+    ) -> list[SemanticMatch]:
         """Semantic search across all documents."""
         return self._search_sync(query, limit, threshold)
 
     def _search_sync(
         self, query: str, limit: int = 10, threshold: float = 0.3
-    ) -> List[SemanticMatch]:
+    ) -> list[SemanticMatch]:
         """Internal synchronous search implementation."""
         query_embedding = self.embed_text(query)
 
@@ -273,7 +268,7 @@ class EmbeddingService:
 
     async def search_async(
         self, query: str, limit: int = 10, threshold: float = 0.3
-    ) -> List[SemanticMatch]:
+    ) -> list[SemanticMatch]:
         """Async semantic search - runs embedding in thread pool to avoid blocking."""
         import asyncio
         loop = asyncio.get_event_loop()
@@ -281,7 +276,7 @@ class EmbeddingService:
             None, lambda: self._search_sync(query, limit, threshold)
         )
 
-    def find_similar(self, doc_id: int, limit: int = 5) -> List[SemanticMatch]:
+    def find_similar(self, doc_id: int, limit: int = 5) -> list[SemanticMatch]:
         """Find documents similar to a given document."""
         doc_embedding = self.embed_document(doc_id)
 

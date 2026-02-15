@@ -6,7 +6,7 @@ Analyzes document content and suggests appropriate tags based on patterns.
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 # Type alias for SQL parameters
 SqlParam = Union[str, int, float, None]
@@ -125,8 +125,8 @@ class AutoTagger:
         self,
         title: str,
         content: str | None = None,
-        existing_tags: List[str] | None = None
-    ) -> List[Tuple[str, float]]:
+        existing_tags: list[str] | None = None
+    ) -> list[tuple[str, float]]:
         """
         Analyze a document and suggest tags with confidence scores.
 
@@ -189,7 +189,7 @@ class AutoTagger:
         self,
         document_id: int,
         max_suggestions: int = DEFAULT_MAX_SUGGESTIONS
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Suggest tags for a specific document.
 
@@ -231,7 +231,7 @@ class AutoTagger:
         document_id: int,
         confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
         max_tags: int = DEFAULT_MAX_TAGS_PER_DOC,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Automatically apply high-confidence tags to a document.
 
@@ -281,7 +281,7 @@ class AutoTagger:
         untagged_only: bool = True,
         project: str | None = None,
         limit: int | None = None,
-    ) -> Dict[int, List[Tuple[str, float]]]:
+    ) -> dict[int, list[tuple[str, float]]]:
         """
         Suggest tags for multiple documents.
 
@@ -305,7 +305,7 @@ class AutoTagger:
                 WHERE d.is_deleted = 0
             """
 
-            params: List[SqlParam] = []
+            params: list[SqlParam] = []
 
             if project:
                 query += " AND d.project = ?"
@@ -338,13 +338,13 @@ class AutoTagger:
 
     def batch_auto_tag(
         self,
-        document_ids: List[int] | None = None,
+        document_ids: list[int] | None = None,
         untagged_only: bool = True,
         project: str | None = None,
         confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
         max_tags_per_doc: int = DEFAULT_MAX_TAGS_PER_DOC,
         dry_run: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Apply auto-tagging to multiple documents.
 
@@ -436,9 +436,9 @@ class AutoTagger:
     def add_custom_pattern(
         self,
         name: str,
-        title_patterns: List[str] | None = None,
-        content_patterns: List[str] | None = None,
-        tags: List[str] = None,
+        title_patterns: list[str] | None = None,
+        content_patterns: list[str] | None = None,
+        tags: list[str] = None,
         confidence: float = DEFAULT_TAGGING_CONFIDENCE
     ):
         """

@@ -5,10 +5,8 @@ This module provides a mapping from text aliases to emoji tags for easier input
 while maintaining the space-efficient emoji tag system in the GUI.
 """
 
-from typing import Dict, List, Set
-
 # Emoji alias mappings - text -> emoji
-EMOJI_ALIASES: Dict[str, str] = {
+EMOJI_ALIASES: dict[str, str] = {
     # Document Types
     "gameplan": "🎯",
     "plan": "🎯",
@@ -116,17 +114,16 @@ EMOJI_ALIASES: Dict[str, str] = {
 }
 
 # Reverse mapping - emoji -> text aliases (for display/reference)
-REVERSE_ALIASES: Dict[str, List[str]] = {}
+REVERSE_ALIASES: dict[str, list[str]] = {}
 for alias, emoji in EMOJI_ALIASES.items():
     if emoji not in REVERSE_ALIASES:
         REVERSE_ALIASES[emoji] = []
     REVERSE_ALIASES[emoji].append(alias)
 
 # Set of all emoji tags for validation
-EMOJI_TAGS: Set[str] = set(EMOJI_ALIASES.values())
+EMOJI_TAGS: set[str] = set(EMOJI_ALIASES.values())
 
-
-def expand_aliases(tags: List[str]) -> List[str]:
+def expand_aliases(tags: list[str]) -> list[str]:
     """
     Expand text aliases to emojis in a list of tags.
 
@@ -152,7 +149,6 @@ def expand_aliases(tags: List[str]) -> List[str]:
             expanded.append(tag)
     return expanded
 
-
 def expand_alias_string(tag_string: str) -> str:
     """
     Expand aliases in a comma-separated tag string.
@@ -176,8 +172,7 @@ def expand_alias_string(tag_string: str) -> str:
     expanded = expand_aliases(tags)
     return ", ".join(expanded)
 
-
-def get_aliases_for_emoji(emoji: str) -> List[str]:
+def get_aliases_for_emoji(emoji: str) -> list[str]:
     """
     Get all text aliases for a given emoji.
 
@@ -193,7 +188,6 @@ def get_aliases_for_emoji(emoji: str) -> List[str]:
     """
     return REVERSE_ALIASES.get(emoji, [])
 
-
 def is_emoji_tag(tag: str) -> bool:
     """
     Check if a tag is a known emoji tag.
@@ -206,7 +200,6 @@ def is_emoji_tag(tag: str) -> bool:
     """
     return tag in EMOJI_TAGS
 
-
 def is_text_alias(tag: str) -> bool:
     """
     Check if a tag is a known text alias.
@@ -218,7 +211,6 @@ def is_text_alias(tag: str) -> bool:
         True if the tag is a known text alias
     """
     return tag.lower() in EMOJI_ALIASES
-
 
 def normalize_tag_to_emoji(tag: str) -> str:
     """
@@ -241,8 +233,7 @@ def normalize_tag_to_emoji(tag: str) -> str:
     tag_lower = tag.strip().lower()
     return EMOJI_ALIASES.get(tag_lower, tag)
 
-
-def get_all_aliases() -> Dict[str, str]:
+def get_all_aliases() -> dict[str, str]:
     """
     Get all emoji aliases.
 
@@ -251,8 +242,7 @@ def get_all_aliases() -> Dict[str, str]:
     """
     return EMOJI_ALIASES.copy()
 
-
-def get_category_emojis() -> Dict[str, List[str]]:
+def get_category_emojis() -> dict[str, list[str]]:
     """
     Get emojis organized by category.
 
@@ -270,8 +260,7 @@ def get_category_emojis() -> Dict[str, List[str]]:
     }
     return categories
 
-
-def suggest_aliases(partial: str) -> List[str]:
+def suggest_aliases(partial: str) -> list[str]:
     """
     Suggest aliases based on partial input.
 

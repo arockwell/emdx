@@ -8,10 +8,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
-
 
 class SearchMode(Enum):
     """Available search modes."""
@@ -21,7 +20,6 @@ class SearchMode(Enum):
     SEMANTIC = "semantic"  # AI-powered semantic search
     COMBINED = "combined"  # FTS + semantic
 
-
 @dataclass
 class SearchResultItem:
     """Single search result for display."""
@@ -29,7 +27,7 @@ class SearchResultItem:
     doc_id: int
     title: str
     snippet: str
-    tags: List[str]
+    tags: list[str]
     tags_display: str  # Formatted tags for display
     score: float  # Normalized 0-1
     source: str  # "fts", "tags", "semantic"
@@ -37,23 +35,21 @@ class SearchResultItem:
     updated_at: str | None = None
     is_selected: bool = False  # For multi-select
 
-
 @dataclass
 class SearchStateVM:
     """Complete search state for the UI."""
 
     query: str = ""
-    results: List[SearchResultItem] = field(default_factory=list)
+    results: list[SearchResultItem] = field(default_factory=list)
     total_count: int = 0
     mode: SearchMode = SearchMode.FTS
     is_searching: bool = False
     search_time_ms: int = 0
-    recent_docs: List[SearchResultItem] = field(default_factory=list)
-    popular_tags: List[Dict[str, Any]] = field(default_factory=list)
-    selected_indices: Set[int] = field(default_factory=set)
-    active_filters: List[str] = field(default_factory=list)
+    recent_docs: list[SearchResultItem] = field(default_factory=list)
+    popular_tags: list[dict[str, Any]] = field(default_factory=list)
+    selected_indices: set[int] = field(default_factory=set)
+    active_filters: list[str] = field(default_factory=list)
     status_text: str = ""
-
 
 class SearchPresenter:
     """
@@ -84,7 +80,7 @@ class SearchPresenter:
         self.on_state_update = on_state_update
         self._state = SearchStateVM()
         self._search_service = None  # Lazy load
-        self._cache: Dict[str, List[SearchResultItem]] = {}
+        self._cache: dict[str, list[SearchResultItem]] = {}
         self._cache_max_size = 20
 
     @property
@@ -241,7 +237,7 @@ class SearchPresenter:
         self._state.selected_indices.clear()
         await self._notify_update()
 
-    async def _execute_search(self, query: str) -> List[SearchResultItem]:
+    async def _execute_search(self, query: str) -> list[SearchResultItem]:
         """Execute the actual search based on current mode."""
         if not self.search_service:
             return []
@@ -358,7 +354,7 @@ class SearchPresenter:
         for item in self._state.results:
             item.is_selected = False
 
-    def get_selected_doc_ids(self) -> List[int]:
+    def get_selected_doc_ids(self) -> list[int]:
         """Get document IDs of selected results."""
         return [
             self._state.results[i].doc_id

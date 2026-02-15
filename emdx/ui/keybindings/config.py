@@ -6,7 +6,7 @@ Loads user keybinding customizations from ~/.config/emdx/keybindings.yaml
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from emdx.config.constants import EMDX_CONFIG_DIR
 
@@ -53,13 +53,11 @@ EXAMPLE_CONFIG = """# EMDX Keybinding Configuration
 overrides: []
 """
 
-
 def get_config_path() -> Path:
     """Get the path to the keybindings config file."""
     return DEFAULT_CONFIG_PATH
 
-
-def load_config() -> Dict[str, Any]:
+def load_config() -> dict[str, Any]:
     """
     Load keybinding configuration from YAML file.
 
@@ -90,7 +88,6 @@ def load_config() -> Dict[str, Any]:
         logger.error(f"Failed to load keybindings config: {e}")
         return {"overrides": []}
 
-
 def save_example_config() -> bool:
     """
     Save example config file if it doesn't exist.
@@ -113,8 +110,7 @@ def save_example_config() -> bool:
         logger.error(f"Failed to create keybindings config: {e}")
         return False
 
-
-def parse_overrides(config: Dict[str, Any]) -> List[KeybindingEntry]:
+def parse_overrides(config: dict[str, Any]) -> list[KeybindingEntry]:
     """
     Parse override entries from config into KeybindingEntry objects.
 
@@ -157,7 +153,6 @@ def parse_overrides(config: Dict[str, Any]) -> List[KeybindingEntry]:
 
     return entries
 
-
 def _parse_context(context_str: str) -> Context | None:
     """Parse a context string into a Context enum value."""
     # Try direct match
@@ -171,7 +166,6 @@ def _parse_context(context_str: str) -> Context | None:
             return ctx
 
     return None
-
 
 class KeybindingConfig:
     """
@@ -191,9 +185,9 @@ class KeybindingConfig:
 
     def __init__(self, config_path: Path | None = None):
         self.config_path = config_path or get_config_path()
-        self.config: Dict[str, Any] = {}
-        self.overrides: List[KeybindingEntry] = []
-        self._override_map: Dict[tuple, KeybindingEntry] = {}
+        self.config: dict[str, Any] = {}
+        self.overrides: list[KeybindingEntry] = []
+        self._override_map: dict[tuple, KeybindingEntry] = {}
 
     def load(self) -> None:
         """Load configuration from file."""
@@ -210,7 +204,7 @@ class KeybindingConfig:
             key = (entry.key, entry.context)
             self._override_map[key] = entry
 
-    def get_overrides(self) -> List[KeybindingEntry]:
+    def get_overrides(self) -> list[KeybindingEntry]:
         """Get all override entries."""
         return self.overrides
 
