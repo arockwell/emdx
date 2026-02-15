@@ -150,7 +150,17 @@ def list_tasks(
     with db.get_connection() as conn:
         cursor = conn.execute(f"""
             SELECT * FROM tasks WHERE {' AND '.join(conditions)}
-            ORDER BY priority, created_at DESC LIMIT ?
+            ORDER BY
+                CASE status
+                    WHEN 'active' THEN 0
+                    WHEN 'blocked' THEN 1
+                    WHEN 'open' THEN 2
+                    WHEN 'failed' THEN 3
+                    WHEN 'done' THEN 4
+                END,
+                priority,
+                created_at DESC
+            LIMIT ?
         """, params)
         return [dict(row) for row in cursor.fetchall()]
 

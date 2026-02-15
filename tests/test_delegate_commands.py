@@ -19,8 +19,11 @@ import pytest
 import typer
 
 from emdx.commands.delegate import (
-    PR_INSTRUCTION,
+    PR_INSTRUCTION_GENERIC,
+    SingleResult,
+    _extract_pr_url,
     _load_doc_context,
+    _make_pr_instruction,
     _resolve_task,
     _run_chain,
     _run_discovery,
@@ -335,7 +338,7 @@ class TestRunSingle:
         )
         mock_executor_cls.return_value = mock_executor
 
-        doc_id, task_id = _run_single(
+        result = _run_single(
             prompt="test task",
             tags=["test"],
             title="Test Title",
@@ -343,8 +346,8 @@ class TestRunSingle:
             quiet=False,
         )
 
-        assert doc_id == 42
-        assert task_id == 1
+        assert result.doc_id == 42
+        assert result.task_id == 1
         mock_create.assert_called_once()
         mock_update.assert_called()
         mock_print.assert_called_once_with(42)
@@ -363,7 +366,7 @@ class TestRunSingle:
         )
         mock_executor_cls.return_value = mock_executor
 
-        doc_id, task_id = _run_single(
+        result = _run_single(
             prompt="failing task",
             tags=[],
             title=None,
@@ -371,8 +374,8 @@ class TestRunSingle:
             quiet=False,
         )
 
-        assert doc_id is None
-        assert task_id == 1
+        assert result.doc_id is None
+        assert result.task_id == 1
         # Check task was updated with failed status
         mock_update.assert_called()
         calls = mock_update.call_args_list
@@ -407,7 +410,8 @@ class TestRunSingle:
         # Verify PR instruction was included in the config
         call_args = mock_executor.execute.call_args
         config = call_args[0][0]
-        assert PR_INSTRUCTION in config.output_instruction
+        assert "pull request" in config.output_instruction.lower() or \
+            "gh pr create" in config.output_instruction
 
     @patch("emdx.commands.delegate._print_doc_content")
     @patch("emdx.commands.delegate._safe_update_task")
@@ -695,10 +699,10 @@ class TestRunChain:
         calls = mock_executor.execute.call_args_list
         # First step should NOT have PR instruction
         first_config = calls[0][0][0]
-        assert PR_INSTRUCTION not in (first_config.output_instruction or "")
+        assert "gh pr create" not in (first_config.output_instruction or "")
         # Last step SHOULD have PR instruction
         last_config = calls[1][0][0]
-        assert PR_INSTRUCTION in last_config.output_instruction
+        assert "gh pr create" in last_config.output_instruction
 
 
 # =============================================================================
@@ -712,7 +716,7 @@ class TestDelegateCommand:
     @patch("emdx.commands.delegate._run_single")
     def test_single_task_invocation(self, mock_run_single):
         """Test basic single task invocation."""
-        mock_run_single.return_value = (42, 1)
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -879,7 +883,7 @@ class TestDelegateCommand:
     def test_doc_flag_loads_context(self, mock_run_single, mock_load_doc):
         """Test that --doc flag loads document context."""
         mock_load_doc.return_value = "Document context with task"
-        mock_run_single.return_value = (42, 1)
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -909,7 +913,7 @@ class TestDelegateCommand:
     def test_worktree_flag_creates_worktree(self, mock_run_single, mock_create_wt, mock_cleanup_wt):
         """Test that --worktree flag creates and cleans up worktree."""
         mock_create_wt.return_value = ("/tmp/worktree", "branch")
-        mock_run_single.return_value = (42, 1)
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -940,7 +944,7 @@ class TestDelegateCommand:
     def test_pr_implies_worktree(self, mock_run_single, mock_create_wt, mock_cleanup_wt):
         """Test that --pr implicitly creates worktree."""
         mock_create_wt.return_value = ("/tmp/worktree", "branch")
-        mock_run_single.return_value = (42, 1)
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -1028,7 +1032,7 @@ class TestDelegateCommand:
             "title": "My Gameplan",
             "content": "Plan content here",
         }
-        mock_run_single.return_value = (100, 1)
+        mock_run_single.return_value = SingleResult(doc_id=100, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -1058,7 +1062,7 @@ class TestDelegateCommand:
     @patch("emdx.commands.delegate._run_single")
     def test_tags_flattened(self, mock_run_single):
         """Test that comma-separated tags are properly flattened."""
-        mock_run_single.return_value = (42, 1)
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -1085,24 +1089,45 @@ class TestDelegateCommand:
 
 
 # =============================================================================
-# Tests for PR_INSTRUCTION constant
+# Tests for PR instruction helpers
 # =============================================================================
 
 
 class TestPRInstruction:
-    """Tests for PR instruction constant."""
+    """Tests for PR instruction generation and URL extraction."""
 
-    def test_pr_instruction_mentions_branch(self):
-        assert "branch" in PR_INSTRUCTION.lower()
+    def test_generic_instruction_mentions_branch(self):
+        assert "branch" in PR_INSTRUCTION_GENERIC.lower()
 
-    def test_pr_instruction_mentions_pr_create(self):
-        assert "gh pr create" in PR_INSTRUCTION
+    def test_generic_instruction_mentions_pr_create(self):
+        assert "gh pr create" in PR_INSTRUCTION_GENERIC
 
-    def test_pr_instruction_mentions_commit(self):
-        assert "commit" in PR_INSTRUCTION.lower()
+    def test_generic_instruction_mentions_commit(self):
+        assert "commit" in PR_INSTRUCTION_GENERIC.lower()
 
-    def test_pr_instruction_mentions_push(self):
-        assert "push" in PR_INSTRUCTION.lower() or "Push" in PR_INSTRUCTION
+    def test_generic_instruction_mentions_push(self):
+        text = PR_INSTRUCTION_GENERIC.lower()
+        assert "push" in text
+
+    def test_make_pr_instruction_with_branch(self):
+        result = _make_pr_instruction("fix/my-branch-1")
+        assert "fix/my-branch-1" in result
+        assert "gh pr create" in result
+        assert "git push" in result
+
+    def test_make_pr_instruction_without_branch(self):
+        result = _make_pr_instruction(None)
+        assert result == PR_INSTRUCTION_GENERIC
+
+    def test_extract_pr_url_found(self):
+        text = "Created PR: https://github.com/user/repo/pull/123 done"
+        assert _extract_pr_url(text) == "https://github.com/user/repo/pull/123"
+
+    def test_extract_pr_url_not_found(self):
+        assert _extract_pr_url("no url here") is None
+
+    def test_extract_pr_url_none_input(self):
+        assert _extract_pr_url(None) is None
 
 
 # =============================================================================
@@ -1143,7 +1168,7 @@ class TestErrorHandling:
     @patch("emdx.commands.delegate._run_single")
     def test_single_task_failure_exits(self, mock_run_single):
         """Test that single task failure causes exit."""
-        mock_run_single.return_value = (None, 1)  # doc_id is None = failure
+        mock_run_single.return_value = SingleResult(task_id=1)  # doc_id is None = failure
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
