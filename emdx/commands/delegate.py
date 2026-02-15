@@ -41,7 +41,7 @@ from typing import Any
 import typer
 
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
-from ..database.documents import get_document
+from ..database.documents import get_document, save_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
 app = typer.Typer(
@@ -342,9 +342,12 @@ def _run_single(
     save_cmd = " ".join(cmd_parts)
 
     output_instruction = (
-        "\n\nIMPORTANT: When you complete this task, save your final output using:\n"
-        f'echo "YOUR OUTPUT HERE" | {save_cmd}\n'
-        "Report the document ID that was created."
+        "\n\nIMPORTANT — SAVE YOUR OUTPUT: When done, pipe your complete "
+        "findings to emdx. Example:\n"
+        f"cat <<'RESULT' | {save_cmd}\n"
+        "Your full analysis/output here as markdown\n"
+        "RESULT\n"
+        "Report the document ID shown after saving."
     )
 
     if pr:
@@ -391,12 +394,41 @@ def _run_single(
                 f"duration:{result.execution_time_ms / 1000:.1f}s{pr_info}\n"
             )
     else:
-        _safe_update_task(task_id, status="done")
-        # No doc saved — print whatever output we captured
-        if result.output_content:
-            sys.stdout.write(result.output_content)
-            sys.stdout.write("\n")
-        sys.stderr.write("delegate: agent completed but no document was saved\n")
+        # Agent didn't save — auto-save the output content
+        if result.output_content and result.output_content.strip():
+            try:
+                doc_id = save_document(
+                    title=doc_title,
+                    content=result.output_content,
+                    tags=all_tags,
+                )
+                _safe_update_task(
+                    task_id, status="done", output_doc_id=doc_id,
+                )
+                _safe_update_execution(result.execution_id, doc_id=doc_id)
+                _print_doc_content(doc_id)
+                if not quiet:
+                    pr_info = f" pr:{pr_url}" if pr_url else ""
+                    sys.stderr.write(
+                        f"task_id:{task_id} doc_id:{doc_id} "
+                        f"tokens:{result.tokens_used} "
+                        f"cost:${result.cost_usd:.4f} "
+                        f"duration:{result.execution_time_ms / 1000:.1f}s"
+                        f"{pr_info} (auto-saved)\n"
+                    )
+            except Exception as e:
+                _safe_update_task(task_id, status="done")
+                sys.stdout.write(result.output_content)
+                sys.stdout.write("\n")
+                sys.stderr.write(
+                    f"delegate: auto-save failed ({e}), "
+                    "output printed to stdout\n"
+                )
+        else:
+            _safe_update_task(task_id, status="done")
+            sys.stderr.write(
+                "delegate: agent completed with no output\n"
+            )
 
     return SingleResult(doc_id=doc_id, task_id=task_id, pr_url=pr_url)
 
