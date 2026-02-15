@@ -497,8 +497,8 @@ def _run_parallel(
 
     # Collect doc_ids in original task order (filter out None values)
     doc_ids: list[int] = [
-        results[i].doc_id for i in range(len(tasks))
-        if results.get(i) and results[i].doc_id is not None
+        r.doc_id for i in range(len(tasks))
+        if (r := results.get(i)) and r.doc_id is not None
     ]
 
     if not doc_ids:

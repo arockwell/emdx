@@ -47,7 +47,7 @@ def _get_tag_count(tag_name: str) -> int:
     all_tags = list_all_tags()
     for tag in all_tags:
         if tag["name"] == tag_name.lower():
-            return tag["count"]
+            return int(tag["count"])
     return 0
 
 
