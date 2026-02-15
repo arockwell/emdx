@@ -13,7 +13,7 @@ runner = CliRunner()
 class TestBrowseCommands:
     """Test browse command-line interface."""
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_empty_database(self, mock_list_docs, mock_db):
         """Test list command with empty database."""
@@ -26,7 +26,7 @@ class TestBrowseCommands:
         assert "No documents found" in result.stdout
         mock_list_docs.assert_called_once()
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_with_documents(self, mock_list_docs, mock_db):
         """Test list command with documents."""
@@ -47,7 +47,7 @@ class TestBrowseCommands:
         assert "Test Document" in result.stdout
         mock_list_docs.assert_called_once()
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_with_project_filter(self, mock_list_docs, mock_db):
         """Test list command with project filter."""
@@ -61,7 +61,7 @@ class TestBrowseCommands:
             project="test-project", limit=50
         )
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_json_format(self, mock_list_docs, mock_db):
         """Test list command with JSON format."""
@@ -80,7 +80,7 @@ class TestBrowseCommands:
         assert "[" in result.stdout  # JSON array
         assert '"id": 1' in result.stdout
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.get_recent_documents")
     def test_recent_command(self, mock_get_recent_docs, mock_db):
         """Test recent command."""
@@ -101,7 +101,7 @@ class TestBrowseCommands:
         assert "Recent Doc" in result.stdout
         mock_get_recent_docs.assert_called_once_with(limit=10)
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.get_stats")
     def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""

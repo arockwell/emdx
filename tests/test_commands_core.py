@@ -535,7 +535,7 @@ class TestTrashCommand:
     """Tests for the trash command."""
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_trash_empty(self, mock_db, mock_list_deleted):
         """Empty trash shows message."""
         mock_db.ensure_schema = Mock()
@@ -546,7 +546,7 @@ class TestTrashCommand:
         assert "No documents in trash" in _out(result)
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_trash_with_items(self, mock_db, mock_list_deleted):
         """Trash with items shows table."""
         mock_db.ensure_schema = Mock()
@@ -565,7 +565,7 @@ class TestTrashCommand:
         assert "Deleted Doc" in _out(result)
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_trash_with_days_filter(self, mock_db, mock_list_deleted):
         """Trash --days filters by age."""
         mock_db.ensure_schema = Mock()
@@ -583,7 +583,7 @@ class TestRestoreCommand:
     """Tests for the trash restore command."""
 
     @patch("emdx.commands.trash.restore_document")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_restore_by_id(self, mock_db, mock_restore):
         """Restore a specific document."""
         mock_db.ensure_schema = Mock()
@@ -594,7 +594,7 @@ class TestRestoreCommand:
         assert "Restored" in _out(result)
 
     @patch("emdx.commands.trash.restore_document")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_restore_not_found(self, mock_db, mock_restore):
         """Restore a document not in trash."""
         mock_db.ensure_schema = Mock()
@@ -604,7 +604,7 @@ class TestRestoreCommand:
         assert result.exit_code == 0
         assert "Could not restore" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_restore_no_args(self, mock_db):
         """Restore with no ID and no --all should error."""
         mock_db.ensure_schema = Mock()
@@ -614,7 +614,7 @@ class TestRestoreCommand:
 
     @patch("emdx.commands.trash.list_deleted_documents")
     @patch("emdx.commands.trash.restore_document")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_restore_all(self, mock_db, mock_restore, mock_list_deleted):
         """Restore --all restores all deleted documents."""
         mock_db.ensure_schema = Mock()
@@ -636,7 +636,7 @@ class TestPurgeCommand:
     """Tests for the trash purge command."""
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_purge_empty_trash(self, mock_db, mock_list_deleted):
         """Purge with empty trash shows message."""
         mock_db.ensure_schema = Mock()
@@ -648,7 +648,7 @@ class TestPurgeCommand:
 
     @patch("emdx.commands.trash.purge_deleted_documents")
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_purge_with_force(self, mock_db, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
         mock_db.ensure_schema = Mock()

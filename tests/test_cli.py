@@ -52,7 +52,7 @@ class TestCLIBasics:
             or result.exit_code == 2
         )
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.list_documents")
     def test_list_command(self, mock_list_docs, mock_db):
         """Test list command."""
@@ -69,7 +69,7 @@ class TestCLIBasics:
         # Should work even with empty database
         assert result.exit_code == 0 or "no documents" in result.stdout.lower()
 
-    @patch("emdx.commands.browse.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.get_stats")
     def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""

@@ -24,8 +24,8 @@ class TestTagAddCommand:
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.add_tags_to_document")
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_add_tags_explicit(self, mock_db, mock_get_doc, mock_add_tags, mock_get_tags):
         """Add tags via explicit 'add' subcommand."""
         mock_db.ensure_schema = Mock()
@@ -69,8 +69,8 @@ class TestTagAddCommand:
         assert argv == ["emdx", "tag", "add", "42", "--auto"]
 
     @patch("emdx.commands.tags.get_document_tags")
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_tag_show_current(self, mock_db, mock_get_doc, mock_get_tags):
         """Tag with no tag arguments shows current tags."""
         mock_db.ensure_schema = Mock()
@@ -82,8 +82,8 @@ class TestTagAddCommand:
         assert result.exit_code == 0
         assert "Tags for #1" in out
 
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_tag_doc_not_found(self, mock_db, mock_get_doc):
         """Tag a nonexistent document shows error."""
         mock_db.ensure_schema = Mock()
@@ -95,8 +95,8 @@ class TestTagAddCommand:
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.add_tags_to_document")
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_tag_already_exists(self, mock_db, mock_get_doc, mock_add_tags, mock_get_tags):
         """Adding a tag that already exists shows message."""
         mock_db.ensure_schema = Mock()
@@ -117,8 +117,8 @@ class TestTagRemoveCommand:
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.remove_tags_from_document")
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_remove(self, mock_db, mock_get_doc, mock_remove_tags, mock_get_tags):
         """Remove tags from a document."""
         mock_db.ensure_schema = Mock()
@@ -132,8 +132,8 @@ class TestTagRemoveCommand:
 
     @patch("emdx.commands.tags.get_document_tags")
     @patch("emdx.commands.tags.remove_tags_from_document")
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_remove_not_on_doc(self, mock_db, mock_get_doc, mock_remove_tags, mock_get_tags):
         """Removing a tag that doesn't exist shows message."""
         mock_db.ensure_schema = Mock()
@@ -145,8 +145,8 @@ class TestTagRemoveCommand:
         assert result.exit_code == 0
         assert "No tags removed" in _out(result)
 
-    @patch("emdx.commands.tags.get_document")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.get_document")
+    @patch("emdx.commands._helpers.db")
     def test_remove_doc_not_found(self, mock_db, mock_get_doc):
         """Remove tags from a nonexistent document shows error."""
         mock_db.ensure_schema = Mock()
@@ -164,7 +164,7 @@ class TestTagListCommand:
     """Tests for the tag list command."""
 
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_tags_list(self, mock_db, mock_list_all):
         """List all tags."""
         mock_db.ensure_schema = Mock()
@@ -190,7 +190,7 @@ class TestTagListCommand:
         assert "testing" in out
 
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_tags_list_empty(self, mock_db, mock_list_all):
         """No tags shows message."""
         mock_db.ensure_schema = Mock()
@@ -201,7 +201,7 @@ class TestTagListCommand:
         assert "No tags found" in _out(result)
 
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_tags_sort_option(self, mock_db, mock_list_all):
         """Tags with --sort option."""
         mock_db.ensure_schema = Mock()
@@ -219,7 +219,7 @@ class TestTagRenameCommand:
 
     @patch("emdx.commands.tags.rename_tag")
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_rename_with_force(self, mock_db, mock_list_all, mock_rename):
         """Rename a tag with --force."""
         mock_db.ensure_schema = Mock()
@@ -234,7 +234,7 @@ class TestTagRenameCommand:
         mock_rename.assert_called_once_with("old-tag", "new-tag")
 
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_rename_not_found(self, mock_db, mock_list_all):
         """Rename a tag that doesn't exist shows error."""
         mock_db.ensure_schema = Mock()
@@ -246,7 +246,7 @@ class TestTagRenameCommand:
 
     @patch("emdx.commands.tags.rename_tag")
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_rename_failure(self, mock_db, mock_list_all, mock_rename):
         """Rename that fails (e.g. target already exists) shows error."""
         mock_db.ensure_schema = Mock()
@@ -268,7 +268,7 @@ class TestTagMergeCommand:
 
     @patch("emdx.commands.tags.merge_tags")
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_merge_tags_with_force(self, mock_db, mock_list_all, mock_merge):
         """Merge tags with --force."""
         mock_db.ensure_schema = Mock()
@@ -285,7 +285,7 @@ class TestTagMergeCommand:
         assert "Merged" in _out(result)
 
     @patch("emdx.commands.tags.list_all_tags")
-    @patch("emdx.commands.tags.db")
+    @patch("emdx.commands._helpers.db")
     def test_merge_tags_no_valid_sources(self, mock_db, mock_list_all):
         """Merge with no valid source tags shows error."""
         mock_db.ensure_schema = Mock()

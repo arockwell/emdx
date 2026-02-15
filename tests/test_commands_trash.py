@@ -20,7 +20,7 @@ def _out(result) -> str:
 class TestTrashList:
     """Tests for trash list command."""
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_list_empty_trash(self, mock_list, mock_db):
         mock_list.return_value = []
@@ -28,7 +28,7 @@ class TestTrashList:
         assert result.exit_code == 0
         assert "No documents in trash" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_list_empty_trash_with_days(self, mock_list, mock_db):
         mock_list.return_value = []
@@ -36,7 +36,7 @@ class TestTrashList:
         assert result.exit_code == 0
         assert "No documents deleted in the last 7 days" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_list_shows_documents(self, mock_list, mock_db):
         mock_list.return_value = [
@@ -55,7 +55,7 @@ class TestTrashList:
         assert "Test Document" in out
         assert "test-project" in out
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_list_truncates_long_titles(self, mock_list, mock_db):
         mock_list.return_value = [
@@ -73,7 +73,7 @@ class TestTrashList:
         # Title gets truncated — either by our code ("...") or Rich table ("…")
         assert "..." in out or "…" in out
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_callback_invokes_list(self, mock_list, mock_db):
         """Invoking `trash` without subcommand runs list."""
@@ -86,13 +86,13 @@ class TestTrashList:
 class TestTrashRestore:
     """Tests for trash restore command."""
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     def test_restore_no_args_exits(self, mock_db):
         result = runner.invoke(app, ["restore"])
         assert result.exit_code == 1
         assert "Provide document ID" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.restore_document")
     def test_restore_single_doc(self, mock_restore, mock_db):
         mock_restore.return_value = True
@@ -101,7 +101,7 @@ class TestTrashRestore:
         assert "Restored 1 document" in _out(result)
         mock_restore.assert_called_once_with("42")
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.restore_document")
     def test_restore_not_found(self, mock_restore, mock_db):
         mock_restore.return_value = False
@@ -110,7 +110,7 @@ class TestTrashRestore:
         assert "Could not restore" in _out(result)
         assert "999" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.restore_document")
     def test_restore_multiple_docs(self, mock_restore, mock_db):
         mock_restore.side_effect = [True, False, True]
@@ -120,7 +120,7 @@ class TestTrashRestore:
         assert "Restored 2 document" in out
         assert "Could not restore 1 document" in out
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_restore_all_empty(self, mock_list, mock_db):
         mock_list.return_value = []
@@ -132,7 +132,7 @@ class TestTrashRestore:
 class TestTrashPurge:
     """Tests for trash purge command."""
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_purge_empty_trash(self, mock_list, mock_db):
         mock_list.return_value = []
@@ -140,7 +140,7 @@ class TestTrashPurge:
         assert result.exit_code == 0
         assert "No documents in trash to purge" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     @patch("emdx.commands.trash.purge_deleted_documents")
     def test_purge_with_force(self, mock_purge, mock_list, mock_db):
@@ -150,7 +150,7 @@ class TestTrashPurge:
         assert result.exit_code == 0
         assert "Permanently deleted 1 document" in _out(result)
 
-    @patch("emdx.commands.trash.db")
+    @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_purge_cancelled(self, mock_list, mock_db):
         mock_list.return_value = [{"id": 1, "deleted_at": datetime(2026, 1, 1)}]
