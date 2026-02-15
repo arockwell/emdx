@@ -371,3 +371,198 @@ class TestTaskDelete:
     def test_delete_requires_task_id(self):
         result = runner.invoke(app, ["delete"])
         assert result.exit_code != 0
+
+
+class TestTaskView:
+    """Tests for task view command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_view_shows_basic_info(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 42, "title": "Fix auth bug", "status": "open",
+            "description": "The auth middleware has a race condition",
+            "epic_key": None, "epic_seq": None, "parent_task_id": None,
+            "source_doc_id": None, "priority": 3, "created_at": "2026-01-15",
+        }
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        mock_tasks.get_task_log.return_value = []
+
+        result = runner.invoke(app, ["view", "42"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#42" in out
+        assert "Fix auth bug" in out
+        assert "open" in out
+        assert "race condition" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_view_shows_epic_label(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 10, "title": "SEC-1: Harden auth", "status": "active",
+            "description": "", "epic_key": "SEC", "epic_seq": 1,
+            "parent_task_id": 500, "source_doc_id": 99, "priority": 1,
+            "created_at": "2026-01-15",
+        }
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        mock_tasks.get_task_log.return_value = []
+
+        result = runner.invoke(app, ["view", "10"])
+        out = _out(result)
+        assert "SEC-1" in out
+        assert "Category: SEC" in out
+        assert "Epic: #500" in out
+        assert "Doc: #99" in out
+        assert "Priority: 1" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_view_shows_dependencies(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 5, "title": "Task with deps", "status": "blocked",
+            "description": "", "epic_key": None, "epic_seq": None,
+            "parent_task_id": None, "source_doc_id": None, "priority": 3,
+            "created_at": "2026-01-15",
+        }
+        mock_tasks.get_dependencies.return_value = [
+            {"id": 3, "title": "Blocker task", "status": "active"},
+        ]
+        mock_tasks.get_dependents.return_value = [
+            {"id": 8, "title": "Waiting task", "status": "open"},
+        ]
+        mock_tasks.get_task_log.return_value = []
+
+        result = runner.invoke(app, ["view", "5"])
+        out = _out(result)
+        assert "Blocked by:" in out
+        assert "#3" in out
+        assert "Blocker task" in out
+        assert "Blocks:" in out
+        assert "#8" in out
+        assert "Waiting task" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_view_shows_work_log(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 7, "title": "Some task", "status": "active",
+            "description": "", "epic_key": None, "epic_seq": None,
+            "parent_task_id": None, "source_doc_id": None, "priority": 3,
+            "created_at": "2026-01-15",
+        }
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        mock_tasks.get_task_log.return_value = [
+            {"message": "Started investigation", "created_at": "2026-01-15 10:00"},
+            {"message": "Found root cause", "created_at": "2026-01-15 11:00"},
+        ]
+
+        result = runner.invoke(app, ["view", "7"])
+        out = _out(result)
+        assert "Work log:" in out
+        assert "Started investigation" in out
+        assert "Found root cause" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_view_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["view", "999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_view_requires_task_id(self):
+        result = runner.invoke(app, ["view"])
+        assert result.exit_code != 0
+
+
+class TestTaskActive:
+    """Tests for task active command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_active_marks_task(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["active", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Active" in out
+        assert "#1" in out
+        assert "Test task" in out
+        mock_tasks.update_task.assert_called_once_with(1, status="active")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_active_with_note(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 2, "title": "Auth fix"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["active", "2", "--note", "Starting work"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(2, status="active")
+        mock_tasks.log_progress.assert_called_once_with(2, "Starting work")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_active_with_note_short_flag(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["active", "3", "-n", "On it"])
+        assert result.exit_code == 0
+        mock_tasks.log_progress.assert_called_once_with(3, "On it")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_active_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["active", "999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_active_requires_task_id(self):
+        result = runner.invoke(app, ["active"])
+        assert result.exit_code != 0
+
+
+class TestTaskLog:
+    """Tests for task log command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_log_add_message(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
+        mock_tasks.log_progress.return_value = 1
+        result = runner.invoke(app, ["log", "1", "Found the root cause"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Logged" in out
+        assert "#1" in out
+        assert "Found the root cause" in out
+        mock_tasks.log_progress.assert_called_once_with(1, "Found the root cause")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_log_view_entries(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Bug fix"}
+        mock_tasks.get_task_log.return_value = [
+            {"message": "Started debugging", "created_at": "2026-01-15 10:00"},
+            {"message": "Identified issue in middleware", "created_at": "2026-01-15 11:00"},
+        ]
+        result = runner.invoke(app, ["log", "5"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Log for #5" in out
+        assert "Bug fix" in out
+        assert "Started debugging" in out
+        assert "Identified issue in middleware" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_log_view_empty(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 3, "title": "Clean task"}
+        mock_tasks.get_task_log.return_value = []
+        result = runner.invoke(app, ["log", "3"])
+        assert result.exit_code == 0
+        assert "No log entries" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_log_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["log", "999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_log_requires_task_id(self):
+        result = runner.invoke(app, ["log"])
+        assert result.exit_code != 0

@@ -125,6 +125,9 @@ class TestPrimeDefault:
         assert "emdx find" in result.stdout
         assert "emdx delegate" in result.stdout
         assert "emdx task ready" in result.stdout
+        assert "emdx task view" in result.stdout
+        assert "emdx task active" in result.stdout
+        assert "emdx task log" in result.stdout
 
     @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")

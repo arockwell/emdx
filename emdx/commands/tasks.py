@@ -107,6 +107,133 @@ def done(
     console.print(f"[green]✓ Done:[/green] #{task_id} {task['title']}")
 
 
+@app.command()
+def view(
+    task_id: int = typer.Argument(..., help="Task ID"),
+):
+    """View full task details.
+
+    Shows title, description, status, epic/category, source doc,
+    dependencies, and recent work log entries.
+
+    Examples:
+        emdx task view 42
+    """
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    icon = ICONS.get(task["status"], "?")
+    # Header
+    label = f"#{task_id}"
+    if task.get("epic_key") and task.get("epic_seq"):
+        label = f"{task['epic_key']}-{task['epic_seq']} (#{task_id})"
+    console.print(f"\n[bold]{icon} {label}: {task['title']}[/bold]")
+
+    # Metadata line
+    meta = [f"Status: {task['status']}"]
+    if task.get("epic_key"):
+        meta.append(f"Category: {task['epic_key']}")
+    if task.get("parent_task_id"):
+        meta.append(f"Epic: #{task['parent_task_id']}")
+    if task.get("source_doc_id"):
+        meta.append(f"Doc: #{task['source_doc_id']}")
+    if task.get("priority") and task["priority"] != 3:
+        meta.append(f"Priority: {task['priority']}")
+    console.print(f"[dim]{' | '.join(meta)}[/dim]")
+
+    if task.get("created_at"):
+        console.print(f"[dim]Created: {task['created_at']}[/dim]")
+
+    # Description
+    if task.get("description"):
+        console.print(f"\n{task['description']}")
+
+    # Dependencies
+    deps = tasks.get_dependencies(task_id)
+    if deps:
+        console.print("\n[bold]Blocked by:[/bold]")
+        for d in deps:
+            dep_icon = ICONS.get(d["status"], "?")
+            console.print(f"  {dep_icon} #{d['id']} {d['title']}")
+
+    dependents = tasks.get_dependents(task_id)
+    if dependents:
+        console.print("\n[bold]Blocks:[/bold]")
+        for d in dependents:
+            dep_icon = ICONS.get(d["status"], "?")
+            console.print(f"  {dep_icon} #{d['id']} {d['title']}")
+
+    # Work log
+    log = tasks.get_task_log(task_id, limit=5)
+    if log:
+        console.print("\n[bold]Work log:[/bold]")
+        for entry in log:
+            ts = entry.get("created_at", "")
+            console.print(f"  [dim]{ts}[/dim] {entry['message']}")
+
+
+@app.command()
+def active(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    note: str | None = typer.Option(None, "-n", "--note", help="Progress note"),
+):
+    """Mark a task as in-progress.
+
+    Use this at session start after picking a task from 'emdx task ready'.
+
+    Examples:
+        emdx task active 42
+        emdx task active 42 --note "Starting work on auth refactor"
+    """
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    tasks.update_task(task_id, status="active")
+    if note:
+        tasks.log_progress(task_id, note)
+
+    console.print(f"[blue]● Active:[/blue] #{task_id} {task['title']}")
+
+
+@app.command()
+def log(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    message: str | None = typer.Argument(None, help="Log message (omit to view log)"),
+):
+    """View or add to a task's work log.
+
+    Without a message, shows the log history.
+    With a message, appends an entry.
+
+    Examples:
+        emdx task log 42
+        emdx task log 42 "Investigated root cause — issue is in auth middleware"
+    """
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    if message:
+        tasks.log_progress(task_id, message)
+        console.print(f"[green]Logged:[/green] #{task_id} — {message}")
+        return
+
+    entries = tasks.get_task_log(task_id, limit=20)
+    if not entries:
+        console.print(f"[yellow]No log entries for #{task_id}[/yellow]")
+        return
+
+    console.print(f"\n[bold]Log for #{task_id}: {task['title']}[/bold]")
+    for entry in entries:
+        ts = entry.get("created_at", "")
+        console.print(f"  [dim]{ts}[/dim] {entry['message']}")
+
+
 @app.command("list")
 def list_cmd(
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
