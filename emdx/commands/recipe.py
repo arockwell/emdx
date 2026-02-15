@@ -10,6 +10,7 @@ instructions for Claude to follow via `emdx delegate`.
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -20,14 +21,14 @@ from ..utils.output import console
 
 app = typer.Typer(help="Manage and run EMDX recipes")
 
-def _find_recipe(id_or_name: str) -> dict | None:
+def _find_recipe(id_or_name: str) -> dict[str, Any] | None:
     """Find a recipe by ID or title search."""
     # Try as numeric ID first
     try:
         doc_id = int(id_or_name)
         doc = get_document(doc_id)
         if doc:
-            return doc
+            return dict(doc)
     except ValueError:
         pass
 
@@ -40,9 +41,9 @@ def _find_recipe(id_or_name: str) -> dict | None:
         # Fall back to text search within recipes
         results = search_documents(id_or_name, limit=20)
         recipe_ids = {r["id"] for r in recipes}
-        for r in results:
-            if r["id"] in recipe_ids:
-                return r
+        for result in results:
+            if result["id"] in recipe_ids:
+                return dict(result)
 
     return None
 

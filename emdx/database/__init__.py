@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Union, cast
 
 from . import cascade, groups
 from .connection import DatabaseConnection, db_connection
@@ -169,7 +169,7 @@ class SQLiteDatabase:
                 )
             conn.commit()
             row = cursor.fetchone()
-            return dict(row) if row else None
+            return cast(DocumentRow, dict(row)) if row else None
 
     def list_documents(self, project: str | None = None, limit: int = 50) -> list[DocumentListItem]:
         """List documents with optional filters."""
@@ -191,7 +191,7 @@ class SQLiteDatabase:
                 f"FROM documents WHERE {where_clause} ORDER BY id DESC LIMIT ?",
                 params,
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(DocumentListItem, dict(row)) for row in cursor.fetchall()]
 
     def update_document(self, doc_id: int, title: str, content: str) -> bool:
         """Update a document."""
@@ -254,7 +254,7 @@ class SQLiteDatabase:
                 "FROM documents WHERE is_deleted = FALSE ORDER BY accessed_at DESC LIMIT ?",
                 (limit,),
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(RecentDocumentItem, dict(row)) for row in cursor.fetchall()]
 
     def get_stats(self, project: str | None = None) -> DatabaseStats:
         """Get database statistics."""
@@ -276,7 +276,7 @@ class SQLiteDatabase:
                     "SUM(access_count) as total_views, AVG(access_count) as avg_views "
                     "FROM documents WHERE is_deleted = FALSE"
                 )
-            return dict(cursor.fetchone())
+            return cast(DatabaseStats, dict(cursor.fetchone()))
 
     def list_deleted_documents(
         self, days: int | None = None, limit: int = 50,
@@ -300,7 +300,7 @@ class SQLiteDatabase:
                     "WHERE is_deleted = TRUE ORDER BY deleted_at DESC LIMIT ?",
                     (limit,),
                 )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(DeletedDocumentItem, dict(row)) for row in cursor.fetchall()]
 
     def restore_document(self, identifier: Union[str, int]) -> bool:
         """Restore a soft-deleted document."""
@@ -377,7 +377,7 @@ class SQLiteDatabase:
                     f"FROM documents d WHERE {where_clause} ORDER BY d.id DESC LIMIT ?",
                     params,
                 )
-                return [dict(row) for row in cursor.fetchall()]
+                return [cast(SearchResult, dict(row)) for row in cursor.fetchall()]
 
             conditions = ["d.is_deleted = FALSE"]
             params = []
@@ -397,7 +397,7 @@ class SQLiteDatabase:
                 f"WHERE fts.documents_fts MATCH ? AND {where_clause} ORDER BY rank LIMIT ?",
                 [safe_query] + params + [limit],
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(SearchResult, dict(row)) for row in cursor.fetchall()]
 
 
 # Create global instance for backward compatibility

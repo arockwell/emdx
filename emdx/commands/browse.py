@@ -3,6 +3,8 @@ Browse and analytics commands for emdx
 """
 
 
+from typing import Any
+
 import typer
 from rich.table import Table
 
@@ -50,11 +52,12 @@ def list(
 
             # Add rows from database
             for doc in docs:
+                created = doc["created_at"].strftime("%Y-%m-%d") if doc["created_at"] else ""
                 table.add_row(
                     str(doc["id"]),
                     truncate_title(doc["title"]),
                     doc["project"] or "None",
-                    doc["created_at"].strftime("%Y-%m-%d"),
+                    created,
                     str(doc["access_count"]),
                 )
 
@@ -62,13 +65,17 @@ def list(
             console.print(f"\n[dim]Showing {len(docs)} of {len(docs)} documents[/dim]")
 
         elif format == "json":
-            # Convert datetime objects to strings
+            # Convert datetime objects to strings for JSON serialization
+            json_docs = []
             for doc in docs:
-                doc["created_at"] = doc["created_at"].isoformat()
-                if doc.get("accessed_at"):
-                    doc["accessed_at"] = doc["accessed_at"].isoformat()
+                d: dict[str, Any] = dict(doc)
+                if d["created_at"]:
+                    d["created_at"] = d["created_at"].isoformat()
+                if d.get("accessed_at"):
+                    d["accessed_at"] = d["accessed_at"].isoformat()
+                json_docs.append(d)
             # Use plain print for machine-parseable output
-            print(json.dumps(docs, indent=2))
+            print(json.dumps(json_docs, indent=2))
 
         elif format == "csv":
             print("id,title,project,created,views")
@@ -77,7 +84,8 @@ def list(
                 title = doc["title"].replace(",", "\\,")
                 print(
                     f"{doc['id']},{title},{doc['project'] or ''}"
-                    f",{doc['created_at'].strftime('%Y-%m-%d')},{doc['access_count']}"
+                    f",{doc['created_at'].strftime('%Y-%m-%d') if doc['created_at'] else ''}"
+                    f",{doc['access_count']}"
                 )
 
     except Exception as e:

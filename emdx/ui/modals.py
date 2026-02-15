@@ -328,7 +328,7 @@ class DocumentPreviewModal(ModalScreen):
     def __init__(self, doc_id: int, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.doc_id = doc_id
-        self._doc_data: dict | None = None
+        self._doc_data: dict[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="preview-dialog"):
@@ -353,7 +353,8 @@ class DocumentPreviewModal(ModalScreen):
         try:
             from emdx.services.document_service import get_document
 
-            self._doc_data = get_document(self.doc_id)
+            result = get_document(self.doc_id)
+            self._doc_data = dict(result) if result else None
             if not self._doc_data:
                 self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")  # noqa: E501
                 return

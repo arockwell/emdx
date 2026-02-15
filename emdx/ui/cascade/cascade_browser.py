@@ -65,8 +65,10 @@ class CascadeBrowser(Widget):
         """Handle request to process a stage — runs Claude with live logs."""
         stage, doc_id = event.stage, event.doc_id
 
+        doc: dict[str, Any] | None
         if doc_id:
-            doc = get_document(str(doc_id))
+            raw = get_document(str(doc_id))
+            doc = dict(raw) if raw else None
             if not doc:
                 self._update_status(f"[red]Document #{doc_id} not found[/red]")
                 return
@@ -78,7 +80,7 @@ class CascadeBrowser(Widget):
             doc = docs[0]
             doc_id = doc["id"]
 
-        assert doc_id is not None  # Guaranteed by the if/else above
+        assert doc_id is not None and doc is not None  # Guaranteed by the if/else above
         self._update_status(f"[cyan]Processing #{doc_id}: {doc.get('title', '')[:40]}...[/cyan]")
 
         from emdx.commands.cascade import STAGE_PROMPTS

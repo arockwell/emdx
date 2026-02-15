@@ -3,7 +3,7 @@ Document CRUD operations for emdx knowledge base
 """
 
 import logging
-from typing import Any, Union
+from typing import Any, Union, cast
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
@@ -13,6 +13,7 @@ from .types import (
     DeletedDocumentItem,
     DocumentListItem,
     DocumentRow,
+    MostViewedDoc,
     RecentDocumentItem,
     SupersedeCandidate,
 )
@@ -20,8 +21,15 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
-def _parse_doc_datetimes(doc: dict[str, Any], fields: list[str] | None = None) -> dict[str, Any]:
-    """Parse datetime fields in a document dictionary."""
+def _parse_doc_datetimes(
+    doc: dict[str, Any], fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Parse datetime string fields in a document dictionary, in place.
+
+    Returns the same dict for call-chaining convenience.  Callers should
+    ``cast()`` to the concrete TypedDict *before* calling this so that
+    their local variable already carries the right type.
+    """
     if fields is None:
         fields = ["created_at", "updated_at", "accessed_at", "deleted_at"]
     for field in fields:
@@ -108,9 +116,9 @@ def get_document(identifier: Union[str, int]) -> DocumentRow | None:
         row = cursor.fetchone()
 
         if row:
-            # Convert Row to dict and parse datetime strings
-            doc = dict(row)
-            return _parse_doc_datetimes(doc)
+            raw = dict(row)
+            _parse_doc_datetimes(raw)
+            return cast(DocumentRow, raw)
         return None
 
 
@@ -176,12 +184,11 @@ def list_documents(
         )
 
         # Convert rows and parse datetime strings
-        docs = []
+        docs: list[DocumentListItem] = []
         for row in cursor.fetchall():
-            doc = dict(row)
-            docs.append(
-                _parse_doc_datetimes(doc, ["created_at", "accessed_at", "archived_at"])
-            )
+            raw = dict(row)
+            _parse_doc_datetimes(raw, ["created_at", "accessed_at", "archived_at"])
+            docs.append(cast(DocumentListItem, raw))
         return docs
 
 
@@ -350,10 +357,11 @@ def get_recent_documents(limit: int = 10) -> list[RecentDocumentItem]:
         )
 
         # Convert rows and parse datetime strings
-        docs = []
+        docs: list[RecentDocumentItem] = []
         for row in cursor.fetchall():
-            doc = dict(row)
-            docs.append(_parse_doc_datetimes(doc))
+            raw = dict(row)
+            _parse_doc_datetimes(raw)
+            docs.append(cast(RecentDocumentItem, raw))
         return docs
 
 
@@ -392,7 +400,7 @@ def get_stats(project: str | None = None) -> DatabaseStats:
             )
 
         row = cursor.fetchone()
-        stats = dict(row) if row else {}
+        stats: DatabaseStats = cast(DatabaseStats, dict(row)) if row else cast(DatabaseStats, {})
 
         # Get database file size
         stats["table_size"] = f"{db_connection.db_path.stat().st_size / 1024 / 1024:.2f} MB"
@@ -422,7 +430,7 @@ def get_stats(project: str | None = None) -> DatabaseStats:
 
         most_viewed = cursor.fetchone()
         if most_viewed:
-            stats["most_viewed"] = dict(most_viewed)
+            stats["most_viewed"] = cast(MostViewedDoc, dict(most_viewed))
 
         return stats
 
@@ -455,10 +463,11 @@ def list_deleted_documents(days: int | None = None, limit: int = 50) -> list[Del
             )
 
         # Convert rows and parse datetime strings
-        docs = []
+        docs: list[DeletedDocumentItem] = []
         for row in cursor.fetchall():
-            doc = dict(row)
-            docs.append(_parse_doc_datetimes(doc))
+            raw = dict(row)
+            _parse_doc_datetimes(raw)
+            docs.append(cast(DeletedDocumentItem, raw))
         return docs
 
 
@@ -590,8 +599,9 @@ def find_supersede_candidate(
         # For exact matches, return the most recent one
         exact_matches = [c for c in candidates if c[2] == "exact"]
         if exact_matches:
-            # Return most recent exact match
-            return _parse_doc_datetimes(exact_matches[0][0])
+            raw = exact_matches[0][0]
+            _parse_doc_datetimes(raw)
+            return cast(SupersedeCandidate, raw)
 
         # For fuzzy matches, we need content similarity check
         if content and candidates:
@@ -600,7 +610,8 @@ def find_supersede_candidate(
             for doc, _title_sim, _match_type in candidates:
                 content_sim = compute_content_similarity(content, doc["content"])
                 if content_sim >= content_threshold:
-                    return _parse_doc_datetimes(doc)
+                    _parse_doc_datetimes(doc)
+                    return cast(SupersedeCandidate, doc)
 
         return None
 
@@ -649,10 +660,11 @@ def get_children(doc_id: int) -> list[ChildDocumentItem]:
             (doc_id,),
         )
 
-        docs = []
+        docs: list[ChildDocumentItem] = []
         for row in cursor.fetchall():
-            doc = dict(row)
-            docs.append(_parse_doc_datetimes(doc))
+            raw = dict(row)
+            _parse_doc_datetimes(raw)
+            docs.append(cast(ChildDocumentItem, raw))
         return docs
 
 
@@ -711,4 +723,9 @@ def list_recent_documents(
         """
 
         cursor = conn.execute(query, (cutoff.isoformat(), limit))
-        return [_parse_doc_datetimes(dict(row)) for row in cursor.fetchall()]
+        docs: list[DocumentRow] = []
+        for row in cursor.fetchall():
+            raw = dict(row)
+            _parse_doc_datetimes(raw)
+            docs.append(cast(DocumentRow, raw))
+        return docs

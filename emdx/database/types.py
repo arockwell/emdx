@@ -2,25 +2,30 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TypedDict
 
 
 class DocumentRow(TypedDict):
-    """Full document row from the documents table."""
+    """Full document row from the documents table.
+
+    Datetime fields are parsed from SQLite strings to datetime objects
+    by ``_parse_doc_datetimes`` before being returned to callers.
+    """
 
     id: int
     title: str
     content: str
     project: str | None
-    created_at: str | None
-    updated_at: str | None
-    accessed_at: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+    accessed_at: datetime | None
     access_count: int
-    deleted_at: str | None
+    deleted_at: datetime | None
     is_deleted: int
     parent_id: int | None
     relationship: str | None
-    archived_at: str | None
+    archived_at: datetime | None
     stage: str | None
 
 
@@ -30,11 +35,12 @@ class DocumentListItem(TypedDict):
     id: int
     title: str
     project: str | None
-    created_at: str | None
+    created_at: datetime | None
     access_count: int
     parent_id: int | None
     relationship: str | None
-    archived_at: str | None
+    archived_at: datetime | None
+    accessed_at: datetime | None
 
 
 class RecentDocumentItem(TypedDict):
@@ -43,7 +49,7 @@ class RecentDocumentItem(TypedDict):
     id: int
     title: str
     project: str | None
-    accessed_at: str | None
+    accessed_at: datetime | None
     access_count: int
 
 
@@ -53,7 +59,7 @@ class DeletedDocumentItem(TypedDict):
     id: int
     title: str
     project: str | None
-    deleted_at: str | None
+    deleted_at: datetime | None
     access_count: int
 
 
@@ -63,10 +69,10 @@ class ChildDocumentItem(TypedDict):
     id: int
     title: str
     project: str | None
-    created_at: str | None
+    created_at: datetime | None
     parent_id: int | None
     relationship: str | None
-    archived_at: str | None
+    archived_at: datetime | None
 
 
 class SupersedeCandidate(TypedDict):
@@ -76,7 +82,7 @@ class SupersedeCandidate(TypedDict):
     title: str
     content: str
     project: str | None
-    created_at: str | None
+    created_at: datetime | None
     parent_id: int | None
 
 
@@ -86,8 +92,8 @@ class SearchResult(TypedDict):
     id: int
     title: str
     project: str | None
-    created_at: str | None
-    updated_at: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
     snippet: str | None
     rank: float
 

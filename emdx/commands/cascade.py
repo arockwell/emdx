@@ -15,6 +15,7 @@ Key concepts:
 import re
 import time
 from datetime import datetime
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -151,7 +152,7 @@ def _update_cascade_run(
 
 
 def _process_stage(
-    doc: dict, stage: str, cascade_run_id: int | None = None,
+    doc: dict[str, Any], stage: str, cascade_run_id: int | None = None,
 ) -> tuple[bool, int, str | None]:
     """Process a single stage for a document.
 
@@ -347,7 +348,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str) -> None:
             _update_cascade_run(cascade_run_id, status='failed', error_message="Stage mismatch")
             raise typer.Exit(1)
 
-        success, new_doc_id, stage_pr_url = _process_stage(doc, stage, cascade_run_id)
+        success, new_doc_id, stage_pr_url = _process_stage(dict(doc), stage, cascade_run_id)
 
         if not success:
             _update_cascade_run(cascade_run_id, status='failed', error_message=f"Failed at {stage}")
@@ -464,8 +465,9 @@ def process(
         raise typer.Exit(1)
 
     # Get document to process
+    doc: dict[str, Any] | None
     if doc_id:
-        doc = get_document(str(doc_id))
+        doc = dict(get_document(str(doc_id)) or {}) or None
         if not doc:
             console.print(f"[red]Document #{doc_id} not found[/red]")
             raise typer.Exit(1)

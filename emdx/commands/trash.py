@@ -80,7 +80,7 @@ def _list_trash(days: int | None = None, limit: int = 50) -> None:
                 str(doc["id"]),
                 doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
                 doc["project"] or "[dim]None[/dim]",
-                doc["deleted_at"].strftime("%Y-%m-%d %H:%M"),
+                doc["deleted_at"].strftime("%Y-%m-%d %H:%M") if doc["deleted_at"] else "Unknown",
                 str(doc["access_count"]),
             )
 
@@ -167,7 +167,10 @@ def purge(
             from datetime import datetime, timedelta
 
             cutoff = datetime.now() - timedelta(days=older_than)
-            docs_to_purge = [d for d in deleted_docs if d["deleted_at"] < cutoff]
+            docs_to_purge = [
+                d for d in deleted_docs
+                if d["deleted_at"] is not None and d["deleted_at"] < cutoff
+            ]
             count = len(docs_to_purge)
         else:
             deleted_docs = list_deleted_documents()

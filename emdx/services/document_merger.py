@@ -17,9 +17,9 @@ from typing import Any, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
+from ..database.types import DocumentRow
 from ..models.documents import delete_document, get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags
-from ..utils.datetime_utils import parse_datetime
 from .similarity import SimilarityService
 
 logger = logging.getLogger(__name__)
@@ -314,7 +314,7 @@ class DocumentMerger:
             preserve_metadata=preserve_metadata
         )
 
-    def _calculate_document_score(self, doc: dict[str, Any], tags: list[str]) -> float:
+    def _calculate_document_score(self, doc: DocumentRow, tags: list[str]) -> float:
         """Calculate a quality score for a document."""
         score = 0.0
 
@@ -333,14 +333,13 @@ class DocumentMerger:
             score += 1
 
         # Recent access
-        if doc.get('accessed_at'):
-            accessed_at = parse_datetime(doc['accessed_at'])
-            if accessed_at:
-                days_since_access = (datetime.now() - accessed_at).days
-                if days_since_access < 7:
-                    score += 2
-                elif days_since_access < 30:
-                    score += 1
+        accessed_at = doc.get('accessed_at')
+        if accessed_at is not None:
+            days_since_access = (datetime.now() - accessed_at).days
+            if days_since_access < 7:
+                score += 2
+            elif days_since_access < 30:
+                score += 1
 
         return float(score)
 

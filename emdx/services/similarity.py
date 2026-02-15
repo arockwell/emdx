@@ -177,7 +177,8 @@ class SimilarityService:
         idf_weights = None
         if self._vectorizer is not None:
             try:
-                vocabulary = self._vectorizer.vocabulary_
+                # Convert vocabulary values to plain ints (sklearn stores numpy int64)
+                vocabulary = {k: int(v) for k, v in self._vectorizer.vocabulary_.items()}
                 if hasattr(self._vectorizer, 'idf_'):
                     idf_weights = self._vectorizer.idf_.tolist()
             except AttributeError:
