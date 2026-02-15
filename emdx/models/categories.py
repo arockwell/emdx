@@ -39,8 +39,11 @@ def list_categories() -> list[dict[str, Any]]:
         cursor = conn.execute("""
             SELECT
                 c.key, c.name, c.description, c.created_at,
-                COUNT(CASE WHEN t.epic_seq IS NOT NULL AND t.status IN ('open', 'active', 'blocked') THEN 1 END) as open_count,
-                COUNT(CASE WHEN t.epic_seq IS NOT NULL AND t.status = 'done' THEN 1 END) as done_count,
+                COUNT(CASE WHEN t.epic_seq IS NOT NULL
+                    AND t.status IN ('open', 'active', 'blocked')
+                    THEN 1 END) as open_count,
+                COUNT(CASE WHEN t.epic_seq IS NOT NULL
+                    AND t.status = 'done' THEN 1 END) as done_count,
                 COUNT(CASE WHEN t.type = 'epic' THEN 1 END) as epic_count,
                 COUNT(CASE WHEN t.epic_seq IS NOT NULL THEN 1 END) as total_count
             FROM categories c
@@ -123,13 +126,16 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
 
         # Find parent epic tasks (title starts with "EPIC:")
         epic_cursor = conn.execute(
-            "SELECT DISTINCT parent_task_id FROM tasks WHERE epic_key = ? AND parent_task_id IS NOT NULL",
+            "SELECT DISTINCT parent_task_id FROM tasks "
+            "WHERE epic_key = ? AND parent_task_id IS NOT NULL",
             (key,),
         )
         parent_ids = [r["parent_task_id"] for r in epic_cursor.fetchall()]
 
         for pid in parent_ids:
-            parent = conn.execute("SELECT id, type, epic_key FROM tasks WHERE id = ?", (pid,)).fetchone()
+            parent = conn.execute(
+                "SELECT id, type, epic_key FROM tasks WHERE id = ?", (pid,)
+            ).fetchone()
             if parent and parent["epic_key"] is None:
                 conn.execute(
                     "UPDATE tasks SET type = 'epic', epic_key = ? WHERE id = ?",

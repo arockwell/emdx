@@ -368,7 +368,10 @@ def _get_execution_methods_json() -> list[dict]:
             "command": "emdx delegate",
             "usage": 'emdx delegate "task" --tags analysis',
             "when": "All one-shot AI execution (single, parallel, chain, PR, worktree)",
-            "key_flags": ["--doc", "--each/--do", "--chain", "--pr", "--worktree", "--synthesize", "--tags"],
+            "key_flags": [
+                "--doc", "--each/--do", "--chain", "--pr",
+                "--worktree", "--synthesize", "--tags",
+            ],
         },
     ]
 
