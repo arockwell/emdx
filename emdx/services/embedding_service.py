@@ -66,7 +66,7 @@ class ChunkMatch:
 
     doc_id: int
     title: str
-    project: Optional[str]
+    project: str | None
     chunk_index: int
     heading_path: str
     similarity: float
@@ -474,11 +474,12 @@ class EmbeddingService:
                         (doc_id, self.MODEL_NAME),
                     )
 
-                for chunk, embedding in zip(chunks, embeddings):
+                for chunk, embedding in zip(chunks, embeddings, strict=False):
                     cursor.execute(
                         """
                         INSERT OR REPLACE INTO chunk_embeddings
-                        (document_id, chunk_index, heading_path, text, model_name, embedding, dimension, updated_at)
+                        (document_id, chunk_index, heading_path, text,
+                         model_name, embedding, dimension, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
@@ -501,7 +502,7 @@ class EmbeddingService:
 
     def search_chunks(
         self, query: str, limit: int = 10, threshold: float = 0.3
-    ) -> List[ChunkMatch]:
+    ) -> list[ChunkMatch]:
         """Semantic search at chunk level - returns relevant paragraphs."""
         query_embedding = self.embed_text(query)
 

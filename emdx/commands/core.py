@@ -457,7 +457,10 @@ def find(
                 ]
 
         if not hybrid_results:
-            console.print(f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]")
+            console.print(
+                f"[yellow]No results found for '[/yellow]{search_query}"
+                "[yellow]'[/yellow]"
+            )
             return
 
         # Handle output formats
@@ -506,7 +509,10 @@ def find(
                     f"[dim]{result.chunk_heading}[/dim]"
                 )
             else:
-                console.print(f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]")
+                console.print(
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] "
+                    f"[bold]{result.title}[/bold]"
+                )
 
             # Display metadata
             metadata = []
@@ -528,7 +534,9 @@ def find(
                     chunk_preview += "..."
                 console.print(f"[dim]{chunk_preview}[/dim]")
             elif snippets and result.snippet:
-                snippet = result.snippet.replace("<b>", "[bold yellow]").replace("</b>", "[/bold yellow]")
+                snippet = result.snippet.replace(
+                    "<b>", "[bold yellow]"
+                ).replace("</b>", "[/bold yellow]")
                 console.print(f"[dim]...{snippet}...[/dim]")
 
             if i < len(hybrid_results):
@@ -632,7 +640,8 @@ def _find_keyword_search(
 
             if not results:
                 console.print(
-                    f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"
+                    "[yellow]No results found after excluding tags: "
+                    f"{', '.join(no_tag_list)}[/yellow]"
                 )
                 return
 

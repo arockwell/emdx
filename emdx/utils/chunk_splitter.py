@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass
@@ -38,7 +37,7 @@ MIN_CHUNK_CHARS = MIN_CHUNK_TOKENS * CHARS_PER_TOKEN
 MAX_CHUNK_CHARS = MAX_CHUNK_TOKENS * CHARS_PER_TOKEN
 
 
-def split_into_chunks(content: str, title: str = "") -> List[Chunk]:
+def split_into_chunks(content: str, title: str = "") -> list[Chunk]:
     """
     Split markdown content into chunks for semantic search.
 
@@ -87,13 +86,13 @@ def split_into_chunks(content: str, title: str = "") -> List[Chunk]:
     return chunks
 
 
-def _split_by_headings(content: str, title: str) -> List[Chunk]:
+def _split_by_headings(content: str, title: str) -> list[Chunk]:
     """Split content by markdown headings, preserving heading hierarchy."""
     # Match markdown headings: ## Heading, ### Subheading, etc.
     heading_pattern = re.compile(r"^(#{1,6})\s+(.+?)$", re.MULTILINE)
 
-    chunks: List[Chunk] = []
-    heading_stack: List[tuple[int, str]] = []  # (level, heading_text)
+    chunks: list[Chunk] = []
+    heading_stack: list[tuple[int, str]] = []  # (level, heading_text)
     last_pos = 0
     current_line = 1
 
@@ -148,9 +147,9 @@ def _split_by_headings(content: str, title: str) -> List[Chunk]:
     return chunks
 
 
-def _split_large_chunks(chunks: List[Chunk]) -> List[Chunk]:
+def _split_large_chunks(chunks: list[Chunk]) -> list[Chunk]:
     """Split chunks that exceed MAX_CHUNK_CHARS."""
-    result: List[Chunk] = []
+    result: list[Chunk] = []
 
     for chunk in chunks:
         if len(chunk.text) <= MAX_CHUNK_CHARS:
@@ -220,11 +219,11 @@ def _split_large_chunks(chunks: List[Chunk]) -> List[Chunk]:
     return result
 
 
-def _split_by_sentences(text: str, heading_path: str, start_line: int) -> List[Chunk]:
+def _split_by_sentences(text: str, heading_path: str, start_line: int) -> list[Chunk]:
     """Split text by sentences when paragraph splitting isn't enough."""
     # Simple sentence splitting on . ! ?
     sentences = re.split(r"(?<=[.!?])\s+", text)
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     current_text = ""
     current_start = start_line
 
@@ -265,12 +264,12 @@ def _split_by_sentences(text: str, heading_path: str, start_line: int) -> List[C
     return chunks
 
 
-def _merge_small_chunks(chunks: List[Chunk]) -> List[Chunk]:
+def _merge_small_chunks(chunks: list[Chunk]) -> list[Chunk]:
     """Merge consecutive small chunks that share a heading path prefix."""
     if len(chunks) <= 1:
         return chunks
 
-    result: List[Chunk] = []
+    result: list[Chunk] = []
     i = 0
 
     while i < len(chunks):

@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Set
 
 from ..database import db
 from ..database.search import search_documents
@@ -34,16 +33,16 @@ class HybridSearchResult:
 
     doc_id: int
     title: str
-    project: Optional[str]
+    project: str | None
     score: float  # Normalized 0-1, combined score
     keyword_score: float  # FTS5 score component
     semantic_score: float  # Semantic score component
     source: str  # "keyword", "semantic", or "hybrid"
     snippet: str
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     # Chunk-level data (populated when extract=True or from semantic search)
-    chunk_heading: Optional[str] = None
-    chunk_text: Optional[str] = None
+    chunk_heading: str | None = None
+    chunk_text: str | None = None
 
 
 # Weights for combining keyword and semantic scores
@@ -106,7 +105,7 @@ class HybridSearchService:
         except Exception:
             return False
 
-    def determine_mode(self, requested_mode: Optional[str] = None) -> SearchMode:
+    def determine_mode(self, requested_mode: str | None = None) -> SearchMode:
         """Determine the search mode based on request and index availability."""
         if requested_mode:
             try:
@@ -123,10 +122,10 @@ class HybridSearchService:
         self,
         query: str,
         limit: int = 10,
-        mode: Optional[str] = None,
+        mode: str | None = None,
         extract: bool = False,
-        project: Optional[str] = None,
-    ) -> List[HybridSearchResult]:
+        project: str | None = None,
+    ) -> list[HybridSearchResult]:
         """
         Execute hybrid search combining keyword and semantic search.
 
@@ -150,8 +149,8 @@ class HybridSearchService:
             return self._search_hybrid(query, limit, project, extract)
 
     def _search_keyword(
-        self, query: str, limit: int, project: Optional[str]
-    ) -> List[HybridSearchResult]:
+        self, query: str, limit: int, project: str | None
+    ) -> list[HybridSearchResult]:
         """Execute FTS5 keyword search only."""
         docs = search_documents(query=query, project=project, limit=limit)
 
@@ -176,8 +175,8 @@ class HybridSearchService:
         return results
 
     def _search_semantic(
-        self, query: str, limit: int, project: Optional[str], extract: bool
-    ) -> List[HybridSearchResult]:
+        self, query: str, limit: int, project: str | None, extract: bool
+    ) -> list[HybridSearchResult]:
         """Execute semantic search using chunks or documents."""
         if not self.embedding_service:
             return []
@@ -216,8 +215,8 @@ class HybridSearchService:
         return results
 
     def _search_chunks(
-        self, query: str, limit: int, project: Optional[str], extract: bool
-    ) -> List[HybridSearchResult]:
+        self, query: str, limit: int, project: str | None, extract: bool
+    ) -> list[HybridSearchResult]:
         """Search at chunk level for more precise results."""
         if not self.embedding_service:
             return []
@@ -235,7 +234,7 @@ class HybridSearchService:
             matches = [m for m in matches if m.project == project]
 
         # Deduplicate by document, keeping highest-scoring chunk per doc
-        seen_docs: Set[int] = set()
+        seen_docs: set[int] = set()
         results = []
 
         for match in matches:
@@ -250,7 +249,11 @@ class HybridSearchService:
             seen_docs.add(match.doc_id)
 
             # Build snippet from chunk
-            chunk_preview = match.chunk_text[:200] + "..." if len(match.chunk_text) > 200 else match.chunk_text
+            chunk_preview = (
+                match.chunk_text[:200] + "..."
+                if len(match.chunk_text) > 200
+                else match.chunk_text
+            )
 
             results.append(
                 HybridSearchResult(
@@ -274,8 +277,8 @@ class HybridSearchService:
         return results
 
     def _search_hybrid(
-        self, query: str, limit: int, project: Optional[str], extract: bool
-    ) -> List[HybridSearchResult]:
+        self, query: str, limit: int, project: str | None, extract: bool
+    ) -> list[HybridSearchResult]:
         """
         Combine keyword and semantic search results.
 
@@ -290,8 +293,7 @@ class HybridSearchService:
         keyword_results = self._search_keyword(query, limit * 2, project)
         semantic_results = self._search_semantic(query, limit * 2, project, extract)
 
-        # Build lookup maps
-        keyword_by_id = {r.doc_id: r for r in keyword_results}
+        # Build lookup map
         semantic_by_id = {r.doc_id: r for r in semantic_results}
 
         # Merge results
@@ -317,7 +319,8 @@ class HybridSearchService:
                     keyword_score=result.keyword_score,
                     semantic_score=sem_result.semantic_score,
                     source="hybrid",
-                    snippet=sem_result.snippet or result.snippet,  # Prefer semantic snippet (chunk-based)
+                    # Prefer semantic snippet (chunk-based)
+                    snippet=sem_result.snippet or result.snippet,
                     tags=result.tags or sem_result.tags,
                     chunk_heading=sem_result.chunk_heading,
                     chunk_text=sem_result.chunk_text,
@@ -337,7 +340,7 @@ class HybridSearchService:
         final_results = sorted(merged.values(), key=lambda r: r.score, reverse=True)
         return final_results[:limit]
 
-    def _populate_tags(self, results: List[HybridSearchResult]) -> None:
+    def _populate_tags(self, results: list[HybridSearchResult]) -> None:
         """Fetch and populate tags for all results."""
         if not results:
             return
