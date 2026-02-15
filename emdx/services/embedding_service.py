@@ -61,6 +61,26 @@ class SemanticMatch:
     snippet: str
 
 @dataclass
+class ChunkMatch:
+    """A semantically similar chunk within a document."""
+
+    doc_id: int
+    title: str
+    project: str | None
+    chunk_index: int
+    heading_path: str
+    similarity: float
+    chunk_text: str
+
+    @property
+    def display_heading(self) -> str:
+        """Format heading path for display."""
+        if self.heading_path:
+            return f'§"{self.heading_path}"'
+        return ""
+
+
+@dataclass
 class EmbeddingStats:
     """Statistics about the embedding index."""
 
@@ -69,6 +89,8 @@ class EmbeddingStats:
     coverage_percent: float
     model_name: str
     index_size_bytes: int
+    indexed_chunks: int = 0
+    chunk_index_size_bytes: int = 0
 
 class EmbeddingService:
     """Manages document embeddings for semantic search."""
@@ -337,6 +359,24 @@ class EmbeddingService:
             )
             size = cursor.fetchone()[0] or 0
 
+            # Chunk statistics
+            try:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM chunk_embeddings WHERE model_name = ?",
+                    (self.MODEL_NAME,),
+                )
+                chunk_count = cursor.fetchone()[0]
+
+                cursor.execute(
+                    "SELECT SUM(LENGTH(embedding)) FROM chunk_embeddings WHERE model_name = ?",
+                    (self.MODEL_NAME,),
+                )
+                chunk_size = cursor.fetchone()[0] or 0
+            except Exception:
+                # Table might not exist yet
+                chunk_count = 0
+                chunk_size = 0
+
         coverage = (indexed / total * 100) if total > 0 else 0
 
         return EmbeddingStats(
@@ -345,6 +385,8 @@ class EmbeddingService:
             coverage_percent=round(coverage, 1),
             model_name=self.MODEL_NAME,
             index_size_bytes=size,
+            indexed_chunks=chunk_count,
+            chunk_index_size_bytes=chunk_size,
         )
 
     def delete_embedding(self, doc_id: int) -> bool:
@@ -362,6 +404,169 @@ class EmbeddingService:
         with db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM document_embeddings")
-            count = cursor.rowcount
+            doc_count = cursor.rowcount
+            cursor.execute("DELETE FROM chunk_embeddings")
+            chunk_count = cursor.rowcount
             conn.commit()
-            return count
+            return doc_count + chunk_count
+
+    # ========== Chunk-level indexing and search ==========
+
+    def index_chunks(self, force: bool = False, batch_size: int = 100) -> int:
+        """Index all document chunks. Returns count of newly indexed chunks."""
+        from ..utils.chunk_splitter import split_into_chunks
+
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            if force:
+                # Get all documents
+                cursor.execute(
+                    "SELECT id, title, content FROM documents WHERE is_deleted = 0"
+                )
+            else:
+                # Only get documents without chunk embeddings
+                cursor.execute(
+                    """
+                    SELECT d.id, d.title, d.content
+                    FROM documents d
+                    WHERE d.is_deleted = 0
+                      AND NOT EXISTS (
+                          SELECT 1 FROM chunk_embeddings c
+                          WHERE c.document_id = d.id AND c.model_name = ?
+                      )
+                    """,
+                    (self.MODEL_NAME,),
+                )
+
+            docs = cursor.fetchall()
+
+        if not docs:
+            return 0
+
+        model = _get_model()
+        total_chunks = 0
+
+        for doc_id, title, content in docs:
+            # Split document into chunks
+            chunks = split_into_chunks(content, title)
+
+            if not chunks:
+                continue
+
+            # Embed all chunks for this document
+            texts = [chunk.text for chunk in chunks]
+            embeddings = model.encode(
+                texts,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+
+            # Save chunk embeddings
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Clear existing chunks for this document if force
+                if force:
+                    cursor.execute(
+                        "DELETE FROM chunk_embeddings WHERE document_id = ? AND model_name = ?",
+                        (doc_id, self.MODEL_NAME),
+                    )
+
+                for chunk, embedding in zip(chunks, embeddings, strict=False):
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO chunk_embeddings
+                        (document_id, chunk_index, heading_path, text,
+                         model_name, embedding, dimension, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            doc_id,
+                            chunk.index,
+                            chunk.heading_path,
+                            chunk.text,
+                            self.MODEL_NAME,
+                            embedding.tobytes(),
+                            self.EMBEDDING_DIM,
+                            datetime.utcnow().isoformat(),
+                        ),
+                    )
+                conn.commit()
+
+            total_chunks += len(chunks)
+            logger.info(f"Indexed {len(chunks)} chunks for document {doc_id}")
+
+        return total_chunks
+
+    def search_chunks(
+        self, query: str, limit: int = 10, threshold: float = 0.3
+    ) -> list[ChunkMatch]:
+        """Semantic search at chunk level - returns relevant paragraphs."""
+        query_embedding = self.embed_text(query)
+
+        # Load all chunk embeddings from database
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT c.document_id, c.chunk_index, c.heading_path, c.text, c.embedding,
+                       d.title, d.project
+                FROM chunk_embeddings c
+                JOIN documents d ON c.document_id = d.id
+                WHERE c.model_name = ? AND d.is_deleted = 0
+                """,
+                (self.MODEL_NAME,),
+            )
+            rows = cursor.fetchall()
+
+        if not rows:
+            return []
+
+        # Compute similarities
+        results = []
+        for doc_id, chunk_index, heading_path, text, emb_bytes, title, project in rows:
+            chunk_embedding = np.frombuffer(emb_bytes, dtype=np.float32)
+            similarity = float(np.dot(query_embedding, chunk_embedding))
+
+            if similarity >= threshold:
+                results.append(
+                    ChunkMatch(
+                        doc_id=doc_id,
+                        title=title,
+                        project=project,
+                        chunk_index=chunk_index,
+                        heading_path=heading_path,
+                        similarity=similarity,
+                        chunk_text=text,
+                    )
+                )
+
+        # Sort by similarity descending
+        results.sort(key=lambda x: x.similarity, reverse=True)
+        return results[:limit]
+
+    def has_chunks(self) -> bool:
+        """Check if chunk index exists."""
+        try:
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT COUNT(*) FROM chunk_embeddings WHERE model_name = ?",
+                    (self.MODEL_NAME,),
+                )
+                count: int = cursor.fetchone()[0]
+                return count > 0
+        except Exception:
+            return False
+
+    def delete_chunk_embeddings(self, doc_id: int) -> bool:
+        """Delete chunk embeddings for a document."""
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM chunk_embeddings WHERE document_id = ?", (doc_id,)
+            )
+            conn.commit()
+            return cursor.rowcount > 0

@@ -2170,6 +2170,45 @@ def migration_039_add_categories_and_epic_fields(conn: sqlite3.Connection) -> No
     conn.commit()
 
 
+def migration_040_add_chunk_embeddings(conn: sqlite3.Connection) -> None:
+    """Add chunk embeddings table for chunk-level semantic search.
+
+    Chunks are sections of documents split by markdown headings. Each chunk
+    gets its own embedding, enabling more precise semantic search that returns
+    the relevant paragraph, not the entire 5000-word document.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chunk_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            heading_path TEXT NOT NULL,
+            text TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            dimension INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(document_id, chunk_index, model_name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_document
+        ON chunk_embeddings(document_id)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model
+        ON chunk_embeddings(model_name)
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2212,6 +2251,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
     (38, "Add LOWER(title) index for case-insensitive search", migration_038_add_title_lower_index),
     (39, "Add categories and epic fields to tasks", migration_039_add_categories_and_epic_fields),
+    (40, "Add chunk embeddings for semantic search", migration_040_add_chunk_embeddings),
 ]
 
 
