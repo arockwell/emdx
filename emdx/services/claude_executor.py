@@ -156,9 +156,6 @@ def execute_claude_detached(
         # Use nohup for true detachment
         nohup_cmd = ["nohup"] + wrapper_cmd
 
-        # Open log file for appending
-        log_handle = open(log_file, 'a')
-
         # Ensure PATH contains the claude binary location
         # Use get_subprocess_env() to strip CLAUDECODE (allows nested sessions)
         from ..utils.environment import get_subprocess_env
@@ -168,19 +165,19 @@ def execute_claude_detached(
         if 'PATH' not in env:
             env['PATH'] = '/usr/local/bin:/usr/bin:/bin'
 
-        process = subprocess.Popen(
-            nohup_cmd,
-            stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
-            stdout=log_handle,  # Direct to file, no pipe
-            stderr=subprocess.STDOUT,
-            cwd=working_dir,
-            env=env,
-            start_new_session=True,  # Better than preexec_fn
-            close_fds=True  # Don't inherit file descriptors
-        )
-
-        # Close the file handle in parent process
-        log_handle.close()
+        # Open log file for appending - use context manager to ensure cleanup on error
+        with open(log_file, 'a') as log_handle:
+            process = subprocess.Popen(
+                nohup_cmd,
+                stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
+                stdout=log_handle,  # Direct to file, no pipe
+                stderr=subprocess.STDOUT,
+                cwd=working_dir,
+                env=env,
+                start_new_session=True,  # Better than preexec_fn
+                close_fds=True  # Don't inherit file descriptors
+            )
+        # File handle automatically closed when exiting context manager
 
         # Return immediately - don't wait or read from pipes
         # Note: Don't use console.print here as stdout might be redirected
@@ -193,21 +190,19 @@ def execute_claude_detached(
     except FileNotFoundError as e:
         # Handle missing nohup
         if "nohup" in str(e):
-            # Fallback without nohup
-            log_handle = open(log_file, 'a')
-
-            process = subprocess.Popen(
-                wrapper_cmd,  # Use wrapper even without nohup
-                stdin=subprocess.DEVNULL,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                cwd=working_dir,
-                env=env,  # Use same env as nohup version
-                start_new_session=True,
-                close_fds=True
-            )
-
-            log_handle.close()
+            # Fallback without nohup - use context manager for safe cleanup
+            with open(log_file, 'a') as log_handle:
+                process = subprocess.Popen(
+                    wrapper_cmd,  # Use wrapper even without nohup
+                    stdin=subprocess.DEVNULL,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    cwd=working_dir,
+                    env=env,  # Use same env as nohup version
+                    start_new_session=True,
+                    close_fds=True
+                )
+            # File handle automatically closed when exiting context manager
 
             # Print to stderr to avoid log pollution
             print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)  # noqa: E501
