@@ -367,9 +367,11 @@ def get_active_delegate_tasks() -> list[dict[str, Any]]:
                 (SELECT COUNT(*) FROM tasks c
                  WHERE c.parent_task_id = t.id) as child_count,
                 (SELECT COUNT(*) FROM tasks c
-                 WHERE c.parent_task_id = t.id AND c.status = 'done') as children_done,
+                 WHERE c.parent_task_id = t.id
+                 AND c.status = 'done') as children_done,
                 (SELECT COUNT(*) FROM tasks c
-                 WHERE c.parent_task_id = t.id AND c.status = 'active') as children_active
+                 WHERE c.parent_task_id = t.id
+                 AND c.status = 'active') as children_active
             FROM tasks t
             WHERE t.status = 'active' AND t.parent_task_id IS NULL
             ORDER BY t.updated_at DESC

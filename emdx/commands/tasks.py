@@ -123,7 +123,7 @@ def done(
 @app.command()
 def view(
     task_id: int = typer.Argument(..., help="Task ID"),
-):
+) -> None:
     """View full task details.
 
     Shows title, description, status, epic/category, source doc,
@@ -191,7 +191,7 @@ def view(
 def active(
     task_id: int = typer.Argument(..., help="Task ID"),
     note: str | None = typer.Option(None, "-n", "--note", help="Progress note"),
-):
+) -> None:
     """Mark a task as in-progress.
 
     Use this at session start after picking a task from 'emdx task ready'.
@@ -216,7 +216,7 @@ def active(
 def log(
     task_id: int = typer.Argument(..., help="Task ID"),
     message: str | None = typer.Argument(None, help="Log message (omit to view log)"),
-):
+) -> None:
     """View or add to a task's work log.
 
     Without a message, shows the log history.
@@ -251,7 +251,7 @@ def log(
 def note(
     task_id: int = typer.Argument(..., help="Task ID"),
     message: str = typer.Argument(..., help="Progress note"),
-):
+) -> None:
     """Log a progress note on a task without changing its status.
 
     Shorthand for 'emdx task log <id> "message"'.
@@ -273,7 +273,7 @@ def note(
 def blocked(
     task_id: int = typer.Argument(..., help="Task ID"),
     reason: str = typer.Option("", "-r", "--reason", help="Why the task is blocked"),
-):
+) -> None:
     """Mark a task as blocked.
 
     Optionally provide a reason, which is logged to the work log.
