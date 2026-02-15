@@ -4,14 +4,15 @@
 # would make the migration scripts harder to understand and maintain.
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from pathlib import Path
 
 from ..config.settings import get_db_path
 
 
 @contextmanager
-def foreign_keys_disabled(conn: sqlite3.Connection):
+def foreign_keys_disabled(conn: sqlite3.Connection) -> Generator[None, None, None]:
     """Context manager to temporarily disable foreign key constraints.
 
     Used during migrations that need to recreate tables, which requires
@@ -50,14 +51,14 @@ def get_schema_version(conn: sqlite3.Connection) -> int:
     return result[0] if result[0] is not None else -1
 
 
-def set_schema_version(conn: sqlite3.Connection, version: int):
+def set_schema_version(conn: sqlite3.Connection, version: int) -> None:
     """Set the schema version."""
     cursor = conn.cursor()
     cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
     conn.commit()
 
 
-def migration_000_create_documents_table(conn: sqlite3.Connection):
+def migration_000_create_documents_table(conn: sqlite3.Connection) -> None:
     """Create the initial documents table and related schema."""
     cursor = conn.cursor()
 
@@ -153,7 +154,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_001_add_tags(conn: sqlite3.Connection):
+def migration_001_add_tags(conn: sqlite3.Connection) -> None:
     """Add tags tables for tag system support."""
     cursor = conn.cursor()
 
@@ -193,7 +194,7 @@ def migration_001_add_tags(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_002_add_executions(conn: sqlite3.Connection):
+def migration_002_add_executions(conn: sqlite3.Connection) -> None:
     """Add executions table for tracking Claude executions."""
     cursor = conn.cursor()
 
@@ -223,7 +224,7 @@ def migration_002_add_executions(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_003_add_document_relationships(conn: sqlite3.Connection):
+def migration_003_add_document_relationships(conn: sqlite3.Connection) -> None:
     """Add parent_id column to track document generation relationships."""
     cursor = conn.cursor()
 
@@ -236,7 +237,7 @@ def migration_003_add_document_relationships(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_004_add_execution_pid(conn: sqlite3.Connection):
+def migration_004_add_execution_pid(conn: sqlite3.Connection) -> None:
     """Add process ID tracking to executions table."""
     cursor = conn.cursor()
 
@@ -246,7 +247,7 @@ def migration_004_add_execution_pid(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
+def migration_005_add_execution_heartbeat(conn: sqlite3.Connection) -> None:
     """Add heartbeat tracking to executions table."""
     cursor = conn.cursor()
 
@@ -259,7 +260,7 @@ def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
+def migration_006_numeric_execution_ids(conn: sqlite3.Connection) -> None:
     """Convert executions table to use numeric IDs."""
     cursor = conn.cursor()
 
@@ -311,7 +312,7 @@ def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_007_add_agent_tables(conn: sqlite3.Connection):
+def migration_007_add_agent_tables(conn: sqlite3.Connection) -> None:
     """Add tables for agent system."""
     cursor = conn.cursor()
 
@@ -486,7 +487,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_008_add_workflow_tables(conn: sqlite3.Connection):
+def migration_008_add_workflow_tables(conn: sqlite3.Connection) -> None:
     """Add tables for workflow orchestration system.
 
     Workflows allow composing multiple agent runs with different execution modes:
@@ -648,7 +649,7 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_009_add_tasks(conn: sqlite3.Connection):
+def migration_009_add_tasks(conn: sqlite3.Connection) -> None:
     """Add tasks tables for task management system."""
     cursor = conn.cursor()
 
@@ -699,7 +700,7 @@ def migration_009_add_tasks(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_010_add_task_executions(conn: sqlite3.Connection):
+def migration_010_add_task_executions(conn: sqlite3.Connection) -> None:
     """Add task_executions table - the join between tasks and workflows.
 
     This table connects the task system to the workflow system, tracking
@@ -742,7 +743,7 @@ def migration_010_add_task_executions(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
+def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection) -> None:
     """Add 'dynamic' to workflow stage mode CHECK constraint.
 
     Dynamic mode allows stages to discover items at runtime and process
@@ -792,7 +793,7 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_012_add_gdocs(conn: sqlite3.Connection):
+def migration_012_add_gdocs(conn: sqlite3.Connection) -> None:
     """Add gdocs table for tracking Google Docs exports."""
     cursor = conn.cursor()
 
@@ -817,7 +818,7 @@ def migration_012_add_gdocs(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
+def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection) -> None:
     """Make doc_id nullable in executions table for workflow agent runs.
 
     Workflow agent executions don't always have an associated document,
@@ -863,7 +864,7 @@ def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
+def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection) -> None:
     """Fix workflow_individual_runs FK to reference executions instead of agent_executions.
 
     The workflow executor uses the executions table directly for tracking,
@@ -911,7 +912,7 @@ def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_015_add_export_profiles(conn: sqlite3.Connection):
+def migration_015_add_export_profiles(conn: sqlite3.Connection) -> None:
     """Add export profiles and export history tables.
 
     Export profiles provide reusable, configurable export configurations
@@ -1062,7 +1063,7 @@ def migration_015_add_export_profiles(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_016_add_input_output_tokens(conn: sqlite3.Connection):
+def migration_016_add_input_output_tokens(conn: sqlite3.Connection) -> None:
     """Add input_tokens and output_tokens columns to workflow_individual_runs.
 
     This allows tracking input vs output token usage separately for better
@@ -1083,7 +1084,7 @@ def migration_016_add_input_output_tokens(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_017_add_cost_usd(conn: sqlite3.Connection):
+def migration_017_add_cost_usd(conn: sqlite3.Connection) -> None:
     """Add cost_usd column to workflow_individual_runs.
 
     Stores the actual cost from Claude API for accurate billing tracking.
@@ -1097,7 +1098,7 @@ def migration_017_add_cost_usd(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
+def migration_018_add_document_hierarchy(conn: sqlite3.Connection) -> None:
     """Add relationship and archived_at columns for document hierarchy.
 
     - relationship: describes how a child relates to parent ('supersedes', 'exploration', 'variant')
@@ -1125,7 +1126,7 @@ def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_019_add_document_sources(conn: sqlite3.Connection):
+def migration_019_add_document_sources(conn: sqlite3.Connection) -> None:
     """Add document_sources table to track document provenance.
 
     This table links documents to their originating workflow runs,
@@ -1167,7 +1168,7 @@ def migration_019_add_document_sources(conn: sqlite3.Connection):
     conn.commit()
 
 
-def _backfill_document_sources(cursor):
+def _backfill_document_sources(cursor: sqlite3.Cursor) -> None:
     """Populate document_sources from existing workflow tables."""
     # Backfill from individual runs (most common case)
     cursor.execute("""
@@ -1212,7 +1213,7 @@ def _backfill_document_sources(cursor):
     """)
 
 
-def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
+def migration_020_add_synthesis_cost(conn: sqlite3.Connection) -> None:
     """Add synthesis_cost_usd to workflow_stage_runs table.
 
     Tracks the cost of synthesis Claude calls separately from individual runs.
@@ -1239,7 +1240,7 @@ def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_021_add_workflow_presets(conn: sqlite3.Connection):
+def migration_021_add_workflow_presets(conn: sqlite3.Connection) -> None:
     """Add workflow_presets table for named variable configurations.
 
     Presets are named bundles of variables that can be applied to a workflow.
@@ -1299,7 +1300,7 @@ def migration_021_add_workflow_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_022_add_document_groups(conn: sqlite3.Connection):
+def migration_022_add_document_groups(conn: sqlite3.Connection) -> None:
     """Add document grouping system for organizing related documents.
 
     This enables hierarchical organization of documents into batches, rounds,
@@ -1363,7 +1364,7 @@ def migration_022_add_document_groups(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
+def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection) -> None:
     """Deactivate legacy builtin workflows that are superseded by dynamic task-driven workflows.
 
     These workflows were created before the dynamic workflow system (task_parallel, parallel_fix,
@@ -1429,7 +1430,7 @@ def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_024_remove_agent_tables(conn: sqlite3.Connection):
+def migration_024_remove_agent_tables(conn: sqlite3.Connection) -> None:
     """Remove the agent system tables.
 
     The agent system has been deprecated in favor of the workflow system,
@@ -1460,7 +1461,7 @@ def migration_024_remove_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_025_add_standalone_presets(conn: sqlite3.Connection):
+def migration_025_add_standalone_presets(conn: sqlite3.Connection) -> None:
     """Add standalone presets table for quick run configurations.
 
     Unlike workflow_presets which are tied to specific workflows,
@@ -1500,7 +1501,7 @@ def migration_025_add_standalone_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_026_add_embeddings(conn: sqlite3.Connection):
+def migration_026_add_embeddings(conn: sqlite3.Connection) -> None:
     """Add document embeddings table for semantic search.
 
     Stores vector embeddings computed by sentence-transformers for
@@ -1535,7 +1536,7 @@ def migration_026_add_embeddings(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
+def migration_027_add_synthesizing_status(conn: sqlite3.Connection) -> None:
     """Add 'synthesizing' status to workflow_stage_runs.
 
     When a parallel or dynamic workflow enters the synthesis phase
@@ -1591,7 +1592,7 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_028_add_document_stage(conn: sqlite3.Connection):
+def migration_028_add_document_stage(conn: sqlite3.Connection) -> None:
     """Add stage column to documents for streaming pipeline processing.
 
     The stage column enables a status-as-queue pattern where documents
@@ -1615,7 +1616,7 @@ def migration_028_add_document_stage(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_029_add_document_pr_url(conn: sqlite3.Connection):
+def migration_029_add_document_pr_url(conn: sqlite3.Connection) -> None:
     """Add pr_url column to documents for tracking pipeline outputs.
 
     When a pipeline document reaches 'done' through actual implementation,
@@ -1638,7 +1639,7 @@ def migration_029_add_document_pr_url(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
+def migration_030_cleanup_unused_tables(conn: sqlite3.Connection) -> None:
     """Remove unused tables and features identified in cruft audit.
 
     Removes:
@@ -1671,7 +1672,7 @@ def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_031_add_cascade_runs(conn: sqlite3.Connection):
+def migration_031_add_cascade_runs(conn: sqlite3.Connection) -> None:
     """Add cascade_runs table to track end-to-end cascade executions.
 
     This enables:
@@ -1723,7 +1724,7 @@ def migration_031_add_cascade_runs(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_032_extract_cascade_metadata(conn: sqlite3.Connection):
+def migration_032_extract_cascade_metadata(conn: sqlite3.Connection) -> None:
     """Extract cascade metadata (stage, pr_url) to a dedicated table.
 
     This migration:
@@ -1780,7 +1781,7 @@ def migration_032_extract_cascade_metadata(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_033_add_mail_config(conn: sqlite3.Connection):
+def migration_033_add_mail_config(conn: sqlite3.Connection) -> None:
     """Add mail configuration and read receipts tables."""
     cursor = conn.cursor()
 
@@ -1806,7 +1807,7 @@ def migration_033_add_mail_config(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
+def migration_034_delegate_activity_tracking(conn: sqlite3.Connection) -> None:
     """Add delegate activity tracking columns to tasks table."""
     cursor = conn.cursor()
 
@@ -1837,7 +1838,7 @@ def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
+def migration_035_remove_workflow_tables(conn: sqlite3.Connection) -> None:
     """Remove the entire workflow system.
 
     The workflow system has been replaced by recipes — markdown documents
@@ -1930,7 +1931,7 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_036_add_execution_metrics(conn: sqlite3.Connection):
+def migration_036_add_execution_metrics(conn: sqlite3.Connection) -> None:
     """Add metrics and task linkage to executions table.
 
     Fixes delegate→activity browser data flow:
@@ -1958,7 +1959,7 @@ def migration_036_add_execution_metrics(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
+def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection) -> None:
     """Add ON DELETE CASCADE to foreign keys missing it.
 
     This migration fixes 6 foreign keys that were created without CASCADE,
@@ -2115,7 +2116,7 @@ def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_038_add_title_lower_index(conn: sqlite3.Connection):
+def migration_038_add_title_lower_index(conn: sqlite3.Connection) -> None:
     """Add functional index on LOWER(title) for case-insensitive search.
 
     This index improves performance for case-insensitive title searches,
@@ -2131,7 +2132,7 @@ def migration_038_add_title_lower_index(conn: sqlite3.Connection):
     """)
 
 
-def migration_039_add_categories_and_epic_fields(conn: sqlite3.Connection):
+def migration_039_add_categories_and_epic_fields(conn: sqlite3.Connection) -> None:
     """Add categories table and epic fields to tasks.
 
     Categories are permanent buckets with a short key (SEC, DEBT) that own
@@ -2214,7 +2215,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
 ]
 
 
-def run_migrations(db_path=None):
+def run_migrations(db_path: str | Path | None = None) -> None:
     """Run all pending migrations."""
     if db_path is None:
         db_path = get_db_path()

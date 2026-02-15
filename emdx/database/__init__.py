@@ -12,6 +12,13 @@ Organized database operations split into focused modules:
 This package maintains backward compatibility with the original sqlite_database.py API.
 """
 
+from __future__ import annotations
+
+import sqlite3
+from contextlib import AbstractContextManager
+from pathlib import Path
+from typing import Any, Union
+
 from . import cascade, groups
 from .connection import DatabaseConnection, db_connection
 from .documents import (
@@ -43,7 +50,8 @@ class SQLiteDatabase:
        with temporary paths that MUST NOT touch the global database.
     """
 
-    def __init__(self, db_path=None):
+    def __init__(self, db_path: Path | None = None) -> None:
+        self._connection: DatabaseConnection | None
         if db_path is not None:
             # Custom path: create own connection (for test isolation)
             self._connection = DatabaseConnection(db_path)
@@ -54,23 +62,24 @@ class SQLiteDatabase:
             self._uses_global_connection = True
         self._uses_custom_path = db_path is not None
 
-    def _get_connection_instance(self):
+    def _get_connection_instance(self) -> DatabaseConnection:
         """Get the appropriate DatabaseConnection instance."""
         if self._uses_global_connection:
             from . import connection
             return connection.db_connection
+        assert self._connection is not None
         return self._connection
 
     @property
-    def db_path(self):
+    def db_path(self) -> Path:
         """Get database path."""
         return self._get_connection_instance().db_path
 
-    def get_connection(self):
+    def get_connection(self) -> AbstractContextManager[sqlite3.Connection]:
         """Get database connection."""
         return self._get_connection_instance().get_connection()
 
-    def ensure_schema(self):
+    def ensure_schema(self) -> None:
         """Ensure database schema."""
         return self._get_connection_instance().ensure_schema()
 
@@ -79,19 +88,27 @@ class SQLiteDatabase:
     # Global mode: delegate to database/documents.py (single source of truth).
     # Isolated mode: self-contained SQL against the instance's own database.
 
-    def save_document(self, title, content, project=None, tags=None, parent_id=None):
+    def save_document(
+        self,
+        title: str,
+        content: str,
+        project: str | None = None,
+        tags: list[str] | None = None,
+        parent_id: int | None = None,
+    ) -> int:
         """Save a document to the database."""
         if not self._uses_custom_path:
             return save_document(title, content, project, tags, parent_id)
 
         # Isolated mode — self-contained SQL for test databases
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             cursor = conn.execute(
                 "INSERT INTO documents (title, content, project, parent_id) VALUES (?, ?, ?, ?)",
                 (title, content, project, parent_id),
             )
             conn.commit()
-            doc_id = cursor.lastrowid
+            doc_id: int = cursor.lastrowid  # type: ignore[assignment]
 
             if tags:
                 for tag_name in tags:
@@ -113,12 +130,13 @@ class SQLiteDatabase:
 
             return doc_id
 
-    def get_document(self, identifier):
+    def get_document(self, identifier: Union[str, int]) -> dict[str, Any] | None:
         """Get a document by ID or title."""
         if not self._uses_custom_path:
             return get_document(identifier)
 
         # Isolated mode
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             identifier_str = str(identifier)
             if identifier_str.isdigit():
@@ -145,15 +163,16 @@ class SQLiteDatabase:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def list_documents(self, project=None, limit=50):
+    def list_documents(self, project: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         """List documents with optional filters."""
         if not self._uses_custom_path:
             return list_documents(project, limit)
 
         # Isolated mode
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
-            params = []
+            params: list[Any] = []
             if project:
                 conditions.append("project = ?")
                 params.append(project)
@@ -166,24 +185,26 @@ class SQLiteDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def update_document(self, doc_id, title, content):
+    def update_document(self, doc_id: int, title: str, content: str) -> bool:
         """Update a document."""
         if not self._uses_custom_path:
             return update_document(doc_id, title, content)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             cursor = conn.execute(
                 "UPDATE documents SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",  # noqa: E501
                 (title, content, doc_id),
             )
             conn.commit()
-            return cursor.rowcount > 0
+            return bool(cursor.rowcount > 0)
 
-    def delete_document(self, identifier, hard_delete=False):
+    def delete_document(self, identifier: Union[str, int], hard_delete: bool = False) -> bool:
         """Delete a document (soft delete by default)."""
         if not self._uses_custom_path:
             return delete_document(identifier, hard_delete)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             identifier_str = str(identifier)
             if hard_delete:
@@ -211,13 +232,14 @@ class SQLiteDatabase:
                         (identifier_str,),
                     )
             conn.commit()
-            return cursor.rowcount > 0
+            return bool(cursor.rowcount > 0)
 
-    def get_recent_documents(self, limit=10):
+    def get_recent_documents(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get recently accessed documents."""
         if not self._uses_custom_path:
             return get_recent_documents(limit)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             cursor = conn.execute(
                 "SELECT id, title, project, accessed_at, access_count "
@@ -226,11 +248,12 @@ class SQLiteDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_stats(self, project=None):
+    def get_stats(self, project: str | None = None) -> dict[str, Any]:
         """Get database statistics."""
         if not self._uses_custom_path:
             return get_stats(project)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             if project:
                 cursor = conn.execute(
@@ -247,11 +270,14 @@ class SQLiteDatabase:
                 )
             return dict(cursor.fetchone())
 
-    def list_deleted_documents(self, days=None, limit=50):
+    def list_deleted_documents(
+        self, days: int | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
         """List soft-deleted documents."""
         if not self._uses_custom_path:
             return list_deleted_documents(days, limit)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             if days:
                 cursor = conn.execute(
@@ -268,11 +294,12 @@ class SQLiteDatabase:
                 )
             return [dict(row) for row in cursor.fetchall()]
 
-    def restore_document(self, identifier):
+    def restore_document(self, identifier: Union[str, int]) -> bool:
         """Restore a soft-deleted document."""
         if not self._uses_custom_path:
             return restore_document(identifier)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             identifier_str = str(identifier)
             if identifier_str.isdigit():
@@ -288,13 +315,14 @@ class SQLiteDatabase:
                     (identifier_str,),
                 )
             conn.commit()
-            return cursor.rowcount > 0
+            return bool(cursor.rowcount > 0)
 
-    def purge_deleted_documents(self, older_than_days=None):
+    def purge_deleted_documents(self, older_than_days: int | None = None) -> int:
         """Permanently delete soft-deleted documents."""
         if not self._uses_custom_path:
             return purge_deleted_documents(older_than_days)
 
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             if older_than_days:
                 cursor = conn.execute(
@@ -305,11 +333,19 @@ class SQLiteDatabase:
             else:
                 cursor = conn.execute("DELETE FROM documents WHERE is_deleted = TRUE")
             conn.commit()
-            return cursor.rowcount
+            return int(cursor.rowcount)
 
-    def search_documents(self, query, project=None, limit=10, fuzzy=False,
-                        created_after=None, created_before=None,
-                        modified_after=None, modified_before=None):
+    def search_documents(
+        self,
+        query: str,
+        project: str | None = None,
+        limit: int = 10,
+        fuzzy: bool = False,
+        created_after: str | None = None,
+        created_before: str | None = None,
+        modified_after: str | None = None,
+        modified_before: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Search documents using FTS."""
         if not self._uses_custom_path:
             return search_documents(query, project, limit, fuzzy,
@@ -317,10 +353,11 @@ class SQLiteDatabase:
                                     modified_after, modified_before)
 
         # Isolated mode — self-contained FTS search for test databases
+        assert self._connection is not None
         with self._connection.get_connection() as conn:
             if query == "*":
                 conditions = ["d.is_deleted = FALSE"]
-                params = []
+                params: list[Any] = []
                 if project:
                     conditions.append("d.project = ?")
                     params.append(project)

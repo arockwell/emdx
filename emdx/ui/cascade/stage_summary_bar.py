@@ -1,5 +1,7 @@
 """Stage summary bar widget for cascade browser."""
 
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.reactive import reactive
 from textual.widget import Widget
@@ -34,7 +36,7 @@ class StageSummaryBar(Widget):
 
     current_stage = reactive("idea")
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.stats: dict[str, int] = {}
 

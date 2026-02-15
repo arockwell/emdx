@@ -114,7 +114,7 @@ class LazyCommand(click.MultiCommand):
                 len(cmd_object.registered_commands) > 1
                 or cmd_object.registered_groups
             ):
-                cmd = get_group(cmd_object)
+                cmd: click.BaseCommand = get_group(cmd_object)
             else:
                 cmd = get_command(cmd_object)
             cmd.name = self.name
@@ -164,7 +164,9 @@ class LazyCommand(click.MultiCommand):
     def get_params(self, ctx: click.Context) -> list[click.Parameter]:
         """Get parameters (loads the real command first for accurate params)."""
         real_cmd = self._load_real_command()
-        return real_cmd.get_params(ctx)
+        if isinstance(real_cmd, click.Command):
+            return real_cmd.get_params(ctx)
+        return list(getattr(real_cmd, "params", []))
 
     def main(self, *args: Any, **kwargs: Any) -> Any:
         """Run as main entry point."""
@@ -222,7 +224,7 @@ class LazyTyperGroup(TyperGroup):
         all_commands = base + [cmd for cmd in lazy if cmd not in base]
         return sorted(all_commands)
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.BaseCommand | None:
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         """Get command, returning a lazy placeholder if needed.
 
         For lazy commands, this returns a LazyCommand placeholder that:
@@ -231,7 +233,10 @@ class LazyTyperGroup(TyperGroup):
         """
         # Check if we've already loaded the real command
         if cmd_name in self._loaded_commands:
-            return self._loaded_commands[cmd_name]
+            loaded = self._loaded_commands[cmd_name]
+            if isinstance(loaded, click.Command):
+                return loaded
+            return None
 
         # Check if this is a lazy command
         if cmd_name in self.lazy_subcommands:

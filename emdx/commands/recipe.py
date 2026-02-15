@@ -47,7 +47,7 @@ def _find_recipe(id_or_name: str) -> dict | None:
     return None
 
 @app.command("list")
-def list_recipes():
+def list_recipes() -> None:
     """List all recipes (documents tagged 📋)."""
     results = search_by_tags(["📋"], limit=50, prefix_match=False)
 
@@ -93,7 +93,7 @@ def run_recipe(
     worktree: bool = typer.Option(
         False, "--worktree", "-w", help="Run in isolated git worktree"
     ),
-):
+) -> None:
     """Run a recipe by passing it to emdx delegate.
 
     The recipe document is loaded as context and the agent executes its
@@ -142,7 +142,7 @@ def create_recipe(
     title: str | None = typer.Option(
         None, "--title", "-T", help="Custom title (default: filename)"
     ),
-):
+) -> None:
     """Create a recipe from a markdown file.
 
     Equivalent to: emdx save <file> --tags "recipe"

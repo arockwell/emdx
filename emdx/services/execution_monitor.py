@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-import psutil
+import psutil  # type: ignore[import-untyped]
 
 from ..database.connection import db_connection
 from ..models.executions import (
@@ -38,7 +38,7 @@ class ExecutionMonitor:
         Returns:
             Dictionary with health status
         """
-        health = {
+        health: dict[str, Any] = {
             'execution_id': execution.id,
             'is_zombie': False,
             'is_running': False,
@@ -125,7 +125,7 @@ class ExecutionMonitor:
                         'zombie_process': -2,
                         'process_died': -3,
                         'stale_execution': -4
-                    }.get(fail_reason, -1)
+                    }.get(fail_reason or '', -1)
 
                     update_execution_status(execution.id, 'failed', exit_code)
                     action['completed'] = True

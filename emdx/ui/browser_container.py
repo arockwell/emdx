@@ -4,8 +4,10 @@ Minimal browser container - just swaps browsers, no fancy shit.
 """
 
 import logging
+from typing import Any
 
 from rich.markup import escape
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 _keybinding_registry = None
 
 
-def get_keybinding_registry():
+def get_keybinding_registry() -> Any:
     """Get the global keybinding registry instance."""
     return _keybinding_registry
 
@@ -77,14 +79,14 @@ class BrowserContainer(App):
 
     current_browser = reactive("document")
 
-    def __init__(self, initial_theme: str | None = None, *args, **kwargs):
+    def __init__(self, initial_theme: str | None = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.browsers = {}  # Will store browser instances
-        self.browser_states = {}  # Quick and dirty state storage
-        self.container_widget = None  # Will be set in compose
+        self.browsers: dict[str, Widget] = {}  # Will store browser instances
+        self.browser_states: dict[str, Any] = {}  # Quick and dirty state storage
+        self.container_widget: BrowserContainerWidget | None = None  # Will be set in compose
         self._initial_theme = initial_theme  # Theme override from CLI
 
-    def exit(self, *args, **kwargs):
+    def exit(self, *args: Any, **kwargs: Any) -> None:
         """Override exit to log when it's called."""
         import traceback
         logger.error("BrowserContainer.exit() called!")
@@ -100,8 +102,9 @@ class BrowserContainer(App):
 
     def compose(self) -> ComposeResult:
         """Yield the widget wrapper."""
-        self.container_widget = BrowserContainerWidget()
-        yield self.container_widget
+        widget = BrowserContainerWidget()
+        self.container_widget = widget
+        yield widget
 
     async def on_mount(self) -> None:
         """Mount the default browser on startup."""
@@ -125,6 +128,7 @@ class BrowserContainer(App):
                 logger.warning(f"Unknown theme '{saved_theme}', using emdx-dark")
 
         # Create and mount Activity browser as the default (Mission Control)
+        browser: Widget
         try:
             from .activity_browser import ActivityBrowser
             browser = ActivityBrowser()
@@ -137,6 +141,7 @@ class BrowserContainer(App):
             self.browsers["document"] = browser
             self.current_browser = "document"
 
+        assert self.container_widget is not None
         mount_point = self.container_widget.query_one("#browser-mount", Container)
         await mount_point.mount(browser)
 
@@ -186,6 +191,7 @@ class BrowserContainer(App):
             self.browser_states[self.current_browser] = current.save_state()
 
         # Remove current browser
+        assert self.container_widget is not None
         mount_point = self.container_widget.query_one("#browser-mount", Container)
         await mount_point.remove_children()
 
@@ -242,7 +248,7 @@ class BrowserContainer(App):
         await mount_point.mount(browser)
 
         # Set focus to the new browser after mount is complete
-        def do_focus():
+        def do_focus() -> None:
             if hasattr(browser, 'focus'):
                 browser.focus()
 
@@ -258,12 +264,12 @@ class BrowserContainer(App):
 
         # Let each browser handle its own status updates
 
-    def action_quit(self) -> None:
+    async def action_quit(self) -> None:
         """Quit the application."""
         logger.debug("action_quit called")
         self.exit()
 
-    async def on_activity_view_view_document(self, event) -> None:
+    async def on_activity_view_view_document(self, event: Any) -> None:
         """Handle ViewDocument message from ActivityView - switch to document browser."""
         await self._view_document(event.doc_id)
 
@@ -283,7 +289,7 @@ class BrowserContainer(App):
             if hasattr(doc_browser, 'search'):
                 await doc_browser.search(f"#{doc_id}")
 
-    async def on_key(self, event) -> None:
+    async def on_key(self, event: events.Key) -> None:
         """Global key routing - handle screen switching and browser-specific keys."""
         key = event.key
 
@@ -364,7 +370,7 @@ class BrowserContainer(App):
         """Debug function to dump the widget tree and regions (ctrl+d)."""
         lines = [f"Screen size={self.screen.size} region={self.screen.region}"]
 
-        def dump_widget(widget, indent=0):
+        def dump_widget(widget: Any, indent: int = 0) -> None:
             prefix = "  " * indent
             lines.append(f"{prefix}{widget.__class__.__name__} id={widget.id} region={widget.region}")  # noqa: E501
             for child in widget.children:
@@ -459,12 +465,13 @@ class BrowserContainer(App):
         # Document commands - delegate to current browser
         elif command_id.startswith("doc."):
             current = self.browsers.get(self.current_browser)
-            if command_id == "doc.new" and hasattr(current, "action_new_document"):
-                await current.action_new_document()
-            elif command_id == "doc.edit" and hasattr(current, "action_edit_document"):
-                await current.action_edit_document()
-            elif command_id == "doc.tag" and hasattr(current, "action_add_tags"):
-                current.action_add_tags()
+            if current is not None:
+                if command_id == "doc.new" and hasattr(current, "action_new_document"):
+                    await current.action_new_document()  # type: ignore[attr-defined]
+                elif command_id == "doc.edit" and hasattr(current, "action_edit_document"):
+                    await current.action_edit_document()  # type: ignore[attr-defined]
+                elif command_id == "doc.tag" and hasattr(current, "action_add_tags"):
+                    current.action_add_tags()  # type: ignore[attr-defined]
 
         else:
             logger.warning(f"Unknown command: {command_id}")

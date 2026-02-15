@@ -79,12 +79,12 @@ class SearchPresenter:
     ):
         self.on_state_update = on_state_update
         self._state = SearchStateVM()
-        self._search_service = None  # Lazy load
+        self._search_service: Any = None  # Lazy load
         self._cache: dict[str, list[SearchResultItem]] = {}
         self._cache_max_size = 20
 
     @property
-    def search_service(self):
+    def search_service(self) -> Any:
         """Lazy load the unified search service."""
         if self._search_service is None:
             try:
@@ -152,7 +152,7 @@ class SearchPresenter:
             self._state.status_text = f"Error: {e}"
             await self._notify_update()
 
-    def _load_initial_data_sync(self):
+    def _load_initial_data_sync(self) -> tuple[Any, list[dict[str, Any]]]:
         """Synchronous helper to load initial data (runs in thread pool)."""
         recent = self.search_service.get_recent_documents(limit=10)
         popular_tags = self.search_service.get_popular_tags(limit=15)

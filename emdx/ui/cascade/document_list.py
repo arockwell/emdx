@@ -50,14 +50,14 @@ class DocumentList(Widget):
             self.selected_ids = selected_ids
             super().__init__()
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.docs: list[dict[str, Any]] = []
         self.current_stage = "idea"
         self.selected_ids: set[int] = set()  # Multi-select tracking
 
     def compose(self) -> ComposeResult:
-        table = DataTable(id="doc-table")
+        table: DataTable[str] = DataTable(id="doc-table")
         table.add_column("", width=2)  # Selection marker column
         table.add_column("ID", width=6)
         table.add_column("Title", width=38)

@@ -14,6 +14,7 @@ The LogBrowser uses mixins for separation of concerns:
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 class LogBrowserSubscriber(LogStreamSubscriber):
     """Internal subscriber for LogBrowser to handle stream events."""
 
-    def __init__(self, log_browser):
+    def __init__(self, log_browser: Any) -> None:
         self.log_browser = log_browser
 
     def on_log_content(self, new_content: str) -> None:
@@ -133,7 +134,7 @@ class LogBrowser(
     }
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.executions: list[Execution] = []
         self.selection_mode = False
@@ -157,7 +158,7 @@ class LogBrowser(
                     table_container.styles.min_height = 15
                     table_container.styles.padding = 0
 
-                    table = DataTable(id="log-table")
+                    table: DataTable[str] = DataTable(id="log-table")
                     table.cursor_type = "row"
                     table.show_header = True
                     yield table
@@ -302,7 +303,7 @@ class LogBrowser(
         except Exception as e:
             logger.error(f"Error loading execution log: {e}", exc_info=True)
 
-    async def on_data_table_row_highlighted(self, event) -> None:
+    async def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row selection in the execution table."""
         row_idx = event.cursor_row
         if row_idx < len(self.executions):

@@ -32,7 +32,7 @@ def analyze(
     all_analyses: bool = typer.Option(False, "--all", "-a", help="Run all analyses"),
     project: str | None = typer.Option(None, "--project", help="Filter by specific project"),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
-):
+) -> None:
     """
     Analyze your knowledge base to discover patterns, issues, and insights.
 
@@ -121,7 +121,7 @@ def analyze(
     if projects:
         _analyze_projects()
 
-def _analyze_health():
+def _analyze_health() -> None:
     """Show detailed health metrics."""
     monitor = HealthMonitor()
 
@@ -208,7 +208,7 @@ def _analyze_health():
             console.print(f"  • {rec}")
         console.print("\n[dim]Run 'emdx maintain' to fix these issues[/dim]")
 
-def _analyze_duplicates():
+def _analyze_duplicates() -> None:
     """Find duplicate documents."""
     detector = DuplicateDetector()
 
@@ -245,7 +245,7 @@ def _analyze_duplicates():
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")
 
-def _analyze_similar():
+def _analyze_similar() -> None:
     """Find similar documents for merging."""
     merger = DocumentMerger()
 
@@ -266,17 +266,16 @@ def _analyze_similar():
 
     # Show top candidates
     for i, candidate in enumerate(candidates[:5], 1):
-        console.print(f"\n  [{i}] [cyan]{candidate.doc1['title']}[/cyan]")
-        console.print(f"      ↔ [cyan]{candidate.doc2['title']}[/cyan]")
-        console.print(f"      [dim]Similarity: {candidate.similarity:.0%} | "
-                     f"Combined length: {candidate.combined_length:,} chars[/dim]")
+        console.print(f"\n  [{i}] [cyan]{candidate.doc1_title}[/cyan]")
+        console.print(f"      ↔ [cyan]{candidate.doc2_title}[/cyan]")
+        console.print(f"      [dim]Similarity: {candidate.similarity_score:.0%}[/dim]")
 
     if len(candidates) > 5:
         console.print(f"\n  [dim]... and {len(candidates) - 5} more[/dim]")
 
     console.print("\n[dim]Run 'emdx maintain --merge' to merge similar documents[/dim]")
 
-def _analyze_empty():
+def _analyze_empty() -> None:
     """Find empty documents."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -309,7 +308,7 @@ def _analyze_empty():
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
 
-def _analyze_tags(project: str | None = None):
+def _analyze_tags(project: str | None = None) -> None:
     """Analyze tag coverage and patterns."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -402,7 +401,7 @@ def _analyze_tags(project: str | None = None):
             console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
             console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
 
-def _analyze_projects():
+def _analyze_projects() -> None:
     """Show project-level analysis."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -508,21 +507,12 @@ def _collect_duplicates_data() -> dict[str, Any]:
     except ImportError:
         near_dupes = []
 
-    result = {
-        "exact_duplicates": {
-            "count": len(exact_dupes),
-            "total_duplicates": sum(len(group) - 1 for group in exact_dupes),
-            "groups": []
-        },
-        "near_duplicates": {
-            "count": len(near_dupes),
-            "pairs": []
-        }
-    }
+    exact_groups: list[dict[str, Any]] = []
+    near_pairs: list[dict[str, Any]] = []
 
     # Add exact duplicate groups
     for group in exact_dupes[:10]:  # Limit to 10 groups
-        result["exact_duplicates"]["groups"].append({
+        exact_groups.append({
             "title": group[0]['title'],
             "count": len(group),
             "ids": [doc['id'] for doc in group]
@@ -530,13 +520,23 @@ def _collect_duplicates_data() -> dict[str, Any]:
 
     # Add near duplicate pairs
     for doc1, doc2, similarity in near_dupes[:10]:  # Limit to 10 pairs
-        result["near_duplicates"]["pairs"].append({
+        near_pairs.append({
             "doc1": {"id": doc1['id'], "title": doc1['title']},
             "doc2": {"id": doc2['id'], "title": doc2['title']},
             "similarity": similarity
         })
 
-    return result
+    return {
+        "exact_duplicates": {
+            "count": len(exact_dupes),
+            "total_duplicates": sum(len(group) - 1 for group in exact_dupes),
+            "groups": exact_groups,
+        },
+        "near_duplicates": {
+            "count": len(near_dupes),
+            "pairs": near_pairs,
+        }
+    }
 
 def _collect_similar_data() -> dict[str, Any]:
     """Collect similar documents data."""
@@ -546,20 +546,21 @@ def _collect_similar_data() -> dict[str, Any]:
     except ImportError as e:
         return {"error": str(e), "count": 0, "candidates": []}
 
-    result = {
-        "count": len(candidates),
-        "candidates": []
-    }
+    candidate_list: list[dict[str, Any]] = []
 
     for candidate in candidates[:20]:  # Limit to 20
-        result["candidates"].append({
-            "doc1": {"id": candidate.doc1['id'], "title": candidate.doc1['title']},
-            "doc2": {"id": candidate.doc2['id'], "title": candidate.doc2['title']},
-            "similarity": candidate.similarity,
-            "combined_length": candidate.combined_length
+        candidate_list.append({
+            "doc1_id": candidate.doc1_id,
+            "doc1_title": candidate.doc1_title,
+            "doc2_id": candidate.doc2_id,
+            "doc2_title": candidate.doc2_title,
+            "similarity": candidate.similarity_score,
         })
 
-    return result
+    return {
+        "count": len(candidates),
+        "candidates": candidate_list,
+    }
 
 def _collect_empty_data() -> dict[str, Any]:
     """Collect empty documents data."""
@@ -576,13 +577,10 @@ def _collect_empty_data() -> dict[str, Any]:
 
         empty_docs = cursor.fetchall()
 
-    result = {
-        "count": len(empty_docs),
-        "documents": []
-    }
+    documents: list[dict[str, Any]] = []
 
     for doc in empty_docs:
-        result["documents"].append({
+        documents.append({
             "id": doc['id'],
             "title": doc['title'],
             "length": doc['length'],
@@ -590,7 +588,10 @@ def _collect_empty_data() -> dict[str, Any]:
             "access_count": doc['access_count']
         })
 
-    return result
+    return {
+        "count": len(empty_docs),
+        "documents": documents,
+    }
 
 def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
     """Collect tag analysis data."""
@@ -638,15 +639,7 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
         stats = cursor.fetchone()
         coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
 
-        result = {
-            "project": project,
-            "coverage": coverage,
-            "total_documents": stats['total_docs'],
-            "tagged_documents": stats['tagged_docs'],
-            "unique_tags": stats['unique_tags'],
-            "avg_tags_per_doc": float(stats['avg_tags'] or 0),
-            "top_tags": []
-        }
+        top_tags: list[dict[str, Any]] = []
 
         # Most used tags
         cursor.execute("""
@@ -661,10 +654,20 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
         """)
 
         for tag in cursor.fetchall():
-            result["top_tags"].append({
+            top_tags.append({
                 "name": tag['name'],
                 "count": tag['usage_count']
             })
+
+        result: dict[str, Any] = {
+            "project": project,
+            "coverage": coverage,
+            "total_documents": stats['total_docs'],
+            "tagged_documents": stats['tagged_docs'],
+            "unique_tags": stats['unique_tags'],
+            "avg_tags_per_doc": float(stats['avg_tags'] or 0),
+            "top_tags": top_tags,
+        }
 
         # Untagged count
         cursor.execute("""
@@ -703,16 +706,13 @@ def _collect_projects_data() -> dict[str, Any]:
 
         projects = cursor.fetchall()
 
-    result = {
-        "count": len(projects),
-        "projects": []
-    }
+    project_list: list[dict[str, Any]] = []
 
     for proj in projects:
         last_updated = parse_datetime(proj['last_updated'])
         days_ago = (datetime.now() - last_updated).days if last_updated else 0
 
-        result["projects"].append({
+        project_list.append({
             "name": proj['project'] or "[No Project]",
             "doc_count": proj['doc_count'],
             "avg_length": float(proj['avg_length'] or 0),
@@ -722,7 +722,10 @@ def _collect_projects_data() -> dict[str, Any]:
             "days_since_update": days_ago
         })
 
-    return result
+    return {
+        "count": len(projects),
+        "projects": project_list,
+    }
 
 # Create typer app for this module
 app = typer.Typer(help="Analyze documents and extract insights")

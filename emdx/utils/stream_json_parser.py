@@ -97,7 +97,7 @@ def extract_text_from_stream_json(content: str) -> str:
     Returns:
         Extracted plain text content with proper paragraph separation
     """
-    text_parts = []
+    text_parts: list[str] = []
 
     for line in content.split("\n"):
         content_type, text = parse_stream_json_line(line)

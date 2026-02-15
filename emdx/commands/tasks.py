@@ -23,7 +23,7 @@ def add(
     description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
     epic: int | None = typer.Option(None, "-e", "--epic", help="Add to epic (task ID)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Category key (e.g. SEC)"),
-):
+) -> None:
     """Add a task to the work queue.
 
     Examples:
@@ -62,7 +62,7 @@ def add(
 
 
 @app.command()
-def ready():
+def ready() -> None:
     """Show tasks ready to work on.
 
     Lists open tasks that aren't blocked by dependencies.
@@ -87,7 +87,7 @@ def ready():
 def done(
     task_id: int = typer.Argument(..., help="Task ID"),
     note: str | None = typer.Option(None, "-n", "--note", help="Completion note"),
-):
+) -> None:
     """Mark a task as done.
 
     Examples:
@@ -292,7 +292,7 @@ def list_cmd(
     limit: int = typer.Option(20, "-n", "--limit"),
     epic: int | None = typer.Option(None, "-e", "--epic", help="Filter by epic ID"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
-):
+) -> None:
     """List tasks.
 
     By default shows open, active, and blocked tasks (hides done/failed).
@@ -366,7 +366,7 @@ def list_cmd(
 def delete(
     task_id: int = typer.Argument(..., help="Task ID"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-):
+) -> None:
     """Delete a task.
 
     Examples:

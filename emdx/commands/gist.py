@@ -182,7 +182,7 @@ def create(
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
     update: str | None = typer.Option(None, "--update", "-u", help="Update existing gist ID"),
-):
+) -> None:
     """Create or update a GitHub Gist from a document."""
     # Ensure database schema is up to date
     db.ensure_schema()

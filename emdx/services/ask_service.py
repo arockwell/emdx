@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 try:
     import anthropic
@@ -40,10 +41,10 @@ class AskService:
 
     def __init__(self, model: str | None = None):
         self.model = model or self.DEFAULT_MODEL
-        self._client = None
-        self._embedding_service = None
+        self._client: Any = None
+        self._embedding_service: Any = None
 
-    def _get_client(self):
+    def _get_client(self) -> Any:
         """Lazy load Anthropic client."""
         if not HAS_ANTHROPIC:
             raise ImportError(
@@ -54,8 +55,7 @@ class AskService:
             self._client = anthropic.Anthropic()
         return self._client
 
-    def _get_embedding_service(self):
-        """Lazy load embedding service."""
+    def _get_embedding_service(self) -> Any:
         if self._embedding_service is None:
             try:
                 from .embedding_service import EmbeddingService
@@ -74,7 +74,7 @@ class AskService:
 
         try:
             stats = embedding_service.stats()
-            return stats.indexed_documents >= self.MIN_EMBEDDINGS_FOR_SEMANTIC
+            return bool(stats.indexed_documents >= self.MIN_EMBEDDINGS_FOR_SEMANTIC)
         except Exception as e:
             logger.debug(f"Could not check embedding stats: {e}")
             return False
@@ -143,7 +143,7 @@ class AskService:
                     SELECT id, title, content FROM documents
                     WHERE content LIKE ? AND is_deleted = 0
                 """
-                params = [f"%{ticket}%"]
+                params: list[Any] = [f"%{ticket}%"]
 
                 if project:
                     query += " AND project = ?"
@@ -190,16 +190,16 @@ class AskService:
                     SELECT id, title, content FROM documents
                     WHERE is_deleted = 0
                 """
-                params = []
+                fallback_params: list[Any] = []
 
                 if project:
                     query += " AND project = ?"
-                    params.append(project)
+                    fallback_params.append(project)
 
                 query += " ORDER BY updated_at DESC LIMIT ?"
-                params.append(limit)
+                fallback_params.append(limit)
 
-                cursor.execute(query, params)
+                cursor.execute(query, fallback_params)
                 docs = cursor.fetchall()
 
         return docs[:limit], "keyword"

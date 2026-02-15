@@ -63,11 +63,11 @@ class UnifiedSearchService:
     - #123: Document ID lookup
     """
 
-    def __init__(self):
-        self._embedding_service = None  # Lazy load
+    def __init__(self) -> None:
+        self._embedding_service: Any = None  # Lazy load
 
     @property
-    def embedding_service(self):
+    def embedding_service(self) -> Any:
         """Lazy load the embedding service."""
         if self._embedding_service is None:
             try:
@@ -361,7 +361,7 @@ class UnifiedSearchService:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
-    def _convert_semantic_matches(self, matches) -> list[SearchResult]:
+    def _convert_semantic_matches(self, matches: list[Any]) -> list[SearchResult]:
         """Convert semantic matches to SearchResult objects."""
         results = []
         for match in matches:
@@ -577,7 +577,7 @@ class UnifiedSearchService:
             with db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
-                count = cursor.fetchone()[0]
+                count = int(cursor.fetchone()[0])
                 return count > 0
         except Exception:
             return False

@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..models.executions import (
+    Execution,
     get_execution,
     get_execution_stats,
     get_recent_executions,
@@ -40,7 +41,7 @@ def tail_log_subprocess(log_path: Path, follow: bool = False, lines: int = 50) -
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True)
             try:
-                for line in process.stdout:
+                for line in process.stdout or []:
                     console.print(line.rstrip())
             except KeyboardInterrupt:
                 process.terminate()
@@ -111,7 +112,7 @@ def tail_log_python(log_path: Path, follow: bool = False, lines: int = 50) -> No
                 console.print("\n[yellow]Stopped following log[/yellow]")
 
 
-def display_execution_metadata(execution) -> None:
+def display_execution_metadata(execution: Execution) -> None:
     """Display execution metadata in a formatted way."""
     console.print("\n[bold]Execution Details[/bold]")
     console.print(f"ID: [cyan]{execution.id}[/cyan]")
@@ -147,7 +148,7 @@ def display_execution_metadata(execution) -> None:
 
 
 @app.command(name="list")
-def list_executions(limit: int = typer.Option(50, help="Number of executions to show")):
+def list_executions(limit: int = typer.Option(50, help="Number of executions to show")) -> None:
     """List recent executions."""
     executions = get_recent_executions(limit)
 
@@ -201,7 +202,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
 
 
 @app.command()
-def running():
+def running() -> None:
     """Show currently running executions."""
     executions = get_running_executions()
 
@@ -230,7 +231,7 @@ def running():
 
 
 @app.command()
-def stats():
+def stats() -> None:
     """Show execution statistics."""
     stats = get_execution_stats()
 
@@ -252,8 +253,8 @@ def show(
     no_header: bool = typer.Option(False, "--no-header",
                                   help="Skip metadata, show only logs"),
     full: bool = typer.Option(False, "--full",
-                             help="Show entire log file")
-):
+                             help="Show entire log file"),
+) -> None:
     """Show execution details with integrated log viewer."""
     execution = get_execution(exec_id)
 
@@ -298,19 +299,19 @@ def logs(
     exec_id: int,
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
     lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show")
-):
+) -> None:
     """Show only the logs for an execution (no metadata)."""
     show(exec_id, follow=follow, lines=lines, no_header=True, full=False)
 
 
 @app.command()
-def tail(exec_id: int):
+def tail(exec_id: int) -> None:
     """Follow the log of a running execution (alias for show -f)."""
     show(exec_id, follow=True)
 
 
 @app.command(name="kill")
-def kill_execution(exec_id: int | None = typer.Argument(None)):
+def kill_execution(exec_id: int | None = typer.Argument(None)) -> None:
     """Kill a running execution and mark it as completed.
 
     If no exec_id provided, shows running executions to choose from.
@@ -350,7 +351,7 @@ def kill_execution(exec_id: int | None = typer.Argument(None)):
 
 
 @app.command(name="killall")
-def kill_all_executions():
+def kill_all_executions() -> None:
     """Kill ALL running executions at once."""
     executions = get_running_executions()
 
@@ -377,9 +378,9 @@ def kill_all_executions():
 
 
 @app.command(name="health")
-def execution_health():
+def execution_health() -> None:
     """Show detailed health status of running executions."""
-    import psutil
+    import psutil  # type: ignore[import-untyped]
 
     from ..services.execution_monitor import ExecutionMonitor
 
@@ -467,9 +468,9 @@ def execution_health():
 def monitor_executions(
     interval: int = typer.Option(5, "--interval", "-i", help="Refresh interval in seconds"),
     follow: bool = typer.Option(True, "--follow/--no-follow", help="Continuously monitor")
-):
+) -> None:
     """Monitor execution status in real-time."""
-    import psutil
+    import psutil  # type: ignore[import-untyped]
 
     from ..services.execution_monitor import ExecutionMonitor
 

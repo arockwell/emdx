@@ -6,6 +6,7 @@ It outputs priming context that should be injected at session start.
 """
 
 from datetime import datetime
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -32,7 +33,7 @@ def prime(
         "--quiet", "-q",
         help="Minimal output - just ready tasks"
     ),
-):
+) -> None:
     """
     Output priming context for Claude Code session injection.
 
@@ -66,37 +67,10 @@ def prime(
 # Text output
 # ---------------------------------------------------------------------------
 
-def _get_execution_methods_json() -> list[dict]:
-    """Return execution methods as structured data for JSON output."""
-    return [
-        {
-            "command": "emdx delegate",
-            "usage": 'emdx delegate "task" --tags analysis',
-            "when": "All one-shot AI execution (single, parallel, chain, PR, worktree)",
-            "key_flags": [
-                "--doc", "--each/--do", "--chain",
-                "--pr", "--worktree", "--synthesize", "--tags",
-            ],
-        },
-        {
-            "command": "emdx recipe",
-            "usage": "emdx recipe run 42",
-            "when": "Run a saved recipe (document tagged 📋) via delegate",
-            "key_flags": ["--pr", "--worktree", "--model"],
-        },
-        {
-            "command": "emdx cascade",
-            "usage": 'emdx cascade add "idea" --auto',
-            "when": "Transform idea into working code with PR autonomously",
-            "key_flags": ["--auto", "--stop", "--sync"],
-        },
-    ]
-
-
 def _output_text(
     project: str | None, verbose: bool, quiet: bool,
     markdown: bool = False, execution: bool = False,
-):
+) -> None:
     """Output priming context as text."""
     lines = []
 
@@ -155,8 +129,8 @@ def _output_text(
         if recent:
             lines.append("RECENT DOCS:")
             lines.append("")
-            for doc in recent[:5]:
-                lines.append(f"  #{doc['id']}  {doc['title']}")
+            for rdoc in recent[:5]:
+                lines.append(f"  #{rdoc['id']}  {rdoc['title']}")
             lines.append("")
 
         cascade_status = _get_cascade_status()
@@ -215,7 +189,7 @@ def _format_epic_line(epic: dict) -> str:
 # Data queries
 # ---------------------------------------------------------------------------
 
-def _get_active_epics() -> list:
+def _get_active_epics() -> list[dict[str, Any]]:
     """Get active/open epics with child task counts."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -239,7 +213,7 @@ def _get_active_epics() -> list:
         ]
 
 
-def _get_ready_tasks() -> list:
+def _get_ready_tasks() -> list[dict[str, Any]]:
     """Get tasks that are ready to work on (open + no blockers, excludes delegate)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -268,7 +242,7 @@ def _get_ready_tasks() -> list:
         ]
 
 
-def _get_in_progress_tasks() -> list:
+def _get_in_progress_tasks() -> list[dict[str, Any]]:
     """Get manually created tasks currently in progress (excludes delegate)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -290,7 +264,7 @@ def _get_in_progress_tasks() -> list:
         ]
 
 
-def _get_recent_docs() -> list:
+def _get_recent_docs() -> list[dict[str, Any]]:
     """Get recently accessed documents."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -362,7 +336,7 @@ def _get_usage_instructions() -> list[str]:
 # JSON output
 # ---------------------------------------------------------------------------
 
-def _get_execution_methods_json() -> list[dict]:
+def _get_execution_methods_json() -> list[dict[str, Any]]:
     """Return execution methods as structured data for JSON output."""
     return [
         {
@@ -377,11 +351,11 @@ def _get_execution_methods_json() -> list[dict]:
     ]
 
 
-def _output_json(project: str | None, verbose: bool, quiet: bool):
+def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
     """Output priming context as JSON."""
     import json
 
-    data = {
+    data: dict[str, Any] = {
         "project": project,
         "timestamp": datetime.now().isoformat(),
         "active_epics": _get_active_epics(),

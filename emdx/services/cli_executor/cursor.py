@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class CursorCliExecutor(CliExecutor):
     """Executor for Cursor Agent CLI."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = CLI_CONFIGS[CliTool.CURSOR]
 
     @property
@@ -215,7 +215,7 @@ class CursorCliExecutor(CliExecutor):
                     "cost_usd": 0.0,
                 }
 
-            return data
+            return dict(data)
 
         except json.JSONDecodeError:
             logger.debug(f"Failed to parse line as JSON: {line[:100]}")

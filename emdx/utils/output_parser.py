@@ -70,7 +70,7 @@ def extract_output_doc_id(log_file: Path) -> int | None:
         logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")  # noqa: E501
         return None
 
-def extract_token_usage(log_file: Path) -> int:
+def extract_token_usage(log_file: Path) -> int | float:
     """Extract total token usage from Claude execution log.
 
     Convenience wrapper around extract_token_usage_detailed that
@@ -85,7 +85,7 @@ def extract_token_usage(log_file: Path) -> int:
     usage = extract_token_usage_detailed(log_file)
     return usage.get('total', 0)
 
-def extract_token_usage_detailed(log_file: Path) -> dict[str, int]:
+def extract_token_usage_detailed(log_file: Path) -> dict[str, int | float]:
     """Extract detailed token usage from Claude execution log.
 
     Parses the log file looking for the raw result JSON that was embedded

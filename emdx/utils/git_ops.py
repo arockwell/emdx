@@ -30,16 +30,16 @@ class GitProject:
     """Represents a git project with its worktrees."""
     name: str
     main_path: str
-    worktrees: list['GitWorktree'] = None
+    worktrees: list['GitWorktree'] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.worktrees is None:
             self.worktrees = []
 
     @property
     def worktree_count(self) -> int:
         """Get the number of worktrees."""
-        return len(self.worktrees)
+        return len(self.worktrees or [])
 
     @property
     def display_name(self) -> str:
@@ -129,7 +129,7 @@ def discover_projects_from_main_repos() -> list[GitProject]:
         List of GitProject objects with worktrees pre-loaded
     """
     dev_dir = Path.home() / "dev"
-    projects = []
+    projects: list[GitProject] = []
 
     if not dev_dir.exists():
         logger.warning(f"Dev directory not found: {dev_dir}")
@@ -199,7 +199,7 @@ def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> 
             worktree_dirs.append(str(home_worktrees))
 
     # Map of project_name -> (main_path, [worktrees])
-    projects_map = {}
+    projects_map: dict[str, tuple[str, list[GitWorktree]]] = {}
 
     for worktree_dir in worktree_dirs:
         try:
@@ -344,7 +344,7 @@ def discover_git_projects(search_paths: list[str] | None = None, max_depth: int 
                         projects.append(GitProject(
                             name=item.name,
                             main_path=str(item),
-                            worktree_count=len(worktrees)
+                            worktrees=worktrees,
                         ))
                     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
                         # Failed to get worktrees, but it's still a git repo
@@ -352,7 +352,7 @@ def discover_git_projects(search_paths: list[str] | None = None, max_depth: int 
                         projects.append(GitProject(
                             name=item.name,
                             main_path=str(item),
-                            worktree_count=0
+                            worktrees=[],
                         ))
         except (OSError, PermissionError) as e:
             # Skip directories we can't read
@@ -383,7 +383,7 @@ def get_worktrees(project_path: str | None = None) -> list[GitWorktree]:
         )
 
         worktrees = []
-        current_worktree = {}
+        current_worktree: dict[str, str] = {}
 
         for line in result.stdout.strip().split('\n'):
             if not line:

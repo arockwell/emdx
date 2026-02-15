@@ -9,6 +9,7 @@ import importlib
 import inspect
 import logging
 import pkgutil
+from types import ModuleType
 
 from textual.binding import Binding
 from textual.widget import Widget
@@ -26,7 +27,7 @@ class KeybindingExtractor:
     with BINDINGS defined, then converts them to KeybindingEntry objects.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.entries: list[KeybindingEntry] = []
         self.scanned_classes: set = set()
 
@@ -58,7 +59,7 @@ class KeybindingExtractor:
 
         return self.entries
 
-    def _scan_module_recursive(self, module, module_name: str) -> None:
+    def _scan_module_recursive(self, module: ModuleType, module_name: str) -> None:
         """Recursively scan a module and its submodules."""
         # Scan the module itself
         self._scan_module_members(module)
@@ -75,7 +76,7 @@ class KeybindingExtractor:
                 except Exception as e:
                     logger.warning(f"Error scanning {full_name}: {e}")
 
-    def _scan_module_members(self, module) -> None:
+    def _scan_module_members(self, module: ModuleType) -> None:
         """Scan a module's members for Widget classes with BINDINGS."""
         for _name, obj in inspect.getmembers(module, inspect.isclass):
             # Skip if already scanned (class might be imported in multiple places)

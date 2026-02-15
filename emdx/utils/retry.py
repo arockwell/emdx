@@ -4,6 +4,8 @@ import asyncio
 import functools
 import logging
 import time
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +23,8 @@ def retry(
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 10.0,
-    exceptions: tuple = TRANSIENT_EXCEPTIONS,
-):
+    exceptions: tuple[type[BaseException], ...] = TRANSIENT_EXCEPTIONS,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Retry decorator with exponential backoff.
 
     Args:
@@ -31,10 +33,10 @@ def retry(
         max_delay: Maximum delay between retries in seconds.
         exceptions: Tuple of exception types to retry on.
     """
-    def decorator(func):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            last_exception = None
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exception: BaseException | None = None
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
@@ -47,11 +49,11 @@ def retry(
                             attempt + 1, max_retries, func.__name__, type(e).__name__, e,
                         )
                         time.sleep(delay)
-            raise last_exception
+            raise last_exception  # type: ignore[misc]
 
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            last_exception = None
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exception: BaseException | None = None
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
@@ -64,7 +66,7 @@ def retry(
                             attempt + 1, max_retries, func.__name__, type(e).__name__, e,
                         )
                         await asyncio.sleep(delay)
-            raise last_exception
+            raise last_exception  # type: ignore[misc]
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper

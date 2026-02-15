@@ -10,10 +10,13 @@ operations while this widget focuses on display and user interaction.
 import logging
 from typing import Any, Protocol
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.coordinate import Coordinate
 from textual.reactive import reactive
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, Label, RichLog, Static
 
@@ -72,7 +75,7 @@ class DocumentBrowser(HelpMixin, Widget):
     # Reactive properties
     mode = reactive("NORMAL")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # UI state
         self.edit_mode: bool = False
@@ -81,7 +84,7 @@ class DocumentBrowser(HelpMixin, Widget):
 
         # Debounce preview updates
         self._pending_preview_doc_id: int | None = None
-        self._preview_timer = None
+        self._preview_timer: Timer | None = None
 
         # Current ViewModel (updated by presenter callbacks)
         self._current_vm: DocumentListVM | None = None
@@ -183,9 +186,9 @@ class DocumentBrowser(HelpMixin, Widget):
             details_panel.can_focus = False
 
             # Add initial content to details panel
-            details_panel.write("📋 **Document Details**")
-            details_panel.write("")
-            details_panel.write("[dim]Select a document to view details[/dim]")
+            details_panel.write("📋 **Document Details**")  # type: ignore[attr-defined]
+            details_panel.write("")  # type: ignore[attr-defined]
+            details_panel.write("[dim]Select a document to view details[/dim]")  # type: ignore[attr-defined]
         except (LookupError, AttributeError) as e:
             logger.error(f"Error setting up details panel: {type(e).__name__}: {e}")
         except Exception as e:
@@ -226,7 +229,7 @@ class DocumentBrowser(HelpMixin, Widget):
         """Load more documents when user scrolls near the end."""
         await self.presenter.load_more_documents()
 
-    def _format_hierarchy_title(self, doc) -> str:
+    def _format_hierarchy_title(self, doc: Any) -> str:
         """Format document title with hierarchy tree characters.
 
         Args:
@@ -364,7 +367,7 @@ class DocumentBrowser(HelpMixin, Widget):
         await self.presenter.search(f"#{doc_id}")
         return False
 
-    async def on_key(self, event) -> None:
+    async def on_key(self, event: events.Key) -> None:
         """Handle key events."""
         key = event.key
 
@@ -409,7 +412,7 @@ class DocumentBrowser(HelpMixin, Widget):
             if self.presenter.filtered_count > 0:
                 # If we deleted the last item, move cursor to the new last item
                 new_cursor_row = min(row_idx, self.presenter.filtered_count - 1)
-                table.cursor_coordinate = (new_cursor_row, 0)
+                table.cursor_coordinate = Coordinate(new_cursor_row, 0)
 
             self.update_status(f"Document '{doc.title}' deleted")
         else:
@@ -432,20 +435,21 @@ class DocumentBrowser(HelpMixin, Widget):
         detail_vm = self.presenter.get_document_detail(doc_item.id)
         if not detail_vm:
             return
-        full_doc = {"id": detail_vm.id, "title": detail_vm.title, "content": detail_vm.content}
+        doc_title = detail_vm.title
+        doc_content = detail_vm.content
 
         # Store original preview for restoration
-        self.original_preview_content = full_doc["content"]
+        self.original_preview_content = doc_content
         self.edit_mode = True
 
         # Extract content without unicode box if present
         content = self._extract_content_without_title_box(
-            full_doc["content"], full_doc["title"]
+            doc_content, doc_title
         )
 
         # Switch to editing mode via manager
         title_input, vim_editor = await self.preview_manager.switch_to_editing(
-            host=self, title=full_doc["title"], content=content, is_new=False
+            host=self, title=doc_title, content=content, is_new=False
         )
 
         # Focus on title input first
@@ -708,7 +712,7 @@ class DocumentBrowser(HelpMixin, Widget):
         """Move cursor to top."""
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
-            table.cursor_coordinate = (0, 0)
+            table.cursor_coordinate = Coordinate(0, 0)
 
     async def action_cursor_bottom(self) -> None:
         """Move cursor to bottom - loads all remaining documents first."""
@@ -718,7 +722,7 @@ class DocumentBrowser(HelpMixin, Widget):
 
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
-            table.cursor_coordinate = (table.row_count - 1, 0)
+            table.cursor_coordinate = Coordinate(table.row_count - 1, 0)
 
     async def action_edit_document(self) -> None:
         """Edit the current document."""
@@ -750,7 +754,7 @@ class DocumentBrowser(HelpMixin, Widget):
 
         doc_id = doc_item.id
         success = await self.presenter.expand_document(doc_id)
-        if success:
+        if success and self._current_vm is not None:
             # Find the document again and restore cursor position
             for idx, doc in enumerate(self._current_vm.filtered_documents):
                 if doc.id == doc_id:
@@ -776,7 +780,11 @@ class DocumentBrowser(HelpMixin, Widget):
         if self.presenter.is_expanded(doc_id):
             await self.presenter.collapse_document(doc_id)
             # Find the document again and restore cursor position
-            for idx, doc in enumerate(self._current_vm.filtered_documents):
+            vm_docs = (
+                self._current_vm.filtered_documents
+                if self._current_vm else []
+            )
+            for idx, doc in enumerate(vm_docs):
                 if doc.id == doc_id:
                     table.move_cursor(row=idx)
                     break
@@ -788,7 +796,11 @@ class DocumentBrowser(HelpMixin, Widget):
             parent = self.presenter.get_parent_document(doc_item)
             if parent:
                 # Find parent's index and move cursor there
-                for idx, doc in enumerate(self._current_vm.filtered_documents):
+                vm_docs2 = (
+                    self._current_vm.filtered_documents
+                    if self._current_vm else []
+                )
+                for idx, doc in enumerate(vm_docs2):
                     if doc.id == parent.id:
                         table.move_cursor(row=idx)
                         self.update_status(f"Moved to parent #{parent.id}")
@@ -924,7 +936,7 @@ class DocumentBrowser(HelpMixin, Widget):
                 f"Could not update status after exiting selection mode: {type(e).__name__}: {e}"
             )
 
-    async def on_data_table_row_highlighted(self, event) -> None:
+    async def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Update preview and details panel when row is highlighted."""
         if self.edit_mode:
             return
@@ -1050,7 +1062,7 @@ class DocumentBrowser(HelpMixin, Widget):
             except Exception as e2:
                 logger.debug("Fallback details panel also failed: %s", e2)
 
-    async def on_input_submitted(self, event) -> None:
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
         if event.input.id == "search-input":
             # Handle search via presenter

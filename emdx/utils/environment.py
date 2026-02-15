@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
@@ -234,7 +235,7 @@ class EnvironmentValidator:
             for key, value in self.info.items():
                 console.print(f"  {key}: {value}")
 
-    def get_environment_info(self) -> dict[str, any]:
+    def get_environment_info(self) -> dict[str, Any]:
         """Get environment information for logging."""
         return {
             "valid": len(self.errors) == 0,
@@ -246,7 +247,7 @@ class EnvironmentValidator:
 def validate_execution_environment(
     verbose: bool = False,
     cli_tool: str = "claude"
-) -> tuple[bool, dict[str, any] | None]:
+) -> tuple[bool, dict[str, Any] | None]:
     """Validate the execution environment.
 
     Args:
@@ -267,7 +268,7 @@ def validate_execution_environment(
 def ensure_claude_in_path() -> None:
     """Ensure claude command is in PATH for subprocess calls."""
     # Common locations where claude might be installed
-    claude_paths = [
+    claude_paths: list[str | Path] = [
         "/usr/local/bin",
         "/opt/homebrew/bin",  # macOS ARM
         Path.home() / ".local" / "bin",  # pip install --user
@@ -278,8 +279,8 @@ def ensure_claude_in_path() -> None:
     current_path = os.environ.get("PATH", "").split(os.pathsep)
     added_paths = []
 
-    for path in claude_paths:
-        path = Path(path)
+    for p in claude_paths:
+        path = Path(p)
         if path.exists() and str(path) not in current_path:
             claude_exe = path / "claude"
             if claude_exe.exists() and claude_exe.is_file():

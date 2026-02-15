@@ -56,7 +56,8 @@ def create(
         console.print(f"   [dim]Type: {group_type}[/dim]")
         if parent:
             parent_group = groups.get_group(parent)
-            console.print(f"   [dim]Parent: #{parent} ({parent_group['name']})[/dim]")
+            if parent_group:
+                console.print(f"   [dim]Parent: #{parent} ({parent_group['name']})[/dim]")
         if project:
             console.print(f"   [dim]Project: {project}[/dim]")
 
@@ -112,7 +113,8 @@ def add(
             )
             for doc_id in added:
                 doc = get_document(str(doc_id))
-                console.print(f"   [dim]#{doc_id}: {doc['title'][:40]} ({role})[/dim]")
+                if doc:
+                    console.print(f"   [dim]#{doc_id}: {doc['title'][:40]} ({role})[/dim]")
 
         if already_in:
             console.print(f"[yellow]Already in group: {already_in}[/yellow]")
@@ -421,7 +423,7 @@ def edit(
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
             raise typer.Exit(1) from None
 
-        updates = {}
+        updates: dict[str, str | int | None] = {}
         if name is not None:
             updates['name'] = name
         if description is not None:

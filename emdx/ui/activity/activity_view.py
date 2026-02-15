@@ -13,6 +13,7 @@ and cursor tracking by node reference — eliminating scroll jumping.
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -40,8 +41,8 @@ try:
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
-    doc_db = None
-    groups_db = None
+    doc_db = None  # type: ignore[assignment]
+    groups_db = None  # type: ignore[assignment]
     HAS_DOCS = False
     HAS_GROUPS = False
 
@@ -243,7 +244,7 @@ class ActivityView(HelpMixin, Widget):
     notification_visible = reactive(False)
     notification_is_error = reactive(False)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.activity_items: list[ActivityItem] = []
         self.log_stream: LogStream | None = None
@@ -330,41 +331,37 @@ class ActivityView(HelpMixin, Widget):
         status_bar = self.query_one("#status-bar", Static)
 
         # Count active items (running agents)
-        active = sum(
-            1
-            for item in self.activity_items
-            if item.status == "running"
+        active = len(
+            [item for item in self.activity_items if item.status == "running"]
         )
 
         # Count docs today
         today = datetime.now().date()
-        docs_today = sum(
-            1
-            for item in self.activity_items
-            if item.timestamp and item.timestamp.date() == today
+        docs_today = len(
+            [item for item in self.activity_items
+             if item.timestamp and item.timestamp.date() == today]
         )
 
         # Total cost today
-        cost_today = sum(
-            item.cost
-            for item in self.activity_items
-            if item.timestamp
-            and item.timestamp.date() == today
-            and item.cost
+        cost_today: float = sum(
+            (item.cost for item in self.activity_items
+             if item.timestamp
+             and item.timestamp.date() == today
+             and item.cost),
+            0.0,
         )
 
         # Count errors (today only)
-        errors = sum(
-            1
-            for item in self.activity_items
-            if item.status == "failed"
-            and item.timestamp
-            and item.timestamp.date() == today
+        errors = len(
+            [item for item in self.activity_items
+             if item.status == "failed"
+             and item.timestamp
+             and item.timestamp.date() == today]
         )
 
         # Generate sparkline for the week
         week_data = self._get_week_activity_data()
-        spark = sparkline(week_data, width=7)
+        spark = sparkline([float(x) for x in week_data], width=7)
 
         # Get theme indicator
         from emdx.ui.themes import get_theme_indicator
@@ -396,10 +393,9 @@ class ActivityView(HelpMixin, Widget):
 
         for i in range(6, -1, -1):  # 6 days ago to today
             day = today - timedelta(days=i)
-            count = sum(
-                1
-                for item in self.activity_items
-                if item.timestamp and item.timestamp.date() == day
+            count = len(
+                [item for item in self.activity_items
+                 if item.timestamp and item.timestamp.date() == day]
             )
             counts.append(count)
 
@@ -436,7 +432,7 @@ class ActivityView(HelpMixin, Widget):
             logger.debug(f"Preview widgets not ready: {e}")
             return
 
-        def show_markdown():
+        def show_markdown() -> None:
             preview_scroll.display = True
             preview_log.display = False
 
@@ -742,7 +738,7 @@ class ActivityView(HelpMixin, Widget):
 
     def _handle_log_content(self, content: str) -> None:
         """Handle new log content from stream - LIVE LOGS formatted."""
-        def update_ui():
+        def update_ui() -> None:
             try:
                 from emdx.ui.live_log_writer import LiveLogWriter
 
@@ -843,7 +839,7 @@ class ActivityView(HelpMixin, Widget):
                 item.expanded = True
                 # Add children to tree node
                 node.remove_children()
-                tree._add_children(node, item.children)
+                tree.add_activity_children(node, item.children)
                 node.expand()
             except Exception as e:
                 logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)  # noqa: E501
@@ -864,7 +860,7 @@ class ActivityView(HelpMixin, Widget):
                 item.children = await item.load_children(doc_db)
                 item.expanded = True
                 node.remove_children()
-                tree._add_children(node, item.children)
+                tree.add_activity_children(node, item.children)
                 node.expand()
             except Exception as e:
                 logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)  # noqa: E501
@@ -931,7 +927,7 @@ class ActivityView(HelpMixin, Widget):
                 item.children = await item.load_children(doc_db)
                 item.expanded = True
                 tree = self.query_one("#activity-tree", ActivityTree)
-                tree._add_children(node, item.children)
+                tree.add_activity_children(node, item.children)
             except Exception as e:
                 logger.error(f"Error loading children for {item.item_type} #{item.item_id}: {e}", exc_info=True)  # noqa: E501
 

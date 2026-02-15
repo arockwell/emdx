@@ -487,7 +487,7 @@ class MaintenanceApplication:
             preview = []
             for candidate in candidates[:3]:
                 preview.append(
-                    f"'{candidate.doc1['title']}' ↔ '{candidate.doc2['title']}' ({candidate.similarity:.0%})"  # noqa: E501
+                    f"'{candidate.doc1_title}' ↔ '{candidate.doc2_title}' ({candidate.similarity_score:.0%})"  # noqa: E501
                 )
 
             return MaintenanceResult(
@@ -504,22 +504,39 @@ class MaintenanceApplication:
 
         for candidate in candidates:
             try:
-                # Keep the document with more views
-                if (
-                    candidate.doc1["access_count"]
-                    >= candidate.doc2["access_count"]
-                ):
-                    keep, remove = candidate.doc1, candidate.doc2
-                else:
-                    keep, remove = candidate.doc2, candidate.doc1
-
-                # Merge content
-                merged_content = self.document_merger._merge_content(
-                    keep["content"], remove["content"]
-                )
-
+                # Fetch full document data for the merge
                 with self._db.get_connection() as conn:
                     cursor = conn.cursor()
+
+                    cursor.execute(
+                        "SELECT id, title, content, access_count FROM documents WHERE id = ?",
+                        (candidate.doc1_id,),
+                    )
+                    doc1_row = cursor.fetchone()
+
+                    cursor.execute(
+                        "SELECT id, title, content, access_count FROM documents WHERE id = ?",
+                        (candidate.doc2_id,),
+                    )
+                    doc2_row = cursor.fetchone()
+
+                    if not doc1_row or not doc2_row:
+                        continue
+
+                    doc1 = dict(doc1_row)
+                    doc2 = dict(doc2_row)
+
+                    # Keep the document with more views
+                    if doc1["access_count"] >= doc2["access_count"]:
+                        keep, remove = doc1, doc2
+                    else:
+                        keep, remove = doc2, doc1
+
+                    # Merge content
+                    merged_content = self.document_merger._merge_content(
+                        keep["content"], remove["content"],
+                        keep["title"], remove["title"],
+                    )
 
                     # Update the kept document
                     cursor.execute(
@@ -545,7 +562,8 @@ class MaintenanceApplication:
                 merged_count += 1
             except Exception as e:
                 logger.warning(
-                    "Failed to merge documents %s and %s: %s", keep["id"], remove["id"], e
+                    "Failed to merge documents %s and %s: %s",
+                    candidate.doc1_id, candidate.doc2_id, e
                 )
                 continue
 
@@ -567,7 +585,7 @@ class MaintenanceApplication:
         Returns:
             MaintenanceResult with operation details.
         """
-        from ..commands.gc import GarbageCollector
+        from ..commands.gc import GarbageCollector  # type: ignore[import-untyped]
 
         gc = GarbageCollector(self._db_path)
         analysis = gc.analyze()

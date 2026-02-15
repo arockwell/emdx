@@ -20,7 +20,7 @@ def create_group(
     project: str | None = None,
     description: str | None = None,
     created_by: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> int:
     """Create a new document group.
 
@@ -54,7 +54,9 @@ def create_group(
             (name, description, parent_group_id, group_type, project, created_by),
         )
         conn.commit()
-        return cursor.lastrowid
+        row_id = cursor.lastrowid
+        assert row_id is not None
+        return row_id
 
 
 def get_group(group_id: int) -> dict[str, Any] | None:
@@ -78,7 +80,7 @@ def list_groups(
     group_type: str | None = None,
     include_inactive: bool = False,
     top_level_only: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> list[dict[str, Any]]:
     """List groups with optional filters.
 
@@ -92,8 +94,8 @@ def list_groups(
     Returns:
         List of group dicts
     """
-    conditions = []
-    params = []
+    conditions: list[str] = []
+    params: list[Any] = []
 
     if not include_inactive:
         conditions.append("is_active = TRUE")
@@ -126,7 +128,7 @@ def list_groups(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def update_group(group_id: int, **kwargs) -> bool:
+def update_group(group_id: int, **kwargs: Any) -> bool:
     """Update group properties.
 
     Supported kwargs: name, description, parent_group_id, group_type,
@@ -352,7 +354,7 @@ def get_recursive_doc_count(group_id: int) -> int:
             """,
             (group_id,),
         )
-        return cursor.fetchone()[0]
+        return int(cursor.fetchone()[0])
 
 
 def list_top_groups_with_counts() -> list[dict[str, Any]]:
@@ -398,7 +400,7 @@ def update_group_metrics(group_id: int) -> bool:
         return _update_group_metrics(conn, group_id)
 
 
-def _update_group_metrics(conn, group_id: int) -> bool:
+def _update_group_metrics(conn: sqlite3.Connection, group_id: int) -> bool:
     """Internal: Update group metrics using existing connection."""
     # Count documents
     cursor = conn.execute(
@@ -438,8 +440,8 @@ def _would_create_cycle(parent_id: int, child_id: int | None) -> bool:
     # Walk up the parent chain from parent_id
     # If we find child_id, it would be a cycle
     with db_connection.get_connection() as conn:
-        current = parent_id
-        visited = set()
+        current: int | None = parent_id
+        visited: set[int] = set()
 
         while current is not None:
             if current == child_id:

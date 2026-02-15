@@ -5,8 +5,11 @@ Provides consistent vim editing experience across main browser and file browser.
 """
 
 import logging
+from typing import Any
 
+from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.document._document import Selection
 
 from .text_areas import VimEditTextArea
 from .vim_line_numbers import SimpleVimLineNumbers
@@ -17,7 +20,7 @@ logger = logging.getLogger(__name__)
 class VimEditor(Vertical):
     """Unified vim editor with line numbers and proper layout."""
 
-    def __init__(self, app_instance, content="", **kwargs):
+    def __init__(self, app_instance: Any, content: str = "", **kwargs: Any) -> None:
         """Initialize vim editor.
 
         Args:
@@ -43,22 +46,22 @@ class VimEditor(Vertical):
 
         # Apply styling
         self.text_area.show_line_numbers = False  # Using custom vim relative numbers
-        self.text_area.word_wrap = False  # Disable to maintain line alignment
+        self.text_area.soft_wrap = False  # Disable to maintain line alignment
 
         # Create line numbers widget
         self.line_numbers = SimpleVimLineNumbers(id="vim-line-numbers")
-        self.text_area.line_numbers_widget = self.line_numbers
+        self.text_area.line_numbers_widget = self.line_numbers  # type: ignore[attr-defined]
 
         # Create horizontal container for line numbers and text area
         self.edit_container = Horizontal(id="vim-edit-container")
         self.edit_container.styles.width = "100%"
         self.edit_container.styles.height = "100%"
 
-    def compose(self):
+    def compose(self) -> ComposeResult:
         """Compose the vim editor layout."""
         yield self.edit_container
 
-    def on_mount(self):
+    def on_mount(self) -> None:
         """Set up the vim editor after mounting."""
         total_lines = len(self.text_area.text.split('\n'))
 
@@ -89,19 +92,19 @@ class VimEditor(Vertical):
         # This handles cases where TextArea's internal logic overrides our initial positioning
         self.set_timer(0.1, lambda: self._delayed_positioning_check())
 
-    def get_text(self):
+    def get_text(self) -> str:
         """Get the current text content."""
         return self.text_area.text
 
-    def set_text(self, content):
+    def set_text(self, content: str) -> None:
         """Set the text content."""
         self.text_area.text = content
 
-    def focus_editor(self):
+    def focus_editor(self) -> None:
         """Focus the text editor."""
         self.text_area.focus()
 
-    def _calculate_line_number_width(self, total_lines):
+    def _calculate_line_number_width(self, total_lines: int) -> int:
         """Calculate required width for line numbers based on total lines."""
         # Account for the largest line number + 1 space padding
         max_digits = len(str(total_lines))
@@ -109,7 +112,7 @@ class VimEditor(Vertical):
         width = max(3, max_digits) + 2
         return width
 
-    def _update_line_number_width(self):
+    def _update_line_number_width(self) -> None:
         """Update line number widget width based on current content."""
         total_lines = len(self.text_area.text.split('\n'))
         line_number_width = self._calculate_line_number_width(total_lines)
@@ -120,7 +123,7 @@ class VimEditor(Vertical):
             self.line_numbers.styles.min_width = line_number_width
             self.line_numbers.styles.max_width = line_number_width
 
-    def _initialize_editor(self):
+    def _initialize_editor(self) -> None:
         """Initialize editor after mounting - focus and set up line numbers."""
         try:
             # AGGRESSIVE positioning: Force cursor to top MULTIPLE times with different approaches
@@ -131,7 +134,7 @@ class VimEditor(Vertical):
             # Method 2: Clear any existing selection that might affect positioning
             if hasattr(self.text_area, 'selection'):
                 try:
-                    self.text_area.selection = None
+                    self.text_area.selection = Selection((0, 0), (0, 0))
                 except Exception as e:
                     logger.debug("Could not clear selection: %s", e)
 
@@ -174,7 +177,7 @@ class VimEditor(Vertical):
         except Exception as e:
             logger.error(f"Error initializing vim editor: {e}")
 
-    def _delayed_positioning_check(self):
+    def _delayed_positioning_check(self) -> None:
         """Delayed check to ensure positioning worked correctly."""
         try:
 
@@ -192,22 +195,22 @@ class VimEditor(Vertical):
                 # Force positioning again
                 self.text_area.cursor_location = (0, 0)
                 if hasattr(self.text_area, 'selection'):
-                    self.text_area.selection = None
+                    self.text_area.selection = Selection((0, 0), (0, 0))
                 # Note: scroll_to and line numbers disabled due to layout issues
         except Exception as e:
             logger.error(f"Error in delayed positioning check: {e}")
 
     @property
-    def vim_mode(self):
+    def vim_mode(self) -> str:
         """Get current vim mode."""
         return self.text_area.vim_mode
 
     @property
-    def text(self):
+    def text(self) -> str:
         """Get/set text content (property interface)."""
         return self.text_area.text
 
     @text.setter
-    def text(self, value):
+    def text(self, value: str) -> None:
         """Set text content."""
         self.text_area.text = value

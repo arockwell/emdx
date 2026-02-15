@@ -77,6 +77,7 @@ def create_task(
             epic_key, epic_seq_val,
         ))
         task_id = cursor.lastrowid
+        assert task_id is not None
 
         if depends_on:
             # Use executemany for efficient batch insertion
@@ -122,7 +123,8 @@ def list_tasks(
         epic_key: Filter by category key.
         parent_task_id: Filter by parent task (epic) ID.
     """
-    conditions, params = ["1=1"], []
+    conditions: list[str] = ["1=1"]
+    params: list[Any] = []
 
     if status:
         conditions.append(f"status IN ({','.join('?' * len(status))})")
@@ -162,7 +164,7 @@ def list_tasks(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def update_task(task_id: int, **kwargs) -> bool:
+def update_task(task_id: int, **kwargs: Any) -> bool:
     """Update task fields."""
     if not kwargs:
         return False
@@ -230,7 +232,7 @@ def get_ready_tasks(
         epic_key: Filter by category key.
     """
     conditions = ["t.status = 'open'"]
-    params = []
+    params: list[Any] = []
 
     if gameplan_id:
         conditions.append("t.gameplan_id = ?")
@@ -311,6 +313,7 @@ def log_progress(task_id: int, message: str) -> int:
             (task_id,)
         )
         conn.commit()
+        assert cursor.lastrowid is not None
         return cursor.lastrowid
 
 

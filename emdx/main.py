@@ -9,6 +9,7 @@ actually invoked.
 """
 
 import os
+from collections.abc import Callable
 
 import typer
 
@@ -67,9 +68,9 @@ def get_lazy_help() -> dict[str, str]:
     return LAZY_HELP
 
 
-def create_disabled_command(name: str):
+def create_disabled_command(name: str) -> Callable[[], None]:
     """Create a command that shows a disabled message in safe mode."""
-    def disabled_command():
+    def disabled_command() -> None:
         typer.echo(
             f"Command '{name}' is disabled in safe mode. "
             f"Set EMDX_SAFE_MODE=0 to enable.",
@@ -180,7 +181,7 @@ if is_safe_mode():
 
 # Version command
 @app.command()
-def version():
+def version() -> None:
     """Show emdx version"""
     typer.echo(f"emdx version {__version__}")
     typer.echo(f"Build ID: {__build_id__}")
@@ -201,7 +202,7 @@ def main(
         False, "--safe-mode", envvar="EMDX_SAFE_MODE",
         help="Disable execution commands (cascade, delegate, recipe)"
     ),
-):
+) -> None:
     """
     emdx - Documentation Index Management System
 
@@ -256,7 +257,7 @@ def main(
 _TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "batch", "--help", "-h", "help"}
 
 
-def run():
+def run() -> None:
     """Entry point for the CLI.
 
     Supports trailing 'help' as alternative to --help:

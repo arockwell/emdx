@@ -90,6 +90,28 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
+# Optional dependencies — not installed in CI base environment
+[[tool.mypy.overrides]]
+module = [
+    "sklearn.*",
+    "numpy",
+    "numpy.*",
+    "datasketch",
+    "datasketch.*",
+    "anthropic",
+    "anthropic.*",
+    "sentence_transformers",
+    "sentence_transformers.*",
+    "psutil",
+    "psutil.*",
+]
+ignore_missing_imports = true
+
+# click doesn't ship complete type stubs — suppress type errors in lazy loader
+[[tool.mypy.overrides]]
+module = "emdx.utils.lazy_group"
+disable_error_code = ["valid-type", "misc", "no-any-return", "arg-type", "attr-defined"]
+
 [tool.pytest.ini_options]
 minversion = "7.0.0"
 addopts = "-v --tb=short --strict-markers"
