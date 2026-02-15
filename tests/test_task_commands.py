@@ -31,6 +31,8 @@ class TestTaskAdd:
             "Fix the auth bug",
             description="",
             source_doc_id=None,
+            parent_task_id=None,
+            epic_key=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -46,6 +48,8 @@ class TestTaskAdd:
             "Implement this",
             description="",
             source_doc_id=42,
+            parent_task_id=None,
+            epic_key=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -60,6 +64,8 @@ class TestTaskAdd:
             "Another task",
             description="",
             source_doc_id=99,
+            parent_task_id=None,
+            epic_key=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -76,6 +82,8 @@ class TestTaskAdd:
             "Refactor tests",
             description="Split into unit and integration",
             source_doc_id=None,
+            parent_task_id=None,
+            epic_key=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -87,6 +95,8 @@ class TestTaskAdd:
             "Task",
             description="Details here",
             source_doc_id=None,
+            parent_task_id=None,
+            epic_key=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -103,6 +113,8 @@ class TestTaskAdd:
             "Full task",
             description="Full description",
             source_doc_id=10,
+            parent_task_id=None,
+            epic_key=None,
         )
 
     def test_add_task_requires_title(self):
@@ -229,7 +241,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=True
+            status=None, limit=20, exclude_delegate=True,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -238,7 +251,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=False
+            status=None, limit=20, exclude_delegate=False,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -247,7 +261,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-a"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=False
+            status=None, limit=20, exclude_delegate=False,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -256,7 +271,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--status", "open"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open"], limit=20, exclude_delegate=True
+            status=["open"], limit=20, exclude_delegate=True,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -265,7 +281,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-s", "open,active"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active"], limit=20, exclude_delegate=True
+            status=["open", "active"], limit=20, exclude_delegate=True,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -274,7 +291,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--limit", "5"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=5, exclude_delegate=True
+            status=None, limit=5, exclude_delegate=True,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -283,7 +301,8 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-n", "10"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=10, exclude_delegate=True
+            status=None, limit=10, exclude_delegate=True,
+            epic_key=None, parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")

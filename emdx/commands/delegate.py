@@ -271,6 +271,7 @@ def _run_single(
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
     seq: int | None = None,
+    epic_key: str | None = None,
 ) -> tuple[int | None, int | None]:
     """Run a single task via UnifiedExecutor. Returns (doc_id, task_id)."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -285,6 +286,7 @@ def _run_single(
         parent_task_id=parent_task_id,
         seq=seq,
         tags=",".join(tags) if tags else None,
+        epic_key=epic_key,
     )
 
     # Build save instruction so the sub-agent persists output
@@ -355,13 +357,15 @@ def _run_parallel(
     base_branch: str = "main",
     source_doc_id: int | None = None,
     worktree: bool = False,
+    epic_key: str | None = None,
+    epic_parent_id: int | None = None,
 ) -> List[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
 
-    # Create parent group task
+    # Create parent group task (does NOT get epic numbering)
     flat_tags = ",".join(tags) if tags else None
-    parent_task_id = _safe_create_task(
+    parent_task_id = epic_parent_id or _safe_create_task(
         title=title or f"Parallel: {len(tasks)} tasks",
         prompt=" | ".join(t[:60] for t in tasks),
         task_type="group",
@@ -401,6 +405,7 @@ def _run_parallel(
                 working_dir=task_worktree_path,
                 parent_task_id=parent_task_id,
                 seq=idx + 1,
+                epic_key=epic_key,
             )
         finally:
             # Clean up worktree unless --pr (keep for the PR branch)
@@ -483,13 +488,15 @@ def _run_chain(
     pr: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
+    epic_key: str | None = None,
+    epic_parent_id: int | None = None,
 ) -> List[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
     Returns list of doc_ids from all steps.
     """
-    # Create parent task for the chain
-    parent_task_id = _safe_create_task(
+    # Create parent task for the chain (does NOT get epic numbering)
+    parent_task_id = epic_parent_id or _safe_create_task(
         title=title or f"Chain: {len(tasks)} steps",
         prompt=" → ".join(t[:40] for t in tasks),
         task_type="chain",
@@ -551,6 +558,7 @@ def _run_chain(
             working_dir=working_dir,
             parent_task_id=parent_task_id,
             seq=step_num,
+            epic_key=epic_key,
         )
 
         if doc_id is None:
@@ -643,6 +651,14 @@ def delegate(
         None, "--do",
         help="Template for each discovered item (use {{item}})",
     ),
+    epic: int | None = typer.Option(
+        None, "--epic", "-e",
+        help="Epic task ID to add tasks to",
+    ),
+    cat: str | None = typer.Option(
+        None, "--cat", "-c",
+        help="Category key for auto-numbered tasks",
+    ),
 ):
     """Delegate tasks to Claude agents with results on stdout.
 
@@ -723,6 +739,20 @@ def delegate(
         for t in tags:
             flat_tags.extend(t.split(","))
 
+    # Resolve --epic and --cat to parent_task_id and epic_key
+    epic_parent_id = None
+    epic_key = cat.upper() if isinstance(cat, str) else None
+
+    if isinstance(epic, int) and epic:
+        from ..models.tasks import get_task as _get_task
+        epic_task = _get_task(epic)
+        if not epic_task:
+            typer.echo(f"Error: Epic #{epic} not found", err=True)
+            raise typer.Exit(1)
+        epic_parent_id = epic
+        if not epic_key and epic_task.get("epic_key"):
+            epic_key = epic_task["epic_key"]
+
     # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
     #    --pr always implies --worktree so the sub-agent has a clean git environment
     use_worktree = worktree or pr
@@ -749,6 +779,8 @@ def delegate(
                 pr=pr,
                 working_dir=worktree_path,
                 source_doc_id=doc,
+                epic_key=epic_key,
+                epic_parent_id=epic_parent_id,
             )
         elif len(task_list) == 1:
             doc_id, _ = _run_single(
@@ -760,6 +792,8 @@ def delegate(
                 pr=pr,
                 working_dir=worktree_path,
                 source_doc_id=doc,
+                parent_task_id=epic_parent_id,
+                epic_key=epic_key,
             )
             if doc_id is None:
                 raise typer.Exit(1)
@@ -776,6 +810,8 @@ def delegate(
                 base_branch=base_branch,
                 source_doc_id=doc,
                 worktree=use_worktree,
+                epic_key=epic_key,
+                epic_parent_id=epic_parent_id,
             )
     finally:
         if worktree_path and not pr:

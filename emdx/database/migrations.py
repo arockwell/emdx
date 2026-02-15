@@ -2127,6 +2127,42 @@ def migration_038_add_title_lower_index(conn: sqlite3.Connection):
         ON documents(LOWER(title))
     """)
 
+
+def migration_039_add_categories_and_epic_fields(conn: sqlite3.Connection):
+    """Add categories table and epic fields to tasks.
+
+    Categories are permanent buckets with a short key (SEC, DEBT) that own
+    the numbering namespace. Epics are regular tasks with type='epic' that
+    group work within a category.
+    """
+    cursor = conn.cursor()
+
+    # Create categories table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Add epic columns to tasks
+    existing = {row[1] for row in cursor.execute("PRAGMA table_info(tasks)").fetchall()}
+
+    if "epic_key" not in existing:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN epic_key TEXT REFERENCES categories(key)")
+    if "epic_seq" not in existing:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN epic_seq INTEGER")
+
+    # Unique index: only one task per (epic_key, epic_seq) combination
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq
+        ON tasks(epic_key, epic_seq)
+        WHERE epic_key IS NOT NULL AND epic_seq IS NOT NULL
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_epic_key ON tasks(epic_key)")
+
     conn.commit()
 
 
@@ -2171,6 +2207,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
     (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
     (38, "Add LOWER(title) index for case-insensitive search", migration_038_add_title_lower_index),
+    (39, "Add categories and epic fields to tasks", migration_039_add_categories_and_epic_fields),
 ]
 
 

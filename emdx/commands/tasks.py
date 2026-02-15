@@ -13,7 +13,7 @@ from emdx.utils.output import console
 
 app = typer.Typer(help="Agent work queue")
 
-ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗"}
+ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘"}
 
 
 @app.command()
@@ -21,6 +21,8 @@ def add(
     title: str = typer.Argument(..., help="Task title"),
     doc: int | None = typer.Option(None, "-d", "--doc", help="Link to document ID"),
     description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
+    epic: int | None = typer.Option(None, "-e", "--epic", help="Add to epic (task ID)"),
+    cat: str | None = typer.Option(None, "-c", "--cat", help="Category key (e.g. SEC)"),
 ):
     """Add a task to the work queue.
 
@@ -28,15 +30,34 @@ def add(
         emdx task add "Fix the auth bug"
         emdx task add "Implement this" --doc 42
         emdx task add "Refactor tests" -D "Split into unit and integration"
+        emdx task add "Test task" --epic 510
+        emdx task add "Another task" --cat SEC
     """
+    parent_task_id = None
+    epic_key = cat.upper() if cat else None
+
+    if epic:
+        parent_task = tasks.get_task(epic)
+        if not parent_task:
+            console.print(f"[red]Epic #{epic} not found[/red]")
+            raise typer.Exit(1)
+        parent_task_id = epic
+        # Inherit epic_key from the parent epic if not explicitly set
+        if not epic_key and parent_task.get("epic_key"):
+            epic_key = parent_task["epic_key"]
+
     task_id = tasks.create_task(
         title,
         description=description or "",
         source_doc_id=doc,
+        parent_task_id=parent_task_id,
+        epic_key=epic_key,
     )
     msg = f"[green]✅ Task #{task_id}:[/green] {title}"
     if doc:
         msg += f" [dim](doc #{doc})[/dim]"
+    if epic_key:
+        msg += f" [dim]({epic_key})[/dim]"
     console.print(msg)
 
 
@@ -91,6 +112,8 @@ def list_cmd(
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
+    epic: int | None = typer.Option(None, "-e", "--epic", help="Filter by epic ID"),
+    cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
 ):
     """List tasks.
 
@@ -101,10 +124,18 @@ def list_cmd(
         emdx task list
         emdx task list --all
         emdx task list -s open,active
+        emdx task list --cat SEC
+        emdx task list --epic 510
     """
     status_list = [s.strip() for s in status.split(",")] if status else None
     exclude_delegate = not all
-    task_list = tasks.list_tasks(status=status_list, limit=limit, exclude_delegate=exclude_delegate)
+    task_list = tasks.list_tasks(
+        status=status_list,
+        limit=limit,
+        exclude_delegate=exclude_delegate,
+        epic_key=cat,
+        parent_task_id=epic,
+    )
 
     if not task_list:
         console.print("[yellow]No tasks[/yellow]")
