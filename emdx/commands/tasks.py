@@ -10,6 +10,7 @@ from rich.table import Table
 from rich.text import Text
 
 from emdx.models import tasks
+from emdx.models.types import TaskDict
 from emdx.utils.output import console, print_json
 
 app = typer.Typer(help="Agent work queue")
@@ -389,7 +390,7 @@ def list_cmd(
     console.print(table)
 
 
-def _task_label(task: dict) -> str:
+def _task_label(task: TaskDict) -> str:
     """Format task label: DEBT-13 if epic, else #id."""
     epic_key = task.get("epic_key")
     epic_seq = task.get("epic_seq")
@@ -398,7 +399,7 @@ def _task_label(task: dict) -> str:
     return f"#{task['id']}"
 
 
-def _display_title(task: dict) -> str:
+def _display_title(task: TaskDict) -> str:
     """Strip redundant KEY-N: prefix from title since the ID column has it."""
     title = task["title"]
     epic_key = task.get("epic_key")
