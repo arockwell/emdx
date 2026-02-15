@@ -46,7 +46,12 @@ class StageSummaryBar(Widget):
 
     def refresh_stats(self) -> None:
         """Refresh stage statistics."""
-        self.stats = get_cascade_stats()
+        raw = get_cascade_stats()
+        self.stats = {
+            "idea": raw["idea"], "prompt": raw["prompt"],
+            "analyzed": raw["analyzed"], "planned": raw["planned"],
+            "done": raw["done"],
+        }
         self._update_display()
 
     def _update_display(self) -> None:

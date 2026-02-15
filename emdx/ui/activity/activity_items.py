@@ -194,7 +194,7 @@ class CascadeRunItem(ActivityItem):
 
             for exec_data in executions:
                 exec_status = exec_data.get("status", "pending")
-                doc_stage = exec_data.get("doc_stage", "")
+                doc_stage = exec_data["doc_stage"] or ""
 
                 # Build title showing stage transition
                 title = exec_data.get("doc_title", "Stage execution")

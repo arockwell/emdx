@@ -10,11 +10,12 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
 from emdx.database.documents import get_document
+from emdx.database.types import ChildDocInfo, PipelineActivityItem
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ update_cascade_stage = cascade_db.update_cascade_stage
 save_document_to_cascade = cascade_db.save_document_to_cascade
 get_document = get_document
 
-def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_pipeline_activity(limit: int = 10) -> list[PipelineActivityItem]:
     """Get recent pipeline activity — executions with their input/output docs."""
     PREV_STAGE = {"prompt": "idea", "analyzed": "prompt", "planned": "analyzed", "done": "planned"}
 
@@ -50,22 +51,22 @@ def get_recent_pipeline_activity(limit: int = 10) -> list[dict[str, Any]]:
         for row in cursor.fetchall():
             output_stage, input_stage = row[9], row[10]
             from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")  # noqa: E501
-            results.append({
+            results.append(cast(PipelineActivityItem, {
                 "exec_id": row[0], "input_id": row[1], "input_title": row[2],
                 "status": row[3], "started_at": row[4], "completed_at": row[5],
                 "log_file": row[6], "output_id": row[7], "output_title": row[8],
                 "output_stage": output_stage, "from_stage": from_stage,
-            })
+            }))
         return results
 
-def get_child_info(parent_id: int) -> dict[str, Any] | None:
+def get_child_info(parent_id: int) -> ChildDocInfo | None:
     """Get info about the first child document of a parent."""
     with db_connection.get_connection() as conn:
         row = conn.execute(
             "SELECT id, title, stage FROM documents WHERE parent_id = ? LIMIT 1",
             (parent_id,),
         ).fetchone()
-        return {"id": row[0], "title": row[1], "stage": row[2]} if row else None
+        return cast(ChildDocInfo, {"id": row[0], "title": row[1], "stage": row[2]}) if row else None
 
 def get_document_pr_url(doc_id: int) -> str | None:
     """Get PR URL for a document."""

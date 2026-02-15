@@ -5,6 +5,7 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
+from typing import Any
 
 from emdx.utils.datetime_utils import parse_datetime
 
@@ -172,18 +173,20 @@ class ActivityDataLoader:
                         continue
 
                     seen_run_ids.add(run_id)
-                    timestamp = parse_datetime(run.get("started_at")) or datetime.now()
-                    title = run.get("initial_doc_title", f"Cascade Run #{run_id}")[:40]
+                    timestamp = parse_datetime(run["started_at"]) or datetime.now()
+                    doc_title = run["initial_doc_title"]
+                    title = (doc_title or f"Cascade Run #{run_id}")[:40]
                     executions = get_cascade_run_executions(run_id)
+                    run_dict: dict[str, Any] = dict(run)
 
                     item = CascadeRunItem(
                         item_id=run_id,
                         title=title,
                         timestamp=timestamp,
-                        cascade_run=run,
-                        status=run.get("status", "running"),
-                        pipeline_name=run.get("pipeline_name", "default"),
-                        current_stage=run.get("current_stage", ""),
+                        cascade_run=run_dict,
+                        status=run["status"] or "running",
+                        pipeline_name=str(run_dict.get("pipeline_name", "default")),
+                        current_stage=str(run_dict.get("current_stage", "")),
                         execution_count=len(executions),
                     )
                     items.append(item)

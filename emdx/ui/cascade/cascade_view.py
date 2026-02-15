@@ -183,7 +183,9 @@ class CascadeView(Widget):
             return
         old_row = self.pipeline_table.cursor_row if self.pipeline_table.row_count > 0 else 0
         self.pipeline_table.clear()
-        self._pipeline_data = get_recent_pipeline_activity(limit=10)
+        self._pipeline_data = [
+            dict(a) for a in get_recent_pipeline_activity(limit=10)
+        ]
 
         STATUS_DISPLAY = {"completed": "[green]\u2713 done[/green]", "running": "[yellow]\u27f3 run[/yellow]", "failed": "[red]\u2717 fail[/red]"}  # noqa: E501
 

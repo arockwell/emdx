@@ -378,7 +378,13 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str) -> None:
 @app.command()
 def status() -> None:
     """Show cascade status - documents at each stage."""
-    stats = cascade_db.get_cascade_stats()
+    raw_stats = cascade_db.get_cascade_stats()
+    # CascadeStats is a TypedDict with fixed stage keys; convert for dynamic access
+    stats: dict[str, int] = {
+        "idea": raw_stats["idea"], "prompt": raw_stats["prompt"],
+        "analyzed": raw_stats["analyzed"], "planned": raw_stats["planned"],
+        "done": raw_stats["done"],
+    }
 
     table = Table(title="Cascade Status")
     table.add_column("Stage", style="cyan")
@@ -433,7 +439,7 @@ def show(
     table.add_column("Created")
 
     for doc in docs:
-        created = doc["created_at"].strftime("%Y-%m-%d %H:%M") if doc.get("created_at") else ""
+        created = str(doc["created_at"] or "")[:16]
         table.add_row(str(doc["id"]), doc["title"][:60], created)
 
     console.print(table)
@@ -475,7 +481,8 @@ def process(
             console.print(f"[red]Document #{doc_id} is at stage '{doc.get('stage')}', not '{stage}'[/red]")  # noqa: E501
             raise typer.Exit(1)
     else:
-        doc = cascade_db.get_oldest_at_stage(stage)
+        oldest = cascade_db.get_oldest_at_stage(stage)
+        doc = dict(oldest) if oldest else None
         if not doc:
             console.print(f"[dim]No documents waiting at stage '{stage}'[/dim]")
             return
@@ -569,10 +576,10 @@ def run(
             processed = False
 
             for stage in active_stages:
-                doc = cascade_db.get_oldest_at_stage(stage)
-                if doc:
+                stage_doc = cascade_db.get_oldest_at_stage(stage)
+                if stage_doc:
                     console.print(f"\n[cyan]Found document at '{stage}'[/cyan]")
-                    success, _, _ = _process_stage(doc, stage)
+                    success, _, _ = _process_stage(dict(stage_doc), stage)
                     processed = True
                     break  # Process one at a time
 
