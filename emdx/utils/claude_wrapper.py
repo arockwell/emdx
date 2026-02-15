@@ -18,7 +18,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from emdx.models.executions import update_execution_heartbeat, update_execution_status
+from emdx.models.executions import update_execution_heartbeat, update_execution_status  # noqa: E402
 
 
 def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:

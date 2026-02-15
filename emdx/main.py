@@ -90,12 +90,12 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
 from emdx.commands.browse import app as browse_app  # noqa: E402
+from emdx.commands.categories import app as categories_app  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
+from emdx.commands.epics import app as epics_app  # noqa: E402
 from emdx.commands.executions import app as executions_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.groups import app as groups_app  # noqa: E402
-from emdx.commands.epics import app as epics_app  # noqa: E402
-from emdx.commands.categories import app as categories_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
