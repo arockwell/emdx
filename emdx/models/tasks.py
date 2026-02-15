@@ -32,21 +32,49 @@ def create_task(
     retry_of: Optional[int] = None,
     tags: Optional[str] = None,
     status: str = "open",
+    epic_key: Optional[str] = None,
 ) -> int:
-    """Create task and return its ID."""
+    """Create task and return its ID.
+
+    When epic_key is set and task_type is not 'epic':
+      - Auto-creates category if needed
+      - Assigns next epic_seq and prepends "KEY-N: " to title
+    When epic_key is set and task_type is 'epic':
+      - Sets epic_key but leaves epic_seq NULL (epics don't get numbers)
+    """
+    epic_seq_val = None
+
+    if epic_key:
+        from emdx.models.categories import ensure_category
+        epic_key = ensure_category(epic_key.upper())
+
     with db.get_connection() as conn:
         cursor = conn.cursor()
+
+        # Auto-number non-epic tasks within a category
+        if epic_key and task_type != "epic":
+            cursor.execute(
+                "SELECT COALESCE(MAX(epic_seq), 0) + 1 FROM tasks WHERE epic_key = ?",
+                (epic_key,),
+            )
+            epic_seq_val = cursor.fetchone()[0]
+            prefix = f"{epic_key}-{epic_seq_val}: "
+            if not title.startswith(prefix):
+                title = f"{prefix}{title}"
+
         cursor.execute("""
             INSERT INTO tasks (
                 title, description, priority, gameplan_id, project, status,
                 prompt, type, execution_id, output_doc_id, source_doc_id,
-                parent_task_id, seq, retry_of, tags
+                parent_task_id, seq, retry_of, tags,
+                epic_key, epic_seq
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             title, description, priority, gameplan_id, project, status,
             prompt, task_type, execution_id, output_doc_id, source_doc_id,
             parent_task_id, seq, retry_of, tags,
+            epic_key, epic_seq_val,
         ))
         task_id = cursor.lastrowid
 
@@ -58,6 +86,16 @@ def create_task(
             )
         conn.commit()
         return task_id
+
+
+def create_epic(name: str, category_key: str, description: str = "") -> int:
+    """Create an epic task. Returns task ID."""
+    return create_task(
+        title=name,
+        description=description,
+        task_type="epic",
+        epic_key=category_key.upper(),
+    )
 
 
 def get_task(task_id: int) -> Optional[dict[str, Any]]:
@@ -74,11 +112,15 @@ def list_tasks(
     project: Optional[str] = None,
     limit: int = DEFAULT_BROWSE_LIMIT,
     exclude_delegate: bool = False,
+    epic_key: Optional[str] = None,
+    parent_task_id: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """List tasks with filters.
 
     Args:
         exclude_delegate: If True, exclude delegate-created tasks (prompt IS NULL).
+        epic_key: Filter by category key.
+        parent_task_id: Filter by parent task (epic) ID.
     """
     conditions, params = ["1=1"], []
 
@@ -93,6 +135,12 @@ def list_tasks(
         params.append(project)
     if exclude_delegate:
         conditions.append("prompt IS NULL")
+    if epic_key:
+        conditions.append("epic_key = ?")
+        params.append(epic_key.upper())
+    if parent_task_id is not None:
+        conditions.append("parent_task_id = ?")
+        params.append(parent_task_id)
 
     params.append(limit)
 
@@ -160,11 +208,16 @@ def get_dependents(task_id: int) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_ready_tasks(gameplan_id: Optional[int] = None, exclude_delegate: bool = True) -> list[dict[str, Any]]:
+def get_ready_tasks(
+    gameplan_id: Optional[int] = None,
+    exclude_delegate: bool = True,
+    epic_key: Optional[str] = None,
+) -> list[dict[str, Any]]:
     """Get tasks ready to work (open + all deps done).
 
     Args:
         exclude_delegate: If True (default), exclude delegate-created tasks.
+        epic_key: Filter by category key.
     """
     conditions = ["t.status = 'open'"]
     params = []
@@ -174,6 +227,9 @@ def get_ready_tasks(gameplan_id: Optional[int] = None, exclude_delegate: bool = 
         params.append(gameplan_id)
     if exclude_delegate:
         conditions.append("t.prompt IS NULL")
+    if epic_key:
+        conditions.append("t.epic_key = ?")
+        params.append(epic_key.upper())
 
     with db.get_connection() as conn:
         cursor = conn.execute(f"""
@@ -319,3 +375,53 @@ def get_failed_tasks(limit: int = 5) -> list[dict[str, Any]]:
             LIMIT ?
         """, (limit,))
         return [dict(row) for row in cursor.fetchall()]
+
+
+def list_epics(
+    category_key: Optional[str] = None,
+    status: Optional[list[str]] = None,
+) -> list[dict[str, Any]]:
+    """List epic tasks with child counts."""
+    conditions = ["t.type = 'epic'"]
+    params = []
+
+    if category_key:
+        conditions.append("t.epic_key = ?")
+        params.append(category_key.upper())
+    if status:
+        conditions.append(f"t.status IN ({','.join('?' * len(status))})")
+        params.extend(status)
+
+    with db.get_connection() as conn:
+        cursor = conn.execute(f"""
+            SELECT t.*,
+                COUNT(c.id) as child_count,
+                COUNT(CASE WHEN c.status IN ('open', 'active', 'blocked') THEN 1 END) as children_open,
+                COUNT(CASE WHEN c.status = 'done' THEN 1 END) as children_done
+            FROM tasks t
+            LEFT JOIN tasks c ON c.parent_task_id = t.id AND c.type != 'epic'
+            WHERE {' AND '.join(conditions)}
+            GROUP BY t.id
+            ORDER BY t.created_at DESC
+        """, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_epic_view(epic_id: int) -> Optional[dict[str, Any]]:
+    """Get epic task + its children."""
+    with db.get_connection() as conn:
+        cursor = conn.execute("SELECT * FROM tasks WHERE id = ? AND type = 'epic'", (epic_id,))
+        epic_row = cursor.fetchone()
+        if not epic_row:
+            return None
+
+        epic = dict(epic_row)
+
+        child_cursor = conn.execute("""
+            SELECT * FROM tasks
+            WHERE parent_task_id = ?
+            ORDER BY epic_seq, seq, id
+        """, (epic_id,))
+        epic["children"] = [dict(row) for row in child_cursor.fetchall()]
+
+        return epic

@@ -95,6 +95,8 @@ from emdx.commands.trash import app as trash_app
 from emdx.commands.executions import app as executions_app
 from emdx.commands.tasks import app as tasks_app
 from emdx.commands.groups import app as groups_app
+from emdx.commands.epics import app as epics_app
+from emdx.commands.categories import app as categories_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
 from emdx.ui.gui import gui as gui_command
@@ -147,6 +149,10 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
+
+# Add epics and categories as subcommand groups
+app.add_typer(epics_app, name="epic", help="Manage task epics")
+app.add_typer(categories_app, name="cat", help="Manage task categories")
 
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
