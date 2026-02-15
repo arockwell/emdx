@@ -4,6 +4,7 @@ import sqlite3
 from typing import Any
 
 from emdx.database import db
+from emdx.models.types import TagSearchResultDict, TagStatsDict
 from emdx.utils.datetime_utils import parse_datetime
 from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
@@ -188,7 +189,7 @@ def get_tags_for_documents(doc_ids: list[int]) -> dict[int, list[str]]:
         return result
 
 
-def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
+def list_all_tags(sort_by: str = "usage") -> list[TagStatsDict]:
     """List all tags with statistics.
 
     Args:
@@ -244,7 +245,7 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 def search_by_tags(
     tag_names: list[str], mode: str = "all", project: str | None = None, limit: int = 20,
     prefix_match: bool = True
-) -> list[dict[str, Any]]:
+) -> list[TagSearchResultDict]:
     """Search documents by tags.
 
     Args:

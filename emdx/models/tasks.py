@@ -9,6 +9,14 @@ from emdx.config.constants import (
     DEFAULT_TASK_PRIORITY,
 )
 from emdx.database import db
+from emdx.models.types import (
+    ActiveDelegateTaskDict,
+    EpicTaskDict,
+    EpicViewDict,
+    GameplanStatsDict,
+    TaskDict,
+    TaskLogEntryDict,
+)
 
 # Valid status values
 STATUSES = ('open', 'active', 'blocked', 'done', 'failed')
@@ -100,7 +108,7 @@ def create_epic(name: str, category_key: str, description: str = "") -> int:
     )
 
 
-def get_task(task_id: int) -> dict[str, Any] | None:
+def get_task(task_id: int) -> TaskDict | None:
     """Get task by ID."""
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
@@ -116,7 +124,7 @@ def list_tasks(
     exclude_delegate: bool = False,
     epic_key: str | None = None,
     parent_task_id: int | None = None,
-) -> list[dict[str, Any]]:
+) -> list[TaskDict]:
     """List tasks with filters.
 
     Args:
@@ -217,7 +225,7 @@ def delete_task(task_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-def get_dependencies(task_id: int) -> list[dict[str, Any]]:
+def get_dependencies(task_id: int) -> list[TaskDict]:
     """Get tasks this task depends on."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -228,7 +236,7 @@ def get_dependencies(task_id: int) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_dependents(task_id: int) -> list[dict[str, Any]]:
+def get_dependents(task_id: int) -> list[TaskDict]:
     """Get tasks that depend on this task (tasks this one blocks)."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -243,7 +251,7 @@ def get_ready_tasks(
     gameplan_id: int | None = None,
     exclude_delegate: bool = True,
     epic_key: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[TaskDict]:
     """Get tasks ready to work (open + all deps done).
 
     Args:
@@ -336,7 +344,7 @@ def log_progress(task_id: int, message: str) -> int:
         return cursor.lastrowid
 
 
-def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[dict[str, Any]]:
+def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLogEntryDict]:
     """Get task log entries."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -346,7 +354,7 @@ def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[dict[s
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_gameplan_stats(gameplan_id: int) -> dict[str, Any]:
+def get_gameplan_stats(gameplan_id: int) -> GameplanStatsDict:
     """Get task stats for a gameplan."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -359,7 +367,7 @@ def get_gameplan_stats(gameplan_id: int) -> dict[str, Any]:
         return {'total': total, 'done': done, 'by_status': by_status}
 
 
-def get_active_delegate_tasks() -> list[dict[str, Any]]:
+def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
     """Get active top-level delegate tasks with child progress counts."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -379,7 +387,7 @@ def get_active_delegate_tasks() -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_children(parent_task_id: int) -> list[dict[str, Any]]:
+def get_children(parent_task_id: int) -> list[TaskDict]:
     """Get child tasks ordered by seq."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -390,7 +398,7 @@ def get_children(parent_task_id: int) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_recent_completed_tasks(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
     """Get recent completed top-level tasks."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -402,7 +410,7 @@ def get_recent_completed_tasks(limit: int = 10) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_failed_tasks(limit: int = 5) -> list[dict[str, Any]]:
+def get_failed_tasks(limit: int = 5) -> list[TaskDict]:
     """Get recent failed top-level tasks."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -417,7 +425,7 @@ def get_failed_tasks(limit: int = 5) -> list[dict[str, Any]]:
 def list_epics(
     category_key: str | None = None,
     status: list[str] | None = None,
-) -> list[dict[str, Any]]:
+) -> list[EpicTaskDict]:
     """List epic tasks with child counts."""
     conditions = ["t.type = 'epic'"]
     params = []
@@ -445,7 +453,7 @@ def list_epics(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_epic_view(epic_id: int) -> dict[str, Any] | None:
+def get_epic_view(epic_id: int) -> EpicViewDict | None:
     """Get epic task + its children."""
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM tasks WHERE id = ? AND type = 'epic'", (epic_id,))
