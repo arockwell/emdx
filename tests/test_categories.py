@@ -1,15 +1,12 @@
 """Tests for the categories model and CLI."""
 
 import re
-import sqlite3
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
-from emdx.models import categories, tasks
 from emdx.commands.categories import app
-
+from emdx.models import categories, tasks
 
 runner = CliRunner()
 
@@ -119,7 +116,7 @@ class TestAdoptCategory:
 
     def test_adopt_with_name(self):
         categories.ensure_category("ANME")
-        result = categories.adopt_category("ANME", name="Adopted Name")
+        categories.adopt_category("ANME", name="Adopted Name")
         cat = categories.get_category("ANME")
         assert cat["name"] == "Adopted Name"
 
