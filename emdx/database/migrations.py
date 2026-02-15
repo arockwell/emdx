@@ -2130,6 +2130,26 @@ def migration_038_add_title_lower_index(conn: sqlite3.Connection):
     conn.commit()
 
 
+def migration_039_add_title_nocase_index(conn: sqlite3.Connection):
+    """Add COLLATE NOCASE index for case-insensitive title search (DEBT-25).
+
+    This complements the LOWER(title) index by adding a COLLATE NOCASE index
+    which allows case-insensitive comparisons directly using the standard
+    comparison operators (=, LIKE, etc.) without wrapping in LOWER().
+
+    Queries like `WHERE title = 'Example' COLLATE NOCASE` or
+    `WHERE title LIKE '%search%' COLLATE NOCASE` will use this index.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_title_nocase
+        ON documents(title COLLATE NOCASE)
+    """)
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2171,6 +2191,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
     (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
     (38, "Add LOWER(title) index for case-insensitive search", migration_038_add_title_lower_index),
+    (39, "Add COLLATE NOCASE index for title search", migration_039_add_title_nocase_index),
 ]
 
 
