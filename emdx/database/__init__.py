@@ -34,6 +34,14 @@ from .documents import (
     update_document,
 )
 from .search import search_documents
+from .types import (
+    DatabaseStats,
+    DeletedDocumentItem,
+    DocumentListItem,
+    DocumentRow,
+    RecentDocumentItem,
+    SearchResult,
+)
 
 
 class SQLiteDatabase:
@@ -130,7 +138,7 @@ class SQLiteDatabase:
 
             return doc_id
 
-    def get_document(self, identifier: Union[str, int]) -> dict[str, Any] | None:
+    def get_document(self, identifier: Union[str, int]) -> DocumentRow | None:
         """Get a document by ID or title."""
         if not self._uses_custom_path:
             return get_document(identifier)
@@ -163,7 +171,7 @@ class SQLiteDatabase:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def list_documents(self, project: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    def list_documents(self, project: str | None = None, limit: int = 50) -> list[DocumentListItem]:
         """List documents with optional filters."""
         if not self._uses_custom_path:
             return list_documents(project, limit)
@@ -234,7 +242,7 @@ class SQLiteDatabase:
             conn.commit()
             return bool(cursor.rowcount > 0)
 
-    def get_recent_documents(self, limit: int = 10) -> list[dict[str, Any]]:
+    def get_recent_documents(self, limit: int = 10) -> list[RecentDocumentItem]:
         """Get recently accessed documents."""
         if not self._uses_custom_path:
             return get_recent_documents(limit)
@@ -248,7 +256,7 @@ class SQLiteDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_stats(self, project: str | None = None) -> dict[str, Any]:
+    def get_stats(self, project: str | None = None) -> DatabaseStats:
         """Get database statistics."""
         if not self._uses_custom_path:
             return get_stats(project)
@@ -272,7 +280,7 @@ class SQLiteDatabase:
 
     def list_deleted_documents(
         self, days: int | None = None, limit: int = 50,
-    ) -> list[dict[str, Any]]:
+    ) -> list[DeletedDocumentItem]:
         """List soft-deleted documents."""
         if not self._uses_custom_path:
             return list_deleted_documents(days, limit)
@@ -345,7 +353,7 @@ class SQLiteDatabase:
         created_before: str | None = None,
         modified_after: str | None = None,
         modified_before: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SearchResult]:
         """Search documents using FTS."""
         if not self._uses_custom_path:
             return search_documents(query, project, limit, fuzzy,

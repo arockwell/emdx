@@ -7,6 +7,15 @@ from typing import Any, Union
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
+from .types import (
+    ChildDocumentItem,
+    DatabaseStats,
+    DeletedDocumentItem,
+    DocumentListItem,
+    DocumentRow,
+    RecentDocumentItem,
+    SupersedeCandidate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +62,7 @@ def save_document(
         return doc_id
 
 
-def get_document(identifier: Union[str, int]) -> dict[str, Any] | None:
+def get_document(identifier: Union[str, int]) -> DocumentRow | None:
     """Get a document by ID or title"""
     with db_connection.get_connection() as conn:
         # Convert to string for consistent handling
@@ -110,7 +119,7 @@ def list_documents(
     limit: int = 50,
     parent_id: int | None = None,
     offset: int = 0,
-) -> list[dict[str, Any]]:
+) -> list[DocumentListItem]:
     """List documents with optional project and hierarchy filters.
 
     Args:
@@ -326,7 +335,7 @@ def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> b
         return cursor.rowcount > 0
 
 
-def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_documents(limit: int = 10) -> list[RecentDocumentItem]:
     """Get recently accessed documents"""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
@@ -348,7 +357,7 @@ def get_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
         return docs
 
 
-def get_stats(project: str | None = None) -> dict[str, Any]:
+def get_stats(project: str | None = None) -> DatabaseStats:
     """Get database statistics"""
     with db_connection.get_connection() as conn:
         if project:
@@ -418,7 +427,7 @@ def get_stats(project: str | None = None) -> dict[str, Any]:
         return stats
 
 
-def list_deleted_documents(days: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_deleted_documents(days: int | None = None, limit: int = 50) -> list[DeletedDocumentItem]:
     """List soft-deleted documents"""
     with db_connection.get_connection() as conn:
         if days:
@@ -511,7 +520,7 @@ def find_supersede_candidate(
     title_threshold: float = 0.85,
     content: str | None = None,
     content_threshold: float = 0.5,
-) -> dict[str, Any] | None:
+) -> SupersedeCandidate | None:
     """Find a document that should be superseded by a new document with the given title.
 
     Uses title normalization and optional content similarity to find the best candidate.
@@ -620,7 +629,7 @@ def set_parent(doc_id: int, parent_id: int, relationship: str = "supersedes") ->
         return cursor.rowcount > 0
 
 
-def get_children(doc_id: int) -> list[dict[str, Any]]:
+def get_children(doc_id: int) -> list[ChildDocumentItem]:
     """Get all child documents of a parent.
 
     Args:
@@ -647,7 +656,7 @@ def get_children(doc_id: int) -> list[dict[str, Any]]:
         return docs
 
 
-def get_descendants(doc_id: int) -> list[dict[str, Any]]:
+def get_descendants(doc_id: int) -> list[ChildDocumentItem]:
     """Get all descendants of a document (children, grandchildren, etc).
 
     Args:
@@ -677,7 +686,7 @@ def get_descendants(doc_id: int) -> list[dict[str, Any]]:
 def list_recent_documents(
     limit: int = 100,
     days: int = 7,
-) -> list[dict[str, Any]]:
+) -> list[DocumentRow]:
     """Get recent direct-save documents.
 
     Args:

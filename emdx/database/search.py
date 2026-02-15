@@ -2,10 +2,9 @@
 Search functionality for emdx documents using FTS5
 """
 
-from typing import Any
-
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
+from .types import SearchResult
 
 
 def escape_fts5_query(query: str) -> str:
@@ -45,8 +44,8 @@ def search_documents(
     created_after: str | None = None,
     created_before: str | None = None,
     modified_after: str | None = None,
-    modified_before: str | None = None
-) -> list[dict[str, Any]]:
+    modified_before: str | None = None,
+) -> list[SearchResult]:
     """Search documents using FTS5
 
     Args:
