@@ -9,10 +9,11 @@ into a dedicated application service layer.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Union
+from typing import Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection

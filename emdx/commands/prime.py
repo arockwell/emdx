@@ -95,7 +95,7 @@ def _get_execution_methods_json() -> list[dict]:
 
 def _output_text(
     project: str | None, verbose: bool, quiet: bool,
-    markdown: bool, execution: bool,
+    markdown: bool = False, execution: bool = False,
 ):
     """Output priming context as text."""
     lines = []

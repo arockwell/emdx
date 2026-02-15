@@ -254,7 +254,7 @@ def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
     cursor.execute("ALTER TABLE executions ADD COLUMN last_heartbeat TIMESTAMP")
 
     # Create index for efficient heartbeat queries
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
 
     conn.commit()
 
@@ -304,9 +304,9 @@ def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
 
         # Recreate indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
 
     conn.commit()
 
@@ -322,7 +322,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
             name TEXT UNIQUE NOT NULL,
             display_name TEXT NOT NULL,
             description TEXT NOT NULL,
-            category TEXT NOT NULL CHECK (category IN ('research', 'generation', 'analysis', 'maintenance')),  # noqa: E501
+            category TEXT NOT NULL CHECK (category IN ('research', 'generation', 'analysis', 'maintenance')),
 
             -- Prompt configuration
             system_prompt TEXT NOT NULL,
@@ -377,7 +377,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
             output_doc_ids TEXT,  -- JSON array of created doc IDs
 
             -- Execution details
-            status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+            status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at TIMESTAMP,
             error_message TEXT,
@@ -407,7 +407,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
 
             -- Pipeline configuration
             agents TEXT NOT NULL,  -- JSON array of {agent_id, config}
-            execution_mode TEXT DEFAULT 'sequential' CHECK (execution_mode IN ('sequential', 'parallel', 'conditional')),  # noqa: E501
+            execution_mode TEXT DEFAULT 'sequential' CHECK (execution_mode IN ('sequential', 'parallel', 'conditional')),
             stop_on_error BOOLEAN DEFAULT TRUE,
 
             -- Metadata
@@ -446,9 +446,9 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     """)
 
     # Create indexes for performance
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_executions(agent_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_executions(status)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_started_at ON agent_executions(started_at)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_executions(agent_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_started_at ON agent_executions(started_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_agents_category ON agents(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_agents_is_active ON agents(is_active)")
 
@@ -464,8 +464,8 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
             'Documentation Generator',
             'Generates comprehensive documentation from code analysis',
             'generation',
-            'You are a documentation expert. Your role is to analyze code and generate clear, comprehensive documentation that helps developers understand and use the codebase effectively.',  # noqa: E501
-            'Analyze {{target}} and generate {{doc_type}} documentation. Focus on clarity, completeness, and practical examples.',  # noqa: E501
+            'You are a documentation expert. Your role is to analyze code and generate clear, comprehensive documentation that helps developers understand and use the codebase effectively.',
+            'Analyze {{target}} and generate {{doc_type}} documentation. Focus on clarity, completeness, and practical examples.',
             '["Glob", "Grep", "Read", "Write", "Task"]',
             TRUE,
             'system'
@@ -475,7 +475,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
             'Code Reviewer',
             'Reviews code changes and provides feedback',
             'analysis',
-            'You are an expert code reviewer focusing on code quality, security, performance, and best practices. Provide constructive feedback that helps developers improve their code.',  # noqa: E501
+            'You are an expert code reviewer focusing on code quality, security, performance, and best practices. Provide constructive feedback that helps developers improve their code.',
             'Review the following code changes:\n\n{{diff}}\n\nFocus on: {{focus_areas}}',
             '["Read", "Grep", "Glob"]',
             TRUE,
@@ -505,7 +505,7 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
             display_name TEXT NOT NULL,
             description TEXT,
             definition_json TEXT NOT NULL,
-            category TEXT DEFAULT 'custom' CHECK (category IN ('analysis', 'planning', 'implementation', 'review', 'custom')),  # noqa: E501
+            category TEXT DEFAULT 'custom' CHECK (category IN ('analysis', 'planning', 'implementation', 'review', 'custom')),
             is_builtin BOOLEAN DEFAULT FALSE,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -528,7 +528,7 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
             parent_run_id INTEGER,
             input_doc_id INTEGER,
             input_variables TEXT,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'paused', 'completed', 'failed', 'cancelled')),  # noqa: E501
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'paused', 'completed', 'failed', 'cancelled')),
             current_stage TEXT,
             current_stage_run INTEGER DEFAULT 0,
             context_json TEXT DEFAULT '{}',
@@ -552,7 +552,7 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
             stage_name TEXT NOT NULL,
             mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial')),
             target_runs INTEGER NOT NULL DEFAULT 1,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
             runs_completed INTEGER DEFAULT 0,
             started_at TIMESTAMP,
             completed_at TIMESTAMP,
@@ -576,7 +576,7 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
             agent_execution_id INTEGER,
             prompt_used TEXT,
             input_context TEXT,
-            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
             output_doc_id INTEGER,
             error_message TEXT,
             started_at TIMESTAMP,
@@ -608,37 +608,37 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_category ON workflows(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_is_active ON workflows(is_active)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_started_at ON workflow_runs(started_at)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_started_at ON workflow_runs(started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
 
     # Insert builtin iteration strategies
     cursor.execute("""
-        INSERT OR IGNORE INTO iteration_strategies (name, display_name, description, prompts_json, recommended_runs, category, is_builtin)  # noqa: E501
+        INSERT OR IGNORE INTO iteration_strategies (name, display_name, description, prompts_json, recommended_runs, category, is_builtin)
         VALUES
-        ('analysis_deepening', 'Analysis Deepening', 'Progressive analysis that digs deeper with each iteration',  # noqa: E501
-         '["Analyze {{input}} thoroughly.", "What did {{prev}} miss?", "Synthesize {{all_prev}}.", "Steel-man weakest points.", "Final synthesis."]',  # noqa: E501
+        ('analysis_deepening', 'Analysis Deepening', 'Progressive analysis that digs deeper with each iteration',
+         '["Analyze {{input}} thoroughly.", "What did {{prev}} miss?", "Synthesize {{all_prev}}.", "Steel-man weakest points.", "Final synthesis."]',
          5, 'analysis', TRUE),
-        ('plan_refinement', 'Plan Refinement', 'Iterative planning that identifies and addresses risks',  # noqa: E501
-         '["Create initial plan for {{input}}.", "Review risks in {{prev}}.", "Revise plan.", "Identify failure modes.", "Final plan."]',  # noqa: E501
+        ('plan_refinement', 'Plan Refinement', 'Iterative planning that identifies and addresses risks',
+         '["Create initial plan for {{input}}.", "Review risks in {{prev}}.", "Revise plan.", "Identify failure modes.", "Final plan."]',
          5, 'planning', TRUE),
         ('adversarial_review', 'Adversarial Review', 'Advocate-Critic-Synthesizer pattern',
-         '["ADVOCATE: Argue FOR {{input}}.", "CRITIC: Argue AGAINST {{prev}}.", "SYNTHESIS: Balance views."]',  # noqa: E501
+         '["ADVOCATE: Argue FOR {{input}}.", "CRITIC: Argue AGAINST {{prev}}.", "SYNTHESIS: Balance views."]',
          3, 'review', TRUE)
     """)
 
     # Insert builtin workflow templates
     cursor.execute("""
-        INSERT OR IGNORE INTO workflows (name, display_name, description, definition_json, category, is_builtin, created_by)  # noqa: E501
+        INSERT OR IGNORE INTO workflows (name, display_name, description, definition_json, category, is_builtin, created_by)
         VALUES
         ('deep_analysis', 'Deep Analysis', 'Parallel coverage + iterative deepening',
-         '{"stages": [{"name": "initial_scan", "mode": "parallel", "runs": 3}, {"name": "deep_dive", "mode": "iterative", "runs": 5, "iteration_strategy": "analysis_deepening"}]}',  # noqa: E501
+         '{"stages": [{"name": "initial_scan", "mode": "parallel", "runs": 3}, {"name": "deep_dive", "mode": "iterative", "runs": 5, "iteration_strategy": "analysis_deepening"}]}',
          'analysis', TRUE, 'system'),
         ('robust_planning', 'Robust Planning', 'Iterative refinement + adversarial review',
-         '{"stages": [{"name": "initial_plan", "mode": "iterative", "runs": 3, "iteration_strategy": "plan_refinement"}, {"name": "challenge", "mode": "adversarial", "runs": 3}]}',  # noqa: E501
+         '{"stages": [{"name": "initial_plan", "mode": "iterative", "runs": 3, "iteration_strategy": "plan_refinement"}, {"name": "challenge", "mode": "adversarial", "runs": 3}]}',
          'planning', TRUE, 'system'),
         ('quick_analysis', 'Quick Analysis', 'Fast parallel analysis with synthesis',
          '{"stages": [{"name": "analyze", "mode": "parallel", "runs": 3}]}',
@@ -721,7 +721,7 @@ def migration_010_add_task_executions(conn: sqlite3.Connection):
             execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),
 
             -- Status tracking
-            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+            status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
 
             -- Timing
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -733,11 +733,11 @@ def migration_010_add_task_executions(conn: sqlite3.Connection):
     """)
 
     # Create indexes for efficient queries
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_workflow_run ON task_executions(workflow_run_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_workflow_run ON task_executions(workflow_run_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
 
     conn.commit()
 
@@ -758,9 +758,9 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workflow_run_id INTEGER NOT NULL,
                 stage_name TEXT NOT NULL,
-                mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),  # noqa: E501
+                mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
                 target_runs INTEGER NOT NULL DEFAULT 1,
-                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
                 runs_completed INTEGER DEFAULT 0,
                 started_at TIMESTAMP,
                 completed_at TIMESTAMP,
@@ -786,8 +786,8 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
         cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
 
         # Recreate indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")  # noqa: E501
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
 
     conn.commit()
 
@@ -846,8 +846,8 @@ def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
 
         # Copy data from old table
         cursor.execute("""
-            INSERT INTO executions_new (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)  # noqa: E501
-            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid  # noqa: E501
+            INSERT INTO executions_new (id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid)
+            SELECT id, doc_id, doc_title, status, started_at, completed_at, log_file, exit_code, working_dir, pid
             FROM executions
         """)
 
@@ -857,7 +857,7 @@ def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
 
         # Recreate indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
 
     conn.commit()
@@ -881,7 +881,7 @@ def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
                 agent_execution_id INTEGER,
                 prompt_used TEXT,
                 input_context TEXT,
-                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
                 output_doc_id INTEGER,
                 error_message TEXT,
                 started_at TIMESTAMP,
@@ -902,11 +902,11 @@ def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
 
         # Drop old table and rename new one
         cursor.execute("DROP TABLE workflow_individual_runs")
-        cursor.execute("ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs")  # noqa: E501
+        cursor.execute("ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs")
 
         # Recreate indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")  # noqa: E501
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)")
 
     conn.commit()
 
@@ -965,10 +965,10 @@ def migration_015_add_export_profiles(conn: sqlite3.Connection):
 
     # Create indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_name ON export_profiles(name)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_project ON export_profiles(project)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_is_active ON export_profiles(is_active)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_project ON export_profiles(project)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_is_active ON export_profiles(is_active)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")
 
     # Insert built-in profiles
     builtin_profiles = [
@@ -1101,7 +1101,7 @@ def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
     """Add relationship and archived_at columns for document hierarchy.
 
     - relationship: describes how a child relates to parent ('supersedes', 'exploration', 'variant')
-    - archived_at: when document was archived (superseded docs auto-archive when parent tagged 'done')  # noqa: E501
+    - archived_at: when document was archived (superseded docs auto-archive when parent tagged 'done')
     """
     cursor = conn.cursor()
 
@@ -1141,12 +1141,12 @@ def migration_019_add_document_sources(conn: sqlite3.Connection):
             workflow_run_id INTEGER,
             workflow_stage_run_id INTEGER,
             workflow_individual_run_id INTEGER,
-            source_type TEXT NOT NULL CHECK (source_type IN ('individual_output', 'synthesis', 'stage_output')),  # noqa: E501
+            source_type TEXT NOT NULL CHECK (source_type IN ('individual_output', 'synthesis', 'stage_output')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
             FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE SET NULL,
-            FOREIGN KEY (workflow_stage_run_id) REFERENCES workflow_stage_runs(id) ON DELETE SET NULL,  # noqa: E501
-            FOREIGN KEY (workflow_individual_run_id) REFERENCES workflow_individual_runs(id) ON DELETE SET NULL  # noqa: E501
+            FOREIGN KEY (workflow_stage_run_id) REFERENCES workflow_stage_runs(id) ON DELETE SET NULL,
+            FOREIGN KEY (workflow_individual_run_id) REFERENCES workflow_individual_runs(id) ON DELETE SET NULL
         )
     """)
 
@@ -1172,7 +1172,7 @@ def _backfill_document_sources(cursor):
     # Backfill from individual runs (most common case)
     cursor.execute("""
         INSERT OR IGNORE INTO document_sources
-        (document_id, workflow_run_id, workflow_stage_run_id, workflow_individual_run_id, source_type)  # noqa: E501
+        (document_id, workflow_run_id, workflow_stage_run_id, workflow_individual_run_id, source_type)
         SELECT
             wir.output_doc_id,
             wsr.workflow_run_id,
@@ -1315,7 +1315,7 @@ def migration_022_add_document_groups(conn: sqlite3.Connection):
             name TEXT NOT NULL,
             description TEXT,
             parent_group_id INTEGER,
-            group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),  # noqa: E501
+            group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),
             project TEXT,
             workflow_run_id INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1337,7 +1337,7 @@ def migration_022_add_document_groups(conn: sqlite3.Connection):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             group_id INTEGER NOT NULL,
             document_id INTEGER NOT NULL,
-            role TEXT DEFAULT 'member' CHECK (role IN ('primary', 'exploration', 'synthesis', 'variant', 'member')),  # noqa: E501
+            role TEXT DEFAULT 'member' CHECK (role IN ('primary', 'exploration', 'synthesis', 'variant', 'member')),
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             added_by TEXT,
 
@@ -1554,9 +1554,9 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workflow_run_id INTEGER NOT NULL,
                 stage_name TEXT NOT NULL,
-                mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),  # noqa: E501
+                mode TEXT NOT NULL CHECK (mode IN ('single', 'parallel', 'iterative', 'adversarial', 'dynamic')),
                 target_runs INTEGER NOT NULL DEFAULT 1,
-                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'synthesizing', 'completed', 'failed', 'cancelled')),  # noqa: E501
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'synthesizing', 'completed', 'failed', 'cancelled')),
                 runs_completed INTEGER DEFAULT 0,
                 started_at TIMESTAMP,
                 completed_at TIMESTAMP,
@@ -1585,8 +1585,8 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
         cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
 
         # Recreate indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")  # noqa: E501
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
 
     conn.commit()
 
@@ -1873,24 +1873,24 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
                 execution_id INTEGER REFERENCES executions(id) ON DELETE SET NULL,
-                execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),  # noqa: E501
-                status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),  # noqa: E501
+                execution_type TEXT NOT NULL CHECK (execution_type IN ('workflow', 'direct', 'manual')),
+                status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
                 started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP,
                 notes TEXT
             )
         """)
         cursor.execute("""
-            INSERT INTO task_executions_new (id, task_id, execution_id, execution_type, status, started_at, completed_at, notes)  # noqa: E501
-            SELECT id, task_id, execution_id, execution_type, status, started_at, completed_at, notes  # noqa: E501
+            INSERT INTO task_executions_new (id, task_id, execution_id, execution_type, status, started_at, completed_at, notes)
+            SELECT id, task_id, execution_id, execution_type, status, started_at, completed_at, notes
             FROM task_executions
         """)
         cursor.execute("DROP TABLE task_executions")
         cursor.execute("ALTER TABLE task_executions_new RENAME TO task_executions")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")  # noqa: E501
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")  # noqa: E501
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")  # noqa: E501
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
 
         # 3. Recreate document_groups without workflow_run_id column
         cursor.execute("DROP TABLE IF EXISTS document_groups_new")
@@ -1900,7 +1900,7 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
                 name TEXT NOT NULL,
                 description TEXT,
                 parent_group_id INTEGER,
-                group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),  # noqa: E501
+                group_type TEXT DEFAULT 'batch' CHECK (group_type IN ('batch', 'initiative', 'round', 'session', 'custom')),
                 project TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_by TEXT,
@@ -1913,16 +1913,16 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
             )
         """)
         cursor.execute("""
-            INSERT INTO document_groups_new (id, name, description, parent_group_id, group_type, project,  # noqa: E501
-                created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd)  # noqa: E501
+            INSERT INTO document_groups_new (id, name, description, parent_group_id, group_type, project,
+                created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd)
             SELECT id, name, description, parent_group_id, group_type, project,
-                created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd  # noqa: E501
+                created_at, created_by, updated_at, is_active, doc_count, total_tokens, total_cost_usd
             FROM document_groups
         """)
         cursor.execute("DROP TABLE document_groups")
         cursor.execute("ALTER TABLE document_groups_new RENAME TO document_groups")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_name ON document_groups(name)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")  # noqa: E501
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_project ON document_groups(project)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_type ON document_groups(group_type)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_active ON document_groups(is_active)")
@@ -2082,8 +2082,8 @@ def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
     cursor.execute("INSERT INTO export_history_new SELECT * FROM export_history")
     cursor.execute("DROP TABLE export_history")
     cursor.execute("ALTER TABLE export_history_new RENAME TO export_history")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")  # noqa: E501
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")
 
     # 5. Recreate cascade_runs table with proper CASCADE/SET NULL
     cursor.execute("DROP TABLE IF EXISTS cascade_runs_new")
@@ -2109,7 +2109,7 @@ def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
     cursor.execute("DROP TABLE cascade_runs")
     cursor.execute("ALTER TABLE cascade_runs_new RENAME TO cascade_runs")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_status ON cascade_runs(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc ON cascade_runs(start_doc_id)")  # noqa: E501
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc ON cascade_runs(start_doc_id)")
 
     cursor.execute("PRAGMA foreign_keys = ON")
     conn.commit()

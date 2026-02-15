@@ -9,10 +9,11 @@ similarity via efficient matrix operations.
 
 import difflib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Union
+from typing import Any, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection

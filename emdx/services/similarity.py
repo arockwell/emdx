@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import logging
 import pickle
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from ..config.constants import EMDX_CONFIG_DIR
 from ..database import db
