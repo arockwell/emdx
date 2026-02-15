@@ -3,6 +3,10 @@ TF-IDF-based document similarity service for EMDX.
 
 Uses scikit-learn's TfidfVectorizer to compute document similarity
 with hybrid scoring that combines content similarity and tag similarity.
+
+For duplicate detection, uses radius-based nearest neighbor search
+(ball tree) to achieve O(n*k) complexity instead of O(n²) pairwise
+comparison, where k is the average number of similar documents per doc.
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Callable, List, Set
 
 from ..config.constants import EMDX_CONFIG_DIR
 
@@ -43,7 +47,7 @@ class SimilarDocument:
     """Represents a document similar to a query document."""
     doc_id: int
     title: str
-    project: Optional[str]
+    project: str | None
     similarity_score: float
     content_similarity: float
     tag_similarity: float
@@ -57,7 +61,7 @@ class IndexStats:
     vocabulary_size: int
     cache_size_bytes: int
     cache_age_seconds: float
-    last_built: Optional[datetime]
+    last_built: datetime | None
 
 
 class SimilarityService:
@@ -70,7 +74,7 @@ class SimilarityService:
     CONTENT_WEIGHT = 0.6      # Content similarity weight
     TAG_WEIGHT = 0.4          # Tag similarity weight
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """Initialize the similarity service.
 
         Args:
@@ -82,13 +86,13 @@ class SimilarityService:
         self._cache_path = self._cache_dir / "similarity_cache.pkl"
 
         # Index state
-        self._vectorizer: Optional[TfidfVectorizer] = None
+        self._vectorizer: TfidfVectorizer | None = None
         self._tfidf_matrix = None
         self._doc_ids: List[int] = []
         self._doc_titles: List[str] = []
-        self._doc_projects: List[Optional[str]] = []
+        self._doc_projects: List[str | None] = []
         self._doc_tags: List[Set[str]] = []
-        self._last_built: Optional[datetime] = None
+        self._last_built: datetime | None = None
 
     def _load_cache(self) -> bool:
         """Load the cached index if it exists.
@@ -205,7 +209,7 @@ class SimilarityService:
 
             # Parse tags
             tags_str = doc['tags'] or ''
-            tags = set(t.strip() for t in tags_str.split(',') if t.strip())
+            tags = {t.strip() for t in tags_str.split(',') if t.strip()}
             self._doc_tags.append(tags)
 
             # Combine title and content for TF-IDF
@@ -432,12 +436,18 @@ class SimilarityService:
     def find_all_duplicate_pairs(
         self,
         min_similarity: float = 0.7,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Callable | None = None,
     ) -> List[tuple]:
-        """Find all pairs of similar documents efficiently using matrix operations.
+        """Find all pairs of similar documents efficiently using radius neighbors.
 
-        This is MUCH faster than pairwise comparison - O(n*k) instead of O(n²)
-        where k is the number of non-zero entries in the sparse matrix.
+        Uses sklearn NearestNeighbors with radius_neighbors for O(n*k) complexity
+        where k is the average number of similar neighbors per document, instead of
+        O(n²) pairwise comparison.
+
+        The algorithm:
+        1. Build a ball tree index on TF-IDF vectors (O(n log n))
+        2. Query radius neighbors for each document (O(n*k) total)
+        3. Convert cosine distance to similarity and filter by threshold
 
         Args:
             min_similarity: Minimum similarity threshold (0.0 to 1.0)
@@ -453,50 +463,84 @@ class SimilarityService:
             return []
 
         import numpy as np
-        from scipy.sparse import csr_matrix
+        from sklearn.neighbors import NearestNeighbors
+        from sklearn.preprocessing import normalize
 
-        # Compute full similarity matrix (sparse operation, very fast)
+        n_docs = len(self._doc_ids)
+
         if progress_callback:
             progress_callback(0, 100, 0)
 
-        # This is the key optimization: cosine_similarity on sparse matrices
-        # is highly optimized and uses BLAS under the hood
-        similarity_matrix = cosine_similarity(self._tfidf_matrix)
+        # Normalize vectors for cosine similarity computation
+        # For normalized vectors: cosine_similarity = 1 - (euclidean_distance² / 2)
+        # So: euclidean_distance = sqrt(2 * (1 - cosine_similarity))
+        normalized_matrix = normalize(self._tfidf_matrix, norm='l2')
+
+        # Convert similarity threshold to distance threshold
+        # cosine_sim = 1 - (dist² / 2), so dist = sqrt(2 * (1 - sim))
+        max_distance = np.sqrt(2 * (1 - min_similarity))
 
         if progress_callback:
-            progress_callback(50, 100, 0)
+            progress_callback(10, 100, 0)
 
-        # Find pairs above threshold (only upper triangle to avoid duplicates)
+        # Use ball_tree algorithm which works well with sparse high-dimensional data
+        # Convert to dense for NearestNeighbors (required for ball_tree)
+        # For very large datasets, could chunk this or use brute with sparse
+        dense_matrix = normalized_matrix.toarray()
+
+        if progress_callback:
+            progress_callback(20, 100, 0)
+
+        # Build the neighbor index - O(n log n)
+        nn = NearestNeighbors(
+            radius=max_distance,
+            algorithm='ball_tree',
+            metric='euclidean',
+            n_jobs=-1  # Use all CPUs
+        )
+        nn.fit(dense_matrix)
+
+        if progress_callback:
+            progress_callback(40, 100, 0)
+
+        # Query all neighbors within radius - O(n*k) where k is avg neighbors
+        distances, indices = nn.radius_neighbors(dense_matrix, return_distance=True)
+
+        if progress_callback:
+            progress_callback(70, 100, 0)
+
+        # Build pairs (avoiding duplicates by only keeping i < j)
         pairs = []
-        n_docs = len(self._doc_ids)
+        seen_pairs = set()
 
-        # Use numpy to find all pairs above threshold efficiently
-        # Only look at upper triangle (i < j)
-        rows, cols = np.triu_indices(n_docs, k=1)
-        similarities = similarity_matrix[rows, cols]
+        for i in range(n_docs):
+            neighbor_indices = indices[i]
+            neighbor_distances = distances[i]
 
-        # Filter by threshold
-        mask = similarities >= min_similarity
-        matching_rows = rows[mask]
-        matching_cols = cols[mask]
-        matching_sims = similarities[mask]
+            for j_idx, j in enumerate(neighbor_indices):
+                if i >= j:  # Skip self and avoid duplicates (only keep i < j)
+                    continue
+
+                pair_key = (i, j)
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+
+                # Convert euclidean distance back to cosine similarity
+                dist = neighbor_distances[j_idx]
+                similarity = 1 - (dist * dist / 2)
+
+                if similarity >= min_similarity:
+                    pairs.append((
+                        self._doc_ids[i],
+                        self._doc_ids[j],
+                        self._doc_titles[i],
+                        self._doc_titles[j],
+                        float(similarity)
+                    ))
 
         if progress_callback:
-            progress_callback(75, 100, len(matching_sims))
-
-        # Build result tuples
-        for idx in range(len(matching_rows)):
-            i, j = matching_rows[idx], matching_cols[idx]
-            title1 = self._doc_titles[i]
-            title2 = self._doc_titles[j]
-
-            pairs.append((
-                self._doc_ids[i],
-                self._doc_ids[j],
-                title1,
-                title2,
-                float(matching_sims[idx])
-            ))
+            progress_callback(90, 100, len(pairs))
 
         # Sort by similarity descending
         pairs.sort(key=lambda x: x[4], reverse=True)

@@ -1,7 +1,7 @@
 """Category operations for task epic numbering."""
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from emdx.database import db
 
@@ -24,7 +24,7 @@ def create_category(key: str, name: str, description: str = "") -> str:
     return key
 
 
-def get_category(key: str) -> Optional[dict[str, Any]]:
+def get_category(key: str) -> dict[str, Any] | None:
     """Get category by key."""
     key = key.upper()
     with db.get_connection() as conn:
@@ -69,7 +69,7 @@ def ensure_category(key: str) -> str:
     return key
 
 
-def adopt_category(key: str, name: Optional[str] = None) -> dict[str, int]:
+def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
     """Backfill existing tasks with KEY-N: titles into the category system.
 
     Scans tasks where title matches '{KEY}-N:' pattern and sets epic_key/epic_seq.

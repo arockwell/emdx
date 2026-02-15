@@ -14,9 +14,9 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from ..config.cli_config import CliTool, get_default_cli_tool, DEFAULT_ALLOWED_TOOLS
+from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..config.constants import EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
 from ..utils.environment import get_subprocess_env
@@ -38,7 +38,7 @@ def format_timestamp(ts: float) -> str:
     return f"[{dt.strftime('%H:%M:%S')}]"
 
 
-def format_stream_line(line: str, timestamp: float) -> Optional[str]:
+def format_stream_line(line: str, timestamp: float) -> str | None:
     """Format a stream-json line into readable log output.
 
     Works with both Claude and Cursor output formats.
@@ -142,12 +142,12 @@ class ExecutionConfig:
     prompt: str
     working_dir: str = field(default_factory=lambda: str(Path.cwd()))
     title: str = "CLI Execution"
-    doc_id: Optional[int] = None
-    output_instruction: Optional[str] = None
+    doc_id: int | None = None
+    output_instruction: str | None = None
     allowed_tools: List[str] = field(default_factory=lambda: DEFAULT_ALLOWED_TOOLS.copy())
     timeout_seconds: int = 300
     cli_tool: str = "claude"  # "claude" or "cursor"
-    model: Optional[str] = None  # Override default model for the CLI
+    model: str | None = None  # Override default model for the CLI
     verbose: bool = False  # Stream output in real-time
 
 
@@ -157,15 +157,15 @@ class ExecutionResult:
     success: bool
     execution_id: int
     log_file: Path
-    output_doc_id: Optional[int] = None
-    output_content: Optional[str] = None
+    output_doc_id: int | None = None
+    output_content: str | None = None
     tokens_used: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
     execution_time_ms: int = 0
-    error_message: Optional[str] = None
-    exit_code: Optional[int] = None
+    error_message: str | None = None
+    exit_code: int | None = None
     cli_tool: str = "claude"  # Which CLI was used
 
     def to_dict(self) -> Dict[str, Any]:
@@ -192,7 +192,7 @@ class UnifiedExecutor:
     Supports multiple CLI tools (Claude, Cursor) through the strategy pattern.
     """
 
-    def __init__(self, log_dir: Optional[Path] = None):
+    def __init__(self, log_dir: Path | None = None):
         self.log_dir = log_dir or EMDX_LOG_DIR
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -258,8 +258,12 @@ class UnifiedExecutor:
 
             if config.verbose:
                 # Stream output in real-time using Popen
+                import select
+                import sys
+
                 stdout_lines = []
                 stderr_lines = []
+                deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
                     process = subprocess.Popen(
@@ -271,26 +275,36 @@ class UnifiedExecutor:
                         env=get_subprocess_env(),
                     )
 
-                    import sys
-
-                    # Stream stdout in real-time
+                    # Stream stdout in real-time with timeout
                     while True:
-                        # Check if process has finished
+                        if time.time() > deadline:
+                            process.kill()
+                            process.wait()
+                            raise subprocess.TimeoutExpired(
+                                cmd.args, config.timeout_seconds
+                            )
+
                         retcode = process.poll()
 
-                        # Read available stdout
+                        # Use select for non-blocking read with 1s timeout
                         if process.stdout:
-                            line = process.stdout.readline()
-                            if line:
-                                stdout_lines.append(line)
-                                # Format the line for readable output
-                                formatted = format_stream_line(line, time.time())
-                                if formatted:
-                                    f.write(formatted + "\n")
-                                    f.flush()
-                                    # Print formatted output to terminal
-                                    sys.stdout.write(formatted + "\n")
-                                    sys.stdout.flush()
+                            try:
+                                ready, _, _ = select.select(
+                                    [process.stdout], [], [], 1.0
+                                )
+                            except (ValueError, TypeError):
+                                # Fallback for mocked pipes without real fd
+                                ready = [process.stdout]
+                            if ready:
+                                line = process.stdout.readline()
+                                if line:
+                                    stdout_lines.append(line)
+                                    formatted = format_stream_line(line, time.time())
+                                    if formatted:
+                                        f.write(formatted + "\n")
+                                        f.flush()
+                                        sys.stdout.write(formatted + "\n")
+                                        sys.stdout.flush()
 
                         if retcode is not None:
                             # Process finished, read any remaining output
@@ -323,8 +337,11 @@ class UnifiedExecutor:
             else:
                 # Stream output to log file in real-time (without terminal output)
                 # This enables Activity browser to show live logs
+                import select
+
                 stdout_lines = []
                 stderr_lines = []
+                deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
                     process = subprocess.Popen(
@@ -336,18 +353,33 @@ class UnifiedExecutor:
                         env=get_subprocess_env(),
                     )
 
-                    # Stream stdout to log file in real-time
+                    # Stream stdout to log file in real-time with timeout
                     while True:
+                        if time.time() > deadline:
+                            process.kill()
+                            process.wait()
+                            raise subprocess.TimeoutExpired(
+                                cmd.args, config.timeout_seconds
+                            )
+
                         retcode = process.poll()
 
                         if process.stdout:
-                            line = process.stdout.readline()
-                            if line:
-                                stdout_lines.append(line)
-                                formatted = format_stream_line(line, time.time())
-                                if formatted:
-                                    f.write(formatted + "\n")
-                                    f.flush()  # Flush immediately for live viewing
+                            try:
+                                ready, _, _ = select.select(
+                                    [process.stdout], [], [], 1.0
+                                )
+                            except (ValueError, TypeError):
+                                # Fallback for mocked pipes without real fd
+                                ready = [process.stdout]
+                            if ready:
+                                line = process.stdout.readline()
+                                if line:
+                                    stdout_lines.append(line)
+                                    formatted = format_stream_line(line, time.time())
+                                    if formatted:
+                                        f.write(formatted + "\n")
+                                        f.flush()  # Flush immediately for live viewing
 
                         if retcode is not None:
                             # Process finished, read any remaining output

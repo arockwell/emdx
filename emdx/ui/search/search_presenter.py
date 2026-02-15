@@ -5,9 +5,10 @@ Handles search logic with debouncing, mode switching, and result management.
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,8 @@ class SearchResultItem:
     tags_display: str  # Formatted tags for display
     score: float  # Normalized 0-1
     source: str  # "fts", "tags", "semantic"
-    project: Optional[str] = None
-    updated_at: Optional[str] = None
+    project: str | None = None
+    updated_at: str | None = None
     is_selected: bool = False  # For multi-select
 
 
@@ -78,7 +79,7 @@ class SearchPresenter:
 
     def __init__(
         self,
-        on_state_update: Optional[Callable[[SearchStateVM], Awaitable[None]]] = None,
+        on_state_update: Callable[[SearchStateVM], Awaitable[None]] | None = None,
     ):
         self.on_state_update = on_state_update
         self._state = SearchStateVM()
@@ -103,7 +104,7 @@ class SearchPresenter:
         """Get current state."""
         return self._state
 
-    def get_debounce_time(self, mode: Optional[SearchMode] = None) -> int:
+    def get_debounce_time(self, mode: SearchMode | None = None) -> int:
         """Get debounce time for the given mode in milliseconds."""
         mode = mode or self._state.mode
         return self.DEBOUNCE_TIMES.get(mode, 150)
@@ -161,7 +162,7 @@ class SearchPresenter:
         popular_tags = self.search_service.get_popular_tags(limit=15)
         return recent, popular_tags
 
-    async def search(self, query: str, mode: Optional[SearchMode] = None) -> None:
+    async def search(self, query: str, mode: SearchMode | None = None) -> None:
         """
         Execute search with the given query and mode.
 
@@ -365,7 +366,7 @@ class SearchPresenter:
             if i < len(self._state.results)
         ]
 
-    def get_result_at_index(self, index: int) -> Optional[SearchResultItem]:
+    def get_result_at_index(self, index: int) -> SearchResultItem | None:
         """Get result at the given index."""
         if 0 <= index < len(self._state.results):
             return self._state.results[index]

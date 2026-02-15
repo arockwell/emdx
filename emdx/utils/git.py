@@ -8,7 +8,6 @@ import random
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ def cleanup_worktree(worktree_path: str):
         logger.warning("Could not clean up worktree %s: %s", worktree_path, e)
 
 
-def get_git_project(path: Optional[Path] = None) -> Optional[str]:
+def get_git_project(path: Path | None = None) -> str | None:
     """
     Get the git repository name for a given path.
 

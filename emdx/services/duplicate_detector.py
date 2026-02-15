@@ -13,7 +13,7 @@ import hashlib
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 try:
     from datasketch import MinHash, MinHashLSH
@@ -100,7 +100,7 @@ class DuplicateDetector:
         """Initialize the duplicate detector. Uses the shared db module for connections."""
         pass
 
-    def _get_content_hash(self, content: Optional[str]) -> str:
+    def _get_content_hash(self, content: str | None) -> str:
         """Generate hash of content for duplicate detection."""
         if not content:
             return "empty"
@@ -163,7 +163,7 @@ class DuplicateDetector:
         self,
         threshold: float = 0.85,
         num_perm: int = DEFAULT_NUM_PERM,
-        max_documents: Optional[int] = None,
+        max_documents: int | None = None,
     ) -> List[Tuple[Dict, Dict, float]]:
         """
         Find near-duplicate documents based on content similarity using MinHash/LSH.
@@ -493,10 +493,10 @@ class DuplicateDetector:
 
         # Filter to groups with multiple documents and different content
         similar_title_groups = []
-        for title, group in title_groups.items():
+        for _title, group in title_groups.items():
             if len(group) > 1:
                 # Check if content is different
-                hashes = set(self._get_content_hash(doc['content']) for doc in group)
+                hashes = {self._get_content_hash(doc['content']) for doc in group}
                 if len(hashes) > 1:  # Different content
                     similar_title_groups.append(group)
 

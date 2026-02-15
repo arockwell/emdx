@@ -8,19 +8,19 @@ via keyboard-driven fuzzy search.
 import asyncio
 import logging
 import traceback
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Input, ListView, ListItem, Static
+from textual.widgets import Input, ListItem, ListView, Static
 
 from emdx.config.constants import EMDX_CONFIG_DIR
+
 from .palette_commands import CommandContext
-from .palette_presenter import PalettePresenter, PaletteResultItem, PaletteState, ResultType
+from .palette_presenter import PalettePresenter, PaletteResultItem, PaletteState
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class CommandPaletteScreen(ModalScreen):
     def __init__(
         self,
         initial_query: str = "",
-        context: Optional[CommandContext] = None,
+        context: CommandContext | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -223,7 +223,7 @@ class CommandPaletteScreen(ModalScreen):
                 )
                 return
 
-            for i, result in enumerate(state.results):
+            for _i, result in enumerate(state.results):
                 item = PaletteResultWidget(result)
                 results_view.append(item)
 

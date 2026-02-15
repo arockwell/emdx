@@ -1,7 +1,5 @@
 """Category CLI commands — manage task categories for epic numbering."""
 
-from typing import Optional
-
 import typer
 from rich.table import Table
 
@@ -15,7 +13,7 @@ app = typer.Typer(help="Manage task categories")
 def create(
     key: str = typer.Argument(..., help="Category key (2-8 uppercase letters, e.g. SEC)"),
     name: str = typer.Argument(..., help="Category name (e.g. Security)"),
-    description: Optional[str] = typer.Option(None, "-D", "--description", help="Category description"),
+    description: str | None = typer.Option(None, "-D", "--description", help="Category description"),
 ):
     """Create a new category.
 
@@ -73,7 +71,7 @@ def list_cmd():
 @app.command()
 def adopt(
     key: str = typer.Argument(..., help="Category key to adopt tasks for"),
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="Set category name"),
+    name: str | None = typer.Option(None, "--name", "-n", help="Set category name"),
 ):
     """Backfill existing tasks with KEY-N: titles into the category system.
 

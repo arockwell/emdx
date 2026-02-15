@@ -17,16 +17,14 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
-from ..config.cli_config import CliTool, get_cli_config, DEFAULT_ALLOWED_TOOLS
-from ..config.settings import DEFAULT_CLAUDE_MODEL
-from ..utils.environment import ensure_claude_in_path, validate_execution_environment
+from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
+from ..utils.environment import ensure_claude_in_path
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
-
 
 # Re-export for backward compatibility - prefer importing from cli_config
 __all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]
@@ -67,11 +65,11 @@ def execute_claude_detached(
     task: str,
     execution_id: int,
     log_file: Path,
-    allowed_tools: Optional[List[str]] = None,
-    working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None,
+    allowed_tools: List[str] | None = None,
+    working_dir: str | None = None,
+    doc_id: str | None = None,
     cli_tool: str = "claude",
-    model: Optional[str] = None,
+    model: str | None = None,
 ) -> int:
     """Execute a task with a CLI tool in a fully detached background process.
 
@@ -226,10 +224,10 @@ def execute_cli_sync(
     execution_id: int,
     log_file: Path,
     cli_tool: str = "claude",
-    model: Optional[str] = None,
-    allowed_tools: Optional[List[str]] = None,
-    working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None,
+    model: str | None = None,
+    allowed_tools: List[str] | None = None,
+    working_dir: str | None = None,
+    doc_id: str | None = None,
     timeout: int = 300,
 ) -> dict:
     """Execute a task with specified CLI tool synchronously, waiting for completion.
@@ -382,48 +380,3 @@ def execute_cli_sync(
     except Exception as e:
         main_logger.error(f"Execution failed: {e}")
         return {"success": False, "error": str(e), "exit_code": -1}
-
-
-def execute_claude_sync(
-    task: str,
-    execution_id: int,
-    log_file: Path,
-    allowed_tools: Optional[List[str]] = None,
-    working_dir: Optional[str] = None,
-    doc_id: Optional[str] = None,
-    timeout: int = 300,
-) -> dict:
-    """Execute a task with Claude synchronously, waiting for completion.
-
-    DEPRECATED: Use execute_cli_sync(cli_tool="claude", ...) instead.
-    This wrapper exists for backward compatibility only.
-
-    Args:
-        task: The task prompt to execute
-        execution_id: Numeric database execution ID
-        log_file: Path to the log file
-        allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
-        working_dir: Working directory for execution
-        doc_id: Document ID (for logging)
-        timeout: Maximum seconds to wait (default 300 = 5 minutes)
-
-    Returns:
-        Dict with 'success' (bool) and 'output' (str) or 'error' (str)
-    """
-    import warnings
-    warnings.warn(
-        "execute_claude_sync is deprecated, use execute_cli_sync(cli_tool='claude', ...) instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return execute_cli_sync(
-        task=task,
-        execution_id=execution_id,
-        log_file=log_file,
-        cli_tool="claude",
-        model=None,  # Use default Claude model
-        allowed_tools=allowed_tools,
-        working_dir=working_dir,
-        doc_id=doc_id,
-        timeout=timeout,
-    )

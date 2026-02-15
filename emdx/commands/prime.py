@@ -5,13 +5,10 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
-import typer
 from datetime import datetime
-from typing import Optional
 
+import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
 
 from ..database import db
 from ..utils.git import get_git_project
@@ -138,7 +135,7 @@ def _get_execution_methods_json() -> list[dict]:
     ]
 
 
-def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: bool, execution: bool):
+def _output_text(project: str | None, verbose: bool, quiet: bool, markdown: bool, execution: bool):
     """Output priming context as text."""
 
     lines = []
@@ -231,7 +228,7 @@ def _output_text(project: Optional[str], verbose: bool, quiet: bool, markdown: b
     print("\n".join(lines))
 
 
-def _output_json(project: Optional[str], verbose: bool, quiet: bool, execution: bool):
+def _output_json(project: str | None, verbose: bool, quiet: bool, execution: bool):
     """Output priming context as JSON."""
     import json
 
@@ -316,7 +313,7 @@ def _get_recent_docs() -> list:
 def _get_cascade_status() -> dict:
     """Get cascade queue status by stage."""
     stages = ["idea", "prompt", "analyzed", "planned", "done"]
-    status = {stage: 0 for stage in stages}
+    status = dict.fromkeys(stages, 0)
 
     try:
         with db.get_connection() as conn:
@@ -339,5 +336,5 @@ def _get_cascade_status() -> dict:
 
 
 # Create typer app for the command
-app = typer.Typer()
+app = typer.Typer(help="Output priming context for Claude session injection")
 app.command()(prime)

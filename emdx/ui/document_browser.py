@@ -8,7 +8,7 @@ operations while this widget focuses on display and user interaction.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, Protocol
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -19,25 +19,25 @@ from textual.widgets import DataTable, Input, Label, RichLog, Static
 
 from emdx.services.tag_service import get_document_tags
 
+from .modals import HelpMixin
 from .presenters import DocumentBrowserPresenter
 from .viewmodels import DocumentDetailVM, DocumentListVM
 from .vim_editor import VimEditor
-from .modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
 
 class TextAreaHost(Protocol):
     """Protocol defining what VimEditTextArea and SelectionTextArea expect from their host."""
-    
+
     def action_save_and_exit_edit(self) -> None:
         """Save and exit edit mode."""
         ...
-    
+
     def _update_vim_status(self, message: str = "") -> None:
         """Update status with vim mode information."""
         ...
-        
+
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (for SelectionTextArea)."""
         ...
@@ -70,23 +70,23 @@ class DocumentBrowser(HelpMixin, Widget):
     ]
 
     CSS_PATH = "document_browser.tcss"
-    
+
     # Reactive properties
     mode = reactive("NORMAL")
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # UI state
         self.edit_mode: bool = False
-        self.editing_doc_id: Optional[int] = None
-        self.tag_action: Optional[str] = None
+        self.editing_doc_id: int | None = None
+        self.tag_action: str | None = None
 
         # Debounce preview updates
-        self._pending_preview_doc_id: Optional[int] = None
+        self._pending_preview_doc_id: int | None = None
         self._preview_timer = None
 
         # Current ViewModel (updated by presenter callbacks)
-        self._current_vm: Optional[DocumentListVM] = None
+        self._current_vm: DocumentListVM | None = None
 
         # Initialize presenter with update callbacks
         self.presenter = DocumentBrowserPresenter(
@@ -103,7 +103,7 @@ class DocumentBrowser(HelpMixin, Widget):
         """Handle detail ViewModel updates from presenter."""
         # This callback can be used for detail panel updates in the future
         pass
-        
+
     def compose(self) -> ComposeResult:
         """Compose the document browser UI."""
         # Docked inputs at the top (hidden by default)
@@ -114,9 +114,9 @@ class DocumentBrowser(HelpMixin, Widget):
         yield Input(placeholder="Enter tags separated by spaces...", id="tag-input")
         yield Label("", id="tag-selector")
         yield Label("", id="vim-mode-indicator")
-        
+
         with Horizontal():
-            with Vertical(id="sidebar") as sidebar:
+            with Vertical(id="sidebar"):
                 # Remove debug background
                 pass
                 with Vertical(id="table-container", classes="table-section") as table_container:
@@ -134,9 +134,9 @@ class DocumentBrowser(HelpMixin, Widget):
                     yield RichLog(
                         id="details-panel",
                         classes="details-richlog",
-                        wrap=True, 
-                        highlight=True, 
-                        markup=True, 
+                        wrap=True,
+                        highlight=True,
+                        markup=True,
                     auto_scroll=False
                 )
             with Vertical(id="preview-container"):
@@ -146,7 +146,7 @@ class DocumentBrowser(HelpMixin, Widget):
                         classes="preview-richlog",
                         wrap=True, highlight=True, markup=True, auto_scroll=False
                     )
-        
+
         # Status bar at the bottom (for dynamic messages)
         yield Static("Ready", id="browser-status", classes="browser-status")
         # Navigation bar (fixed)
@@ -155,7 +155,7 @@ class DocumentBrowser(HelpMixin, Widget):
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] view │ [dim]e[/dim] edit",
             id="nav-bar", classes="nav-bar"
         )
-                    
+
     async def on_mount(self) -> None:
         """Initialize the document browser."""
         logger.debug("DocumentBrowser mounted")
@@ -174,16 +174,16 @@ class DocumentBrowser(HelpMixin, Widget):
         table.cursor_type = "row"
         table.show_header = True  # Show built-in headers
         table.cell_padding = 0  # Remove cell padding for tight spacing
-        
+
         # Disable focus on non-interactive widgets
         preview_content = self.query_one("#preview-content")
         preview_content.can_focus = False
-        
+
         # Setup details panel
         try:
             details_panel = self.query_one("#details-panel")
             details_panel.can_focus = False
-            
+
             # Add initial content to details panel
             details_panel.write("📋 **Document Details**")
             details_panel.write("")
@@ -194,19 +194,19 @@ class DocumentBrowser(HelpMixin, Widget):
             logger.error(f"Unexpected error setting up details panel: {type(e).__name__}: {e}")
             import traceback
             logger.error(traceback.format_exc())
-        
+
         search_input = self.query_one("#search-input")
         search_input.can_focus = False
         tag_input = self.query_one("#tag-input")
         tag_input.can_focus = False
-        
+
         # Hide inputs initially
         search_input.display = False
         tag_input.display = False
-        
+
         # Set focus to table so keys work immediately
         table.focus()
-        
+
         # Load documents via presenter
         await self.presenter.load_documents()
 
@@ -308,7 +308,7 @@ class DocumentBrowser(HelpMixin, Widget):
         Kept for backward compatibility - delegates to _render_document_list.
         """
         await self._render_document_list()
-            
+
     def save_state(self) -> Dict[str, Any]:
         """Save current state for restoration."""
         state: Dict[str, Any] = {
@@ -369,13 +369,13 @@ class DocumentBrowser(HelpMixin, Widget):
     async def on_key(self, event) -> None:
         """Handle key events."""
         key = event.key
-        
+
         # Handle delete key
         if key == "d" and not self.edit_mode and self.mode == "NORMAL":
             await self._handle_delete()
             event.stop()
             return
-        
+
         # Handle escape key to exit modes
         # Don't handle escape for SELECTION mode here - let SelectionTextArea handle it
         if key == "escape":
@@ -392,7 +392,7 @@ class DocumentBrowser(HelpMixin, Widget):
                 self.exit_tag_mode()
                 event.stop()
             # Note: SELECTION mode escape is handled by SelectionTextArea itself
-    
+
     async def _handle_delete(self) -> None:
         """Handle delete key press - immediately delete document."""
         table = self.query_one("#doc-table", DataTable)
@@ -416,7 +416,7 @@ class DocumentBrowser(HelpMixin, Widget):
             self.update_status(f"Document '{doc.title}' deleted")
         else:
             self.update_status("Error deleting document")
-                
+
     async def enter_edit_mode(self) -> None:
         """Enter edit mode for the selected document."""
         table = self.query_one("#doc-table", DataTable)
@@ -455,7 +455,7 @@ class DocumentBrowser(HelpMixin, Widget):
 
         # Update status
         self._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")
-        
+
     def action_save_and_exit_edit(self) -> None:
         """Save document and exit edit mode (called by VimEditTextArea)."""
         logger.debug("action_save_and_exit_edit called")
@@ -470,19 +470,19 @@ class DocumentBrowser(HelpMixin, Widget):
                 asyncio.create_task(self.save_and_exit_edit_mode())
             except Exception as e2:
                 logger.debug("Fallback async save also failed: %s", e2)
-            
+
     def _async_exit_edit_mode(self) -> None:
         """Async wrapper for exit_edit_mode."""
         logger.debug("_async_exit_edit_mode")
         import asyncio
         asyncio.create_task(self.exit_edit_mode())
-        
+
     def _async_save_and_exit_edit_mode(self) -> None:
         """Async wrapper for save_and_exit_edit_mode."""
         logger.debug("_async_save_and_exit_edit_mode")
         import asyncio
         asyncio.create_task(self.save_and_exit_edit_mode())
-        
+
     async def save_and_exit_edit_mode(self) -> None:
         """Save the document and exit edit mode."""
         if not self.edit_mode:
@@ -527,17 +527,17 @@ class DocumentBrowser(HelpMixin, Widget):
             logger.error(f"Error in save_and_exit_edit_mode: {e}")
             import traceback
             logger.error(traceback.format_exc())
-        
+
     def _format_content_with_title_box(self, title: str, content: str) -> str:
         """Format content with title as markdown header."""
         # Simply use markdown header - Rich will render it with the unicode box
         formatted = f"# {title}\n\n{content}"
         return formatted
-    
+
     def _extract_content_without_title_box(self, content: str, title: str) -> str:
         """Extract content without the title header or unicode box if present."""
         lines = content.split('\n')
-        
+
         # Check for markdown header first
         if lines and lines[0].strip() == f"# {title}":
             # Skip the header line and optional blank line
@@ -545,7 +545,7 @@ class DocumentBrowser(HelpMixin, Widget):
             if len(lines) > 1 and not lines[1].strip():
                 start_idx = 2
             return '\n'.join(lines[start_idx:])
-        
+
         # Check if content starts with a unicode box (various styles)
         if len(lines) >= 3:
             # Check for double-line box (╔═╗)
@@ -554,24 +554,24 @@ class DocumentBrowser(HelpMixin, Widget):
                 if len(lines) > 3 and not lines[3].strip():
                     start_idx = 4
                 return '\n'.join(lines[start_idx:])
-            
+
             # Check for heavy-line box (┏━┓)
             elif lines[0].startswith('┏') and lines[2].startswith('┗'):
                 start_idx = 3
                 if len(lines) > 3 and not lines[3].strip():
                     start_idx = 4
                 return '\n'.join(lines[start_idx:])
-            
+
             # Check for single-line box (┌─┐)
             elif lines[0].startswith('┌') and lines[2].startswith('└'):
                 start_idx = 3
                 if len(lines) > 3 and not lines[3].strip():
                     start_idx = 4
                 return '\n'.join(lines[start_idx:])
-        
+
         # No header or box found, return original content
         return content
-    
+
     def _update_vim_status(self, message: str = "") -> None:
         """Update status bar with vim mode info (called by VimEditTextArea)."""
         try:
@@ -583,7 +583,7 @@ class DocumentBrowser(HelpMixin, Widget):
             else:
                 vim_indicator.update("VIM: NORMAL | ESC=exit")
                 vim_indicator.add_class("active")
-                
+
             # Also update main status
             app = self.app
             if hasattr(app, 'update_status'):
@@ -593,7 +593,7 @@ class DocumentBrowser(HelpMixin, Widget):
                     app.update_status("Edit Mode | ESC=exit | Ctrl+S=save")
         except (LookupError, AttributeError) as e:
             logger.debug(f"Could not update vim status: {type(e).__name__}: {e}")
-            
+
     def action_toggle_selection_mode(self) -> None:
         """Toggle selection mode (called by SelectionTextArea)."""
         if self.mode == "SELECTION":
@@ -602,12 +602,12 @@ class DocumentBrowser(HelpMixin, Widget):
                 self.call_after_refresh(self._async_exit_selection_mode)
             except (AttributeError, RuntimeError) as e:
                 logger.debug(f"Could not exit selection mode: {type(e).__name__}: {e}")
-        
+
     def _async_exit_selection_mode(self) -> None:
         """Async wrapper for exit_selection_mode."""
         import asyncio
         asyncio.create_task(self.exit_selection_mode())
-        
+
     async def exit_edit_mode(self) -> None:
         """Exit edit mode and restore preview."""
         if not self.edit_mode:
@@ -661,12 +661,12 @@ class DocumentBrowser(HelpMixin, Widget):
         self._update_vim_status(
             "NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel"
         )
-        
+
     def action_cursor_down(self) -> None:
         """Move cursor down."""
         table = self.query_one("#doc-table", DataTable)
         table.action_cursor_down()
-        
+
     def action_cursor_up(self) -> None:
         """Move cursor up."""
         table = self.query_one("#doc-table", DataTable)
@@ -711,7 +711,7 @@ class DocumentBrowser(HelpMixin, Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
             table.cursor_coordinate = (0, 0)
-            
+
     async def action_cursor_bottom(self) -> None:
         """Move cursor to bottom - loads all remaining documents first."""
         # Load all remaining documents before going to bottom
@@ -721,11 +721,11 @@ class DocumentBrowser(HelpMixin, Widget):
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0:
             table.cursor_coordinate = (table.row_count - 1, 0)
-            
+
     async def action_edit_document(self) -> None:
         """Edit the current document."""
         await self.enter_edit_mode()
-    
+
     async def action_refresh(self) -> None:
         """Refresh the document list."""
         await self.load_documents()
@@ -808,14 +808,14 @@ class DocumentBrowser(HelpMixin, Widget):
             app = self.app
             if hasattr(app, 'update_status'):
                 app.update_status(message)
-    
+
     async def action_new_document(self) -> None:
         """Create a new document."""
         # Don't allow new document in log browser mode
         if getattr(self, 'mode', 'NORMAL') == "LOG_BROWSER":
             return
         await self.enter_new_document_mode()
-        
+
     def action_search(self) -> None:
         """Enter search mode."""
         self.mode = "SEARCH"
@@ -823,7 +823,7 @@ class DocumentBrowser(HelpMixin, Widget):
         search_input.display = True
         search_input.can_focus = True
         search_input.focus()
-        
+
     def action_add_tags(self) -> None:
         """Enter tag adding mode."""
         self.mode = "TAG"
@@ -832,7 +832,7 @@ class DocumentBrowser(HelpMixin, Widget):
         tag_input.display = True
         tag_input.can_focus = True
         tag_input.focus()
-        
+
     def action_remove_tags(self) -> None:
         """Enter tag removal mode."""
         self.mode = "TAG"
@@ -886,7 +886,7 @@ class DocumentBrowser(HelpMixin, Widget):
                 app.update_status("Selection Mode | ESC=exit | Enter=copy selection")
         except Exception as e:
             logger.debug("Could not update status: %s", e)
-            
+
     async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore preview."""
         if self.mode != "SELECTION":
@@ -925,7 +925,7 @@ class DocumentBrowser(HelpMixin, Widget):
             logger.debug(
                 f"Could not update status after exiting selection mode: {type(e).__name__}: {e}"
             )
-    
+
     async def on_data_table_row_highlighted(self, event) -> None:
         """Update preview and details panel when row is highlighted."""
         if self.edit_mode:
@@ -1052,7 +1052,7 @@ class DocumentBrowser(HelpMixin, Widget):
             except Exception as e2:
                 logger.debug("Fallback details panel also failed: %s", e2)
 
-                
+
     async def on_input_submitted(self, event) -> None:
         """Handle input submission."""
         if event.input.id == "search-input":
@@ -1060,7 +1060,7 @@ class DocumentBrowser(HelpMixin, Widget):
             query = event.input.value.strip()
             await self.apply_search(query)
             self.exit_search_mode()
-            
+
         elif event.input.id == "tag-input":
             # Handle tag operations
             if self.tag_action == "add":
@@ -1068,7 +1068,7 @@ class DocumentBrowser(HelpMixin, Widget):
             elif self.tag_action == "remove":
                 await self.remove_tags_from_current_doc(event.input.value)
             self.exit_tag_mode()
-            
+
     def exit_search_mode(self) -> None:
         """Exit search mode."""
         self.mode = "NORMAL"
@@ -1078,7 +1078,7 @@ class DocumentBrowser(HelpMixin, Widget):
         search_input.value = ""
         table = self.query_one("#doc-table", DataTable)
         table.focus()
-        
+
     def exit_tag_mode(self) -> None:
         """Exit tag mode."""
         self.mode = "NORMAL"
@@ -1089,8 +1089,8 @@ class DocumentBrowser(HelpMixin, Widget):
         tag_input.placeholder = "Enter tags separated by spaces..."
         table = self.query_one("#doc-table", DataTable)
         table.focus()
-        
-    async def apply_search(self, query: Optional[str] = None) -> None:
+
+    async def apply_search(self, query: str | None = None) -> None:
         """Apply current search filter via presenter.
 
         Args:

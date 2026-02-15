@@ -7,7 +7,7 @@ replacing the stringly-typed item_type field with proper polymorphism.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -21,7 +21,7 @@ class ActivityItem(ABC):
     expanded: bool = False
     children: List["ActivityItem"] = field(default_factory=list)
     status: str = "completed"  # Default status for items that don't track status
-    doc_id: Optional[int] = None  # Document ID if this item has associated content
+    doc_id: int | None = None  # Document ID if this item has associated content
     cost: float = 0.0  # Cost in USD if tracked
 
     @property
@@ -251,7 +251,7 @@ class CascadeRunItem(ActivityItem):
 class CascadeStageItem(ActivityItem):
     """A single stage execution within a cascade run."""
 
-    doc_id: Optional[int] = None
+    doc_id: int | None = None
     status: str = "pending"
     stage: str = ""
 
@@ -439,7 +439,7 @@ class AgentExecutionItem(ActivityItem):
 
     execution: Dict[str, Any] = field(default_factory=dict)
     status: str = "running"
-    doc_id: Optional[int] = None
+    doc_id: int | None = None
     log_file: str = ""
     cli_tool: str = "claude"
 

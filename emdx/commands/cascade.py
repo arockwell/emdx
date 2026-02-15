@@ -15,18 +15,16 @@ Key concepts:
 import re
 import time
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from ..config.constants import EMDX_LOG_DIR
-from ..database.documents import get_document, save_document
 from ..database import cascade as cascade_db
-from ..services.claude_executor import execute_claude_detached, execute_claude_sync
 from ..database.connection import db_connection
+from ..database.documents import get_document, save_document
+from ..services.claude_executor import execute_claude_detached, execute_cli_sync
 
 console = Console()
 
@@ -174,10 +172,11 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
     timeout = 1800 if stage == "planned" else 300
 
     try:
-        result = execute_claude_sync(
+        result = execute_cli_sync(
             task=prompt,
             execution_id=execution_id,
             log_file=log_file,
+            cli_tool="claude",
             doc_id=str(doc_id),
             timeout=timeout,
         )
@@ -227,7 +226,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
 
             return True, new_doc_id, pr_url
         else:
-            console.print(f"[red]✗ Processing failed[/red]")
+            console.print("[red]✗ Processing failed[/red]")
             with db_connection.get_connection() as conn:
                 conn.execute(
                     "UPDATE executions SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -250,7 +249,7 @@ def _process_stage(doc: dict, stage: str, cascade_run_id: int = None) -> tuple[b
 @app.command()
 def add(
     content: str = typer.Argument(..., help="The idea content to add to the cascade"),
-    title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title"),
+    title: str | None = typer.Option(None, "--title", "-t", help="Document title"),
     stage: str = typer.Option("idea", "--stage", "-s", help="Starting stage"),
     auto: bool = typer.Option(False, "--auto", "-a", help="Automatically run through stages"),
     stop: str = typer.Option("done", "--stop", help="Stage to stop at (default: done)"),
@@ -327,7 +326,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
         # Verify document is at expected stage
         if doc.get("stage") != stage:
             console.print(f"[red]Document #{current_doc_id} is at '{doc.get('stage')}', expected '{stage}'[/red]")
-            _update_cascade_run(cascade_run_id, status='failed', error_message=f"Stage mismatch")
+            _update_cascade_run(cascade_run_id, status='failed', error_message="Stage mismatch")
             raise typer.Exit(1)
 
         success, new_doc_id, stage_pr_url = _process_stage(doc, stage, cascade_run_id)
@@ -350,7 +349,7 @@ def _run_auto(doc_id: int, start_stage: str, stop_stage: str):
     # Complete the cascade run
     _update_cascade_run(cascade_run_id, status='completed')
 
-    console.print(f"[bold green]✓ Cascade complete![/bold green]")
+    console.print("[bold green]✓ Cascade complete![/bold green]")
     console.print(f"  Final document: #{current_doc_id}")
     console.print(f"  Final stage: {stop_stage}")
     if pr_url:
@@ -424,7 +423,7 @@ def show(
 @app.command()
 def process(
     stage: str = typer.Argument(..., help="Stage to process"),
-    doc_id: Optional[int] = typer.Option(None, "--doc", "-d", help="Specific document ID"),
+    doc_id: int | None = typer.Option(None, "--doc", "-d", help="Specific document ID"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be processed"),
     sync: bool = typer.Option(True, "--sync/--async", "-s", help="Wait for completion (default: sync)"),
 ):
@@ -472,7 +471,7 @@ def process(
     else:
         # Async execution - start and return immediately
         doc_id = doc["id"]
-        next_stage = NEXT_STAGE[stage]
+        NEXT_STAGE[stage]
         prompt = STAGE_PROMPTS[stage].format(content=doc["content"])
 
         EMDX_LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -570,7 +569,7 @@ def run(
 @app.command()
 def advance(
     doc_id: int = typer.Argument(..., help="Document ID to advance"),
-    to_stage: Optional[str] = typer.Option(None, "--to", help="Target stage (default: next stage)"),
+    to_stage: str | None = typer.Option(None, "--to", help="Target stage (default: next stage)"),
 ):
     """Manually advance a document to the next stage.
 
@@ -630,7 +629,7 @@ def remove(
 @app.command()
 def synthesize(
     stage: str = typer.Argument(..., help="Stage to synthesize from (e.g., 'analyzed')"),
-    title: Optional[str] = typer.Option(None, "--title", "-t", help="Title for synthesized document"),
+    title: str | None = typer.Option(None, "--title", "-t", help="Title for synthesized document"),
     next_stage: str = typer.Option("planned", "--next", "-n", help="Stage for the synthesized doc"),
     keep: bool = typer.Option(False, "--keep", "-k", help="Keep source docs in current stage"),
 ):
@@ -694,7 +693,7 @@ def synthesize(
 @app.command()
 def runs(
     limit: int = typer.Option(10, "--limit", "-n", help="Max runs to show"),
-    status_filter: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
+    status_filter: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
 ):
     """Show cascade run history."""
     query = "SELECT id, start_doc_id, start_stage, stop_stage, current_stage, status, pr_url, started_at, completed_at FROM cascade_runs"

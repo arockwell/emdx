@@ -8,8 +8,9 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Dict, List
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection

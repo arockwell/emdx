@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
@@ -57,16 +57,16 @@ class DocumentMerger:
     SIMILARITY_THRESHOLD = 0.7  # Minimum similarity for merge candidates
     PREFILTER_THRESHOLD = 0.3   # Lower threshold for TF-IDF pre-filtering
 
-    def __init__(self, db_path: Optional[Union[str, Path]] = None):
+    def __init__(self, db_path: Union[str, Path] | None = None):
         self.db_path = Path(db_path) if db_path else get_db_path()
         self._db = DatabaseConnection(self.db_path)
         self._similarity_service = SimilarityService(self.db_path)
-    
+
     def find_merge_candidates(
         self,
-        project: Optional[str] = None,
+        project: str | None = None,
         similarity_threshold: float = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Callable | None = None
     ) -> List[MergeCandidate]:
         """
         Find documents that are candidates for merging.
@@ -188,7 +188,7 @@ class DocumentMerger:
         candidates.sort(key=lambda c: c.similarity_score, reverse=True)
         return candidates
 
-    def _get_document_metadata(self, project: Optional[str] = None) -> Dict[int, Dict[str, Any]]:
+    def _get_document_metadata(self, project: str | None = None) -> Dict[int, Dict[str, Any]]:
         """
         Get metadata for all active documents.
 
@@ -224,49 +224,49 @@ class DocumentMerger:
             }
             for doc in documents
         }
-    
+
     def _calculate_similarity(self, text1: str, text2: str) -> float:
         """Calculate similarity between two texts using SequenceMatcher."""
         if not text1 or not text2:
             return 0.0
-        
+
         # Quick check for exact match
         if text1 == text2:
             return 1.0
-        
+
         # Use SequenceMatcher for similarity
         return difflib.SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
-    
+
     def suggest_merge_strategy(
-        self, 
-        doc1_id: int, 
+        self,
+        doc1_id: int,
         doc2_id: int
     ) -> MergeStrategy:
         """
         Suggest the best strategy for merging two documents.
-        
+
         Args:
             doc1_id: First document ID
             doc2_id: Second document ID
-            
+
         Returns:
             MergeStrategy with recommended approach
         """
         # Get both documents
         doc1 = get_document(str(doc1_id))
         doc2 = get_document(str(doc2_id))
-        
+
         if not doc1 or not doc2:
             raise ValueError("One or both documents not found")
-        
+
         # Get tags for both
         tags1 = get_document_tags(doc1_id)
         tags2 = get_document_tags(doc2_id)
-        
+
         # Determine which document to keep (higher score wins)
         doc1_score = self._calculate_document_score(doc1, tags1)
         doc2_score = self._calculate_document_score(doc2, tags2)
-        
+
         if doc1_score >= doc2_score:
             keep_doc = doc1
             keep_id = doc1_id
@@ -277,7 +277,7 @@ class DocumentMerger:
             keep_id = doc2_id
             merge_doc = doc1
             merge_id = doc1_id
-        
+
         # Merge titles
         if keep_doc['title'] == merge_doc['title']:
             merged_title = keep_doc['title']
@@ -287,18 +287,18 @@ class DocumentMerger:
                 merged_title = keep_doc['title']
             else:
                 merged_title = merge_doc['title']
-        
+
         # Merge content
         merged_content = self._merge_content(
-            keep_doc['content'] or '', 
+            keep_doc['content'] or '',
             merge_doc['content'] or '',
             keep_doc['title'],
             merge_doc['title']
         )
-        
+
         # Combine tags (union)
         merged_tags = list(set(tags1 + tags2))
-        
+
         # Preserve important metadata
         preserve_metadata = {
             'original_ids': [doc1_id, doc2_id],
@@ -306,7 +306,7 @@ class DocumentMerger:
             'merge_date': datetime.now().isoformat(),
             'combined_access_count': doc1['access_count'] + doc2['access_count']
         }
-        
+
         return MergeStrategy(
             keep_doc_id=keep_id,
             merge_doc_id=merge_id,
@@ -315,25 +315,25 @@ class DocumentMerger:
             merged_tags=merged_tags,
             preserve_metadata=preserve_metadata
         )
-    
+
     def _calculate_document_score(self, doc: Dict[str, Any], tags: List[str]) -> float:
         """Calculate a quality score for a document."""
         score = 0.0
-        
+
         # Access count (popularity)
         score += min(doc['access_count'] / 10, 10)  # Cap at 10 points
-        
+
         # Content length (comprehensiveness)
         content_length = len(doc['content'] or '')
         score += min(content_length / 1000, 5)  # Cap at 5 points
-        
+
         # Has tags
         score += len(tags) * 0.5  # 0.5 points per tag
-        
+
         # Title quality
         if len(doc['title']) > 10:
             score += 1
-        
+
         # Recent access
         if doc.get('accessed_at'):
             accessed_at = parse_datetime(doc['accessed_at'])
@@ -343,25 +343,25 @@ class DocumentMerger:
                     score += 2
                 elif days_since_access < 30:
                     score += 1
-        
+
         return score
-    
+
     def _merge_content(
-        self, 
-        content1: str, 
+        self,
+        content1: str,
         content2: str,
         title1: str,
         title2: str
     ) -> str:
         """
         Intelligently merge two document contents.
-        
+
         Args:
             content1: Content of first document
             content2: Content of second document
             title1: Title of first document
             title2: Title of second document
-            
+
         Returns:
             Merged content
         """
@@ -370,48 +370,48 @@ class DocumentMerger:
             return content2
         if not content2:
             return content1
-        
+
         # If identical, return one
         if content1 == content2:
             return content1
-        
+
         # Check if one contains the other
         if content1 in content2:
             return content2
         if content2 in content1:
             return content1
-        
+
         # Otherwise, combine with clear separation
         merged = []
-        
+
         # Add primary content
         merged.append(content1)
-        
+
         # Add separator
         merged.append("\n\n---\n")
-        
+
         # Add note about merge
         if title1 != title2:
             merged.append(f"\n_Merged from: {title2}_\n")
         else:
             merged.append("\n_Additional content from duplicate:_\n")
-        
+
         merged.append("\n" + content2)
-        
+
         return "".join(merged)
-    
+
     def execute_merge(
-        self, 
+        self,
         strategy: MergeStrategy,
         delete_source: bool = True
     ) -> bool:
         """
         Execute a document merge based on the strategy.
-        
+
         Args:
             strategy: The merge strategy to execute
             delete_source: Whether to delete the source document
-            
+
         Returns:
             True if successful
         """
@@ -422,7 +422,7 @@ class DocumentMerger:
                 title=strategy.merged_title,
                 content=strategy.merged_content
             )
-            
+
             # Add merged tags
             if strategy.merged_tags:
                 # Get existing tags to avoid duplicates
@@ -430,21 +430,21 @@ class DocumentMerger:
                 new_tags = [tag for tag in strategy.merged_tags if tag not in existing]
                 if new_tags:
                     add_tags_to_document(strategy.keep_doc_id, new_tags)
-            
+
             # Delete or mark the source document
             if delete_source:
                 delete_document(strategy.merge_doc_id)
-            
+
             # Log the merge (could be stored in a merge history table)
             # For now, we'll just return success
-            
+
             return True
-            
+
         except Exception as e:
             # Log error
             logger.error(f"Merge failed: {e}")
             return False
-    
+
     def find_related_documents(
         self,
         doc_id: int,
@@ -484,19 +484,19 @@ class DocumentMerger:
         for candidate in candidates:
             # Title similarity
             title_sim = self._calculate_similarity(doc['title'], candidate['title'])
-            
+
             # Content similarity (sample for performance)
             content_sim = self._calculate_similarity(
-                (doc['content'] or '')[:500], 
+                (doc['content'] or '')[:500],
                 (candidate['content'] or '')[:500]
             )
-            
+
             # Combined score
             score = (title_sim * 0.3) + (content_sim * 0.7)
-            
+
             if score > 0.3:  # Minimum threshold
                 related.append((candidate['id'], candidate['title'], score))
-        
+
         # Sort by score and return top N
         related.sort(key=lambda x: x[2], reverse=True)
         return related[:limit]

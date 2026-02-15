@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -13,7 +12,6 @@ from emdx.services.cascade_service import (
     get_document,
     list_documents_at_stage,
     monitor_execution_completion,
-    update_cascade_stage,
 )
 from emdx.services.document_service import save_document
 from emdx.services.execution_service import create_execution
@@ -46,7 +44,7 @@ class CascadeBrowser(Widget):
 
     def __init__(self):
         super().__init__()
-        self.cascade_view: Optional[CascadeView] = None
+        self.cascade_view: CascadeView | None = None
 
     def compose(self) -> ComposeResult:
         self.cascade_view = CascadeView(id="cascade-view")
@@ -81,8 +79,8 @@ class CascadeBrowser(Widget):
 
         self._update_status(f"[cyan]Processing #{doc_id}: {doc.get('title', '')[:40]}...[/cyan]")
 
-        from emdx.services.claude_executor import execute_claude_detached, DEFAULT_ALLOWED_TOOLS
         from emdx.commands.cascade import STAGE_PROMPTS
+        from emdx.services.claude_executor import DEFAULT_ALLOWED_TOOLS, execute_claude_detached
 
         prompt = STAGE_PROMPTS[stage].format(content=doc.get("content", ""))
 

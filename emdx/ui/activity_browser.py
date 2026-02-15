@@ -1,10 +1,8 @@
 """Activity Browser - wraps ActivityView for the browser container."""
 
 import logging
-from typing import Optional
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
 from textual.widget import Widget
 from textual.widgets import Static
 
@@ -43,7 +41,7 @@ class ActivityBrowser(Widget):
 
     def __init__(self):
         super().__init__()
-        self.activity_view: Optional[ActivityView] = None
+        self.activity_view: ActivityView | None = None
 
     def compose(self) -> ComposeResult:
         self.activity_view = ActivityView(id="activity-view")

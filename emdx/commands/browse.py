@@ -2,7 +2,6 @@
 Browse and analytics commands for emdx
 """
 
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -10,15 +9,15 @@ from rich.table import Table
 from emdx.database import db
 from emdx.models.documents import get_recent_documents, get_stats, list_documents
 from emdx.utils.datetime_utils import format_datetime as _format_datetime
-from emdx.utils.text_formatting import truncate_title
 from emdx.utils.output import console
+from emdx.utils.text_formatting import truncate_title
 
-app = typer.Typer()
+app = typer.Typer(help="Browse and list documents with statistics")
 
 
 @app.command()
 def list(
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum documents to show"),
     format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, csv"),
 ):
@@ -134,7 +133,7 @@ def recent(
 
 @app.command()
 def stats(
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None, "--project", "-p", help="Show stats for specific project"
     ),
     detailed: bool = typer.Option(False, "--detailed", "-d", help="Show detailed statistics"),

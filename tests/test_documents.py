@@ -177,7 +177,7 @@ class TestGetDocument:
 
         doc_id = save_document("Accessed At Test", "Content")
         doc1 = get_document(doc_id)
-        time.sleep(0.05)
+        time.sleep(0.001)  # Minimal delay to ensure different timestamps
         doc2 = get_document(doc_id)
         # accessed_at should be updated (or at least not earlier)
         assert doc2["accessed_at"] >= doc1["accessed_at"]
@@ -219,7 +219,7 @@ class TestUpdateDocument:
 
         doc_id = save_document("Timestamp Test", "Content")
         doc_before = get_document(doc_id)
-        time.sleep(0.05)
+        time.sleep(0.001)  # Minimal delay to ensure different timestamps
         update_document(doc_id, "Timestamp Test v2", "New Content")
         doc_after = get_document(doc_id)
         assert doc_after["updated_at"] >= doc_before["updated_at"]
@@ -496,7 +496,7 @@ class TestGetRecentDocuments:
         id2 = save_document("New", "Content")
         # Access old one so its accessed_at is more recent
         get_document(id1)
-        time.sleep(0.05)
+        time.sleep(0.001)  # Minimal delay to ensure different timestamps
         get_document(id1)
 
         docs = get_recent_documents(limit=10)

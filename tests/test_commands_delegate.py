@@ -2,7 +2,17 @@
 
 from unittest.mock import patch
 
-from emdx.commands.delegate import _slugify_title, _resolve_task, PR_INSTRUCTION
+import pytest
+import typer
+
+from emdx.commands.delegate import (
+    _slugify_title,
+    _resolve_task,
+    _validate_discovery_command,
+    _run_discovery,
+    PR_INSTRUCTION,
+    SAFE_DISCOVERY_COMMANDS,
+)
 
 
 class TestSlugifyTitle:
@@ -90,3 +100,95 @@ class TestPRInstruction:
 
     def test_pr_instruction_mentions_pr_create(self):
         assert "gh pr create" in PR_INSTRUCTION
+
+
+class TestValidateDiscoveryCommand:
+    """Tests for _validate_discovery_command — prevents command injection."""
+
+    def test_allows_fd_command(self):
+        args = _validate_discovery_command("fd -e py src/")
+        assert args == ["fd", "-e", "py", "src/"]
+
+    def test_allows_find_command(self):
+        args = _validate_discovery_command("find . -name '*.py'")
+        assert args[0] == "find"
+
+    def test_allows_git_command(self):
+        args = _validate_discovery_command("git ls-files")
+        assert args == ["git", "ls-files"]
+
+    def test_allows_ls_command(self):
+        args = _validate_discovery_command("ls -la")
+        assert args == ["ls", "-la"]
+
+    def test_allows_full_path_to_allowed_command(self):
+        args = _validate_discovery_command("/usr/bin/fd -e py")
+        assert args == ["/usr/bin/fd", "-e", "py"]
+
+    def test_rejects_rm_command(self):
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("rm -rf /")
+
+    def test_rejects_curl_command(self):
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("curl http://evil.com")
+
+    def test_rejects_wget_command(self):
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("wget http://evil.com")
+
+    def test_rejects_bash_command(self):
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("bash -c 'rm -rf /'")
+
+    def test_rejects_shell_injection_via_semicolon(self):
+        # With shlex parsing and allowlist, "fd;" is not a valid command
+        # The semicolon becomes part of the command name, which is not in allowlist
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd; rm -rf /")
+
+    def test_rejects_shell_injection_via_backticks(self):
+        # Backticks are handled as literals by shlex when shell=False
+        args = _validate_discovery_command("fd `whoami`")
+        # The backticks become literal characters in the argument
+        assert "`whoami`" in args[1]
+
+    def test_rejects_shell_injection_via_dollar_parens(self):
+        args = _validate_discovery_command("fd $(whoami)")
+        # Command substitution is not executed with shell=False
+        assert "$(whoami)" in args[1]
+
+    def test_rejects_pipe_injection(self):
+        # Pipe becomes a literal argument with shlex + shell=False
+        args = _validate_discovery_command("fd | rm -rf /")
+        assert "|" in args
+
+    def test_rejects_empty_command(self):
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("")
+
+    def test_rejects_malformed_quotes(self):
+        with pytest.raises(typer.Exit):
+            _validate_discovery_command("fd 'unterminated")
+
+    def test_safe_commands_set_not_empty(self):
+        assert len(SAFE_DISCOVERY_COMMANDS) > 0
+        assert "fd" in SAFE_DISCOVERY_COMMANDS
+        assert "find" in SAFE_DISCOVERY_COMMANDS
+
+
+class TestRunDiscovery:
+    """Tests for _run_discovery — executes validated discovery commands."""
+
+    def test_runs_echo_command(self):
+        result = _run_discovery("echo 'file1.py\nfile2.py'")
+        assert "file1.py" in result
+        assert "file2.py" in result
+
+    def test_runs_seq_command(self):
+        result = _run_discovery("seq 1 3")
+        assert result == ["1", "2", "3"]
+
+    def test_rejects_dangerous_command(self):
+        with pytest.raises(typer.Exit):
+            _run_discovery("rm -rf /tmp/test")

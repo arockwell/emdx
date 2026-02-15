@@ -9,7 +9,6 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.markdown import Markdown
@@ -36,10 +35,10 @@ from emdx.models.tags import (
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.emoji_aliases import expand_alias_string
-from emdx.utils.text_formatting import truncate_title
 from emdx.utils.output import console
+from emdx.utils.text_formatting import truncate_title
 
-app = typer.Typer()
+app = typer.Typer(help="Core CRUD operations for documents")
 
 
 @dataclass
@@ -48,7 +47,7 @@ class InputContent:
 
     content: str
     source_type: str  # 'stdin', 'file', or 'direct'
-    source_path: Optional[Path] = None
+    source_path: Path | None = None
 
 
 @dataclass
@@ -56,11 +55,11 @@ class DocumentMetadata:
     """Container for document metadata"""
 
     title: str
-    project: Optional[str] = None
-    tags: Optional[list[str]] = None
+    project: str | None = None
+    tags: list[str] | None = None
 
 
-def get_input_content(input_arg: Optional[str]) -> InputContent:
+def get_input_content(input_arg: str | None) -> InputContent:
     """Handle input from stdin, file, or direct text"""
     import sys
 
@@ -96,7 +95,7 @@ def get_input_content(input_arg: Optional[str]) -> InputContent:
         raise typer.Exit(1)
 
 
-def generate_title(input_content: InputContent, provided_title: Optional[str]) -> str:
+def generate_title(input_content: InputContent, provided_title: str | None) -> str:
     """Generate appropriate title based on source and content"""
     if provided_title:
         return provided_title
@@ -116,7 +115,7 @@ def generate_title(input_content: InputContent, provided_title: Optional[str]) -
             return f"Note - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
 
-def detect_project(input_content: InputContent, provided_project: Optional[str]) -> Optional[str]:
+def detect_project(input_content: InputContent, provided_project: str | None) -> str | None:
     """Detect project from git repository"""
     if provided_project:
         return provided_project
@@ -135,7 +134,7 @@ def detect_project(input_content: InputContent, provided_project: Optional[str])
     return detected_project
 
 
-def create_document(title: str, content: str, project: Optional[str]) -> int:
+def create_document(title: str, content: str, project: str | None) -> int:
     """Save document to database and return document ID"""
     # Ensure database schema exists
     try:
@@ -153,7 +152,7 @@ def create_document(title: str, content: str, project: Optional[str]) -> int:
         raise typer.Exit(1) from e
 
 
-def apply_tags(doc_id: int, tags_str: Optional[str]) -> list[str]:
+def apply_tags(doc_id: int, tags_str: str | None) -> list[str]:
     """Parse and apply tags to document"""
     if not tags_str:
         return []
@@ -170,7 +169,7 @@ def display_save_result(
     doc_id: int,
     metadata: DocumentMetadata,
     applied_tags: list[str],
-    supersede_target: Optional[dict] = None,
+    supersede_target: dict | None = None,
 ) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
@@ -184,15 +183,15 @@ def display_save_result(
 
 @app.command()
 def save(
-    input: Optional[str] = typer.Argument(
+    input: str | None = typer.Argument(
         None, help="File path or content to save (reads from stdin if not provided)"
     ),
-    title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title"),
-    project: Optional[str] = typer.Option(
+    title: str | None = typer.Option(None, "--title", "-t", help="Document title"),
+    project: str | None = typer.Option(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
-    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
-    group_id: Optional[int] = typer.Option(
+    tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
+    group_id: int | None = typer.Option(
         None, "--group", "-g",
         help="Add document to group",
         envvar="EMDX_GROUP_ID"
@@ -318,8 +317,8 @@ def save(
                             (doc_id, gist_id_str, gist_url, public),
                         )
                         conn.commit()
-                except Exception:
-                    pass  # Non-fatal — gist was still created
+                except Exception as e:
+                    console.print(f"   [dim]Warning: Failed to record gist in database: {e}[/dim]")
 
                 console.print(f"   [green]Gist:[/green] {gist_url}")
 
@@ -338,24 +337,24 @@ def save(
 
 @app.command()
 def find(
-    query: Optional[list[str]] = typer.Argument(
+    query: list[str] | None = typer.Argument(
         default=None, help="Search terms (optional if using --tags)"
     ),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
     fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy search"),
-    tags: Optional[str] = typer.Option(
+    tags: str | None = typer.Option(
         None, "--tags", "-t", help="Filter by tags (comma-separated)"
     ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
-    no_tags: Optional[str] = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
+    no_tags: str | None = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
     ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
-    created_after: Optional[str] = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),
-    created_before: Optional[str] = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),
-    modified_after: Optional[str] = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),
-    modified_before: Optional[str] = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),
+    created_after: str | None = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),
+    created_before: str | None = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),
+    modified_after: str | None = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),
+    modified_before: str | None = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),
 ) -> None:
     """Search the knowledge base with full-text search"""
     search_query = " ".join(query) if query else ""
@@ -414,7 +413,7 @@ def find(
             # Regular search without tags (but might have date filters)
             # If we have no search query but have date filters, use a wildcard
             effective_query = search_query if search_query else "*"
-            
+
             results = search_documents(
                 effective_query, project=project, limit=limit, fuzzy=fuzzy,
                 created_after=created_after, created_before=created_before,
@@ -429,7 +428,7 @@ def find(
                 else:
                     console.print("[yellow]No results found matching the date filters[/yellow]")
                 return
-        
+
         # Batch fetch tags for all results to avoid N+1 queries
         doc_ids = [result["id"] for result in results]
         all_tags_map = get_tags_for_documents(doc_ids)
@@ -463,7 +462,7 @@ def find(
             for result in results:
                 print(result['id'])
             return
-        
+
         if json_output:
             # Output as JSON with all metadata
             output_results = []
@@ -481,19 +480,19 @@ def find(
                     "tags": doc_tags,
                     "access_count": result.get("access_count", 0),
                 }
-                
+
                 # Add search-specific metadata if available
                 if "rank" in result:
                     output_result["relevance"] = result["rank"]
                 elif "score" in result:
                     output_result["similarity"] = result["score"]
-                
+
                 if snippets and "snippet" in result:
                     # Clean snippet of HTML tags
                     output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
-                
+
                 output_results.append(output_result)
-            
+
             # Output as JSON
             print(json.dumps(output_results, indent=2))
             return
@@ -517,7 +516,7 @@ def find(
             if modified_before:
                 date_range.append(f"before {modified_before}")
             search_desc.append(f"modified {' and '.join(date_range)}")
-        
+
         search_description = " ".join(search_desc) if search_desc else "all documents"
         console.print(
             f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n"
@@ -643,10 +642,10 @@ def view(
 @app.command()
 def edit(
     identifier: str = typer.Argument(..., help="Document ID or title"),
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None, "--title", "-t", help="Update title without editing content"
     ),
-    editor: Optional[str] = typer.Option(
+    editor: str | None = typer.Option(
         None, "--editor", "-e", help="Editor to use (default: $EDITOR)"
     ),
 ) -> None:

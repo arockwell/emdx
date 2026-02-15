@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 try:
     import anthropic
@@ -41,7 +41,7 @@ class AskService:
     DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
     MIN_EMBEDDINGS_FOR_SEMANTIC = 50  # Use semantic only if we have enough coverage
 
-    def __init__(self, model: Optional[str] = None):
+    def __init__(self, model: str | None = None):
         self.model = model or self.DEFAULT_MODEL
         self._client = None
         self._embedding_service = None
@@ -86,7 +86,7 @@ class AskService:
         self,
         question: str,
         limit: int = 10,
-        project: Optional[str] = None,
+        project: str | None = None,
         force_keyword: bool = False,
     ) -> Answer:
         """
@@ -112,7 +112,7 @@ class AskService:
         )
 
     def _retrieve_keyword(
-        self, question: str, limit: int, project: Optional[str] = None
+        self, question: str, limit: int, project: str | None = None
     ) -> Tuple[List[tuple], str]:
         """Retrieve documents using FTS keyword search."""
         docs = []
@@ -208,7 +208,7 @@ class AskService:
         return docs[:limit], "keyword"
 
     def _retrieve_semantic(
-        self, question: str, limit: int, project: Optional[str] = None
+        self, question: str, limit: int, project: str | None = None
     ) -> Tuple[List[tuple], str]:
         """Retrieve documents using semantic (embedding) search."""
         embedding_service = self._get_embedding_service()
@@ -304,7 +304,7 @@ Rules:
         question: str,
         additional_context: str,
         limit: int = 5,
-        project: Optional[str] = None,
+        project: str | None = None,
     ) -> Answer:
         """
         Ask a question with additional context (e.g., from external resources).

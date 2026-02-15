@@ -11,7 +11,7 @@ main documents table for efficiency (only ~1% of docs use cascade).
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
@@ -227,7 +227,7 @@ def get_cascade_stats() -> dict[str, int]:
             GROUP BY cm.stage
             """
         )
-        results = {stage: 0 for stage in STAGES}
+        results = dict.fromkeys(STAGES, 0)
         for row in cursor.fetchall():
             results[row["stage"]] = row["count"]
         return results

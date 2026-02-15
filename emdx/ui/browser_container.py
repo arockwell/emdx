@@ -8,12 +8,12 @@ import logging
 from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Vertical
+from textual.containers import Container
 from textual.reactive import reactive
 from textual.widget import Widget
 
 from emdx.config.ui_config import get_theme, set_theme
-from emdx.ui.themes import register_all_themes, get_theme_names, get_opposite_theme, is_dark_theme
+from emdx.ui.themes import get_opposite_theme, get_theme_names, is_dark_theme, register_all_themes
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class BrowserContainer(App):
         global _keybinding_registry
 
         try:
-            from emdx.ui.keybindings import KeybindingRegistry, ConflictSeverity
+            from emdx.ui.keybindings import ConflictSeverity, KeybindingRegistry
             from emdx.ui.keybindings.extractor import extract_all_keybindings
 
             # Extract all keybindings from widgets
@@ -155,7 +155,7 @@ class BrowserContainer(App):
             registry.register_many(entries)
 
             # Detect conflicts
-            conflicts = registry.detect_conflicts()
+            registry.detect_conflicts()
             _keybinding_registry = registry
 
             # Warn about critical conflicts

@@ -17,7 +17,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,9 @@ class StreamEvent:
 
     event_type: str  # "text", "tool", "status", "result", "skip"
     content: str  # Main content to display
-    timestamp: Optional[datetime] = None  # From StructuredLogger lines
-    tool_name: Optional[str] = None  # For tool_use events
-    tool_input: Optional[str] = None  # Brief summary of tool input
+    timestamp: datetime | None = None  # From StructuredLogger lines
+    tool_name: str | None = None  # For tool_use events
+    tool_input: str | None = None  # Brief summary of tool input
     raw_line: str = ""  # Original line for debugging
 
 

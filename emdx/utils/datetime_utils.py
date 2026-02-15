@@ -6,12 +6,12 @@ handling various input formats from SQLite, JSON, and ISO 8601 strings.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Union
+from typing import Union
 
 
 def parse_datetime(value: Union[str, datetime, None],
-                   default: Optional[datetime] = None,
-                   assume_utc: bool = False) -> Optional[datetime]:
+                   default: datetime | None = None,
+                   assume_utc: bool = False) -> datetime | None:
     """
     Parse a datetime value from various formats.
 

@@ -2,8 +2,7 @@
 Search functionality for emdx documents using FTS5
 """
 
-import re
-from typing import Any, Optional
+from typing import Any
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
@@ -39,14 +38,14 @@ def escape_fts5_query(query: str) -> str:
 
 
 def search_documents(
-    query: str, 
-    project: Optional[str] = None, 
-    limit: int = 10, 
+    query: str,
+    project: str | None = None,
+    limit: int = 10,
     fuzzy: bool = False,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    modified_after: Optional[str] = None,
-    modified_before: Optional[str] = None
+    created_after: str | None = None,
+    created_before: str | None = None,
+    modified_after: str | None = None,
+    modified_before: str | None = None
 ) -> list[dict[str, Any]]:
     """Search documents using FTS5
 
@@ -83,42 +82,42 @@ def search_documents(
                 WHERE documents_fts MATCH ? AND d.deleted_at IS NULL
             """
             params = [escape_fts5_query(query)]
-        
+
         conditions = []
-        
+
         # Add project filter
         if project:
             conditions.append("d.project = ?")
             params.append(project)
-        
+
         # Add date filters
         if created_after:
             conditions.append("d.created_at >= ?")
             params.append(created_after)
-        
+
         if created_before:
             conditions.append("d.created_at <= ?")
             params.append(created_before)
-        
+
         if modified_after:
             conditions.append("d.updated_at >= ?")
             params.append(modified_after)
-        
+
         if modified_before:
             conditions.append("d.updated_at <= ?")
             params.append(modified_before)
-        
+
         # Combine conditions
         if conditions:
             base_query += " AND " + " AND ".join(conditions)
-        
+
         # Order by rank for text searches, by id for date-only searches
         if query == "*":
             base_query += " ORDER BY d.id DESC LIMIT ?"
         else:
             base_query += " ORDER BY rank LIMIT ?"
         params.append(limit)
-        
+
         cursor = conn.execute(base_query, params)
 
         # Convert rows and parse datetime strings

@@ -6,13 +6,13 @@ Provides a modal dialog for selecting and previewing themes.
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Vertical, Horizontal
+from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Static, Label, OptionList
+from textual.widgets import Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from emdx.config.ui_config import get_theme, set_theme
-from emdx.ui.themes import get_theme_display_info, get_theme_names
+from emdx.ui.themes import get_theme_display_info
 
 
 class ThemeSelectorScreen(ModalScreen):

@@ -9,9 +9,9 @@ actually invoked.
 """
 
 import os
-from typing import Optional
 
 import typer
+
 from emdx import __build_id__, __version__
 from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 
@@ -88,21 +88,20 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # =============================================================================
 # EAGER IMPORTS - Core KB commands (fast, always needed)
 # =============================================================================
-from emdx.commands.core import app as core_app
 from emdx.commands.browse import app as browse_app
-from emdx.commands.tags import app as tag_app
-from emdx.commands.trash import app as trash_app
+from emdx.commands.core import app as core_app
 from emdx.commands.executions import app as executions_app
-from emdx.commands.tasks import app as tasks_app
+from emdx.commands.gist import app as gist_app
 from emdx.commands.groups import app as groups_app
 from emdx.commands.epics import app as epics_app
 from emdx.commands.categories import app as categories_app
+from emdx.commands.maintain import app as maintain_app
 from emdx.commands.prime import prime as prime_command
 from emdx.commands.status import status as status_command
+from emdx.commands.tags import app as tag_app
+from emdx.commands.tasks import app as tasks_app
+from emdx.commands.trash import app as trash_app
 from emdx.ui.gui import gui as gui_command
-from emdx.commands.maintain import app as maintain_app
-from emdx.commands.gist import app as gist_app
-
 
 # Create main app with lazy loading support
 app = typer.Typer(
@@ -191,9 +190,10 @@ def version():
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", "-V", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
-    db_url: Optional[str] = typer.Option(
+    db_url: str | None = typer.Option(
         None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
     ),
     safe_mode: bool = typer.Option(
@@ -234,6 +234,11 @@ def main(
         [cyan]EMDX_SAFE_MODE=1 emdx --help[/cyan]
         [cyan]emdx --safe-mode cascade add "idea"[/cyan]  # Will show disabled message
     """
+    # Handle --version flag
+    if version:
+        typer.echo(f"emdx {__version__}")
+        raise typer.Exit()
+
     # Set up global state based on flags
     if verbose and quiet:
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)

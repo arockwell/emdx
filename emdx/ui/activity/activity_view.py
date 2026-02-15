@@ -13,23 +13,23 @@ and cursor tracking by node reference — eliminating scroll jumping.
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import Static, RichLog, Tree
+from textual.widgets import RichLog, Static, Tree
 
 from emdx.utils.datetime_utils import parse_datetime
 
-from .sparkline import sparkline
-from .activity_items import ActivityItem as ActivityItemBase
+from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
+from .activity_items import ActivityItem as ActivityItemBase
 from .activity_tree import ActivityTree
 from .group_picker import GroupPicker
-from ..modals import HelpMixin
+from .sparkline import sparkline
 
 logger = logging.getLogger(__name__)
 
@@ -254,12 +254,12 @@ class ActivityView(HelpMixin, Widget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.activity_items: List[ActivityItem] = []
-        self.log_stream: Optional[LogStream] = None
+        self.log_stream: LogStream | None = None
         self.log_subscriber = AgentLogSubscriber(self)
-        self.streaming_item_id: Optional[int] = None
+        self.streaming_item_id: int | None = None
         self._fullscreen = False
         # Cache to prevent flickering during refresh
-        self._last_preview_key: Optional[tuple] = None  # (item_type, item_id, status)
+        self._last_preview_key: tuple | None = None  # (item_type, item_id, status)
         # Flag to only run zombie cleanup once on startup
         self._zombies_cleaned = False
         # Reentrance guard: prevents overlapping async refreshes
@@ -267,7 +267,7 @@ class ActivityView(HelpMixin, Widget):
         # Data loader (owns DB queries)
         self._data_loader = ActivityDataLoader()
 
-    def _get_selected_item(self) -> Optional[ActivityItem]:
+    def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the tree."""
         try:
             tree = self.query_one("#activity-tree", ActivityTree)
@@ -720,7 +720,7 @@ class ActivityView(HelpMixin, Widget):
                     log_path = Path(log_file)
 
             if not log_path:
-                preview_log.write(f"[yellow]⏳ Waiting for log...[/yellow]")
+                preview_log.write("[yellow]⏳ Waiting for log...[/yellow]")
                 preview_log.write(f"[dim]item_type={item.item_type}[/dim]")
                 return
 
@@ -735,7 +735,7 @@ class ActivityView(HelpMixin, Widget):
             initial = self.log_stream.get_initial_content()
             if initial:
                 from emdx.ui.live_log_writer import LiveLogWriter
-                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                LiveLogWriter(preview_log, auto_scroll=True)
                 from emdx.utils.stream_json_parser import parse_and_format_live_logs
                 formatted = parse_and_format_live_logs(initial)
                 for line in formatted[-50:]:
@@ -1151,7 +1151,7 @@ class ActivityView(HelpMixin, Widget):
         # First check if already visible in tree
         node = tree.find_node_by_doc_id(doc_id)
         if node:
-            logger.debug(f"Found document node directly in tree")
+            logger.debug("Found document node directly in tree")
             tree.move_cursor(node)
             tree.scroll_to_node(node)
             await self._update_preview(force=True)

@@ -6,8 +6,8 @@ Provides:
 - CommandRegistry: Registry of available commands
 """
 
-from .palette_screen import CommandPaletteScreen
 from .palette_commands import CommandRegistry, PaletteCommand
+from .palette_screen import CommandPaletteScreen
 
 __all__ = [
     "CommandPaletteScreen",

@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -22,7 +22,7 @@ from emdx.services.cascade_service import (
 )
 from emdx.services.execution_service import get_execution, update_execution_status
 
-from .constants import NEXT_STAGE, STAGES, STAGE_EMOJI
+from .constants import NEXT_STAGE, STAGE_EMOJI, STAGES
 from .document_list import DocumentList
 from .new_idea_screen import NewIdeaScreen
 from .stage_summary_bar import StageSummaryBar
@@ -39,7 +39,7 @@ class CascadeView(Widget):
             super().__init__()
 
     class ProcessStage(Message):
-        def __init__(self, stage: str, doc_id: Optional[int] = None):
+        def __init__(self, stage: str, doc_id: int | None = None):
             self.stage = stage
             self.doc_id = doc_id
             super().__init__()
@@ -89,16 +89,16 @@ class CascadeView(Widget):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.summary: Optional[StageSummaryBar] = None
-        self.doc_list: Optional[DocumentList] = None
-        self.pipeline_table: Optional[DataTable] = None
+        self.summary: StageSummaryBar | None = None
+        self.doc_list: DocumentList | None = None
+        self.pipeline_table: DataTable | None = None
         self._pipeline_data: List[Dict[str, Any]] = []
-        self._selected_pipeline_idx: Optional[int] = None
+        self._selected_pipeline_idx: int | None = None
         self._pipeline_view_mode: str = "output"
         self._auto_refresh_timer = None
         self._log_stream = None
         self._log_subscriber = None
-        self._selected_exec: Optional[Dict[str, Any]] = None
+        self._selected_exec: Dict[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
         from textual.containers import ScrollableContainer
@@ -416,7 +416,7 @@ class CascadeView(Widget):
             if doc_id:
                 self.post_message(self.ViewDocument(doc_id))
 
-    def _get_selected_pipeline_act(self) -> Optional[Dict[str, Any]]:
+    def _get_selected_pipeline_act(self) -> Dict[str, Any] | None:
         if self._selected_pipeline_idx is None:
             self._update_status("[yellow]Select a pipeline row first[/yellow]")
             return None

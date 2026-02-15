@@ -1,7 +1,7 @@
 """Tag management operations for emdx."""
 
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 from emdx.database import db
 from emdx.utils.datetime_utils import parse_datetime
@@ -27,7 +27,7 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Add tags to a document. Returns list of newly added tags."""
     # Expand aliases before processing
     expanded_tags = expand_aliases(tag_names)
-    
+
     with db.get_connection() as conn:
         added_tags = []
         for tag_name in expanded_tags:
@@ -67,7 +67,7 @@ def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Remove tags from a document. Returns list of removed tags."""
     # Expand aliases before processing
     expanded_tags = expand_aliases(tag_names)
-    
+
     with db.get_connection() as conn:
         removed_tags = []
 
@@ -117,7 +117,7 @@ def get_document_tags(doc_id: int) -> list[str]:
         # Convert any text aliases to emojis for display
         raw_tags = [row[0] for row in cursor.fetchall()]
         normalized_tags = [normalize_tag_to_emoji(tag) for tag in raw_tags]
-        
+
         # Remove duplicates while preserving order (in case both "gameplan" and "🎯" exist)
         seen = set()
         unique_tags = []
@@ -125,7 +125,7 @@ def get_document_tags(doc_id: int) -> list[str]:
             if tag not in seen:
                 seen.add(tag)
                 unique_tags.append(tag)
-        
+
         return unique_tags
 
 
@@ -209,7 +209,7 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 
             # Normalize tag name to emoji for display
             normalized_name = normalize_tag_to_emoji(row[1])
-            
+
             tags.append(
                 {
                     "id": row[0],
@@ -224,7 +224,7 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 
 
 def search_by_tags(
-    tag_names: list[str], mode: str = "all", project: Optional[str] = None, limit: int = 20,
+    tag_names: list[str], mode: str = "all", project: str | None = None, limit: int = 20,
     prefix_match: bool = True
 ) -> list[dict[str, Any]]:
     """Search documents by tags.
@@ -277,7 +277,7 @@ def search_by_tags(
             params = tag_names_lower + [len(tag_names_lower)]
         else:
             # Documents with ANY of the specified tags (or prefix matches)
-            query = """
+            query = f"""
                 SELECT DISTINCT
                     d.id, d.title, d.project, d.created_at, d.access_count,
                     GROUP_CONCAT(t.name, ', ') as tags
@@ -285,8 +285,8 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
-                AND ({})
-            """.format(tag_conditions)
+                AND ({tag_conditions})
+            """
 
             params = tag_params
 
@@ -301,7 +301,7 @@ def search_by_tags(
 
         docs = []
         for row in cursor.fetchall():
-            doc = dict(zip([col[0] for col in cursor.description], row))
+            doc = dict(zip([col[0] for col in cursor.description], row, strict=False))
             docs.append(doc)
 
         return docs

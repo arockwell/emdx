@@ -8,12 +8,10 @@ Provides a quick overview of:
 - Cascade queue
 """
 
-import typer
 from datetime import datetime, timedelta
-from typing import Optional
 
+import typer
 from rich.console import Console
-from rich.text import Text
 
 from ..database import db
 from ..models.tasks import (
@@ -26,7 +24,7 @@ from ..models.tasks import (
 console = Console()
 
 
-def _parse_timestamp(value) -> Optional[datetime]:
+def _parse_timestamp(value) -> datetime | None:
     """Parse a timestamp that may be a datetime, string, or None."""
     if value is None:
         return None
@@ -91,7 +89,7 @@ def _show_active_tasks():
         if task_type in ("group", "chain"):
             child_count = task.get("child_count", 0)
             children_done = task.get("children_done", 0)
-            children_active = task.get("children_active", 0)
+            task.get("children_active", 0)
             progress = f"step {children_done + 1}/{child_count}" if child_count else ""
             console.print(
                 f"  [cyan]#{task_id}[/cyan]  {task_type:<7} "
@@ -258,5 +256,5 @@ def status(
 
 
 # Create typer app for the command
-app = typer.Typer()
+app = typer.Typer(help="Show delegate activity and project status")
 app.command()(status)

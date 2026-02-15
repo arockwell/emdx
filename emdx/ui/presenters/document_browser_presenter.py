@@ -13,16 +13,19 @@ The original presenter handled:
 """
 
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
+from collections.abc import Awaitable, Callable
+from typing import Any, Dict, List, Set
 
 from emdx.services.document_service import (
     count_documents,
     delete_document,
     get_children_count,
     get_document,
-    list_documents as db_list_documents,
     save_document,
     update_document,
+)
+from emdx.services.document_service import (
+    list_documents as db_list_documents,
 )
 from emdx.services.tag_service import (
     add_tags_to_document,
@@ -43,7 +46,7 @@ class DocumentBrowserPresenter:
     def __init__(
         self,
         on_list_update: Callable[[DocumentListVM], Awaitable[None]],
-        on_detail_update: Optional[Callable[[DocumentDetailVM], Awaitable[None]]] = None,
+        on_detail_update: Callable[[DocumentDetailVM], Awaitable[None]] | None = None,
     ):
         """Initialize the presenter."""
         self.on_list_update = on_list_update
@@ -59,6 +62,7 @@ class DocumentBrowserPresenter:
         self._loading_more: bool = False
         self._expanded_docs: Set[int] = set()
         self._tags_cache: Dict[int, List[str]] = {}
+        self._tags_cache_max: int = 200  # Limit tags cache size
         self._doc_cache: Dict[int, Dict[str, Any]] = {}
         self._doc_cache_max: int = 50
 
@@ -83,6 +87,18 @@ class DocumentBrowserPresenter:
             has_more=self._has_more,
             status_text=status_text,
         )
+
+    def _update_tags_cache(self, tags_dict: Dict[int, List[str]]) -> None:
+        """Update tags cache with eviction when size limit exceeded.
+
+        Uses FIFO eviction to keep the cache bounded.
+        """
+        for doc_id, tags in tags_dict.items():
+            # Evict oldest entries if at capacity
+            while len(self._tags_cache) >= self._tags_cache_max:
+                oldest_key = next(iter(self._tags_cache))
+                del self._tags_cache[oldest_key]
+            self._tags_cache[doc_id] = tags
 
     def _raw_doc_to_view_model(
         self,
@@ -131,7 +147,7 @@ class DocumentBrowserPresenter:
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-            self._tags_cache.update(all_tags)
+            self._update_tags_cache(all_tags)
 
             children_counts = get_children_count(doc_ids)
 
@@ -174,7 +190,7 @@ class DocumentBrowserPresenter:
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-            self._tags_cache.update(all_tags)
+            self._update_tags_cache(all_tags)
 
             children_counts = get_children_count(doc_ids)
 
@@ -307,7 +323,7 @@ class DocumentBrowserPresenter:
 
             doc_ids = [doc["id"] for doc in raw_docs]
             all_tags = get_tags_for_documents(doc_ids) if doc_ids else {}
-            self._tags_cache.update(all_tags)
+            self._update_tags_cache(all_tags)
 
             children_counts = get_children_count(doc_ids)
 
@@ -364,7 +380,7 @@ class DocumentBrowserPresenter:
         try:
             add_tags_to_document(doc_id, tags)
             new_tags = self._tags_cache.get(doc_id, []) + tags
-            self._tags_cache[doc_id] = list(set(new_tags))
+            self._update_tags_cache({doc_id: list(set(new_tags))})
 
             for doc in self._filtered_documents:
                 if doc.id == doc_id:
@@ -381,7 +397,7 @@ class DocumentBrowserPresenter:
         try:
             remove_tags_from_document(doc_id, tags)
             current_tags = self._tags_cache.get(doc_id, [])
-            self._tags_cache[doc_id] = [t for t in current_tags if t not in tags]
+            self._update_tags_cache({doc_id: [t for t in current_tags if t not in tags]})
 
             for doc in self._filtered_documents:
                 if doc.id == doc_id:
@@ -393,7 +409,7 @@ class DocumentBrowserPresenter:
         except Exception as e:
             logger.error(f"Error removing tags from document {doc_id}: {e}")
 
-    def get_document_detail(self, doc_id: int) -> Optional[DocumentDetailVM]:
+    def get_document_detail(self, doc_id: int) -> DocumentDetailVM | None:
         """Get full document details for the detail panel."""
         try:
             if doc_id in self._doc_cache:
@@ -434,7 +450,7 @@ class DocumentBrowserPresenter:
         self,
         title: str,
         content: str,
-        tags: Optional[List[str]] = None,
+        tags: List[str] | None = None,
     ) -> int:
         """Save a new document."""
         project = get_git_project()
@@ -449,8 +465,8 @@ class DocumentBrowserPresenter:
     async def update_existing_document(
         self,
         doc_id: int,
-        title: Optional[str] = None,
-        content: Optional[str] = None,
+        title: str | None = None,
+        content: str | None = None,
     ) -> bool:
         """Update an existing document."""
         try:
@@ -470,13 +486,13 @@ class DocumentBrowserPresenter:
             logger.error(f"Error updating document {doc_id}: {e}")
             return False
 
-    def get_document_at_index(self, index: int) -> Optional[DocumentListItem]:
+    def get_document_at_index(self, index: int) -> DocumentListItem | None:
         """Get document at the given index in the filtered list."""
         if 0 <= index < len(self._filtered_documents):
             return self._filtered_documents[index]
         return None
 
-    def get_parent_document(self, doc: DocumentListItem) -> Optional[DocumentListItem]:
+    def get_parent_document(self, doc: DocumentListItem) -> DocumentListItem | None:
         """Get the parent document of a given document."""
         if doc.parent_id is None:
             return None

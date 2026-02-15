@@ -7,7 +7,7 @@ The full presenter/viewmodel pattern was removed as dead code.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 
 @dataclass
@@ -20,12 +20,12 @@ class DocumentListItem:
     tags_display: str
     project: str
     access_count: int
-    created_at: Optional[str] = None
-    accessed_at: Optional[str] = None
-    parent_id: Optional[int] = None
+    created_at: str | None = None
+    accessed_at: str | None = None
+    parent_id: int | None = None
     has_children: bool = False
     depth: int = 0
-    relationship: Optional[str] = None
+    relationship: str | None = None
 
 
 @dataclass
@@ -38,9 +38,9 @@ class DocumentDetailVM:
     project: str
     tags: List[str]
     tags_formatted: str
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    accessed_at: Optional[str] = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    accessed_at: str | None = None
     access_count: int = 0
     word_count: int = 0
     char_count: int = 0

@@ -29,22 +29,28 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import typer
 
+from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
 
 
-app = typer.Typer(name="delegate", help="Delegate tasks to agents (stdout-friendly)")
+app = typer.Typer(
+    name="delegate",
+    help="Delegate tasks to agents (stdout-friendly)",
+    context_settings={"allow_interspersed_args": True},
+)
 
 
-def _safe_create_task(**kwargs) -> Optional[int]:
+def _safe_create_task(**kwargs) -> int | None:
     """Create task, never fail delegate."""
     try:
         from ..models.tasks import create_task
@@ -54,26 +60,26 @@ def _safe_create_task(**kwargs) -> Optional[int]:
         return None
 
 
-def _safe_update_task(task_id: Optional[int], **kwargs) -> None:
+def _safe_update_task(task_id: int | None, **kwargs) -> None:
     """Update task, never fail delegate."""
     if task_id is None:
         return
     try:
         from ..models.tasks import update_task
         update_task(task_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
 
-def _safe_update_execution(exec_id: Optional[int], **kwargs) -> None:
+def _safe_update_execution(exec_id: int | None, **kwargs) -> None:
     """Update execution record, never fail delegate."""
     if exec_id is None:
         return
     try:
         from ..models.executions import update_execution
         update_execution(exec_id, **kwargs)
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
 
 
 PR_INSTRUCTION = (
@@ -138,12 +144,73 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Allowlist of safe discovery commands that can be used with --each
+# These commands are designed for file/directory discovery and are safe to execute
+SAFE_DISCOVERY_COMMANDS = frozenset({
+    "fd",           # Modern find alternative
+    "find",         # Traditional file finder
+    "ls",           # List files
+    "eza",          # Modern ls alternative
+    "exa",          # Another ls alternative
+    "rg",           # ripgrep (with --files flag for discovery)
+    "git",          # git ls-files, etc.
+    "locate",       # File location database
+    "tree",         # Directory tree
+    "echo",         # Simple output
+    "cat",          # Read file contents
+    "head",         # First lines
+    "tail",         # Last lines
+    "seq",          # Generate sequences
+})
+
+
+def _validate_discovery_command(command: str) -> List[str]:
+    """Parse and validate a discovery command against the allowlist.
+
+    Args:
+        command: The discovery command string from --each
+
+    Returns:
+        List of command arguments (parsed via shlex)
+
+    Raises:
+        typer.Exit: If the command is not in the allowlist
+    """
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
+        raise typer.Exit(1)
+
+    if not args:
+        sys.stderr.write("delegate: empty discovery command\n")
+        raise typer.Exit(1)
+
+    # Extract the base command (handle paths like /usr/bin/fd)
+    base_cmd = Path(args[0]).name
+
+    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
+        sys.stderr.write(
+            f"delegate: '{base_cmd}' is not an allowed discovery command\n"
+            f"delegate: allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
+        )
+        raise typer.Exit(1)
+
+    return args
+
+
 def _run_discovery(command: str) -> List[str]:
-    """Run a shell command and return output lines as items."""
+    """Run a validated discovery command and return output lines as items.
+
+    Security: Uses shlex.split() with shell=False and validates the command
+    against an allowlist of safe discovery tools to prevent command injection.
+    """
+    args = _validate_discovery_command(command)
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=30,
@@ -165,7 +232,7 @@ def _run_discovery(command: str) -> List[str]:
         raise typer.Exit(1)
 
 
-def _load_doc_context(doc_id: int, prompt: Optional[str]) -> str:
+def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
 
     If prompt provided: "Document #id (title):\n\n{content}\n\n---\n\nTask: {prompt}"
@@ -196,16 +263,16 @@ def _print_doc_content(doc_id: int) -> None:
 def _run_single(
     prompt: str,
     tags: List[str],
-    title: Optional[str],
-    model: Optional[str],
+    title: str | None,
+    model: str | None,
     quiet: bool,
     pr: bool = False,
-    working_dir: Optional[str] = None,
-    source_doc_id: Optional[int] = None,
-    parent_task_id: Optional[int] = None,
-    seq: Optional[int] = None,
-    epic_key: Optional[str] = None,
-) -> tuple[Optional[int], Optional[int]]:
+    working_dir: str | None = None,
+    source_doc_id: int | None = None,
+    parent_task_id: int | None = None,
+    seq: int | None = None,
+    epic_key: str | None = None,
+) -> tuple[int | None, int | None]:
     """Run a single task via UnifiedExecutor. Returns (doc_id, task_id)."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
@@ -242,7 +309,7 @@ def _run_single(
         title=doc_title,
         output_instruction=output_instruction,
         working_dir=working_dir or str(Path.cwd()),
-        timeout_seconds=300,
+        timeout_seconds=DELEGATE_EXECUTION_TIMEOUT,
         model=model,
     )
 
@@ -281,17 +348,17 @@ def _run_single(
 def _run_parallel(
     tasks: List[str],
     tags: List[str],
-    title: Optional[str],
-    jobs: Optional[int],
+    title: str | None,
+    jobs: int | None,
     synthesize: bool,
-    model: Optional[str],
+    model: str | None,
     quiet: bool,
     pr: bool = False,
     base_branch: str = "main",
-    source_doc_id: Optional[int] = None,
+    source_doc_id: int | None = None,
     worktree: bool = False,
-    epic_key: Optional[str] = None,
-    epic_parent_id: Optional[int] = None,
+    epic_key: str | None = None,
+    epic_parent_id: int | None = None,
 ) -> List[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -308,9 +375,9 @@ def _run_parallel(
     )
 
     # Results indexed by task position to preserve order
-    results: dict[int, tuple[Optional[int], Optional[int]]] = {}
+    results: dict[int, tuple[int | None, int | None]] = {}
 
-    def run_task(idx: int, task: str) -> tuple[int, tuple[Optional[int], Optional[int]]]:
+    def run_task(idx: int, task: str) -> tuple[int, tuple[int | None, int | None]]:
         task_title = title or f"Delegate: {task[:60]}"
         if len(tasks) > 1:
             task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
@@ -415,14 +482,14 @@ def _run_parallel(
 def _run_chain(
     tasks: List[str],
     tags: List[str],
-    title: Optional[str],
-    model: Optional[str],
+    title: str | None,
+    model: str | None,
     quiet: bool,
     pr: bool = False,
-    working_dir: Optional[str] = None,
-    source_doc_id: Optional[int] = None,
-    epic_key: Optional[str] = None,
-    epic_parent_id: Optional[int] = None,
+    working_dir: str | None = None,
+    source_doc_id: int | None = None,
+    epic_key: str | None = None,
+    epic_parent_id: int | None = None,
 ) -> List[int]:
     """Run tasks sequentially, piping output from each step to the next.
 
@@ -532,11 +599,11 @@ def delegate(
         None,
         help="Task prompt(s) or document IDs. Numeric args load doc content.",
     ),
-    tags: Optional[List[str]] = typer.Option(
+    tags: List[str] | None = typer.Option(
         None, "--tags", "-t",
         help="Tags to apply to outputs (comma-separated)",
     ),
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None, "--title", "-T",
         help="Title for output document(s)",
     ),
@@ -584,11 +651,11 @@ def delegate(
         None, "--do",
         help="Template for each discovered item (use {{item}})",
     ),
-    epic: int = typer.Option(
+    epic: int | None = typer.Option(
         None, "--epic", "-e",
         help="Epic task ID to add tasks to",
     ),
-    cat: str = typer.Option(
+    cat: str | None = typer.Option(
         None, "--cat", "-c",
         help="Category key for auto-numbered tasks",
     ),
@@ -674,9 +741,9 @@ def delegate(
 
     # Resolve --epic and --cat to parent_task_id and epic_key
     epic_parent_id = None
-    epic_key = cat.upper() if cat else None
+    epic_key = cat.upper() if isinstance(cat, str) else None
 
-    if epic:
+    if isinstance(epic, int) and epic:
         from ..models.tasks import get_task as _get_task
         epic_task = _get_task(epic)
         if not epic_task:

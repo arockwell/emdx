@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 try:
     import numpy as np
@@ -58,7 +58,7 @@ class SemanticMatch:
 
     doc_id: int
     title: str
-    project: Optional[str]
+    project: str | None
     similarity: float
     snippet: str
 
@@ -115,7 +115,7 @@ class EmbeddingService:
 
         return embedding
 
-    def _get_cached_embedding(self, doc_id: int) -> Optional[np.ndarray]:
+    def _get_cached_embedding(self, doc_id: int) -> np.ndarray | None:
         """Get cached embedding from database."""
         with db.get_connection() as conn:
             cursor = conn.cursor()
@@ -195,7 +195,7 @@ class EmbeddingService:
             # Save all embeddings in batch
             with db.get_connection() as conn:
                 cursor = conn.cursor()
-                for (doc_id, _, _), embedding in zip(batch, embeddings):
+                for (doc_id, _, _), embedding in zip(batch, embeddings, strict=False):
                     cursor.execute(
                         """
                         INSERT OR REPLACE INTO document_embeddings

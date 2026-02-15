@@ -1,6 +1,6 @@
 """Document list widget for cascade browser."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from textual.app import ComposeResult
 from textual.message import Message
@@ -9,7 +9,6 @@ from textual.widgets import DataTable, Static
 
 from emdx.services.cascade_service import (
     get_child_info,
-    get_document_pr_url,
     list_documents_at_stage,
 )
 
@@ -163,7 +162,7 @@ class DocumentList(Widget):
         """Get list of selected document IDs."""
         return list(self.selected_ids)
 
-    def get_selected_doc_id(self) -> Optional[int]:
+    def get_selected_doc_id(self) -> int | None:
         """Get currently selected document ID (cursor position)."""
         table = self.query_one("#doc-table", DataTable)
         if table.row_count > 0 and table.cursor_row is not None:

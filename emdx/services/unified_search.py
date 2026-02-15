@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from ..database import db
 from ..database.search import search_documents
@@ -28,11 +28,11 @@ class SearchQuery:
     tags: List[str] = field(default_factory=list)
     tag_mode: str = "all"  # "all" or "any"
     semantic: bool = False
-    created_after: Optional[datetime] = None
-    created_before: Optional[datetime] = None
-    modified_after: Optional[datetime] = None
-    modified_before: Optional[datetime] = None
-    project: Optional[str] = None
+    created_after: datetime | None = None
+    created_before: datetime | None = None
+    modified_after: datetime | None = None
+    modified_before: datetime | None = None
+    project: str | None = None
     limit: int = 50
 
 
@@ -46,9 +46,9 @@ class SearchResult:
     score: float  # Normalized 0-1
     source: str  # "fts", "tags", "semantic", "fuzzy"
     tags: List[str] = field(default_factory=list)
-    project: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    project: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class UnifiedSearchService:
@@ -385,7 +385,7 @@ class UnifiedSearchService:
         query: str,
         limit: int = 20,
         threshold: float = 0.4,
-        exclude_ids: Optional[Set[int]] = None,
+        exclude_ids: Set[int] | None = None,
     ) -> List[SearchResult]:
         """
         Fuzzy search document titles using SequenceMatcher.
@@ -538,7 +538,7 @@ class UnifiedSearchService:
 
         return [{"name": normalize_tag_to_emoji(row[0]), "count": row[1]} for row in rows]
 
-    def get_document_by_id(self, doc_id: int) -> Optional[SearchResult]:
+    def get_document_by_id(self, doc_id: int) -> SearchResult | None:
         """Get a single document by ID."""
         with db.get_connection() as conn:
             cursor = conn.cursor()

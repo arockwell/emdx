@@ -10,7 +10,6 @@ Features:
 
 import asyncio
 import logging
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -136,7 +135,7 @@ class SearchScreen(HelpMixin, Widget):
         super().__init__(*args, **kwargs)
         self.presenter = SearchPresenter(on_state_update=self._on_state_update)
         self._debounce_timer = None
-        self._current_vm: Optional[SearchStateVM] = None
+        self._current_vm: SearchStateVM | None = None
 
     def compose(self) -> ComposeResult:
         # Search bar

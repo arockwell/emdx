@@ -9,7 +9,7 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from typing import List, Optional, Type
+from typing import List, Type
 
 from textual.binding import Binding
 from textual.widget import Widget
@@ -79,7 +79,7 @@ class KeybindingExtractor:
 
     def _scan_module_members(self, module) -> None:
         """Scan a module's members for Widget classes with BINDINGS."""
-        for name, obj in inspect.getmembers(module, inspect.isclass):
+        for _name, obj in inspect.getmembers(module, inspect.isclass):
             # Skip if already scanned (class might be imported in multiple places)
             if obj in self.scanned_classes:
                 continue
@@ -118,7 +118,7 @@ class KeybindingExtractor:
 
     def _binding_to_entry(
         self, binding: Binding, widget_class: Type[Widget], context: Context
-    ) -> Optional[KeybindingEntry]:
+    ) -> KeybindingEntry | None:
         """Convert a Textual Binding to a KeybindingEntry."""
         try:
             return KeybindingEntry(
@@ -138,7 +138,7 @@ class KeybindingExtractor:
 
     def _tuple_to_entry(
         self, binding: tuple, widget_class: Type[Widget], context: Context
-    ) -> Optional[KeybindingEntry]:
+    ) -> KeybindingEntry | None:
         """Convert a legacy tuple binding to a KeybindingEntry."""
         try:
             key = binding[0]

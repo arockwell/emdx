@@ -1,7 +1,5 @@
 """Epic CLI commands — manage task epics (grouped work within categories)."""
 
-from typing import Optional
-
 import typer
 from rich.table import Table
 
@@ -17,7 +15,7 @@ ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocke
 def create(
     name: str = typer.Argument(..., help="Epic name"),
     cat: str = typer.Option(..., "--cat", "-c", help="Category key (e.g. SEC)"),
-    description: Optional[str] = typer.Option(None, "-D", "--description", help="Epic description"),
+    description: str | None = typer.Option(None, "-D", "--description", help="Epic description"),
 ):
     """Create a new epic.
 
@@ -35,8 +33,8 @@ def create(
 
 @app.command("list")
 def list_cmd(
-    cat: Optional[str] = typer.Option(None, "--cat", "-c", help="Filter by category"),
-    status: Optional[str] = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
+    cat: str | None = typer.Option(None, "--cat", "-c", help="Filter by category"),
+    status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
 ):
     """List epics with child task counts.
 

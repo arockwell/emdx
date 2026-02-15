@@ -6,7 +6,6 @@ works as a shorthand for `emdx tag add 42 gameplan`.
 """
 
 
-from typing import Optional
 
 import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -24,7 +23,6 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import normalize_tag_to_emoji
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 
@@ -33,7 +31,7 @@ app = typer.Typer(help="Manage document tags")
 
 def _add_tags_impl(
     doc_id: int,
-    tags: Optional[list[str]],
+    tags: list[str] | None,
     auto: bool,
     suggest: bool,
 ):
@@ -135,7 +133,7 @@ def tag_callback():
 @app.command()
 def add(
     doc_id: int = typer.Argument(..., help="Document ID to tag"),
-    tags: Optional[list[str]] = typer.Argument(None, help="Tags to add (space-separated)"),
+    tags: list[str] | None = typer.Argument(None, help="Tags to add (space-separated)"),
     auto: bool = typer.Option(False, "--auto", "-a", help="Apply high-confidence auto-tags"),
     suggest: bool = typer.Option(False, "--suggest", "-s", help="Show tag suggestions"),
 ):
@@ -323,11 +321,11 @@ def merge(
 @app.command()
 def batch(
     untagged_only: bool = typer.Option(True, "--untagged/--all", help="Only process untagged documents"),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
     confidence: float = typer.Option(0.7, "--confidence", "-c", help="Minimum confidence threshold"),
     max_tags: int = typer.Option(3, "--max-tags", "-m", help="Maximum tags per document"),
     dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
 ):
     """Batch auto-tag multiple documents."""
     try:
@@ -366,7 +364,7 @@ def batch(
             return
 
         # Display what will be done
-        console.print(f"\n[bold cyan]🏷️  Batch Auto-Tagging Report[/bold cyan]")
+        console.print("\n[bold cyan]🏷️  Batch Auto-Tagging Report[/bold cyan]")
         console.print(f"\n[yellow]Found {len(eligible_docs)} documents to tag[/yellow]")
         console.print(f"[yellow]Total tags to apply: {total_tags_to_apply}[/yellow]\n")
 

@@ -2,7 +2,6 @@
 AI-powered Q&A and semantic search commands for EMDX.
 """
 
-from typing import Optional
 
 import typer
 from rich.panel import Panel
@@ -18,7 +17,7 @@ app = typer.Typer(help="AI-powered knowledge base features")
 def ask_question(
     question: str = typer.Argument(..., help="Your question"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to search"),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Limit to project"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),
     show_sources: bool = typer.Option(True, "--sources/--no-sources", help="Show source documents"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
@@ -61,7 +60,7 @@ def ask_question(
 def get_context(
     question: str = typer.Argument(..., help="Your question"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to retrieve"),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Limit to project"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search"),
     include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),
 ):
@@ -75,8 +74,9 @@ def get_context(
         emdx ai context "What's the API design?" | claude "summarize this"
         emdx ai context "error handling" --no-question | claude "list the patterns"
     """
-    from ..services.ask_service import AskService
     import sys
+
+    from ..services.ask_service import AskService
 
     service = AskService()
 
@@ -167,7 +167,7 @@ def semantic_search(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max results"),
     threshold: float = typer.Option(0.3, "--threshold", "-t", help="Minimum similarity (0-1)"),
-    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
 ):
     """
     Semantic search across your documents.
@@ -262,7 +262,7 @@ def find_similar(
         raise typer.Exit(1)
 
     if not results:
-        console.print(f"[yellow]No similar documents found[/yellow]")
+        console.print("[yellow]No similar documents found[/yellow]")
         return
 
     console.print(f"[bold]Documents similar to #{doc_id} '{source_title}':[/bold]\n")
