@@ -290,7 +290,7 @@ class UnifiedSearchService:
                 SearchResult(
                     doc_id=doc["id"],
                     title=doc["title"],
-                    snippet=doc.get("snippet", "")[:200] if doc.get("snippet") else "",
+                    snippet=(doc.get("snippet") or "")[:200],
                     score=score,
                     source="fts",
                     project=doc.get("project"),

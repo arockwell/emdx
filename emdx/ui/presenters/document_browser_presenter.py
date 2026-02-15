@@ -16,6 +16,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from emdx.database.types import DocumentListItem as DbDocumentListItem
+from emdx.database.types import DocumentRow, SearchResult
 from emdx.services.document_service import (
     count_documents,
     delete_document,
@@ -62,7 +64,7 @@ class DocumentBrowserPresenter:
         self._expanded_docs: set[int] = set()
         self._tags_cache: dict[int, list[str]] = {}
         self._tags_cache_max: int = 200  # Limit tags cache size
-        self._doc_cache: dict[int, dict[str, Any]] = {}
+        self._doc_cache: dict[int, DocumentRow] = {}
         self._doc_cache_max: int = 50
 
     def _create_list_vm(self) -> DocumentListVM:
@@ -101,7 +103,7 @@ class DocumentBrowserPresenter:
 
     def _raw_doc_to_view_model(
         self,
-        doc: dict[str, Any],
+        doc: DbDocumentListItem | SearchResult,
         tags: list[str],
         has_children: bool,
         depth: int = 0,
@@ -113,19 +115,21 @@ class DocumentBrowserPresenter:
         if was_truncated:
             title += "..."
 
+        # access_count is on DbDocumentListItem but not SearchResult
+        raw: dict[str, Any] = dict(doc)
         return DocumentListItem(
             id=doc["id"],
             title=title,
             tags=tags,
             tags_display=tags_display,
             project=doc["project"] if doc["project"] else "default",
-            access_count=doc["access_count"] or 0,
+            access_count=raw.get("access_count", 0) or 0,
             created_at=doc["created_at"],
-            accessed_at=doc.get("accessed_at"),
-            parent_id=doc.get("parent_id"),
+            accessed_at=raw.get("accessed_at"),
+            parent_id=raw.get("parent_id"),
             has_children=has_children,
             depth=depth,
-            relationship=doc.get("relationship"),
+            relationship=raw.get("relationship"),
         )
 
     async def load_documents(
@@ -411,6 +415,7 @@ class DocumentBrowserPresenter:
     def get_document_detail(self, doc_id: int) -> DocumentDetailVM | None:
         """Get full document details for the detail panel."""
         try:
+            doc: DocumentRow
             if doc_id in self._doc_cache:
                 doc = self._doc_cache[doc_id]
             else:
@@ -431,7 +436,7 @@ class DocumentBrowserPresenter:
                 id=doc["id"],
                 title=doc["title"],
                 content=content,
-                project=doc.get("project", "default"),
+                project=doc.get("project") or "default",
                 tags=tags,
                 tags_formatted=format_tags(tags),
                 created_at=doc.get("created_at"),

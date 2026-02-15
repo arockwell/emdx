@@ -9,6 +9,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.markdown import Markdown
@@ -19,6 +20,7 @@ from emdx.database.documents import (
     find_supersede_candidate,
     set_parent,
 )
+from emdx.database.types import SupersedeCandidate
 from emdx.models.documents import (
     delete_document,
     get_document,
@@ -169,7 +171,7 @@ def display_save_result(
     doc_id: int,
     metadata: DocumentMetadata,
     applied_tags: list[str],
-    supersede_target: dict | None = None,
+    supersede_target: SupersedeCandidate | None = None,
 ) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
@@ -390,7 +392,9 @@ def find(
                 )
 
                 # Combine: only show documents that match both criteria
-                results = [doc for doc in search_results if doc["id"] in tag_doc_ids][:limit]
+                results: list[dict[str, Any]] = [
+                    dict(doc) for doc in search_results if doc["id"] in tag_doc_ids
+                ][:limit]
 
                 if not results:
                     console.print(
@@ -414,11 +418,13 @@ def find(
             # If we have no search query but have date filters, use a wildcard
             effective_query = search_query if search_query else "*"
 
-            results = search_documents(
-                effective_query, project=project, limit=limit, fuzzy=fuzzy,
-                created_after=created_after, created_before=created_before,
-                modified_after=modified_after, modified_before=modified_before
-            )
+            results = [
+                dict(doc) for doc in search_documents(
+                    effective_query, project=project, limit=limit, fuzzy=fuzzy,
+                    created_after=created_after, created_before=created_before,
+                    modified_after=modified_after, modified_before=modified_before,
+                )
+            ]
 
             if not results:
                 if search_query:
@@ -471,12 +477,14 @@ def find(
                 doc_tags = all_tags_map.get(result["id"], [])
 
                 # Build clean result object
+                created = result["created_at"]
+                updated = result.get("updated_at") or created
                 output_result = {
                     "id": result["id"],
                     "title": result["title"],
                     "project": result.get("project"),
-                    "created_at": result["created_at"].isoformat(),
-                    "updated_at": result.get("updated_at", result["created_at"]).isoformat(),
+                    "created_at": created.isoformat() if created else None,
+                    "updated_at": updated.isoformat() if updated else None,
                     "tags": doc_tags,
                     "access_count": result.get("access_count", 0),
                 }
@@ -530,7 +538,8 @@ def find(
             metadata = []
             if result["project"]:
                 metadata.append(f"[green]{result['project']}[/green]")
-            metadata.append(f"[yellow]{result['created_at'].strftime('%Y-%m-%d')}[/yellow]")
+            if result["created_at"]:
+                metadata.append(f"[yellow]{result['created_at'].strftime('%Y-%m-%d')}[/yellow]")
 
             if "rank" in result:
                 metadata.append(f"[dim]relevance: {result['rank']:.3f}[/dim]")
@@ -593,7 +602,9 @@ def view(
                 console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
                 console.print("=" * 60)
                 console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                ca = doc['created_at']
+                created_str = ca.strftime('%Y-%m-%d %H:%M') if ca else 'Unknown'
+                console.print(f"[dim]Created:[/dim] {created_str}")
                 console.print(f"[dim]Views:[/dim] {doc['access_count']}")
                 # Show tags
                 doc_tags = get_document_tags(doc["id"])
@@ -618,9 +629,9 @@ def view(
                     )
                     console.print("=" * 60)
                     console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                    console.print(
-                        f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}"
-                    )
+                    ca = doc['created_at']
+                    created_str = ca.strftime('%Y-%m-%d %H:%M') if ca else 'Unknown'
+                    console.print(f"[dim]Created:[/dim] {created_str}")
                     console.print(f"[dim]Views:[/dim] {doc['access_count']}")
                     # Show tags
                     doc_tags = get_document_tags(doc["id"])
@@ -682,7 +693,9 @@ def edit(
             # Write header comment
             tmp_file.write(f"# Editing: {doc['title']} (ID: {doc['id']})\n")
             tmp_file.write(f"# Project: {doc['project'] or 'None'}\n")
-            tmp_file.write(f"# Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}\n")
+            ca = doc['created_at']
+            created_str = ca.strftime('%Y-%m-%d %H:%M') if ca else 'Unknown'
+            tmp_file.write(f"# Created: {created_str}\n")
             tmp_file.write("# Lines starting with '#' will be removed\n")
             tmp_file.write("#\n")
             tmp_file.write("# First line (after comments) will be used as the title\n")
@@ -811,7 +824,7 @@ def delete(
                 str(doc["id"]),
                 doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
                 doc["project"] or "[dim]None[/dim]",
-                doc["created_at"].strftime("%Y-%m-%d"),
+                doc["created_at"].strftime("%Y-%m-%d") if doc["created_at"] else "",
                 "[red]PERMANENT[/red]" if hard else "[yellow]Soft delete[/yellow]",
             )
 

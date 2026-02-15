@@ -6,7 +6,10 @@ These are stub classes that provide the interface without implementation.
 The full presenter/viewmodel pattern was removed as dead code.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass
@@ -19,8 +22,8 @@ class DocumentListItem:
     tags_display: str
     project: str
     access_count: int
-    created_at: str | None = None
-    accessed_at: str | None = None
+    created_at: datetime | None = None
+    accessed_at: datetime | None = None
     parent_id: int | None = None
     has_children: bool = False
     depth: int = 0
@@ -36,9 +39,9 @@ class DocumentDetailVM:
     project: str
     tags: list[str]
     tags_formatted: str
-    created_at: str | None = None
-    updated_at: str | None = None
-    accessed_at: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    accessed_at: datetime | None = None
     access_count: int = 0
     word_count: int = 0
     char_count: int = 0

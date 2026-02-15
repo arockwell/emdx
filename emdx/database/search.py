@@ -2,10 +2,11 @@
 Search functionality for emdx documents using FTS5
 """
 
-from typing import Any
+from typing import Any, cast
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
+from .types import SearchResult
 
 
 def escape_fts5_query(query: str) -> str:
@@ -45,8 +46,8 @@ def search_documents(
     created_after: str | None = None,
     created_before: str | None = None,
     modified_after: str | None = None,
-    modified_before: str | None = None
-) -> list[dict[str, Any]]:
+    modified_before: str | None = None,
+) -> list[SearchResult]:
     """Search documents using FTS5
 
     Args:
@@ -121,11 +122,11 @@ def search_documents(
         cursor = conn.execute(base_query, params)
 
         # Convert rows and parse datetime strings
-        docs = []
+        docs: list[SearchResult] = []
         for row in cursor.fetchall():
-            doc = dict(row)
+            raw: dict[str, Any] = dict(row)
             for field in ["created_at", "updated_at", "last_accessed"]:
-                if field in doc and isinstance(doc[field], str):
-                    doc[field] = parse_datetime(doc[field])
-            docs.append(doc)
+                if field in raw and isinstance(raw[field], str):
+                    raw[field] = parse_datetime(raw[field])
+            docs.append(cast(SearchResult, raw))
         return docs

@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Union, cast
 
 from . import cascade, groups
 from .connection import DatabaseConnection, db_connection
@@ -34,6 +34,14 @@ from .documents import (
     update_document,
 )
 from .search import search_documents
+from .types import (
+    DatabaseStats,
+    DeletedDocumentItem,
+    DocumentListItem,
+    DocumentRow,
+    RecentDocumentItem,
+    SearchResult,
+)
 
 
 class SQLiteDatabase:
@@ -130,7 +138,7 @@ class SQLiteDatabase:
 
             return doc_id
 
-    def get_document(self, identifier: Union[str, int]) -> dict[str, Any] | None:
+    def get_document(self, identifier: Union[str, int]) -> DocumentRow | None:
         """Get a document by ID or title."""
         if not self._uses_custom_path:
             return get_document(identifier)
@@ -161,9 +169,9 @@ class SQLiteDatabase:
                 )
             conn.commit()
             row = cursor.fetchone()
-            return dict(row) if row else None
+            return cast(DocumentRow, dict(row)) if row else None
 
-    def list_documents(self, project: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    def list_documents(self, project: str | None = None, limit: int = 50) -> list[DocumentListItem]:
         """List documents with optional filters."""
         if not self._uses_custom_path:
             return list_documents(project, limit)
@@ -183,7 +191,7 @@ class SQLiteDatabase:
                 f"FROM documents WHERE {where_clause} ORDER BY id DESC LIMIT ?",
                 params,
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(DocumentListItem, dict(row)) for row in cursor.fetchall()]
 
     def update_document(self, doc_id: int, title: str, content: str) -> bool:
         """Update a document."""
@@ -234,7 +242,7 @@ class SQLiteDatabase:
             conn.commit()
             return bool(cursor.rowcount > 0)
 
-    def get_recent_documents(self, limit: int = 10) -> list[dict[str, Any]]:
+    def get_recent_documents(self, limit: int = 10) -> list[RecentDocumentItem]:
         """Get recently accessed documents."""
         if not self._uses_custom_path:
             return get_recent_documents(limit)
@@ -246,9 +254,9 @@ class SQLiteDatabase:
                 "FROM documents WHERE is_deleted = FALSE ORDER BY accessed_at DESC LIMIT ?",
                 (limit,),
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(RecentDocumentItem, dict(row)) for row in cursor.fetchall()]
 
-    def get_stats(self, project: str | None = None) -> dict[str, Any]:
+    def get_stats(self, project: str | None = None) -> DatabaseStats:
         """Get database statistics."""
         if not self._uses_custom_path:
             return get_stats(project)
@@ -268,11 +276,11 @@ class SQLiteDatabase:
                     "SUM(access_count) as total_views, AVG(access_count) as avg_views "
                     "FROM documents WHERE is_deleted = FALSE"
                 )
-            return dict(cursor.fetchone())
+            return cast(DatabaseStats, dict(cursor.fetchone()))
 
     def list_deleted_documents(
         self, days: int | None = None, limit: int = 50,
-    ) -> list[dict[str, Any]]:
+    ) -> list[DeletedDocumentItem]:
         """List soft-deleted documents."""
         if not self._uses_custom_path:
             return list_deleted_documents(days, limit)
@@ -292,7 +300,7 @@ class SQLiteDatabase:
                     "WHERE is_deleted = TRUE ORDER BY deleted_at DESC LIMIT ?",
                     (limit,),
                 )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(DeletedDocumentItem, dict(row)) for row in cursor.fetchall()]
 
     def restore_document(self, identifier: Union[str, int]) -> bool:
         """Restore a soft-deleted document."""
@@ -345,7 +353,7 @@ class SQLiteDatabase:
         created_before: str | None = None,
         modified_after: str | None = None,
         modified_before: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SearchResult]:
         """Search documents using FTS."""
         if not self._uses_custom_path:
             return search_documents(query, project, limit, fuzzy,
@@ -369,7 +377,7 @@ class SQLiteDatabase:
                     f"FROM documents d WHERE {where_clause} ORDER BY d.id DESC LIMIT ?",
                     params,
                 )
-                return [dict(row) for row in cursor.fetchall()]
+                return [cast(SearchResult, dict(row)) for row in cursor.fetchall()]
 
             conditions = ["d.is_deleted = FALSE"]
             params = []
@@ -389,7 +397,7 @@ class SQLiteDatabase:
                 f"WHERE fts.documents_fts MATCH ? AND {where_clause} ORDER BY rank LIMIT ?",
                 [safe_query] + params + [limit],
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [cast(SearchResult, dict(row)) for row in cursor.fetchall()]
 
 
 # Create global instance for backward compatibility
