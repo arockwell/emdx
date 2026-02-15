@@ -34,14 +34,14 @@ def _get_model():
             raise ImportError(
                 "numpy is required for embedding features. "
                 "Install it with: pip install 'emdx[ai]'"
-            )
+            ) from None
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError:
             raise ImportError(
                 "sentence-transformers is required for embedding features. "
                 "Install it with: pip install 'emdx[ai]'"
-            )
+            ) from None
 
         # all-MiniLM-L6-v2: Good balance of speed/quality
         # ~90MB download, ~80ms per doc, 384 dimensions
@@ -97,7 +97,7 @@ class EmbeddingService:
             )
             row = cursor.fetchone()
             if not row:
-                raise ValueError(f"Document {doc_id} not found")
+                raise ValueError(f"Document {doc_id} not found") from None
 
             title, content = row
 

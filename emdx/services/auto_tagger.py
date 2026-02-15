@@ -8,9 +8,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Union
 
-# Type alias for SQL parameters
-SqlParam = Union[str, int, float, None]
-
 from ..config.constants import (
     DEFAULT_MAX_SUGGESTIONS,
     DEFAULT_MAX_TAGS_PER_DOC,
@@ -19,6 +16,9 @@ from ..config.constants import (
 from ..database import DatabaseConnection
 from ..models.tags import get_or_create_tag
 from ..utils.emoji_aliases import EMOJI_ALIASES
+
+# Type alias for SQL parameters
+SqlParam = Union[str, int, float, None]
 
 
 class AutoTagger:
@@ -104,7 +104,7 @@ class AutoTagger:
     def __init__(
         self,
         db_path: Union[str, Path] | None = None,
-        patterns: Dict | None = None,
+        patterns: dict | None = None,
     ):
         # Use centralized database connection management
         if db_path is not None:

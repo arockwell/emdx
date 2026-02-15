@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..config.constants import EMDX_CONFIG_DIR
+from ..database import db
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,6 @@ try:
     HAS_SKLEARN = True
 except ImportError:
     HAS_SKLEARN = False
-
-from ..database import db
 
 
 def _require_sklearn() -> None:

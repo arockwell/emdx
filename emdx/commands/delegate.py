@@ -170,11 +170,11 @@ def _validate_discovery_command(command: str) -> list[str]:
         args = shlex.split(command)
     except ValueError as e:
         sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not args:
         sys.stderr.write("delegate: empty discovery command\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Extract the base command (handle paths like /usr/bin/fd)
     base_cmd = Path(args[0]).name
@@ -184,7 +184,7 @@ def _validate_discovery_command(command: str) -> list[str]:
             f"delegate: '{base_cmd}' is not an allowed discovery command\n"
             f"delegate: allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     return args
 
@@ -206,19 +206,19 @@ def _run_discovery(command: str) -> list[str]:
         )
         if result.returncode != 0:
             sys.stderr.write(f"delegate: discovery failed: {result.stderr.strip()}\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         lines = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
         if not lines:
             sys.stderr.write("delegate: discovery returned no items\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         sys.stderr.write(f"delegate: discovered {len(lines)} item(s)\n")
         return lines
 
     except subprocess.TimeoutExpired:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
@@ -229,7 +229,7 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     doc = get_document(doc_id)
     if not doc:
         sys.stderr.write(f"delegate: document #{doc_id} not found\n")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     title = doc.get("title", f"Document #{doc_id}")
     content = doc.get("content", "")
@@ -413,7 +413,7 @@ def _run_parallel(
     if not doc_ids:
         sys.stderr.write("delegate: parallel run completed but no output documents found\n")
         _safe_update_task(parent_task_id, status="failed", error="no output documents")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Update parent task
     if synthesize and len(doc_ids) > 1:
@@ -685,11 +685,11 @@ def delegate(
     # Validate mutually exclusive options
     if chain and synthesize:
         typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if each and not do:
         typer.echo("Error: --each requires --do", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     task_list = list(tasks) if tasks else []
 
@@ -729,7 +729,7 @@ def delegate(
     if not task_list:
         typer.echo("Error: No tasks provided", err=True)
         typer.echo('Usage: emdx delegate "task description"', err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Flatten tags
     flat_tags = []
@@ -763,7 +763,7 @@ def delegate(
                 sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
         except Exception as e:
             sys.stderr.write(f"delegate: failed to create worktree: {e}\n")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     try:
         # 4. Route
@@ -794,7 +794,7 @@ def delegate(
                 epic_key=epic_key,
             )
             if doc_id is None:
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
         else:
             _run_parallel(
                 tasks=task_list,

@@ -42,7 +42,7 @@ def create(
             parent_group = groups.get_group(parent)
             if not parent_group:
                 console.print(f"[red]Error: Parent group #{parent} not found[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
         group_id = groups.create_group(
             name=name,
@@ -62,10 +62,10 @@ def create(
 
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error creating group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -85,7 +85,7 @@ def add(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         added = []
         already_in = []
@@ -122,7 +122,7 @@ def add(
 
     except Exception as e:
         console.print(f"[red]Error adding documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -138,7 +138,7 @@ def remove(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         removed = []
         not_in = []
@@ -162,7 +162,7 @@ def remove(
 
     except Exception as e:
         console.print(f"[red]Error removing documents: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command(name="list")
@@ -232,7 +232,7 @@ def list_groups_cmd(
 
     except Exception as e:
         console.print(f"[red]Error listing groups: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def _display_groups_tree(project: str | None, include_inactive: bool) -> None:
@@ -297,7 +297,7 @@ def show(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         # Header
         type_icons = {
@@ -357,7 +357,7 @@ def show(
 
     except Exception as e:
         console.print(f"[red]Error showing group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -373,7 +373,7 @@ def delete(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         # Check for children
         children = groups.get_child_groups(group_id)
@@ -395,13 +395,13 @@ def delete(
             console.print(f"[green]✅ {action} group #{group_id} ({group['name']})[/green]")
         else:
             console.print("[red]Error: Failed to delete group[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     except typer.Abort:
         console.print("[yellow]Cancelled[/yellow]")
     except Exception as e:
         console.print(f"[red]Error deleting group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -419,7 +419,7 @@ def edit(
         group = groups.get_group(group_id)
         if not group:
             console.print(f"[red]Error: Group #{group_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         updates = {}
         if name is not None:
@@ -442,11 +442,11 @@ def edit(
                 console.print(f"   [dim]{key}: {value}[/dim]")
         else:
             console.print("[red]Error: Failed to update group[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error editing group: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

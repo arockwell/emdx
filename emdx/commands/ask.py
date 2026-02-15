@@ -41,7 +41,7 @@ def ask_question(
             result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Display answer
     console.print()
@@ -88,11 +88,11 @@ def get_context(
             docs, method = service._retrieve_semantic(question, limit, project)
     except ImportError as e:
         console.print(f"[red]{e}[/red]", highlight=False)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not docs:
         print("No relevant documents found.", file=sys.stderr)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Build context output
     output_parts = []
@@ -159,7 +159,7 @@ def build_index(
         console.print(f"[dim]Index now: {stats.indexed_documents}/{stats.total_documents} documents ({stats.coverage_percent}%)[/dim]")
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command("search")
@@ -184,20 +184,20 @@ def semantic_search(
         service = EmbeddingService()
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Check if we have embeddings
     stats = service.stats()
     if stats.indexed_documents == 0:
         console.print("[yellow]No documents indexed. Run 'emdx ai index' first.[/yellow]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     try:
         with console.status("[bold blue]Searching...", spinner="dots"):
             results = service.search(query, limit=limit, threshold=threshold)
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not results:
         console.print(f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]")
@@ -239,7 +239,7 @@ def find_similar(
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     from ..database import db
 
     service = EmbeddingService()
@@ -251,7 +251,7 @@ def find_similar(
         row = cursor.fetchone()
         if not row:
             console.print(f"[red]Document {doc_id} not found[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         source_title = row[0]
 
     try:
@@ -259,7 +259,7 @@ def find_similar(
             results = service.find_similar(doc_id, limit=limit)
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not results:
         console.print("[yellow]No similar documents found[/yellow]")
@@ -286,7 +286,7 @@ def show_stats():
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     service = EmbeddingService()
     stats = service.stats()
@@ -317,7 +317,7 @@ def clear_index(
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not confirm:
         confirm = typer.confirm("This will delete all embeddings. Continue?")

@@ -7,8 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
-
-logger = logging.getLogger(__name__)
 from rich import box
 from rich.panel import Panel
 from rich.table import Table
@@ -22,6 +20,8 @@ from ..models.executions import (
 )
 from ..utils.output import console
 from ..utils.text_formatting import truncate_description
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Manage and monitor task executions")
 

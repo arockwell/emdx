@@ -58,7 +58,7 @@ class ActivityDataLoader:
         items.extend(await self._load_agent_executions())
 
         # Sort: running items first (pinned), then by timestamp descending
-        def sort_key(item: ActivityItem) -> Tuple:
+        def sort_key(item: ActivityItem) -> tuple:
             is_running = (
                 item.item_type == "agent_execution" and item.status == "running"
             )

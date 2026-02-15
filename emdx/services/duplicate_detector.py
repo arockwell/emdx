@@ -160,7 +160,7 @@ class DuplicateDetector:
         threshold: float = 0.85,
         num_perm: int = DEFAULT_NUM_PERM,
         max_documents: int | None = None,
-    ) -> list[tuple[Dict, Dict, float]]:
+    ) -> list[tuple[dict, dict, float]]:
         """
         Find near-duplicate documents based on content similarity using MinHash/LSH.
 
@@ -274,7 +274,7 @@ class DuplicateDetector:
 
     def find_near_duplicates_exact(
         self, threshold: float = 0.85, max_documents: int = 200
-    ) -> list[tuple[Dict, Dict, float]]:
+    ) -> list[tuple[dict, dict, float]]:
         """
         Find near-duplicate documents using exact pairwise comparison.
 

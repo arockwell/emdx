@@ -6,8 +6,6 @@ from typing import Any
 
 import psutil
 
-logger = logging.getLogger(__name__)
-
 from ..database.connection import db_connection
 from ..models.executions import (
     Execution,
@@ -15,6 +13,8 @@ from ..models.executions import (
     get_stale_executions,
     update_execution_status,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExecutionMonitor:

@@ -14,8 +14,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Union
 
-logger = logging.getLogger(__name__)
-
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
 from ..models.tags import add_tags_to_document
@@ -24,6 +22,8 @@ from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.similarity import SimilarityService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -410,7 +410,7 @@ class MaintenanceApplication:
 
             # Fast path: merge using pairs data directly
             merged_count = 0
-            for doc1_id, doc2_id, title1, title2, sim in pairs:
+            for doc1_id, doc2_id, _title1, _title2, _sim in pairs:
                 try:
                     with self._db.get_connection() as conn:
                         cursor = conn.cursor()

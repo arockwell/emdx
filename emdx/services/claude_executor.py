@@ -18,12 +18,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..utils.environment import ensure_claude_in_path
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
+
+logger = logging.getLogger(__name__)
 
 # Re-export for backward compatibility - prefer importing from cli_config
 __all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]

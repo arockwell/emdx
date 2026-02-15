@@ -5,9 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
+# Skip all tests if sklearn not installed - must come before module imports
 sklearn = pytest.importorskip("sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')")
 
-from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService
+from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService  # noqa: E402
 
 
 @pytest.fixture

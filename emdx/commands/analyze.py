@@ -240,7 +240,7 @@ def _analyze_duplicates():
         console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")
 
         # Show a few examples
-        for i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
+        for _i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
             console.print(f"    • '{doc1['title']}' ↔ '{doc2['title']}' ({similarity:.0%} similar)")
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")

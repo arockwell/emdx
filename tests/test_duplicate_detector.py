@@ -9,9 +9,10 @@ Tests cover:
 
 import pytest
 
+# Skip all tests if datasketch not installed - must come before module imports
 datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")
 
-from emdx.services.duplicate_detector import (
+from emdx.services.duplicate_detector import (  # noqa: E402
     DEFAULT_NUM_PERM,
     DuplicateDetector,
     _create_minhash,

@@ -407,7 +407,7 @@ def batch(
             ) as progress:
                 task = progress.add_task("Applying tags...", total=len(eligible_docs))
 
-                for doc_id, tag_list in eligible_docs:
+                for doc_id, _tag_list in eligible_docs:
                     applied = tagger.auto_tag_document(
                         doc_id,
                         confidence_threshold=confidence,

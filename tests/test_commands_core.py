@@ -525,8 +525,9 @@ class TestDeleteCommand:
 # ---------------------------------------------------------------------------
 # trash command (now a subcommand group: emdx trash [list|restore|purge])
 # Uses main_app since trash is registered as a typer subgroup there.
+# Late import to avoid circular dependency with main module
 # ---------------------------------------------------------------------------
-from emdx.main import app as main_app
+from emdx.main import app as main_app  # noqa: E402
 
 
 class TestTrashCommand:
