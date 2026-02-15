@@ -321,7 +321,7 @@ class UnifiedSearchService:
                     score=0.8,  # High base score for tag matches
                     source="tags",
                     project=doc.get("project"),
-                    created_at=doc.get("created_at"),
+                    created_at=parse_datetime(doc.get("created_at")),
                 )
             )
 

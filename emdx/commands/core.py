@@ -404,7 +404,11 @@ def find(
                     return
             else:
                 # Tag-only search
-                results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+                results = [
+                    dict(d) for d in search_by_tags(
+                        tag_list, mode=tag_mode, project=project, limit=limit,
+                    )
+                ]
                 if not results:
                     mode_desc = "all" if not any_tags else "any"
                     console.print(
