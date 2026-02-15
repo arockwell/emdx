@@ -53,7 +53,7 @@ all = ["sentence-transformers", "scikit-learn", "numpy", "anthropic",
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
 pytest-cov = "^4.0.0"
-pytest-asyncio = "^0.21.0"
+pytest-asyncio = "^0.23.8"
 ruff = "^0.15.0"
 mypy = "^1.0.0"
 pre-commit = "^3.0.0"
