@@ -155,7 +155,7 @@ class BrowserContainer(App):
             registry.register_many(entries)
 
             # Detect conflicts
-            conflicts = registry.detect_conflicts()
+            registry.detect_conflicts()
             _keybinding_registry = registry
 
             # Warn about critical conflicts

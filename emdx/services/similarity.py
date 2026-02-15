@@ -209,7 +209,7 @@ class SimilarityService:
 
             # Parse tags
             tags_str = doc['tags'] or ''
-            tags = set(t.strip() for t in tags_str.split(',') if t.strip())
+            tags = {t.strip() for t in tags_str.split(',') if t.strip()}
             self._doc_tags.append(tags)
 
             # Combine title and content for TF-IDF

@@ -574,7 +574,7 @@ def find_supersede_candidate(
         if content and candidates:
             from ..services.similarity import compute_content_similarity
 
-            for doc, title_sim, match_type in candidates:
+            for doc, _title_sim, _match_type in candidates:
                 content_sim = compute_content_similarity(content, doc["content"])
                 if content_sim >= content_threshold:
                     return _parse_doc_datetimes(doc)

@@ -116,7 +116,7 @@ class DocumentBrowser(HelpMixin, Widget):
         yield Label("", id="vim-mode-indicator")
 
         with Horizontal():
-            with Vertical(id="sidebar") as sidebar:
+            with Vertical(id="sidebar"):
                 # Remove debug background
                 pass
                 with Vertical(id="table-container", classes="table-section") as table_container:

@@ -735,7 +735,7 @@ class ActivityView(HelpMixin, Widget):
             initial = self.log_stream.get_initial_content()
             if initial:
                 from emdx.ui.live_log_writer import LiveLogWriter
-                writer = LiveLogWriter(preview_log, auto_scroll=True)
+                LiveLogWriter(preview_log, auto_scroll=True)
                 from emdx.utils.stream_json_parser import parse_and_format_live_logs
                 formatted = parse_and_format_live_logs(initial)
                 for line in formatted[-50:]:

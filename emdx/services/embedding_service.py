@@ -195,7 +195,7 @@ class EmbeddingService:
             # Save all embeddings in batch
             with db.get_connection() as conn:
                 cursor = conn.cursor()
-                for (doc_id, _, _), embedding in zip(batch, embeddings):
+                for (doc_id, _, _), embedding in zip(batch, embeddings, strict=False):
                     cursor.execute(
                         """
                         INSERT OR REPLACE INTO document_embeddings

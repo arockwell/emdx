@@ -223,7 +223,7 @@ class CommandPaletteScreen(ModalScreen):
                 )
                 return
 
-            for i, result in enumerate(state.results):
+            for _i, result in enumerate(state.results):
                 item = PaletteResultWidget(result)
                 results_view.append(item)
 

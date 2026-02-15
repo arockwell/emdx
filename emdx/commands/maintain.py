@@ -212,7 +212,7 @@ def _interactive_wizard(dry_run: bool):
             # Handle high similarity (auto-delete)
             if high_sim:
                 console.print("\n[dim]Obvious duplicates (will delete the less-viewed copy):[/dim]")
-                for (id1, id2, t1, t2, sim), _ in high_sim[:5]:
+                for (_id1, _id2, t1, t2, sim), _ in high_sim[:5]:
                     console.print(f"  [dim]• {t1[:40]}... ({sim:.0%})[/dim]")
                 if len(high_sim) > 5:
                     console.print(f"  [dim]  ...and {len(high_sim) - 5} more[/dim]")
@@ -223,7 +223,7 @@ def _interactive_wizard(dry_run: bool):
             # Handle medium similarity (show and ask)
             if med_sim:
                 console.print("\n[dim]Similar documents (70-95%):[/dim]")
-                for (id1, id2, t1, t2, sim), _ in med_sim[:8]:
+                for (_id1, _id2, t1, t2, sim), _ in med_sim[:8]:
                     console.print(f"  [dim]• '{t1[:30]}' ↔ '{t2[:30]}' ({sim:.0%})[/dim]")
                 if len(med_sim) > 8:
                     console.print(f"  [dim]  ...and {len(med_sim) - 8} more[/dim]")
@@ -347,7 +347,7 @@ def _deduplicate_pairs(pairs: list) -> str | None:
     with db.get_connection() as conn:
         cursor = conn.cursor()
 
-        for doc1_id, doc2_id, title1, title2, similarity in pairs:
+        for doc1_id, doc2_id, _title1, _title2, _similarity in pairs:
             # Get access counts to determine which to keep
             cursor.execute(
                 "SELECT id, access_count, LENGTH(content) as len FROM documents WHERE id IN (?, ?)",
@@ -843,7 +843,7 @@ def _cleanup_executions(dry_run: bool, timeout_minutes: int = 30, check_heartbea
         # Check process health
         health = monitor.check_process_health(exec)
 
-        if health['is_zombie'] or (health['process_exists'] == False and exec.pid):
+        if health['is_zombie'] or (not health['process_exists'] and exec.pid):
             dead_process.append((exec, health['reason']))
         elif not exec.pid and runtime_minutes > 60:
             # No PID and > 1 hour old = likely stuck
