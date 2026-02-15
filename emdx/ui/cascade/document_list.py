@@ -171,6 +171,7 @@ class DocumentList(Widget):
                 try:
                     return int(row_key[1])  # ID is now in column 1 (after marker)
                 except (ValueError, IndexError):
+                    # Row data format unexpected, return None to indicate no selection
                     pass
         return None
 

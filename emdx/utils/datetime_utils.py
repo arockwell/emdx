@@ -68,6 +68,7 @@ def parse_datetime(value: Union[str, datetime, None],
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
     except ValueError:
+        # Not ISO format, try fallback formats below
         pass
 
     # Fallback: try common formats

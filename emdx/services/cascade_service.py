@@ -107,6 +107,7 @@ def monitor_execution_completion(
                 try:
                     os.kill(exec_record.pid, 9)
                 except ProcessLookupError:
+                    # Process already exited on its own, nothing to kill
                     pass
             update_execution_status(exec_id, "failed", exit_code=-1)
             on_update(f"[red]\u2717 Timeout[/red] after {max_wait}s")

@@ -31,6 +31,7 @@ def _find_recipe(id_or_name: str) -> dict | None:
         if doc:
             return doc
     except ValueError:
+        # Not a numeric ID, fall through to title search
         pass
 
     # Search by recipe tag, then filter by title match

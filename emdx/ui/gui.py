@@ -22,6 +22,7 @@ def gui(
     try:
         run_browser(theme=theme)
     except KeyboardInterrupt:
+        # Clean exit on Ctrl+C - expected user behavior
         pass
     except Exception as e:
         console.print(f"❌ Error: {e}", style="red")

@@ -51,7 +51,8 @@ class MarkdownConfig:
             main_theme = config.get("theme", "emdx-dark")
             return get_theme_code_theme(main_theme)
         except ImportError:
-            pass  # Fall back to terminal detection
+            # UI config not available, fall back to terminal detection
+            pass
 
         # Try to detect terminal background (fallback approach)
         terminal_bg = os.environ.get("COLORFGBG", "").split(";")[-1]

@@ -168,6 +168,7 @@ class VimEditTextArea(TextArea):
             try:
                 self.app_instance._update_vim_status(f"Error: {str(e)[:50]}")
             except Exception:
+                # Best-effort status update; primary error already logged above
                 pass
 
     def _handle_normal_mode(self, event: events.Key) -> None:

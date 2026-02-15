@@ -525,7 +525,8 @@ def run(
                 try:
                     _run_auto(doc["id"], "idea", stop)
                 except typer.Exit:
-                    pass  # Continue to next document on failure
+                    # Stage failed, but continue processing remaining documents
+                    pass
             elif once:
                 console.print("[dim]No ideas to process[/dim]")
                 break

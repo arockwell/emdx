@@ -209,6 +209,7 @@ class SearchScreen(HelpMixin, Widget):
                 else:
                     btn.remove_class("active")
             except Exception:
+                # Widget not found during initialization; safe to ignore
                 pass
 
     def _render_results_sync(self, state: SearchStateVM) -> None:
@@ -317,6 +318,7 @@ class SearchScreen(HelpMixin, Widget):
                 return f"{delta.days // 7}w"
             return time_str[:10]
         except Exception:
+            # Invalid time format, return empty string
             return ""
 
     def _update_selection(self) -> None:
@@ -335,6 +337,7 @@ class SearchScreen(HelpMixin, Widget):
             try:
                 self._debounce_timer.stop()
             except Exception:
+                # Timer already stopped or expired; safe to ignore
                 pass
             self._debounce_timer = None
 
@@ -497,6 +500,7 @@ class SearchScreen(HelpMixin, Widget):
             status = self.query_one("#search-status", Static)
             status.update(message)
         except Exception:
+            # Status widget not available during initialization
             pass
 
     def save_state(self) -> dict:
@@ -513,6 +517,7 @@ class SearchScreen(HelpMixin, Widget):
                 self.presenter.set_mode(SearchMode(state["mode"]))
                 self.current_mode = SearchMode(state["mode"])
             except ValueError:
+                # Invalid mode value, keep current mode
                 pass
 
         if "query" in state and state["query"]:
@@ -531,6 +536,7 @@ class SearchScreen(HelpMixin, Widget):
                     # Don't stop - let the input handle it
                     return
         except Exception:
+            # Widget query failed, likely during initialization
             pass
 
     async def action_switch_activity(self) -> None:

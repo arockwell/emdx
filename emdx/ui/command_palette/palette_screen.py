@@ -35,6 +35,7 @@ def _debug_log(msg: str) -> None:
         with open(DEBUG_LOG, "a") as f:
             f.write(f"{msg}\n")
     except Exception:
+        # Debug logging is best-effort; failure should not affect the application
         pass
 
 

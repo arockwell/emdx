@@ -138,6 +138,7 @@ class AskService:
                         docs.append(row)
                         seen.add(row[0])
                 except ValueError:
+                    # Invalid doc ID format, skip this reference
                     pass
 
             # Search for ticket references in content

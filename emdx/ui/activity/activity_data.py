@@ -27,6 +27,7 @@ try:
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
+    # Services are optional; activity view degrades gracefully without them
     doc_svc = None
     group_svc = None
     HAS_DOCS = False

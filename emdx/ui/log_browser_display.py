@@ -95,6 +95,7 @@ class LogBrowserDisplayMixin:
             log_content.write(error_msg)
             logger.error(f"Log streaming error: {error}")
         except Exception:
+            # Widget not available; primary error already logged above
             pass
 
     def update_status(self, text: str) -> None:
@@ -103,4 +104,5 @@ class LogBrowserDisplayMixin:
             status = self.query_one(".log-status", Static)
             status.update(text)
         except Exception:
+            # Status widget not available during initialization
             pass

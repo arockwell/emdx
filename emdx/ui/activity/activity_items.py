@@ -4,10 +4,13 @@ This module provides typed classes for different activity stream items,
 replacing the stringly-typed item_type field with proper polymorphism.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -216,7 +219,7 @@ class CascadeRunItem(ActivityItem):
                 )
 
         except Exception:
-            pass
+            logger.debug("Failed to load cascade run children", exc_info=True)
 
         return children
 
@@ -492,7 +495,7 @@ class AgentExecutionItem(ActivityItem):
                         content = '\n'.join(lines[-100:])
                     return f"```\n{content}\n```", f"{self.type_icon} Log"
                 except Exception:
-                    pass
+                    logger.debug(f"Failed to read log file {self.log_file}", exc_info=True)
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
 
