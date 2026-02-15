@@ -19,6 +19,10 @@ class SelectionTextArea(TextArea):
     """TextArea that captures 's' key to exit selection mode."""
 
     def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
+        # Textual 6.x changed defaults - explicitly set the behavior we want
+        kwargs.setdefault("soft_wrap", False)
+        kwargs.setdefault("show_line_numbers", True)
+        kwargs.setdefault("tab_behavior", "indent")
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
 
@@ -65,6 +69,10 @@ class VimEditTextArea(TextArea):
     VIM_COMMAND = "COMMAND"
 
     def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
+        # Textual 6.x changed defaults - explicitly set the behavior we want
+        kwargs.setdefault("soft_wrap", False)
+        kwargs.setdefault("show_line_numbers", True)
+        kwargs.setdefault("tab_behavior", "indent")
         super().__init__(*args, **kwargs)
         self.app_instance = app_instance
         self.vim_mode = self.VIM_NORMAL  # Start in normal mode like vim
