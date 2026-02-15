@@ -99,6 +99,7 @@ from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.groups import app as groups_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
+from emdx.commands.review import app as review_app  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
@@ -154,6 +155,9 @@ app.add_typer(groups_app, name="group", help="Organize documents into hierarchic
 # Add epics and categories as subcommand groups
 app.add_typer(epics_app, name="epic", help="Manage task epics")
 app.add_typer(categories_app, name="cat", help="Manage task categories")
+
+# Add review commands for triaging agent outputs
+app.add_typer(review_app, name="review", help="Triage agent-produced documents")
 
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")

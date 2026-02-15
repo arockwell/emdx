@@ -318,9 +318,13 @@ def _run_single(
     )
 
     # Build save instruction so the sub-agent persists output
+    # Always include 'needs-review' tag for triage workflow
+    all_tags = list(tags) if tags else []
+    if "needs-review" not in all_tags:
+        all_tags.append("needs-review")
+
     cmd_parts = [f'emdx save --title "{doc_title}"']
-    if tags:
-        cmd_parts.append(f'--tags "{",".join(tags)}"')
+    cmd_parts.append(f'--tags "{",".join(all_tags)}"')
     save_cmd = " ".join(cmd_parts)
 
     output_instruction = (
