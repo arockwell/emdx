@@ -277,9 +277,14 @@ def _run_single(
     )
 
     # Build save instruction so the sub-agent persists output
+    # Auto-add 'needs-review' tag for review workflow
+    save_tags = list(tags) if tags else []
+    if "needs-review" not in save_tags:
+        save_tags.append("needs-review")
+
     cmd_parts = [f'emdx save --title "{doc_title}"']
-    if tags:
-        cmd_parts.append(f'--tags "{",".join(tags)}"')
+    if save_tags:
+        cmd_parts.append(f'--tags "{",".join(save_tags)}"')
     save_cmd = " ".join(cmd_parts)
 
     output_instruction = (
