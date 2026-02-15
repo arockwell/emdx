@@ -2222,20 +2222,29 @@ def run_migrations(db_path: str | Path | None = None) -> None:
     # Don't return early - we need to run migrations even for new databases
     # The database file will be created when we connect to it
 
-    conn = sqlite3.connect(db_path)
-    # Enable foreign keys for this connection (migrations use foreign_keys_disabled()
-    # context manager when they need to temporarily disable them for table recreation)
-    conn.execute("PRAGMA foreign_keys = ON")
-
+    conn = None
     try:
+        conn = sqlite3.connect(db_path)
+        # Enable foreign keys for this connection (migrations use foreign_keys_disabled()
+        # context manager when they need to temporarily disable them for table recreation)
+        conn.execute("PRAGMA foreign_keys = ON")
+
         current_version = get_schema_version(conn)
 
         for version, description, migration_func in MIGRATIONS:
             if version > current_version:
                 print(f"Running migration {version}: {description}")
-                migration_func(conn)
+                try:
+                    migration_func(conn)
+                except Exception as e:
+                    # Rollback any uncommitted changes from the failed migration
+                    conn.rollback()
+                    raise RuntimeError(
+                        f"Migration {version} ({description}) failed: {e}"
+                    ) from e
                 set_schema_version(conn, version)
                 print(f"✅ Migration {version} completed")
 
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
