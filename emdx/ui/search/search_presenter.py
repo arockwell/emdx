@@ -197,8 +197,9 @@ class SearchPresenter:
             await self._notify_update()
             return
 
-        # Check cache
-        cache_key = f"{self._state.mode.value}:{query}"
+        # Check cache - include active filters and tags in the key
+        filters_str = ",".join(sorted(self._state.active_filters)) if self._state.active_filters else ""  # noqa: E501
+        cache_key = f"{self._state.mode.value}:{query}:filters={filters_str}"
         if cache_key in self._cache:
             self._state.results = self._cache[cache_key]
             self._state.total_count = len(self._state.results)
