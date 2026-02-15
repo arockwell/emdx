@@ -60,7 +60,7 @@ lint:
 
 # Format code
 format:
-    poetry run black .
+    poetry run ruff format .
 
 # Run type checking
 typecheck:
@@ -70,10 +70,16 @@ typecheck:
 check: lint typecheck test
     @echo "All checks passed!"
 
+# Install git hooks (ruff pre-commit)
+install-hooks:
+    cp scripts/pre-commit .git/hooks/pre-commit
+    chmod +x .git/hooks/pre-commit
+    @echo "Pre-commit hook installed (ruff lint check)"
+
 # Fix all auto-fixable issues
 fix:
-    poetry run black .
     poetry run ruff check --fix .
+    poetry run ruff format .
 
 # Clean up cache and build files
 clean:
