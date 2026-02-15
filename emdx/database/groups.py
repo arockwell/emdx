@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from .connection import db_connection
+from .types import DocumentGroup, DocumentGroupWithCounts, DocumentWithGroups, GroupMember
 
 
 def create_group(
@@ -59,7 +60,7 @@ def create_group(
         return row_id
 
 
-def get_group(group_id: int) -> dict[str, Any] | None:
+def get_group(group_id: int) -> DocumentGroup | None:
     """Get a group by ID.
 
     Returns:
@@ -71,7 +72,7 @@ def get_group(group_id: int) -> dict[str, Any] | None:
             (group_id,),
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return dict(row) if row else None  # type: ignore[return-value]
 
 
 def list_groups(
@@ -81,7 +82,7 @@ def list_groups(
     include_inactive: bool = False,
     top_level_only: bool = False,
     **kwargs: Any,
-) -> list[dict[str, Any]]:
+) -> list[DocumentGroup]:
     """List groups with optional filters.
 
     Args:
@@ -125,7 +126,7 @@ def list_groups(
             """,
             params,
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
 def update_group(group_id: int, **kwargs: Any) -> bool:
@@ -249,7 +250,7 @@ def remove_document_from_group(group_id: int, document_id: int) -> bool:
 
 def get_group_members(
     group_id: int,
-) -> list[dict[str, Any]]:
+) -> list[GroupMember]:
     """Get all documents in a group.
 
     Args:
@@ -275,10 +276,10 @@ def get_group_members(
             """,
             (group_id,),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
-def get_document_groups(document_id: int) -> list[dict[str, Any]]:
+def get_document_groups(document_id: int) -> list[DocumentWithGroups]:
     """Get all groups a document belongs to.
 
     Returns:
@@ -299,10 +300,10 @@ def get_document_groups(document_id: int) -> list[dict[str, Any]]:
             """,
             (document_id,),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
-def get_child_groups(parent_group_id: int) -> list[dict[str, Any]]:
+def get_child_groups(parent_group_id: int) -> list[DocumentGroup]:
     """Get all direct child groups of a parent.
 
     Returns:
@@ -358,7 +359,7 @@ def get_recursive_doc_count(group_id: int) -> int:
         return int(result[0]) if result else 0
 
 
-def list_top_groups_with_counts() -> list[dict[str, Any]]:
+def list_top_groups_with_counts() -> list[DocumentGroupWithCounts]:
     """List top-level groups with child_group_count and doc_count in one query.
 
     Avoids the N+1 pattern of calling get_child_groups + get_recursive_doc_count
@@ -388,7 +389,7 @@ def list_top_groups_with_counts() -> list[dict[str, Any]]:
             ORDER BY g.created_at DESC
             """
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
 def update_group_metrics(group_id: int) -> bool:
