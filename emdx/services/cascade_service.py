@@ -73,6 +73,54 @@ def get_document_pr_url(doc_id: int) -> str | None:
         row = conn.execute("SELECT pr_url FROM documents WHERE id = ?", (doc_id,)).fetchone()
         return row[0] if row and row[0] else None
 
+
+
+def get_orphaned_cascade_executions(
+    cutoff_iso: str, limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Get cascade executions not associated with any cascade run.
+
+    These are legacy executions from before cascade_runs existed, or executions
+    where the cascade_run was deleted. Used for backward compatibility in activity view.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at,
+                   e.completed_at, d.stage, d.pr_url, e.cascade_run_id
+            FROM executions e
+            LEFT JOIN documents d ON e.doc_id = d.id
+            WHERE e.doc_id IS NOT NULL
+              AND e.started_at > ?
+              AND (e.cascade_run_id IS NULL
+                   OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
+              AND e.id = (
+                  SELECT MAX(e2.id) FROM executions e2
+                  WHERE e2.doc_id = e.doc_id
+              )
+            ORDER BY e.started_at DESC
+            LIMIT ?
+            """,
+            (cutoff_iso, limit),
+        )
+        rows = cursor.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "doc_id": row[1],
+            "doc_title": row[2],
+            "status": row[3],
+            "started_at": row[4],
+            "completed_at": row[5],
+            "stage": row[6],
+            "pr_url": row[7],
+            "cascade_run_id": row[8],
+        }
+        for row in rows
+    ]
+
+
 def monitor_execution_completion(
     exec_id: int,
     doc_id: int,
