@@ -125,6 +125,16 @@ def _output_text(
 
     # Verbose additions
     if verbose and not quiet:
+        # Stale documents needing review
+        stale_docs = _get_stale_docs()
+        if stale_docs:
+            lines.append("STALE DOCS (needs review):")
+            lines.append("")
+            for doc in stale_docs[:5]:
+                level = doc["level"].upper()
+                lines.append(f"  [{level}] #{doc['id']}  {doc['title']} ({doc['days_stale']}d)")
+            lines.append("")
+
         recent = _get_recent_docs()
         if recent:
             lines.append("RECENT DOCS:")
@@ -307,6 +317,16 @@ def _get_cascade_status() -> dict:
     return status
 
 
+def _get_stale_docs() -> list:
+    """Get stale documents for priming context."""
+    try:
+        from emdx.commands.stale import get_top_stale_for_priming
+        return get_top_stale_for_priming(limit=5)
+    except Exception:
+        # stale module may not be available or have issues
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Execution guidance (verbose only)
 # ---------------------------------------------------------------------------
@@ -367,6 +387,18 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
         data["execution_methods"] = _get_execution_methods_json()
         data["recent_docs"] = _get_recent_docs()
         data["cascade_status"] = _get_cascade_status()
+        # Include stale documents needing review
+        stale_docs = _get_stale_docs()
+        if stale_docs:
+            data["stale_docs"] = [
+                {
+                    "id": d["id"],
+                    "title": d["title"],
+                    "level": d["level"].value if hasattr(d["level"], "value") else d["level"],
+                    "days_stale": d["days_stale"],
+                }
+                for d in stale_docs
+            ]
 
     print(json.dumps(data, indent=2, default=str))
 
