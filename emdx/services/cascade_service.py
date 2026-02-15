@@ -10,6 +10,7 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 from emdx.database import cascade as cascade_db
 from emdx.database.connection import db_connection
@@ -50,12 +51,12 @@ def get_recent_pipeline_activity(limit: int = 10) -> list[PipelineActivityItem]:
         for row in cursor.fetchall():
             output_stage, input_stage = row[9], row[10]
             from_stage = PREV_STAGE.get(output_stage, input_stage or "?") if output_stage else (input_stage or "?")  # noqa: E501
-            results.append({
+            results.append(cast(PipelineActivityItem, {
                 "exec_id": row[0], "input_id": row[1], "input_title": row[2],
                 "status": row[3], "started_at": row[4], "completed_at": row[5],
                 "log_file": row[6], "output_id": row[7], "output_title": row[8],
                 "output_stage": output_stage, "from_stage": from_stage,
-            })
+            }))
         return results
 
 def get_child_info(parent_id: int) -> ChildDocInfo | None:
@@ -65,7 +66,7 @@ def get_child_info(parent_id: int) -> ChildDocInfo | None:
             "SELECT id, title, stage FROM documents WHERE parent_id = ? LIMIT 1",
             (parent_id,),
         ).fetchone()
-        return {"id": row[0], "title": row[1], "stage": row[2]} if row else None
+        return cast(ChildDocInfo, {"id": row[0], "title": row[1], "stage": row[2]}) if row else None
 
 def get_document_pr_url(doc_id: int) -> str | None:
     """Get PR URL for a document."""

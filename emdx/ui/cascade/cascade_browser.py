@@ -77,7 +77,7 @@ class CascadeBrowser(Widget):
             if not docs:
                 self._update_status(f"[yellow]No documents at stage '{stage}'[/yellow]")
                 return
-            doc = docs[0]
+            doc = dict(docs[0])
             doc_id = doc["id"]
 
         assert doc_id is not None and doc is not None  # Guaranteed by the if/else above

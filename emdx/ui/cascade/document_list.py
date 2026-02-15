@@ -7,6 +7,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import DataTable, Static
 
+from emdx.database.types import CascadeDocumentListItem
 from emdx.services.cascade_service import (
     get_child_info,
     list_documents_at_stage,
@@ -52,7 +53,7 @@ class DocumentList(Widget):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.docs: list[dict[str, Any]] = []
+        self.docs: list[CascadeDocumentListItem] = []
         self.current_stage = "idea"
         self.selected_ids: set[int] = set()  # Multi-select tracking
 
@@ -116,9 +117,11 @@ class DocumentList(Widget):
             parent = str(doc.get("parent_id") or "-")
 
             # Created time
-            created = ""
-            if doc.get("created_at"):
-                created = doc["created_at"].strftime("%m/%d %H:%M")
+            ca = doc["created_at"]
+            if ca and hasattr(ca, "strftime"):
+                created = ca.strftime("%m/%d %H:%M")
+            else:
+                created = str(ca or "")[:16]
 
             table.add_row(marker, doc_id_str, title, parent, created, key=doc_id_str)
 

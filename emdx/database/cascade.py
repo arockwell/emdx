@@ -11,7 +11,7 @@ main documents table for efficiency (only ~1% of docs use cascade).
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from ..utils.datetime_utils import parse_datetime
 from .connection import db_connection
@@ -58,7 +58,7 @@ def get_cascade_metadata(doc_id: int) -> CascadeMetadata | None:
         )
         row = cursor.fetchone()
         if row:
-            return _parse_cascade_datetimes(dict(row))
+            return cast(CascadeMetadata, _parse_cascade_datetimes(dict(row)))
         return None
 
 
@@ -171,11 +171,11 @@ def get_oldest_at_stage(stage: str) -> DocumentRow | None:
         )
         row = cursor.fetchone()
         if row:
-            doc = dict(row)
+            raw: dict[str, Any] = dict(row)
             # Map cascade metadata to expected fields
-            doc["stage"] = doc.pop("cascade_stage", None)
-            doc["pr_url"] = doc.pop("cascade_pr_url", None)
-            return doc
+            raw["stage"] = raw.pop("cascade_stage", None)
+            raw["pr_url"] = raw.pop("cascade_pr_url", None)
+            return cast(DocumentRow, raw)
         return None
 
 
@@ -202,7 +202,10 @@ def list_documents_at_stage(stage: str, limit: int = 50) -> list[CascadeDocument
             """,
             (stage, limit),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [
+            cast(CascadeDocumentListItem, dict(row))
+            for row in cursor.fetchall()
+        ]
 
 
 def count_documents_at_stage(stage: str) -> int:
@@ -242,10 +245,10 @@ def get_cascade_stats() -> CascadeStats:
             GROUP BY cm.stage
             """
         )
-        results = dict.fromkeys(STAGES, 0)
+        results: dict[str, int] = dict.fromkeys(STAGES, 0)
         for row in cursor.fetchall():
             results[row["stage"]] = row["count"]
-        return results
+        return cast(CascadeStats, results)
 
 
 def remove_from_cascade(doc_id: int) -> bool:
@@ -343,7 +346,7 @@ def list_cascade_runs(limit: int = 20) -> list[CascadeRun]:
             """,
             (limit,),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [cast(CascadeRun, dict(row)) for row in cursor.fetchall()]
 
 
 def get_cascade_run_executions(run_id: int) -> list[CascadeRunExecution]:
@@ -366,4 +369,7 @@ def get_cascade_run_executions(run_id: int) -> list[CascadeRunExecution]:
             """,
             (run_id,),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [
+            cast(CascadeRunExecution, dict(row))
+            for row in cursor.fetchall()
+        ]
