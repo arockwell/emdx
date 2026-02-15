@@ -57,7 +57,8 @@ def create_task(
                 "SELECT COALESCE(MAX(epic_seq), 0) + 1 FROM tasks WHERE epic_key = ?",
                 (epic_key,),
             )
-            epic_seq_val = cursor.fetchone()[0]
+            seq_result = cursor.fetchone()
+            epic_seq_val = seq_result[0] if seq_result else 1
             prefix = f"{epic_key}-{epic_seq_val}: "
             if not title.startswith(prefix):
                 title = f"{prefix}{title}"
@@ -154,15 +155,32 @@ def list_tasks(
         return [dict(row) for row in cursor.fetchall()]
 
 
+# Allowed columns for task updates (prevents SQL injection via column names)
+ALLOWED_UPDATE_COLUMNS = frozenset({
+    'title', 'description', 'priority', 'status', 'gameplan_id', 'project',
+    'prompt', 'type', 'execution_id', 'output_doc_id', 'source_doc_id',
+    'parent_task_id', 'seq', 'retry_of', 'tags', 'epic_key', 'epic_seq',
+})
+
+
 def update_task(task_id: int, **kwargs: Any) -> bool:
-    """Update task fields."""
+    """Update task fields.
+
+    Only columns in ALLOWED_UPDATE_COLUMNS can be updated.
+    Unknown columns are silently ignored.
+    """
     if not kwargs:
+        return False
+
+    # Filter to only allowed columns
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k in ALLOWED_UPDATE_COLUMNS}
+    if not filtered_kwargs:
         return False
 
     sets = []
     params = []
 
-    for key, value in kwargs.items():
+    for key, value in filtered_kwargs.items():
         sets.append(f"{key} = ?")
         params.append(value)
         # Set completed_at when status becomes done

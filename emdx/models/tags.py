@@ -16,7 +16,7 @@ def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
     cursor.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
     result = cursor.fetchone()
 
-    if result:
+    if result is not None:
         return int(result[0])
 
     cursor.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
@@ -24,22 +24,31 @@ def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
     return cursor.lastrowid
 
 
-def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
-    """Add tags to a document. Returns list of newly added tags."""
+def add_tags_to_document(
+    doc_id: int, tag_names: list[str], conn: sqlite3.Connection | None = None
+) -> list[str]:
+    """Add tags to a document. Returns list of newly added tags.
+
+    Args:
+        doc_id: Document ID to add tags to
+        tag_names: List of tag names to add
+        conn: Optional existing connection for atomic transactions.
+              If provided, caller is responsible for commit.
+    """
     # Expand aliases before processing
     expanded_tags = expand_aliases(tag_names)
 
-    with db.get_connection() as conn:
+    def _add_tags(connection: sqlite3.Connection) -> list[str]:
         added_tags = []
         for tag_name in expanded_tags:
             tag_name = tag_name.lower().strip()
             if not tag_name:
                 continue
 
-            tag_id = get_or_create_tag(conn, tag_name)
+            tag_id = get_or_create_tag(connection, tag_name)
 
             try:
-                conn.execute(
+                connection.execute(
                     """
                     INSERT INTO document_tags (document_id, tag_id)
                     VALUES (?, ?)
@@ -49,7 +58,7 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
                 added_tags.append(tag_name)
 
                 # Update usage count
-                conn.execute(
+                connection.execute(
                     """
                     UPDATE tags SET usage_count = usage_count + 1
                     WHERE id = ?
@@ -59,9 +68,17 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
             except sqlite3.IntegrityError:
                 # Tag already exists for this document
                 pass
-
-        conn.commit()
         return added_tags
+
+    if conn is not None:
+        # Use provided connection - caller handles commit
+        return _add_tags(conn)
+    else:
+        # Create new connection and commit
+        with db.get_connection() as new_conn:
+            result = _add_tags(new_conn)
+            new_conn.commit()
+            return result
 
 
 def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
@@ -379,7 +396,8 @@ def merge_tags(source_tags: list[str], target_tag: str) -> int:
             (target_tag_id,),
         )
 
-        new_count = cursor.fetchone()[0]
+        count_result = cursor.fetchone()
+        new_count = count_result[0] if count_result else 0
         conn.execute(
             """
             UPDATE tags SET usage_count = ?
