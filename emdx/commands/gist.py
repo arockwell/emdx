@@ -1,5 +1,9 @@
 """
 GitHub Gist integration for emdx
+
+This module provides GitHub Gist integration with retry support for transient
+network failures. Only transient errors (timeouts, connection errors) are retried;
+authentication failures and other 4xx errors are NOT retried.
 """
 
 import logging
@@ -7,6 +11,8 @@ import os
 import subprocess
 import webbrowser
 from typing import Optional
+
+from emdx.utils.retry import retry_subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +23,24 @@ from emdx.models.documents import get_document
 from emdx.utils.output import console
 
 app = typer.Typer(help="GitHub Gist integration")
+
+
+@retry_subprocess(max_retries=3, min_backoff=1.0, max_backoff=10.0)
+def _get_gh_auth_token() -> str:
+    """Get GitHub auth token via gh CLI with retry on transient failures.
+
+    Raises:
+        subprocess.CalledProcessError: On non-transient failures.
+        FileNotFoundError: If gh CLI is not installed.
+    """
+    result = subprocess.run(
+        ["gh", "auth", "token"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    return result.stdout.strip()
 
 
 def get_github_auth() -> Optional[str]:
@@ -34,15 +58,9 @@ def get_github_auth() -> Optional[str]:
     # Priority order:
     # 1. Try gh CLI first (preferred - uses secure credential storage)
     try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10  # Prevent hanging
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
+        token = _get_gh_auth_token()
+        if token:
+            return token
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
         logger.debug("gh auth token not available: %s", e)
 
@@ -60,6 +78,26 @@ def get_github_auth() -> Optional[str]:
     return None
 
 
+@retry_subprocess(max_retries=3, min_backoff=1.0, max_backoff=10.0)
+def _run_gh_gist_create(cmd: list, temp_path: str) -> dict[str, str]:
+    """Run gh gist create command with retry on transient failures.
+
+    Args:
+        cmd: The gh command to execute.
+        temp_path: Path to temp file (for error context).
+
+    Returns:
+        Dict with 'id' and 'url' keys.
+
+    Raises:
+        subprocess.CalledProcessError: On failure.
+    """
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
+    gist_url = result.stdout.strip()
+    gist_id = gist_url.split("/")[-1]
+    return {"id": gist_id, "url": gist_url}
+
+
 def create_gist_with_gh(
     content: str, filename: str, description: str, public: bool = False
 ) -> Optional[dict[str, str]]:
@@ -67,6 +105,7 @@ def create_gist_with_gh(
 
     Uses secure temp file handling to prevent race conditions.
     The temp file is kept open until after the command completes.
+    Retries on transient network failures (timeouts, connection errors).
     """
     import tempfile
 
@@ -86,14 +125,8 @@ def create_gist_with_gh(
         if public:
             cmd.append("--public")
 
-        # Execute command
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-        if result.returncode == 0:
-            gist_url = result.stdout.strip()
-            # Extract gist ID from URL
-            gist_id = gist_url.split("/")[-1]
-            return {"id": gist_id, "url": gist_url}
+        # Execute command with retry
+        return _run_gh_gist_create(cmd, temp_path)
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         logger.debug("Failed to create gist with gh CLI: %s", e)
     finally:
@@ -107,10 +140,28 @@ def create_gist_with_gh(
     return None
 
 
+@retry_subprocess(max_retries=3, min_backoff=1.0, max_backoff=10.0)
+def _run_gh_gist_edit(cmd: list) -> bool:
+    """Run gh gist edit command with retry on transient failures.
+
+    Args:
+        cmd: The gh command to execute.
+
+    Returns:
+        True on success.
+
+    Raises:
+        subprocess.CalledProcessError: On failure.
+    """
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
+    return result.returncode == 0
+
+
 def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
     """Update an existing gist using gh CLI.
 
     Uses secure temp file handling to prevent race conditions.
+    Retries on transient network failures (timeouts, connection errors).
     """
     import tempfile
 
@@ -124,11 +175,9 @@ def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
         finally:
             os.close(fd)
 
-        # Execute gh command
+        # Execute gh command with retry
         cmd = ["gh", "gist", "edit", gist_id, temp_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-        return result.returncode == 0
+        return _run_gh_gist_edit(cmd)
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         logger.debug("Failed to update gist with gh CLI: %s", e)
     finally:

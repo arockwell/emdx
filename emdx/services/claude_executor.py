@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from ..utils.retry import retry
+
 logger = logging.getLogger(__name__)
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
