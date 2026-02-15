@@ -198,6 +198,30 @@ DEFAULT_CLAUDE_SONNET_MODEL = "claude-sonnet-4-5-20250929"
 # =============================================================================
 
 DELEGATE_EXECUTION_TIMEOUT = 600  # 10 min - delegate agent timeout
+CLI_SYNC_DEFAULT_TIMEOUT = 300  # 5 min - default timeout for execute_cli_sync
+STAGE_IMPLEMENTATION_TIMEOUT = 1800  # 30 min - longer timeout for implementation stages
+STAGE_DEFAULT_TIMEOUT = 300  # 5 min - default timeout for non-implementation stages
 SUBPROCESS_DEFAULT_TIMEOUT = 30  # Default subprocess timeout
 SUBPROCESS_SHORT_TIMEOUT = 10  # Short operations (git status, gist check)
 NETWORK_REQUEST_TIMEOUT = 30  # HTTP request timeout
+
+# =============================================================================
+# ENVIRONMENT VARIABLE NAMES
+# =============================================================================
+
+ENV_CLI_TOOL = "EMDX_CLI_TOOL"  # Which CLI tool to use (claude/cursor)
+ENV_SAFE_MODE = "EMDX_SAFE_MODE"  # Enable safe mode (disable execution commands)
+ENV_TEST_DB = "EMDX_TEST_DB"  # Test database path
+ENV_CODE_THEME = "EMDX_CODE_THEME"  # Code syntax highlighting theme
+ENV_ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"  # Anthropic API key
+ENV_CURSOR_API_KEY = "CURSOR_API_KEY"  # Cursor API key
+ENV_GITHUB_TOKEN = "GITHUB_TOKEN"  # GitHub token for gist operations
+
+# =============================================================================
+# UI DEBOUNCE & TIMING (in milliseconds)
+# =============================================================================
+
+DEBOUNCE_FTS_MS = 300  # Full-text search debounce
+DEBOUNCE_TAGS_MS = 300  # Tag search debounce
+DEBOUNCE_SEMANTIC_MS = 500  # Semantic search debounce
+DEBOUNCE_COMBINED_MS = 400  # Combined search debounce

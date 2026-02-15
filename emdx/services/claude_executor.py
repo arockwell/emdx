@@ -22,6 +22,7 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
+from ..config.constants import CLI_SYNC_DEFAULT_TIMEOUT
 from ..utils.environment import ensure_claude_in_path
 from ..utils.structured_logger import ProcessType, StructuredLogger
 from .cli_executor import get_cli_executor
@@ -228,7 +229,7 @@ def execute_cli_sync(
     allowed_tools: List[str] | None = None,
     working_dir: str | None = None,
     doc_id: str | None = None,
-    timeout: int = 300,
+    timeout: int = CLI_SYNC_DEFAULT_TIMEOUT,
 ) -> dict:
     """Execute a task with specified CLI tool synchronously, waiting for completion.
 
@@ -244,7 +245,7 @@ def execute_cli_sync(
         allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
         working_dir: Working directory for execution
         doc_id: Document ID (for logging)
-        timeout: Maximum seconds to wait (default 300 = 5 minutes)
+        timeout: Maximum seconds to wait (default CLI_SYNC_DEFAULT_TIMEOUT = 5 minutes)
 
     Returns:
         Dict with 'success' (bool), 'output' (str) or 'error' (str), and 'exit_code' (int)

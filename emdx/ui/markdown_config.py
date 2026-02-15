@@ -10,6 +10,7 @@ import os
 
 from rich.markdown import Markdown
 
+from ..config.constants import ENV_CODE_THEME
 from ..utils.output import console as shared_console
 
 
@@ -32,7 +33,7 @@ class MarkdownConfig:
     def get_code_theme():
         """Get the appropriate code theme based on UI config or terminal background."""
         # Check environment variable for user preference (highest priority)
-        theme = os.environ.get("EMDX_CODE_THEME")
+        theme = os.environ.get(ENV_CODE_THEME)
         if theme:
             return theme
 

@@ -4,6 +4,7 @@ import os
 from typing import Union
 
 from ...config.cli_config import CliTool
+from ...config.constants import ENV_CLI_TOOL
 from .base import CliExecutor
 from .claude import ClaudeCliExecutor
 from .cursor import CursorCliExecutor
@@ -35,7 +36,7 @@ def get_cli_executor(cli_tool: Union[str, CliTool] | None = None) -> CliExecutor
     # Determine which CLI to use
     if cli_tool is None:
         # Check environment variable, default to Claude
-        env_value = os.environ.get("EMDX_CLI_TOOL", "claude").lower()
+        env_value = os.environ.get(ENV_CLI_TOOL, "claude").lower()
         cli_tool = env_value
 
     # Convert string to enum if needed

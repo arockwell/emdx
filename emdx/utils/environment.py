@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from emdx.config.constants import EMDX_CONFIG_DIR
+from emdx.config.constants import EMDX_CONFIG_DIR, ENV_ANTHROPIC_API_KEY, ENV_CURSOR_API_KEY
 from emdx.utils.output import console
 
 
@@ -176,7 +176,7 @@ class EnvironmentValidator:
             self.warnings.append("Claude config file not found - claude might not be properly configured")
 
         # Check ANTHROPIC_API_KEY
-        if os.environ.get("ANTHROPIC_API_KEY"):
+        if os.environ.get(ENV_ANTHROPIC_API_KEY):
             self.info["api_key"] = "set"
         else:
             # Check if claude works without explicit API key
@@ -188,14 +188,14 @@ class EnvironmentValidator:
                     timeout=5
                 )
                 if result.returncode != 0:
-                    self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
+                    self.warnings.append(f"{ENV_ANTHROPIC_API_KEY} not set and claude might not work")
             except Exception as e:
                 self.warnings.append(f"Cannot verify claude installation: {e}")
 
     def _check_cursor_config(self) -> None:
         """Check Cursor-specific configuration."""
         # Check CURSOR_API_KEY
-        if os.environ.get("CURSOR_API_KEY"):
+        if os.environ.get(ENV_CURSOR_API_KEY):
             self.info["cursor_api_key"] = "set"
 
         # Check authentication status

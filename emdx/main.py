@@ -13,6 +13,7 @@ import os
 import typer
 
 from emdx import __build_id__, __version__
+from emdx.config.constants import ENV_SAFE_MODE
 from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 
 # =============================================================================
@@ -44,7 +45,7 @@ def is_safe_mode() -> bool:
     Safe mode disables execution commands (cascade, delegate, recipe).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
-    return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
+    return os.environ.get(ENV_SAFE_MODE, "0").lower() in ("1", "true", "yes")
 
 
 # Commands disabled in safe mode
@@ -242,7 +243,7 @@ def main(
     # Note: This is checked at import time, so the flag mainly serves as documentation
     # and for future commands that might check at runtime
     if safe_mode:
-        os.environ["EMDX_SAFE_MODE"] = "1"
+        os.environ[ENV_SAFE_MODE] = "1"
 
 
 # Known subcommands of `emdx tag` — used for shorthand routing

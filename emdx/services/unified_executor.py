@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
-from ..config.constants import EMDX_LOG_DIR
+from ..config.constants import CLI_SYNC_DEFAULT_TIMEOUT, EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
 from ..utils.environment import get_subprocess_env
 from .cli_executor import get_cli_executor
@@ -145,7 +145,7 @@ class ExecutionConfig:
     doc_id: int | None = None
     output_instruction: str | None = None
     allowed_tools: List[str] = field(default_factory=lambda: DEFAULT_ALLOWED_TOOLS.copy())
-    timeout_seconds: int = 300
+    timeout_seconds: int = CLI_SYNC_DEFAULT_TIMEOUT
     cli_tool: str = "claude"  # "claude" or "cursor"
     model: str | None = None  # Override default model for the CLI
     verbose: bool = False  # Stream output in real-time

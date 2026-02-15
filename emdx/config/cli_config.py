@@ -9,6 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List
 
+from .constants import (
+    DEFAULT_CLAUDE_MODEL,
+    DEFAULT_CLAUDE_SONNET_MODEL,
+    ENV_CLI_TOOL,
+)
+
 # Default tools allowed for Claude CLI execution
 # These are the standard tools that most agents need for basic operations
 DEFAULT_ALLOWED_TOOLS: List[str] = [
@@ -76,7 +82,7 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
         default_output_format="stream-json",
         requires_verbose_for_stream=True,
         model_flag="--model",
-        default_model="claude-opus-4-5-20251101",
+        default_model=DEFAULT_CLAUDE_MODEL,
         supports_allowed_tools=True,
         allowed_tools_flag="--allowedTools",
         force_flag=None,
@@ -106,19 +112,19 @@ CLI_CONFIGS: Dict[CliTool, CliConfig] = {
 # Use these aliases for portable commands that work with either CLI
 MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     "opus": {
-        "claude": "claude-opus-4-5-20251101",
+        "claude": DEFAULT_CLAUDE_MODEL,
         "cursor": "opus-4.5",
     },
     "sonnet": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": DEFAULT_CLAUDE_SONNET_MODEL,
         "cursor": "sonnet-4.5",
     },
     "auto": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": DEFAULT_CLAUDE_SONNET_MODEL,
         "cursor": "auto",
     },
     "fast": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": DEFAULT_CLAUDE_SONNET_MODEL,
         "cursor": "auto",
     },
 }
@@ -129,7 +135,7 @@ def get_default_cli_tool() -> CliTool:
 
     Checks EMDX_CLI_TOOL environment variable first.
     """
-    env_value = os.environ.get("EMDX_CLI_TOOL", "claude").lower()
+    env_value = os.environ.get(ENV_CLI_TOOL, "claude").lower()
     try:
         return CliTool(env_value)
     except ValueError:

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from ..config.constants import EMDX_CONFIG_DIR
+from ..config.constants import EMDX_CONFIG_DIR, ENV_TEST_DB
 from . import migrations
 
 
@@ -18,7 +18,7 @@ def get_db_path() -> Path:
     When running tests, set EMDX_TEST_DB to a temp file path to prevent
     tests from polluting the real database.
     """
-    test_db = os.environ.get("EMDX_TEST_DB")
+    test_db = os.environ.get(ENV_TEST_DB)
     if test_db:
         return Path(test_db)
 

@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 import typer
 
+from emdx.config.constants import ENV_GITHUB_TOKEN
 from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
@@ -47,7 +48,7 @@ def get_github_auth() -> str | None:
 
     # 2. Fall back to environment variable GITHUB_TOKEN
     # Note: Environment variables are less secure than gh auth
-    token = os.getenv("GITHUB_TOKEN")
+    token = os.getenv(ENV_GITHUB_TOKEN)
     if token:
         return token
 

@@ -10,6 +10,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Set
 
+from ...config.constants import (
+    DEBOUNCE_COMBINED_MS,
+    DEBOUNCE_FTS_MS,
+    DEBOUNCE_SEMANTIC_MS,
+    DEBOUNCE_TAGS_MS,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,10 +75,10 @@ class SearchPresenter:
 
     # Debounce times by mode (milliseconds) - wait for user to stop typing
     DEBOUNCE_TIMES = {
-        SearchMode.FTS: 300,
-        SearchMode.TAGS: 300,
-        SearchMode.SEMANTIC: 500,
-        SearchMode.COMBINED: 400,
+        SearchMode.FTS: DEBOUNCE_FTS_MS,
+        SearchMode.TAGS: DEBOUNCE_TAGS_MS,
+        SearchMode.SEMANTIC: DEBOUNCE_SEMANTIC_MS,
+        SearchMode.COMBINED: DEBOUNCE_COMBINED_MS,
     }
 
     # Minimum query length before searching (avoids searching on every keystroke)
