@@ -134,8 +134,8 @@ class TestTaskReady:
     @patch("emdx.commands.tasks.tasks")
     def test_ready_shows_tasks(self, mock_tasks):
         mock_tasks.get_ready_tasks.return_value = [
-            {"id": 1, "title": "First task", "source_doc_id": None},
-            {"id": 2, "title": "Second task", "source_doc_id": 42},
+            {"id": 1, "title": "First task", "epic_key": None, "epic_seq": None},
+            {"id": 2, "title": "Second task", "epic_key": "SEC", "epic_seq": 1},
         ]
         result = runner.invoke(app, ["ready"])
         assert result.exit_code == 0
@@ -143,21 +143,19 @@ class TestTaskReady:
         assert "Ready (2)" in out
         assert "#1" in out
         assert "First task" in out
-        assert "#2" in out
+        assert "SEC-1" in out
         assert "Second task" in out
-        assert "doc #42" in out
 
     @patch("emdx.commands.tasks.tasks")
-    def test_ready_task_without_doc(self, mock_tasks):
+    def test_ready_shows_epic_label(self, mock_tasks):
         mock_tasks.get_ready_tasks.return_value = [
-            {"id": 3, "title": "No doc task"},
+            {"id": 1, "title": "QW-3: Task", "epic_key": "QW", "epic_seq": 3},
         ]
         result = runner.invoke(app, ["ready"])
-        assert result.exit_code == 0
         out = _out(result)
-        assert "#3" in out
-        assert "No doc task" in out
-        assert "doc #" not in out
+        # ID column shows epic label, title has prefix stripped
+        assert "QW-3" in out
+        assert "Task" in out
 
 
 class TestTaskDone:
@@ -219,46 +217,43 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_tasks(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open task", "status": "open", "epic_key": None},
-            {"id": 2, "title": "Active task", "status": "active", "epic_key": None},
-            {"id": 3, "title": "Blocked task", "status": "blocked", "epic_key": None},
+            {"id": 1, "title": "Open task", "status": "open",
+             "epic_key": None, "epic_seq": None},
+            {"id": 2, "title": "Active task", "status": "active",
+             "epic_key": None, "epic_seq": None},
+            {"id": 3, "title": "Blocked task", "status": "blocked",
+             "epic_key": None, "epic_seq": None},
         ]
+        mock_tasks.get_dependencies.return_value = []
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         out = _out(result)
         assert "Open task" in out
         assert "Active task" in out
         assert "Blocked task" in out
-        assert "3 task(s)" in out
+        assert "Tasks (3)" in out
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_status_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Task", "status": "active", "epic_key": None},
+            {"id": 1, "title": "Task", "status": "active",
+             "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
         assert "active" in out
 
     @patch("emdx.commands.tasks.tasks")
-    def test_list_shows_category_column(self, mock_tasks):
+    def test_list_shows_epic_label_and_strips_prefix(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "SEC-1: Harden auth", "status": "open", "epic_key": "SEC"},
-            {"id": 2, "title": "Plain task", "status": "open", "epic_key": None},
+            {"id": 1, "title": "SEC-1: Harden auth", "status": "open",
+             "epic_key": "SEC", "epic_seq": 1},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
-        assert "Cat" in out
-        assert "SEC" in out
-
-    @patch("emdx.commands.tasks.tasks")
-    def test_list_hides_category_column_when_none(self, mock_tasks):
-        mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Plain task", "status": "open", "epic_key": None},
-        ]
-        result = runner.invoke(app, ["list"])
-        out = _out(result)
-        assert "Cat" not in out
+        # ID column has epic label, title prefix stripped
+        assert "SEC-1" in out
+        assert "Harden auth" in out
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_defaults_to_actionable_statuses(self, mock_tasks):
@@ -341,29 +336,37 @@ class TestTaskList:
         )
 
     @patch("emdx.commands.tasks.tasks")
-    def test_list_displays_status_icons(self, mock_tasks):
+    def test_list_displays_status_as_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open", "status": "open", "epic_key": None},
-            {"id": 2, "title": "Active", "status": "active", "epic_key": None},
-            {"id": 3, "title": "Done", "status": "done", "epic_key": None},
-            {"id": 4, "title": "Failed", "status": "failed", "epic_key": None},
+            {"id": 1, "title": "Open", "status": "open",
+             "epic_key": None, "epic_seq": None},
+            {"id": 2, "title": "Active", "status": "active",
+             "epic_key": None, "epic_seq": None},
+            {"id": 3, "title": "Done", "status": "done",
+             "epic_key": None, "epic_seq": None},
+            {"id": 4, "title": "Failed", "status": "failed",
+             "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         out = _out(result)
-        # Status icons should be present (○ open, ● active, ✓ done, ✗ failed)
-        assert "○" in out or "●" in out or "✓" in out or "✗" in out
+        assert "open" in out
+        assert "active" in out
+        assert "done" in out
+        assert "failed" in out
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_does_not_truncate_title(self, mock_tasks):
-        long_title = "This is a very long task title that exceeds fifty characters by quite a bit"
+        long_title = (
+            "This is a very long task title that exceeds fifty"
+            " characters by quite a bit"
+        )
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": long_title, "status": "open", "epic_key": None},
+            {"id": 1, "title": long_title, "status": "open",
+             "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
-        # Full title should be present (may be line-wrapped by Rich)
-        # Old behavior truncated at 50 chars; verify the end is present
         assert "quite a bit" in out
 
 

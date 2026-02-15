@@ -7,6 +7,7 @@ Delegate activity tracking is separate (shown via `emdx status`).
 
 import typer
 from rich.table import Table
+from rich.text import Text
 
 from emdx.models import tasks
 from emdx.utils.output import console, print_json
@@ -14,6 +15,28 @@ from emdx.utils.output import console, print_json
 app = typer.Typer(help="Agent work queue")
 
 ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘", "closed": "✓"}
+STATUS_STYLE = {
+    "open": "default",
+    "active": "blue",
+    "blocked": "yellow",
+    "done": "green",
+    "failed": "red",
+    "closed": "green",
+}
+
+
+
+def _blocker_summary(task_id: int) -> str:
+    """Get one-line blocker info for a task."""
+    deps = tasks.get_dependencies(task_id)
+    if not deps:
+        return ""
+    open_deps = [d for d in deps if d["status"] not in ("done", "closed")]
+    if not open_deps:
+        return ""
+    names = ", ".join(f"#{d['id']}" for d in open_deps[:3])
+    extra = f" +{len(open_deps) - 3}" if len(open_deps) > 3 else ""
+    return f"{names}{extra}"
 
 
 @app.command()
@@ -83,10 +106,14 @@ def ready(
         console.print("[yellow]No ready tasks[/yellow]")
         return
 
-    console.print(f"\n[bold]Ready ({len(ready_tasks)}):[/bold]")
+    table = Table(title=f"Ready ({len(ready_tasks)})")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title")
+
     for t in ready_tasks:
-        doc = f" [dim](doc #{t['source_doc_id']})[/dim]" if t.get("source_doc_id") else ""
-        console.print(f"  ○ #{t['id']} {t['title']}{doc}")
+        table.add_row(_task_label(t), _display_title(t))
+
+    console.print(table)
 
 
 @app.command()
@@ -299,7 +326,9 @@ def blocked(
 
 @app.command("list")
 def list_cmd(
-    status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
+    status: str | None = typer.Option(
+        None, "-s", "--status", help="Filter by status (comma-sep)"
+    ),
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
     done: bool = typer.Option(False, "--done", help="Include done/failed tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
@@ -310,7 +339,6 @@ def list_cmd(
     """List tasks.
 
     By default shows open, active, and blocked tasks (hides done/failed).
-    Use --done to include completed tasks, --all to include delegate tasks.
 
     Examples:
         emdx task list
@@ -344,40 +372,42 @@ def list_cmd(
         console.print("[yellow]No tasks[/yellow]")
         return
 
-    # Check if any tasks have categories to decide whether to show Cat column
-    has_cats = any(t.get("epic_key") for t in task_list)
-
-    table = Table()
-    table.add_column("", width=2)
-    table.add_column("ID", width=5)
-    table.add_column("Status", width=7)
-    if has_cats:
-        table.add_column("Cat", width=6)
+    table = Table(title=f"Tasks ({len(task_list)})")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
     table.add_column("Title")
-
-    STATUS_STYLE = {
-        "open": "default",
-        "active": "blue",
-        "blocked": "yellow",
-        "done": "green",
-        "failed": "red",
-        "closed": "green",
-    }
 
     for t in task_list:
         style = STATUS_STYLE.get(t["status"], "default")
-        row = [
-            ICONS.get(t["status"], "?"),
-            str(t["id"]),
-            f"[{style}]{t['status']}[/{style}]",
-        ]
-        if has_cats:
-            row.append(t.get("epic_key") or "")
-        row.append(t["title"])
-        table.add_row(*row)
+        title = _display_title(t)
+        if t["status"] == "blocked":
+            blocker = _blocker_summary(t["id"])
+            if blocker:
+                title += f" (blocked by {blocker})"
+        table.add_row(_task_label(t), Text(t["status"], style=style), title)
 
     console.print(table)
-    console.print(f"\n[dim]{len(task_list)} task(s)[/dim]")
+
+
+def _task_label(task: dict) -> str:
+    """Format task label: DEBT-13 if epic, else #id."""
+    epic_key = task.get("epic_key")
+    epic_seq = task.get("epic_seq")
+    if epic_key and epic_seq:
+        return f"{epic_key}-{epic_seq}"
+    return f"#{task['id']}"
+
+
+def _display_title(task: dict) -> str:
+    """Strip redundant KEY-N: prefix from title since the ID column has it."""
+    title = task["title"]
+    epic_key = task.get("epic_key")
+    epic_seq = task.get("epic_seq")
+    if epic_key and epic_seq:
+        prefix = f"{epic_key}-{epic_seq}: "
+        if title.startswith(prefix):
+            return title[len(prefix):]
+    return title
 
 
 @app.command()
