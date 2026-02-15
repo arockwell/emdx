@@ -153,8 +153,11 @@ class ActivityDataLoader:
         """Load cascade executions into CascadeRunItem instances."""
         items: list[ActivityItem] = []
         try:
-            from emdx.database.connection import db_connection
-            from emdx.services.cascade_service import get_cascade_run_executions, list_cascade_runs
+            from emdx.services.cascade_service import (
+                get_cascade_run_executions,
+                get_orphaned_cascade_executions,
+                list_cascade_runs,
+            )
 
             cutoff = datetime.now() - timedelta(days=7)
             seen_run_ids: set[int] = set()
@@ -189,30 +192,17 @@ class ActivityDataLoader:
                 logger.debug(f"Could not load cascade runs (may not exist yet): {e}")
 
             # Backward-compat: individual executions not part of any run
-            with db_connection.get_connection() as conn:
-                cursor = conn.execute(
-                    """
-                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at, e.completed_at,
-                           d.stage, d.pr_url, e.cascade_run_id
-                    FROM executions e
-                    LEFT JOIN documents d ON e.doc_id = d.id
-                    WHERE e.doc_id IS NOT NULL
-                      AND e.started_at > ?
-                      AND (e.cascade_run_id IS NULL
-                           OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
-                      AND e.id = (
-                          SELECT MAX(e2.id) FROM executions e2
-                          WHERE e2.doc_id = e.doc_id
-                      )
-                    ORDER BY e.started_at DESC
-                    LIMIT 50
-                    """,
-                    (cutoff.isoformat(),),
-                )
-                rows = cursor.fetchall()
+            orphaned = get_orphaned_cascade_executions(cutoff.isoformat(), limit=50)
 
-            for row in rows:
-                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url, run_id = row  # noqa: E501
+            for row in orphaned:
+                exec_id = row["id"]
+                doc_id = row["doc_id"]
+                doc_title = row["doc_title"]
+                status = row["status"]
+                started_at = row["started_at"]
+                stage = row["stage"]
+                pr_url = row["pr_url"]
+                run_id = row["cascade_run_id"]
 
                 if run_id and run_id in seen_run_ids:
                     continue
