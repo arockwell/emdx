@@ -566,3 +566,83 @@ class TestTaskLog:
     def test_log_requires_task_id(self):
         result = runner.invoke(app, ["log"])
         assert result.exit_code != 0
+
+
+class TestTaskNote:
+    """Tests for task note command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_note_logs_message(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
+        mock_tasks.log_progress.return_value = 1
+        result = runner.invoke(app, ["note", "1", "Tried approach X"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Logged" in out
+        assert "#1" in out
+        assert "Tried approach X" in out
+        mock_tasks.log_progress.assert_called_once_with(1, "Tried approach X")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_note_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["note", "999", "some note"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_note_requires_task_id_and_message(self):
+        result = runner.invoke(app, ["note"])
+        assert result.exit_code != 0
+
+    def test_note_requires_message(self):
+        result = runner.invoke(app, ["note", "1"])
+        assert result.exit_code != 0
+
+
+class TestTaskBlocked:
+    """Tests for task blocked command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_blocked_marks_task(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["blocked", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Blocked" in out
+        assert "#1" in out
+        assert "Test task" in out
+        mock_tasks.update_task.assert_called_once_with(1, status="blocked")
+        mock_tasks.log_progress.assert_not_called()
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_blocked_with_reason(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 2, "title": "Auth fix"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["blocked", "2", "--reason", "Waiting on API key"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Blocked" in out
+        assert "#2" in out
+        assert "Waiting on API key" in out
+        mock_tasks.update_task.assert_called_once_with(2, status="blocked")
+        mock_tasks.log_progress.assert_called_once_with(2, "Blocked: Waiting on API key")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_blocked_with_reason_short_flag(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["blocked", "3", "-r", "Needs review"])
+        assert result.exit_code == 0
+        mock_tasks.log_progress.assert_called_once_with(3, "Blocked: Needs review")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_blocked_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["blocked", "999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_blocked_requires_task_id(self):
+        result = runner.invoke(app, ["blocked"])
+        assert result.exit_code != 0
