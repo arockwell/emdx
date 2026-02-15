@@ -38,14 +38,17 @@ def save_document(
             (title, content, project, parent_id),
         )
 
-        conn.commit()
+        # Get lastrowid before commit (required by SQLite)
         doc_id = cursor.lastrowid
         assert doc_id is not None
 
-        # Add tags if provided
+        # Add tags if provided - pass connection for atomic transaction
         if tags:
             from emdx.models.tags import add_tags_to_document
-            add_tags_to_document(doc_id, tags)
+            add_tags_to_document(doc_id, tags, conn=conn)
+
+        # Commit after both document and tags are inserted (atomic transaction)
+        conn.commit()
 
         return doc_id
 
@@ -112,16 +115,24 @@ def list_documents(
 
     Args:
         project: Filter by project name (None = all projects)
-        limit: Maximum number of documents to return
+        limit: Maximum number of documents to return (must be non-negative)
         parent_id: Filter by parent document:
             - None: Only top-level documents (parent_id IS NULL)
             - -1: All documents regardless of parent
             - int > 0: Only children of specific parent
-        offset: Starting offset for pagination
+        offset: Starting offset for pagination (must be non-negative)
 
     Returns:
         List of document dictionaries
+
+    Raises:
+        ValueError: If limit or offset is negative
     """
+    if limit < 0:
+        raise ValueError("limit must be non-negative")
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
+
     with db_connection.get_connection() as conn:
         # Build query with filters
         conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
@@ -198,7 +209,8 @@ def count_documents(
             f"SELECT COUNT(*) FROM documents WHERE {where_clause}",
             params,
         )
-        return int(cursor.fetchone()[0])
+        result = cursor.fetchone()
+        return int(result[0]) if result else 0
 
 
 def has_children(doc_id: int) -> bool:
@@ -370,7 +382,8 @@ def get_stats(project: str | None = None) -> dict[str, Any]:
             """
             )
 
-        stats = dict(cursor.fetchone())
+        row = cursor.fetchone()
+        stats = dict(row) if row else {}
 
         # Get database file size
         stats["table_size"] = f"{db_connection.db_path.stat().st_size / 1024 / 1024:.2f} MB"

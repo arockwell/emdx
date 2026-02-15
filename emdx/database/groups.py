@@ -354,7 +354,8 @@ def get_recursive_doc_count(group_id: int) -> int:
             """,
             (group_id,),
         )
-        return int(cursor.fetchone()[0])
+        result = cursor.fetchone()
+        return int(result[0]) if result else 0
 
 
 def list_top_groups_with_counts() -> list[dict[str, Any]]:
@@ -410,7 +411,8 @@ def _update_group_metrics(conn: sqlite3.Connection, group_id: int) -> bool:
         """,
         (group_id,),
     )
-    doc_count = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    doc_count = result[0] if result else 0
 
     conn.execute(
         """

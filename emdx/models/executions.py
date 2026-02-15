@@ -204,12 +204,30 @@ def update_execution_status(exec_id: int, status: str, exit_code: int | None = N
 
         conn.commit()
 
+# Allowed columns for execution updates (prevents SQL injection via column names)
+ALLOWED_EXECUTION_COLUMNS = frozenset({
+    'doc_id', 'doc_title', 'status', 'completed_at', 'log_file', 'exit_code',
+    'working_dir', 'pid', 'cascade_run_id', 'task_id', 'cost_usd',
+    'tokens_used', 'input_tokens', 'output_tokens',
+})
+
+
 def update_execution(exec_id: int, **kwargs: Any) -> None:
-    """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.)."""
+    """Update arbitrary execution fields (doc_id, cost_usd, tokens, task_id, etc.).
+
+    Only columns in ALLOWED_EXECUTION_COLUMNS can be updated.
+    Unknown columns are silently ignored.
+    """
     if not kwargs:
         return
-    sets = [f"{k} = ?" for k in kwargs]
-    params = list(kwargs.values()) + [exec_id]
+
+    # Filter to only allowed columns
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k in ALLOWED_EXECUTION_COLUMNS}
+    if not filtered_kwargs:
+        return
+
+    sets = [f"{k} = ?" for k in filtered_kwargs]
+    params = list(filtered_kwargs.values()) + [exec_id]
     with db_connection.get_connection() as conn:
         conn.execute(
             f"UPDATE executions SET {', '.join(sets)} WHERE id = ?",
@@ -299,7 +317,20 @@ def get_stale_executions(timeout_seconds: int = 1800) -> list[Execution]:
         return executions
 
 def cleanup_old_executions(days: int = 7) -> int:
-    """Clean up executions older than specified days."""
+    """Clean up executions older than specified days.
+
+    Args:
+        days: Number of days to keep executions (must be positive)
+
+    Returns:
+        Number of executions deleted
+
+    Raises:
+        ValueError: If days is not positive
+    """
+    if days <= 0:
+        raise ValueError("days must be positive")
+
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
         # Build interval string safely - days is validated as int by function signature
@@ -326,14 +357,16 @@ def get_execution_stats() -> dict[str, Any]:
 
         # Total executions
         cursor.execute("SELECT COUNT(*) FROM executions")
-        total = cursor.fetchone()[0]
+        total_result = cursor.fetchone()
+        total = total_result[0] if total_result else 0
 
         # Recent activity (last 24 hours)
         cursor.execute("""
             SELECT COUNT(*) FROM executions
             WHERE started_at > datetime('now', '-1 day')
         """)
-        recent = cursor.fetchone()[0]
+        recent_result = cursor.fetchone()
+        recent = recent_result[0] if recent_result else 0
 
         return {
             'total': total,
