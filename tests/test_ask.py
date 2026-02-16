@@ -107,7 +107,7 @@ class TestContextBudget:
 
     def test_generate_answer_respects_budget(self) -> None:
         """_generate_answer should not exceed context budget."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         service = AskService()
 
@@ -120,13 +120,11 @@ class TestContextBudget:
             (4, "Doc 4", large_content),
         ]
 
-        # Mock the LLM call to capture what context was sent
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="Test answer")]
-        mock_client.messages.create.return_value = mock_response
-
-        with patch.object(service, "_get_client", return_value=mock_client):
+        # Mock the Claude CLI call
+        with patch(
+            "emdx.services.ask_service._execute_claude_prompt",
+            return_value="Test answer",
+        ):
             text, context_size = service._generate_answer("test question", docs)
 
         # Context size should not exceed budget
@@ -180,7 +178,7 @@ class TestSourceTitles:
 
     def test_source_titles_structure(self) -> None:
         """Source titles should be list of (id, title) tuples matching sources."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         from emdx.models.documents import save_document
 
@@ -190,13 +188,11 @@ class TestSourceTitles:
 
         service = AskService()
 
-        # Mock the LLM call
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="Test answer")]
-        mock_client.messages.create.return_value = mock_response
-
-        with patch.object(service, "_get_client", return_value=mock_client):
+        # Mock the Claude CLI call
+        with patch(
+            "emdx.services.ask_service._execute_claude_prompt",
+            return_value="Test answer",
+        ):
             result = service.ask(f"question about {unique_content}", limit=5, force_keyword=True)
 
         # Verify structure: source_titles should match sources
