@@ -12,12 +12,13 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+
 class CommandContext(Enum):
     """Contexts where commands are available."""
 
     GLOBAL = "global"  # Available everywhere
-    DOCUMENT_BROWSER = "document_browser"
     ACTIVITY = "activity"
+
 
 @dataclass
 class PaletteCommand:
@@ -31,6 +32,7 @@ class PaletteCommand:
     context: CommandContext = CommandContext.GLOBAL  # Where available
     shortcut: str | None = None  # Keyboard shortcut hint
     category: str = "General"  # For grouping in UI
+
 
 class CommandRegistry:
     """Registry of available commands for the palette."""
@@ -106,8 +108,7 @@ class CommandRegistry:
 
                 # Fuzzy match on keywords
                 keyword_scores = [
-                    SequenceMatcher(None, query_lower, kw.lower()).ratio()
-                    for kw in cmd.keywords
+                    SequenceMatcher(None, query_lower, kw.lower()).ratio() for kw in cmd.keywords
                 ]
                 keyword_score = max(keyword_scores) if keyword_scores else 0.0
 
@@ -146,10 +147,10 @@ class CommandRegistry:
 
         self.register(
             PaletteCommand(
-                id="nav.cascade",
-                name="Go to Cascade",
-                description="Switch to Cascade browser",
-                keywords=["cascade", "pipeline", "stages", "flow"],
+                id="nav.tasks",
+                name="Go to Tasks",
+                description="Switch to Task browser",
+                keywords=["task", "tasks", "todo", "work", "queue", "ready"],
                 context=CommandContext.GLOBAL,
                 shortcut="2",
                 category="Navigation",
@@ -170,10 +171,10 @@ class CommandRegistry:
 
         self.register(
             PaletteCommand(
-                id="nav.documents",
-                name="Go to Documents",
-                description="Switch to Document browser",
-                keywords=["document", "docs", "knowledge", "notes", "browse"],
+                id="nav.cascade",
+                name="Go to Cascade",
+                description="Switch to Cascade browser",
+                keywords=["cascade", "pipeline", "stages", "flow"],
                 context=CommandContext.GLOBAL,
                 shortcut="4",
                 category="Navigation",
@@ -190,43 +191,6 @@ class CommandRegistry:
                 context=CommandContext.GLOBAL,
                 shortcut="\\",
                 category="Appearance",
-            )
-        )
-
-        # Document commands
-        self.register(
-            PaletteCommand(
-                id="doc.new",
-                name="New Document",
-                description="Create a new document",
-                keywords=["new", "create", "document", "add", "write"],
-                context=CommandContext.DOCUMENT_BROWSER,
-                shortcut="n",
-                category="Documents",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="doc.edit",
-                name="Edit Document",
-                description="Edit the selected document",
-                keywords=["edit", "modify", "change", "update"],
-                context=CommandContext.DOCUMENT_BROWSER,
-                shortcut="e",
-                category="Documents",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="doc.tag",
-                name="Add Tags",
-                description="Add tags to the selected document",
-                keywords=["tag", "tags", "label", "category"],
-                context=CommandContext.DOCUMENT_BROWSER,
-                shortcut="t",
-                category="Documents",
             )
         )
 
@@ -290,8 +254,10 @@ class CommandRegistry:
             )
         )
 
+
 # Global registry instance
 _registry: CommandRegistry | None = None
+
 
 def get_command_registry() -> CommandRegistry:
     """Get the global command registry instance."""

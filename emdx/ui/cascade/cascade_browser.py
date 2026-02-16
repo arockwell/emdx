@@ -28,9 +28,9 @@ class CascadeBrowser(Widget):
 
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
-        ("2", "switch_cascade", "Cascade"),
+        ("2", "switch_tasks", "Tasks"),
         ("3", "switch_search", "Search"),
-        ("4", "switch_documents", "Documents"),
+        ("4", "switch_cascade", "Cascade"),
         ("?", "show_help", "Help"),
     ]
 
@@ -51,7 +51,7 @@ class CascadeBrowser(Widget):
         self.cascade_view = CascadeView(id="cascade-view")
         yield self.cascade_view
         yield Static(
-            "[dim]1[/dim] Activity \u2502 [bold]2[/bold] Cascade \u2502 [dim]3[/dim] Search \u2502 [dim]4[/dim] Docs \u2502 "  # noqa: E501
+            "[dim]1[/dim] Activity \u2502 [dim]2[/dim] Tasks \u2502 [dim]3[/dim] Search \u2502 [bold]4[/bold] Cascade \u2502 "  # noqa: E501
             "[dim]n[/dim] new idea \u2502 [dim]a[/dim] advance \u2502 [dim]p[/dim] process \u2502 [dim]s[/dim] synthesize",  # noqa: E501
             id="help-bar",
         )
@@ -91,33 +91,48 @@ class CascadeBrowser(Widget):
         log_dir = Path.cwd() / ".emdx" / "logs" / "cascade"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        log_file.write_text(f"# Cascade: {stage} processing for doc #{doc_id}\n# Started: {datetime.now().isoformat()}\n")  # noqa: E501
+        started = datetime.now().isoformat()
+        log_file.write_text(
+            f"# Cascade: {stage} processing for doc #{doc_id}\n# Started: {started}\n"
+        )
 
         exec_id = create_execution(
-            doc_id=doc_id, doc_title=f"Cascade: {doc.get('title', '')}",
-            log_file=str(log_file), working_dir=str(Path.cwd()),
+            doc_id=doc_id,
+            doc_title=f"Cascade: {doc.get('title', '')}",
+            log_file=str(log_file),
+            working_dir=str(Path.cwd()),
         )
 
         try:
             pid = execute_claude_detached(
-                task=prompt, execution_id=exec_id, log_file=log_file,
-                allowed_tools=list(DEFAULT_ALLOWED_TOOLS), working_dir=str(Path.cwd()),
+                task=prompt,
+                execution_id=exec_id,
+                log_file=log_file,
+                allowed_tools=list(DEFAULT_ALLOWED_TOOLS),
+                working_dir=str(Path.cwd()),
                 doc_id=str(doc_id),
             )
-            self._update_status(f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring...")  # noqa: E501
+            self._update_status(
+                f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring..."
+            )  # noqa: E501
             if self.cascade_view:
                 self.cascade_view.refresh_all()
             self._start_completion_monitor(exec_id, doc_id, doc, stage, str(log_file))
         except Exception as e:
             from emdx.services.execution_service import update_execution_status
+
             update_execution_status(exec_id, "failed", exit_code=1)
             self._update_status(f"[red]\u2717 Failed to start:[/red] {str(e)[:50]}")
             if self.cascade_view:
                 self.cascade_view.refresh_all()
 
     def _start_completion_monitor(
-        self, exec_id: int, doc_id: int,
-        doc: dict[str, Any], stage: str, log_file: str,
+        self,
+        exec_id: int,
+        doc_id: int,
+        doc: dict[str, Any],
+        stage: str,
+        log_file: str,
     ) -> None:
         """Monitor execution in a background thread, updating UI on completion."""
         import concurrent.futures
@@ -130,13 +145,19 @@ class CascadeBrowser(Widget):
                 self._update_status(status_markup)
                 if view:
                     view.refresh_all()
+
             app.call_from_thread(_apply)
 
         def run() -> None:
             monitor_execution_completion(
-                exec_id=exec_id, doc_id=doc_id, doc=doc, stage=stage,
-                log_file=Path(log_file), next_stage_map=NEXT_STAGE,
-                on_update=on_update, save_doc=save_document,
+                exec_id=exec_id,
+                doc_id=doc_id,
+                doc=doc,
+                stage=stage,
+                log_file=Path(log_file),
+                next_stage_map=NEXT_STAGE,
+                on_update=on_update,
+                save_doc=save_document,
             )
 
         concurrent.futures.ThreadPoolExecutor(max_workers=1).submit(run)
@@ -152,9 +173,9 @@ class CascadeBrowser(Widget):
     async def action_switch_cascade(self) -> None:
         pass
 
-    async def action_switch_documents(self) -> None:
+    async def action_switch_tasks(self) -> None:
         if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("document")
+            await self.app.switch_browser("task")
 
     async def action_switch_search(self) -> None:
         if hasattr(self.app, "switch_browser"):

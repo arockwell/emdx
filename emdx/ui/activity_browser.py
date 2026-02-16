@@ -17,9 +17,9 @@ class ActivityBrowser(Widget):
 
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
-        ("2", "switch_cascade", "Cascade"),
+        ("2", "switch_tasks", "Tasks"),
         ("3", "switch_search", "Search"),
-        ("4", "switch_documents", "Documents"),
+        ("4", "switch_cascade", "Cascade"),
         ("?", "show_help", "Help"),
     ]
 
@@ -48,7 +48,7 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] Docs │ "  # noqa: E501
+            "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ [dim]3[/dim] Search │ [dim]4[/dim] Cascade │ "  # noqa: E501
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
             id="help-bar",
         )
@@ -71,10 +71,10 @@ class ActivityBrowser(Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("cascade")
 
-    async def action_switch_documents(self) -> None:
-        """Switch to document browser."""
+    async def action_switch_tasks(self) -> None:
+        """Switch to task browser."""
         if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("document")
+            await self.app.switch_browser("task")
 
     async def action_switch_search(self) -> None:
         """Switch to search screen."""
