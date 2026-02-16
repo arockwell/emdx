@@ -1,7 +1,7 @@
 """CLI tool configuration for EMDX execution system.
 
-This module defines configurations for different CLI tools (Claude, Cursor)
-that can be used to execute agent tasks.
+This module defines configurations for the Claude CLI tool
+used to execute agent tasks.
 """
 
 import os
@@ -26,20 +26,21 @@ DEFAULT_ALLOWED_TOOLS: list[str] = [
     "Write",
 ]
 
+
 class CliTool(str, Enum):
     """Supported CLI tools."""
 
     CLAUDE = "claude"
-    CURSOR = "cursor"
+
 
 @dataclass
 class CliConfig:
     """Configuration for a CLI tool."""
 
     # Command structure
-    binary: list[str]  # e.g., ["claude"] or ["cursor", "agent"]
-    prompt_flag: str  # e.g., "--print" or "-p"
-    prompt_is_positional: bool  # True if prompt goes at end (Cursor)
+    binary: list[str]  # e.g., ["claude"]
+    prompt_flag: str  # e.g., "--print"
+    prompt_is_positional: bool  # True if prompt is a positional argument
 
     # Output format
     output_format_flag: str  # "--output-format"
@@ -53,14 +54,15 @@ class CliConfig:
     # Tool control
     supports_allowed_tools: bool  # Claude has --allowedTools
     allowed_tools_flag: str | None  # "--allowedTools"
-    force_flag: str | None  # Cursor uses "--force"
+    force_flag: str | None  # "--force" flag (unused for Claude)
 
     # Workspace
-    workspace_flag: str | None  # Cursor has "--workspace"
+    workspace_flag: str | None  # "--workspace" flag (unused for Claude)
 
     # Environment
     config_path: str | None  # Path to CLI config file
     api_key_env: str | None  # Environment variable for API key
+
 
 # CLI configurations
 CLI_CONFIGS: dict[CliTool, CliConfig] = {
@@ -80,44 +82,24 @@ CLI_CONFIGS: dict[CliTool, CliConfig] = {
         config_path="~/.claude/claude_cli.json",
         api_key_env="ANTHROPIC_API_KEY",
     ),
-    CliTool.CURSOR: CliConfig(
-        binary=["cursor", "agent"],
-        prompt_flag="-p",
-        prompt_is_positional=True,
-        output_format_flag="--output-format",
-        default_output_format="stream-json",
-        requires_verbose_for_stream=False,
-        model_flag="--model",
-        default_model="auto",
-        supports_allowed_tools=False,
-        allowed_tools_flag=None,
-        force_flag="--force",
-        workspace_flag="--workspace",
-        config_path=None,
-        api_key_env="CURSOR_API_KEY",
-    ),
 }
 
-# Model aliases for cross-CLI compatibility
-# Use these aliases for portable commands that work with either CLI
+# Model aliases for convenience
 MODEL_ALIASES: dict[str, dict[str, str]] = {
     "opus": {
         "claude": "claude-opus-4-5-20251101",
-        "cursor": "opus-4.5",
     },
     "sonnet": {
         "claude": "claude-sonnet-4-5-20250929",
-        "cursor": "sonnet-4.5",
     },
     "auto": {
         "claude": "claude-sonnet-4-5-20250929",
-        "cursor": "auto",
     },
     "fast": {
         "claude": "claude-sonnet-4-5-20250929",
-        "cursor": "auto",
     },
 }
+
 
 def get_default_cli_tool() -> CliTool:
     """Get the default CLI tool from environment or fallback to Claude.
@@ -129,6 +111,7 @@ def get_default_cli_tool() -> CliTool:
         return CliTool(env_value)
     except ValueError:
         return CliTool.CLAUDE
+
 
 def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     """Get configuration for a CLI tool.
@@ -142,6 +125,7 @@ def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     if cli_tool is None:
         cli_tool = get_default_cli_tool()
     return CLI_CONFIGS[cli_tool]
+
 
 def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     """Resolve a model alias to the actual model name for a CLI.
@@ -157,6 +141,7 @@ def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
         return MODEL_ALIASES[alias].get(cli_tool.value, alias)
     return alias
 
+
 def get_available_models(cli_tool: CliTool) -> list[str]:
     """Get list of known models for a CLI tool.
 
@@ -169,15 +154,5 @@ def get_available_models(cli_tool: CliTool) -> list[str]:
             "claude-sonnet-4-5-20250929",
             "opus",
             "sonnet",
-        ]
-    elif cli_tool == CliTool.CURSOR:
-        return [
-            "auto",
-            "opus-4.5",
-            "opus-4.5-thinking",
-            "sonnet-4.5",
-            "sonnet-4.5-thinking",
-            "gpt-5.2",
-            "gemini-3-pro",
         ]
     return []
