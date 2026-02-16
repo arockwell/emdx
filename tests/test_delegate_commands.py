@@ -33,10 +33,10 @@ from emdx.commands.delegate import (
     _run_parallel,
     _run_single,
     _save_output_fallback,
-    _slugify_title,
     delegate,
 )
 from emdx.services.unified_executor import ExecutionResult
+from emdx.utils.git import generate_delegate_branch_name, slugify_for_branch
 
 # =============================================================================
 # Fixtures
@@ -92,9 +92,11 @@ def mock_get_document():
 @pytest.fixture
 def mock_task_helpers():
     """Mock task creation and update helpers."""
-    with patch("emdx.commands.delegate._safe_create_task") as mock_create, \
-         patch("emdx.commands.delegate._safe_update_task") as mock_update, \
-         patch("emdx.commands.delegate._safe_update_execution") as mock_update_exec:
+    with (
+        patch("emdx.commands.delegate._safe_create_task") as mock_create,
+        patch("emdx.commands.delegate._safe_update_task") as mock_update,
+        patch("emdx.commands.delegate._safe_update_execution") as mock_update_exec,
+    ):
         mock_create.return_value = 1
         yield mock_create, mock_update, mock_update_exec
 
@@ -102,54 +104,83 @@ def mock_task_helpers():
 @pytest.fixture
 def mock_worktree():
     """Mock git worktree creation and cleanup."""
-    with patch("emdx.commands.delegate.create_worktree") as mock_create, \
-         patch("emdx.commands.delegate.cleanup_worktree") as mock_cleanup:
+    with (
+        patch("emdx.commands.delegate.create_worktree") as mock_create,
+        patch("emdx.commands.delegate.cleanup_worktree") as mock_cleanup,
+    ):
         mock_create.return_value = ("/tmp/worktree-123", "worktree-123")
         yield mock_create, mock_cleanup
 
 
 # =============================================================================
-# Tests for _slugify_title
+# Tests for slugify_for_branch / generate_delegate_branch_name
 # =============================================================================
 
 
-class TestSlugifyTitle:
-    """Tests for _slugify_title — converts document titles to git branch slugs."""
+class TestSlugifyForBranch:
+    """Tests for slugify_for_branch — converts text to git branch slugs."""
 
     def test_simple_title(self):
-        assert _slugify_title("Fix auth bug") == "fix-auth-bug"
+        assert slugify_for_branch("Fix auth bug") == "fix-auth-bug"
 
     def test_strips_gameplan_prefix(self):
-        assert _slugify_title("Gameplan #1: Contextual Save") == "contextual-save"
+        assert slugify_for_branch("Gameplan #1: Contextual Save") == "contextual-save"
 
     def test_strips_feature_prefix(self):
-        assert _slugify_title("Feature: Dark Mode Toggle") == "dark-mode-toggle"
+        assert slugify_for_branch("Feature: Dark Mode Toggle") == "dark-mode-toggle"
 
     def test_strips_plan_prefix(self):
-        assert _slugify_title("Plan #42: Refactor Database") == "refactor-database"
+        assert slugify_for_branch("Plan #42: Refactor Database") == "refactor-database"
 
     def test_strips_doc_prefix(self):
-        assert _slugify_title("Document: API Design") == "api-design"
+        assert slugify_for_branch("Document: API Design") == "api-design"
 
     def test_removes_special_characters(self):
-        assert _slugify_title("Smart Priming (context-aware)") == "smart-priming-context-aware"
+        assert slugify_for_branch("Smart Priming (context-aware)") == "smart-priming-context-aware"
 
     def test_collapses_whitespace(self):
-        assert _slugify_title("fix   the   thing") == "fix-the-thing"
+        assert slugify_for_branch("fix   the   thing") == "fix-the-thing"
 
     def test_truncates_long_slugs(self):
-        result = _slugify_title("A" * 100)
-        assert len(result) <= 50
+        result = slugify_for_branch("A" * 100)
+        assert len(result) <= 40
 
-    def test_empty_after_strip_returns_feature(self):
-        assert _slugify_title("Gameplan #1:") == "feature"
+    def test_empty_after_strip_returns_task(self):
+        assert slugify_for_branch("Gameplan #1:") == "task"
 
-    def test_only_special_chars_returns_feature(self):
-        assert _slugify_title("!!!???") == "feature"
+    def test_only_special_chars_returns_task(self):
+        assert slugify_for_branch("!!!???") == "task"
 
     def test_no_trailing_hyphens(self):
-        result = _slugify_title("test - ")
+        result = slugify_for_branch("test - ")
         assert not result.endswith("-")
+
+    def test_strips_kink_prefix(self):
+        assert slugify_for_branch("Kink 5: Unify branch naming") == "unify-branch-naming"
+
+
+class TestGenerateDelegateBranchName:
+    """Tests for generate_delegate_branch_name."""
+
+    def test_follows_delegate_pattern(self):
+        name = generate_delegate_branch_name("Fix auth bug")
+        assert name.startswith("delegate/")
+        assert "fix-auth-bug" in name
+
+    def test_has_hash_suffix(self):
+        name = generate_delegate_branch_name("some task")
+        # Pattern: delegate/{slug}-{5-char-hash}
+        parts = name.split("/", 1)[1]
+        assert len(parts.split("-")[-1]) == 5
+
+    def test_unique_for_same_title(self):
+        """Two calls with the same title produce different names (timestamp in hash)."""
+        import time
+
+        name1 = generate_delegate_branch_name("same task")
+        time.sleep(0.01)  # Ensure different timestamp
+        name2 = generate_delegate_branch_name("same task")
+        assert name1 != name2
 
 
 # =============================================================================
@@ -192,7 +223,8 @@ class TestResolveTask:
             "content": "Implement dark mode",
         }
         result = _resolve_task("42", pr=True)
-        assert "feat/add-dark-mode" in result
+        assert "delegate/" in result
+        assert "add-dark-mode" in result
 
     def test_text_task_returned_as_is(self):
         result = _resolve_task("analyze the auth module")
@@ -414,8 +446,10 @@ class TestRunSingle:
         # Verify PR instruction was included in the config
         call_args = mock_executor.execute.call_args
         config = call_args[0][0]
-        assert "pull request" in config.output_instruction.lower() or \
-            "gh pr create" in config.output_instruction
+        assert (
+            "pull request" in config.output_instruction.lower()
+            or "gh pr create" in config.output_instruction
+        )
 
     @patch("emdx.commands.delegate._print_doc_content")
     @patch("emdx.commands.delegate._safe_update_task")
@@ -526,16 +560,20 @@ class TestRunParallel:
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_parallel_tasks_success(
-        self, mock_executor_cls, mock_create, mock_update, mock_print
-    ):
+    def test_parallel_tasks_success(self, mock_executor_cls, mock_create, mock_update, mock_print):
         mock_create.return_value = 1
         mock_executor = MagicMock()
         # Each call returns a different doc_id
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
-            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30
+            ),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -565,10 +603,18 @@ class TestRunParallel:
         mock_executor = MagicMock()
         # 3 tasks + 1 synthesis
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
-            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),  # noqa: E501
-            ExecutionResult(success=True, execution_id=4, log_file=Path("/tmp/4.log"), output_doc_id=99),  # synthesis  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=4, log_file=Path("/tmp/4.log"), output_doc_id=99
+            ),  # synthesis  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -589,9 +635,7 @@ class TestRunParallel:
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_parallel_all_failures_exits(
-        self, mock_executor_cls, mock_create, mock_update
-    ):
+    def test_parallel_all_failures_exits(self, mock_executor_cls, mock_create, mock_update):
         mock_create.return_value = 1
         mock_executor = MagicMock()
         mock_executor.execute.return_value = ExecutionResult(
@@ -617,8 +661,13 @@ class TestRunParallel:
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
     def test_parallel_with_worktree(
-        self, mock_executor_cls, mock_create, mock_update, mock_print,
-        mock_create_worktree, mock_cleanup_worktree
+        self,
+        mock_executor_cls,
+        mock_create,
+        mock_update,
+        mock_print,
+        mock_create_worktree,
+        mock_cleanup_worktree,
     ):
         mock_create.return_value = 1
         mock_create_worktree.return_value = ("/tmp/wt", "branch")
@@ -657,16 +706,20 @@ class TestRunChain:
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_chain_success(
-        self, mock_executor_cls, mock_create, mock_update, mock_get_doc
-    ):
+    def test_chain_success(self, mock_executor_cls, mock_create, mock_update, mock_get_doc):
         mock_create.return_value = 1
         mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Step output"}
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
-            ExecutionResult(success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30
+            ),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -685,16 +738,22 @@ class TestRunChain:
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_chain_pipes_output(
-        self, mock_executor_cls, mock_create, mock_update, mock_get_doc
-    ):
+    def test_chain_pipes_output(self, mock_executor_cls, mock_create, mock_update, mock_get_doc):
         """Verify that output from one step is passed to the next."""
         mock_create.return_value = 1
-        mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Previous step output content"}  # noqa: E501
+        mock_get_doc.return_value = {
+            "id": 10,
+            "title": "Step",
+            "content": "Previous step output content",
+        }  # noqa: E501
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
+            ),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -721,8 +780,12 @@ class TestRunChain:
         mock_create.return_value = 1
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
-            ExecutionResult(success=False, execution_id=2, log_file=Path("/tmp/2.log"), error_message="Failed"),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
+            ),  # noqa: E501
+            ExecutionResult(
+                success=False, execution_id=2, log_file=Path("/tmp/2.log"), error_message="Failed"
+            ),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
         mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Step output"}
@@ -751,8 +814,12 @@ class TestRunChain:
         mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Content"}
         mock_executor = MagicMock()
         mock_executor.execute.side_effect = [
-            ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10),  # noqa: E501
-            ExecutionResult(success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
+            ),  # noqa: E501
+            ExecutionResult(
+                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
+            ),  # noqa: E501
         ]
         mock_executor_cls.return_value = mock_executor
 
@@ -1018,7 +1085,7 @@ class TestDelegateCommand:
             do=None,
         )
 
-        mock_create_wt.assert_called_once_with("main")
+        mock_create_wt.assert_called_once_with("main", task_title="fix bug")
         mock_cleanup_wt.assert_called_once_with("/tmp/worktree")
 
     @patch("emdx.utils.git.cleanup_worktree")
@@ -1052,7 +1119,7 @@ class TestDelegateCommand:
         )
 
         # Worktree should be created even though --worktree not set
-        mock_create_wt.assert_called_once_with("develop")
+        mock_create_wt.assert_called_once_with("develop", task_title="fix bug")
         # Worktree IS cleaned up after PR (branch already pushed to remote)
         mock_cleanup_wt.assert_called_once_with("/tmp/worktree")
 
@@ -1385,14 +1452,10 @@ class TestBranchFlag:
     @patch("emdx.utils.git.cleanup_worktree")
     @patch("emdx.utils.git.create_worktree")
     @patch("emdx.commands.delegate._run_single")
-    def test_branch_implies_worktree(
-        self, mock_run_single, mock_create_wt, mock_cleanup_wt
-    ):
+    def test_branch_implies_worktree(self, mock_run_single, mock_create_wt, mock_cleanup_wt):
         """Test that --branch implicitly creates worktree."""
         mock_create_wt.return_value = ("/tmp/worktree", "branch")
-        mock_run_single.return_value = SingleResult(
-            doc_id=42, task_id=1, branch_name="feat/test"
-        )
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1, branch_name="feat/test")
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -1417,7 +1480,7 @@ class TestBranchFlag:
         )
 
         # Worktree should be created
-        mock_create_wt.assert_called_once_with("main")
+        mock_create_wt.assert_called_once_with("main", task_title="add feature")
         # Worktree should NOT be cleaned up when --branch is set
         mock_cleanup_wt.assert_not_called()
 
@@ -1426,9 +1489,7 @@ class TestBranchFlag:
     def test_branch_with_base_branch(self, mock_run_single, mock_create_wt):
         """Test that --branch respects --base-branch / -b."""
         mock_create_wt.return_value = ("/tmp/worktree", "branch")
-        mock_run_single.return_value = SingleResult(
-            doc_id=42, task_id=1, branch_name="feat/test"
-        )
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1, branch_name="feat/test")
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -1452,7 +1513,7 @@ class TestBranchFlag:
             do=None,
         )
 
-        mock_create_wt.assert_called_once_with("develop")
+        mock_create_wt.assert_called_once_with("develop", task_title="add feature")
 
     def test_branch_and_pr_mutually_exclusive(self):
         """Test that --branch and --pr cannot be used together."""
@@ -1483,9 +1544,7 @@ class TestBranchFlag:
     @patch("emdx.commands.delegate._run_single")
     def test_branch_passed_to_run_single(self, mock_run_single):
         """Test that branch=True is passed through to _run_single."""
-        mock_run_single.return_value = SingleResult(
-            doc_id=42, task_id=1, branch_name="feat/test"
-        )
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1, branch_name="feat/test")
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -1591,9 +1650,7 @@ class TestOutputFileId:
 
     def test_uses_worktree_basename(self):
         """When working_dir is a worktree path, extract its basename."""
-        result = _make_output_file_id(
-            "/Users/alex/dev/worktrees/emdx-worktree-123-456-789", seq=1
-        )
+        result = _make_output_file_id("/Users/alex/dev/worktrees/emdx-worktree-123-456-789", seq=1)
         assert result == "emdx-worktree-123-456-789"
 
     def test_falls_back_to_pid_seq_timestamp(self):
@@ -1738,8 +1795,7 @@ class TestRunSingleFallback:
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
     def test_fallback_called_when_no_doc_id(
-        self, mock_executor_cls, mock_create, mock_update,
-        mock_print, mock_fallback
+        self, mock_executor_cls, mock_create, mock_update, mock_print, mock_fallback
     ):
         """When executor returns no doc_id, fallback is attempted."""
         mock_create.return_value = 1
@@ -1771,8 +1827,7 @@ class TestRunSingleFallback:
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.UnifiedExecutor")
     def test_fallback_not_called_when_doc_id_present(
-        self, mock_executor_cls, mock_create, mock_update,
-        mock_print, mock_fallback
+        self, mock_executor_cls, mock_create, mock_update, mock_print, mock_fallback
     ):
         """When executor returns a doc_id, fallback is NOT called."""
         mock_create.return_value = 1
