@@ -28,6 +28,7 @@ class LogBrowserHost:
         # Exit selection mode
         try:
             import asyncio
+
             asyncio.create_task(self.log_browser.exit_selection_mode())
         except Exception as e:
             logger.error(f"Error exiting selection mode: {e}")
@@ -62,7 +63,7 @@ class LogBrowserNavigationMixin:
         if self.selection_mode:  # type: ignore[has-type]
             return
 
-        self.selection_mode = True  # type: ignore[attr-defined]
+        self.selection_mode = True
 
         # Get current log content by re-reading the file
         # This is more reliable than trying to extract from RichLog
@@ -74,7 +75,7 @@ class LogBrowserNavigationMixin:
                 execution = self.executions[row_idx]  # type: ignore[attr-defined]
                 log_file = Path(execution.log_file)
                 if log_file.exists():
-                    with open(log_file, encoding='utf-8', errors='replace') as f:
+                    with open(log_file, encoding="utf-8", errors="replace") as f:
                         content = f.read()
         except Exception as e:
             logger.error(f"Error reading log for selection: {e}")
@@ -87,12 +88,7 @@ class LogBrowserNavigationMixin:
 
         # Create LogBrowserHost instance for SelectionTextArea
         host = LogBrowserHost(self)
-        selection_area = SelectionTextArea(
-            host,
-            content,
-            id="log-selection",
-            read_only=True
-        )
+        selection_area = SelectionTextArea(host, content, id="log-selection", read_only=True)
         await preview_container.mount(selection_area)
         selection_area.focus()
 
@@ -100,10 +96,10 @@ class LogBrowserNavigationMixin:
 
     async def exit_selection_mode(self) -> None:
         """Exit selection mode and restore log viewer."""
-        if not self.selection_mode:  # type: ignore[attr-defined]
+        if not self.selection_mode:
             return
 
-        self.selection_mode = False  # type: ignore[attr-defined]
+        self.selection_mode = False
 
         # Remove selection area and restore RichLog
         try:
@@ -112,8 +108,9 @@ class LogBrowserNavigationMixin:
             await selection_area.remove()
 
             # Re-mount RichLog widget with markup support
-            log_widget = RichLog(id="log-content", wrap=True, highlight=True, markup=True,
-                                 auto_scroll=False)
+            log_widget = RichLog(
+                id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+            )
             await preview_container.mount(log_widget)
 
             # Reload the current execution's log

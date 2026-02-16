@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any
 
 try:
-    from datasketch import MinHash, MinHashLSH  # type: ignore[import-untyped]
+    from datasketch import MinHash, MinHashLSH
 
     HAS_DATASKETCH = True
 except ImportError:
@@ -33,9 +33,11 @@ def _require_datasketch() -> None:
             "Install it with: pip install 'emdx[similarity]'"
         )
 
+
 # Default parameters for MinHash/LSH
 DEFAULT_NUM_PERM = 128  # Number of permutations for MinHash (higher = more accurate)
 DEFAULT_LSH_THRESHOLD = 0.5  # Lower threshold for LSH candidate generation
+
 
 def _tokenize(text: str) -> set[str]:
     """
@@ -55,23 +57,24 @@ def _tokenize(text: str) -> set[str]:
 
     # Normalize: lowercase and remove excessive whitespace
     text = text.lower().strip()
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"\s+", " ", text)
 
     tokens = set()
 
     # Add word-level tokens
-    words = re.findall(r'\b\w+\b', text)
+    words = re.findall(r"\b\w+\b", text)
     tokens.update(words)
 
     # Add word bigrams for better context capture
     for i in range(len(words) - 1):
-        tokens.add(f"{words[i]}_{words[i+1]}")
+        tokens.add(f"{words[i]}_{words[i + 1]}")
 
     # Add character 3-grams for catching small edits
     for i in range(len(text) - 2):
-        tokens.add(text[i:i+3])
+        tokens.add(text[i : i + 3])
 
     return tokens
+
 
 def _create_minhash(tokens: set[str], num_perm: int = DEFAULT_NUM_PERM) -> MinHash:
     """
@@ -86,8 +89,9 @@ def _create_minhash(tokens: set[str], num_perm: int = DEFAULT_NUM_PERM) -> MinHa
     """
     mh = MinHash(num_perm=num_perm)
     for token in tokens:
-        mh.update(token.encode('utf-8'))
+        mh.update(token.encode("utf-8"))
     return mh
+
 
 class DuplicateDetector:
     """Service for detecting and managing duplicate documents."""
@@ -100,7 +104,7 @@ class DuplicateDetector:
         """Generate hash of content for duplicate detection."""
         if not content:
             return "empty"
-        return hashlib.md5(content.encode('utf-8')).hexdigest()
+        return hashlib.md5(content.encode("utf-8")).hexdigest()
 
     def find_duplicates(self) -> list[list[dict[str, Any]]]:
         """
@@ -137,20 +141,16 @@ class DuplicateDetector:
         # Group by content hash
         hash_groups = defaultdict(list)
         for doc in documents:
-            content_hash = self._get_content_hash(doc['content'])
+            content_hash = self._get_content_hash(doc["content"])
             doc_dict = dict(doc)
             hash_groups[content_hash].append(doc_dict)
 
         # Filter to only groups with duplicates
-        duplicate_groups = [
-            group for group in hash_groups.values()
-            if len(group) > 1
-        ]
+        duplicate_groups = [group for group in hash_groups.values() if len(group) > 1]
 
         # Sort groups by total views (most important first)
         duplicate_groups.sort(
-            key=lambda group: sum(doc['access_count'] for doc in group),
-            reverse=True
+            key=lambda group: sum(doc["access_count"] for doc in group), reverse=True
         )
 
         return duplicate_groups
@@ -223,11 +223,11 @@ class DuplicateDetector:
         doc_tokens: dict[int, set[str]] = {}
 
         for doc in documents:
-            tokens = _tokenize(doc['content'] or '')
+            tokens = _tokenize(doc["content"] or "")
             if len(tokens) < 5:  # Skip documents with too few tokens
                 continue
-            doc_tokens[doc['id']] = tokens
-            doc_minhashes[doc['id']] = _create_minhash(tokens, num_perm)
+            doc_tokens[doc["id"]] = tokens
+            doc_minhashes[doc["id"]] = _create_minhash(tokens, num_perm)
 
         # Create LSH index with a lower threshold to catch candidates
         # We use a lower threshold for LSH and then verify with exact MinHash similarity
@@ -253,7 +253,7 @@ class DuplicateDetector:
 
         # Verify candidates and compute exact similarity
         near_duplicates = []
-        doc_by_id = {doc['id']: doc for doc in documents}
+        doc_by_id = {doc["id"]: doc for doc in documents}
 
         for id1, id2 in candidate_pairs:
             if id1 not in doc_minhashes or id2 not in doc_minhashes:
@@ -323,14 +323,12 @@ class DuplicateDetector:
         # O(n²) pairwise comparison
         for i, doc1 in enumerate(documents):
             for doc2 in documents[i + 1 :]:
-                len1 = doc1['content_length']
-                len2 = doc2['content_length']
+                len1 = doc1["content_length"]
+                len2 = doc2["content_length"]
                 if min(len1, len2) / max(len1, len2) < 0.5:
                     continue
 
-                similarity = difflib.SequenceMatcher(
-                    None, doc1['content'], doc2['content']
-                ).ratio()
+                similarity = difflib.SequenceMatcher(None, doc1["content"], doc2["content"]).ratio()
 
                 if similarity >= threshold:
                     near_duplicates.append((doc1, doc2, similarity))
@@ -350,22 +348,20 @@ class DuplicateDetector:
         Returns:
             Sorted list with the document to keep first
         """
-        if strategy == 'highest-views':
+        if strategy == "highest-views":
             # Sort by views (descending), then by ID (ascending) for stability
-            return sorted(group, key=lambda x: (-x['access_count'], x['id']))
-        elif strategy == 'newest':
+            return sorted(group, key=lambda x: (-x["access_count"], x["id"]))
+        elif strategy == "newest":
             # Sort by creation date (descending)
-            return sorted(group, key=lambda x: x['created_at'], reverse=True)
-        elif strategy == 'oldest':
+            return sorted(group, key=lambda x: x["created_at"], reverse=True)
+        elif strategy == "oldest":
             # Sort by creation date (ascending)
-            return sorted(group, key=lambda x: x['created_at'])
+            return sorted(group, key=lambda x: x["created_at"])
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
 
     def get_documents_to_delete(
-        self,
-        duplicate_groups: list[list[dict[str, Any]]],
-        strategy: str = 'highest-views'
+        self, duplicate_groups: list[list[dict[str, Any]]], strategy: str = "highest-views"
     ) -> list[int]:
         """
         Get list of document IDs to delete based on strategy.
@@ -382,7 +378,7 @@ class DuplicateDetector:
         for group in duplicate_groups:
             sorted_group = self.sort_by_strategy(group, strategy)
             # Keep the first one, delete the rest
-            docs_to_delete.extend([doc['id'] for doc in sorted_group[1:]])
+            docs_to_delete.extend([doc["id"] for doc in sorted_group[1:]])
 
         return docs_to_delete
 
@@ -408,15 +404,18 @@ class DuplicateDetector:
             timestamp = datetime.now().isoformat()
 
             for i in range(0, len(doc_ids), batch_size):
-                batch = doc_ids[i:i + batch_size]
-                placeholders = ','.join('?' * len(batch))
+                batch = doc_ids[i : i + batch_size]
+                placeholders = ",".join("?" * len(batch))
 
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     UPDATE documents
                     SET is_deleted = 1, deleted_at = ?
                     WHERE id IN ({placeholders})
                     AND is_deleted = 0
-                """, [timestamp, *batch])
+                """,
+                    [timestamp, *batch],
+                )
 
                 deleted_count += cursor.rowcount
 
@@ -435,8 +434,7 @@ class DuplicateDetector:
 
         total_duplicates = sum(len(group) - 1 for group in duplicate_groups)
         space_wasted = sum(
-            sum(doc['content_length'] for doc in group[1:])
-            for group in duplicate_groups
+            sum(doc["content_length"] for doc in group[1:]) for group in duplicate_groups
         )
 
         # Find most duplicated content
@@ -444,16 +442,16 @@ class DuplicateDetector:
         if duplicate_groups:
             largest_group = max(duplicate_groups, key=len)
             most_duplicated = {
-                'title': largest_group[0]['title'],
-                'copies': len(largest_group),
-                'total_views': sum(doc['access_count'] for doc in largest_group)
+                "title": largest_group[0]["title"],
+                "copies": len(largest_group),
+                "total_views": sum(doc["access_count"] for doc in largest_group),
             }
 
         return {
-            'duplicate_groups': len(duplicate_groups),
-            'total_duplicates': total_duplicates,
-            'space_wasted': space_wasted,
-            'most_duplicated': most_duplicated
+            "duplicate_groups": len(duplicate_groups),
+            "total_duplicates": total_duplicates,
+            "space_wasted": space_wasted,
+            "most_duplicated": most_duplicated,
         }
 
     def find_similar_titles(self) -> list[list[dict[str, Any]]]:
@@ -485,14 +483,14 @@ class DuplicateDetector:
         # Group by title
         title_groups = defaultdict(list)
         for doc in documents:
-            title_groups[doc['title'].strip()].append(dict(doc))
+            title_groups[doc["title"].strip()].append(dict(doc))
 
         # Filter to groups with multiple documents and different content
         similar_title_groups = []
         for _title, group in title_groups.items():
             if len(group) > 1:
                 # Check if content is different
-                hashes = {self._get_content_hash(doc['content']) for doc in group}
+                hashes = {self._get_content_hash(doc["content"]) for doc in group}
                 if len(hashes) > 1:  # Different content
                     similar_title_groups.append(group)
 
