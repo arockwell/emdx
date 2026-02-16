@@ -13,20 +13,23 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Union
+from typing import Union
 
 from ..config.settings import get_db_path
 from ..database.connection import DatabaseConnection
 from ..database.types import DocumentRow
 from ..models.documents import delete_document, get_document, update_document
 from ..models.tags import add_tags_to_document, get_document_tags
+from ..services.types import DocumentMetadata
 from .similarity import SimilarityService
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class MergeCandidate:
     """Represents a pair of documents that could be merged."""
+
     doc1_id: int
     doc2_id: int
     doc1_title: str
@@ -35,15 +38,18 @@ class MergeCandidate:
     merge_reason: str
     recommended_action: str
 
+
 @dataclass
 class MergeStrategy:
     """Strategy for merging two documents."""
+
     keep_doc_id: int
     merge_doc_id: int
     merged_title: str
     merged_content: str
     merged_tags: list[str]
-    preserve_metadata: dict[str, Any]
+    preserve_metadata: dict[str, str | int | list[int] | list[str] | None]
+
 
 class DocumentMerger:
     """Service for intelligently merging related documents.
@@ -53,7 +59,7 @@ class DocumentMerger:
     """
 
     SIMILARITY_THRESHOLD = 0.7  # Minimum similarity for merge candidates
-    PREFILTER_THRESHOLD = 0.3   # Lower threshold for TF-IDF pre-filtering
+    PREFILTER_THRESHOLD = 0.3  # Lower threshold for TF-IDF pre-filtering
 
     def __init__(self, db_path: Union[str, Path] | None = None):
         self.db_path = Path(db_path) if db_path else get_db_path()
@@ -64,7 +70,7 @@ class DocumentMerger:
         self,
         project: str | None = None,
         similarity_threshold: float | None = None,
-        progress_callback: Callable | None = None
+        progress_callback: Callable | None = None,
     ) -> list[MergeCandidate]:
         """
         Find documents that are candidates for merging.
@@ -100,7 +106,9 @@ class DocumentMerger:
         prefilter_threshold = min(self.PREFILTER_THRESHOLD, threshold * 0.5)
         similar_pairs = self._similarity_service.find_all_duplicate_pairs(
             min_similarity=prefilter_threshold,
-            progress_callback=lambda c, t, f: progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None  # noqa: E501
+            progress_callback=lambda c, t, f: (
+                progress_callback(20 + int(c * 0.5), 100, f) if progress_callback else None
+            ),  # noqa: E501
         )
 
         if progress_callback:
@@ -126,7 +134,7 @@ class DocumentMerger:
                 doc2_meta = doc_metadata.get(doc2_id)
                 if not doc1_meta or not doc2_meta:
                     continue
-                if doc1_meta['project'] != project and doc2_meta['project'] != project:
+                if doc1_meta["project"] != project and doc2_meta["project"] != project:
                     continue
 
             # Get metadata for both docs
@@ -137,7 +145,7 @@ class DocumentMerger:
                 continue
 
             # Skip if both have high access counts (likely both important)
-            if doc1_meta['access_count'] > 50 and doc2_meta['access_count'] > 50:
+            if doc1_meta["access_count"] > 50 and doc2_meta["access_count"] > 50:
                 continue
 
             # Calculate title similarity for refined scoring
@@ -159,25 +167,27 @@ class DocumentMerger:
                     reason = "Related content"
 
                 # Recommend which to keep
-                doc1_content_len = len(doc1_meta.get('content') or '')
-                doc2_content_len = len(doc2_meta.get('content') or '')
+                doc1_content_len = len(doc1_meta.get("content") or "")
+                doc2_content_len = len(doc2_meta.get("content") or "")
 
-                if doc1_meta['access_count'] > doc2_meta['access_count']:
+                if doc1_meta["access_count"] > doc2_meta["access_count"]:
                     action = f"Merge into #{doc1_id} (more views)"
                 elif doc1_content_len > doc2_content_len:
                     action = f"Merge into #{doc1_id} (more content)"
                 else:
                     action = f"Merge into #{doc2_id}"
 
-                candidates.append(MergeCandidate(
-                    doc1_id=doc1_id,
-                    doc2_id=doc2_id,
-                    doc1_title=doc1_title,
-                    doc2_title=doc2_title,
-                    similarity_score=overall_sim,
-                    merge_reason=reason,
-                    recommended_action=action
-                ))
+                candidates.append(
+                    MergeCandidate(
+                        doc1_id=doc1_id,
+                        doc2_id=doc2_id,
+                        doc1_title=doc1_title,
+                        doc2_title=doc2_title,
+                        similarity_score=overall_sim,
+                        merge_reason=reason,
+                        recommended_action=action,
+                    )
+                )
 
         if progress_callback:
             progress_callback(100, 100, len(candidates))
@@ -186,7 +196,7 @@ class DocumentMerger:
         candidates.sort(key=lambda c: c.similarity_score, reverse=True)
         return candidates
 
-    def _get_document_metadata(self, project: str | None = None) -> dict[int, dict[str, Any]]:
+    def _get_document_metadata(self, project: str | None = None) -> dict[int, DocumentMetadata]:
         """
         Get metadata for all active documents.
 
@@ -214,11 +224,11 @@ class DocumentMerger:
             documents = cursor.fetchall()
 
         return {
-            doc['id']: {
-                'title': doc['title'],
-                'content': doc['content'],
-                'project': doc['project'],
-                'access_count': doc['access_count']
+            doc["id"]: {
+                "title": doc["title"],
+                "content": doc["content"],
+                "project": doc["project"],
+                "access_count": doc["access_count"],
             }
             for doc in documents
         }
@@ -235,11 +245,7 @@ class DocumentMerger:
         # Use SequenceMatcher for similarity
         return difflib.SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
 
-    def suggest_merge_strategy(
-        self,
-        doc1_id: int,
-        doc2_id: int
-    ) -> MergeStrategy:
+    def suggest_merge_strategy(self, doc1_id: int, doc2_id: int) -> MergeStrategy:
         """
         Suggest the best strategy for merging two documents.
 
@@ -277,32 +283,32 @@ class DocumentMerger:
             merge_id = doc1_id
 
         # Merge titles
-        if keep_doc['title'] == merge_doc['title']:
-            merged_title = keep_doc['title']
+        if keep_doc["title"] == merge_doc["title"]:
+            merged_title = keep_doc["title"]
         else:
             # Use the more descriptive title
-            if len(keep_doc['title']) >= len(merge_doc['title']):
-                merged_title = keep_doc['title']
+            if len(keep_doc["title"]) >= len(merge_doc["title"]):
+                merged_title = keep_doc["title"]
             else:
-                merged_title = merge_doc['title']
+                merged_title = merge_doc["title"]
 
         # Merge content
         merged_content = self._merge_content(
-            keep_doc['content'] or '',
-            merge_doc['content'] or '',
-            keep_doc['title'],
-            merge_doc['title']
+            keep_doc["content"] or "",
+            merge_doc["content"] or "",
+            keep_doc["title"],
+            merge_doc["title"],
         )
 
         # Combine tags (union)
         merged_tags = list(set(tags1 + tags2))
 
         # Preserve important metadata
-        preserve_metadata = {
-            'original_ids': [doc1_id, doc2_id],
-            'original_titles': [doc1['title'], doc2['title']],
-            'merge_date': datetime.now().isoformat(),
-            'combined_access_count': doc1['access_count'] + doc2['access_count']
+        preserve_metadata: dict[str, str | int | list[int] | list[str] | None] = {
+            "original_ids": [doc1_id, doc2_id],
+            "original_titles": [doc1["title"], doc2["title"]],
+            "merge_date": datetime.now().isoformat(),
+            "combined_access_count": doc1["access_count"] + doc2["access_count"],
         }
 
         return MergeStrategy(
@@ -311,7 +317,7 @@ class DocumentMerger:
             merged_title=merged_title,
             merged_content=merged_content,
             merged_tags=merged_tags,
-            preserve_metadata=preserve_metadata
+            preserve_metadata=preserve_metadata,
         )
 
     def _calculate_document_score(self, doc: DocumentRow, tags: list[str]) -> float:
@@ -319,21 +325,21 @@ class DocumentMerger:
         score = 0.0
 
         # Access count (popularity)
-        score += min(doc['access_count'] / 10, 10)  # Cap at 10 points
+        score += min(doc["access_count"] / 10, 10)  # Cap at 10 points
 
         # Content length (comprehensiveness)
-        content_length = len(doc['content'] or '')
+        content_length = len(doc["content"] or "")
         score += min(content_length / 1000, 5)  # Cap at 5 points
 
         # Has tags
         score += len(tags) * 0.5  # 0.5 points per tag
 
         # Title quality
-        if len(doc['title']) > 10:
+        if len(doc["title"]) > 10:
             score += 1
 
         # Recent access
-        accessed_at = doc.get('accessed_at')
+        accessed_at = doc.get("accessed_at")
         if accessed_at is not None:
             days_since_access = (datetime.now() - accessed_at).days
             if days_since_access < 7:
@@ -343,13 +349,7 @@ class DocumentMerger:
 
         return float(score)
 
-    def _merge_content(
-        self,
-        content1: str,
-        content2: str,
-        title1: str,
-        title2: str
-    ) -> str:
+    def _merge_content(self, content1: str, content2: str, title1: str, title2: str) -> str:
         """
         Intelligently merge two document contents.
 
@@ -397,11 +397,7 @@ class DocumentMerger:
 
         return "".join(merged)
 
-    def execute_merge(
-        self,
-        strategy: MergeStrategy,
-        delete_source: bool = True
-    ) -> bool:
+    def execute_merge(self, strategy: MergeStrategy, delete_source: bool = True) -> bool:
         """
         Execute a document merge based on the strategy.
 
@@ -417,7 +413,7 @@ class DocumentMerger:
             update_document(
                 doc_id=strategy.keep_doc_id,
                 title=strategy.merged_title,
-                content=strategy.merged_content
+                content=strategy.merged_content,
             )
 
             # Add merged tags
@@ -442,11 +438,7 @@ class DocumentMerger:
             logger.error(f"Merge failed: {e}")
             return False
 
-    def find_related_documents(
-        self,
-        doc_id: int,
-        limit: int = 5
-    ) -> list[tuple[int, str, float]]:
+    def find_related_documents(self, doc_id: int, limit: int = 5) -> list[tuple[int, str, float]]:
         """
         Find documents related to a specific document.
 
@@ -465,14 +457,17 @@ class DocumentMerger:
             cursor = conn.cursor()
 
             # Get other documents in same project first
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, title, content
                 FROM documents
                 WHERE is_deleted = 0
                 AND id != ?
                 AND project = ?
                 LIMIT 50
-            """, (doc_id, doc['project']))
+            """,
+                (doc_id, doc["project"]),
+            )
 
             candidates = cursor.fetchall()
 
@@ -480,19 +475,18 @@ class DocumentMerger:
         related = []
         for candidate in candidates:
             # Title similarity
-            title_sim = self._calculate_similarity(doc['title'], candidate['title'])
+            title_sim = self._calculate_similarity(doc["title"], candidate["title"])
 
             # Content similarity (sample for performance)
             content_sim = self._calculate_similarity(
-                (doc['content'] or '')[:500],
-                (candidate['content'] or '')[:500]
+                (doc["content"] or "")[:500], (candidate["content"] or "")[:500]
             )
 
             # Combined score
             score = (title_sim * 0.3) + (content_sim * 0.7)
 
             if score > 0.3:  # Minimum threshold
-                related.append((candidate['id'], candidate['title'], score))
+                related.append((candidate["id"], candidate["title"], score))
 
         # Sort by score and return top N
         related.sort(key=lambda x: x[2], reverse=True)

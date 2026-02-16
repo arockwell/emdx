@@ -849,7 +849,7 @@ def _cleanup_executions(
         health = monitor.check_process_health(exec)
 
         if health["is_zombie"] or (not health["process_exists"] and exec.pid):
-            dead_process.append((exec, health["reason"]))
+            dead_process.append((exec, health["reason"] or "unknown"))
         elif not exec.pid and runtime_minutes > 60:
             # No PID and > 1 hour old = likely stuck
             no_pid_old.append((exec, f"No PID, {runtime_minutes:.0f}m old"))

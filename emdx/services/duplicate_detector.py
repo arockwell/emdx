@@ -13,7 +13,9 @@ import hashlib
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any
+from typing import cast
+
+from ..services.types import DuplicateDocument, DuplicateStats, MostDuplicated
 
 try:
     from datasketch import MinHash, MinHashLSH
@@ -106,7 +108,7 @@ class DuplicateDetector:
             return "empty"
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
-    def find_duplicates(self) -> list[list[dict[str, Any]]]:
+    def find_duplicates(self) -> list[list[DuplicateDocument]]:
         """
         Find all duplicate documents based on content hash.
 
@@ -142,7 +144,7 @@ class DuplicateDetector:
         hash_groups = defaultdict(list)
         for doc in documents:
             content_hash = self._get_content_hash(doc["content"])
-            doc_dict = dict(doc)
+            doc_dict = cast(DuplicateDocument, dict(doc))
             hash_groups[content_hash].append(doc_dict)
 
         # Filter to only groups with duplicates
@@ -160,7 +162,7 @@ class DuplicateDetector:
         threshold: float = 0.85,
         num_perm: int = DEFAULT_NUM_PERM,
         max_documents: int | None = None,
-    ) -> list[tuple[dict, dict, float]]:
+    ) -> list[tuple[DuplicateDocument, DuplicateDocument, float]]:
         """
         Find near-duplicate documents based on content similarity using MinHash/LSH.
 
@@ -212,7 +214,7 @@ class DuplicateDetector:
                 query += f" LIMIT {max_documents}"
 
             cursor.execute(query)
-            documents = [dict(row) for row in cursor.fetchall()]
+            documents = [cast(DuplicateDocument, dict(row)) for row in cursor.fetchall()]
 
         if len(documents) < 2:
             return []
@@ -223,7 +225,7 @@ class DuplicateDetector:
         doc_tokens: dict[int, set[str]] = {}
 
         for doc in documents:
-            tokens = _tokenize(doc["content"] or "")
+            tokens = _tokenize(doc.get("content") or "")
             if len(tokens) < 5:  # Skip documents with too few tokens
                 continue
             doc_tokens[doc["id"]] = tokens
@@ -274,7 +276,7 @@ class DuplicateDetector:
 
     def find_near_duplicates_exact(
         self, threshold: float = 0.85, max_documents: int = 200
-    ) -> list[tuple[dict, dict, float]]:
+    ) -> list[tuple[DuplicateDocument, DuplicateDocument, float]]:
         """
         Find near-duplicate documents using exact pairwise comparison.
 
@@ -316,15 +318,15 @@ class DuplicateDetector:
                 (max_documents,),
             )
 
-            documents = [dict(row) for row in cursor.fetchall()]
+            documents = [cast(DuplicateDocument, dict(row)) for row in cursor.fetchall()]
 
-        near_duplicates = []
+        near_duplicates: list[tuple[DuplicateDocument, DuplicateDocument, float]] = []
 
         # O(n²) pairwise comparison
         for i, doc1 in enumerate(documents):
             for doc2 in documents[i + 1 :]:
-                len1 = doc1["content_length"]
-                len2 = doc2["content_length"]
+                len1 = doc1.get("content_length", 0)
+                len2 = doc2.get("content_length", 0)
                 if min(len1, len2) / max(len1, len2) < 0.5:
                     continue
 
@@ -336,7 +338,9 @@ class DuplicateDetector:
         near_duplicates.sort(key=lambda x: x[2], reverse=True)
         return near_duplicates
 
-    def sort_by_strategy(self, group: list[dict[str, Any]], strategy: str) -> list[dict[str, Any]]:
+    def sort_by_strategy(
+        self, group: list[DuplicateDocument], strategy: str
+    ) -> list[DuplicateDocument]:
         """
         Sort a duplicate group by the given strategy.
         The first document in the sorted list should be kept.
@@ -350,18 +354,18 @@ class DuplicateDetector:
         """
         if strategy == "highest-views":
             # Sort by views (descending), then by ID (ascending) for stability
-            return sorted(group, key=lambda x: (-x["access_count"], x["id"]))
+            return sorted(group, key=lambda x: (-x.get("access_count", 0), x.get("id", 0)))
         elif strategy == "newest":
             # Sort by creation date (descending)
-            return sorted(group, key=lambda x: x["created_at"], reverse=True)
+            return sorted(group, key=lambda x: x.get("created_at") or "", reverse=True)
         elif strategy == "oldest":
             # Sort by creation date (ascending)
-            return sorted(group, key=lambda x: x["created_at"])
+            return sorted(group, key=lambda x: x.get("created_at") or "")
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
 
     def get_documents_to_delete(
-        self, duplicate_groups: list[list[dict[str, Any]]], strategy: str = "highest-views"
+        self, duplicate_groups: list[list[DuplicateDocument]], strategy: str = "highest-views"
     ) -> list[int]:
         """
         Get list of document IDs to delete based on strategy.
@@ -423,7 +427,7 @@ class DuplicateDetector:
 
         return deleted_count
 
-    def get_duplicate_stats(self) -> dict[str, Any]:
+    def get_duplicate_stats(self) -> DuplicateStats:
         """
         Get statistics about duplicates in the knowledge base.
 
@@ -438,13 +442,13 @@ class DuplicateDetector:
         )
 
         # Find most duplicated content
-        most_duplicated = None
+        most_duplicated: MostDuplicated | None = None
         if duplicate_groups:
             largest_group = max(duplicate_groups, key=len)
             most_duplicated = {
                 "title": largest_group[0]["title"],
                 "copies": len(largest_group),
-                "total_views": sum(doc["access_count"] for doc in largest_group),
+                "total_views": sum(doc.get("access_count", 0) for doc in largest_group),
             }
 
         return {
@@ -454,7 +458,7 @@ class DuplicateDetector:
             "most_duplicated": most_duplicated,
         }
 
-    def find_similar_titles(self) -> list[list[dict[str, Any]]]:
+    def find_similar_titles(self) -> list[list[DuplicateDocument]]:
         """
         Find documents with identical titles but different content.
 
@@ -483,7 +487,7 @@ class DuplicateDetector:
         # Group by title
         title_groups = defaultdict(list)
         for doc in documents:
-            title_groups[doc["title"].strip()].append(dict(doc))
+            title_groups[doc["title"].strip()].append(cast(DuplicateDocument, dict(doc)))
 
         # Filter to groups with multiple documents and different content
         similar_title_groups = []
