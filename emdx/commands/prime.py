@@ -6,7 +6,8 @@ It outputs priming context that should be injected at session start.
 """
 
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -16,6 +17,11 @@ from ..database import db
 from ..utils.git import get_git_project
 
 console = Console()
+
+# Constants for recent failures
+FAILURE_LOOKBACK_HOURS = 24
+MAX_RECENT_FAILURES = 5
+ERROR_SNIPPET_LINES = 5
 
 
 def prime(
@@ -119,6 +125,30 @@ def _output_text(
             label = _task_label(task)
             lines.append(f"  {label}  {task['title']}")
         lines.append("")
+
+    # Recent failures (last 24h)
+    if not quiet:
+        recent_failures = _get_recent_failures()
+        if recent_failures:
+            lines.append(f"RECENT FAILURES ({len(recent_failures)}):")
+            lines.append("")
+            for failure in recent_failures:
+                title = failure["title"][:50]
+                if len(failure["title"]) > 50:
+                    title += "..."
+                exit_info = f"exit {failure['exit_code']}" if failure["exit_code"] else "failed"
+                lines.append(f"  #{failure['id']}  {title} ({exit_info})")
+
+                # Show error snippet (first 2 lines max)
+                if failure.get("error_snippet"):
+                    snippet_lines = failure["error_snippet"].split("\n")[:2]
+                    for line in snippet_lines:
+                        truncated = line[:70] + "..." if len(line) > 70 else line
+                        lines.append(f"         {truncated}")
+
+                # Show retry command
+                lines.append(f"         Retry: emdx delegate --retry {failure['id']}")
+            lines.append("")
 
     # Git context (always shown, not quiet-only)
     if not quiet:
@@ -462,6 +492,80 @@ def _get_key_docs(limit: int = 5) -> list[dict[str, Any]]:
         return [{"id": r[0], "title": r[1], "access_count": r[2]} for r in rows]
 
 
+def _extract_error_snippet(log_file: str, lines: int = ERROR_SNIPPET_LINES) -> str | None:
+    """Extract the last N lines from a log file as an error snippet.
+
+    Args:
+        log_file: Path to the log file
+        lines: Number of lines to extract from the end
+
+    Returns:
+        Error snippet string or None if file doesn't exist/is empty
+    """
+    try:
+        log_path = Path(log_file).expanduser()
+        if not log_path.exists():
+            return None
+
+        # Read last N lines efficiently
+        content = log_path.read_text(encoding="utf-8", errors="replace")
+        if not content.strip():
+            return None
+
+        all_lines = content.strip().split("\n")
+        snippet_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        return "\n".join(snippet_lines)
+    except Exception:
+        return None
+
+
+def _get_recent_failures(
+    hours: int = FAILURE_LOOKBACK_HOURS, limit: int = MAX_RECENT_FAILURES
+) -> list[dict[str, Any]]:
+    """Get failed executions from the last N hours.
+
+    Args:
+        hours: Number of hours to look back (default 24)
+        limit: Maximum number of failures to return (default 5)
+
+    Returns:
+        List of dicts with id, doc_title, completed_at, exit_code, task_id, error_snippet
+    """
+    cutoff = datetime.now() - timedelta(hours=hours)
+    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, doc_title, completed_at, exit_code, log_file, task_id
+            FROM executions
+            WHERE status = 'failed'
+            AND completed_at > ?
+            ORDER BY completed_at DESC
+            LIMIT ?
+            """,
+            (cutoff_str, limit),
+        )
+        rows = cursor.fetchall()
+
+        failures = []
+        for r in rows:
+            error_snippet = _extract_error_snippet(r[4]) if r[4] else None
+            failures.append(
+                {
+                    "id": r[0],
+                    "title": r[1],
+                    "completed_at": r[2],
+                    "exit_code": r[3],
+                    "log_file": r[4],
+                    "task_id": r[5],
+                    "error_snippet": error_snippet,
+                }
+            )
+        return failures
+
+
 # ---------------------------------------------------------------------------
 # Execution guidance (verbose only)
 # ---------------------------------------------------------------------------
@@ -517,12 +621,28 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
     """Output priming context as JSON."""
     import json
 
+    # Get recent failures (always included, not just verbose)
+    recent_failures = _get_recent_failures()
+    recent_failures_json = [
+        {
+            "id": f["id"],
+            "title": f["title"],
+            "completed_at": f["completed_at"],
+            "exit_code": f["exit_code"],
+            "task_id": f["task_id"],
+            "error_snippet": f["error_snippet"],
+            "retry_command": f"emdx delegate --retry {f['id']}",
+        }
+        for f in recent_failures
+    ]
+
     data: dict[str, Any] = {
         "project": project,
         "timestamp": datetime.now().isoformat(),
         "active_epics": _get_active_epics(),
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "recent_failures": recent_failures_json,
         "git_context": _get_git_context(),
     }
 
