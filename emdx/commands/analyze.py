@@ -20,6 +20,24 @@ from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..utils.datetime_utils import parse_datetime
 from ..utils.output import console
+from .types import (
+    DuplicateGroup,
+    DuplicatePair,
+    DuplicatePairDoc,
+    DuplicatesData,
+    EmptyData,
+    EmptyDoc,
+    ExactDuplicatesData,
+    HealthData,
+    HealthMetricData,
+    NearDuplicatesData,
+    ProjectInfo,
+    ProjectsData,
+    SimilarCandidate,
+    SimilarData,
+    TagsData,
+    TagUsage,
+)
 
 
 def analyze(
@@ -59,7 +77,7 @@ def analyze(
 
     # Collect results if JSON output is requested
     if json_output:
-        results = {}
+        results: dict[str, Any] = {}
 
         if health:
             results["health"] = _collect_health_data()
@@ -491,37 +509,37 @@ def _get_coverage_color(coverage: float) -> str:
 
 
 # JSON collection functions
-def _collect_health_data() -> dict[str, Any]:
+def _collect_health_data() -> HealthData:
     """Collect health metrics as structured data."""
     monitor = HealthMonitor()
     try:
         metrics = monitor.calculate_overall_health()
     except ImportError as e:
-        return {"error": str(e)}
+        return HealthData(error=str(e))
 
     # Convert HealthMetric objects to dictionaries
-    metrics_dict: dict[str, Any] = {}
+    metrics_dict: dict[str, HealthMetricData] = {}
     for key, metric in metrics["metrics"].items():
-        metrics_dict[key] = {
-            "name": metric.name,
-            "value": metric.value,
-            "score": metric.value * 100,  # Convert to percentage
-            "weight": metric.weight,
-            "status": metric.status,
-            "details": metric.details,
-            "recommendations": metric.recommendations,
-        }
+        metrics_dict[key] = HealthMetricData(
+            name=metric.name,
+            value=metric.value,
+            score=metric.value * 100,  # Convert to percentage
+            weight=metric.weight,
+            status=metric.status,
+            details=metric.details,
+            recommendations=metric.recommendations,
+        )
 
-    return {
-        "overall_score": metrics["overall_score"],
-        "overall_status": metrics["overall_status"],
-        "metrics": metrics_dict,
-        "statistics": metrics["statistics"],
-        "timestamp": metrics["timestamp"],
-    }
+    return HealthData(
+        overall_score=metrics["overall_score"],
+        overall_status=metrics["overall_status"],
+        metrics=metrics_dict,
+        statistics=metrics["statistics"],
+        timestamp=metrics["timestamp"],
+    )
 
 
-def _collect_duplicates_data() -> dict[str, Any]:
+def _collect_duplicates_data() -> DuplicatesData:
     """Collect duplicate analysis data."""
     detector = DuplicateDetector()
     exact_dupes = detector.find_duplicates()
@@ -530,66 +548,70 @@ def _collect_duplicates_data() -> dict[str, Any]:
     except ImportError:
         near_dupes = []
 
-    exact_groups: list[dict[str, Any]] = []
-    near_pairs: list[dict[str, Any]] = []
+    exact_groups: list[DuplicateGroup] = []
+    near_pairs: list[DuplicatePair] = []
 
     # Add exact duplicate groups
     for group in exact_dupes[:10]:  # Limit to 10 groups
         exact_groups.append(
-            {"title": group[0]["title"], "count": len(group), "ids": [doc["id"] for doc in group]}
+            DuplicateGroup(
+                title=group[0]["title"],
+                count=len(group),
+                ids=[doc["id"] for doc in group],
+            )
         )
 
     # Add near duplicate pairs
     for doc1, doc2, similarity in near_dupes[:10]:  # Limit to 10 pairs
         near_pairs.append(
-            {
-                "doc1": {"id": doc1["id"], "title": doc1["title"]},
-                "doc2": {"id": doc2["id"], "title": doc2["title"]},
-                "similarity": similarity,
-            }
+            DuplicatePair(
+                doc1=DuplicatePairDoc(id=doc1["id"], title=doc1["title"]),
+                doc2=DuplicatePairDoc(id=doc2["id"], title=doc2["title"]),
+                similarity=similarity,
+            )
         )
 
-    return {
-        "exact_duplicates": {
-            "count": len(exact_dupes),
-            "total_duplicates": sum(len(group) - 1 for group in exact_dupes),
-            "groups": exact_groups,
-        },
-        "near_duplicates": {
-            "count": len(near_dupes),
-            "pairs": near_pairs,
-        },
-    }
+    return DuplicatesData(
+        exact_duplicates=ExactDuplicatesData(
+            count=len(exact_dupes),
+            total_duplicates=sum(len(group) - 1 for group in exact_dupes),
+            groups=exact_groups,
+        ),
+        near_duplicates=NearDuplicatesData(
+            count=len(near_dupes),
+            pairs=near_pairs,
+        ),
+    )
 
 
-def _collect_similar_data() -> dict[str, Any]:
+def _collect_similar_data() -> SimilarData:
     """Collect similar documents data."""
     merger = DocumentMerger()
     try:
         candidates = merger.find_merge_candidates(similarity_threshold=0.7)
     except ImportError as e:
-        return {"error": str(e), "count": 0, "candidates": []}
+        return SimilarData(error=str(e), count=0, candidates=[])
 
-    candidate_list: list[dict[str, Any]] = []
+    candidate_list: list[SimilarCandidate] = []
 
     for candidate in candidates[:20]:  # Limit to 20
         candidate_list.append(
-            {
-                "doc1_id": candidate.doc1_id,
-                "doc1_title": candidate.doc1_title,
-                "doc2_id": candidate.doc2_id,
-                "doc2_title": candidate.doc2_title,
-                "similarity": candidate.similarity_score,
-            }
+            SimilarCandidate(
+                doc1_id=candidate.doc1_id,
+                doc1_title=candidate.doc1_title,
+                doc2_id=candidate.doc2_id,
+                doc2_title=candidate.doc2_title,
+                similarity=candidate.similarity_score,
+            )
         )
 
-    return {
-        "count": len(candidates),
-        "candidates": candidate_list,
-    }
+    return SimilarData(
+        count=len(candidates),
+        candidates=candidate_list,
+    )
 
 
-def _collect_empty_data() -> dict[str, Any]:
+def _collect_empty_data() -> EmptyData:
     """Collect empty documents data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -604,26 +626,26 @@ def _collect_empty_data() -> dict[str, Any]:
 
         empty_docs = cursor.fetchall()
 
-    documents: list[dict[str, Any]] = []
+    documents: list[EmptyDoc] = []
 
     for doc in empty_docs:
         documents.append(
-            {
-                "id": doc["id"],
-                "title": doc["title"],
-                "length": doc["length"],
-                "project": doc["project"],
-                "access_count": doc["access_count"],
-            }
+            EmptyDoc(
+                id=doc["id"],
+                title=doc["title"],
+                length=doc["length"],
+                project=doc["project"],
+                access_count=doc["access_count"],
+            )
         )
 
-    return {
-        "count": len(empty_docs),
-        "documents": documents,
-    }
+    return EmptyData(
+        count=len(empty_docs),
+        documents=documents,
+    )
 
 
-def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
+def _collect_tags_data(project: str | None = None) -> TagsData:
     """Collect tag analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -674,7 +696,7 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
             (stats["tagged_docs"] / stats["total_docs"] * 100) if stats["total_docs"] > 0 else 0
         )  # noqa: E501
 
-        top_tags: list[dict[str, Any]] = []
+        top_tags: list[TagUsage] = []
 
         # Most used tags
         cursor.execute("""
@@ -689,17 +711,7 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
         """)
 
         for tag in cursor.fetchall():
-            top_tags.append({"name": tag["name"], "count": tag["usage_count"]})
-
-        result: dict[str, Any] = {
-            "project": project,
-            "coverage": coverage,
-            "total_documents": stats["total_docs"],
-            "tagged_documents": stats["tagged_docs"],
-            "unique_tags": stats["unique_tags"],
-            "avg_tags_per_doc": float(stats["avg_tags"] or 0),
-            "top_tags": top_tags,
-        }
+            top_tags.append(TagUsage(name=tag["name"], count=tag["usage_count"]))
 
         # Untagged count
         cursor.execute(
@@ -715,12 +727,21 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
             (project,) if project else (),
         )
 
-        result["untagged_count"] = cursor.fetchone()["untagged"]
+        untagged_count = cursor.fetchone()["untagged"]
 
-    return result
+    return TagsData(
+        project=project,
+        coverage=coverage,
+        total_documents=stats["total_docs"],
+        tagged_documents=stats["tagged_docs"],
+        unique_tags=stats["unique_tags"],
+        avg_tags_per_doc=float(stats["avg_tags"] or 0),
+        top_tags=top_tags,
+        untagged_count=untagged_count,
+    )
 
 
-def _collect_projects_data() -> dict[str, Any]:
+def _collect_projects_data() -> ProjectsData:
     """Collect project analysis data."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
@@ -742,28 +763,28 @@ def _collect_projects_data() -> dict[str, Any]:
 
         projects = cursor.fetchall()
 
-    project_list: list[dict[str, Any]] = []
+    project_list: list[ProjectInfo] = []
 
     for proj in projects:
         last_updated = parse_datetime(proj["last_updated"])
         days_ago = (datetime.now() - last_updated).days if last_updated else 0
 
         project_list.append(
-            {
-                "name": proj["project"] or "[No Project]",
-                "doc_count": proj["doc_count"],
-                "avg_length": float(proj["avg_length"] or 0),
-                "total_views": proj["total_views"],
-                "unique_tags": proj["unique_tags"],
-                "last_updated": proj["last_updated"],
-                "days_since_update": days_ago,
-            }
+            ProjectInfo(
+                name=proj["project"] or "[No Project]",
+                doc_count=proj["doc_count"],
+                avg_length=float(proj["avg_length"] or 0),
+                total_views=proj["total_views"],
+                unique_tags=proj["unique_tags"],
+                last_updated=proj["last_updated"],
+                days_since_update=days_ago,
+            )
         )
 
-    return {
-        "count": len(projects),
-        "projects": project_list,
-    }
+    return ProjectsData(
+        count=len(projects),
+        projects=project_list,
+    )
 
 
 # Create typer app for this module
