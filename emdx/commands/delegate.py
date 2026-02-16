@@ -292,6 +292,50 @@ def _print_doc_content(doc_id: int) -> None:
         sys.stdout.write(doc.get("content", ""))
         sys.stdout.write("\n")
 
+def _cleanup_stale_worktrees(quiet: bool = False) -> None:
+    """Remove delegate worktrees older than 1 hour."""
+    import time
+
+    result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return
+
+    now = time.time()
+    one_hour = 3600
+    removed = 0
+
+    for line in result.stdout.split("\n"):
+        if not line.startswith("worktree "):
+            continue
+        path = line.removeprefix("worktree ").strip()
+        # Only clean up delegate worktrees
+        if "emdx-worktree-" not in Path(path).name:
+            continue
+        # Check age via directory mtime
+        try:
+            mtime = Path(path).stat().st_mtime
+            age = now - mtime
+            if age < one_hour:
+                continue
+            from ..utils.git import cleanup_worktree
+            cleanup_worktree(path)
+            removed += 1
+            if not quiet:
+                age_h = age / 3600
+                sys.stderr.write(
+                    f"delegate: removed stale worktree "
+                    f"({age_h:.1f}h old): {path}\n"
+                )
+        except (OSError, Exception) as e:
+            sys.stderr.write(f"delegate: failed to clean {path}: {e}\n")
+
+    if not quiet:
+        sys.stderr.write(f"delegate: cleaned up {removed} stale worktree(s)\n")
+
+
 @dataclass
 class SingleResult:
     """Result from a single delegate execution."""
@@ -308,7 +352,7 @@ def _run_single(
     quiet: bool,
     pr: bool = False,
     pr_branch: str | None = None,
-    draft: bool = True,
+    draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
@@ -459,7 +503,7 @@ def _run_parallel(
     model: str | None,
     quiet: bool,
     pr: bool = False,
-    draft: bool = True,
+    draft: bool = False,
     base_branch: str = "main",
     source_doc_id: int | None = None,
     worktree: bool = False,
@@ -514,7 +558,7 @@ def _run_parallel(
                 return idx, SingleResult()
 
         try:
-            return idx, _run_single(
+            result = idx, _run_single(
                 prompt=task,
                 tags=tags,
                 title=task_title,
@@ -528,9 +572,11 @@ def _run_parallel(
                 seq=idx + 1,
                 epic_key=epic_key,
             )
+            return result
         finally:
-            # Clean up worktree unless --pr (keep for the PR branch)
-            if task_worktree_path and not pr:
+            # Clean up worktree after execution
+            # For --pr: branch is already pushed, worktree no longer needed
+            if task_worktree_path:
                 from ..utils.git import cleanup_worktree
                 cleanup_worktree(task_worktree_path)
 
@@ -628,7 +674,7 @@ def _run_chain(
     model: str | None,
     quiet: bool,
     pr: bool = False,
-    draft: bool = True,
+    draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     epic_key: str | None = None,
@@ -807,6 +853,10 @@ def delegate(
         None, "--cat", "-c",
         help="Category key for auto-numbered tasks",
     ),
+    cleanup: bool = typer.Option(
+        False, "--cleanup",
+        help="Remove stale delegate worktrees (>1 hour old)",
+    ),
 ) -> None:
     """Delegate tasks to Claude agents with results on stdout.
 
@@ -847,6 +897,12 @@ def delegate(
     Quiet mode (just content, no metadata):
         emdx delegate -q "do something"
     """
+    # Handle --cleanup: remove stale delegate worktrees
+    if cleanup is True:
+        _cleanup_stale_worktrees(quiet)
+        if not tasks:
+            return
+
     # Validate mutually exclusive options
     if chain and synthesize:
         typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)
@@ -863,7 +919,7 @@ def delegate(
     known_flags = {"--tags", "-t", "--title", "-T", "--synthesize", "-s", "--jobs", "-j",
                    "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--draft",
                    "--no-draft", "--worktree", "-w", "--base-branch", "--chain", "--each",
-                   "--do", "--epic", "-e", "--cat", "-c"}
+                   "--do", "--epic", "-e", "--cat", "-c", "--cleanup"}
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
         sys.stderr.write(
@@ -982,7 +1038,9 @@ def delegate(
                 epic_parent_id=epic_parent_id,
             )
     finally:
-        if worktree_path and not pr:
+        # Clean up worktree after execution
+        # For --pr: branch is already pushed, worktree no longer needed
+        if worktree_path:
             from ..utils.git import cleanup_worktree
             if not quiet:
                 sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
