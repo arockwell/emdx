@@ -7,7 +7,11 @@ using TF-IDF clustering for discovery and Claude for synthesis.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    import numpy as np
+    import numpy.typing as npt
 
 import typer
 from rich.console import Console
@@ -38,7 +42,28 @@ def _require_sklearn() -> None:
         )
 
 
-def _fetch_all_documents() -> list[dict[str, Any]]:
+class CompactDocumentDict(TypedDict):
+    """Document data used in compact clustering."""
+
+    id: int
+    title: str
+    content: str
+    project: str | None
+    created_at: str | None
+    tags: str | None
+
+
+class SynthesisResultDict(TypedDict):
+    """Result from _synthesize_cluster."""
+
+    content: str
+    title: str
+    input_tokens: int
+    output_tokens: int
+    source_ids: list[int]
+
+
+def _fetch_all_documents() -> list[CompactDocumentDict]:
     """Fetch all active documents with their content."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -59,12 +84,12 @@ def _fetch_all_documents() -> list[dict[str, Any]]:
             HAVING COALESCE(GROUP_CONCAT(t.name), '') NOT LIKE '%superseded%'
             ORDER BY d.id
         """)
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
 def _compute_similarity_matrix(
-    documents: list[dict[str, Any]],
-) -> tuple[Any, list[int]]:
+    documents: list[CompactDocumentDict],
+) -> tuple[npt.NDArray[np.float64] | None, list[int]]:
     """Compute TF-IDF similarity matrix for documents.
 
     Args:
@@ -107,7 +132,7 @@ def _compute_similarity_matrix(
 
 
 def _find_clusters(
-    similarity_matrix: Any,
+    similarity_matrix: npt.NDArray[np.float64],
     doc_ids: list[int],
     threshold: float = 0.5,
 ) -> list[list[int]]:
@@ -168,7 +193,7 @@ def _find_clusters(
 
 def _display_clusters(
     clusters: list[list[int]],
-    documents: list[dict[str, Any]],
+    documents: list[CompactDocumentDict],
 ) -> None:
     """Display discovered clusters in a table format."""
     doc_map = {doc["id"]: doc for doc in documents}
@@ -184,7 +209,7 @@ def _display_clusters(
         table.add_column("Project", style="green")
 
         for doc_id in cluster:
-            doc = doc_map.get(doc_id, {})
+            doc: CompactDocumentDict | dict[str, object] = doc_map.get(doc_id, {})
             table.add_row(
                 str(doc_id),
                 str(doc.get("title", ""))[:60],
@@ -198,7 +223,7 @@ def _display_clusters(
 def _synthesize_cluster(
     cluster: list[int],
     model: str | None = None,
-) -> dict[str, Any]:
+) -> SynthesisResultDict:
     """Synthesize a cluster of documents into one.
 
     Args:
@@ -223,8 +248,8 @@ def _synthesize_cluster(
 
 
 def _save_synthesis(
-    synthesis_result: dict[str, Any],
-    original_docs: list[dict[str, Any]],
+    synthesis_result: SynthesisResultDict,
+    original_docs: list[CompactDocumentDict],
 ) -> int:
     """Save synthesized document and tag originals as superseded.
 
@@ -245,8 +270,9 @@ def _save_synthesis(
     # Collect all unique tags from original documents
     all_tags: set[str] = set()
     for doc in original_docs:
-        if doc.get("tags"):
-            tags = doc["tags"].split(",")
+        doc_tags = doc.get("tags")
+        if doc_tags:
+            tags = doc_tags.split(",")
             all_tags.update(t.strip() for t in tags if t.strip())
 
     # Save synthesized document
@@ -275,33 +301,24 @@ def _save_synthesis(
 def compact(
     ctx: typer.Context,
     doc_ids: list[int] | None = typer.Argument(
-        default=None,
-        help="Specific document IDs to compact together"
+        default=None, help="Specific document IDs to compact together"
     ),
     dry_run: bool = typer.Option(
-        False, "--dry-run", "-n",
-        help="Show clusters without synthesizing (free, no API calls)"
+        False, "--dry-run", "-n", help="Show clusters without synthesizing (free, no API calls)"
     ),
     auto: bool = typer.Option(
-        False, "--auto",
-        help="Automatically synthesize all discovered clusters"
+        False, "--auto", help="Automatically synthesize all discovered clusters"
     ),
     threshold: float = typer.Option(
-        0.5, "--threshold", "-t",
-        help="Similarity threshold for clustering (0.0-1.0)"
+        0.5, "--threshold", "-t", help="Similarity threshold for clustering (0.0-1.0)"
     ),
     topic: str | None = typer.Option(
-        None, "--topic",
-        help="Filter to documents matching this topic/query"
+        None, "--topic", help="Filter to documents matching this topic/query"
     ),
     model: str | None = typer.Option(
-        None, "--model", "-m",
-        help="Model to use for synthesis (default: claude-opus-4)"
+        None, "--model", "-m", help="Model to use for synthesis (default: claude-opus-4)"
     ),
-    yes: bool = typer.Option(
-        False, "--yes", "-y",
-        help="Skip confirmation prompts"
-    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
 ) -> None:
     """Compact related documents through AI-powered synthesis.
 
@@ -339,9 +356,9 @@ def compact(
     if topic:
         topic_lower = topic.lower()
         documents = [
-            doc for doc in documents
-            if topic_lower in doc["title"].lower()
-            or topic_lower in doc["content"].lower()
+            doc
+            for doc in documents
+            if topic_lower in doc["title"].lower() or topic_lower in doc["content"].lower()
         ]
         if not documents:
             console.print(f"[yellow]No documents found matching '{topic}'[/yellow]")
@@ -370,6 +387,7 @@ def compact(
 
         # Estimate cost
         from ..services.synthesis_service import SynthesisService
+
         service = SynthesisService(model=model)
         cost_est = service.estimate_cost(doc_ids)
 
@@ -390,13 +408,8 @@ def compact(
             raise typer.Exit(0)
 
         # Synthesize
-        total_chars = sum(
-            len(doc_map[did].get("content", "")) for did in doc_ids
-        )
-        status_msg = (
-            f"Synthesizing {len(doc_ids)} documents "
-            f"({total_chars:,} chars)"
-        )
+        total_chars = sum(len(doc_map[did].get("content", "")) for did in doc_ids)
+        status_msg = f"Synthesizing {len(doc_ids)} documents ({total_chars:,} chars)"
         with console.status(f"[bold]{status_msg}[/bold]"):
             result = _synthesize_cluster(doc_ids, model=model)
 
@@ -446,6 +459,7 @@ def compact(
     # Auto mode - process all clusters
     if auto:
         from ..services.synthesis_service import SynthesisService
+
         service = SynthesisService(model=model)
 
         # Estimate total cost
