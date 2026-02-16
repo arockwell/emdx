@@ -11,13 +11,14 @@ from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
 
 
-def get_subprocess_env() -> dict:
+def get_subprocess_env() -> dict[str, str]:
     """Get a clean environment dict for spawning CLI subprocesses.
 
     Removes environment variables that prevent nested execution, such as
     CLAUDECODE which blocks Claude Code from running inside another session.
     """
     return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
 
 class EnvironmentValidator:
     """Validates execution environment before running CLI tools.
@@ -89,10 +90,7 @@ class EnvironmentValidator:
                     version_cmd = self._get_version_command(cmd)
                     if version_cmd:
                         result = subprocess.run(
-                            version_cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=5
+                            version_cmd, capture_output=True, text=True, timeout=5
                         )
                         if result.returncode == 0:
                             self.info[f"{cmd}_version"] = result.stdout.strip()
@@ -172,7 +170,9 @@ class EnvironmentValidator:
         if claude_config.exists():
             self.info["claude_config"] = str(claude_config)
         else:
-            self.warnings.append("Claude config file not found - claude might not be properly configured")  # noqa: E501
+            self.warnings.append(
+                "Claude config file not found - claude might not be properly configured"
+            )  # noqa: E501
 
         # Check ANTHROPIC_API_KEY
         if os.environ.get("ANTHROPIC_API_KEY"):
@@ -181,10 +181,7 @@ class EnvironmentValidator:
             # Check if claude works without explicit API key
             try:
                 result = subprocess.run(
-                    ["claude", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
+                    ["claude", "--version"], capture_output=True, text=True, timeout=5
                 )
                 if result.returncode != 0:
                     self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
@@ -200,10 +197,7 @@ class EnvironmentValidator:
         # Check authentication status
         try:
             result = subprocess.run(
-                ["cursor", "agent", "status"],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ["cursor", "agent", "status"], capture_output=True, text=True, timeout=10
             )
             if "Not logged in" in result.stdout:
                 self.warnings.append(
@@ -241,12 +235,12 @@ class EnvironmentValidator:
             "valid": len(self.errors) == 0,
             "errors": self.errors,
             "warnings": self.warnings,
-            "info": self.info
+            "info": self.info,
         }
 
+
 def validate_execution_environment(
-    verbose: bool = False,
-    cli_tool: str = "claude"
+    verbose: bool = False, cli_tool: str = "claude"
 ) -> tuple[bool, dict[str, Any] | None]:
     """Validate the execution environment.
 
@@ -264,6 +258,7 @@ def validate_execution_environment(
         validator.print_report(verbose)
 
     return is_valid, validator.get_environment_info()
+
 
 def ensure_claude_in_path() -> None:
     """Ensure claude command is in PATH for subprocess calls."""
