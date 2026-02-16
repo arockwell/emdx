@@ -164,11 +164,11 @@ class QAScreen(HelpMixin, Widget):
         try:
             self.query_one("#qa-status", Static).update(state.status_text)
             # Update mode label
-            if state.has_anthropic:
+            if state.has_claude_cli:
                 method = "semantic" if state.has_embeddings else "keyword"
                 label = f"Q&A ({method})"
             else:
-                label = "Q&A (no API)"
+                label = "Q&A (no CLI)"
             self.query_one("#qa-mode-label", Static).update(label)
         except Exception as e:
             logger.error(f"Error rendering status: {e}")

@@ -37,9 +37,16 @@ emdx save notes.md --public --copy
 ```
 
 **Options:**
-- `--title TEXT` - Custom title (auto-detected from filename if not provided)
+- `--title, -t TEXT` - Custom title (auto-detected from filename if not provided)
 - `--tags TEXT` - Comma-separated tags using text aliases
-- `--project TEXT` - Override project detection
+- `--project, -p TEXT` - Override project detection
+- `--group, -g INTEGER` - Add document to group
+- `--group-role TEXT` - Role in group (primary, exploration, synthesis, variant, member)
+- `--auto-tag` - Automatically apply suggested tags
+- `--suggest-tags` - Show tag suggestions after saving
+- `--supersede` - Auto-link to existing doc with same title
+- `--task INTEGER` - Link saved document to a task as its output
+- `--done` - Also mark the linked task as done (requires `--task`)
 - `--gist` / `--share` - Create a GitHub gist after saving
 - `--secret` - Create a secret gist (default; implies `--gist`)
 - `--public` - Create a public gist (implies `--gist`)
@@ -47,7 +54,7 @@ emdx save notes.md --public --copy
 - `--open, -o` - Open gist in browser
 
 ### **emdx find**
-Search documents with full-text, semantic, or hybrid search.
+Search documents with hybrid (default when index exists), keyword, or semantic search.
 
 ```bash
 # Full-text search (keyword mode)
@@ -88,13 +95,20 @@ emdx find "database" --snippets
 ```
 
 **Options:**
-- `--tags TEXT` - Search by tags (using text aliases)
-- `--project TEXT` - Limit search to specific project
-- `--limit INTEGER` - Maximum results to return (default: 10)
-- `--mode [keyword|semantic|hybrid]` - Search mode (auto-detects based on embeddings)
-- `--extract` - Show matching chunk text instead of document snippets
+- `--tags, -t TEXT` - Search by tags (using text aliases)
+- `--any-tags` - Match ANY tag instead of ALL tags
 - `--no-tags TEXT` - Exclude documents with specified tags (comma-separated)
-- `--snippets` - Show snippet previews in results
+- `--project, -p TEXT` - Limit search to specific project
+- `--limit, -n INTEGER` - Maximum results to return (default: 10)
+- `--mode, -m [keyword|semantic|hybrid]` - Search mode (hybrid default when index exists)
+- `--extract, -e` - Show matching chunk text instead of document snippets
+- `--snippets, -s` - Show snippet previews in results
+- `--fuzzy, -f` - Use fuzzy search
+- `--ids-only` - Output only document IDs (for piping)
+- `--created-after TEXT` - Filter by creation date (YYYY-MM-DD)
+- `--created-before TEXT` - Filter by creation date (YYYY-MM-DD)
+- `--modified-after TEXT` - Filter by modification date (YYYY-MM-DD)
+- `--modified-before TEXT` - Filter by modification date (YYYY-MM-DD)
 - `--json` - Output results as JSON
 
 ### **emdx view**
@@ -104,11 +118,20 @@ View document content.
 # View by ID
 emdx view 42
 
-# View with syntax highlighting
-emdx view 42 --highlight
+# View with rich formatting (colors, panel header)
+emdx view 42 --rich
 
 # View raw content (no formatting)
 emdx view 42 --raw
+
+# Output as JSON
+emdx view 42 --json
+
+# Disable pager (for piping)
+emdx view 42 --no-pager
+
+# Hide document header
+emdx view 42 --no-header
 ```
 
 ### **emdx edit**
@@ -135,18 +158,18 @@ emdx delete 42 43 44
 
 ## 🏷️ **Tag Management**
 
-### **emdx tag**
-Manage document tags using intuitive text aliases.
+### **emdx tag add**
+Add tags to a document using intuitive text aliases.
 
 ```bash
 # Add tags using text aliases (much easier than emojis!)
-emdx tag 42 gameplan active urgent
+emdx tag add 42 gameplan active urgent
 
-# View current tags for document
-emdx tag 42
+# Add tags with auto-tagging
+emdx tag add 42 --auto
 
-# Add status tags
-emdx tag 123 feature done success
+# Show tag suggestions
+emdx tag add 42 --suggest
 ```
 
 ### **emdx tag remove**
@@ -615,7 +638,8 @@ emdx gui
 # Note: This is the main interactive interface with:
 # - Document browser (default view)
 # - Log browser (press 'l')
-# - File browser (press 'f')
+# - Activity view (press 'a')
+# - Task browser (press 't')
 # - Vim-like navigation and editing
 ```
 
@@ -624,7 +648,8 @@ emdx gui
 - `g/G` - Go to top/bottom
 - `/` - Search
 - `l` - Switch to log browser
-- `f` - Switch to file browser
+- `a` - Switch to activity view
+- `t` - Switch to task browser
 - `q` - Return to document browser / quit
 - `e` - Edit mode (full vim-like editing)
 - `s` - Selection mode
@@ -655,7 +680,7 @@ echo "content" | emdx save --title "Share Me" --secret --copy
 ## ⚙️ **Configuration**
 
 ### **Environment Variables**
-- `EMDX_DB_PATH` - Custom database location
+- `EMDX_DATABASE_URL` - Custom database connection URL
 - `EMDX_SAFE_MODE` - Enable safe mode (see below)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
@@ -685,12 +710,14 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
 - `tag` (add, remove, list, rename, merge, batch) - Tag management
-- `list`, `recent`, `stats` - Information commands
-- `gui`, `prime`, `status` - Interface and overview
+- `list`, `recent`, `stats`, `briefing` - Information commands
+- `gui`, `prime`, `status`, `version` - Interface and overview
 - `ai` (ask, search, context) - AI-powered features
+- `compact`, `distill`, `review` - AI-powered maintenance
 - `gist` - GitHub Gist integration
 - `exec` - Execution monitoring (read-only)
-- `group`, `task`, `trash` - Organization commands
+- `group`, `task`, `epic`, `cat`, `trash` - Organization commands
+- `stale`, `touch` - Staleness tracking
 
 **Error message:**
 When a disabled command is invoked, you'll see:
@@ -742,7 +769,7 @@ emdx exec kill <execution_id>
 echo "Phase 1: Setup infrastructure" | emdx save --title "Project Gameplan" --tags "gameplan,active"
 
 # Mark phases complete
-emdx tag 123 done success
+emdx tag add 123 done success
 emdx tag remove 123 active
 
 # Review project progress
@@ -846,10 +873,15 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--quiet` | `-q` | Suppress metadata on stderr |
 | `--doc` | `-d` | Document ID to use as input context |
 | `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
+| `--branch` | | Commit and push to origin branch (implies `--worktree`, no PR) |
+| `--draft` / `--no-draft` | | Create PR as draft (default: `--no-draft`) |
 | `--worktree` | `-w` | Run in isolated git worktree |
-| `--base-branch` | | Base branch for worktree (default: main) |
+| `--base-branch` | `-b` | Base branch for worktree (default: main) |
 | `--each` | | Shell command to discover items (one per line) |
 | `--do` | | Template for each discovered item (use `{{item}}`) |
+| `--epic` | `-e` | Epic task ID to add tasks to |
+| `--cat` | `-c` | Category key for auto-numbered tasks |
+| `--cleanup` | | Remove stale delegate worktrees (>1 hour old) |
 
 **Note:** `--each` requires `--do`.
 
@@ -978,28 +1010,45 @@ emdx ai clear --yes
 
 ## 📋 Task Management (`emdx task`)
 
-Manage tasks with dependencies and execution tracking.
+Agent work queue for tracking tasks with status, epics, and categories.
 
-### Creating Tasks
+### Adding Tasks
 
 ```bash
-# Create a basic task
-emdx task create "Implement user authentication"
+# Add a basic task
+emdx task add "Implement user authentication"
 
-# Create with priority (1-5, lower is higher priority)
-emdx task create "Fix critical bug" --priority 1
+# Add with description
+emdx task add "Refactor API" --description "Improve performance and add caching"
 
-# Create with dependencies
-emdx task create "Deploy to production" --depends "123,124"
+# Add linked to a document
+emdx task add "Implement this plan" --doc 42
 
-# Create linked to a gameplan document
-emdx task create "Setup database" --gameplan 456
+# Add to an epic
+emdx task add "Setup database" --epic 510
 
-# Create with description
-emdx task create "Refactor API" --description "Improve performance and add caching"
+# Add with category key
+emdx task add "Fix auth bug" --cat SEC
+```
 
-# Create in specific project
-emdx task create "Add tests" --project myapp
+**Options:**
+- `--doc, -d INTEGER` - Link to document ID
+- `--description, -D TEXT` - Task description
+- `--epic, -e INTEGER` - Add to epic (task ID)
+- `--cat, -c TEXT` - Category key (e.g. SEC)
+
+### Finding Ready Tasks
+
+```bash
+# Show tasks ready to work on
+emdx task ready
+```
+
+### Viewing Tasks
+
+```bash
+# View full task details
+emdx task view 1
 ```
 
 ### Listing Tasks
@@ -1007,107 +1056,32 @@ emdx task create "Add tests" --project myapp
 ```bash
 # List all tasks
 emdx task list
-
-# Filter by status
-emdx task list --status open
-emdx task list --status active,blocked
-
-# Filter by gameplan
-emdx task list --gameplan 456
-
-# Filter by project
-emdx task list --project myapp
-
-# Limit results
-emdx task list --limit 20
 ```
 
-### Viewing and Updating
+### Updating Task Status
 
 ```bash
-# Show task details
-emdx task show 1
+# Mark task as in-progress
+emdx task active 1
 
-# Update task status
-emdx task update 1 --status active
-emdx task update 1 --status done
+# Mark task as done
+emdx task done 1
 
-# Update priority
-emdx task update 1 --priority 2
-
-# Add note to task log
-emdx task update 1 --note "Made progress on this"
-
-# Set current step (for resume)
-emdx task update 1 --step "Implementing API endpoints"
+# Mark task as blocked
+emdx task blocked 1
 ```
 
-### Task Dependencies
+### Work Log
 
 ```bash
-# Show current dependencies
-emdx task depends 1
+# View task work log
+emdx task log 1
 
-# Add dependency
-emdx task depends 1 --on 2
-
-# Remove dependency
-emdx task depends 1 --remove 2
-```
-
-### Finding Ready Tasks
-
-```bash
-# Show tasks ready to work (open + dependencies satisfied)
-emdx task ready
-
-# Filter by gameplan
-emdx task ready --gameplan 456
-
-# Filter by project
-emdx task ready --project myapp
-```
-
-### Running Tasks
-
-```bash
-# Run task with Claude (direct execution)
-emdx task run 1
-
-# Preview prompt without running
-emdx task run 1 --dry-run
-
-# Mark as manually completed
-emdx task manual 1
-emdx task manual 1 --note "Completed via separate PR"
-```
-
-### Marking Tasks as Manually Complete
-
-```bash
-# Mark task as manually completed
-emdx task manual 1
-
-# Mark with a note explaining how it was completed
-emdx task manual 1 --note "Completed via separate PR"
-```
-
-**Options:**
-- `--note, -n TEXT` - Completion note
-
-### Task Execution History
-
-```bash
-# Show execution history for a task
-emdx task executions 1
-emdx task executions 1 --limit 20
-```
-
-### Log Management
-
-```bash
 # Add entry to task log
 emdx task log 1 "Started implementation"
+
+# Add a progress note without changing status
+emdx task note 1 "Halfway through the refactor"
 ```
 
 ### Deleting Tasks
@@ -1115,9 +1089,6 @@ emdx task log 1 "Started implementation"
 ```bash
 # Delete a task
 emdx task delete 1
-
-# Skip confirmation
-emdx task delete 1 --force
 ```
 
 ### Task Statuses
@@ -1128,7 +1099,184 @@ emdx task delete 1 --force
 | `active` | ● | Currently being worked on |
 | `blocked` | ⚠ | Waiting on dependencies or external factors |
 | `done` | ✓ | Completed successfully |
-| `failed` | ✗ | Could not be completed |
+
+---
+
+## 🏔️ Epic Management (`emdx epic`)
+
+Organize tasks into epics for larger initiatives.
+
+```bash
+# Create an epic
+emdx epic create "Auth System Overhaul"
+
+# List all epics with task counts
+emdx epic list
+
+# View an epic and its tasks
+emdx epic view 510
+
+# Mark epic as active
+emdx epic active 510
+
+# Mark epic as done
+emdx epic done 510
+```
+
+---
+
+## 🏷️ Category Management (`emdx cat`)
+
+Manage task categories for auto-numbered task titles (e.g., SEC-1, SEC-2).
+
+```bash
+# Create a category
+emdx cat create SEC --description "Security tasks"
+
+# List all categories with task counts
+emdx cat list
+
+# Backfill existing tasks into the category system
+emdx cat adopt SEC
+```
+
+---
+
+## 📰 Briefing (`emdx briefing`)
+
+Show recent emdx activity summary.
+
+```bash
+# Show activity from the last 24 hours (default)
+emdx briefing
+
+# Show activity since a specific time
+emdx briefing --since "2 days ago"
+emdx briefing --since 2026-02-14
+emdx briefing --since yesterday
+
+# Output as JSON for agent consumption
+emdx briefing --json
+```
+
+---
+
+## 📦 Compact (`emdx compact`)
+
+AI-powered document synthesis to reduce knowledge base sprawl.
+
+```bash
+# Dry run: show clusters without synthesizing (no API calls)
+emdx compact --dry-run
+
+# Automatically synthesize all discovered clusters
+emdx compact --auto
+
+# Compact specific documents together
+emdx compact 42 43 44
+
+# Filter to a specific topic
+emdx compact --topic "authentication"
+
+# Adjust similarity threshold
+emdx compact --threshold 0.7
+
+# Skip confirmation prompts
+emdx compact --yes
+```
+
+**Options:**
+- `--dry-run, -n` - Show clusters without synthesizing
+- `--auto` - Automatically synthesize all clusters
+- `--threshold, -t FLOAT` - Similarity threshold (0.0-1.0, default: 0.5)
+- `--topic TEXT` - Filter to documents matching this topic
+- `--model, -m TEXT` - Model to use for synthesis
+- `--yes, -y` - Skip confirmation prompts
+
+---
+
+## 🔬 Distill (`emdx distill`)
+
+Audience-aware summarization of knowledge base content.
+
+```bash
+# Distill for yourself (default)
+emdx distill "authentication"
+
+# Distill for documentation
+emdx distill "auth patterns" --for docs
+
+# Distill for team briefing
+emdx distill "project status" --for coworkers
+
+# Filter by tags
+emdx distill --tags "gameplan,active"
+
+# Save the output to the knowledge base
+emdx distill "auth" --save --title "Auth Summary"
+
+# Quiet mode (content only)
+emdx distill "auth" --quiet
+```
+
+**Options:**
+- `--for, -f TEXT` - Target audience: `me`, `docs`, `coworkers` (default: me)
+- `--tags, -t TEXT` - Comma-separated tags to filter documents
+- `--limit, -l INTEGER` - Maximum documents to include (default: 20)
+- `--save, -s` - Save the output to the knowledge base
+- `--title TEXT` - Title for saved document
+- `--quiet, -q` - Output only the distilled content
+
+---
+
+## 📋 Review (`emdx review`)
+
+Triage agent-produced documents tagged `needs-review`.
+
+```bash
+# List documents needing review
+emdx review list
+
+# Approve a document
+emdx review approve 42
+
+# Reject a document
+emdx review reject 42
+
+# Show review statistics
+emdx review stats
+```
+
+---
+
+## ⏳ Staleness Tracking (`emdx stale`)
+
+Track knowledge decay and identify documents needing review.
+
+```bash
+# Show stale documents prioritized by urgency
+emdx stale list
+```
+
+### **emdx touch**
+
+Reset a document's staleness timer without incrementing the view count.
+
+```bash
+# Touch single document
+emdx touch 42
+
+# Touch multiple documents
+emdx touch 42 43 44
+```
+
+---
+
+## 📌 Version (`emdx version`)
+
+```bash
+emdx version
+```
 
 ---
 

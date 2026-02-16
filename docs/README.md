@@ -13,6 +13,7 @@ This folder contains detailed documentation for EMDX.
 - [Database Design](database-design.md) - Schema, migrations, and data flow
 - [UI Architecture](ui-architecture.md) - TUI components, theming, and keybindings
 - [Event-Driven Streaming](event-driven-streaming.md) - Log streaming implementation
+- [Architecture Decision Records](adr/) - ADRs for key design decisions
 
 ### Development
 - [Development Setup](development-setup.md) - Installation, testing, and contributing
@@ -29,6 +30,7 @@ This folder contains detailed documentation for EMDX.
 | Write tests | [Testing Guide](testing.md) |
 | Build TUI components | [UI Architecture](ui-architecture.md) |
 | Work with the database | [Database Design](database-design.md) |
+| Understand design decisions | [ADRs](adr/) |
 
 ## Documentation Standards
 

@@ -2,15 +2,16 @@
 Presenter for the QA Screen.
 
 Handles Q&A logic: retrieves context from the knowledge base,
-streams answers from Claude, and manages conversation state.
+generates answers via Claude CLI, and manages conversation state.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -46,7 +47,7 @@ class QAStateVM:
 
     entries: list[QAEntry] = field(default_factory=list)
     is_asking: bool = False
-    has_anthropic: bool = False
+    has_claude_cli: bool = False
     has_embeddings: bool = False
     status_text: str = ""
 
@@ -56,7 +57,7 @@ class QAPresenter:
     Handles Q&A business logic.
 
     - Retrieves relevant documents via hybrid/keyword search
-    - Streams answers from Claude via Anthropic API
+    - Generates answers via Claude CLI (UnifiedExecutor)
     - Manages conversation history
     """
 
@@ -71,7 +72,6 @@ class QAPresenter:
         self.on_state_update = on_state_update
         self.on_answer_chunk = on_answer_chunk
         self._state = QAStateVM()
-        self._client: Any = None
         self._embedding_service: Any = None
         self._cancel_event: asyncio.Event | None = None
 
@@ -81,30 +81,20 @@ class QAPresenter:
 
     async def initialize(self) -> None:
         """Check capabilities on startup."""
-        try:
-            import anthropic  # noqa: F401
-
-            self._state.has_anthropic = True
-        except ImportError:
-            self._state.has_anthropic = False
+        has_claude_cli = shutil.which("claude") is not None
+        self._state.has_claude_cli = has_claude_cli
 
         self._state.has_embeddings = self._has_embeddings()
 
-        if self._state.has_anthropic:
+        if has_claude_cli:
             method = "semantic" if self._state.has_embeddings else "keyword"
             self._state.status_text = f"Ready | {method} retrieval"
         else:
-            self._state.status_text = "anthropic not installed — run: pip install 'emdx[ai]'"
+            self._state.status_text = (
+                "Claude CLI not found — install from: https://docs.anthropic.com/claude-code"
+            )
 
         await self._notify_update()
-
-    def _get_client(self) -> Any:
-        """Lazy load Anthropic client."""
-        if self._client is None:
-            import anthropic
-
-            self._client = anthropic.Anthropic()
-        return self._client
 
     def _get_embedding_service(self) -> Any:
         if self._embedding_service is None:
@@ -135,10 +125,12 @@ class QAPresenter:
         if not question.strip():
             return
 
-        if not self._state.has_anthropic:
+        if not self._state.has_claude_cli:
             entry = QAEntry(
                 question=question,
-                error="anthropic package not installed. Run: pip install 'emdx[ai]'",
+                error=(
+                    "Claude CLI not found. Install from: https://docs.anthropic.com/claude-code"
+                ),
             )
             self._state.entries.append(entry)
             await self._notify_update()
@@ -301,8 +293,8 @@ class QAPresenter:
         return "\n\n---\n\n".join(parts)
 
     async def _stream_answer(self, question: str, context: str) -> str:
-        """Stream an answer from Claude, calling on_answer_chunk for each piece."""
-        client = self._get_client()
+        """Generate an answer via Claude CLI, delivering the result as a single chunk."""
+        from emdx.services.ask_service import _execute_claude_prompt
 
         system_prompt = (
             "You answer questions using the provided knowledge base context.\n\n"
@@ -314,85 +306,22 @@ class QAPresenter:
             "- Be concise but complete\n"
             "- If documents contain conflicting information, note the discrepancy"
         )
+        user_message = (
+            f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
+        )
 
-        messages = [
-            {
-                "role": "user",
-                "content": (
-                    f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
-                ),
-            }
-        ]
+        answer = await asyncio.to_thread(
+            _execute_claude_prompt,
+            system_prompt,
+            user_message,
+            f"TUI Ask: {question[:50]}",
+            self.DEFAULT_MODEL,
+        )
 
-        full_answer = ""
+        if self.on_answer_chunk:
+            await self.on_answer_chunk(answer)
 
-        try:
-            # Use streaming for progressive display
-            stream = await asyncio.to_thread(
-                lambda: client.messages.stream(
-                    model=self.DEFAULT_MODEL,
-                    max_tokens=1500,
-                    system=system_prompt,
-                    messages=messages,
-                )
-            )
-
-            async for chunk in self._iter_stream(stream):
-                if self._cancel_event and self._cancel_event.is_set():
-                    break
-                full_answer += chunk
-                if self.on_answer_chunk:
-                    await self.on_answer_chunk(chunk)
-
-        except Exception as e:
-            logger.error(f"Streaming failed, falling back to sync: {e}")
-            # Fallback to non-streaming
-            response = await asyncio.to_thread(
-                lambda: client.messages.create(
-                    model=self.DEFAULT_MODEL,
-                    max_tokens=1500,
-                    system=system_prompt,
-                    messages=messages,
-                )
-            )
-            full_answer = response.content[0].text
-            if self.on_answer_chunk:
-                await self.on_answer_chunk(full_answer)
-
-        return full_answer
-
-    async def _iter_stream(self, stream_ctx: Any) -> AsyncIterator[str]:
-        """Iterate over a synchronous Anthropic stream context manager."""
-        # The stream is a sync context manager, run iteration in thread
-        import queue
-        import threading
-
-        q: queue.Queue[str | None | Exception] = queue.Queue()
-
-        def _consume() -> None:
-            try:
-                with stream_ctx as stream:
-                    for text in stream.text_stream:
-                        q.put(text)
-                q.put(None)  # Sentinel
-            except Exception as e:
-                q.put(e)
-
-        thread = threading.Thread(target=_consume, daemon=True)
-        thread.start()
-
-        while True:
-            # Poll the queue without blocking the event loop
-            try:
-                item = await asyncio.to_thread(q.get, timeout=30)
-            except Exception:
-                break
-
-            if item is None:
-                break
-            if isinstance(item, Exception):
-                raise item
-            yield item
+        return answer
 
     def clear_history(self) -> None:
         """Clear conversation history."""
