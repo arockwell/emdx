@@ -6,9 +6,12 @@ Provides audience-aware synthesis of documents matching a topic or tags.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import typer
+
+if TYPE_CHECKING:
+    from ..services.synthesis_service import Audience
 from rich.console import Console
 from rich.panel import Panel
 
@@ -21,25 +24,33 @@ console = Console()
 app = typer.Typer(help="Distill KB content into audience-aware summaries")
 
 
+class DistillDocumentDict(TypedDict):
+    """Document data used in distillation."""
+
+    id: int
+    title: str
+    content: str
+
+
 def _get_documents_by_query(
     query: str,
     limit: int = 20,
-) -> list[dict[str, Any]]:
+) -> list[DistillDocumentDict]:
     """Get documents matching a search query."""
     docs = search_documents(query=query, limit=limit)
-    return _fetch_full_content(cast(list[dict[str, Any]], docs))
+    return _fetch_full_content(cast(list[DistillDocumentDict], docs))
 
 
 def _get_documents_by_tags(
     tags: list[str],
     limit: int = 20,
-) -> list[dict[str, Any]]:
+) -> list[DistillDocumentDict]:
     """Get documents matching tags."""
     docs = search_by_tags(tag_names=tags, mode="any", limit=limit)
-    return _fetch_full_content(cast(list[dict[str, Any]], docs))
+    return _fetch_full_content(cast(list[DistillDocumentDict], docs))
 
 
-def _fetch_full_content(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _fetch_full_content(docs: list[DistillDocumentDict]) -> list[DistillDocumentDict]:
     """Fetch full content for a list of document summaries."""
     if not docs:
         return []
@@ -56,26 +67,28 @@ def _fetch_full_content(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rows = cursor.fetchall()
 
     # Build map for ordering
-    content_map = {row["id"]: {"id": row["id"], "title": row["title"], "content": row["content"]}
-                   for row in rows}
+    content_map = {
+        row["id"]: {"id": row["id"], "title": row["title"], "content": row["content"]}
+        for row in rows
+    }
 
     # Return in original order
-    return [content_map[d["id"]] for d in docs if d["id"] in content_map]
+    return [content_map[d["id"]] for d in docs if d["id"] in content_map]  # type: ignore[misc]
 
 
-def _parse_audience(audience_str: str) -> Any:
+def _parse_audience(audience_str: str) -> Audience:
     """Parse audience string to Audience enum."""
     # Import here to handle optional dependency
     try:
-        from ..services.synthesis_service import Audience
+        from ..services.synthesis_service import Audience as AudienceEnum
     except ImportError:
         raise typer.Exit(1) from None
 
     audience_map = {
-        "me": Audience.ME,
-        "docs": Audience.DOCS,
-        "coworkers": Audience.COWORKERS,
-        "team": Audience.COWORKERS,  # alias
+        "me": AudienceEnum.ME,
+        "docs": AudienceEnum.DOCS,
+        "coworkers": AudienceEnum.COWORKERS,
+        "team": AudienceEnum.COWORKERS,  # alias
     }
 
     normalized = audience_str.lower().strip()
@@ -177,13 +190,15 @@ def distill(
     if not quiet:
         console.print("[dim]Searching for documents...[/dim]")
 
-    documents: list[dict[str, Any]] = []
+    documents: list[DistillDocumentDict] = []
 
     if tags:
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
         documents = _get_documents_by_tags(tag_list, limit=limit)
         if not quiet:
-            console.print(f"[dim]Found {len(documents)} docs matching tags: {', '.join(tag_list)}[/dim]")  # noqa: E501
+            console.print(
+                f"[dim]Found {len(documents)} docs matching tags: {', '.join(tag_list)}[/dim]"
+            )  # noqa: E501
 
     if topic:
         topic_docs = _get_documents_by_query(topic, limit=limit)
@@ -212,16 +227,18 @@ def distill(
             f"Synthesizing {len(documents)} documents "
             f"({total_chars:,} chars) for audience: {audience}"
         )
+        # Cast to list[dict[str, Any]] for DistillService interface
+        docs_for_service = cast(list[dict[str, Any]], documents)
         if quiet:
             result = service.synthesize_documents(
-                documents=documents,
+                documents=docs_for_service,
                 topic=topic,
                 audience=target_audience,
             )
         else:
             with console.status(f"[bold]{status_msg}[/bold]"):
                 result = service.synthesize_documents(
-                    documents=documents,
+                    documents=docs_for_service,
                     topic=topic,
                     audience=target_audience,
                 )
