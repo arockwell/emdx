@@ -21,10 +21,7 @@ def get_subprocess_env() -> dict[str, str]:
 
 
 class EnvironmentValidator:
-    """Validates execution environment before running CLI tools.
-
-    Supports validation for multiple CLI tools (Claude, Cursor).
-    """
+    """Validates execution environment before running CLI tools."""
 
     # Base required commands (always needed)
     BASE_REQUIRED_COMMANDS = ["git"]
@@ -32,7 +29,6 @@ class EnvironmentValidator:
     # CLI-specific commands
     CLI_COMMANDS = {
         "claude": "claude",
-        "cursor": "cursor",
     }
 
     REQUIRED_PYTHON_PACKAGES = ["emdx", "typer", "rich"]
@@ -41,7 +37,7 @@ class EnvironmentValidator:
         """Initialize validator for a specific CLI tool.
 
         Args:
-            cli_tool: Which CLI to validate ("claude" or "cursor")
+            cli_tool: Which CLI to validate ("claude")
         """
         self.cli_tool = cli_tool
         self.errors: list[str] = []
@@ -104,8 +100,6 @@ class EnvironmentValidator:
         """Get the version command for a CLI tool."""
         if cmd == "claude":
             return ["claude", "--version"]
-        elif cmd == "cursor":
-            return ["cursor", "agent", "--version"]
         elif cmd == "git":
             return ["git", "--version"]
         return None
@@ -160,8 +154,6 @@ class EnvironmentValidator:
         """Check CLI-specific configuration."""
         if self.cli_tool == "claude":
             self._check_claude_config()
-        elif self.cli_tool == "cursor":
-            self._check_cursor_config()
 
     def _check_claude_config(self) -> None:
         """Check Claude-specific configuration."""
@@ -187,27 +179,6 @@ class EnvironmentValidator:
                     self.warnings.append("ANTHROPIC_API_KEY not set and claude might not work")
             except Exception as e:
                 self.warnings.append(f"Cannot verify claude installation: {e}")
-
-    def _check_cursor_config(self) -> None:
-        """Check Cursor-specific configuration."""
-        # Check CURSOR_API_KEY
-        if os.environ.get("CURSOR_API_KEY"):
-            self.info["cursor_api_key"] = "set"
-
-        # Check authentication status
-        try:
-            result = subprocess.run(
-                ["cursor", "agent", "status"], capture_output=True, text=True, timeout=10
-            )
-            if "Not logged in" in result.stdout:
-                self.warnings.append(
-                    "Cursor not authenticated. Run 'cursor agent login' to authenticate."
-                )
-                self.info["cursor_authenticated"] = "no"
-            else:
-                self.info["cursor_authenticated"] = "yes"
-        except Exception as e:
-            self.warnings.append(f"Cannot verify cursor authentication: {e}")
 
     def print_report(self, verbose: bool = False) -> None:
         """Print validation report."""
@@ -246,7 +217,7 @@ def validate_execution_environment(
 
     Args:
         verbose: Whether to print detailed output
-        cli_tool: Which CLI to validate ("claude" or "cursor")
+        cli_tool: Which CLI to validate ("claude")
 
     Returns:
         Tuple of (is_valid, environment_info)

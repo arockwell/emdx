@@ -1,7 +1,7 @@
 """CLI execution service - handles spawning and managing CLI agent processes.
 
-This module provides the core execution logic for running CLI agent processes.
-It supports multiple CLI tools (Claude, Cursor) and is used by both:
+This module provides the core execution logic for running CLI agent processes
+using the Claude CLI. Used by both:
 - commands/claude_execute.py (CLI interface)
 - services/task_runner.py (programmatic task execution)
 
@@ -26,7 +26,13 @@ from .cli_executor import get_cli_executor
 logger = logging.getLogger(__name__)
 
 # Re-export for backward compatibility - prefer importing from cli_config
-__all__ = ["DEFAULT_ALLOWED_TOOLS", "execute_cli_sync", "execute_claude_detached", "parse_task_content"]  # noqa: E501
+__all__ = [
+    "DEFAULT_ALLOWED_TOOLS",
+    "execute_cli_sync",
+    "execute_claude_detached",
+    "parse_task_content",
+]  # noqa: E501
+
 
 def parse_task_content(task: str) -> str:
     """Parse task string, expanding @filename references.
@@ -38,7 +44,7 @@ def parse_task_content(task: str) -> str:
         Expanded task content with file contents included
     """
     # Find all @filename references
-    pattern = r'@([^\s]+)'
+    pattern = r"@([^\s]+)"
 
     def replace_file_reference(match: re.Match[str]) -> str:
         filename = match.group(1)
@@ -57,6 +63,7 @@ def parse_task_content(task: str) -> str:
     # Replace all @filename references
     expanded = re.sub(pattern, replace_file_reference, task)
     return expanded
+
 
 def execute_claude_detached(
     task: str,
@@ -82,7 +89,7 @@ def execute_claude_detached(
         allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
         working_dir: Working directory for execution
         doc_id: Document ID (for logging)
-        cli_tool: Which CLI to use ("claude" or "cursor")
+        cli_tool: Which CLI to use ("claude")
         model: Model to use (None = default for the CLI)
 
     Returns:
@@ -100,7 +107,7 @@ def execute_claude_detached(
     # Validate environment first
     is_valid, env_info = executor.validate_environment()
     if not is_valid:
-        error_msg = "; ".join(env_info.get('errors', ['Unknown error']))
+        error_msg = "; ".join(env_info.get("errors", ["Unknown error"]))
         raise RuntimeError(f"Environment validation failed: {error_msg}")
 
     # Ensure claude is in PATH (for Claude CLI)
@@ -124,12 +131,15 @@ def execute_claude_detached(
 
     # Initialize structured logger for main process
     main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
-    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'}", {
-        "doc_id": doc_id,
-        "cli_tool": cli_tool,
-        "working_dir": working_dir,
-        "allowed_tools": allowed_tools
-    })
+    main_logger.info(
+        f"Preparing to execute document #{doc_id or 'unknown'}",
+        {
+            "doc_id": doc_id,
+            "cli_tool": cli_tool,
+            "working_dir": working_dir,
+            "allowed_tools": allowed_tools,
+        },
+    )
 
     # Start subprocess in detached mode using wrapper
     try:
@@ -143,6 +153,7 @@ def execute_claude_detached(
         if "pipx" in python_path and "venvs" in python_path:
             # We're running from pipx, use the venv's python directly
             import sysconfig
+
             venv_bin = Path(sysconfig.get_path("scripts"))
             python_path = str(venv_bin / "python")
 
@@ -150,7 +161,7 @@ def execute_claude_detached(
             python_path,
             str(wrapper_path),
             str(execution_id),  # Convert numeric ID to string for command line
-            str(log_file)
+            str(log_file),
         ] + cmd
 
         # Use nohup for true detachment
@@ -159,14 +170,15 @@ def execute_claude_detached(
         # Ensure PATH contains the claude binary location
         # Use get_subprocess_env() to strip CLAUDECODE (allows nested sessions)
         from ..utils.environment import get_subprocess_env
+
         env = get_subprocess_env()
-        env['PYTHONUNBUFFERED'] = '1'
+        env["PYTHONUNBUFFERED"] = "1"
         # Make sure PATH is preserved
-        if 'PATH' not in env:
-            env['PATH'] = '/usr/local/bin:/usr/bin:/bin'
+        if "PATH" not in env:
+            env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
 
         # Open log file for appending - use context manager to ensure cleanup on error
-        with open(log_file, 'a') as log_handle:
+        with open(log_file, "a") as log_handle:
             process = subprocess.Popen(
                 nohup_cmd,
                 stdin=subprocess.DEVNULL,  # Critical: no stdin blocking
@@ -175,14 +187,16 @@ def execute_claude_detached(
                 cwd=working_dir,
                 env=env,
                 start_new_session=True,  # Better than preexec_fn
-                close_fds=True  # Don't inherit file descriptors
+                close_fds=True,  # Don't inherit file descriptors
             )
         # File handle automatically closed when exiting context manager
 
         # Return immediately - don't wait or read from pipes
         # Note: Don't use console.print here as stdout might be redirected
         # Print to stderr instead to avoid log pollution
-        print(f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr)  # noqa: E501
+        print(
+            f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr
+        )  # noqa: E501
         print(f"Monitor with: emdx exec show {execution_id}", file=sys.stderr)
 
         return process.pid
@@ -191,7 +205,7 @@ def execute_claude_detached(
         # Handle missing nohup
         if "nohup" in str(e):
             # Fallback without nohup - use context manager for safe cleanup
-            with open(log_file, 'a') as log_handle:
+            with open(log_file, "a") as log_handle:
                 process = subprocess.Popen(
                     wrapper_cmd,  # Use wrapper even without nohup
                     stdin=subprocess.DEVNULL,
@@ -200,15 +214,19 @@ def execute_claude_detached(
                     cwd=working_dir,
                     env=env,  # Use same env as nohup version
                     start_new_session=True,
-                    close_fds=True
+                    close_fds=True,
                 )
             # File handle automatically closed when exiting context manager
 
             # Print to stderr to avoid log pollution
-            print(f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m", file=sys.stderr)  # noqa: E501
+            print(
+                f"\033[32m✅ Claude started in background (PID: {process.pid}) [no nohup]\033[0m",
+                file=sys.stderr,
+            )  # noqa: E501
             return process.pid
         else:
             raise
+
 
 def execute_cli_sync(
     task: str,
@@ -230,7 +248,7 @@ def execute_cli_sync(
         task: The task prompt to execute
         execution_id: Numeric database execution ID
         log_file: Path to the log file
-        cli_tool: Which CLI to use ("claude" or "cursor")
+        cli_tool: Which CLI to use ("claude")
         model: Model to use (None = default for the CLI)
         allowed_tools: List of allowed tools (defaults to DEFAULT_ALLOWED_TOOLS)
         working_dir: Working directory for execution
@@ -249,7 +267,7 @@ def execute_cli_sync(
     # Validate environment
     is_valid, env_info = executor.validate_environment()
     if not is_valid:
-        errors = env_info.get('errors', ['Unknown error'])
+        errors = env_info.get("errors", ["Unknown error"])
         return {"success": False, "error": f"Environment validation failed: {'; '.join(errors)}"}
 
     # Expand @filename references
@@ -269,13 +287,16 @@ def execute_cli_sync(
 
     # Initialize structured logger
     main_logger = StructuredLogger(log_file, ProcessType.MAIN, os.getpid())
-    main_logger.info(f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)", {
-        "doc_id": doc_id,
-        "cli_tool": cli_tool,
-        "working_dir": working_dir,
-        "allowed_tools": allowed_tools,
-        "mode": "synchronous"
-    })
+    main_logger.info(
+        f"Preparing to execute document #{doc_id or 'unknown'} (synchronous)",
+        {
+            "doc_id": doc_id,
+            "cli_tool": cli_tool,
+            "working_dir": working_dir,
+            "allowed_tools": allowed_tools,
+            "mode": "synchronous",
+        },
+    )
 
     try:
         import select
@@ -284,6 +305,7 @@ def execute_cli_sync(
         # Run with streaming output to log file for live viewing
         # Use Popen to stream stdout to file in real-time
         from ..utils.environment import get_subprocess_env
+
         process = subprocess.Popen(
             cmd.args,
             stdout=subprocess.PIPE,
@@ -295,12 +317,13 @@ def execute_cli_sync(
 
         # Track PID so we can detect zombies if parent dies
         from ..models.executions import update_execution_pid
+
         update_execution_pid(execution_id, process.pid)
 
         # Stream stdout to file and capture it with timeout protection
         stdout_lines = []
         start_time = time.time()
-        with open(log_file, 'a') as f:
+        with open(log_file, "a") as f:
             f.write("\n--- STDOUT ---\n")
             f.flush()
 
@@ -333,31 +356,31 @@ def execute_cli_sync(
 
         # Get any remaining stderr
         _, stderr = process.communicate(timeout=5)  # Short timeout since process should be done
-        stdout = ''.join(stdout_lines)
+        stdout = "".join(stdout_lines)
 
         # Log stderr if any
         if stderr:
-            with open(log_file, 'a') as f:
+            with open(log_file, "a") as f:
                 f.write(f"\n--- STDERR ---\n{stderr}\n")
 
         # Parse the result
         cli_result = executor.parse_output(stdout, stderr, process.returncode)
 
         if cli_result.success:
-            main_logger.info("Execution completed successfully", {
-                "returncode": process.returncode,
-                "output_length": len(cli_result.output)
-            })
+            main_logger.info(
+                "Execution completed successfully",
+                {"returncode": process.returncode, "output_length": len(cli_result.output)},
+            )
             return {
                 "success": True,
                 "output": cli_result.output,
                 "exit_code": cli_result.exit_code,
             }
         else:
-            main_logger.error(f"Execution failed with code {process.returncode}", {
-                "returncode": process.returncode,
-                "stderr": stderr[:500] if stderr else None
-            })
+            main_logger.error(
+                f"Execution failed with code {process.returncode}",
+                {"returncode": process.returncode, "stderr": stderr[:500] if stderr else None},
+            )
             return {
                 "success": False,
                 "error": cli_result.error or f"Exit code {process.returncode}",
