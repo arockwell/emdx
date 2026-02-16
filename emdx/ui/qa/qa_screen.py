@@ -225,8 +225,15 @@ class QAScreen(HelpMixin, Widget):
         if entry.error and not entry.answer:
             log.write(f"[bold red]Error:[/bold red] {entry.error}")
         else:
-            # Write the answer
-            log.write(f"[bold green]A:[/bold green] {entry.answer}")
+            # Write the answer as rendered markdown
+            log.write("[bold green]A:[/bold green]")
+            try:
+                from ..markdown_config import MarkdownConfig
+
+                md = MarkdownConfig.create_markdown(entry.answer)
+                log.write(md)
+            except Exception:
+                log.write(entry.answer)
 
         # Write sources
         if entry.sources:
