@@ -390,8 +390,15 @@ def compact(
             raise typer.Exit(0)
 
         # Synthesize
-        console.print("\n[bold]Synthesizing...[/bold]")
-        result = _synthesize_cluster(doc_ids, model=model)
+        total_chars = sum(
+            len(doc_map[did].get("content", "")) for did in doc_ids
+        )
+        status_msg = (
+            f"Synthesizing {len(doc_ids)} documents "
+            f"({total_chars:,} chars)"
+        )
+        with console.status(f"[bold]{status_msg}[/bold]"):
+            result = _synthesize_cluster(doc_ids, model=model)
 
         # Save
         original_docs = [doc_map[doc_id] for doc_id in doc_ids]
