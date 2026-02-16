@@ -1015,6 +1015,7 @@ class TestDelegateCommand:
     def test_pr_implies_worktree(self, mock_run_single, mock_create_wt, mock_cleanup_wt):
         """Test that --pr implicitly creates worktree."""
         mock_create_wt.return_value = ("/tmp/worktree", "branch")
+        # No pr_url means PR wasn't created successfully
         mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
         ctx = MagicMock()
         ctx.invoked_subcommand = None
@@ -1040,8 +1041,47 @@ class TestDelegateCommand:
 
         # Worktree should be created even though --worktree not set
         mock_create_wt.assert_called_once_with("develop")
-        # Worktree should NOT be cleaned up when --pr is set
+        # Worktree should NOT be cleaned up when --pr is set but no PR was created
         mock_cleanup_wt.assert_not_called()
+
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._run_single")
+    def test_pr_worktree_cleaned_up_when_pr_created(
+        self, mock_run_single, mock_create_wt, mock_cleanup_wt
+    ):
+        """Test that worktree IS cleaned up when --pr and PR was successfully created."""
+        mock_create_wt.return_value = ("/tmp/worktree", "branch")
+        # pr_url present means PR was created successfully - worktree should be cleaned up
+        mock_run_single.return_value = SingleResult(
+            doc_id=42, task_id=1, pr_url="https://github.com/user/repo/pull/123"
+        )
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["fix bug"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=True,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            chain=False,
+            each=None,
+            do=None,
+        )
+
+        # Worktree should be created
+        mock_create_wt.assert_called_once_with("main")
+        # Worktree SHOULD be cleaned up when PR was successfully created
+        mock_cleanup_wt.assert_called_once_with("/tmp/worktree")
 
     @patch("emdx.commands.delegate._run_parallel")
     def test_synthesize_flag_passed_to_parallel(self, mock_run_parallel):
@@ -1392,3 +1432,141 @@ class TestErrorHandling:
                 each=None,
                 do=None,
             )
+
+
+# =============================================================================
+# Tests for parallel PR worktree cleanup
+# =============================================================================
+
+
+class TestParallelPRWorktreeCleanup:
+    """Tests for worktree cleanup in parallel mode with --pr flag."""
+
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_parallel_pr_worktree_cleaned_when_pr_created(
+        self, mock_executor_cls, mock_create, mock_update, mock_print,
+        mock_create_worktree, mock_cleanup_worktree
+    ):
+        """Test that parallel worktrees are cleaned up when PRs are successfully created."""
+        mock_create.return_value = 1
+        mock_create_worktree.return_value = ("/tmp/wt", "branch")
+        mock_executor = MagicMock()
+        # Include PR URL in output_content to simulate successful PR creation
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10,
+            output_content="Created PR: https://github.com/user/repo/pull/123"
+        )
+        mock_executor_cls.return_value = mock_executor
+
+        _run_parallel(
+            tasks=["task1", "task2"],
+            tags=[],
+            title=None,
+            jobs=2,
+            synthesize=False,
+            model=None,
+            quiet=True,
+            pr=True,  # --pr flag
+            worktree=True,
+        )
+
+        # Worktrees should be created for each task
+        assert mock_create_worktree.call_count == 2
+        # Worktrees SHOULD be cleaned up because PRs were created
+        assert mock_cleanup_worktree.call_count == 2
+
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_parallel_pr_worktree_not_cleaned_when_no_pr(
+        self, mock_executor_cls, mock_create, mock_update, mock_print,
+        mock_create_worktree, mock_cleanup_worktree
+    ):
+        """Test that parallel worktrees are NOT cleaned up when PRs fail to be created."""
+        mock_create.return_value = 1
+        mock_create_worktree.return_value = ("/tmp/wt", "branch")
+        mock_executor = MagicMock()
+        # No PR URL in output - PR creation failed
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10,
+            output_content="Task completed but no PR created"
+        )
+        mock_executor_cls.return_value = mock_executor
+
+        _run_parallel(
+            tasks=["task1", "task2"],
+            tags=[],
+            title=None,
+            jobs=2,
+            synthesize=False,
+            model=None,
+            quiet=True,
+            pr=True,  # --pr flag
+            worktree=True,
+        )
+
+        # Worktrees should be created for each task
+        assert mock_create_worktree.call_count == 2
+        # Worktrees should NOT be cleaned up because no PRs were created
+        assert mock_cleanup_worktree.call_count == 0
+
+
+# =============================================================================
+# Tests for cleanup subcommand
+# =============================================================================
+
+
+class TestCleanupSubcommand:
+    """Tests for the cleanup subcommand."""
+
+    @patch("subprocess.run")
+    def test_cleanup_finds_stale_worktrees(self, mock_run, tmp_path):
+        """Test that cleanup identifies stale worktrees."""
+        import os
+        import time
+
+        from emdx.commands.delegate import cleanup_worktrees
+
+        # Mock git rev-parse to return tmp_path
+        mock_run.return_value = MagicMock(returncode=0, stdout=str(tmp_path) + "\n")
+
+        # Create a fake stale worktree directory
+        stale_wt = tmp_path.parent / "emdx-worktree-1234567890-12345-1234"
+        stale_wt.mkdir()
+        # Set mtime to 2 hours ago
+        old_time = time.time() - 7200
+        os.utime(stale_wt, (old_time, old_time))
+
+        # Run cleanup in dry-run mode - should not raise
+        cleanup_worktrees(dry_run=True, max_age_hours=1)
+
+        # Clean up test directory
+        stale_wt.rmdir()
+
+    @patch("subprocess.run")
+    def test_cleanup_respects_max_age(self, mock_run, tmp_path):
+        """Test that cleanup respects the max-age parameter."""
+        from emdx.commands.delegate import cleanup_worktrees
+
+        # Mock git rev-parse to return tmp_path
+        mock_run.return_value = MagicMock(returncode=0, stdout=str(tmp_path) + "\n")
+
+        # Create a worktree directory that's only 30 minutes old
+        recent_wt = tmp_path.parent / "emdx-worktree-recent-99999-9999"
+        recent_wt.mkdir()
+        # mtime is now (within max_age)
+
+        # Run cleanup - should find no stale worktrees
+        # The function will print "No stale worktrees found" and return normally
+        cleanup_worktrees(dry_run=True, max_age_hours=1)
+
+        # Clean up
+        recent_wt.rmdir()

@@ -513,8 +513,9 @@ def _run_parallel(
                 )
                 return idx, SingleResult()
 
+        single_result = None
         try:
-            return idx, _run_single(
+            idx, single_result = idx, _run_single(
                 prompt=task,
                 tags=tags,
                 title=task_title,
@@ -528,9 +529,14 @@ def _run_parallel(
                 seq=idx + 1,
                 epic_key=epic_key,
             )
+            return idx, single_result
         finally:
-            # Clean up worktree unless --pr (keep for the PR branch)
-            if task_worktree_path and not pr:
+            # Clean up worktree unless --pr without a successful PR
+            # If --pr and PR was created (pr_url exists), clean up since branch is pushed
+            should_cleanup = task_worktree_path and (
+                not pr or (single_result and single_result.pr_url)
+            )
+            if should_cleanup:
                 from ..utils.git import cleanup_worktree
                 cleanup_worktree(task_worktree_path)
 
@@ -930,10 +936,12 @@ def delegate(
             sys.stderr.write(f"delegate: failed to create worktree: {e}\n")
             raise typer.Exit(1) from None
 
+    # Track pr_url for cleanup decision
+    pr_url_found: str | None = None
     try:
         # 4. Route
         if chain and len(task_list) > 1:
-            _run_chain(
+            chain_result = _run_chain(
                 tasks=task_list,
                 tags=flat_tags,
                 title=title,
@@ -946,6 +954,11 @@ def delegate(
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
             )
+            # Check last step's document for PR URL (chain returns doc_ids)
+            if pr and chain_result:
+                last_doc = get_document(chain_result[-1])
+                if last_doc:
+                    pr_url_found = _extract_pr_url(last_doc.get("content", ""))
         elif len(task_list) == 1:
             single_result = _run_single(
                 prompt=task_list[0],
@@ -960,6 +973,7 @@ def delegate(
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
             )
+            pr_url_found = single_result.pr_url
             if single_result.pr_url and not quiet:
                 sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
             if single_result.doc_id is None:
@@ -982,8 +996,99 @@ def delegate(
                 epic_parent_id=epic_parent_id,
             )
     finally:
-        if worktree_path and not pr:
+        # Clean up worktree unless --pr without a successful PR
+        # If --pr and PR was created (pr_url exists), clean up since branch is pushed
+        should_cleanup = worktree_path and (not pr or pr_url_found)
+        if should_cleanup:
             from ..utils.git import cleanup_worktree
             if not quiet:
                 sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
             cleanup_worktree(worktree_path)
+
+
+@app.command("cleanup")
+def cleanup_worktrees(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-n",
+        help="Show what would be removed without actually removing",
+    ),
+    max_age_hours: int = typer.Option(
+        1, "--max-age", "-a",
+        help="Maximum age in hours before a worktree is considered stale",
+    ),
+) -> None:
+    """Remove stale emdx-worktree-* directories older than max-age hours.
+
+    Use this to clean up orphaned worktrees that weren't removed after delegate --pr
+    tasks failed or were interrupted.
+
+    Examples:
+        emdx delegate cleanup              # Remove worktrees older than 1 hour
+        emdx delegate cleanup --dry-run    # Show what would be removed
+        emdx delegate cleanup --max-age 2  # Remove worktrees older than 2 hours
+    """
+    import time
+
+    # Get the repo root to find worktrees directory
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True
+        )
+        repo_root = Path(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        sys.stderr.write("delegate cleanup: not in a git repository\n")
+        raise typer.Exit(1) from None
+
+    # Worktrees are created in the parent directory of the repo
+    worktree_parent = repo_root.parent
+    pattern = "emdx-worktree-*"
+
+    # Find matching worktree directories
+    stale_worktrees: list[tuple[Path, float]] = []
+    current_time = time.time()
+    max_age_seconds = max_age_hours * 3600
+
+    for wt_path in worktree_parent.glob(pattern):
+        if not wt_path.is_dir():
+            continue
+
+        # Get modification time (use the directory's mtime)
+        try:
+            mtime = wt_path.stat().st_mtime
+            age_seconds = current_time - mtime
+            if age_seconds > max_age_seconds:
+                stale_worktrees.append((wt_path, age_seconds))
+        except OSError:
+            continue
+
+    if not stale_worktrees:
+        sys.stdout.write(f"No stale worktrees found (older than {max_age_hours} hour(s))\n")
+        return
+
+    # Sort by age (oldest first)
+    stale_worktrees.sort(key=lambda x: x[1], reverse=True)
+
+    sys.stdout.write(f"Found {len(stale_worktrees)} stale worktree(s):\n")
+    for wt_path, age_seconds in stale_worktrees:
+        age_hours = age_seconds / 3600
+        sys.stdout.write(f"  {wt_path.name} ({age_hours:.1f}h old)\n")
+
+    if dry_run:
+        sys.stdout.write("\nDry run - no changes made. Remove --dry-run to delete.\n")
+        return
+
+    # Remove stale worktrees
+    removed = 0
+    for wt_path, _ in stale_worktrees:
+        try:
+            # Use git worktree remove for proper cleanup
+            subprocess.run(
+                ["git", "worktree", "remove", str(wt_path), "--force"],
+                capture_output=True, text=True
+            )
+            removed += 1
+        except Exception as e:
+            sys.stderr.write(f"  Failed to remove {wt_path.name}: {e}\n")
+
+    sys.stdout.write(f"\nRemoved {removed}/{len(stale_worktrees)} worktree(s)\n")
