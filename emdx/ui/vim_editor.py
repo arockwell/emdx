@@ -11,6 +11,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.document._document import Selection
 
+from .protocols import VimEditorHost
 from .text_areas import VimEditTextArea
 from .vim_line_numbers import SimpleVimLineNumbers
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 class VimEditor(Vertical):
     """Unified vim editor with line numbers and proper layout."""
 
-    def __init__(self, app_instance: Any, content: str = "", **kwargs: Any) -> None:
+    def __init__(self, app_instance: VimEditorHost, content: str = "", **kwargs: Any) -> None:
         """Initialize vim editor.
 
         Args:
@@ -41,7 +42,7 @@ class VimEditor(Vertical):
             app_instance,
             content,  # First positional arg after app_instance
             read_only=False,
-            id="vim-text-area"
+            id="vim-text-area",
         )
 
         # Apply styling
@@ -63,7 +64,7 @@ class VimEditor(Vertical):
 
     def on_mount(self) -> None:
         """Set up the vim editor after mounting."""
-        total_lines = len(self.text_area.text.split('\n'))
+        total_lines = len(self.text_area.text.split("\n"))
 
         line_number_width = self._calculate_line_number_width(total_lines)
 
@@ -114,7 +115,7 @@ class VimEditor(Vertical):
 
     def _update_line_number_width(self) -> None:
         """Update line number widget width based on current content."""
-        total_lines = len(self.text_area.text.split('\n'))
+        total_lines = len(self.text_area.text.split("\n"))
         line_number_width = self._calculate_line_number_width(total_lines)
 
         # Update width if it changed
@@ -132,7 +133,7 @@ class VimEditor(Vertical):
             self.text_area.cursor_location = (0, 0)
 
             # Method 2: Clear any existing selection that might affect positioning
-            if hasattr(self.text_area, 'selection'):
+            if hasattr(self.text_area, "selection"):
                 try:
                     self.text_area.selection = Selection((0, 0), (0, 0))
                 except Exception as e:
@@ -143,15 +144,15 @@ class VimEditor(Vertical):
 
             # Method 3: For markdown files, be extra aggressive
             is_markdown = False
-            if hasattr(self.text_area, 'file_path') and self.text_area.file_path:
+            if hasattr(self.text_area, "file_path") and self.text_area.file_path:
                 file_path_str = str(self.text_area.file_path).lower()
-                is_markdown = file_path_str.endswith(('.md', '.markdown'))
+                is_markdown = file_path_str.endswith((".md", ".markdown"))
                 if is_markdown:
                     # Force cursor to top for markdown files
                     self.text_area.cursor_location = (0, 0)
 
             # Method 6: Force cursor position using TextArea internal methods if available
-            if hasattr(self.text_area, 'move_cursor'):
+            if hasattr(self.text_area, "move_cursor"):
                 try:
                     self.text_area.move_cursor((0, 0))
                 except Exception as e:
@@ -161,17 +162,17 @@ class VimEditor(Vertical):
             self.text_area.focus()
 
             # Use cursor position for line numbers
-            if hasattr(self.text_area, 'selection') and self.text_area.selection:
+            if hasattr(self.text_area, "selection") and self.text_area.selection:
                 current_line = self.text_area.selection.end[0]
-            elif hasattr(self.text_area, 'cursor_location'):
+            elif hasattr(self.text_area, "cursor_location"):
                 current_line = self.text_area.cursor_location[0]
             else:
                 current_line = 0
 
-            total_lines = len(self.text_area.text.split('\n'))
+            total_lines = len(self.text_area.text.split("\n"))
             self.line_numbers.set_line_numbers(current_line, total_lines, self.text_area)
             self._update_line_number_width()
-            if hasattr(self.text_area, '_update_line_numbers'):
+            if hasattr(self.text_area, "_update_line_numbers"):
                 self.text_area._update_line_numbers()
 
         except Exception as e:
@@ -180,21 +181,18 @@ class VimEditor(Vertical):
     def _delayed_positioning_check(self) -> None:
         """Delayed check to ensure positioning worked correctly."""
         try:
-
             # Check if we're still at the top
-            current_cursor = getattr(self.text_area, 'cursor_location', (0, 0))
-            current_selection = getattr(self.text_area, 'selection', None)
-
+            current_cursor = getattr(self.text_area, "cursor_location", (0, 0))
+            current_selection = getattr(self.text_area, "selection", None)
 
             # If we're not at the top, force it again
             cursor_row = current_cursor[0] if current_cursor else 0
             selection_row = current_selection.end[0] if current_selection else 0
 
             if cursor_row != 0 or selection_row != 0:
-
                 # Force positioning again
                 self.text_area.cursor_location = (0, 0)
-                if hasattr(self.text_area, 'selection'):
+                if hasattr(self.text_area, "selection"):
                     self.text_area.selection = Selection((0, 0), (0, 0))
                 # Note: scroll_to and line numbers disabled due to layout issues
         except Exception as e:
