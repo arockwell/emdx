@@ -17,6 +17,7 @@ EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+
 
 **Key Components:**
 - `commands/` - CLI command implementations
+- `config/` - Configuration management (settings, constants, tagging rules)
 - `database/` - SQLite operations and migrations
 - `ui/` - TUI components (Textual widgets)
 - `services/` - Business logic (log streaming, file watching, etc.)
@@ -162,7 +163,7 @@ echo "text" | emdx save --title "Title" --tags "notes"
 
 # Search — FTS5 keyword search (default). OR/AND/NOT do NOT work (terms are quoted).
 # To search for multiple concepts, run separate find commands or use --tags.
-emdx find "query"                      # Full-text search (default)
+emdx find "query"                      # Hybrid search (default when index exists)
 emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
 emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-tags for OR)
@@ -174,7 +175,7 @@ emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
 
 # Tags
-emdx tag 42 gameplan active
+emdx tag add 42 gameplan active
 emdx tag list
 
 # AI search (requires emdx[ai] extra)
