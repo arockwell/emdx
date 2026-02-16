@@ -28,6 +28,7 @@ LAZY_SUBCOMMANDS = {
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
+    "distill": "emdx.commands.distill:app",
     "compact": "emdx.commands.compact:app",
 }
 
@@ -37,6 +38,7 @@ LAZY_HELP = {
     "cascade": "Cascade ideas through stages to working code",
     "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
+    "distill": "Distill KB content into audience-aware summaries",
     "compact": "Compact related documents through AI-powered synthesis",
 }
 
