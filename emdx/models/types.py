@@ -92,3 +92,11 @@ class TagSearchResultDict(TypedDict):
     created_at: str | None
     access_count: int
     tags: str
+
+
+class ExecutionStatsDict(TypedDict):
+    total: int
+    recent_24h: int
+    running: int
+    completed: int
+    failed: int

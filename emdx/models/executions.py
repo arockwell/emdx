@@ -8,6 +8,7 @@ from typing import Any
 
 from ..database.connection import db_connection
 from ..utils.datetime_utils import parse_timestamp
+from .types import ExecutionStatsDict
 
 
 @dataclass
@@ -342,7 +343,7 @@ def cleanup_old_executions(days: int = 7) -> int:
         conn.commit()
         return int(cursor.rowcount)
 
-def get_execution_stats() -> dict[str, Any]:
+def get_execution_stats() -> ExecutionStatsDict:
     """Get execution statistics."""
     with db_connection.get_connection() as conn:
         cursor = conn.cursor()
