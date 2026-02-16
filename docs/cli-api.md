@@ -47,10 +47,10 @@ emdx save notes.md --public --copy
 - `--open, -o` - Open gist in browser
 
 ### **emdx find**
-Search documents with full-text and tag-based search.
+Search documents with full-text, semantic, or hybrid search.
 
 ```bash
-# Full-text search
+# Full-text search (keyword mode)
 emdx find "docker compose"
 emdx find "kubernetes deployment"
 
@@ -64,12 +64,38 @@ emdx find "authentication" --tags "gameplan"
 
 # Project-scoped search
 emdx find "config" --project "emdx"
+
+# Hybrid search (combines keyword + semantic)
+emdx find "how to handle errors" --mode hybrid
+
+# Semantic search (meaning-based, requires embeddings)
+emdx find "authentication patterns" --mode semantic
+
+# Force keyword-only search
+emdx find "docker" --mode keyword
+
+# Show matching chunk text instead of document snippets
+emdx find "error handling" --mode hybrid --extract
+
+# Exclude documents with specific tags
+emdx find "api" --no-tags "archived,draft"
+
+# Output as JSON
+emdx find "config" --json
+
+# Show snippet previews (default behavior, explicit)
+emdx find "database" --snippets
 ```
 
 **Options:**
 - `--tags TEXT` - Search by tags (using text aliases)
 - `--project TEXT` - Limit search to specific project
 - `--limit INTEGER` - Maximum results to return (default: 10)
+- `--mode [keyword|semantic|hybrid]` - Search mode (auto-detects based on embeddings)
+- `--extract` - Show matching chunk text instead of document snippets
+- `--no-tags TEXT` - Exclude documents with specified tags (comma-separated)
+- `--snippets` - Show snippet previews in results
+- `--json` - Output results as JSON
 
 ### **emdx view**
 View document content.
