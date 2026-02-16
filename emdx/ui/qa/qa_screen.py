@@ -45,10 +45,6 @@ class QAScreen(HelpMixin, Widget):
         Binding("s", "save_exchange", "Save"),
         Binding("c", "clear_history", "Clear"),
         Binding("question_mark", "show_help", "Help"),
-        Binding("1", "switch_activity", "Activity"),
-        Binding("2", "switch_tasks", "Tasks"),
-        Binding("3", "switch_search", "Search"),
-        Binding("4", "switch_cascade", "Cascade"),
     ]
 
     DEFAULT_CSS = """
@@ -125,7 +121,6 @@ class QAScreen(HelpMixin, Widget):
         yield Static("Ready | Type a question and press Enter", id="qa-status")
         yield Static(
             "[dim]1[/dim] Activity | [dim]2[/dim] Tasks | "
-            "[bold]3[/bold] Search/QA | [dim]4[/dim] Cascade | "
             "[dim]/[/dim] input | [dim]s[/dim] save | [dim]c[/dim] clear",
             id="qa-nav",
         )
@@ -316,30 +311,12 @@ class QAScreen(HelpMixin, Widget):
                     "c",
                     "1",
                     "2",
-                    "3",
-                    "4",
                     "slash",
                 }
                 if event.key in pass_through_keys:
                     return
         except Exception:
             pass
-
-    async def action_switch_activity(self) -> None:
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("activity")
-
-    async def action_switch_cascade(self) -> None:
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
-
-    async def action_switch_tasks(self) -> None:
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("task")
-
-    async def action_switch_search(self) -> None:
-        """Already on search/QA, do nothing."""
-        pass
 
     def set_query(self, query: str) -> None:
         """Set the input query programmatically (compatibility with command palette)."""

@@ -23,6 +23,7 @@ from ..services.document_merger import DocumentMerger
 from ..services.duplicate_detector import DuplicateDetector
 from ..services.health_monitor import HealthMonitor
 from ..services.similarity import SimilarityService
+from ..services.types import OverallHealthResult
 
 logger = logging.getLogger(__name__)
 
@@ -174,9 +175,7 @@ class MaintenanceApplication:
         """
         # Find duplicates
         duplicates = self.duplicate_detector.find_duplicates()
-        duplicate_count = (
-            sum(len(group) - 1 for group in duplicates) if duplicates else 0
-        )
+        duplicate_count = sum(len(group) - 1 for group in duplicates) if duplicates else 0
 
         # Find empty documents
         with self._db.get_connection() as conn:
@@ -292,15 +291,9 @@ class MaintenanceApplication:
             # Preview suggestions
             preview = []
             for doc in untagged[:3]:
-                suggestions = self.auto_tagger.analyze_document(
-                    doc["title"], doc["content"]
-                )
+                suggestions = self.auto_tagger.analyze_document(doc["title"], doc["content"])
                 if suggestions:
-                    tags = [
-                        tag
-                        for tag, conf in suggestions[:3]
-                        if conf > confidence_threshold
-                    ]
+                    tags = [tag for tag, conf in suggestions[:3] if conf > confidence_threshold]
                     if tags:
                         preview.append(f"#{doc['id']}: {', '.join(tags)}")
 
@@ -316,15 +309,9 @@ class MaintenanceApplication:
         # Actually tag documents
         tagged_count = 0
         for doc in untagged:
-            suggestions = self.auto_tagger.analyze_document(
-                doc["title"], doc["content"]
-            )
+            suggestions = self.auto_tagger.analyze_document(doc["title"], doc["content"])
             if suggestions:
-                tags = [
-                    tag
-                    for tag, conf in suggestions
-                    if conf > confidence_threshold
-                ][:3]
+                tags = [tag for tag, conf in suggestions if conf > confidence_threshold][:3]
                 if tags:
                     add_tags_to_document(doc["id"], tags)
                     tagged_count += 1
@@ -338,7 +325,9 @@ class MaintenanceApplication:
         )
 
     def merge_similar(
-        self, dry_run: bool = True, threshold: float = 0.7,
+        self,
+        dry_run: bool = True,
+        threshold: float = 0.7,
         progress_callback: Callable | None = None,
         use_tfidf: bool = True,
     ) -> MaintenanceResult:
@@ -381,19 +370,19 @@ class MaintenanceApplication:
                         # Get access counts to determine which would be kept
                         cursor.execute(
                             "SELECT id, access_count, LENGTH(content) as len FROM documents WHERE id IN (?, ?)",  # noqa: E501
-                            (doc1_id, doc2_id)
+                            (doc1_id, doc2_id),
                         )
-                        docs = {row['id']: row for row in cursor.fetchall()}
+                        docs = {row["id"]: row for row in cursor.fetchall()}
 
                         # Determine which would be kept (higher access count, then longer content)
-                        doc1 = docs.get(doc1_id, {'access_count': 0, 'len': 0})
-                        doc2 = docs.get(doc2_id, {'access_count': 0, 'len': 0})
+                        doc1 = docs.get(doc1_id, {"access_count": 0, "len": 0})
+                        doc2 = docs.get(doc2_id, {"access_count": 0, "len": 0})
 
-                        if doc1['access_count'] > doc2['access_count']:
+                        if doc1["access_count"] > doc2["access_count"]:
                             keep_title, merge_title = title1, title2
-                        elif doc2['access_count'] > doc1['access_count']:
+                        elif doc2["access_count"] > doc1["access_count"]:
                             keep_title, merge_title = title2, title1
-                        elif (doc1['len'] or 0) >= (doc2['len'] or 0):
+                        elif (doc1["len"] or 0) >= (doc2["len"] or 0):
                             keep_title, merge_title = title1, title2
                         else:
                             keep_title, merge_title = title2, title1
@@ -418,9 +407,9 @@ class MaintenanceApplication:
                         cursor.execute(
                             """SELECT id, title, content, access_count
                                FROM documents WHERE id IN (?, ?) AND is_deleted = 0""",
-                            (doc1_id, doc2_id)
+                            (doc1_id, doc2_id),
                         )
-                        docs = {row['id']: dict(row) for row in cursor.fetchall()}
+                        docs = {row["id"]: dict(row) for row in cursor.fetchall()}
 
                     if len(docs) != 2:
                         continue
@@ -428,11 +417,11 @@ class MaintenanceApplication:
                     doc1, doc2 = docs.get(doc1_id, {}), docs.get(doc2_id, {})
 
                     # Keep doc with more views, else longer content
-                    if doc1.get('access_count', 0) > doc2.get('access_count', 0):
+                    if doc1.get("access_count", 0) > doc2.get("access_count", 0):
                         keep, remove = doc1, doc2
-                    elif doc2.get('access_count', 0) > doc1.get('access_count', 0):
+                    elif doc2.get("access_count", 0) > doc1.get("access_count", 0):
                         keep, remove = doc2, doc1
-                    elif len(doc1.get('content', '') or '') >= len(doc2.get('content', '') or ''):
+                    elif len(doc1.get("content", "") or "") >= len(doc2.get("content", "") or ""):
                         keep, remove = doc1, doc2
                     else:
                         keep, remove = doc2, doc1
@@ -441,7 +430,7 @@ class MaintenanceApplication:
                         keep.get("content", "") or "",
                         remove.get("content", "") or "",
                         keep.get("title", ""),
-                        remove.get("title", "")
+                        remove.get("title", ""),
                     )
 
                     with self._db.get_connection() as conn:
@@ -470,8 +459,7 @@ class MaintenanceApplication:
 
         # Fall back to old slow method (only when use_tfidf=False)
         candidates = self.document_merger.find_merge_candidates(
-            similarity_threshold=threshold,
-            progress_callback=progress_callback
+            similarity_threshold=threshold, progress_callback=progress_callback
         )
 
         if not candidates:
@@ -534,8 +522,10 @@ class MaintenanceApplication:
 
                     # Merge content
                     merged_content = self.document_merger._merge_content(
-                        keep["content"], remove["content"],
-                        keep["title"], remove["title"],
+                        keep["content"],
+                        remove["content"],
+                        keep["title"],
+                        remove["title"],
                     )
 
                     # Update the kept document
@@ -563,7 +553,9 @@ class MaintenanceApplication:
             except Exception as e:
                 logger.warning(
                     "Failed to merge documents %s and %s: %s",
-                    candidate.doc1_id, candidate.doc2_id, e
+                    candidate.doc1_id,
+                    candidate.doc2_id,
+                    e,
                 )
                 continue
 
@@ -638,7 +630,7 @@ class MaintenanceApplication:
             details=details,
         )
 
-    def get_health_metrics(self) -> dict:
+    def get_health_metrics(self) -> OverallHealthResult:
         """
         Get current health metrics for the knowledge base.
 

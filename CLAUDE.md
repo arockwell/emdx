@@ -63,6 +63,29 @@ poetry run ruff check .         # Verify zero errors remain
 - When writing SQL strings that exceed 100 chars, break across lines or use implicit string concatenation
 - All `--flags` must come BEFORE positional arguments in `emdx delegate` calls
 
+## Type Safety — MANDATORY
+
+The codebase uses mypy strict checking. Pre-commit hooks run mypy on staged files.
+
+**Patterns:**
+- Use `TypedDict` for dict return types with known shapes — never `dict[str, Any]` when the keys are known
+- Existing TypedDicts live in `database/types.py`, `models/types.py`, and `services/types.py`
+- Use `TYPE_CHECKING` guards for optional/heavy imports (e.g., `EmbeddingService`, `SentenceTransformer`, `Observer`)
+- Use `from __future__ import annotations` in files with forward references or TYPE_CHECKING guards
+- Use `SqlParam = str | int` (or `Union[str, int, float, None]`) for dynamic SQL parameter lists — never `list[Any]`
+- Use `cast()` when converting sqlite `Row` objects to TypedDicts
+- Use `total=False` on TypedDicts where some fields are only present in certain code paths
+
+**Avoid:**
+- `dict[str, Any]` when the dict shape is known — define a TypedDict instead
+- Bare `Any` for optional dependency types — use `TYPE_CHECKING` + `SomeType | None`
+- `list[Any]` for SQL params — use a concrete union type alias
+
+**Exceptions (intentionally `Any`):**
+- `cli_executor/` — genuinely polymorphic JSON from Claude CLI streaming
+- `unified_executor.py` `ExecutionResult.to_dict()` — serialization method
+- Textual widget `*args: Any, **kwargs: Any` — framework convention
+
 ## CLI Output Mode Convention
 
 - Default CLI output should be plain text (no Rich markup) for machine/pipe friendliness
@@ -200,7 +223,24 @@ These commands work but are not yet stable:
 - **`emdx save "text"`** looks for a FILE named "text" — use `echo "text" | emdx save --title "Title"` for stdin.
 - **`select.select()` on macOS**: Python's `select.select()` does not work reliably on `subprocess.Popen` stdout/stderr pipes on macOS. Use background threads with `queue.Queue` instead (see `_reader_thread()` in `unified_executor.py`).
 - **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
+- **FTS5 virtual table queries**: `documents_fts` is a separate FTS5 virtual table, NOT a column on `documents`. You must JOIN it: `SELECT d.id FROM documents d JOIN documents_fts fts ON d.id = fts.rowid WHERE fts.documents_fts MATCH ?`. Never use `WHERE documents_fts MATCH ?` directly on the documents table — it silently fails with "no such column". See `emdx/database/search.py` for the canonical pattern.
 - **Mocked internal functions in tests**: When refactoring a function's signature (parameters, return type), grep for tests that mock it — they break silently. Use: `rg "mock.*<func_name>\|patch.*<func_name>" tests/`
+
+## Delegate Debugging
+
+### Stuck Delegate Diagnostics
+If a delegate appears stuck (no output beyond worktree creation):
+
+1. Check process: `ps -o etime=,%cpu= -p <PID>`
+2. Check TCP connections: `lsof -p <PID> 2>/dev/null | grep TCP | wc -l`
+   - **2+ connections** = healthy, waiting on API response
+   - **0 connections** = stuck, kill and re-dispatch
+3. Check worktree: `cd <worktree> && git status` — see if files were created
+4. Kill: `kill <PID>` then clean up worktree: `git worktree remove <path> --force`
+
+### Common Causes of Hanging
+- Very large `--doc` content embedded in CLI arguments
+- Shared virtualenv editable install pointing to deleted worktree (fix: `poetry lock && poetry install`)
 
 ## Release Process
 
