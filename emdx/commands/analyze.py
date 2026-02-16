@@ -25,7 +25,9 @@ from ..utils.output import console
 def analyze(
     health: bool = typer.Option(False, "--health", "-h", help="Show detailed health metrics"),
     duplicates: bool = typer.Option(False, "--duplicates", "-d", help="Find duplicate documents"),
-    similar: bool = typer.Option(False, "--similar", "-s", help="Find similar documents for merging"),  # noqa: E501
+    similar: bool = typer.Option(
+        False, "--similar", "-s", help="Find similar documents for merging"
+    ),  # noqa: E501
     empty: bool = typer.Option(False, "--empty", "-e", help="Find empty documents"),
     tags: bool = typer.Option(False, "--tags", "-t", help="Analyze tag coverage and patterns"),
     projects: bool = typer.Option(False, "--projects", "-p", help="Show project-level analysis"),
@@ -82,10 +84,7 @@ def analyze(
         return
 
     # Header for human-readable output
-    console.print(Panel(
-        "[bold cyan]📊 Knowledge Base Analysis[/bold cyan]",
-        box=box.DOUBLE
-    ))
+    console.print(Panel("[bold cyan]📊 Knowledge Base Analysis[/bold cyan]", box=box.DOUBLE))
 
     # Health Analysis
     if health:
@@ -121,6 +120,7 @@ def analyze(
     if projects:
         _analyze_projects()
 
+
 def _analyze_health() -> None:
     """Show detailed health metrics."""
     monitor = HealthMonitor()
@@ -134,13 +134,12 @@ def _analyze_health() -> None:
 
     # Overall health score
     overall_score = metrics["overall_score"] * 100  # Convert to percentage
-    health_color = (
-        "green" if overall_score >= 80 else
-        "yellow" if overall_score >= 60 else
-        "red"
-    )
+    health_color = "green" if overall_score >= 80 else "yellow" if overall_score >= 60 else "red"
 
-    console.print(f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]")  # noqa: E501
+    console.print(
+        f"\n[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%"
+        f"[/{health_color}][/bold]"
+    )
 
     # Detailed metrics
     console.print("\n[bold]Health Metrics:[/bold]")
@@ -159,7 +158,7 @@ def _analyze_health() -> None:
         "Tag Coverage",
         f"[{tag_color}]{tag_score:.0f}%[/{tag_color}]",
         _get_status_emoji(tag_score),
-        tag_metric.details
+        tag_metric.details,
     )
 
     # Duplicate Ratio
@@ -170,7 +169,7 @@ def _analyze_health() -> None:
         "Duplicate Ratio",
         f"[{dup_color}]{dup_score:.0f}%[/{dup_color}]",
         _get_status_emoji(dup_score),
-        dup_metric.details
+        dup_metric.details,
     )
 
     # Organization
@@ -181,7 +180,7 @@ def _analyze_health() -> None:
         "Organization",
         f"[{org_color}]{org_score:.0f}%[/{org_color}]",
         _get_status_emoji(org_score),
-        org_metric.details
+        org_metric.details,
     )
 
     # Activity
@@ -192,7 +191,7 @@ def _analyze_health() -> None:
         "Activity",
         f"[{act_color}]{act_score:.0f}%[/{act_color}]",
         _get_status_emoji(act_score),
-        act_metric.details
+        act_metric.details,
     )
 
     console.print(metrics_table)
@@ -207,6 +206,7 @@ def _analyze_health() -> None:
         for rec in all_recommendations:
             console.print(f"  • {rec}")
         console.print("\n[dim]Run 'emdx maintain' to fix these issues[/dim]")
+
 
 def _analyze_duplicates() -> None:
     """Find duplicate documents."""
@@ -229,7 +229,10 @@ def _analyze_duplicates() -> None:
     # Exact duplicates
     if exact_dupes:
         total_exact = sum(len(group) - 1 for group in exact_dupes)
-        console.print(f"\n  [yellow]Exact Duplicates:[/yellow] {len(exact_dupes)} groups ({total_exact} documents)")  # noqa: E501
+        console.print(
+            f"\n  [yellow]Exact Duplicates:[/yellow]"
+            f" {len(exact_dupes)} groups ({total_exact} documents)"
+        )
 
         # Show a few examples
         for i, group in enumerate(exact_dupes[:3], 1):
@@ -237,13 +240,16 @@ def _analyze_duplicates() -> None:
 
     # Near duplicates
     if near_dupes:
-        console.print(f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)")  # noqa: E501
+        console.print(
+            f"\n  [yellow]Near Duplicates:[/yellow] {len(near_dupes)} pairs (85%+ similar)"
+        )  # noqa: E501
 
         # Show a few examples
         for _i, (doc1, doc2, similarity) in enumerate(near_dupes[:3], 1):
             console.print(f"    • '{doc1['title']}' ↔ '{doc2['title']}' ({similarity:.0%} similar)")
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove duplicates[/dim]")
+
 
 def _analyze_similar() -> None:
     """Find similar documents for merging."""
@@ -275,6 +281,7 @@ def _analyze_similar() -> None:
 
     console.print("\n[dim]Run 'emdx maintain --merge' to merge similar documents[/dim]")
 
+
 def _analyze_empty() -> None:
     """Find empty documents."""
     with db_connection.get_connection() as conn:
@@ -301,12 +308,16 @@ def _analyze_empty() -> None:
     # Show examples
     console.print("\n  Examples:")
     for doc in empty_docs[:5]:
-        console.print(f"    • #{doc['id']}: '{doc['title']}' ({doc['length']} chars, {doc['access_count']} views)")  # noqa: E501
+        console.print(
+            f"    • #{doc['id']}: '{doc['title']}'"
+            f" ({doc['length']} chars, {doc['access_count']} views)"
+        )
 
     if len(empty_docs) > 5:
         console.print(f"    [dim]... and {len(empty_docs) - 5} more[/dim]")
 
     console.print("\n[dim]Run 'emdx maintain --clean' to remove empty documents[/dim]")
+
 
 def _analyze_tags(project: str | None = None) -> None:
     """Analyze tag coverage and patterns."""
@@ -315,7 +326,8 @@ def _analyze_tags(project: str | None = None) -> None:
 
         # Overall tag statistics
         if project:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
                     COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
@@ -332,7 +344,9 @@ def _analyze_tags(project: str | None = None) -> None:
                 LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
                 LEFT JOIN tags t ON dt2.tag_id = t.id
                 WHERE d.is_deleted = 0 AND d.project = ?
-            """, (project,))
+            """,
+                (project,),
+            )
         else:
             cursor.execute("""
                 SELECT
@@ -359,9 +373,12 @@ def _analyze_tags(project: str | None = None) -> None:
         if project:
             console.print(f"  [dim]Project: {project}[/dim]")
 
-        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
+        coverage = (
+            (stats["tagged_docs"] / stats["total_docs"] * 100) if stats["total_docs"] > 0 else 0
+        )  # noqa: E501
 
-        console.print(f"\n  Tag Coverage: [{_get_coverage_color(coverage)}]{coverage:.1f}%[/{_get_coverage_color(coverage)}]")  # noqa: E501
+        color = _get_coverage_color(coverage)
+        console.print(f"\n  Tag Coverage: [{color}]{coverage:.1f}%[/{color}]")
         console.print(f"  Total Documents: {stats['total_docs']:,}")
         console.print(f"  Tagged Documents: {stats['tagged_docs']:,}")
         console.print(f"  Unique Tags: {stats['unique_tags']}")
@@ -386,20 +403,24 @@ def _analyze_tags(project: str | None = None) -> None:
                 console.print(f"    • {tag['name']} ({tag['usage_count']} docs)")
 
         # Untagged documents
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) as untagged
             FROM documents d
             WHERE d.is_deleted = 0
             AND NOT EXISTS (
                 SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
             )
-        """ + (" AND d.project = ?" if project else ""),
-        (project,) if project else ())
+        """
+            + (" AND d.project = ?" if project else ""),
+            (project,) if project else (),
+        )
 
-        untagged = cursor.fetchone()['untagged']
+        untagged = cursor.fetchone()["untagged"]
         if untagged > 0:
             console.print(f"\n  [yellow]⚠️  {untagged} documents have no tags[/yellow]")
             console.print("  [dim]Run 'emdx maintain --tags' to auto-tag documents[/dim]")
+
 
 def _analyze_projects() -> None:
     """Show project-level analysis."""
@@ -434,19 +455,20 @@ def _analyze_projects() -> None:
     table.add_column("Last Updated")
 
     for proj in projects:
-        last_updated = parse_datetime(proj['last_updated'])
+        last_updated = parse_datetime(proj["last_updated"])
         days_ago = (datetime.now() - last_updated).days if last_updated else 0
 
         table.add_row(
-            proj['project'] or "[No Project]",
-            str(proj['doc_count']),
+            proj["project"] or "[No Project]",
+            str(proj["doc_count"]),
             f"{proj['avg_length']:.0f}",
             f"{proj['total_views']:,}",
-            str(proj['unique_tags']),
-            f"{days_ago}d ago"
+            str(proj["unique_tags"]),
+            f"{days_ago}d ago",
         )
 
     console.print(table)
+
 
 def _get_status_emoji(score: float) -> str:
     """Get status emoji based on score."""
@@ -457,6 +479,7 @@ def _get_status_emoji(score: float) -> str:
     else:
         return "❌"
 
+
 def _get_coverage_color(coverage: float) -> str:
     """Get color based on coverage percentage."""
     if coverage >= 80:
@@ -465,6 +488,7 @@ def _get_coverage_color(coverage: float) -> str:
         return "yellow"
     else:
         return "red"
+
 
 # JSON collection functions
 def _collect_health_data() -> dict[str, Any]:
@@ -476,27 +500,26 @@ def _collect_health_data() -> dict[str, Any]:
         return {"error": str(e)}
 
     # Convert HealthMetric objects to dictionaries
-    result = {
-        "overall_score": metrics["overall_score"],
-        "overall_status": metrics["overall_status"],
-        "metrics": {},
-        "statistics": metrics.get("statistics", {}),
-        "timestamp": metrics.get("timestamp", datetime.now().isoformat())
-    }
-
-    # Convert each metric
+    metrics_dict: dict[str, Any] = {}
     for key, metric in metrics["metrics"].items():
-        result["metrics"][key] = {
+        metrics_dict[key] = {
             "name": metric.name,
             "value": metric.value,
             "score": metric.value * 100,  # Convert to percentage
             "weight": metric.weight,
             "status": metric.status,
             "details": metric.details,
-            "recommendations": metric.recommendations
+            "recommendations": metric.recommendations,
         }
 
-    return result
+    return {
+        "overall_score": metrics["overall_score"],
+        "overall_status": metrics["overall_status"],
+        "metrics": metrics_dict,
+        "statistics": metrics["statistics"],
+        "timestamp": metrics["timestamp"],
+    }
+
 
 def _collect_duplicates_data() -> dict[str, Any]:
     """Collect duplicate analysis data."""
@@ -512,19 +535,19 @@ def _collect_duplicates_data() -> dict[str, Any]:
 
     # Add exact duplicate groups
     for group in exact_dupes[:10]:  # Limit to 10 groups
-        exact_groups.append({
-            "title": group[0]['title'],
-            "count": len(group),
-            "ids": [doc['id'] for doc in group]
-        })
+        exact_groups.append(
+            {"title": group[0]["title"], "count": len(group), "ids": [doc["id"] for doc in group]}
+        )
 
     # Add near duplicate pairs
     for doc1, doc2, similarity in near_dupes[:10]:  # Limit to 10 pairs
-        near_pairs.append({
-            "doc1": {"id": doc1['id'], "title": doc1['title']},
-            "doc2": {"id": doc2['id'], "title": doc2['title']},
-            "similarity": similarity
-        })
+        near_pairs.append(
+            {
+                "doc1": {"id": doc1["id"], "title": doc1["title"]},
+                "doc2": {"id": doc2["id"], "title": doc2["title"]},
+                "similarity": similarity,
+            }
+        )
 
     return {
         "exact_duplicates": {
@@ -535,8 +558,9 @@ def _collect_duplicates_data() -> dict[str, Any]:
         "near_duplicates": {
             "count": len(near_dupes),
             "pairs": near_pairs,
-        }
+        },
     }
+
 
 def _collect_similar_data() -> dict[str, Any]:
     """Collect similar documents data."""
@@ -549,18 +573,21 @@ def _collect_similar_data() -> dict[str, Any]:
     candidate_list: list[dict[str, Any]] = []
 
     for candidate in candidates[:20]:  # Limit to 20
-        candidate_list.append({
-            "doc1_id": candidate.doc1_id,
-            "doc1_title": candidate.doc1_title,
-            "doc2_id": candidate.doc2_id,
-            "doc2_title": candidate.doc2_title,
-            "similarity": candidate.similarity_score,
-        })
+        candidate_list.append(
+            {
+                "doc1_id": candidate.doc1_id,
+                "doc1_title": candidate.doc1_title,
+                "doc2_id": candidate.doc2_id,
+                "doc2_title": candidate.doc2_title,
+                "similarity": candidate.similarity_score,
+            }
+        )
 
     return {
         "count": len(candidates),
         "candidates": candidate_list,
     }
+
 
 def _collect_empty_data() -> dict[str, Any]:
     """Collect empty documents data."""
@@ -580,18 +607,21 @@ def _collect_empty_data() -> dict[str, Any]:
     documents: list[dict[str, Any]] = []
 
     for doc in empty_docs:
-        documents.append({
-            "id": doc['id'],
-            "title": doc['title'],
-            "length": doc['length'],
-            "project": doc['project'],
-            "access_count": doc['access_count']
-        })
+        documents.append(
+            {
+                "id": doc["id"],
+                "title": doc["title"],
+                "length": doc["length"],
+                "project": doc["project"],
+                "access_count": doc["access_count"],
+            }
+        )
 
     return {
         "count": len(empty_docs),
         "documents": documents,
     }
+
 
 def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
     """Collect tag analysis data."""
@@ -600,7 +630,8 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
 
         # Overall tag statistics
         if project:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     COUNT(DISTINCT d.id) as total_docs,
                     COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
@@ -616,7 +647,9 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
                 LEFT JOIN document_tags dt2 ON d.id = dt2.document_id
                 LEFT JOIN tags t ON dt2.tag_id = t.id
                 WHERE d.is_deleted = 0 AND d.project = ?
-            """, (project,))
+            """,
+                (project,),
+            )
         else:
             cursor.execute("""
                 SELECT
@@ -637,7 +670,9 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
             """)
 
         stats = cursor.fetchone()
-        coverage = (stats['tagged_docs'] / stats['total_docs'] * 100) if stats['total_docs'] > 0 else 0  # noqa: E501
+        coverage = (
+            (stats["tagged_docs"] / stats["total_docs"] * 100) if stats["total_docs"] > 0 else 0
+        )  # noqa: E501
 
         top_tags: list[dict[str, Any]] = []
 
@@ -654,35 +689,36 @@ def _collect_tags_data(project: str | None = None) -> dict[str, Any]:
         """)
 
         for tag in cursor.fetchall():
-            top_tags.append({
-                "name": tag['name'],
-                "count": tag['usage_count']
-            })
+            top_tags.append({"name": tag["name"], "count": tag["usage_count"]})
 
         result: dict[str, Any] = {
             "project": project,
             "coverage": coverage,
-            "total_documents": stats['total_docs'],
-            "tagged_documents": stats['tagged_docs'],
-            "unique_tags": stats['unique_tags'],
-            "avg_tags_per_doc": float(stats['avg_tags'] or 0),
+            "total_documents": stats["total_docs"],
+            "tagged_documents": stats["tagged_docs"],
+            "unique_tags": stats["unique_tags"],
+            "avg_tags_per_doc": float(stats["avg_tags"] or 0),
             "top_tags": top_tags,
         }
 
         # Untagged count
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) as untagged
             FROM documents d
             WHERE d.is_deleted = 0
             AND NOT EXISTS (
                 SELECT 1 FROM document_tags dt WHERE dt.document_id = d.id
             )
-        """ + (" AND d.project = ?" if project else ""),
-        (project,) if project else ())
+        """
+            + (" AND d.project = ?" if project else ""),
+            (project,) if project else (),
+        )
 
-        result["untagged_count"] = cursor.fetchone()['untagged']
+        result["untagged_count"] = cursor.fetchone()["untagged"]
 
     return result
+
 
 def _collect_projects_data() -> dict[str, Any]:
     """Collect project analysis data."""
@@ -709,23 +745,26 @@ def _collect_projects_data() -> dict[str, Any]:
     project_list: list[dict[str, Any]] = []
 
     for proj in projects:
-        last_updated = parse_datetime(proj['last_updated'])
+        last_updated = parse_datetime(proj["last_updated"])
         days_ago = (datetime.now() - last_updated).days if last_updated else 0
 
-        project_list.append({
-            "name": proj['project'] or "[No Project]",
-            "doc_count": proj['doc_count'],
-            "avg_length": float(proj['avg_length'] or 0),
-            "total_views": proj['total_views'],
-            "unique_tags": proj['unique_tags'],
-            "last_updated": proj['last_updated'],
-            "days_since_update": days_ago
-        })
+        project_list.append(
+            {
+                "name": proj["project"] or "[No Project]",
+                "doc_count": proj["doc_count"],
+                "avg_length": float(proj["avg_length"] or 0),
+                "total_views": proj["total_views"],
+                "unique_tags": proj["unique_tags"],
+                "last_updated": proj["last_updated"],
+                "days_since_update": days_ago,
+            }
+        )
 
     return {
         "count": len(projects),
         "projects": project_list,
     }
+
 
 # Create typer app for this module
 app = typer.Typer(help="Analyze documents and extract insights")
