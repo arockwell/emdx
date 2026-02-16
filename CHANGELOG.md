@@ -7,10 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-02-16
+
+**The autonomy release.** EMDX shed its last API key requirement — the `ask` and Q&A systems now run through the Claude CLI like everything else. The cascade system was removed entirely (~5,500 lines), replaced by recipes. New commands (`wrapup`, structured recipes) and smarter existing ones (`prime` with git context, `ask` with tag/recent filters, `save --task`) round out the agent workflow. Under the hood, strict typing continued with Protocols, TypedDicts, and concrete generics.
+
+### 🚀 Major Features
+
+#### `emdx wrapup` — session summaries (#664)
+End-of-session command that gathers recent tasks, documents, and delegate executions from a configurable time window and synthesizes them into a coherent summary:
+
+```bash
+emdx wrapup                    # Summarize last 4 hours
+emdx wrapup --hours 8          # Wider window
+emdx wrapup --dry-run          # Preview what would be summarized
+emdx wrapup --json             # Raw activity data without synthesis
+```
+
+Summaries are auto-saved with `session-summary,active` tags.
+
+#### Structured multi-step recipes
+Recipes gained frontmatter and step-by-step execution. Write a recipe as a markdown document with YAML frontmatter defining steps, then run it — each step executes in sequence through delegate:
+
+```bash
+emdx recipe run <id>           # Execute a multi-step recipe
+```
+
+#### Conversational Q&A in TUI (#650)
+The TUI search screen (position 3) was redesigned as a conversational Q&A interface. Type natural-language questions, get streaming answers from Claude with source citations. Supports saving exchanges to the KB and clearing conversation history.
+
+#### `ask` command upgraded (#648, #661)
+- **Tag and recent filters** — `--tags` and `--recent` narrow the document set before retrieval (#648)
+- **Enhanced output** — source titles in citations, confidence indicator, context budget enforcement
+- **Claude CLI backend** — replaced the Anthropic Python SDK with Claude CLI, removing the last `anthropic` package dependency (#661)
+
+### 🔧 Improvements
+
+#### `emdx prime` with git context (#647)
+`emdx prime` now includes current branch, recent commits, and open PRs. Verbose mode shows most-accessed documents (key docs).
+
+#### `emdx save --task` and `--done` (#649)
+Link saved documents to tasks at save time, closing the task-to-document gap:
+
+```bash
+emdx save findings.md --task 42          # Link as task output
+emdx save findings.md --task 42 --done   # Link + mark task done
+```
+
+#### Anthropic SDK fully removed (#661)
+The `ask` service and TUI Q&A presenter were the last consumers of the `anthropic` Python package. Both now use the Claude CLI via `UnifiedExecutor`, matching `delegate`, `compact`, and `distill`. No API key needed — just a Claude CLI installation.
+
+#### Typing hardening
+- **Protocols** for UI callbacks — type-safe event handling without concrete coupling (#646)
+- **TypedDicts** across compact, distill, unified search, and UI layers — replacing `dict[str, Any]` with named shapes
+- **Concrete generics** — `App[None]`, `Queue[str | None]`, `ModalScreen[str]`, reducing strict mypy `type-arg` errors from 64 to 51 (#671)
+
+#### Activity view improvements
+- Execution output text persisted to database for richer preview display
+- Completed executions that produced a document are hidden from Activity (reduces noise)
+- Completed cascade-stage duplicates hidden (#646)
+
+#### TUI interaction fix (#653)
+Single-click now highlights items; double-click opens fullscreen — fixing the previous behavior where any click triggered fullscreen navigation.
+
+### 🐛 Bug Fixes
+- **qa**: FTS query used `documents_fts` as a column instead of JOINing the virtual table — Q&A silently returned 0 sources (#672)
+- **typing**: `TYPE_CHECKING` guards added for optional dependencies to prevent import-time crashes
+- **cli**: Typer type mismatches fixed, dead code removed
+- **recipes**: mypy errors in recipe parser and command resolved; git worktree mocked in recipe executor tests
+- **activity**: Broadened execution query to include all non-cascade executions (was filtering too aggressively)
+
 ### 💥 Breaking Changes
 
 #### Cascade system removed (#651)
-The cascade pipeline (`emdx cascade` commands) and the `--chain` flag on `emdx delegate` have been removed. These features added complexity without proportional value — the recipe system provides a simpler, more flexible alternative.
+The cascade pipeline (`emdx cascade` commands) and the `--chain` flag on `emdx delegate` have been removed (~5,500 lines). The recipe system provides a simpler, more flexible alternative.
 
 **Removed:**
 - `emdx cascade` command group (new, list, advance, auto, status)
@@ -23,10 +92,10 @@ The cascade pipeline (`emdx cascade` commands) and the `--chain` flag on `emdx d
 # New: Save instructions as a recipe, run with delegate
 echo "Your multi-step instructions..." | emdx save --title "My Workflow" --tags recipe
 emdx recipe run <id>
-
-# Old: emdx delegate --chain "step1" "step2" "step3"
-# New: Write sequential steps in a single recipe document
 ```
+
+#### `anthropic` package no longer used anywhere
+The optional `[ai]` extra no longer includes the `anthropic` package. All AI features use the Claude CLI.
 
 ## [0.15.0] - 2026-02-15
 
@@ -731,6 +800,7 @@ A sustained cleanup across 10+ PRs deleted dead code from every layer — unused
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.16.0]: https://github.com/arockwell/emdx/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/arockwell/emdx/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/arockwell/emdx/compare/v0.12.0...v0.14.0
 [0.12.0]: https://github.com/arockwell/emdx/compare/v0.10.0...v0.12.0
