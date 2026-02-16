@@ -274,8 +274,9 @@ class QAPresenter:
             with db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT id, title, content FROM documents "
-                    "WHERE documents_fts MATCH ? AND is_deleted = 0 "
+                    "SELECT d.id, d.title, d.content FROM documents d "
+                    "JOIN documents_fts fts ON d.id = fts.rowid "
+                    "WHERE fts.documents_fts MATCH ? AND d.is_deleted = 0 "
                     "ORDER BY rank LIMIT ?",
                     (terms, limit),
                 )
