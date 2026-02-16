@@ -57,8 +57,6 @@ emdx delegate --worktree "make risky changes"
 # With PR creation (implies --worktree)
 emdx delegate --pr "fix the auth bug"
 
-# Sequential pipeline (chain mode)
-emdx delegate --chain "analyze" "plan" "implement"
 ```
 
 **Result handling**:
@@ -131,16 +129,6 @@ emdx delegate --pr "fix the auth bug"
 - Implies `--worktree`
 - Agent instructed to create PR after changes
 - PR URL captured in output
-
-### Chain (Sequential Pipeline)
-
-Each step sees previous output:
-```bash
-emdx delegate --chain "analyze" "plan" "implement"
-```
-- Steps execute sequentially
-- Previous step's output available as context
-- Final step can use `--pr` for PR creation
 
 ## References
 

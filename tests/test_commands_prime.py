@@ -249,20 +249,18 @@ class TestPrimeVerbose:
     """Test --verbose flag."""
 
     @patch(_SCHEMA_PATCH)
-    @patch("emdx.commands.prime._get_cascade_status")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_verbose_shows_recent_docs(self, mock_project, mock_ip, mock_ready,
-                                        mock_epics, mock_docs, mock_cascade, _):
+                                        mock_epics, mock_docs, _):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []
         mock_ip.return_value = []
         mock_docs.return_value = [{"id": 100, "title": "Design Doc", "project": "emdx"}]
-        mock_cascade.return_value = {"idea": 0, "prompt": 0, "analyzed": 0, "planned": 0, "done": 0}
 
         result = runner.invoke(app, ["--verbose"])
         assert result.exit_code == 0
@@ -271,34 +269,13 @@ class TestPrimeVerbose:
         assert "Design Doc" in result.stdout
 
     @patch(_SCHEMA_PATCH)
-    @patch("emdx.commands.prime._get_cascade_status")
-    @patch("emdx.commands.prime._get_recent_docs")
-    @patch("emdx.commands.prime._get_active_epics")
-    @patch("emdx.commands.prime._get_ready_tasks")
-    @patch("emdx.commands.prime._get_in_progress_tasks")
-    @patch("emdx.commands.prime.get_git_project")
-    def test_verbose_shows_cascade_status(self, mock_project, mock_ip, mock_ready,
-                                           mock_epics, mock_docs, mock_cascade, _):
-        mock_project.return_value = None
-        mock_epics.return_value = []
-        mock_ready.return_value = []
-        mock_ip.return_value = []
-        mock_docs.return_value = []
-        mock_cascade.return_value = {"idea": 3, "prompt": 1, "analyzed": 0, "planned": 0, "done": 5}
-
-        result = runner.invoke(app, ["--verbose"])
-        assert "CASCADE QUEUE" in result.stdout
-        assert "idea: 3" in result.stdout
-
-    @patch(_SCHEMA_PATCH)
-    @patch("emdx.commands.prime._get_cascade_status")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_verbose_shows_task_descriptions(self, mock_project, mock_ip, mock_ready,
-                                              mock_epics, mock_docs, mock_cascade, _):
+                                              mock_epics, mock_docs, _):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = [
@@ -306,7 +283,6 @@ class TestPrimeVerbose:
         ]
         mock_ip.return_value = []
         mock_docs.return_value = []
-        mock_cascade.return_value = {"idea": 0, "prompt": 0, "analyzed": 0, "planned": 0, "done": 0}
 
         result = runner.invoke(app, ["--verbose"])
         assert "Detailed explanation" in result.stdout
@@ -337,26 +313,23 @@ class TestPrimeJson:
         assert len(data["ready_tasks"]) == 1
 
     @patch(_SCHEMA_PATCH)
-    @patch("emdx.commands.prime._get_cascade_status")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_json_verbose_includes_extras(self, mock_project, mock_ip, mock_ready,
-                                           mock_epics, mock_docs, mock_cascade, _):
+                                           mock_epics, mock_docs, _):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []
         mock_ip.return_value = []
         mock_docs.return_value = [{"id": 1, "title": "Doc", "project": "p"}]
-        mock_cascade.return_value = {"idea": 1}
 
         result = runner.invoke(app, ["--format", "json", "--verbose"])
         data = json.loads(result.stdout)
         assert "execution_methods" in data
         assert "recent_docs" in data
-        assert "cascade_status" in data
 
     @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
@@ -375,4 +348,3 @@ class TestPrimeJson:
         data = json.loads(result.stdout)
         assert "execution_methods" not in data
         assert "recent_docs" not in data
-        assert "cascade_status" not in data

@@ -30,7 +30,7 @@ __all__ = [
 
 
 def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
-    """Get standalone agent/delegate executions not part of a cascade.
+    """Get standalone agent/delegate executions.
 
     Joins to tasks table via task_id to get output_doc_id when execution.doc_id
     is NULL (delegate writes doc_id to task but historically not to execution).
@@ -45,7 +45,6 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
             FROM executions e
             LEFT JOIN tasks t ON t.execution_id = e.id
             WHERE e.started_at > ?
-              AND e.cascade_run_id IS NULL
             ORDER BY e.started_at DESC
             LIMIT ?
             """,

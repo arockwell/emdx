@@ -189,7 +189,6 @@ class TestCLIIntegration:
         # Track which modules are loaded
         lazy_modules = [
             'emdx.commands.recipe',
-            'emdx.commands.cascade',
             'emdx.commands.delegate',
             'emdx.commands.claude_execute',
             'emdx.commands.ask',
@@ -231,7 +230,6 @@ class TestCLIIntegration:
 
         assert result.exit_code == 0
         assert "recipe" in result.output
-        assert "cascade" in result.output
         assert "ai" in result.output
         assert "gui" in result.output
 
@@ -244,7 +242,6 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         # Check that our lazy help text appears (not the actual module help)
         assert "Manage and run EMDX recipes" in result.output
-        assert "Cascade ideas through stages" in result.output
 
     def test_lazy_command_works_when_invoked(self):
         """Test that lazy commands work when actually invoked."""

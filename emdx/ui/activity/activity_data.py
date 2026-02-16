@@ -7,14 +7,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import cast
 
-from emdx.ui.types import CascadeRunDict, GroupDict
+from emdx.ui.types import GroupDict
 from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
     ActivityItem,
     AgentExecutionItem,
-    CascadeRunItem,
-    CascadeStageItem,
     DocumentItem,
     GroupItem,
 )
@@ -57,7 +55,6 @@ class ActivityDataLoader:
         if HAS_DOCS:
             items.extend(await self._load_direct_saves())
 
-        items.extend(await self._load_cascade_executions())
         items.extend(await self._load_agent_executions())
 
         # Sort: running items first (pinned), then by timestamp descending
@@ -147,89 +144,6 @@ class ActivityDataLoader:
 
             except Exception as e:
                 logger.error(f"Error loading document {doc.get('id', '?')}: {e}", exc_info=True)
-
-        return items
-
-    async def _load_cascade_executions(self) -> list[ActivityItem]:
-        """Load cascade executions into CascadeRunItem instances."""
-        items: list[ActivityItem] = []
-        try:
-            from emdx.services.cascade_service import (
-                get_cascade_run_executions,
-                get_orphaned_cascade_executions,
-                list_cascade_runs,
-            )
-
-            cutoff = datetime.now() - timedelta(days=7)
-            seen_run_ids: set[int] = set()
-
-            # Load cascade runs (grouped view)
-            try:
-                runs = list_cascade_runs(limit=30)
-
-                for run in runs:
-                    run_id = run.get("id")
-                    if not run_id:
-                        continue
-
-                    seen_run_ids.add(run_id)
-                    timestamp = parse_datetime(run["started_at"]) or datetime.now()
-                    doc_title = run["initial_doc_title"]
-                    title = (doc_title or f"Cascade Run #{run_id}")[:40]
-                    executions = get_cascade_run_executions(run_id)
-                    run_dict = cast(CascadeRunDict, dict(run))
-
-                    item = CascadeRunItem(
-                        item_id=run_id,
-                        title=title,
-                        timestamp=timestamp,
-                        cascade_run=run_dict,
-                        status=run["status"] or "running",
-                        pipeline_name=str(run_dict.get("pipeline_name", "default")),
-                        current_stage=str(run_dict.get("current_stage", "")),
-                        execution_count=len(executions),
-                    )
-                    items.append(item)
-
-            except Exception as e:
-                logger.debug(f"Could not load cascade runs (may not exist yet): {e}")
-
-            # Backward-compat: individual executions not part of any run
-            orphaned = get_orphaned_cascade_executions(cutoff.isoformat(), limit=50)
-
-            for row in orphaned:
-                exec_id = row["id"]
-                doc_id = row["doc_id"]
-                doc_title = row["doc_title"]
-                status = row["status"]
-                started_at = row["started_at"]
-                stage = row["stage"]
-                pr_url = row["pr_url"]
-                run_id = row["cascade_run_id"]
-
-                if run_id and run_id in seen_run_ids:
-                    continue
-
-                timestamp = parse_datetime(started_at) or datetime.now()
-                title = doc_title or f"Document #{doc_id}"
-                if stage:
-                    title = f"📋 {title}"
-                if pr_url:
-                    title = f"🔗 {title}"
-
-                # Use CascadeStageItem for individual cascade executions (backward compat)
-                stage_item = CascadeStageItem(
-                    item_id=exec_id,
-                    title=title,
-                    status=status or "unknown",
-                    timestamp=timestamp,
-                    doc_id=doc_id,
-                    stage=stage or "",
-                )
-                items.append(stage_item)
-
-        except Exception as e:
-            logger.error(f"Error loading cascade executions: {e}", exc_info=True)
 
         return items
 

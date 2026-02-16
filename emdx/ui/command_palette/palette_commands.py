@@ -169,18 +169,6 @@ class CommandRegistry:
             )
         )
 
-        self.register(
-            PaletteCommand(
-                id="nav.cascade",
-                name="Go to Cascade",
-                description="Switch to Cascade browser",
-                keywords=["cascade", "pipeline", "stages", "flow"],
-                context=CommandContext.GLOBAL,
-                shortcut="4",
-                category="Navigation",
-            )
-        )
-
         # Appearance commands
         self.register(
             PaletteCommand(

@@ -446,24 +446,28 @@ class TestTaskView:
         assert "open" in out
         assert "race condition" in out
 
+    @patch("emdx.models.documents.get_document")
     @patch("emdx.commands.tasks.tasks")
-    def test_view_shows_epic_label(self, mock_tasks):
+    def test_view_shows_epic_label(self, mock_tasks, mock_get_doc):
         mock_tasks.get_task.return_value = {
             "id": 10, "title": "SEC-1: Harden auth", "status": "active",
             "description": "", "epic_key": "SEC", "epic_seq": 1,
-            "parent_task_id": 500, "source_doc_id": 99, "priority": 1,
-            "created_at": "2026-01-15",
+            "parent_task_id": 500, "source_doc_id": 99, "output_doc_id": None,
+            "priority": 1, "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
         mock_tasks.get_task_log.return_value = []
+        mock_get_doc.return_value = {"id": 99, "title": "Security audit report"}
 
         result = runner.invoke(app, ["view", "10"])
         out = _out(result)
         assert "SEC-1" in out
         assert "Category: SEC" in out
         assert "Epic: #500" in out
-        assert "Doc: #99" in out
+        assert "Input:" in out
+        assert "#99" in out
+        assert "Security audit report" in out
         assert "Priority: 1" in out
 
     @patch("emdx.commands.tasks.tasks")

@@ -95,9 +95,6 @@ emdx delegate "check auth" "review tests" "scan for XSS"
 # Parallel with synthesis
 emdx delegate --synthesize "task1" "task2" "task3"
 
-# Sequential pipeline (each step sees previous output)
-emdx delegate --chain "analyze the problem" "design solution" "implement it"
-
 # With document context
 emdx delegate --doc 42 "implement the plan described here"
 
@@ -105,7 +102,7 @@ emdx delegate --doc 42 "implement the plan described here"
 emdx delegate --pr "fix the auth bug"
 
 # All flags compose together
-emdx delegate --doc 42 --chain --pr "analyze" "implement"
+emdx delegate --doc 42 --pr "fix the bug"
 
 # Dynamic discovery
 emdx delegate --each "fd -e py src/" --do "Review {{item}}"
@@ -120,12 +117,10 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 | Research/analysis | `emdx delegate "task"` |
 | Parallel research | `emdx delegate "t1" "t2" "t3"` |
 | Combined summary | `emdx delegate --synthesize "t1" "t2"` |
-| Sequential pipeline | `emdx delegate --chain "analyze" "plan" "implement"` |
 | Discover + process | `emdx delegate --each "cmd" --do "Review {{item}}"` |
 | Doc as input | `emdx delegate --doc 42 "implement this"` |
 | Code changes with PR | `emdx delegate --pr "fix the bug"` |
-| Idea to PR pipeline | `emdx cascade add "idea" --auto` (experimental) |
-| Run saved recipe | `emdx recipe run 42` (experimental) |
+| Run saved recipe | `emdx recipe run 42` |
 
 ### Auto-Tagging Guidelines
 
@@ -166,13 +161,6 @@ emdx ai context "question" | claude
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
 For AI system docs, see [AI System](docs/ai-system.md).
-
-## Experimental Commands
-
-These commands work but are not yet stable:
-
-- **`emdx cascade`** — Autonomous idea-to-code pipeline. See [Cascade](docs/cascade.md).
-- **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
 ## Known Gotchas
 

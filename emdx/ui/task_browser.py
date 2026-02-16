@@ -19,7 +19,6 @@ class TaskBrowser(Widget):
         ("1", "switch_activity", "Activity"),
         ("2", "switch_tasks", "Tasks"),
         ("3", "switch_search", "Search"),
-        ("4", "switch_cascade", "Cascade"),
         ("?", "show_help", "Help"),
     ]
 
@@ -59,10 +58,6 @@ class TaskBrowser(Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
 
-    async def action_switch_cascade(self) -> None:
-        """Switch to cascade browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
 
     async def action_switch_search(self) -> None:
         """Switch to search screen."""
