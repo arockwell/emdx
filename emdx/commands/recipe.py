@@ -387,8 +387,8 @@ def install_recipe(
         console.print("\nInstall with: [cyan]emdx recipe install <name>[/cyan]")
         return
 
-    rpath = get_builtin_recipe(name)
-    if not rpath:
+    recipe_path = get_builtin_recipe(name)
+    if not recipe_path:
         console.print(f"[red]Built-in recipe not found: {name}[/red]")
         available = list_builtin_recipes()
         if available:
@@ -396,7 +396,7 @@ def install_recipe(
             console.print(f"[dim]Available: {names}[/dim]")
         raise typer.Exit(1)
 
-    _install_builtin(rpath)
+    _install_builtin(recipe_path)
 
 
 def _install_builtin(rpath: Path) -> None:

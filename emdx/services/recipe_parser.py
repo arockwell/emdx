@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
 @dataclass
@@ -150,11 +150,11 @@ def validate_inputs(
 
 def substitute(text: str, values: dict[str, str]) -> str:
     """Replace {{var}} placeholders with values."""
-    def replacer(match: re.Match) -> str:
-        name = match.group(1)
+    def replacer(match: re.Match[str]) -> str:
+        name: str = match.group(1)
         return values.get(name, match.group(0))
 
-    return _VAR_RE.sub(replacer, text)
+    return str(_VAR_RE.sub(replacer, text))
 
 
 def resolve_inputs(
