@@ -51,7 +51,7 @@ class QAScreen(HelpMixin, Widget):
     QAScreen {
         layout: grid;
         grid-size: 1;
-        grid-rows: auto 1fr 1 1;
+        grid-rows: auto 1fr auto 1 1;
     }
 
     #qa-input-bar {
@@ -86,6 +86,13 @@ class QAScreen(HelpMixin, Widget):
         scrollbar-gutter: stable;
     }
 
+    #qa-spinner {
+        height: 1;
+        padding: 0 1;
+        display: none;
+        color: $accent;
+    }
+
     #qa-status {
         height: 1;
         background: $surface-darken-1;
@@ -107,6 +114,9 @@ class QAScreen(HelpMixin, Widget):
         )
         self._current_entry_index: int = -1
         self._source_ids: list[int] = []  # Track source doc IDs for navigation
+        self._spinner_timer: Any = None
+        self._spinner_frame: int = 0
+        self._spinner_label: str = "Thinking"
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="qa-input-bar"):
@@ -117,6 +127,7 @@ class QAScreen(HelpMixin, Widget):
             yield Static("Q&A", id="qa-mode-label")
 
         yield RichLog(id="qa-conversation", wrap=True, markup=True)
+        yield Static("", id="qa-spinner")
 
         yield Static("Ready | Type a question and press Enter", id="qa-status")
         yield Static(
@@ -155,7 +166,7 @@ class QAScreen(HelpMixin, Widget):
         self.call_later(self._render_status, state)
 
     def _render_status(self, state: QAStateVM) -> None:
-        """Update the status bar."""
+        """Update the status bar and spinner label."""
         try:
             self.query_one("#qa-status", Static).update(state.status_text)
             # Update mode label
@@ -165,6 +176,13 @@ class QAScreen(HelpMixin, Widget):
             else:
                 label = "Q&A (no CLI)"
             self.query_one("#qa-mode-label", Static).update(label)
+
+            # Update spinner label to match current phase
+            if self._spinner_timer and state.is_asking:
+                if "Generating" in state.status_text:
+                    self._spinner_label = "Generating answer"
+                elif "Retrieving" in state.status_text:
+                    self._spinner_label = "Retrieving context"
         except Exception as e:
             logger.error(f"Error rendering status: {e}")
 
@@ -202,14 +220,47 @@ class QAScreen(HelpMixin, Widget):
         self._current_entry_index = self.presenter.get_entry_count()
         asyncio.create_task(self._ask_and_render(question))
 
+    _SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    def _start_spinner(self, label: str = "Thinking") -> None:
+        """Start the animated spinner."""
+        self._spinner_frame = 0
+        spinner = self.query_one("#qa-spinner", Static)
+        spinner.update(f"{self._SPINNER_FRAMES[0]} {label}...")
+        spinner.display = True
+        self._spinner_label = label
+
+        def tick() -> None:
+            self._spinner_frame = (self._spinner_frame + 1) % len(self._SPINNER_FRAMES)
+            frame = self._SPINNER_FRAMES[self._spinner_frame]
+            try:
+                self.query_one("#qa-spinner", Static).update(f"{frame} {self._spinner_label}...")
+            except Exception:
+                pass
+
+        self._spinner_timer = self.set_interval(0.1, tick)
+
+    def _stop_spinner(self) -> None:
+        """Stop the animated spinner."""
+        if self._spinner_timer:
+            self._spinner_timer.stop()
+            self._spinner_timer = None
+        try:
+            spinner = self.query_one("#qa-spinner", Static)
+            spinner.display = False
+        except Exception:
+            pass
+
     async def _ask_and_render(self, question: str) -> None:
         """Ask the question and render the full answer when done."""
         log = self.query_one("#qa-conversation", RichLog)
 
-        # Show loading indicator
-        log.write("[dim]Thinking...[/dim]")
+        # Show animated spinner
+        self._start_spinner("Thinking")
 
         await self.presenter.ask(question)
+
+        self._stop_spinner()
 
         # Get the entry that was just completed
         entries = self.presenter.state.entries
@@ -217,10 +268,6 @@ class QAScreen(HelpMixin, Widget):
             return
 
         entry = entries[-1]
-
-        # Remove the "Thinking..." line by clearing and re-rendering
-        # Actually, RichLog doesn't support removing lines easily.
-        # Instead, just write the answer below.
 
         if entry.error and not entry.answer:
             log.write(f"[bold red]Error:[/bold red] {entry.error}")
