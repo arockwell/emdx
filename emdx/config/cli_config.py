@@ -26,11 +26,13 @@ DEFAULT_ALLOWED_TOOLS: list[str] = [
     "Write",
 ]
 
+
 class CliTool(str, Enum):
     """Supported CLI tools."""
 
     CLAUDE = "claude"
     CURSOR = "cursor"
+
 
 @dataclass
 class CliConfig:
@@ -62,6 +64,7 @@ class CliConfig:
     config_path: str | None  # Path to CLI config file
     api_key_env: str | None  # Environment variable for API key
 
+
 # CLI configurations
 CLI_CONFIGS: dict[CliTool, CliConfig] = {
     CliTool.CLAUDE: CliConfig(
@@ -72,7 +75,7 @@ CLI_CONFIGS: dict[CliTool, CliConfig] = {
         default_output_format="stream-json",
         requires_verbose_for_stream=True,
         model_flag="--model",
-        default_model="claude-opus-4-5-20251101",
+        default_model="claude-opus-4-6",
         supports_allowed_tools=True,
         allowed_tools_flag="--allowedTools",
         force_flag=None,
@@ -102,7 +105,7 @@ CLI_CONFIGS: dict[CliTool, CliConfig] = {
 # Use these aliases for portable commands that work with either CLI
 MODEL_ALIASES: dict[str, dict[str, str]] = {
     "opus": {
-        "claude": "claude-opus-4-5-20251101",
+        "claude": "claude-opus-4-6",
         "cursor": "opus-4.5",
     },
     "sonnet": {
@@ -119,6 +122,7 @@ MODEL_ALIASES: dict[str, dict[str, str]] = {
     },
 }
 
+
 def get_default_cli_tool() -> CliTool:
     """Get the default CLI tool from environment or fallback to Claude.
 
@@ -129,6 +133,7 @@ def get_default_cli_tool() -> CliTool:
         return CliTool(env_value)
     except ValueError:
         return CliTool.CLAUDE
+
 
 def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     """Get configuration for a CLI tool.
@@ -142,6 +147,7 @@ def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
     if cli_tool is None:
         cli_tool = get_default_cli_tool()
     return CLI_CONFIGS[cli_tool]
+
 
 def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     """Resolve a model alias to the actual model name for a CLI.
@@ -157,6 +163,7 @@ def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
         return MODEL_ALIASES[alias].get(cli_tool.value, alias)
     return alias
 
+
 def get_available_models(cli_tool: CliTool) -> list[str]:
     """Get list of known models for a CLI tool.
 
@@ -165,7 +172,7 @@ def get_available_models(cli_tool: CliTool) -> list[str]:
     """
     if cli_tool == CliTool.CLAUDE:
         return [
-            "claude-opus-4-5-20251101",
+            "claude-opus-4-6",
             "claude-sonnet-4-5-20250929",
             "opus",
             "sonnet",
