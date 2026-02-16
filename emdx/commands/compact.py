@@ -25,8 +25,8 @@ app = typer.Typer(help="Compact documents by AI-powered synthesis")
 
 # Import guards for optional dependencies
 try:
-    from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
-    from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
 
     HAS_SKLEARN = True
 except ImportError:

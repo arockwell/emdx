@@ -58,7 +58,6 @@ class TaskBrowser(Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
 
-
     async def action_switch_search(self) -> None:
         """Switch to search screen."""
         if hasattr(self.app, "switch_browser"):
@@ -76,7 +75,7 @@ class TaskBrowser(Widget):
         """Update status — for compatibility with browser container."""
         pass
 
-    def focus(self, scroll_visible: bool = True) -> Self:  # type: ignore[override]
+    def focus(self, scroll_visible: bool = True) -> Self:
         """Focus the task view."""
         if self.task_view:
             try:
@@ -85,7 +84,7 @@ class TaskBrowser(Widget):
                     option_list.focus()
             except Exception:
                 pass
-        return self  # type: ignore[return-value]
+        return self
 
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Stub for compatibility — tasks don't select by doc ID."""
