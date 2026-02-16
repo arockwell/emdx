@@ -171,15 +171,7 @@ def distill(
     # Parse audience
     target_audience = _parse_audience(audience)
 
-    # Import synthesis service (optional dependency)
-    try:
-        from ..services.synthesis_service import DistillService
-    except ImportError:
-        console.print(
-            "[red]Anthropic SDK is required for distill command.[/red]\n"
-            "Install with: pip install 'emdx[ai]'"
-        )
-        raise typer.Exit(1) from None
+    from ..services.synthesis_service import DistillService
 
     # Gather documents
     if not quiet:

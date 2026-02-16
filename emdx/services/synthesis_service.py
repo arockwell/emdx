@@ -5,7 +5,7 @@ Provides two synthesis services:
 - SynthesisService: Used by compact command for merging related documents
 - DistillService: Used by distill command for audience-aware KB synthesis
 
-Uses Claude API for high-quality synthesis.
+Uses Claude CLI (via UnifiedExecutor) for synthesis.
 """
 
 from __future__ import annotations
@@ -16,25 +16,54 @@ from enum import Enum
 from typing import Any
 
 from ..database import db
+from .unified_executor import ExecutionConfig, ExecutionResult, UnifiedExecutor
 
 logger = logging.getLogger(__name__)
 
-try:
-    import anthropic
-
-    HAS_ANTHROPIC = True
-except ImportError:
-    anthropic = None  # type: ignore[assignment]
-    HAS_ANTHROPIC = False
+SYNTHESIS_TIMEOUT = 300
 
 
-def _require_anthropic() -> None:
-    """Raise ImportError with helpful message if anthropic is not installed."""
-    if not HAS_ANTHROPIC:
-        raise ImportError(
-            "anthropic is required for synthesis features. "
-            "Install it with: pip install 'emdx[ai]'"
+def _execute_prompt(
+    system_prompt: str,
+    user_message: str,
+    title: str,
+    model: str | None = None,
+) -> ExecutionResult:
+    """Execute a synthesis prompt via the Claude CLI.
+
+    Combines system and user messages into a single prompt for --print mode.
+
+    Args:
+        system_prompt: System-level instructions
+        user_message: The user message content
+        title: Title for the execution record
+        model: Optional model override
+
+    Returns:
+        ExecutionResult from the CLI execution
+
+    Raises:
+        RuntimeError: If the CLI execution fails
+    """
+    prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
+
+    config = ExecutionConfig(
+        prompt=prompt,
+        title=title,
+        allowed_tools=[],
+        timeout_seconds=SYNTHESIS_TIMEOUT,
+        model=model,
+    )
+
+    executor = UnifiedExecutor()
+    result = executor.execute(config)
+
+    if not result.success:
+        raise RuntimeError(
+            f"Synthesis failed: {result.error_message or 'unknown error'}"
         )
+
+    return result
 
 
 # =============================================================================
@@ -105,14 +134,6 @@ class DistillService:
 
     def __init__(self, model: str | None = None):
         self.model = model or self.DEFAULT_MODEL
-        self._client: Any = None
-
-    def _get_client(self) -> Any:
-        """Lazy load Anthropic client."""
-        _require_anthropic()
-        if self._client is None:
-            self._client = anthropic.Anthropic()
-        return self._client
 
     def synthesize_documents(
         self,
@@ -178,35 +199,24 @@ class DistillService:
                 "Create a unified, well-organized summary."
             )
 
-        # Call Claude API
-        try:
-            client = self._get_client()
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                system=f"{audience_instruction}\n\n{task_instruction}",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Documents to synthesize:\n\n{context}",
-                    }
-                ],
-            )
+        system_prompt = f"{audience_instruction}\n\n{task_instruction}"
+        user_message = f"Documents to synthesize:\n\n{context}"
 
-            return DistillResult(
-                content=response.content[0].text,
-                source_ids=source_ids,
-                source_count=len(documents),
-                audience=audience,
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-            )
+        result = _execute_prompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            title=f"Distill: {topic or 'synthesis'}",
+            model=self.model,
+        )
 
-        except Exception as e:
-            if HAS_ANTHROPIC and isinstance(e, anthropic.APIError):
-                logger.error(f"Claude API error during synthesis: {e}")
-                raise
-            raise
+        return DistillResult(
+            content=result.output_content or "",
+            source_ids=source_ids,
+            source_count=len(documents),
+            audience=audience,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+        )
 
     def distill_single(
         self,
@@ -253,14 +263,6 @@ class SynthesisService:
             model: Model to use (defaults to claude-opus-4)
         """
         self.model = model or self.DEFAULT_MODEL
-        self._client: Any = None
-
-    def _get_client(self) -> Any:
-        """Lazy load Anthropic client."""
-        _require_anthropic()
-        if self._client is None:
-            self._client = anthropic.Anthropic()
-        return self._client
 
     def synthesize_documents(
         self,
@@ -278,10 +280,8 @@ class SynthesisService:
 
         Raises:
             ValueError: If no valid documents found
-            ImportError: If anthropic is not installed
+            RuntimeError: If CLI execution fails
         """
-        _require_anthropic()
-
         # Fetch documents from database
         documents = self._fetch_documents(doc_ids)
         if not documents:
@@ -301,57 +301,47 @@ class SynthesisService:
         if title_hint:
             title_context += f"\n\nSuggested title direction: {title_hint}"
 
-        # Generate synthesized content
-        client = self._get_client()
-        response = client.messages.create(
-            model=self.model,
-            max_tokens=self.MAX_TOKENS,
-            system=(
-                "You are a document synthesis expert. Your task is to "
-                "intelligently merge\nmultiple related documents into a "
-                "single, coherent document that:\n\n"
-                "1. Preserves ALL key information, facts, and insights "
-                "from the source documents\n"
-                "2. Eliminates redundancy and repetition\n"
-                "3. Organizes information logically with clear structure\n"
-                "4. Maintains the original tone and technical level\n"
-                "5. Uses markdown formatting for readability\n\n"
-                "Your output should be a complete markdown document with:\n"
-                "- A clear, descriptive title (as a level-1 heading)\n"
-                "- Well-organized sections\n"
-                '- No references to "the source documents" - write as a '
-                "standalone document\n\n"
-                "IMPORTANT: Start your response with the title as a markdown "
-                "heading, then the content.\n"
-                "Do not include any preamble or explanation - just the "
-                "synthesized document."
-            ),
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Synthesize the following documents into a single "
-                        "coherent document.\n\n"
-                        f"{title_context}\n\n---\n\n{context}"
-                    ),
-                }
-            ],
+        system_prompt = (
+            "You are a document synthesis expert. Your task is to "
+            "intelligently merge\nmultiple related documents into a "
+            "single, coherent document that:\n\n"
+            "1. Preserves ALL key information, facts, and insights "
+            "from the source documents\n"
+            "2. Eliminates redundancy and repetition\n"
+            "3. Organizes information logically with clear structure\n"
+            "4. Maintains the original tone and technical level\n"
+            "5. Uses markdown formatting for readability\n\n"
+            "Your output should be a complete markdown document with:\n"
+            "- A clear, descriptive title (as a level-1 heading)\n"
+            "- Well-organized sections\n"
+            '- No references to "the source documents" - write as a '
+            "standalone document\n\n"
+            "IMPORTANT: Start your response with the title as a markdown "
+            "heading, then the content.\n"
+            "Do not include any preamble or explanation - just the "
+            "synthesized document."
+        )
+        user_message = (
+            "Synthesize the following documents into a single "
+            "coherent document.\n\n"
+            f"{title_context}\n\n---\n\n{context}"
         )
 
-        # Extract content and title
-        content_block = response.content[0]
-        content = (
-            content_block.text
-            if hasattr(content_block, "text")
-            else str(content_block)
+        result = _execute_prompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            title=f"Compact: {titles[0]}",
+            model=self.model,
         )
+
+        content = result.output_content or ""
         title = self._extract_title(content, titles)
 
         return SynthesisResult(
             content=content,
             title=title,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
             source_doc_ids=doc_ids,
         )
 
