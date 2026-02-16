@@ -72,8 +72,14 @@ class TestRecipeList:
     @patch("emdx.commands.recipe.search_by_tags")
     def test_list_shows_recipes(self, mock_tags):
         mock_tags.return_value = [
-            {"id": 42, "title": "Security Audit", "content": "# Security Audit\nCheck all endpoints"},  # noqa: E501
-            {"id": 43, "title": "Code Review", "content": "Review code quality"},
+            {
+                "id": 42, "title": "Security Audit",
+                "content": "# Security Audit\nCheck all endpoints",
+            },
+            {
+                "id": 43, "title": "Code Review",
+                "content": "Review code quality",
+            },
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
@@ -82,6 +88,18 @@ class TestRecipeList:
         assert "Code Review" in out
         assert "#42" in out
         assert "#43" in out
+
+    @patch("emdx.commands.recipe.search_by_tags")
+    def test_list_shows_steps_badge_for_structured(self, mock_tags):
+        mock_tags.return_value = [
+            {
+                "id": 42, "title": "Multi-Step",
+                "content": "# Multi-Step\n\n## Step 1: Scan\nDo it.\n",
+            },
+        ]
+        result = runner.invoke(app, ["list"])
+        assert result.exit_code == 0
+        assert "(steps)" in _out(result)
 
 
 class TestRecipeRun:
@@ -96,11 +114,13 @@ class TestRecipeRun:
 
     @patch("emdx.commands.recipe.subprocess")
     @patch("emdx.commands.recipe._find_recipe")
-    def test_run_builds_delegate_command(self, mock_find, mock_subprocess):
-        mock_find.return_value = {"id": 42, "title": "My Recipe", "content": "..."}
+    def test_run_simple_builds_delegate_command(self, mock_find, mock_subprocess):
+        """Simple recipes (no steps) still delegate via subprocess."""
+        mock_find.return_value = {
+            "id": 42, "title": "My Recipe", "content": "Just do it.",
+        }
         mock_subprocess.run.return_value = MagicMock(returncode=0)
         runner.invoke(app, ["run", "42"])
-        # Verify delegate was called with --doc 42
         call_args = mock_subprocess.run.call_args[0][0]
         assert "delegate" in call_args
         assert "--doc" in call_args
@@ -108,8 +128,10 @@ class TestRecipeRun:
 
     @patch("emdx.commands.recipe.subprocess")
     @patch("emdx.commands.recipe._find_recipe")
-    def test_run_with_pr_flag(self, mock_find, mock_subprocess):
-        mock_find.return_value = {"id": 42, "title": "My Recipe", "content": "..."}
+    def test_run_simple_with_pr_flag(self, mock_find, mock_subprocess):
+        mock_find.return_value = {
+            "id": 42, "title": "My Recipe", "content": "Just do it.",
+        }
         mock_subprocess.run.return_value = MagicMock(returncode=0)
         runner.invoke(app, ["run", "42", "--pr"])
         call_args = mock_subprocess.run.call_args[0][0]
@@ -117,14 +139,80 @@ class TestRecipeRun:
 
     @patch("emdx.commands.recipe.subprocess")
     @patch("emdx.commands.recipe._find_recipe")
-    def test_run_with_extra_args(self, mock_find, mock_subprocess):
-        mock_find.return_value = {"id": 42, "title": "My Recipe", "content": "..."}
+    def test_run_simple_with_extra_args(self, mock_find, mock_subprocess):
+        mock_find.return_value = {
+            "id": 42, "title": "My Recipe", "content": "Just do it.",
+        }
         mock_subprocess.run.return_value = MagicMock(returncode=0)
         runner.invoke(app, ["run", "42", "--", "analyze", "auth"])
         call_args = mock_subprocess.run.call_args[0][0]
-        # Extra args should be incorporated into the prompt
         prompt_args = [a for a in call_args if "analyze" in a or "auth" in a]
         assert len(prompt_args) > 0
+
+    @patch("emdx.commands.recipe._run_structured")
+    @patch("emdx.commands.recipe._find_recipe")
+    def test_run_structured_detected(self, mock_find, mock_run_structured):
+        """Structured recipes (with steps) use the recipe executor."""
+        mock_find.return_value = {
+            "id": 42, "title": "Multi-Step",
+            "content": "# Multi\n\n## Step 1: Scan\nScan.\n\n## Step 2: Fix\nFix.\n",
+        }
+        runner.invoke(app, ["run", "42"])
+        mock_run_structured.assert_called_once()
+
+    @patch("emdx.commands.recipe._run_structured")
+    @patch("emdx.commands.recipe._find_recipe")
+    def test_run_structured_with_inputs(self, mock_find, mock_run_structured):
+        mock_find.return_value = {
+            "id": 42, "title": "Multi-Step",
+            "content": "# Multi\n\n## Step 1: Scan\nScan {{target}}.\n",
+        }
+        runner.invoke(app, ["run", "42", "--input", "target=api"])
+        call_kwargs = mock_run_structured.call_args.kwargs
+        assert call_kwargs["inputs"] == {"target": "api"}
+
+
+class TestRecipeShow:
+    """Tests for recipe show command."""
+
+    @patch("emdx.commands.recipe._find_recipe")
+    def test_show_not_found(self, mock_find):
+        mock_find.return_value = None
+        result = runner.invoke(app, ["show", "nonexistent"])
+        assert result.exit_code == 1
+
+    @patch("emdx.commands.recipe._find_recipe")
+    def test_show_simple_recipe(self, mock_find):
+        mock_find.return_value = {
+            "id": 42, "title": "Simple", "content": "No steps here.",
+        }
+        result = runner.invoke(app, ["show", "42"])
+        assert result.exit_code == 0
+        assert "simple" in _out(result).lower()
+
+    @patch("emdx.commands.recipe._find_recipe")
+    def test_show_structured_recipe(self, mock_find):
+        mock_find.return_value = {
+            "id": 42, "title": "Multi",
+            "content": (
+                "---\n"
+                "inputs:\n"
+                "  - name: target\n"
+                "    required: true\n"
+                "---\n\n"
+                "# Multi\n\n"
+                "## Step 1: Scan\nScan {{target}}.\n\n"
+                "## Step 2: Fix [--pr]\nFix issues.\n"
+            ),
+        }
+        result = runner.invoke(app, ["show", "42"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "target" in out
+        assert "required" in out.lower()
+        assert "Scan" in out
+        assert "Fix" in out
+        assert "--pr" in out
 
 
 class TestRecipeCreate:
@@ -145,3 +233,26 @@ class TestRecipeCreate:
         assert "save" in call_args
         assert "--tags" in call_args
         assert "recipe" in call_args
+
+
+class TestRecipeInstall:
+    """Tests for recipe install command."""
+
+    @patch("emdx.commands.recipe.subprocess")
+    def test_install_builtin(self, mock_subprocess):
+        mock_subprocess.run.return_value = MagicMock(returncode=0, stderr="")
+        result = runner.invoke(app, ["install", "idea-to-pr"])
+        assert result.exit_code == 0
+        assert "Installed" in _out(result)
+
+    def test_install_nonexistent(self):
+        result = runner.invoke(app, ["install", "nonexistent-recipe"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_install_no_name_lists(self):
+        result = runner.invoke(app, ["install"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "idea-to-pr" in out
+        assert "security-audit" in out
