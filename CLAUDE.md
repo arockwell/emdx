@@ -28,6 +28,8 @@ poetry run pytest tests/ -x -q  # Run tests
 
 ## Code Quality — MANDATORY
 
+**Pre-commit hooks are active** (ruff lint, ruff format, mypy on staged files). They run automatically on `git commit`. Config: `.pre-commit-config.yaml`. To run manually: `poetry run pre-commit run --files <files>`.
+
 **Before every commit, run lint and fix errors:**
 
 ```bash
