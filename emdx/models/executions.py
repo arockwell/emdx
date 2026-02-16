@@ -449,3 +449,39 @@ def get_execution_stats() -> ExecutionStatsDict:
             "completed": status_counts.get("completed", 0),
             "failed": status_counts.get("failed", 0),
         }
+
+
+def get_execution_stats_in_window(hours: int) -> dict[str, int | float]:
+    """Get execution statistics within a time window.
+
+    Args:
+        hours: Number of hours to look back
+
+    Returns:
+        Dictionary with total, completed, failed, running counts and cost/token totals
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+                SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
+                SUM(COALESCE(cost_usd, 0)) as total_cost,
+                SUM(COALESCE(tokens_used, 0)) as total_tokens
+            FROM executions
+            WHERE started_at > datetime('now', ? || ' hours')
+            """,
+            (f"-{hours}",),
+        )
+        row = cursor.fetchone()
+        return {
+            "total": row[0] or 0,
+            "completed": row[1] or 0,
+            "failed": row[2] or 0,
+            "running": row[3] or 0,
+            "total_cost_usd": row[4] or 0.0,
+            "total_tokens": row[5] or 0,
+        }
