@@ -519,8 +519,8 @@ class SimilarityService:
     def find_all_duplicate_pairs(
         self,
         min_similarity: float = 0.7,
-        progress_callback: Callable | None = None,
-    ) -> list[tuple]:
+        progress_callback: Callable[[int, int, int], None] | None = None,
+    ) -> list[tuple[int, int, str, str, float]]:
         """Find all pairs of similar documents efficiently using radius neighbors.
 
         Uses sklearn NearestNeighbors with radius_neighbors for O(n*k) complexity

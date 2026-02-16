@@ -160,7 +160,7 @@ def format_stream_line(line: str, timestamp: float) -> str | None:
         return None
 
 
-def _reader_thread(pipe: IO[str], line_queue: queue.Queue) -> None:
+def _reader_thread(pipe: IO[str], line_queue: queue.Queue[str | None]) -> None:
     """Read lines from a pipe and put them on a queue.
 
     Runs in a background thread. Using simple iteration (``for line in pipe``)

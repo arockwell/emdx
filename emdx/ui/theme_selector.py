@@ -15,7 +15,7 @@ from emdx.config.ui_config import get_theme, set_theme
 from emdx.ui.themes import get_theme_display_info
 
 
-class ThemeSelectorScreen(ModalScreen):
+class ThemeSelectorScreen(ModalScreen[str]):
     """Modal screen for selecting a theme."""
 
     CSS = """
@@ -78,10 +78,7 @@ class ThemeSelectorScreen(ModalScreen):
             yield Static("", id="theme-description")
 
             # Instructions
-            yield Static(
-                "j/k Navigate • Enter Select • Esc Cancel",
-                id="theme-instructions"
-            )
+            yield Static("j/k Navigate • Enter Select • Esc Cancel", id="theme-instructions")
 
     def on_mount(self) -> None:
         """Populate the theme list."""
@@ -102,8 +99,7 @@ class ThemeSelectorScreen(ModalScreen):
 
         # Highlight current theme
         current_idx = next(
-            (i for i, t in enumerate(self.themes) if t["name"] == self.current_theme),
-            0
+            (i for i, t in enumerate(self.themes) if t["name"] == self.current_theme), 0
         )
         option_list.highlighted = current_idx
 
@@ -116,10 +112,7 @@ class ThemeSelectorScreen(ModalScreen):
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         """Update description when option is highlighted."""
         if event.option and event.option.id:
-            idx = next(
-                (i for i, t in enumerate(self.themes) if t["name"] == event.option.id),
-                0
-            )
+            idx = next((i for i, t in enumerate(self.themes) if t["name"] == event.option.id), 0)
             self._update_description(idx)
 
     def _update_description(self, idx: int) -> None:
