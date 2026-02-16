@@ -26,6 +26,15 @@ poetry run emdx --help  # Always use poetry run in project dir
 poetry run pytest tests/ -x -q  # Run tests
 ```
 
+## Worktree Cleanup
+
+When working in the emdx repo, stale delegate worktrees may accumulate in the parent directory. These can block `gh pr checkout` and other git operations.
+
+- Use `git worktree list` to find active worktrees
+- Use `emdx delegate --cleanup` to remove worktrees older than 1 hour
+- If `gh pr checkout` fails due to existing worktrees, clone to `/tmp` instead
+- After merging delegate-created PRs, the local worktrees are no longer needed (branches are already pushed to remote)
+
 ## Code Quality — MANDATORY
 
 **Pre-commit hooks are active** (ruff lint, ruff format, mypy on staged files). They run automatically on `git commit`. Config: `.pre-commit-config.yaml`. To run manually: `poetry run pre-commit run --files <files>`.
