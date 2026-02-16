@@ -120,10 +120,13 @@ class TestContextBudget:
             (4, "Doc 4", large_content),
         ]
 
-        # Mock the Claude CLI call
-        with patch(
-            "emdx.services.ask_service._execute_claude_prompt",
-            return_value="Test answer",
+        # Mock the Claude CLI availability and call
+        with (
+            patch("emdx.services.ask_service._has_claude_cli", return_value=True),
+            patch(
+                "emdx.services.ask_service._execute_claude_prompt",
+                return_value="Test answer",
+            ),
         ):
             text, context_size = service._generate_answer("test question", docs)
 
@@ -188,10 +191,13 @@ class TestSourceTitles:
 
         service = AskService()
 
-        # Mock the Claude CLI call
-        with patch(
-            "emdx.services.ask_service._execute_claude_prompt",
-            return_value="Test answer",
+        # Mock the Claude CLI availability and call
+        with (
+            patch("emdx.services.ask_service._has_claude_cli", return_value=True),
+            patch(
+                "emdx.services.ask_service._execute_claude_prompt",
+                return_value="Test answer",
+            ),
         ):
             result = service.ask(f"question about {unique_content}", limit=5, force_keyword=True)
 
