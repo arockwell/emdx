@@ -1040,8 +1040,8 @@ class TestDelegateCommand:
 
         # Worktree should be created even though --worktree not set
         mock_create_wt.assert_called_once_with("develop")
-        # Worktree should NOT be cleaned up when --pr is set
-        mock_cleanup_wt.assert_not_called()
+        # Worktree IS cleaned up — branch is pushed to remote for PRs
+        mock_cleanup_wt.assert_called_once_with("/tmp/worktree")
 
     @patch("emdx.commands.delegate._run_parallel")
     def test_synthesize_flag_passed_to_parallel(self, mock_run_parallel):
