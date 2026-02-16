@@ -139,10 +139,9 @@ def _print_dry_run_summary(activity: dict[str, Any]) -> None:
 def _run_synthesis(
     prompt: str,
     title: str,
-    tags: list[str],
     model: str | None,
-) -> int | None:
-    """Run synthesis via the synthesis service."""
+) -> str | None:
+    """Run synthesis via the synthesis service. Returns content or None."""
     system_prompt = (
         "You are a session summarizer. Generate concise, actionable summaries "
         "of work activity. Focus on accomplishments, blockers, and next steps."
@@ -157,12 +156,7 @@ def _run_synthesis(
         )
 
         if result.success and result.output_content:
-            doc_id = save_document(
-                title=title,
-                content=result.output_content,
-                tags=tags,
-            )
-            return doc_id
+            return result.output_content
     except RuntimeError as e:
         sys.stderr.write(f"wrapup: synthesis failed: {e}\n")
 
@@ -187,16 +181,18 @@ def wrapup(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be summarized without synthesizing"
     ),
+    save: bool = typer.Option(False, "--save", "-s", help="Save summary to knowledge base"),
 ) -> None:
     """Generate a session summary from recent activity.
 
     Queries tasks, documents, and delegate executions from the last N hours,
-    then synthesizes a coherent summary. Output goes to stdout and is
-    auto-saved with 'session-summary,active' tags.
+    then synthesizes a coherent summary. Output goes to stdout.
+    Use --save to persist to the knowledge base.
 
     Examples:
         emdx wrapup                    # Summarize last 4 hours
         emdx wrapup --hours 8          # Summarize last 8 hours
+        emdx wrapup --save             # Summarize and save to KB
         emdx wrapup --dry-run          # Preview what would be summarized
         emdx wrapup --json             # Get raw activity data
     """
@@ -231,27 +227,24 @@ def wrapup(
 
     # Run synthesis
     title = f"Session Summary ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
-    tags = ["session-summary", "active"]
 
     if not quiet:
         sys.stderr.write(f"wrapup: synthesizing {total_items} items...\n")
 
-    doc_id = _run_synthesis(
+    content = _run_synthesis(
         prompt=prompt,
         title=title,
-        tags=tags,
         model=model or "claude-sonnet-4-5-20250929",
     )
 
-    # Output results
-    if doc_id:
-        from ..database.documents import get_document
-
-        doc = get_document(doc_id)
-        if doc:
-            print(doc.get("content", ""))
-        if not quiet:
-            sys.stderr.write(f"wrapup: saved as doc #{doc_id}\n")
-    else:
+    if not content:
         sys.stderr.write("wrapup: synthesis failed, no output generated\n")
         raise typer.Exit(1)
+
+    print(content)
+
+    if save:
+        tags = ["session-summary", "active"]
+        doc_id = save_document(title=title, content=content, tags=tags)
+        if not quiet:
+            sys.stderr.write(f"wrapup: saved as doc #{doc_id}\n")
