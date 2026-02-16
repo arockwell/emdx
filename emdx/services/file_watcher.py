@@ -14,14 +14,14 @@ if TYPE_CHECKING:
 
 # Try to use watchdog for efficient file watching
 try:
-    from watchdog.events import FileSystemEventHandler  # type: ignore[import-not-found]
-    from watchdog.observers import Observer as ObserverClass  # type: ignore[import-not-found]
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer as ObserverClass
 
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
-    FileSystemEventHandler = object  # type: ignore[misc,assignment]
-    ObserverClass = None  # type: ignore[misc,assignment]
+    FileSystemEventHandler = object
+    ObserverClass = None
 
 logger = logging.getLogger(__name__)
 

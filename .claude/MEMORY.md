@@ -1,5 +1,15 @@
 # EMDX Project Memory
 
+## Design Philosophy
+- **Claude is the primary user of emdx, not the human directly.** Alex tells Claude to use emdx. All features should optimize for machine-readability, minimal token cost, structured output (JSON), and composability. The human UX is for oversight; the hot path is Claude -> emdx CLI -> stdout -> Claude's context window.
+
+## User Preferences
+- Always use Opus 4.6 (`model: "opus"`) for all subagents — max quality, not cost optimization
+- Use `poetry run emdx` in this project, never global `emdx`
+- Prefer small, focused PRs over monolithic ones
+- When running teams, commit work as agents finish rather than waiting for all
+- When emdx delegate fails, fall back to direct web search + manual save
+
 ## Architecture Notes
 - TUI screens: 1=Activity, 2=Tasks, 3=Search, 4=Cascade (reordered Feb 2026)
 - Document browser removed; replaced by TaskBrowser (`task_browser.py` + `task_view.py`)
@@ -37,6 +47,32 @@
 - **All `--flags` must come BEFORE positional arguments** in `emdx delegate` calls.
 - **Appropriate use cases**: code review, PR evaluation, research, analysis. NOT: rebasing, committing, pushing.
 - **`select.select()` broken on macOS**: Root cause of 0-byte delegate logs and hung agents. Fixed with threaded reader approach.
+
+## Codebase Audit (2026-02-08)
+- Completed comprehensive audit with 14 agents (PR #414)
+- Key remaining work:
+  - UI dead code: 1,272 lines across 7 files (execution/, file_list.py, file_preview.py, document_viewer.py)
+  - cascade_browser.py (1,881 lines) needs SRP refactor
+  - 29 direct DB/model import violations in UI layer
+  - docs/cli-api.md has 8 undocumented commands
+  - models/tags.py still needs proper tests (test_tags.py tests raw SQL)
+  - workflows/database.py (1,051 lines) untested
+
+## Team Patterns That Worked
+- Non-overlapping file ownership prevents merge conflicts
+- Test writers only CREATE new files, never touch source
+- Explore agents for audit, general-purpose for implementation
+- Shut down agents as they finish to free resources
+- Don't do git operations (stash, checkout) while agents share working dir
+
+## Feature Research Priorities (as of Feb 2026)
+Top paths for enhancement (ranked by impact x feasibility):
+1. MCP Server (emdx as native Claude tool)
+2. Semantic Search (get emdx ai search working)
+3. Smart Priming (context-aware session bootstrap)
+4. Auto-Linking (KB self-organization on save)
+5. "Dream Journal" overnight consolidation
+See emdx #6092 for full 10-path deep dive.
 
 ## Optional Dependencies (Split in Feb 2026)
 - Heavy deps (sklearn, datasketch, anthropic, numpy, sentence-transformers, google-*) are optional extras

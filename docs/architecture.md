@@ -18,50 +18,105 @@ emdx/
 ├── commands/               # CLI command implementations
 │   ├── core.py            # save, find, view, edit, delete
 │   ├── browse.py          # list, stats, recent
-│   ├── tags.py            # tag add/remove/list/rename/merge/legend/batch
+│   ├── tags.py            # tag add/remove/list/rename/merge/batch
 │   ├── trash.py           # trash, restore, purge
 │   ├── groups.py          # document group management
-│   ├── tasks.py           # task management with dependencies
+│   ├── tasks.py           # task work queue (add/ready/done/view/active/blocked)
 │   ├── gist.py            # GitHub gist integration
-│   ├── gdoc.py            # Google Docs integration
 │   ├── executions.py      # execution monitoring
 │   ├── delegate.py        # one-shot AI execution (parallel, worktree, PR)
 │   ├── recipe.py          # reusable recipe management
-│   ├── similarity.py      # TF-IDF document similarity
 │   ├── ask.py             # AI Q&A over knowledge base
 │   ├── prime.py           # session priming context
 │   ├── status.py          # project status overview
+│   ├── briefing.py        # recent activity summary
+│   ├── compact.py         # AI-powered document synthesis
+│   ├── distill.py         # audience-aware summarization
+│   ├── epics.py           # epic management
+│   ├── categories.py      # task category management
+│   ├── review.py          # triage agent-produced documents
+│   ├── stale.py           # knowledge decay tracking
 │   ├── analyze.py         # database analysis
 │   └── maintain.py        # maintenance operations
+├── config/                 # Configuration management
+│   ├── cli_config.py      # CLI configuration
+│   ├── constants.py       # shared constants
+│   ├── settings.py        # application settings
+│   ├── tagging_rules.py   # auto-tagging rules
+│   └── ui_config.py       # UI configuration
 ├── database/               # SQLite operations
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
 │   ├── search.py          # FTS5 search
 │   ├── groups.py          # document group operations
-│   └── migrations.py      # schema migrations
+│   ├── types.py           # database type definitions
+│   └── migrations.py      # schema migrations (41 migrations, 0-40)
 ├── models/                 # Data models
 │   ├── documents.py       # document model
 │   ├── tags.py            # tag model
 │   ├── executions.py      # execution model
-│   └── tasks.py           # task model with dependencies
+│   ├── tasks.py           # task model
+│   ├── categories.py      # category model
+│   └── types.py           # shared type definitions
 ├── ui/                     # TUI components (Textual)
+│   ├── gui.py                 # main GUI entry point
 │   ├── browser_container.py   # main app container
-│   ├── document_browser.py    # document management
-│   ├── log_browser.py         # execution logs
 │   ├── activity_browser.py    # unified activity display
+│   ├── activity/              # activity view components
+│   ├── log_browser.py         # execution logs
+│   ├── run_browser.py         # execution run browser
+│   ├── task_browser.py        # task management browser
+│   ├── task_view.py           # task detail view
 │   ├── vim_editor.py          # vim modal editing
-│   └── themes.py              # theme system
+│   ├── vim_line_numbers.py    # line number gutter
+│   ├── command_palette/       # command palette system
+│   ├── keybindings/           # keybinding management
+│   ├── search/                # search UI components
+│   ├── qa/                    # Q&A UI components
+│   ├── modals.py              # modal dialogs
+│   ├── formatting.py          # output formatting
+│   ├── inputs.py              # input widgets
+│   ├── text_areas.py          # text area widgets
+│   ├── themes.py              # theme system
+│   └── theme_selector.py      # theme selection UI
 ├── services/               # Business logic
-│   ├── unified_executor.py # CLI execution (Claude/Cursor)
-│   ├── log_stream.py      # event-driven log streaming
-│   ├── file_watcher.py    # file monitoring
-│   ├── auto_tagger.py     # automatic tagging
-│   ├── embedding_service.py # semantic search embeddings
-│   └── health_monitor.py  # system health
+│   ├── unified_executor.py    # CLI execution (Claude/Cursor)
+│   ├── cli_executor/          # CLI executor components
+│   ├── log_stream.py         # event-driven log streaming
+│   ├── file_watcher.py       # file monitoring
+│   ├── auto_tagger.py        # automatic tagging
+│   ├── embedding_service.py   # semantic search embeddings
+│   ├── hybrid_search.py      # combined keyword + semantic search
+│   ├── unified_search.py     # unified search interface
+│   ├── similarity.py         # document similarity
+│   ├── duplicate_detector.py  # duplicate detection
+│   ├── ask_service.py        # AI Q&A service
+│   ├── claude_executor.py    # Claude API executor
+│   ├── document_service.py   # document operations
+│   ├── document_merger.py    # document merging
+│   ├── synthesis_service.py  # synthesis orchestration
+│   ├── group_service.py      # group operations
+│   ├── tag_service.py        # tag operations
+│   ├── execution_service.py  # execution management
+│   ├── execution_monitor.py  # execution health monitoring
+│   └── health_monitor.py     # system health
 └── utils/                  # Shared utilities
     ├── git.py             # git operations (worktrees, branches)
+    ├── git_ops.py         # additional git utilities
     ├── emoji_aliases.py   # tag alias system
-    └── claude_wrapper.py  # Claude Code integration
+    ├── claude_wrapper.py  # Claude Code integration
+    ├── chunk_splitter.py  # document chunking
+    ├── output.py          # shared console output
+    ├── output_parser.py   # execution output parsing
+    ├── text_formatting.py # text formatting utilities
+    ├── title_normalization.py # title normalization
+    ├── datetime_utils.py  # date/time helpers
+    ├── file_size.py       # file size utilities
+    ├── environment.py     # environment detection
+    ├── lazy_group.py      # lazy-loaded typer groups
+    ├── retry.py           # retry logic
+    ├── logging_utils.py   # logging utilities
+    └── structured_logger.py # structured logging
 ```
 
 ## 🖥️ **TUI Browser Modes**
@@ -110,7 +165,8 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **`executions`** - Execution tracking and lifecycle
 - **`documents_fts`** - Full-text search virtual table
 - **`document_groups`** - Hierarchical document organization
-- **`tasks`** - Task management with dependencies
+- **`tasks`** - Agent work queue with epics and categories
+- **`chunk_embeddings`** - Chunk-level semantic search vectors
 
 ### **Key Design Decisions**
 - **SQLite with FTS5** - Fast full-text search with simple deployment
@@ -136,9 +192,9 @@ App (emdx gui)
     ├── ActivityView (press 'a')
     │   ├── ActivityTree (executions, documents, groups)
     │   └── ContextPanel (details for selected item)
-    └── CascadeBrowser (press '4')
-        ├── Stage columns (idea → prompt → analyzed → planned → done)
-        └── Document processing controls
+    └── TaskBrowser (press 't')
+        ├── Task list with status indicators
+        └── Task detail view
 ```
 
 ### **Key Patterns**

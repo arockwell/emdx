@@ -29,17 +29,18 @@ app = typer.Typer(help="Manage and monitor task executions")
 
 def tail_log_subprocess(log_path: Path, follow: bool = False, lines: int = 50) -> None:
     """Tail a log file using system tail command."""
-    cmd = ['tail', f'-n{lines}']
+    cmd = ["tail", f"-n{lines}"]
     if follow:
-        cmd.append('-f')
+        cmd.append("-f")
     cmd.append(str(log_path))
 
     try:
         if follow:
             # Stream output for follow mode
             console.print("\n[dim]Following log file... Press Ctrl+C to stop[/dim]\n")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE, text=True)
+            process = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
             try:
                 for line in process.stdout or []:
                     console.print(line.rstrip())
@@ -65,7 +66,7 @@ def tail_log_python(log_path: Path, follow: bool = False, lines: int = 50) -> No
         return
 
     # Read last N lines efficiently
-    with open(log_path, 'rb') as f:
+    with open(log_path, "rb") as f:
         # Seek to end and work backwards
         f.seek(0, 2)  # Go to end
         f.tell()
@@ -83,12 +84,12 @@ def tail_log_python(log_path: Path, follow: bool = False, lines: int = 50) -> No
             f.seek(-read_size, 1)
 
             # Count lines
-            lines_found += chunk.count(b'\n')
+            lines_found += chunk.count(b"\n")
             chunks.append(chunk)
 
         # Combine chunks and get last N lines
-        content = b''.join(reversed(chunks))
-        all_lines = content.decode('utf-8', errors='replace').splitlines()
+        content = b"".join(reversed(chunks))
+        all_lines = content.decode("utf-8", errors="replace").splitlines()
         display_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
 
         for line in display_lines:
@@ -118,15 +119,14 @@ def display_execution_metadata(execution: Execution) -> None:
     console.print(f"ID: [cyan]{execution.id}[/cyan]")
     console.print(f"Document: {execution.doc_title} (ID: {execution.doc_id})")
 
-    status_style = {
-        'running': 'yellow',
-        'completed': 'green',
-        'failed': 'red'
-    }.get(execution.status, 'white')
+    status_style = {"running": "yellow", "completed": "green", "failed": "red"}.get(
+        execution.status, "white"
+    )
 
     # Check for zombie process
     if execution.is_zombie:
-        console.print(f"Status: [{status_style}]{execution.status}[/{status_style}] [red](process dead - zombie!)[/red]")  # noqa: E501
+        status = f"[{status_style}]{execution.status}[/{status_style}]"
+        console.print(f"Status: {status} [red](process dead - zombie!)[/red]")
     else:
         console.print(f"Status: [{status_style}]{execution.status}[/{status_style}]")
 
@@ -164,11 +164,9 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
     table.add_column("Worktree", style="dim")
 
     for exec in executions:
-        status_style = {
-            'running': 'yellow',
-            'completed': 'green',
-            'failed': 'red'
-        }.get(exec.status, 'white')
+        status_style = {"running": "yellow", "completed": "green", "failed": "red"}.get(
+            exec.status, "white"
+        )
 
         # Format timestamp in local timezone
         local_time = exec.started_at.astimezone()
@@ -183,7 +181,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
         worktree = ""
         if exec.working_dir:
             # Get just the last part of the path for display
-            worktree_parts = exec.working_dir.split('/')
+            worktree_parts = exec.working_dir.split("/")
             if worktree_parts:
                 worktree = worktree_parts[-1]
                 # Truncate if too long
@@ -195,7 +193,7 @@ def list_executions(limit: int = typer.Option(50, help="Number of executions to 
             truncate_description(exec.doc_title),
             status_display,
             formatted_time,
-            worktree
+            worktree,
         )
 
     console.print(table)
@@ -220,11 +218,7 @@ def running() -> None:
         local_time = exec.started_at.astimezone()
         formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
-        table.add_row(
-            str(exec.id),
-            truncate_description(exec.doc_title),
-            formatted_time
-        )
+        table.add_row(str(exec.id), truncate_description(exec.doc_title), formatted_time)
 
     console.print(table)
     console.print(f"\n[yellow]Total: {len(executions)} running execution(s)[/yellow]")
@@ -246,14 +240,12 @@ def stats() -> None:
 @app.command()
 def show(
     exec_id: int,
-    follow: bool = typer.Option(None, "--follow", "-f",
-                               help="Follow log output (auto for running)"),
-    lines: int = typer.Option(50, "--lines", "-n",
-                             help="Number of log lines to show"),
-    no_header: bool = typer.Option(False, "--no-header",
-                                  help="Skip metadata, show only logs"),
-    full: bool = typer.Option(False, "--full",
-                             help="Show entire log file"),
+    follow: bool = typer.Option(
+        None, "--follow", "-f", help="Follow log output (auto for running)"
+    ),
+    lines: int = typer.Option(50, "--lines", "-n", help="Number of log lines to show"),
+    no_header: bool = typer.Option(False, "--no-header", help="Skip metadata, show only logs"),
+    full: bool = typer.Option(False, "--full", help="Show entire log file"),
 ) -> None:
     """Show execution details with integrated log viewer."""
     execution = get_execution(exec_id)
@@ -298,7 +290,7 @@ def show(
 def logs(
     exec_id: int,
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
-    lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show")
+    lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show"),
 ) -> None:
     """Show only the logs for an execution (no metadata)."""
     show(exec_id, follow=follow, lines=lines, no_header=True, full=False)
@@ -380,7 +372,7 @@ def kill_all_executions() -> None:
 @app.command(name="health")
 def execution_health() -> None:
     """Show detailed health status of running executions."""
-    import psutil  # type: ignore[import-untyped]
+    import psutil
 
     from ..services.execution_monitor import ExecutionMonitor
 
@@ -395,13 +387,15 @@ def execution_health() -> None:
     metrics = monitor.get_execution_metrics()
 
     # Show summary
-    console.print(Panel(
-        f"[bold]Execution Health Status[/bold]\n"
-        f"Running: [cyan]{metrics['currently_running']}[/cyan] | "
-        f"Unhealthy: [red]{metrics['unhealthy_running']}[/red] | "
-        f"Failure Rate: [yellow]{metrics['failure_rate_percent']:.1f}%[/yellow]",
-        box=box.ROUNDED
-    ))
+    console.print(
+        Panel(
+            f"[bold]Execution Health Status[/bold]\n"
+            f"Running: [cyan]{metrics['currently_running']}[/cyan] | "
+            f"Unhealthy: [red]{metrics['unhealthy_running']}[/red] | "
+            f"Failure Rate: [yellow]{metrics['failure_rate_percent']:.1f}%[/yellow]",
+            box=box.ROUNDED,
+        )
+    )
 
     # Create health table
     table = Table(title="Running Executions Health Check")
@@ -418,18 +412,18 @@ def execution_health() -> None:
         # Format runtime
         runtime = (datetime.now(timezone.utc) - exec.started_at).total_seconds()
         if runtime > 3600:
-            runtime_str = f"{runtime/3600:.1f}h"
+            runtime_str = f"{runtime / 3600:.1f}h"
         else:
-            runtime_str = f"{runtime/60:.0f}m"
+            runtime_str = f"{runtime / 60:.0f}m"
 
         # Determine health status
-        if health['is_zombie']:
+        if health["is_zombie"]:
             health_status = "[red]ZOMBIE[/red]"
-        elif not health['process_exists'] and exec.pid:
+        elif not health["process_exists"] and exec.pid:
             health_status = "[red]DEAD[/red]"
-        elif health['is_stale']:
+        elif health["is_stale"]:
             health_status = "[yellow]STALE[/yellow]"
-        elif health['is_running']:
+        elif health["is_running"]:
             health_status = "[green]HEALTHY[/green]"
         else:
             health_status = "[yellow]UNKNOWN[/yellow]"
@@ -453,13 +447,13 @@ def execution_health() -> None:
             str(exec.pid) if exec.pid else "-",
             proc_status,
             runtime_str,
-            health_status
+            health_status,
         )
 
     console.print(table)
 
     # Show recommendations if there are unhealthy executions
-    if metrics['unhealthy_running'] > 0:
+    if metrics["unhealthy_running"] > 0:
         console.print("\n[yellow]⚠ Found unhealthy executions![/yellow]")
         console.print("Run [cyan]emdx maintain cleanup --executions --execute[/cyan] to clean up")
 
@@ -467,10 +461,10 @@ def execution_health() -> None:
 @app.command(name="monitor")
 def monitor_executions(
     interval: int = typer.Option(5, "--interval", "-i", help="Refresh interval in seconds"),
-    follow: bool = typer.Option(True, "--follow/--no-follow", help="Continuously monitor")
+    follow: bool = typer.Option(True, "--follow/--no-follow", help="Continuously monitor"),
 ) -> None:
     """Monitor execution status in real-time."""
-    import psutil  # type: ignore[import-untyped]
+    import psutil
 
     from ..services.execution_monitor import ExecutionMonitor
 
@@ -486,7 +480,8 @@ def monitor_executions(
             running = get_running_executions()
 
             # Header
-            console.print(f"[bold]📊 Execution Monitor[/bold] - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")  # noqa: E501
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            console.print(f"[bold]📊 Execution Monitor[/bold] - {now}")
             console.print("-" * 80)
 
             if not running:
@@ -517,9 +512,9 @@ def monitor_executions(
 
                             # Check health
                             health = monitor.check_process_health(exec)
-                            if health['is_zombie']:
+                            if health["is_zombie"]:
                                 status_str = "[red]Zombie[/red]"
-                            elif health['is_running']:
+                            elif health["is_running"]:
                                 status_str = "[green]Running[/green]"
                             else:
                                 status_str = "[yellow]Unknown[/yellow]"
@@ -533,7 +528,7 @@ def monitor_executions(
 
                     # Calculate runtime
                     runtime = (datetime.now(timezone.utc) - exec.started_at).total_seconds()
-                    runtime_str = f"{int(runtime/60)}:{int(runtime%60):02d}"
+                    runtime_str = f"{int(runtime / 60)}:{int(runtime % 60):02d}"
 
                     # Add row
                     table.add_row(
@@ -542,7 +537,7 @@ def monitor_executions(
                         runtime_str,
                         cpu_str,
                         mem_str,
-                        status_str
+                        status_str,
                     )
 
                 console.print(table)
@@ -551,7 +546,9 @@ def monitor_executions(
                 break
 
             # Wait for next update
-            console.print(f"\n[dim]Refreshing every {interval} seconds. Press Ctrl+C to stop.[/dim]")  # noqa: E501
+            console.print(
+                f"\n[dim]Refreshing every {interval} seconds. Press Ctrl+C to stop.[/dim]"
+            )  # noqa: E501
             time.sleep(interval)
 
     except KeyboardInterrupt:

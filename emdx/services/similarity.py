@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 try:
     import scipy.sparse  # type: ignore[import-untyped]
-    from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
-    from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
 
     HAS_SKLEARN = True
 except ImportError:
@@ -42,9 +42,11 @@ def _require_sklearn() -> None:
             "Install it with: pip install 'emdx[similarity]'"
         )
 
+
 @dataclass
 class SimilarDocument:
     """Represents a document similar to a query document."""
+
     doc_id: int
     title: str
     project: str | None
@@ -53,24 +55,27 @@ class SimilarDocument:
     tag_similarity: float
     common_tags: list[str]
 
+
 @dataclass
 class IndexStats:
     """Statistics about the TF-IDF index."""
+
     document_count: int
     vocabulary_size: int
     cache_size_bytes: int
     cache_age_seconds: float
     last_built: datetime | None
 
+
 class SimilarityService:
     """TF-IDF-based document similarity service."""
 
     # Configuration
-    MAX_FEATURES = 10000      # Vocabulary size limit
-    MIN_DF = 2                # Minimum document frequency
-    MAX_DF = 0.95             # Maximum document frequency
-    CONTENT_WEIGHT = 0.6      # Content similarity weight
-    TAG_WEIGHT = 0.4          # Tag similarity weight
+    MAX_FEATURES = 10000  # Vocabulary size limit
+    MIN_DF = 2  # Minimum document frequency
+    MAX_DF = 0.95  # Maximum document frequency
+    CONTENT_WEIGHT = 0.6  # Content similarity weight
+    TAG_WEIGHT = 0.4  # Tag similarity weight
 
     def __init__(self, db_path: Path | None = None):
         """Initialize the similarity service.
@@ -112,14 +117,14 @@ class SimilarityService:
             with open(metadata_path, encoding="utf-8") as f:
                 cache_data = json.load(f)
 
-            self._doc_ids = cache_data['doc_ids']
-            self._doc_titles = cache_data['doc_titles']
-            self._doc_projects = cache_data['doc_projects']
+            self._doc_ids = cache_data["doc_ids"]
+            self._doc_titles = cache_data["doc_titles"]
+            self._doc_projects = cache_data["doc_projects"]
             # Convert tag lists back to sets
-            self._doc_tags = [set(tags) for tags in cache_data['doc_tags']]
+            self._doc_tags = [set(tags) for tags in cache_data["doc_tags"]]
 
             # Parse last_built datetime
-            last_built_str = cache_data.get('last_built')
+            last_built_str = cache_data.get("last_built")
             if last_built_str:
                 self._last_built = datetime.fromisoformat(last_built_str)
             else:
@@ -132,25 +137,26 @@ class SimilarityService:
                 self._tfidf_matrix = None
 
             # Rebuild TfidfVectorizer from stored vocabulary
-            vocabulary = cache_data.get('vocabulary')
+            vocabulary = cache_data.get("vocabulary")
             if vocabulary is not None:
                 self._vectorizer = TfidfVectorizer(
                     max_features=self.MAX_FEATURES,
                     min_df=1,  # Use 1 since we're restoring existing vocabulary
                     max_df=self.MAX_DF,
-                    stop_words='english',
+                    stop_words="english",
                     ngram_range=(1, 2),
                     sublinear_tf=True,
                     vocabulary=vocabulary,
                 )
                 # Mark vectorizer as fitted by setting required attributes
                 # The vocabulary is already set, we just need to set idf_ if available
-                idf_weights = cache_data.get('idf_weights')
+                idf_weights = cache_data.get("idf_weights")
                 if idf_weights is not None:
                     import numpy as np
+
                     self._vectorizer.idf_ = np.array(idf_weights)
                     # _tfidf is a TfidfTransformer inside the vectorizer
-                    if hasattr(self._vectorizer, '_tfidf'):
+                    if hasattr(self._vectorizer, "_tfidf"):
                         self._vectorizer._tfidf.idf_ = self._vectorizer.idf_
             else:
                 self._vectorizer = None
@@ -179,7 +185,7 @@ class SimilarityService:
             try:
                 # Convert vocabulary values to plain ints (sklearn stores numpy int64)
                 vocabulary = {k: int(v) for k, v in self._vectorizer.vocabulary_.items()}
-                if hasattr(self._vectorizer, 'idf_'):
+                if hasattr(self._vectorizer, "idf_"):
                     idf_weights = self._vectorizer.idf_.tolist()
             except AttributeError:
                 # Vectorizer not fitted yet
@@ -187,18 +193,18 @@ class SimilarityService:
 
         # Prepare metadata (all JSON-serializable)
         cache_data = {
-            'doc_ids': self._doc_ids,
-            'doc_titles': self._doc_titles,
-            'doc_projects': self._doc_projects,
+            "doc_ids": self._doc_ids,
+            "doc_titles": self._doc_titles,
+            "doc_projects": self._doc_projects,
             # Convert sets to lists for JSON serialization
-            'doc_tags': [list(tags) for tags in self._doc_tags],
-            'last_built': self._last_built.isoformat() if self._last_built else None,
-            'vocabulary': vocabulary,
-            'idf_weights': idf_weights,
+            "doc_tags": [list(tags) for tags in self._doc_tags],
+            "last_built": self._last_built.isoformat() if self._last_built else None,
+            "vocabulary": vocabulary,
+            "idf_weights": idf_weights,
         }
 
         # Save metadata as JSON
-        with open(metadata_path, 'w', encoding="utf-8") as f:
+        with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(cache_data, f)
 
         # Save TF-IDF matrix using scipy sparse format (safe, no arbitrary code exec)
@@ -256,7 +262,7 @@ class SimilarityService:
                 max_features=self.MAX_FEATURES,
                 min_df=1,
                 max_df=self.MAX_DF,
-                stop_words='english',
+                stop_words="english",
                 ngram_range=(1, 2),
                 sublinear_tf=True,
             )
@@ -277,13 +283,13 @@ class SimilarityService:
         corpus = []
 
         for doc in documents:
-            self._doc_ids.append(doc['id'])
-            self._doc_titles.append(doc['title'])
-            self._doc_projects.append(doc['project'])
+            self._doc_ids.append(doc["id"])
+            self._doc_titles.append(doc["title"])
+            self._doc_projects.append(doc["project"])
 
             # Parse tags
-            tags_str = doc['tags'] or ''
-            tags = {t.strip() for t in tags_str.split(',') if t.strip()}
+            tags_str = doc["tags"] or ""
+            tags = {t.strip() for t in tags_str.split(",") if t.strip()}
             self._doc_tags.append(tags)
 
             # Combine title and content for TF-IDF
@@ -296,7 +302,7 @@ class SimilarityService:
             max_features=self.MAX_FEATURES,
             min_df=min_df,
             max_df=self.MAX_DF,
-            stop_words='english',
+            stop_words="english",
             ngram_range=(1, 2),
             sublinear_tf=True,
         )
@@ -336,7 +342,7 @@ class SimilarityService:
         min_similarity: float = 0.1,
         content_only: bool = False,
         tags_only: bool = False,
-        same_project: bool = False
+        same_project: bool = False,
     ) -> list[SimilarDocument]:
         """Find documents similar to the given document.
 
@@ -375,7 +381,7 @@ class SimilarityService:
         if tags_only:
             content_similarities = [0.0] * len(self._doc_ids)
         else:
-            doc_vector = self._tfidf_matrix[doc_index:doc_index+1]
+            doc_vector = self._tfidf_matrix[doc_index : doc_index + 1]
             content_similarities = cosine_similarity(doc_vector, self._tfidf_matrix)[0]
 
         # Compute hybrid scores
@@ -397,30 +403,28 @@ class SimilarityService:
             elif tags_only:
                 score = tag_sim
             else:
-                score = (self.CONTENT_WEIGHT * content_sim +
-                         self.TAG_WEIGHT * tag_sim)
+                score = self.CONTENT_WEIGHT * content_sim + self.TAG_WEIGHT * tag_sim
 
             if score >= min_similarity:
                 common_tags = list(query_tags & self._doc_tags[i])
-                results.append(SimilarDocument(
-                    doc_id=other_doc_id,
-                    title=self._doc_titles[i],
-                    project=self._doc_projects[i],
-                    similarity_score=score,
-                    content_similarity=content_sim,
-                    tag_similarity=tag_sim,
-                    common_tags=common_tags
-                ))
+                results.append(
+                    SimilarDocument(
+                        doc_id=other_doc_id,
+                        title=self._doc_titles[i],
+                        project=self._doc_projects[i],
+                        similarity_score=score,
+                        content_similarity=content_sim,
+                        tag_similarity=tag_sim,
+                        common_tags=common_tags,
+                    )
+                )
 
         # Sort by score and limit
         results.sort(key=lambda x: x.similarity_score, reverse=True)
         return results[:limit]
 
     def find_similar_by_text(
-        self,
-        text: str,
-        limit: int = 5,
-        min_similarity: float = 0.1
+        self, text: str, limit: int = 5, min_similarity: float = 0.1
     ) -> list[SimilarDocument]:
         """Find documents similar to arbitrary text.
 
@@ -450,15 +454,17 @@ class SimilarityService:
             score = float(similarities[i])
 
             if score >= min_similarity:
-                results.append(SimilarDocument(
-                    doc_id=doc_id,
-                    title=self._doc_titles[i],
-                    project=self._doc_projects[i],
-                    similarity_score=score,
-                    content_similarity=score,
-                    tag_similarity=0.0,  # No tag comparison for text queries
-                    common_tags=[]
-                ))
+                results.append(
+                    SimilarDocument(
+                        doc_id=doc_id,
+                        title=self._doc_titles[i],
+                        project=self._doc_projects[i],
+                        similarity_score=score,
+                        content_similarity=score,
+                        tag_similarity=0.0,  # No tag comparison for text queries
+                        common_tags=[],
+                    )
+                )
 
         # Sort by score and limit
         results.sort(key=lambda x: x.similarity_score, reverse=True)
@@ -494,7 +500,7 @@ class SimilarityService:
             vocabulary_size=vocab_size,
             cache_size_bytes=cache_size,
             cache_age_seconds=cache_age,
-            last_built=self._last_built
+            last_built=self._last_built,
         )
 
     def invalidate_cache(self) -> None:
@@ -540,8 +546,8 @@ class SimilarityService:
             return []
 
         import numpy as np
-        from sklearn.neighbors import NearestNeighbors  # type: ignore[import-untyped]
-        from sklearn.preprocessing import normalize  # type: ignore[import-untyped]
+        from sklearn.neighbors import NearestNeighbors
+        from sklearn.preprocessing import normalize
 
         n_docs = len(self._doc_ids)
 
@@ -551,7 +557,7 @@ class SimilarityService:
         # Normalize vectors for cosine similarity computation
         # For normalized vectors: cosine_similarity = 1 - (euclidean_distance² / 2)
         # So: euclidean_distance = sqrt(2 * (1 - cosine_similarity))
-        normalized_matrix = normalize(self._tfidf_matrix, norm='l2')
+        normalized_matrix = normalize(self._tfidf_matrix, norm="l2")
 
         # Convert similarity threshold to distance threshold
         # cosine_sim = 1 - (dist² / 2), so dist = sqrt(2 * (1 - sim))
@@ -571,9 +577,9 @@ class SimilarityService:
         # Build the neighbor index - O(n log n)
         nn = NearestNeighbors(
             radius=max_distance,
-            algorithm='ball_tree',
-            metric='euclidean',
-            n_jobs=-1  # Use all CPUs
+            algorithm="ball_tree",
+            metric="euclidean",
+            n_jobs=-1,  # Use all CPUs
         )
         nn.fit(dense_matrix)
 
@@ -608,13 +614,15 @@ class SimilarityService:
                 similarity = 1 - (dist * dist / 2)
 
                 if similarity >= min_similarity:
-                    pairs.append((
-                        self._doc_ids[i],
-                        self._doc_ids[j],
-                        self._doc_titles[i],
-                        self._doc_titles[j],
-                        float(similarity)
-                    ))
+                    pairs.append(
+                        (
+                            self._doc_ids[i],
+                            self._doc_ids[j],
+                            self._doc_titles[i],
+                            self._doc_titles[j],
+                            float(similarity),
+                        )
+                    )
 
         if progress_callback:
             progress_callback(90, 100, len(pairs))
@@ -626,6 +634,7 @@ class SimilarityService:
             progress_callback(100, 100, len(pairs))
 
         return pairs
+
 
 def compute_content_similarity(content1: str, content2: str) -> float:
     """Compute TF-IDF cosine similarity between two pieces of content.

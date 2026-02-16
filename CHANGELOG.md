@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 💥 Breaking Changes
+
+#### Cascade system removed (#651)
+The cascade pipeline (`emdx cascade` commands) and the `--chain` flag on `emdx delegate` have been removed. These features added complexity without proportional value — the recipe system provides a simpler, more flexible alternative.
+
+**Removed:**
+- `emdx cascade` command group (new, list, advance, auto, status)
+- `--chain` flag from `emdx delegate`
+- Cascade-related database tables and TUI screens
+
+**Migration:** Use the recipe system instead:
+```bash
+# Old: emdx cascade new "idea" --auto
+# New: Save instructions as a recipe, run with delegate
+echo "Your multi-step instructions..." | emdx save --title "My Workflow" --tags recipe
+emdx recipe run <id>
+
+# Old: emdx delegate --chain "step1" "step2" "step3"
+# New: Write sequential steps in a single recipe document
+```
+
 ## [0.15.0] - 2026-02-15
 
 **The intelligence release.** EMDX gained the ability to synthesize its own knowledge base — compact duplicates, distill topics for different audiences, and search semantically across chunks. The delegate command grew new modes for branch-only workflows and draft PRs. Under the hood, 2,800+ lint and type errors were resolved, the TUI was reorganized, and the document browser was replaced by a focused task browser.
