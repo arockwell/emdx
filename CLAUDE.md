@@ -174,6 +174,11 @@ These commands work but are not yet stable:
 - **`emdx cascade`** — Autonomous idea-to-code pipeline. See [Cascade](docs/cascade.md).
 - **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
+## Known Gotchas
+
+- **`select.select()` on macOS**: Python's `select.select()` does not work reliably on `subprocess.Popen` stdout/stderr pipes on macOS. Use background threads with `queue.Queue` instead (see `_reader_thread()` in `unified_executor.py`).
+- **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
+
 ## Release Process
 
 ```bash
