@@ -295,27 +295,6 @@ class TestPrimeVerbose:
         assert "Design Doc" in result.stdout
 
     @patch(_SCHEMA_PATCH)
-    @patch("emdx.commands.prime._get_cascade_status")
-    @patch("emdx.commands.prime._get_recent_docs")
-    @patch("emdx.commands.prime._get_active_epics")
-    @patch("emdx.commands.prime._get_ready_tasks")
-    @patch("emdx.commands.prime._get_in_progress_tasks")
-    @patch("emdx.commands.prime.get_git_project")
-    def test_verbose_shows_cascade_status(
-        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs, mock_cascade, _
-    ):
-        mock_project.return_value = None
-        mock_epics.return_value = []
-        mock_ready.return_value = []
-        mock_ip.return_value = []
-        mock_docs.return_value = []
-        mock_cascade.return_value = {"idea": 3, "prompt": 1, "analyzed": 0, "planned": 0, "done": 5}
-
-        result = runner.invoke(app, ["--verbose"])
-        assert "CASCADE QUEUE" in result.stdout
-        assert "idea: 3" in result.stdout
-
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
@@ -397,7 +376,6 @@ class TestPrimeJson:
         data = json.loads(result.stdout)
         assert "execution_methods" not in data
         assert "recent_docs" not in data
-        assert "cascade_status" not in data
 
 
 # ---------------------------------------------------------------------------
@@ -626,7 +604,6 @@ class TestPrimeWithKeyDocs:
 
     @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_key_docs")
-    @patch("emdx.commands.prime._get_cascade_status")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_git_context")
     @patch("emdx.commands.prime._get_active_epics")
@@ -641,7 +618,6 @@ class TestPrimeWithKeyDocs:
         mock_epics,
         mock_git,
         mock_recent,
-        mock_cascade,
         mock_key_docs,
         _,
     ):
@@ -651,7 +627,6 @@ class TestPrimeWithKeyDocs:
         mock_ip.return_value = []
         mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
         mock_recent.return_value = []
-        mock_cascade.return_value = {}
         mock_key_docs.return_value = [
             {"id": 1, "title": "Important Doc", "access_count": 100},
             {"id": 2, "title": "Another Doc", "access_count": 50},
@@ -665,7 +640,6 @@ class TestPrimeWithKeyDocs:
 
     @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_key_docs")
-    @patch("emdx.commands.prime._get_cascade_status")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_git_context")
     @patch("emdx.commands.prime._get_active_epics")
@@ -680,7 +654,6 @@ class TestPrimeWithKeyDocs:
         mock_epics,
         mock_git,
         mock_recent,
-        mock_cascade,
         mock_key_docs,
         _,
     ):
@@ -690,7 +663,6 @@ class TestPrimeWithKeyDocs:
         mock_ip.return_value = []
         mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
         mock_recent.return_value = []
-        mock_cascade.return_value = {}
         mock_key_docs.return_value = [{"id": 1, "title": "Doc", "access_count": 10}]
 
         result = runner.invoke(app, ["--format", "json", "--verbose"])
