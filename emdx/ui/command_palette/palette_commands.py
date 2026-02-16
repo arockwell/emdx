@@ -12,11 +12,13 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+
 class CommandContext(Enum):
     """Contexts where commands are available."""
 
     GLOBAL = "global"  # Available everywhere
     ACTIVITY = "activity"
+
 
 @dataclass
 class PaletteCommand:
@@ -30,6 +32,7 @@ class PaletteCommand:
     context: CommandContext = CommandContext.GLOBAL  # Where available
     shortcut: str | None = None  # Keyboard shortcut hint
     category: str = "General"  # For grouping in UI
+
 
 class CommandRegistry:
     """Registry of available commands for the palette."""
@@ -105,8 +108,7 @@ class CommandRegistry:
 
                 # Fuzzy match on keywords
                 keyword_scores = [
-                    SequenceMatcher(None, query_lower, kw.lower()).ratio()
-                    for kw in cmd.keywords
+                    SequenceMatcher(None, query_lower, kw.lower()).ratio() for kw in cmd.keywords
                 ]
                 keyword_score = max(keyword_scores) if keyword_scores else 0.0
 
@@ -252,8 +254,10 @@ class CommandRegistry:
             )
         )
 
+
 # Global registry instance
 _registry: CommandRegistry | None = None
+
 
 def get_command_registry() -> CommandRegistry:
     """Get the global command registry instance."""

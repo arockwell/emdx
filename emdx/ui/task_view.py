@@ -22,7 +22,7 @@ from emdx.models.tasks import (
     list_epics,
     list_tasks,
 )
-from emdx.models.types import TaskDict, TaskLogEntryDict
+from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class TaskView(Widget):
         self._tasks: list[TaskDict] = []
         self._tasks_by_status: dict[str, list[TaskDict]] = defaultdict(list)
         self._option_id_to_task: dict[str, TaskDict] = {}
-        self._epics: dict[str | None, dict[str, Any]] = {}
+        self._epics: dict[str | None, EpicTaskDict] = {}
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
@@ -186,7 +186,7 @@ class TaskView(Widget):
         # Load epics for reference
         try:
             epics = list_epics()
-            self._epics = {e.get("epic_key"): e for e in epics}
+            self._epics = {e["epic_key"]: e for e in epics}
         except Exception as e:
             logger.error(f"Failed to load epics: {e}")
             self._epics = {}
@@ -219,16 +219,12 @@ class TaskView(Widget):
                 option_list.add_option(Option("", disabled=True))
 
             # Section header as a disabled option
-            option_list.add_option(
-                Option(f"[bold]{label} ({len(tasks)})[/bold]", disabled=True)
-            )
+            option_list.add_option(Option(f"[bold]{label} ({len(tasks)})[/bold]", disabled=True))
 
             for task in tasks:
                 opt_id = f"task-{task['id']}"
                 self._option_id_to_task[opt_id] = task
-                option_list.add_option(
-                    Option(f"  {_task_label(task)}", id=opt_id)
-                )
+                option_list.add_option(Option(f"  {_task_label(task)}", id=opt_id))
                 first_option_added = True
 
     def _update_status_bar(self) -> None:
@@ -267,9 +263,7 @@ class TaskView(Widget):
             pass
         return None
 
-    def on_option_list_option_highlighted(
-        self, event: OptionList.OptionHighlighted
-    ) -> None:
+    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         """Update detail pane when a task is highlighted."""
         if event.option_list.id != "task-option-list":
             return
@@ -300,9 +294,7 @@ class TaskView(Widget):
             if epic:
                 done = epic.get("children_done", 0)
                 total = epic.get("child_count", 0)
-                meta_parts.append(
-                    f"Epic: {task['epic_key']} ({done}/{total} done)"
-                )
+                meta_parts.append(f"Epic: {task['epic_key']} ({done}/{total} done)")
             else:
                 meta_parts.append(f"Epic: {task['epic_key']}")
         detail_log.write("  ".join(meta_parts))
@@ -314,9 +306,7 @@ class TaskView(Widget):
         if task.get("updated_at"):
             time_parts.append(f"Updated {_format_time_ago(task['updated_at'])}")
         if task.get("completed_at"):
-            time_parts.append(
-                f"Completed {_format_time_ago(task['completed_at'])}"
-            )
+            time_parts.append(f"Completed {_format_time_ago(task['completed_at'])}")
         if time_parts:
             detail_log.write(f"[dim]{' · '.join(time_parts)}[/dim]")
 
@@ -332,8 +322,7 @@ class TaskView(Widget):
                 for dep in deps:
                     dep_icon = STATUS_ICONS.get(dep["status"], "?")
                     detail_log.write(
-                        f"  {dep_icon} #{dep['id']} {dep['title'][:60]}"
-                        f" [{dep['status']}]"
+                        f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]"
                     )
         except Exception as e:
             logger.debug(f"Error loading dependencies: {e}")
@@ -346,8 +335,7 @@ class TaskView(Widget):
                 for dep in dependents:
                     dep_icon = STATUS_ICONS.get(dep["status"], "?")
                     detail_log.write(
-                        f"  {dep_icon} #{dep['id']} {dep['title'][:60]}"
-                        f" [{dep['status']}]"
+                        f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]"
                     )
         except Exception as e:
             logger.debug(f"Error loading dependents: {e}")
@@ -365,9 +353,7 @@ class TaskView(Widget):
 
         # Work log
         try:
-            log_entries: list[TaskLogEntryDict] = get_task_log(
-                task["id"], limit=20
-            )
+            log_entries: list[TaskLogEntryDict] = get_task_log(task["id"], limit=20)
             if log_entries:
                 detail_log.write("")
                 detail_log.write("[bold]Work Log:[/bold]")
@@ -383,9 +369,7 @@ class TaskView(Widget):
         # Execution info
         if task.get("execution_id"):
             detail_log.write("")
-            detail_log.write(
-                f"[bold]Execution:[/bold] #{task['execution_id']}"
-            )
+            detail_log.write(f"[bold]Execution:[/bold] #{task['execution_id']}")
         if task.get("output_doc_id"):
             detail_log.write(f"Output doc: #{task['output_doc_id']}")
 

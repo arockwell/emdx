@@ -89,6 +89,7 @@ class BrowserContainer(App):
     def exit(self, *args: Any, **kwargs: Any) -> None:
         """Override exit to log when it's called."""
         import traceback
+
         logger.error("BrowserContainer.exit() called!")
         logger.error("".join(traceback.format_stack()))
         super().exit(*args, **kwargs)
@@ -96,6 +97,7 @@ class BrowserContainer(App):
     def _handle_exception(self, error: Exception) -> None:
         """Override exception handler to log exceptions."""
         import traceback
+
         logger.error(f"BrowserContainer._handle_exception called with: {error}")
         logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
         super()._handle_exception(error)
@@ -117,7 +119,9 @@ class BrowserContainer(App):
         register_all_themes(self)
 
         # Use CLI theme if provided, otherwise load from config
-        if self._initial_theme and (self._initial_theme in get_theme_names() or self._initial_theme in self.available_themes):  # noqa: E501
+        if self._initial_theme and (
+            self._initial_theme in get_theme_names() or self._initial_theme in self.available_themes
+        ):  # noqa: E501
             self.theme = self._initial_theme
         else:
             saved_theme = get_theme()
@@ -131,12 +135,14 @@ class BrowserContainer(App):
         browser: Widget
         try:
             from .activity_browser import ActivityBrowser
+
             browser = ActivityBrowser()
             self.browsers["activity"] = browser
             self.current_browser = "activity"
         except Exception as e:
             logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
             from .task_browser import TaskBrowser
+
             browser = TaskBrowser()
             self.browsers["task"] = browser
             self.current_browser = "task"
@@ -178,7 +184,7 @@ class BrowserContainer(App):
     def update_status(self, text: str) -> None:
         """Update the status bar - delegate to current browser."""
         current_browser = self.browsers.get(self.current_browser)
-        if current_browser and hasattr(current_browser, 'update_status'):
+        if current_browser and hasattr(current_browser, "update_status"):
             current_browser.update_status(text)
 
     async def switch_browser(self, browser_type: str) -> None:
@@ -200,46 +206,62 @@ class BrowserContainer(App):
             if browser_type == "activity":
                 try:
                     from .activity_browser import ActivityBrowser
+
                     self.browsers[browser_type] = ActivityBrowser()
                     logger.debug("ActivityBrowser created")
                 except Exception as e:
                     logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Activity browser failed to load:\n{escape(str(e))}")  # noqa: E501
+
+                    self.browsers[browser_type] = Static(
+                        f"Activity browser failed to load:\n{escape(str(e))}"
+                    )  # noqa: E501
             elif browser_type == "log":
                 from .log_browser import LogBrowser
+
                 self.browsers[browser_type] = LogBrowser()
             elif browser_type == "cascade":
                 try:
                     from .cascade import CascadeBrowser
+
                     self.browsers[browser_type] = CascadeBrowser()
                     logger.debug("CascadeBrowser created")
                 except Exception as e:
                     logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
+
+                    msg = f"Cascade browser failed to load:\n{escape(str(e))}"
+                    self.browsers[browser_type] = Static(msg)
             elif browser_type == "task":
                 try:
                     from .task_browser import TaskBrowser
+
                     self.browsers[browser_type] = TaskBrowser()
                     logger.debug("TaskBrowser created")
                 except Exception as e:
                     logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
+
+                    self.browsers[browser_type] = Static(
+                        f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details."
+                    )  # noqa: E501
             elif browser_type == "search":
                 try:
                     from .search import SearchScreen
+
                     self.browsers[browser_type] = SearchScreen()
                     logger.debug("SearchScreen created")
                 except Exception as e:
                     logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Search screen failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
+
+                    msg = f"Search screen failed to load:\n{escape(str(e))}"
+                    self.browsers[browser_type] = Static(msg)
             else:
                 # Unknown browser type - fallback to activity
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to activity")
                 from .activity_browser import ActivityBrowser
+
                 self.browsers["activity"] = ActivityBrowser()
                 browser_type = "activity"
 
@@ -249,7 +271,7 @@ class BrowserContainer(App):
 
         # Set focus to the new browser after mount is complete
         def do_focus() -> None:
-            if hasattr(browser, 'focus'):
+            if hasattr(browser, "focus"):
                 browser.focus()
 
         self.call_after_refresh(do_focus)
@@ -282,7 +304,7 @@ class BrowserContainer(App):
 
         # Try to select the document in the browser
         activity_browser = self.browsers.get("activity")
-        if activity_browser and hasattr(activity_browser, 'select_document_by_id'):
+        if activity_browser and hasattr(activity_browser, "select_document_by_id"):
             await activity_browser.select_document_by_id(doc_id)
 
     async def on_key(self, event: events.Key) -> None:
@@ -339,6 +361,7 @@ class BrowserContainer(App):
         def on_preview_result(result: dict | None) -> None:
             if result:
                 import asyncio
+
                 asyncio.create_task(self._handle_preview_result(result))
 
         self.push_screen(DocumentPreviewModal(doc_id), on_preview_result)
@@ -361,7 +384,9 @@ class BrowserContainer(App):
 
         def dump_widget(widget: Any, indent: int = 0) -> None:
             prefix = "  " * indent
-            lines.append(f"{prefix}{widget.__class__.__name__} id={widget.id} region={widget.region}")  # noqa: E501
+            lines.append(
+                f"{prefix}{widget.__class__.__name__} id={widget.id} region={widget.region}"
+            )  # noqa: E501
             for child in widget.children:
                 dump_widget(child, indent + 1)
 
@@ -381,6 +406,7 @@ class BrowserContainer(App):
     def action_open_command_palette(self) -> None:
         """Open the command palette modal."""
         import asyncio
+
         try:
             from emdx.ui.command_palette import CommandPaletteScreen
 

@@ -91,33 +91,48 @@ class CascadeBrowser(Widget):
         log_dir = Path.cwd() / ".emdx" / "logs" / "cascade"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"{doc_id}_{stage}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        log_file.write_text(f"# Cascade: {stage} processing for doc #{doc_id}\n# Started: {datetime.now().isoformat()}\n")  # noqa: E501
+        started = datetime.now().isoformat()
+        log_file.write_text(
+            f"# Cascade: {stage} processing for doc #{doc_id}\n# Started: {started}\n"
+        )
 
         exec_id = create_execution(
-            doc_id=doc_id, doc_title=f"Cascade: {doc.get('title', '')}",
-            log_file=str(log_file), working_dir=str(Path.cwd()),
+            doc_id=doc_id,
+            doc_title=f"Cascade: {doc.get('title', '')}",
+            log_file=str(log_file),
+            working_dir=str(Path.cwd()),
         )
 
         try:
             pid = execute_claude_detached(
-                task=prompt, execution_id=exec_id, log_file=log_file,
-                allowed_tools=list(DEFAULT_ALLOWED_TOOLS), working_dir=str(Path.cwd()),
+                task=prompt,
+                execution_id=exec_id,
+                log_file=log_file,
+                allowed_tools=list(DEFAULT_ALLOWED_TOOLS),
+                working_dir=str(Path.cwd()),
                 doc_id=str(doc_id),
             )
-            self._update_status(f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring...")  # noqa: E501
+            self._update_status(
+                f"[green]\u25cf Started #{exec_id}[/green] (PID {pid}) - monitoring..."
+            )  # noqa: E501
             if self.cascade_view:
                 self.cascade_view.refresh_all()
             self._start_completion_monitor(exec_id, doc_id, doc, stage, str(log_file))
         except Exception as e:
             from emdx.services.execution_service import update_execution_status
+
             update_execution_status(exec_id, "failed", exit_code=1)
             self._update_status(f"[red]\u2717 Failed to start:[/red] {str(e)[:50]}")
             if self.cascade_view:
                 self.cascade_view.refresh_all()
 
     def _start_completion_monitor(
-        self, exec_id: int, doc_id: int,
-        doc: dict[str, Any], stage: str, log_file: str,
+        self,
+        exec_id: int,
+        doc_id: int,
+        doc: dict[str, Any],
+        stage: str,
+        log_file: str,
     ) -> None:
         """Monitor execution in a background thread, updating UI on completion."""
         import concurrent.futures
@@ -130,13 +145,19 @@ class CascadeBrowser(Widget):
                 self._update_status(status_markup)
                 if view:
                     view.refresh_all()
+
             app.call_from_thread(_apply)
 
         def run() -> None:
             monitor_execution_completion(
-                exec_id=exec_id, doc_id=doc_id, doc=doc, stage=stage,
-                log_file=Path(log_file), next_stage_map=NEXT_STAGE,
-                on_update=on_update, save_doc=save_document,
+                exec_id=exec_id,
+                doc_id=doc_id,
+                doc=doc,
+                stage=stage,
+                log_file=Path(log_file),
+                next_stage_map=NEXT_STAGE,
+                on_update=on_update,
+                save_doc=save_document,
             )
 
         concurrent.futures.ThreadPoolExecutor(max_workers=1).submit(run)
