@@ -15,11 +15,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import IO, Any
+from typing import IO
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..config.constants import EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
+from ..services.types import ExecutionResultDict
 from ..utils.environment import get_subprocess_env
 from .cli_executor import get_cli_executor
 
@@ -210,7 +211,7 @@ class ExecutionResult:
     exit_code: int | None = None
     cli_tool: str = "claude"  # Which CLI was used
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> ExecutionResultDict:
         return {
             "success": self.success,
             "execution_id": self.execution_id,
