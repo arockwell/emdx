@@ -9,12 +9,13 @@ Uses stream-json output format by default for real-time log streaming.
 
 import json
 import logging
+import queue
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from ..config.cli_config import DEFAULT_ALLOWED_TOOLS
 from ..config.constants import EMDX_LOG_DIR
@@ -146,6 +147,22 @@ def format_stream_line(line: str, timestamp: float) -> str | None:
             return f"{format_timestamp(timestamp)} 💬 {line}"
         return None
 
+def _reader_thread(pipe: IO[str], line_queue: queue.Queue) -> None:
+    """Read lines from a pipe and put them on a queue.
+
+    Runs in a background thread. Using simple iteration (``for line in pipe``)
+    is reliable across platforms, unlike ``select.select()`` which doesn't
+    work with ``subprocess.Popen`` pipes on macOS.
+    """
+    try:
+        for line in pipe:
+            line_queue.put(line)
+    except ValueError:
+        pass  # pipe closed
+    finally:
+        line_queue.put(None)  # sentinel: EOF
+
+
 @dataclass
 class ExecutionConfig:
     """Configuration for a CLI execution."""
@@ -265,12 +282,11 @@ class UnifiedExecutor:
             log_file.parent.mkdir(parents=True, exist_ok=True)
 
             if config.verbose:
-                # Stream output in real-time using Popen
-                import select
+                # Stream output in real-time using Popen + reader thread
                 import sys
 
-                stdout_lines = []
-                stderr_lines = []
+                stdout_lines: list[str] = []
+                stderr_lines: list[str] = []
                 deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
@@ -283,7 +299,15 @@ class UnifiedExecutor:
                         env=get_subprocess_env(),
                     )
 
-                    # Stream stdout in real-time with timeout
+                    # Read stdout via background thread (reliable on macOS)
+                    stdout_q: queue.Queue[str | None] = queue.Queue()
+                    reader = threading.Thread(
+                        target=_reader_thread,
+                        args=(process.stdout, stdout_q),
+                        daemon=True,
+                    )
+                    reader.start()
+
                     while True:
                         if time.time() > deadline:
                             process.kill()
@@ -292,39 +316,24 @@ class UnifiedExecutor:
                                 cmd.args, config.timeout_seconds
                             )
 
-                        retcode = process.poll()
+                        try:
+                            line = stdout_q.get(timeout=1.0)
+                        except queue.Empty:
+                            continue
 
-                        # Use select for non-blocking read with 1s timeout
-                        if process.stdout:
-                            try:
-                                ready, _, _ = select.select(
-                                    [process.stdout], [], [], 1.0
-                                )
-                            except (ValueError, TypeError):
-                                # Fallback for mocked pipes without real fd
-                                ready = [process.stdout]
-                            if ready:
-                                line = process.stdout.readline()
-                                if line:
-                                    stdout_lines.append(line)
-                                    formatted = format_stream_line(line, time.time())
-                                    if formatted:
-                                        f.write(formatted + "\n")
-                                        f.flush()
-                                        sys.stdout.write(formatted + "\n")
-                                        sys.stdout.flush()
-
-                        if retcode is not None:
-                            # Process finished, read any remaining output
-                            if process.stdout:
-                                for line in process.stdout:
-                                    stdout_lines.append(line)
-                                    formatted = format_stream_line(line, time.time())
-                                    if formatted:
-                                        f.write(formatted + "\n")
-                                        sys.stdout.write(formatted + "\n")
-                                        sys.stdout.flush()
+                        if line is None:  # EOF sentinel
                             break
+
+                        stdout_lines.append(line)
+                        formatted = format_stream_line(line, time.time())
+                        if formatted:
+                            f.write(formatted + "\n")
+                            f.flush()
+                            sys.stdout.write(formatted + "\n")
+                            sys.stdout.flush()
+
+                    reader.join(timeout=5.0)
+                    process.wait()
 
                     # Capture stderr
                     if process.stderr:
@@ -343,10 +352,8 @@ class UnifiedExecutor:
             else:
                 # Stream output to log file in real-time (without terminal output)
                 # This enables Activity browser to show live logs
-                import select
-
-                stdout_lines = []
-                stderr_lines = []
+                stdout_lines: list[str] = []
+                stderr_lines: list[str] = []
                 deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
@@ -359,7 +366,15 @@ class UnifiedExecutor:
                         env=get_subprocess_env(),
                     )
 
-                    # Stream stdout to log file in real-time with timeout
+                    # Read stdout via background thread (reliable on macOS)
+                    stdout_q: queue.Queue[str | None] = queue.Queue()
+                    reader = threading.Thread(
+                        target=_reader_thread,
+                        args=(process.stdout, stdout_q),
+                        daemon=True,
+                    )
+                    reader.start()
+
                     while True:
                         if time.time() > deadline:
                             process.kill()
@@ -368,34 +383,22 @@ class UnifiedExecutor:
                                 cmd.args, config.timeout_seconds
                             )
 
-                        retcode = process.poll()
+                        try:
+                            line = stdout_q.get(timeout=1.0)
+                        except queue.Empty:
+                            continue
 
-                        if process.stdout:
-                            try:
-                                ready, _, _ = select.select(
-                                    [process.stdout], [], [], 1.0
-                                )
-                            except (ValueError, TypeError):
-                                # Fallback for mocked pipes without real fd
-                                ready = [process.stdout]
-                            if ready:
-                                line = process.stdout.readline()
-                                if line:
-                                    stdout_lines.append(line)
-                                    formatted = format_stream_line(line, time.time())
-                                    if formatted:
-                                        f.write(formatted + "\n")
-                                        f.flush()  # Flush immediately for live viewing
-
-                        if retcode is not None:
-                            # Process finished, read any remaining output
-                            if process.stdout:
-                                for line in process.stdout:
-                                    stdout_lines.append(line)
-                                    formatted = format_stream_line(line, time.time())
-                                    if formatted:
-                                        f.write(formatted + "\n")
+                        if line is None:  # EOF sentinel
                             break
+
+                        stdout_lines.append(line)
+                        formatted = format_stream_line(line, time.time())
+                        if formatted:
+                            f.write(formatted + "\n")
+                            f.flush()  # Flush immediately for live viewing
+
+                    reader.join(timeout=5.0)
+                    process.wait()
 
                     # Capture stderr
                     if process.stderr:

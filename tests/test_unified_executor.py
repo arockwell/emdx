@@ -1,5 +1,6 @@
 """Tests for the UnifiedExecutor service."""
 
+import queue
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,7 @@ from emdx.services.unified_executor import (
     ExecutionConfig,
     ExecutionResult,
     UnifiedExecutor,
+    _reader_thread,
 )
 
 
@@ -234,6 +236,64 @@ class TestUnifiedExecutor:
         mock_update_status.assert_called_with(42, 'failed', -1)
 
 
+    @patch('subprocess.Popen')
+    @patch('emdx.services.unified_executor.get_cli_executor')
+    @patch('emdx.services.unified_executor.create_execution')
+    @patch('emdx.services.unified_executor.update_execution_status')
+    def test_streaming_writes_to_log_file(
+        self, mock_update_status, mock_create_exec, mock_get_executor,
+        mock_popen, tmp_path,
+    ):
+        """Verify stream-json lines are formatted and written to the log."""
+        import json
+
+        from emdx.services.cli_executor.base import CliCommand, CliResult
+
+        mock_executor = MagicMock()
+        mock_executor.validate_environment.return_value = (True, {})
+        mock_executor.build_command.return_value = CliCommand(
+            args=["claude", "--print"], cwd=str(tmp_path),
+        )
+        mock_executor.parse_output.return_value = CliResult(
+            success=True, output='Done', exit_code=0,
+        )
+        mock_get_executor.return_value = mock_executor
+
+        # Simulate stream-json lines
+        init_line = json.dumps({
+            "type": "system", "subtype": "init", "model": "test-model",
+        }) + "\n"
+        result_line = json.dumps({
+            "type": "result", "subtype": "success",
+            "is_error": False, "duration_ms": 100,
+            "result": "all done",
+        }) + "\n"
+
+        mock_process = MagicMock()
+        mock_process.stdout.__iter__ = lambda self: iter(
+            [init_line, result_line],
+        )
+        mock_process.stderr.read.return_value = ''
+        mock_process.returncode = 0
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+
+        mock_create_exec.return_value = 1
+
+        executor = UnifiedExecutor(log_dir=tmp_path)
+        result = executor.execute(ExecutionConfig(prompt="test"))
+
+        assert result.success is True
+
+        # Find the log file and verify contents
+        log_files = list(tmp_path.glob("unified-*.log"))
+        assert len(log_files) == 1
+        log_content = log_files[0].read_text()
+        assert "Session started" in log_content
+        assert "test-model" in log_content
+        assert "Completed (100ms)" in log_content
+
+
 class TestDefaultAllowedTools:
     """Test default allowed tools."""
 
@@ -247,3 +307,39 @@ class TestDefaultAllowedTools:
         config1.allowed_tools.append("Custom")
         assert "Custom" not in config2.allowed_tools
         assert "Custom" not in DEFAULT_ALLOWED_TOOLS
+
+
+class TestReaderThread:
+    """Test the _reader_thread helper used for reliable pipe reading."""
+
+    def test_reads_lines_and_sends_sentinel(self):
+        """Lines from pipe appear on queue, followed by None sentinel."""
+        q: queue.Queue[str | None] = queue.Queue()
+        pipe = MagicMock()
+        pipe.__iter__ = lambda self: iter(["line1\n", "line2\n"])
+
+        _reader_thread(pipe, q)
+
+        assert q.get(timeout=1) == "line1\n"
+        assert q.get(timeout=1) == "line2\n"
+        assert q.get(timeout=1) is None  # sentinel
+
+    def test_empty_pipe_sends_sentinel(self):
+        """An empty pipe still sends the None sentinel."""
+        q: queue.Queue[str | None] = queue.Queue()
+        pipe = MagicMock()
+        pipe.__iter__ = lambda self: iter([])
+
+        _reader_thread(pipe, q)
+
+        assert q.get(timeout=1) is None
+
+    def test_closed_pipe_sends_sentinel(self):
+        """A ValueError (closed pipe) still sends sentinel."""
+        q: queue.Queue[str | None] = queue.Queue()
+        pipe = MagicMock()
+        pipe.__iter__ = MagicMock(side_effect=ValueError("closed"))
+
+        _reader_thread(pipe, q)
+
+        assert q.get(timeout=1) is None
