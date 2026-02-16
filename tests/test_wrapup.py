@@ -218,25 +218,44 @@ class TestWrapupCommand:
 
     @patch("emdx.commands.wrapup._collect_activity")
     @patch("emdx.commands.wrapup._run_synthesis")
-    @patch("emdx.database.documents.get_document")
-    def test_synthesis_saves_with_correct_tags(
+    def test_synthesis_prints_content(
         self,
-        mock_get_doc: MagicMock,
         mock_synth: MagicMock,
         mock_collect: MagicMock,
         runner: CliRunner,
         mock_activity: dict[str, Any],
     ) -> None:
-        """Output is saved with session-summary,active tags."""
+        """Synthesis output is printed to stdout."""
         mock_collect.return_value = mock_activity
-        mock_synth.return_value = 999
-        mock_get_doc.return_value = {"content": "Summary content here"}
+        mock_synth.return_value = "Summary content here"
 
         result = runner.invoke(app, ["wrapup"])
 
         assert result.exit_code == 0
+        assert "Summary content here" in result.output
         mock_synth.assert_called_once()
-        call_args = mock_synth.call_args
+
+    @patch("emdx.commands.wrapup._collect_activity")
+    @patch("emdx.commands.wrapup._run_synthesis")
+    @patch("emdx.commands.wrapup.save_document")
+    def test_save_flag_persists_with_correct_tags(
+        self,
+        mock_save: MagicMock,
+        mock_synth: MagicMock,
+        mock_collect: MagicMock,
+        runner: CliRunner,
+        mock_activity: dict[str, Any],
+    ) -> None:
+        """--save flag saves output with session-summary,active tags."""
+        mock_collect.return_value = mock_activity
+        mock_synth.return_value = "Summary content here"
+        mock_save.return_value = 999
+
+        result = runner.invoke(app, ["wrapup", "--save"])
+
+        assert result.exit_code == 0
+        mock_save.assert_called_once()
+        call_args = mock_save.call_args
         assert "session-summary" in call_args.kwargs["tags"]
         assert "active" in call_args.kwargs["tags"]
 
