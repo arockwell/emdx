@@ -210,6 +210,11 @@ class ActivityDataLoader:
                 if run_id and run_id in seen_run_ids:
                     continue
 
+                # Skip completed executions that produced a doc — the doc
+                # already shows in the activity feed via _load_direct_saves.
+                if status == "completed" and doc_id:
+                    continue
+
                 timestamp = parse_datetime(started_at) or datetime.now()
                 title = doc_title or f"Document #{doc_id}"
                 if stage:
