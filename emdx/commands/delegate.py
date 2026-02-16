@@ -22,6 +22,9 @@ Sequential pipeline:
 With PR creation:
     emdx delegate --pr "fix the auth bug"
 
+Push branch only (no PR):
+    emdx delegate --branch "add logging to auth module"
+
 With worktree isolation:
     emdx delegate --worktree "fix X"
 
@@ -92,6 +95,11 @@ PR_INSTRUCTION_GENERIC = (
 # Regex to find PR URLs in agent output
 _PR_URL_RE = re.compile(r'https://github\.com/[^/]+/[^/]+/pull/\d+')
 
+# Regex to find pushed branch references in agent output
+_BRANCH_PUSH_RE = re.compile(
+    r'(?:origin/|pushed to |branch [\'"`])([a-zA-Z0-9_./-]+)'
+)
+
 
 def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) -> str:
     """Build a structured PR instruction for the agent.
@@ -122,6 +130,34 @@ def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) ->
         f"4. Create the PR: gh pr create{draft_flag} --title \"<short title>\" "
         "--body \"<description of changes>\"\n"
         "5. Report the PR URL in your output (e.g. https://github.com/.../pull/123)"
+    )
+
+
+def _make_branch_instruction(branch_name: str | None = None) -> str:
+    """Build a push-only instruction for the agent (no PR creation).
+
+    Tells the agent to commit and push to origin, but not open a PR.
+
+    Args:
+        branch_name: The branch name to use (if pre-created).
+    """
+    if not branch_name:
+        return (
+            "\n\nAfter saving your output, if you made any code changes,"
+            " commit and push them:\n"
+            "1. Create a new branch with a descriptive name\n"
+            "2. Commit your changes with a clear message\n"
+            "3. Push: git push -u origin <branch-name>\n"
+            "4. Report the branch name that was pushed."
+        )
+    return (
+        "\n\nAfter saving your output, if you made any code changes,"
+        " commit and push them:\n"
+        f"1. You are already on branch `{branch_name}`"
+        " — commit your changes there\n"
+        "2. Write a clear commit message summarizing the changes\n"
+        f"3. Push: git push -u origin {branch_name}\n"
+        f"4. Report the branch name `{branch_name}` in your output."
     )
 
 
@@ -400,6 +436,7 @@ class SingleResult:
     doc_id: int | None = None
     task_id: int | None = None
     pr_url: str | None = None
+    branch_name: str | None = None
 
 
 def _run_single(
@@ -409,6 +446,7 @@ def _run_single(
     model: str | None,
     quiet: bool,
     pr: bool = False,
+    branch: bool = False,
     pr_branch: str | None = None,
     draft: bool = False,
     working_dir: str | None = None,
@@ -454,6 +492,8 @@ def _run_single(
 
     if pr:
         output_instruction += _make_pr_instruction(pr_branch, draft=draft)
+    elif branch:
+        output_instruction += _make_branch_instruction(pr_branch)
 
     config = ExecutionConfig(
         prompt=prompt,
@@ -476,6 +516,8 @@ def _run_single(
 
     # Extract PR URL from output content
     pr_url = _extract_pr_url(result.output_content)
+    # Track branch name (known from pr_branch, or extracted from output)
+    pushed_branch = pr_branch
 
     doc_id = result.output_doc_id
 
@@ -500,12 +542,15 @@ def _run_single(
         _print_doc_content(doc_id)
         if not quiet:
             pr_info = f" pr:{pr_url}" if pr_url else ""
+            branch_info = (
+                f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
+            )
             sys.stderr.write(
                 f"task_id:{task_id} doc_id:{doc_id} "
                 f"tokens:{result.tokens_used} "
                 f"cost:${result.cost_usd:.4f} "
                 f"duration:{result.execution_time_ms / 1000:.1f}s"
-                f"{pr_info}\n"
+                f"{pr_info}{branch_info}\n"
             )
     else:
         _safe_update_task(task_id, status="done")
@@ -515,7 +560,10 @@ def _run_single(
             sys.stdout.write("\n")
         sys.stderr.write("delegate: agent completed with no output\n")
 
-    return SingleResult(doc_id=doc_id, task_id=task_id, pr_url=pr_url)
+    return SingleResult(
+        doc_id=doc_id, task_id=task_id,
+        pr_url=pr_url, branch_name=pushed_branch,
+    )
 
 def _print_pr_summary(
     tasks: list[str], results: dict[int, SingleResult],
@@ -535,6 +583,26 @@ def _print_pr_summary(
     sys.stderr.write("\n")
 
 
+def _print_branch_summary(
+    tasks: list[str], results: dict[int, SingleResult],
+) -> None:
+    """Print a summary table of branches pushed by parallel tasks."""
+    branch_results = [
+        (i, results[i]) for i in sorted(results)
+        if results[i].branch_name and not results[i].pr_url
+    ]
+    if not branch_results:
+        return
+
+    sys.stderr.write(
+        f"\ndelegate: {len(branch_results)} branch(es) pushed:\n"
+    )
+    for i, sr in branch_results:
+        label = tasks[i][:60] if i < len(tasks) else "?"
+        sys.stderr.write(f"  [{i + 1}] {sr.branch_name}  {label}\n")
+    sys.stderr.write("\n")
+
+
 def _run_parallel(
     tasks: list[str],
     tags: list[str],
@@ -544,6 +612,7 @@ def _run_parallel(
     model: str | None,
     quiet: bool,
     pr: bool = False,
+    branch: bool = False,
     draft: bool = False,
     base_branch: str = "main",
     source_doc_id: int | None = None,
@@ -565,12 +634,13 @@ def _run_parallel(
         tags=flat_tags,
     )
 
-    # Pre-generate branch names for --pr tasks so agents get deterministic names
+    # Pre-generate branch names for --pr/--branch tasks
     branch_names: list[str | None] = [None] * len(tasks)
-    if pr:
+    if pr or branch:
+        prefix = "fix" if pr else "feat"
         for i, task in enumerate(tasks):
             slug = _slugify_title(task) or f"task-{i + 1}"
-            branch_names[i] = f"fix/{slug}-{i + 1}"
+            branch_names[i] = f"{prefix}/{slug}-{i + 1}"
 
     # Results indexed by task position to preserve order
     results: dict[int, SingleResult] = {}
@@ -606,6 +676,7 @@ def _run_parallel(
                 model=model,
                 quiet=True,  # suppress per-task metadata in parallel mode
                 pr=pr,
+                branch=branch,
                 pr_branch=branch_names[idx],
                 draft=draft,
                 working_dir=task_worktree_path,
@@ -615,9 +686,9 @@ def _run_parallel(
             )
             return result
         finally:
-            # Clean up worktree after execution
+            # Clean up worktree unless --branch (needs local branch)
             # For --pr: branch is already pushed, worktree no longer needed
-            if task_worktree_path:
+            if task_worktree_path and not branch:
                 from ..utils.git import cleanup_worktree
                 cleanup_worktree(task_worktree_path)
 
@@ -645,9 +716,11 @@ def _run_parallel(
         )
         raise typer.Exit(1) from None
 
-    # Print PR summary if any PRs were created
+    # Print PR/branch summary if any were created
     if pr:
         _print_pr_summary(tasks, results)
+    elif branch:
+        _print_branch_summary(tasks, results)
 
     # Update parent task
     if synthesize and len(doc_ids) > 1:
@@ -715,6 +788,7 @@ def _run_chain(
     model: str | None,
     quiet: bool,
     pr: bool = False,
+    branch: bool = False,
     draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
@@ -773,8 +847,9 @@ def _run_chain(
 
         sys.stdout.write(f"\n=== Step {step_num}/{total_steps}: {task[:60]} ===\n")
 
-        # Only last step gets --pr
+        # Only last step gets --pr/--branch
         step_pr = pr and is_last_step
+        step_branch = branch and is_last_step
 
         step_title = title or f"Delegate chain step {step_num}/{total_steps}"
 
@@ -785,6 +860,7 @@ def _run_chain(
             model=model,
             quiet=quiet,
             pr=step_pr,
+            branch=step_branch,
             draft=draft,
             working_dir=working_dir,
             parent_task_id=parent_task_id,
@@ -862,6 +938,10 @@ def delegate(
         False, "--pr",
         help="Instruct agent to create a PR (implies --worktree)",
     ),
+    branch: bool = typer.Option(
+        False, "--branch",
+        help="Commit and push to origin branch (implies --worktree, no PR)",
+    ),
     draft: bool = typer.Option(
         False, "--draft/--no-draft",
         help="Create PR as draft (default: False, use --draft for draft PRs)",
@@ -871,8 +951,8 @@ def delegate(
         help="Run in isolated git worktree",
     ),
     base_branch: str = typer.Option(
-        "main", "--base-branch",
-        help="Base branch for worktree (only with --worktree)",
+        "main", "--base-branch", "-b",
+        help="Base branch for worktree/branch (default: main)",
     ),
     chain: bool = typer.Option(
         False, "--chain",
@@ -926,6 +1006,12 @@ def delegate(
     With PR creation:
         emdx delegate --pr "fix the auth bug"
 
+    Push branch only (no PR):
+        emdx delegate --branch "add logging to auth module"
+
+    Push branch from a specific base:
+        emdx delegate --branch -b develop "add feature X"
+
     Implement gameplans by doc ID (auto-branches + PRs):
         emdx delegate --worktree --pr -j 7 6097 6098 6099 6100 6101 6102 6103
 
@@ -949,6 +1035,10 @@ def delegate(
         typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)
         raise typer.Exit(1) from None
 
+    if pr and branch:
+        typer.echo("Error: --pr and --branch are mutually exclusive", err=True)
+        raise typer.Exit(1) from None
+
     if each and not do:
         typer.echo("Error: --each requires --do", err=True)
         raise typer.Exit(1) from None
@@ -958,9 +1048,9 @@ def delegate(
     # Guard: detect flags accidentally consumed as task arguments.
     # This can happen if allow_interspersed_args is misconfigured or bypassed.
     known_flags = {"--tags", "-t", "--title", "-T", "--synthesize", "-s", "--jobs", "-j",
-                   "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--draft",
-                   "--no-draft", "--worktree", "-w", "--base-branch", "--chain", "--each",
-                   "--do", "--epic", "-e", "--cat", "-c", "--cleanup"}
+                   "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--branch",
+                   "--draft", "--no-draft", "--worktree", "-w", "--base-branch", "-b",
+                   "--chain", "--each", "--do", "--epic", "-e", "--cat", "-c", "--cleanup"}
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
         sys.stderr.write(
@@ -1014,8 +1104,8 @@ def delegate(
             epic_key = epic_task["epic_key"]
 
     # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
-    #    --pr always implies --worktree so the sub-agent has a clean git environment
-    use_worktree = worktree or pr
+    #    --pr/--branch always imply --worktree for a clean git environment
+    use_worktree = worktree or pr or branch
     worktree_path = None
     if use_worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
@@ -1037,6 +1127,7 @@ def delegate(
                 model=model,
                 quiet=quiet,
                 pr=pr,
+                branch=branch,
                 draft=draft,
                 working_dir=worktree_path,
                 source_doc_id=doc,
@@ -1051,6 +1142,7 @@ def delegate(
                 model=model,
                 quiet=quiet,
                 pr=pr,
+                branch=branch,
                 draft=draft,
                 working_dir=worktree_path,
                 source_doc_id=doc,
@@ -1059,6 +1151,10 @@ def delegate(
             )
             if single_result.pr_url and not quiet:
                 sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
+            elif single_result.branch_name and not quiet:
+                sys.stderr.write(
+                    f"delegate: branch pushed: {single_result.branch_name}\n"
+                )
             if single_result.doc_id is None:
                 raise typer.Exit(1) from None
         else:
@@ -1071,6 +1167,7 @@ def delegate(
                 model=model,
                 quiet=quiet,
                 pr=pr,
+                branch=branch,
                 draft=draft,
                 base_branch=base_branch,
                 source_doc_id=doc,
@@ -1079,10 +1176,12 @@ def delegate(
                 epic_parent_id=epic_parent_id,
             )
     finally:
-        # Clean up worktree after execution
+        # Clean up worktree unless --branch (needs local branch)
         # For --pr: branch is already pushed, worktree no longer needed
-        if worktree_path:
+        if worktree_path and not branch:
             from ..utils.git import cleanup_worktree
             if not quiet:
-                sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
+                sys.stderr.write(
+                    f"delegate: cleaning up worktree {worktree_path}\n"
+                )
             cleanup_worktree(worktree_path)

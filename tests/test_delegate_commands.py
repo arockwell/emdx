@@ -23,6 +23,7 @@ from emdx.commands.delegate import (
     SingleResult,
     _extract_pr_url,
     _load_doc_context,
+    _make_branch_instruction,
     _make_output_file_id,
     _make_output_file_path,
     _make_pr_instruction,
@@ -799,6 +800,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -829,6 +831,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -857,6 +860,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -884,6 +888,7 @@ class TestDelegateCommand:
                 quiet=False,
                 doc=None,
                 pr=False,
+                branch=False,
                 worktree=False,
                 base_branch="main",
                 chain=True,
@@ -908,6 +913,7 @@ class TestDelegateCommand:
                 quiet=False,
                 doc=None,
                 pr=False,
+                branch=False,
                 worktree=False,
                 base_branch="main",
                 chain=False,
@@ -935,6 +941,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -970,6 +977,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=42,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -1001,6 +1009,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=True,
             base_branch="main",
@@ -1033,6 +1042,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=True,
+            branch=False,
             draft=False,
             worktree=False,  # Not explicitly set, but should be implied
             base_branch="develop",
@@ -1064,6 +1074,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -1098,6 +1109,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=True,
+            branch=False,
             draft=True,
             worktree=False,
             base_branch="main",
@@ -1132,6 +1144,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=True,
+            branch=False,
             draft=False,  # --no-draft
             worktree=False,
             base_branch="main",
@@ -1161,6 +1174,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=True,
+            branch=False,
             draft=False,  # --no-draft
             worktree=True,
             base_branch="main",
@@ -1221,6 +1235,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -1252,6 +1267,7 @@ class TestDelegateCommand:
             quiet=False,
             doc=None,
             pr=False,
+            branch=False,
             draft=False,
             worktree=False,
             base_branch="main",
@@ -1336,6 +1352,172 @@ class TestPRInstruction:
 
 
 # =============================================================================
+# Tests for --branch flag and branch instruction
+# =============================================================================
+
+
+class TestBranchInstruction:
+    """Tests for branch (push-only) instruction generation."""
+
+    def test_make_branch_instruction_with_branch_name(self):
+        result = _make_branch_instruction("feat/my-branch")
+        assert "feat/my-branch" in result
+        assert "git push" in result
+        assert "gh pr create" not in result
+
+    def test_make_branch_instruction_without_branch_name(self):
+        result = _make_branch_instruction(None)
+        assert "git push" in result
+        assert "gh pr create" not in result
+        assert "branch-name" in result or "branch name" in result.lower()
+
+    def test_make_branch_instruction_no_pr(self):
+        """Branch instruction must never mention PR creation."""
+        for branch_name in [None, "feat/test"]:
+            result = _make_branch_instruction(branch_name)
+            assert "pull request" not in result.lower()
+            assert "gh pr" not in result
+
+
+class TestBranchFlag:
+    """Tests for --branch flag in delegate command."""
+
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._run_single")
+    def test_branch_implies_worktree(
+        self, mock_run_single, mock_create_wt, mock_cleanup_wt
+    ):
+        """Test that --branch implicitly creates worktree."""
+        mock_create_wt.return_value = ("/tmp/worktree", "branch")
+        mock_run_single.return_value = SingleResult(
+            doc_id=42, task_id=1, branch_name="feat/test"
+        )
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["add feature"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=True,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            chain=False,
+            each=None,
+            do=None,
+        )
+
+        # Worktree should be created
+        mock_create_wt.assert_called_once_with("main")
+        # Worktree should NOT be cleaned up when --branch is set
+        mock_cleanup_wt.assert_not_called()
+
+    @patch("emdx.utils.git.create_worktree")
+    @patch("emdx.commands.delegate._run_single")
+    def test_branch_with_base_branch(self, mock_run_single, mock_create_wt):
+        """Test that --branch respects --base-branch / -b."""
+        mock_create_wt.return_value = ("/tmp/worktree", "branch")
+        mock_run_single.return_value = SingleResult(
+            doc_id=42, task_id=1, branch_name="feat/test"
+        )
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["add feature"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=True,
+            draft=False,
+            worktree=False,
+            base_branch="develop",
+            chain=False,
+            each=None,
+            do=None,
+        )
+
+        mock_create_wt.assert_called_once_with("develop")
+
+    def test_branch_and_pr_mutually_exclusive(self):
+        """Test that --branch and --pr cannot be used together."""
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        with pytest.raises(typer.Exit):
+            delegate(
+                ctx=ctx,
+                tasks=["task"],
+                tags=None,
+                title=None,
+                synthesize=False,
+                jobs=None,
+                model=None,
+                quiet=False,
+                doc=None,
+                pr=True,
+                branch=True,
+                draft=False,
+                worktree=False,
+                base_branch="main",
+                chain=False,
+                each=None,
+                do=None,
+            )
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_branch_passed_to_run_single(self, mock_run_single):
+        """Test that branch=True is passed through to _run_single."""
+        mock_run_single.return_value = SingleResult(
+            doc_id=42, task_id=1, branch_name="feat/test"
+        )
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        # Need worktree mock since --branch implies worktree
+        with patch("emdx.utils.git.create_worktree") as mock_wt:
+            mock_wt.return_value = ("/tmp/wt", "br")
+            delegate(
+                ctx=ctx,
+                tasks=["add feature"],
+                tags=None,
+                title=None,
+                synthesize=False,
+                jobs=None,
+                model=None,
+                quiet=False,
+                doc=None,
+                pr=False,
+                branch=True,
+                draft=False,
+                worktree=False,
+                base_branch="main",
+                chain=False,
+                each=None,
+                do=None,
+            )
+
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["branch"] is True
+        assert call_kwargs["pr"] is False
+
+
+# =============================================================================
 # Tests for error handling
 # =============================================================================
 
@@ -1363,6 +1545,7 @@ class TestErrorHandling:
                 quiet=False,
                 doc=None,
                 pr=False,
+                branch=False,
                 worktree=True,
                 base_branch="main",
                 chain=False,
@@ -1389,6 +1572,7 @@ class TestErrorHandling:
                 quiet=False,
                 doc=None,
                 pr=False,
+                branch=False,
                 worktree=False,
                 base_branch="main",
                 chain=False,
