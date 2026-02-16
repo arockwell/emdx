@@ -247,15 +247,15 @@ class BrowserContainer(App):
                     )  # noqa: E501
             elif browser_type == "search":
                 try:
-                    from .search import SearchScreen
+                    from .qa import QAScreen
 
-                    self.browsers[browser_type] = SearchScreen()
-                    logger.debug("SearchScreen created")
+                    self.browsers[browser_type] = QAScreen()
+                    logger.debug("QAScreen created")
                 except Exception as e:
-                    logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
+                    logger.error(f"Failed to create QAScreen: {e}", exc_info=True)
                     from textual.widgets import Static
 
-                    msg = f"Search screen failed to load:\n{escape(str(e))}"
+                    msg = f"Q&A screen failed to load:\n{escape(str(e))}"
                     self.browsers[browser_type] = Static(msg)
             else:
                 # Unknown browser type - fallback to activity
