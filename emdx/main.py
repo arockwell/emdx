@@ -72,11 +72,10 @@ def get_lazy_help() -> dict[str, str]:
 
 def create_disabled_command(name: str) -> Callable[[], None]:
     """Create a command that shows a disabled message in safe mode."""
+
     def disabled_command() -> None:
         typer.echo(
-            f"Command '{name}' is disabled in safe mode. "
-            f"Set EMDX_SAFE_MODE=0 to enable.",
-            err=True
+            f"Command '{name}' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.", err=True
         )
         raise typer.Exit(1)
 
@@ -109,6 +108,7 @@ from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
 from emdx.commands.trash import app as trash_app  # noqa: E402
+from emdx.commands.wrapup import wrapup as wrapup_command  # noqa: E402
 from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
@@ -185,6 +185,8 @@ app.command(name="briefing")(briefing_command)
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
 
+# Add the wrapup command for session summaries
+app.command(name="wrapup")(wrapup_command)
 
 
 # =============================================================================
@@ -217,8 +219,10 @@ def main(
         None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
     ),
     safe_mode: bool = typer.Option(
-        False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (delegate, recipe)"
+        False,
+        "--safe-mode",
+        envvar="EMDX_SAFE_MODE",
+        help="Disable execution commands (delegate, recipe)",
     ),
 ) -> None:
     """
@@ -309,10 +313,7 @@ def _rewrite_tag_shorthand(argv: list[str]) -> None:
     """
     # Find the position of 'tag' in argv (skip argv[0] which is the program name)
     try:
-        tag_idx = next(
-            i for i in range(1, len(argv))
-            if argv[i] == "tag"
-        )
+        tag_idx = next(i for i in range(1, len(argv)) if argv[i] == "tag")
     except StopIteration:
         return
 

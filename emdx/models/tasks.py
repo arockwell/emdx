@@ -19,7 +19,7 @@ from emdx.models.types import (
 )
 
 # Valid status values
-STATUSES = ('open', 'active', 'blocked', 'done', 'failed')
+STATUSES = ("open", "active", "blocked", "done", "failed")
 
 
 def create_task(
@@ -54,6 +54,7 @@ def create_task(
 
     if epic_key:
         from emdx.models.categories import ensure_category
+
         epic_key = ensure_category(epic_key.upper())
 
     with db.get_connection() as conn:
@@ -71,7 +72,8 @@ def create_task(
             if not title.startswith(prefix):
                 title = f"{prefix}{title}"
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO tasks (
                 title, description, priority, gameplan_id, project, status,
                 prompt, type, execution_id, output_doc_id, source_doc_id,
@@ -79,12 +81,27 @@ def create_task(
                 epic_key, epic_seq
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            title, description, priority, gameplan_id, project, status,
-            prompt, task_type, execution_id, output_doc_id, source_doc_id,
-            parent_task_id, seq, retry_of, tags,
-            epic_key, epic_seq_val,
-        ))
+        """,
+            (
+                title,
+                description,
+                priority,
+                gameplan_id,
+                project,
+                status,
+                prompt,
+                task_type,
+                execution_id,
+                output_doc_id,
+                source_doc_id,
+                parent_task_id,
+                seq,
+                retry_of,
+                tags,
+                epic_key,
+                epic_seq_val,
+            ),
+        )
         task_id = cursor.lastrowid
         assert task_id is not None
 
@@ -92,7 +109,7 @@ def create_task(
             # Use executemany for efficient batch insertion
             cursor.executemany(
                 "INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)",
-                [(task_id, dep_id) for dep_id in depends_on if dep_id is not None]
+                [(task_id, dep_id) for dep_id in depends_on if dep_id is not None],
             )
         conn.commit()
         return task_id
@@ -156,8 +173,9 @@ def list_tasks(
     params.append(limit)
 
     with db.get_connection() as conn:
-        cursor = conn.execute(f"""
-            SELECT * FROM tasks WHERE {' AND '.join(conditions)}
+        cursor = conn.execute(
+            f"""
+            SELECT * FROM tasks WHERE {" AND ".join(conditions)}
             ORDER BY
                 CASE status
                     WHEN 'active' THEN 0
@@ -169,17 +187,35 @@ def list_tasks(
                 priority,
                 created_at DESC
             LIMIT ?
-        """, params)
+        """,
+            params,
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 # Allowed columns for task updates (prevents SQL injection via column names)
-ALLOWED_UPDATE_COLUMNS = frozenset({
-    'title', 'description', 'priority', 'status', 'error', 'gameplan_id',
-    'project', 'prompt', 'type', 'execution_id', 'output_doc_id',
-    'source_doc_id', 'parent_task_id', 'seq', 'retry_of', 'tags',
-    'epic_key', 'epic_seq',
-})
+ALLOWED_UPDATE_COLUMNS = frozenset(
+    {
+        "title",
+        "description",
+        "priority",
+        "status",
+        "error",
+        "gameplan_id",
+        "project",
+        "prompt",
+        "type",
+        "execution_id",
+        "output_doc_id",
+        "source_doc_id",
+        "parent_task_id",
+        "seq",
+        "retry_of",
+        "tags",
+        "epic_key",
+        "epic_seq",
+    }
+)
 
 
 def update_task(task_id: int, **kwargs: Any) -> bool:
@@ -203,16 +239,14 @@ def update_task(task_id: int, **kwargs: Any) -> bool:
         sets.append(f"{key} = ?")
         params.append(value)
         # Set completed_at when status becomes done
-        if key == 'status' and value == 'done':
+        if key == "status" and value == "done":
             sets.append("completed_at = CURRENT_TIMESTAMP")
 
     sets.append("updated_at = CURRENT_TIMESTAMP")
     params.append(task_id)
 
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", params
-        )
+        cursor = conn.execute(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", params)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -228,22 +262,28 @@ def delete_task(task_id: int) -> bool:
 def get_dependencies(task_id: int) -> list[TaskDict]:
     """Get tasks this task depends on."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT t.* FROM tasks t
             JOIN task_deps d ON t.id = d.depends_on
             WHERE d.task_id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_dependents(task_id: int) -> list[TaskDict]:
     """Get tasks that depend on this task (tasks this one blocks)."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT t.* FROM tasks t
             JOIN task_deps d ON t.id = d.task_id
             WHERE d.depends_on = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
@@ -271,16 +311,19 @@ def get_ready_tasks(
         params.append(epic_key.upper())
 
     with db.get_connection() as conn:
-        cursor = conn.execute(f"""
+        cursor = conn.execute(
+            f"""
             SELECT t.* FROM tasks t
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps d
                 JOIN tasks dep ON d.depends_on = dep.id
                 WHERE d.task_id = t.id AND dep.status != 'done'
             )
             ORDER BY t.priority, t.created_at
-        """, params)
+        """,
+            params,
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
@@ -294,8 +337,7 @@ def add_dependency(task_id: int, depends_on: int) -> bool:
     with db.get_connection() as conn:
         try:
             conn.execute(
-                "INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)",
-                (task_id, depends_on)
+                "INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)", (task_id, depends_on)
             )
             conn.commit()
             return True
@@ -305,6 +347,7 @@ def add_dependency(task_id: int, depends_on: int) -> bool:
         except sqlite3.Error as e:
             # Other database error
             import logging
+
             logging.error(f"Database error adding task dependency: {e}")
             return False
 
@@ -320,9 +363,7 @@ def _would_cycle(task_id: int, new_dep: int) -> bool:
             if current in visited:
                 continue
             visited.add(current)
-            cursor = conn.execute(
-                "SELECT depends_on FROM task_deps WHERE task_id = ?", (current,)
-            )
+            cursor = conn.execute("SELECT depends_on FROM task_deps WHERE task_id = ?", (current,))
             stack.extend(row[0] for row in cursor.fetchall())
     return False
 
@@ -331,14 +372,8 @@ def log_progress(task_id: int, message: str) -> int:
     """Add entry to task log."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO task_log (task_id, message) VALUES (?, ?)",
-            (task_id, message)
-        )
-        conn.execute(
-            "UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (task_id,)
-        )
+        cursor.execute("INSERT INTO task_log (task_id, message) VALUES (?, ?)", (task_id, message))
+        conn.execute("UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
         conn.commit()
         assert cursor.lastrowid is not None
         return cursor.lastrowid
@@ -347,24 +382,30 @@ def log_progress(task_id: int, message: str) -> int:
 def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLogEntryDict]:
     """Get task log entries."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT * FROM task_log WHERE task_id = ?
             ORDER BY created_at DESC LIMIT ?
-        """, (task_id, limit))
+        """,
+            (task_id, limit),
+        )
         return [cast(TaskLogEntryDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_gameplan_stats(gameplan_id: int) -> GameplanStatsDict:
     """Get task stats for a gameplan."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT status, COUNT(*) as count FROM tasks
             WHERE gameplan_id = ? GROUP BY status
-        """, (gameplan_id,))
-        by_status = {row['status']: row['count'] for row in cursor.fetchall()}
+        """,
+            (gameplan_id,),
+        )
+        by_status = {row["status"]: row["count"] for row in cursor.fetchall()}
         total = sum(by_status.values())
-        done = by_status.get('done', 0)
-        return {'total': total, 'done': done, 'by_status': by_status}
+        done = by_status.get("done", 0)
+        return {"total": total, "done": done, "by_status": by_status}
 
 
 def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
@@ -390,35 +431,44 @@ def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
 def get_children(parent_task_id: int) -> list[TaskDict]:
     """Get child tasks ordered by seq."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT * FROM tasks
             WHERE parent_task_id = ?
             ORDER BY seq, id
-        """, (parent_task_id,))
+        """,
+            (parent_task_id,),
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
     """Get recent completed top-level tasks."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT * FROM tasks
             WHERE status = 'done' AND parent_task_id IS NULL
             ORDER BY completed_at DESC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
 def get_failed_tasks(limit: int = 5) -> list[TaskDict]:
     """Get recent failed top-level tasks."""
     with db.get_connection() as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT * FROM tasks
             WHERE status = 'failed' AND parent_task_id IS NULL
             ORDER BY updated_at DESC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
 
@@ -438,7 +488,8 @@ def list_epics(
         params.extend(status)
 
     with db.get_connection() as conn:
-        cursor = conn.execute(f"""
+        cursor = conn.execute(
+            f"""
             SELECT t.*,
                 COUNT(c.id) as child_count,
                 COUNT(CASE WHEN c.status IN ('open', 'active', 'blocked')
@@ -446,10 +497,12 @@ def list_epics(
                 COUNT(CASE WHEN c.status = 'done' THEN 1 END) as children_done
             FROM tasks t
             LEFT JOIN tasks c ON c.parent_task_id = t.id AND c.type != 'epic'
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             GROUP BY t.id
             ORDER BY t.created_at DESC
-        """, params)
+        """,
+            params,
+        )
         return [cast(EpicTaskDict, dict(row)) for row in cursor.fetchall()]
 
 
@@ -466,13 +519,63 @@ def get_epic_view(epic_id: int) -> EpicViewDict | None:
 
         raw: dict[str, Any] = dict(epic_row)
 
-        child_cursor = conn.execute("""
+        child_cursor = conn.execute(
+            """
             SELECT * FROM tasks
             WHERE parent_task_id = ?
             ORDER BY epic_seq, seq, id
-        """, (epic_id,))
-        raw["children"] = [
-            cast(TaskDict, dict(row)) for row in child_cursor.fetchall()
-        ]
+        """,
+            (epic_id,),
+        )
+        raw["children"] = [cast(TaskDict, dict(row)) for row in child_cursor.fetchall()]
 
         return cast(EpicViewDict, raw)
+
+
+def get_tasks_in_window(hours: int) -> list[TaskDict]:
+    """Get non-delegate tasks updated within a time window.
+
+    Args:
+        hours: Number of hours to look back
+
+    Returns:
+        List of tasks updated within the window, excluding delegate-created tasks
+    """
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE prompt IS NULL
+            AND updated_at > datetime('now', ? || ' hours')
+            ORDER BY updated_at DESC
+            """,
+            (f"-{hours}",),
+        )
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+
+
+def get_delegate_tasks_in_window(hours: int, limit: int = 20) -> list[TaskDict]:
+    """Get completed delegate tasks within a time window.
+
+    Args:
+        hours: Number of hours to look back
+        limit: Maximum number of tasks to return
+
+    Returns:
+        List of top-level delegate tasks (with prompt IS NOT NULL)
+    """
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT t.*, d.title as doc_title
+            FROM tasks t
+            LEFT JOIN documents d ON t.output_doc_id = d.id
+            WHERE t.prompt IS NOT NULL
+            AND t.parent_task_id IS NULL
+            AND t.updated_at > datetime('now', ? || ' hours')
+            ORDER BY t.updated_at DESC
+            LIMIT ?
+            """,
+            (f"-{hours}", limit),
+        )
+        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]

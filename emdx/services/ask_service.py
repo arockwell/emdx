@@ -304,13 +304,15 @@ class AskService:
             terms = re.sub(r"[^\w\s]", " ", question).strip()
             if terms and len(docs) < limit:
                 query = """
-                    SELECT id, title, content FROM documents
-                    WHERE documents_fts MATCH ? AND is_deleted = 0
+                    SELECT d.id, d.title, d.content
+                    FROM documents d
+                    JOIN documents_fts fts ON d.id = fts.rowid
+                    WHERE fts.documents_fts MATCH ? AND d.is_deleted = 0
                 """
                 params = [terms]
 
                 if project:
-                    query += " AND project = ?"
+                    query += " AND d.project = ?"
                     params.append(project)
 
                 query += " ORDER BY rank LIMIT ?"
