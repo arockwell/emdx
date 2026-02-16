@@ -156,8 +156,6 @@ class Context(Enum):
             "BrowserContainer": cls.GLOBAL,
             # Activity browser
             "ActivityView": cls.ACTIVITY_NORMAL,
-            # Document browser and related
-            "DocumentBrowser": cls.DOCUMENT_NORMAL,
             # Agent browser
             "AgentBrowser": cls.AGENT_NORMAL,
             "AgentHistoryModal": cls.MODAL_AGENT,

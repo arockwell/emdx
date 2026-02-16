@@ -136,10 +136,10 @@ class BrowserContainer(App):
             self.current_browser = "activity"
         except Exception as e:
             logger.error(f"Failed to create ActivityBrowser: {e}", exc_info=True)
-            from .document_browser import DocumentBrowser
-            browser = DocumentBrowser()
-            self.browsers["document"] = browser
-            self.current_browser = "document"
+            from .task_browser import TaskBrowser
+            browser = TaskBrowser()
+            self.browsers["task"] = browser
+            self.current_browser = "task"
 
         assert self.container_widget is not None
         mount_point = self.container_widget.query_one("#browser-mount", Container)
@@ -218,15 +218,15 @@ class BrowserContainer(App):
                     logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Cascade browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
-            elif browser_type == "document":
+            elif browser_type == "task":
                 try:
-                    from .document_browser import DocumentBrowser
-                    self.browsers[browser_type] = DocumentBrowser()
-                    logger.debug("DocumentBrowser created")
+                    from .task_browser import TaskBrowser
+                    self.browsers[browser_type] = TaskBrowser()
+                    logger.debug("TaskBrowser created")
                 except Exception as e:
-                    logger.error(f"Failed to create DocumentBrowser: {e}", exc_info=True)
+                    logger.error(f"Failed to create TaskBrowser: {e}", exc_info=True)
                     from textual.widgets import Static
-                    self.browsers[browser_type] = Static(f"Document browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
+                    self.browsers[browser_type] = Static(f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
             elif browser_type == "search":
                 try:
                     from .search import SearchScreen
@@ -237,11 +237,11 @@ class BrowserContainer(App):
                     from textual.widgets import Static
                     self.browsers[browser_type] = Static(f"Search screen failed to load:\n{escape(str(e))}\n\nCheck logs for details.")  # noqa: E501
             else:
-                # Unknown browser type - fallback to document
-                logger.warning(f"Unknown browser type: {browser_type}, falling back to document")
-                from .document_browser import DocumentBrowser
-                self.browsers["document"] = DocumentBrowser()
-                browser_type = "document"
+                # Unknown browser type - fallback to activity
+                logger.warning(f"Unknown browser type: {browser_type}, falling back to activity")
+                from .activity_browser import ActivityBrowser
+                self.browsers["activity"] = ActivityBrowser()
+                browser_type = "activity"
 
         # Mount the new browser
         browser = self.browsers[browser_type]
@@ -274,20 +274,16 @@ class BrowserContainer(App):
         await self._view_document(event.doc_id)
 
     async def _view_document(self, doc_id: int) -> None:
-        """Switch to document browser and view a specific document."""
+        """Switch to activity browser and view a specific document."""
         logger.debug(f"Viewing doc #{doc_id}")
 
-        # Switch to document browser
-        await self.switch_browser("document")
+        # Switch to activity browser (docs are viewable there)
+        await self.switch_browser("activity")
 
         # Try to select the document in the browser
-        doc_browser = self.browsers.get("document")
-        if doc_browser and hasattr(doc_browser, 'select_document_by_id'):
-            await doc_browser.select_document_by_id(doc_id)
-        elif doc_browser:
-            # Fallback: search for the document
-            if hasattr(doc_browser, 'search'):
-                await doc_browser.search(f"#{doc_id}")
+        activity_browser = self.browsers.get("activity")
+        if activity_browser and hasattr(activity_browser, 'select_document_by_id'):
+            await activity_browser.select_document_by_id(doc_id)
 
     async def on_key(self, event: events.Key) -> None:
         """Global key routing - handle screen switching and browser-specific keys."""
@@ -299,13 +295,13 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Cascade, 3=Search, 4=Documents)
+        # Global number keys for screen switching (1=Activity, 2=Tasks, 3=Search, 4=Cascade)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
             return
         elif key == "2":
-            await self.switch_browser("cascade")
+            await self.switch_browser("task")
             event.stop()
             return
         elif key == "3":
@@ -313,23 +309,16 @@ class BrowserContainer(App):
             event.stop()
             return
         elif key == "4":
-            await self.switch_browser("document")
+            await self.switch_browser("cascade")
             event.stop()
             return
 
-        # Q to quit from activity, document, cascade, or search browser
-        if key == "q" and self.current_browser in ["activity", "document", "cascade", "search"]:
+        # Q to quit from activity, task, cascade, or search browser
+        if key == "q" and self.current_browser in ["activity", "task", "cascade", "search"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
             return
-
-        # Browser-specific keys from document browser
-        if self.current_browser == "document":
-            if key == "l":
-                await self.switch_browser("log")
-                event.stop()
-                return
 
         # Q from sub-browsers goes back to activity (the new default)
         if key == "q" and self.current_browser in ["log"]:
@@ -439,10 +428,12 @@ class BrowserContainer(App):
         # Navigation commands
         if command_id == "nav.activity":
             await self.switch_browser("activity")
-        elif command_id == "nav.documents":
-            await self.switch_browser("document")
+        elif command_id == "nav.tasks":
+            await self.switch_browser("task")
         elif command_id == "nav.search":
             await self.switch_browser("search")
+        elif command_id == "nav.cascade":
+            await self.switch_browser("cascade")
         elif command_id == "nav.logs":
             await self.switch_browser("log")
 
@@ -461,17 +452,6 @@ class BrowserContainer(App):
                 current.action_show_help()
         elif command_id == "app.quit":
             self.exit()
-
-        # Document commands - delegate to current browser
-        elif command_id.startswith("doc."):
-            current = self.browsers.get(self.current_browser)
-            if current is not None:
-                if command_id == "doc.new" and hasattr(current, "action_new_document"):
-                    await current.action_new_document()  # type: ignore[attr-defined]
-                elif command_id == "doc.edit" and hasattr(current, "action_edit_document"):
-                    await current.action_edit_document()  # type: ignore[attr-defined]
-                elif command_id == "doc.tag" and hasattr(current, "action_add_tags"):
-                    current.action_add_tags()  # type: ignore[attr-defined]
 
         else:
             logger.warning(f"Unknown command: {command_id}")

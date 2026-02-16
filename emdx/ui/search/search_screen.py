@@ -59,9 +59,9 @@ class SearchScreen(HelpMixin, Widget):
         Binding("r", "refresh", "Refresh"),
         Binding("question_mark", "show_help", "Help"),
         Binding("1", "switch_activity", "Activity"),
-        Binding("2", "switch_cascade", "Cascade"),
+        Binding("2", "switch_tasks", "Tasks"),
         Binding("3", "switch_search", "Search"),
-        Binding("4", "switch_documents", "Documents"),
+        Binding("4", "switch_cascade", "Cascade"),
     ]
 
     DEFAULT_CSS = """
@@ -159,7 +159,7 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] Docs │ "  # noqa: E501
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ [bold]3[/bold] Search │ [dim]4[/dim] Cascade │ "  # noqa: E501
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
             id="search-nav"
         )
@@ -546,10 +546,10 @@ class SearchScreen(HelpMixin, Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("cascade")
 
-    async def action_switch_documents(self) -> None:
-        """Switch to document browser."""
+    async def action_switch_tasks(self) -> None:
+        """Switch to task browser."""
         if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("document")
+            await self.app.switch_browser("task")
 
     async def action_switch_search(self) -> None:
         """Already on search, do nothing."""
