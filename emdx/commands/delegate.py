@@ -48,6 +48,7 @@ import typer
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document, save_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
+from ..utils.git import generate_delegate_branch_name, validate_pr_preconditions
 
 app = typer.Typer(
     name="delegate",
@@ -229,25 +230,35 @@ def _save_output_fallback(
         return None
 
 
-def _slugify_title(title: str) -> str:
-    """Convert a document title to a git branch slug.
+def _validate_pr_and_warn(
+    working_dir: str | None,
+    base_branch: str = "main",
+    quiet: bool = False,
+) -> bool:
+    """Run PR precondition checks and log warnings. Returns True if OK."""
+    info = validate_pr_preconditions(working_dir, base_branch)
+    if info.get("error"):
+        sys.stderr.write(f"delegate: PR validation error: {info['error']}\n")
+        return False
 
-    Examples:
-        "Gameplan #1: Contextual Save" -> "contextual-save"
-        "Smart Priming (context-aware)" -> "smart-priming-context-aware"
-    """
-    import re
-
-    # Remove common prefixes like "Gameplan #1:", "Feature:", etc.
-    slug = re.sub(
-        r"^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*", "", title, flags=re.IGNORECASE
-    ).strip()  # noqa: E501
-    # Keep only alphanumeric and spaces/hyphens
-    slug = re.sub(r"[^a-zA-Z0-9\s-]", "", slug)
-    # Collapse whitespace to hyphens, lowercase
-    slug = re.sub(r"\s+", "-", slug).strip("-").lower()
-    # Truncate to reasonable branch name length
-    return slug[:50].rstrip("-") or "feature"
+    ok = True
+    branch = info["branch_name"]
+    if not info["has_commits"]:
+        sys.stderr.write(
+            f"delegate: WARNING - No commits on branch '{branch}' "
+            f"relative to {base_branch}. PR will likely fail.\n"
+        )
+        ok = False
+    if not info["is_pushed"]:
+        sys.stderr.write(f"delegate: WARNING - Branch '{branch}' not pushed to origin.\n")
+    if info["files_changed"] == 0:
+        sys.stderr.write("delegate: WARNING - 0 file changes in PR.\n")
+    if ok and not quiet:
+        sys.stderr.write(
+            f"delegate: PR validation passed: {info['commit_count']} commit(s), "
+            f"{info['files_changed']} file(s) changed\n"
+        )
+    return ok
 
 
 def _resolve_task(task: str, pr: bool = False) -> str:
@@ -270,7 +281,7 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     content = doc.get("content", "")
 
     if pr:
-        branch = f"feat/{_slugify_title(title)}"
+        branch = generate_delegate_branch_name(title)
         return (
             f"Read and implement the following gameplan:\n\n# {title}\n\n{content}\n\n"
             f"---\n\n"
@@ -533,6 +544,10 @@ def _run_single(
         _safe_update_task(task_id, status="failed", error=result.error_message)
         return SingleResult(task_id=task_id, success=False, error_message=result.error_message)
 
+    # Validate PR preconditions if --pr was requested
+    if pr and working_dir:
+        _validate_pr_and_warn(working_dir, quiet=quiet)
+
     # Extract PR URL from output content
     pr_url = _extract_pr_url(result.output_content)
     # Track branch name (known from pr_branch, or extracted from output)
@@ -651,13 +666,11 @@ def _run_parallel(
         tags=flat_tags,
     )
 
-    # Pre-generate branch names for --pr/--branch tasks
+    # Pre-generate branch names for --pr/--branch tasks (unified naming)
     branch_names: list[str | None] = [None] * len(tasks)
     if pr or branch:
-        prefix = "fix" if pr else "feat"
         for i, task in enumerate(tasks):
-            slug = _slugify_title(task) or f"task-{i + 1}"
-            branch_names[i] = f"{prefix}/{slug}-{i + 1}"
+            branch_names[i] = generate_delegate_branch_name(task)
 
     # Results indexed by task position to preserve order
     results: dict[int, SingleResult] = {}
@@ -673,7 +686,7 @@ def _run_parallel(
             from ..utils.git import create_worktree
 
             try:
-                task_worktree_path, _ = create_worktree(base_branch)
+                task_worktree_path, _ = create_worktree(base_branch, task_title=task)
                 if not quiet:
                     sys.stderr.write(
                         f"delegate: worktree [{idx + 1}/{len(tasks)}] "
@@ -1233,11 +1246,16 @@ def delegate(
     #    --pr/--branch always imply --worktree for a clean git environment
     use_worktree = worktree or pr or branch
     worktree_path = None
+    worktree_branch = None
     if use_worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
 
         try:
-            worktree_path, _ = create_worktree(base_branch)
+            task_title_for_branch = title or task_list[0][:80] if task_list else None
+            worktree_path, worktree_branch = create_worktree(
+                base_branch,
+                task_title=task_title_for_branch,
+            )
             if not quiet:
                 sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
         except Exception as e:
@@ -1270,6 +1288,7 @@ def delegate(
                 quiet=quiet,
                 pr=pr,
                 branch=branch,
+                pr_branch=worktree_branch,
                 draft=draft,
                 working_dir=worktree_path,
                 source_doc_id=doc,

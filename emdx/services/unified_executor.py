@@ -368,8 +368,8 @@ class UnifiedExecutor:
             else:
                 # Stream output to log file in real-time (without terminal output)
                 # This enables Activity browser to show live logs
-                stdout_lines.clear()
-                stderr_lines.clear()
+                stdout_lines = []
+                stderr_lines = []
                 deadline = start_time + config.timeout_seconds
 
                 with open(log_file, "w") as f:
