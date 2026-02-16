@@ -376,9 +376,9 @@ class SearchScreen(HelpMixin, Widget):
         """Handle when an option is selected (Enter pressed on OptionList)."""
         if event.option_list.id == "results-list" and event.option.id:
             doc_id = int(event.option.id)
-            from ..modals import DocumentPreviewModal
+            from ..modals import DocumentPreviewScreen
 
-            self.app.push_screen(DocumentPreviewModal(doc_id))
+            self.app.push_screen(DocumentPreviewScreen(doc_id))
 
     def action_cursor_down(self) -> None:
         """Move cursor down and focus results list."""
@@ -474,9 +474,9 @@ class SearchScreen(HelpMixin, Widget):
             option = results_list.get_option_at_index(results_list.highlighted)
             if option and option.id:
                 doc_id = int(option.id)
-                from ..modals import DocumentPreviewModal
+                from ..modals import DocumentPreviewScreen
 
-                await self.app.push_screen(DocumentPreviewModal(doc_id))
+                await self.app.push_screen(DocumentPreviewScreen(doc_id))
 
     async def action_edit_document(self) -> None:
         """Edit the selected document."""

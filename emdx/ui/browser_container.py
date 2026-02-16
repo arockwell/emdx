@@ -335,8 +335,8 @@ class BrowserContainer(App[None]):
         await self._view_document(doc_id)
 
     async def _show_document_preview(self, doc_id: int) -> None:
-        """Show document in a modal preview overlay."""
-        from emdx.ui.modals import DocumentPreviewModal
+        """Show document in a fullscreen preview."""
+        from emdx.ui.modals import DocumentPreviewScreen
 
         def on_preview_result(result: dict | None) -> None:
             if result:
@@ -344,7 +344,7 @@ class BrowserContainer(App[None]):
 
                 asyncio.create_task(self._handle_preview_result(result))
 
-        self.push_screen(DocumentPreviewModal(doc_id), on_preview_result)
+        self.push_screen(DocumentPreviewScreen(doc_id), on_preview_result)
 
     async def _handle_preview_result(self, result: dict) -> None:
         """Handle result from document preview modal."""
