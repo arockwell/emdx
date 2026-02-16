@@ -24,8 +24,30 @@ Generate a manual testing checklist for TUI changes.
 - [ ] Advance a doc with `a`
 - [ ] Activity feed in cascade shows entries without duplicates
 
+### modals.py (DocumentPreviewScreen)
+- [ ] Press `f`/`Enter` on a document — fullscreen preview opens with rendered markdown
+- [ ] Press `c` in fullscreen preview — switches to copy mode (raw selectable text)
+- [ ] Press `c` again — switches back to rendered preview
+- [ ] Select text with mouse in copy mode — text is selectable
+- [ ] Press `Esc`/`q` — closes preview, returns to previous screen
+
+### activity_view.py (preview panel copy mode)
+- [ ] Select a document — RHS preview shows rendered markdown
+- [ ] Press `c` — RHS switches to raw selectable text
+- [ ] Press `c` again — back to rendered markdown
+- [ ] Switch documents while in copy mode — content updates correctly
+
+### qa/qa_screen.py
+- [ ] Press `3` from any screen — Q&A screen opens
+- [ ] Type a question and press Enter — animated spinner appears
+- [ ] Spinner label updates: Thinking → Retrieving context → Generating answer
+- [ ] Answer renders as formatted markdown (headings, code blocks, lists)
+- [ ] Sources listed below answer
+- [ ] Press `s` — saves exchange to knowledge base
+- [ ] Press `c` — clears conversation history
+
 ### browser_container.py / main layout
-- [ ] Switch between all tabs (1-4) — no crashes
+- [ ] Switch between all tabs (1–3) — no crashes
 - [ ] Resize terminal — layout adapts without breaking
 - [ ] Keybindings work in all views
 

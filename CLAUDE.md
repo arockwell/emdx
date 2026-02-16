@@ -216,6 +216,13 @@ These commands work but are not yet stable:
 
 - **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
+## TUI Browser Architecture
+
+- Screen-switching bindings (1=Activity, 2=Tasks, 3=Q&A) live on `BrowserContainer` (the app), NOT on individual browser widgets
+- Browser type keys must match their screen names: `"activity"`, `"task"`, `"qa"` — NOT legacy names like `"search"`
+- Every browser's help bar should show all screen numbers (bold the current one, dim the rest)
+- The `QAScreen` is accessed via browser key `"qa"`, not `"search"`
+
 ## Known Gotchas
 
 - **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
