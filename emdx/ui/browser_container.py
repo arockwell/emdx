@@ -63,7 +63,7 @@ class BrowserContainerWidget(Widget):
         yield Container(id="browser-mount")
 
 
-class BrowserContainer(App):
+class BrowserContainer(App[None]):
     """Dead simple container that swaps browser widgets."""
 
     # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior

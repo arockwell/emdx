@@ -30,7 +30,7 @@ class KeybindingExtractor:
 
     def __init__(self) -> None:
         self.entries: list[KeybindingEntry] = []
-        self.scanned_classes: set = set()
+        self.scanned_classes: set[type] = set()
 
     def scan_module(self, module_name: str = "emdx.ui") -> list[KeybindingEntry]:
         """
@@ -135,7 +135,7 @@ class KeybindingExtractor:
             return None
 
     def _tuple_to_entry(
-        self, binding: tuple, widget_class: type[Widget], context: Context
+        self, binding: tuple[str, ...], widget_class: type[Widget], context: Context
     ) -> KeybindingEntry | None:
         """Convert a legacy tuple binding to a KeybindingEntry."""
         try:

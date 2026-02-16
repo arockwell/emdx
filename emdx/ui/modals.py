@@ -16,7 +16,7 @@ from textual.widgets import RichLog, Static
 logger = logging.getLogger(__name__)
 
 
-class KeybindingsHelpScreen(ModalScreen):
+class KeybindingsHelpScreen(ModalScreen[None]):
     """Modal screen showing available keybindings."""
 
     CSS = """
@@ -154,7 +154,7 @@ class HelpMixin:
 
     # Override these in subclasses for customization
     HELP_TITLE: str = "Keybindings"
-    HELP_CATEGORIES: dict = {}  # action_name -> category
+    HELP_CATEGORIES: dict[str, str] = {}  # action_name -> category
 
     # Default category mappings for common actions
     _DEFAULT_CATEGORIES = {

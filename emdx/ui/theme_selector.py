@@ -15,7 +15,7 @@ from emdx.config.ui_config import get_theme, set_theme
 from emdx.ui.themes import get_theme_display_info
 
 
-class ThemeSelectorScreen(ModalScreen):
+class ThemeSelectorScreen(ModalScreen[str]):
     """Modal screen for selecting a theme."""
 
     CSS = """

@@ -11,7 +11,7 @@ from emdx.config.constants import EMDX_CONFIG_DIR
 from emdx.utils.output import console
 
 
-def get_subprocess_env() -> dict:
+def get_subprocess_env() -> dict[str, str]:
     """Get a clean environment dict for spawning CLI subprocesses.
 
     Removes environment variables that prevent nested execution, such as

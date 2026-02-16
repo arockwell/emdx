@@ -343,7 +343,7 @@ class KeybindingRegistry:
                 bindings.extend(self.by_context.get(parent, []))
 
         # Sort: priority bindings first, then by context specificity
-        def sort_key(b: KeybindingEntry) -> tuple:
+        def sort_key(b: KeybindingEntry) -> tuple[int, int]:
             # Get context depth (more specific = higher number)
             ctx_order = [context] + Context.get_parent_contexts(context)
             try:
