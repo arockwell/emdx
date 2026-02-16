@@ -11,6 +11,8 @@ from emdx.commands.prime import (
     _format_epic_line,
     _get_git_context,
     _get_key_docs,
+    _get_recent_failures,
+    _get_recent_failures_json,
     _task_label,
     app,
 )
@@ -698,3 +700,288 @@ class TestPrimeWithKeyDocs:
         assert "key_docs" in data
         assert len(data["key_docs"]) == 1
         assert data["key_docs"][0]["access_count"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Helper for failed tasks
+# ---------------------------------------------------------------------------
+
+
+def _make_failed_task(
+    id=1,
+    title="Failed task",
+    error="Something went wrong",
+    prompt="do something",
+    updated_at="2026-02-16T12:00:00",
+    epic_key=None,
+    epic_seq=None,
+):
+    return {
+        "id": id,
+        "title": title,
+        "error": error,
+        "prompt": prompt,
+        "updated_at": updated_at,
+        "status": "failed",
+        "epic_key": epic_key,
+        "epic_seq": epic_seq,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tests for _get_recent_failures and _get_recent_failures_json
+# ---------------------------------------------------------------------------
+
+
+class TestGetRecentFailures:
+    """Tests for _get_recent_failures helper."""
+
+    @patch("emdx.models.tasks.get_recent_failures")
+    def test_calls_model_function(self, mock_get_failures):
+        mock_get_failures.return_value = [_make_failed_task()]
+
+        result = _get_recent_failures()
+
+        mock_get_failures.assert_called_once_with(hours=24, limit=5)
+        assert len(result) == 1
+        assert result[0]["id"] == 1
+
+    @patch("emdx.models.tasks.get_recent_failures")
+    def test_returns_empty_list_when_no_failures(self, mock_get_failures):
+        mock_get_failures.return_value = []
+
+        result = _get_recent_failures()
+
+        assert result == []
+
+
+class TestGetRecentFailuresJson:
+    """Tests for _get_recent_failures_json helper."""
+
+    @patch("emdx.models.tasks.get_recent_failures")
+    def test_formats_failures_for_json(self, mock_get_failures):
+        mock_get_failures.return_value = [
+            _make_failed_task(
+                id=42,
+                title="DB Migration failed",
+                error="Connection refused",
+                prompt="run migrations",
+            )
+        ]
+
+        result = _get_recent_failures_json()
+
+        assert len(result) == 1
+        assert result[0]["id"] == 42
+        assert result[0]["title"] == "DB Migration failed"
+        assert result[0]["error"] == "Connection refused"
+        assert result[0]["prompt"] == "run migrations"
+        assert result[0]["retry_command"] == 'emdx delegate "run migrations"'
+
+    @patch("emdx.models.tasks.get_recent_failures")
+    def test_retry_command_is_none_when_no_prompt(self, mock_get_failures):
+        mock_get_failures.return_value = [_make_failed_task(id=1, prompt=None)]
+
+        result = _get_recent_failures_json()
+
+        assert result[0]["retry_command"] is None
+
+    @patch("emdx.models.tasks.get_recent_failures")
+    def test_returns_empty_list_when_no_failures(self, mock_get_failures):
+        mock_get_failures.return_value = []
+
+        result = _get_recent_failures_json()
+
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Tests for recent failures in text output
+# ---------------------------------------------------------------------------
+
+
+class TestPrimeWithRecentFailures:
+    """Tests for RECENT FAILURES section in prime output."""
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_shows_recent_failures_section(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        mock_failures.return_value = [
+            _make_failed_task(
+                id=38,
+                title="Check database migrations",
+                error="Connection refused to localhost:5432",
+                prompt="Check database migrations",
+            )
+        ]
+
+        result = runner.invoke(app, [])
+        assert result.exit_code == 0
+        assert "RECENT FAILURES (1)" in result.stdout
+        assert "#38" in result.stdout
+        assert "Check database migrations" in result.stdout
+        assert "error: Connection refused" in result.stdout
+        assert 'retry: emdx delegate "Check database migrations"' in result.stdout
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_truncates_long_error_messages(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        long_error = "A" * 100  # Error longer than 60 chars
+        mock_failures.return_value = [_make_failed_task(id=1, title="Task", error=long_error)]
+
+        result = runner.invoke(app, [])
+        # Should be truncated with ...
+        assert "AAAAAAA..." in result.stdout
+        assert long_error not in result.stdout
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_truncates_multiline_error_messages(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        multiline_error = "Line one\nLine two\nLine three"
+        mock_failures.return_value = [_make_failed_task(id=1, title="Task", error=multiline_error)]
+
+        result = runner.invoke(app, [])
+        # Should only show first line with ...
+        assert "error: Line one..." in result.stdout
+        assert "Line two" not in result.stdout
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_no_section_when_no_failures(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        mock_failures.return_value = []
+
+        result = runner.invoke(app, [])
+        assert "RECENT FAILURES" not in result.stdout
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_escapes_quotes_in_retry_command(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        mock_failures.return_value = [_make_failed_task(id=1, title="Task", prompt='fix "bug"')]
+
+        result = runner.invoke(app, [])
+        assert 'retry: emdx delegate "fix \\"bug\\""' in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Tests for recent failures in JSON output
+# ---------------------------------------------------------------------------
+
+
+class TestPrimeJsonWithRecentFailures:
+    """Tests for recent_failures in JSON output."""
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures_json")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_json_includes_recent_failures(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures_json, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        mock_failures_json.return_value = [
+            {
+                "id": 38,
+                "title": "DB Migration failed",
+                "error": "Connection refused",
+                "prompt": "run migrations",
+                "retry_command": 'emdx delegate "run migrations"',
+                "updated_at": "2026-02-16T12:00:00",
+            }
+        ]
+
+        result = runner.invoke(app, ["--format", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert "recent_failures" in data
+        assert len(data["recent_failures"]) == 1
+        assert data["recent_failures"][0]["id"] == 38
+        assert data["recent_failures"][0]["retry_command"] == 'emdx delegate "run migrations"'
+
+    @patch(_SCHEMA_PATCH)
+    @patch("emdx.commands.prime._get_recent_failures_json")
+    @patch("emdx.commands.prime._get_git_context")
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_json_empty_failures_is_empty_list(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, mock_failures_json, _
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+        mock_git.return_value = {"branch": None, "commits": [], "prs": [], "error": None}
+        mock_failures_json.return_value = []
+
+        result = runner.invoke(app, ["--format", "json"])
+        data = json.loads(result.stdout)
+        assert "recent_failures" in data
+        assert data["recent_failures"] == []

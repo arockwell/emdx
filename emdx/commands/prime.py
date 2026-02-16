@@ -120,6 +120,29 @@ def _output_text(
             lines.append(f"  {label}  {task['title']}")
         lines.append("")
 
+    # Recent failures
+    recent_failures = _get_recent_failures()
+    if recent_failures:
+        lines.append(f"RECENT FAILURES ({len(recent_failures)}):")
+        lines.append("")
+        for task in recent_failures:
+            label = _task_label(task)
+            title = task.get("title", "")[:40]
+            error = task.get("error", "")
+            prompt = task.get("prompt", "")
+
+            lines.append(f"  {label}  {title}")
+            if error:
+                # Truncate error to one line, max 60 chars
+                error_snippet = error.split("\n")[0][:60]
+                if len(error) > 60 or "\n" in error:
+                    error_snippet += "..."
+                lines.append(f"         error: {error_snippet}")
+            if prompt:
+                escaped = prompt[:50].replace('"', '\\"')
+                lines.append(f'         retry: emdx delegate "{escaped}"')
+        lines.append("")
+
     # Git context (always shown, not quiet-only)
     if not quiet:
         git_ctx = _get_git_context()
@@ -310,6 +333,15 @@ def _get_in_progress_tasks() -> list[dict[str, Any]]:
             }
             for r in rows
         ]
+
+
+def _get_recent_failures() -> list[dict[str, Any]]:
+    """Get recent failures for prime output."""
+    from typing import cast
+
+    from ..models.tasks import get_recent_failures
+
+    return cast(list[dict[str, Any]], get_recent_failures(hours=24, limit=5))
 
 
 def _get_recent_docs() -> list[dict[str, Any]]:
@@ -513,6 +545,24 @@ def _get_execution_methods_json() -> list[dict[str, Any]]:
     ]
 
 
+def _get_recent_failures_json() -> list[dict[str, Any]]:
+    """Get recent failures formatted for JSON output."""
+    from ..models.tasks import get_recent_failures
+
+    failures = get_recent_failures(hours=24, limit=5)
+    return [
+        {
+            "id": f["id"],
+            "title": f["title"],
+            "error": f.get("error", ""),
+            "prompt": f.get("prompt", ""),
+            "retry_command": f'emdx delegate "{f.get("prompt", "")}"' if f.get("prompt") else None,
+            "updated_at": f.get("updated_at"),
+        }
+        for f in failures
+    ]
+
+
 def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
     """Output priming context as JSON."""
     import json
@@ -523,6 +573,7 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
         "active_epics": _get_active_epics(),
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "recent_failures": _get_recent_failures_json(),
         "git_context": _get_git_context(),
     }
 
