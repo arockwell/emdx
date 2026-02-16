@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-02-15
+
+**The intelligence release.** EMDX gained the ability to synthesize its own knowledge base — compact duplicates, distill topics for different audiences, and search semantically across chunks. The delegate command grew new modes for branch-only workflows and draft PRs. Under the hood, 2,800+ lint and type errors were resolved, the TUI was reorganized, and the document browser was replaced by a focused task browser.
+
+### 🚀 Major Features
+
+#### `emdx compact` — AI-powered document deduplication (#621, #631)
+Finds clusters of similar documents using TF-IDF similarity and merges them into single coherent documents via Claude. Originals are tagged `superseded` (not deleted). Works in discovery mode or with explicit doc IDs:
+
+```bash
+emdx compact --dry-run                    # Show clusters without merging
+emdx compact --dry-run --threshold 0.7    # Tighter similarity threshold
+emdx compact 32 33                        # Merge specific documents
+emdx compact --auto                       # Merge all discovered clusters
+emdx compact --topic "delegate"           # Only cluster docs matching a topic
+```
+
+Documents tagged `superseded` are automatically excluded from future clustering. The synthesis runs through the Claude CLI (same auth as `delegate`) — no `ANTHROPIC_API_KEY` needed.
+
+#### `emdx distill` — audience-aware KB synthesis (#618, #631)
+Searches the knowledge base and synthesizes matching documents into a coherent summary, tailored for a specific audience:
+
+```bash
+emdx distill "authentication"                    # Personal summary (default)
+emdx distill --for docs "API design"             # Documentation style
+emdx distill --for coworkers "sprint progress"   # Team briefing
+emdx distill --tags "security,active" --save     # Save result to KB
+```
+
+Three audience modes — `me` (dense, technical), `docs` (formal documentation), `coworkers` (accessible team briefing) — each with distinct prompting.
+
+#### Hybrid search with semantic matching (#604)
+`emdx find` now supports chunk-level semantic search alongside the existing full-text search:
+
+```bash
+emdx find "concept" --mode semantic    # Conceptual/semantic search
+emdx find "query" --extract            # Extract key info from results
+```
+
+Documents are split into chunks and indexed with sentence-transformer embeddings. Semantic mode finds conceptually related content even when keywords don't match.
+
+#### `emdx review` and `emdx briefing` (#597, #600)
+Two new commands for staying on top of agent activity:
+- **`emdx review`** — Triage agent outputs: review, approve, tag, or dismiss delegate results
+- **`emdx briefing`** — Generate an activity summary of recent delegate work
+
+#### Knowledge decay — stale docs and `touch` (#583)
+Documents now track freshness. `emdx maintain --stale` identifies documents that haven't been accessed recently. `emdx touch <id>` marks a document as still relevant, resetting its decay clock.
+
+#### Task system overhaul (#576, #582, #609)
+Tasks gained structure and visibility:
+- **Categories and epics** — organize tasks into larger units of work (#576)
+- **Introspection commands** — `task view`, `task active`, `task log`, `task note`, `task blocked` (#582)
+- **Grouped list output** — tasks display in sections with age and blocker info (#609)
+
+### 🔧 Improvements
+
+#### Delegate enhancements (#596, #601, #623, #629, #631)
+- **`--draft` flag** — Create draft PRs by default for safety; `--no-draft` for ready-to-review (#601)
+- **`--branch` flag** — Push-only mode without PR creation; `-b` alias for `--base-branch` (#623)
+- **Structured PR instructions** — Parallel `--pr` tasks get proper summaries (#596)
+- **Auto-save fallback** — File-based output fallback when agents skip `emdx save` (#610, #622)
+- **Worktree cleanup** — `--cleanup` flag, worktrees always cleaned up after execution (#624, #629)
+- **Synthesis uses Claude CLI** — `compact` and `distill` use the same auth path as `delegate`, no API key required (#631)
+
+#### TUI reorganization (#626)
+- Screens reordered: **1=Activity, 2=Tasks, 3=Search, 4=Cascade**
+- Document browser replaced by a focused **task browser** with grouped status view and detail pane
+- ~2,100 lines of dead UI code removed (document browser, preview manager, presenters, viewmodels)
+
+#### `emdx view` output modes (#625)
+- Default output is now **plain text** (no Rich formatting) — pipes cleanly to other tools
+- `--rich` flag for formatted terminal output
+- `--json` flag for structured output
+- Systematic `--json` support added across multiple CLI commands (#595)
+
+#### Code quality blitz
+- **2,343 ruff lint errors** resolved across the entire codebase (#581, #586)
+- **528 mypy type errors** resolved — full strict type checking (#588)
+- **Pre-commit hooks** added: ruff lint, ruff format, mypy on staged files (#585)
+- **TypedDict definitions** added across database, models, groups, and cascade layers (#602, #603, #606, #607)
+- **CI expanded** — lint, type-check, and multi-Python test matrix (#515)
+
+#### Test coverage: 780 → 1,170+ tests
+- Comprehensive tests for task commands, cascade, delegate, execution system, and async UI (#528, #534, #542, #543, #557)
+- Weak assertions tightened (#533), test sleeps reduced (#531)
+- Foreign key handling consolidated (#532)
+
+#### Dependency upgrades
+- **Textual** 4.x → 6.2.x (#587)
+- **numpy** 1.26 → 2.4, **sentence-transformers** 3.x → 5.x, **typer** 0.15 → 0.23 (#547, #552, #554, #608)
+- Dependabot and Renovate configured for automated updates (#523)
+- Release automation workflow added (#527)
+
+### 🐛 Bug Fixes
+- **security**: Command injection in `--each` flag patched (#518)
+- **db**: SQL injection prevention, atomicity fixes, null checks (#594)
+- **similarity**: Pickle replaced with safe JSON serialization in cache (#592)
+- **ui**: Race conditions in document browser and search presenter (#591)
+- **cascade**: Stage update race condition (#589)
+- **migrations**: Rollback handling and UnboundLocalError (#590)
+- **delegate**: Flag-as-task parsing bug (#580), auto-save when agent skips `emdx save` (#610)
+- **delegate**: Draft default mismatch between CLI and internal functions (#615)
+- **db**: Foreign key cascade on 6 tables, LOWER(title) index (#520)
+- **deps**: Missing pyyaml dependency (#475)
+- **delegate**: Replace `select.select()` with threaded reader for macOS pipe reliability (#632)
+
+### 💥 Breaking Changes
+- **Document browser removed** — replaced by task browser. Screen 2 is now Tasks, not Documents (#626)
+- **`emdx view` default changed** — output is plain text by default. Use `--rich` for formatted output (#625)
+- **`anthropic` SDK no longer required** for `compact`/`distill` — uses Claude CLI instead (#631)
+
 ## [0.14.0] - 2026-02-13
 
 **The simplification release.** EMDX went from 6 execution commands and a complex workflow engine down to one command that does everything: `emdx delegate`. The codebase shed ~15,000 lines of dead code while gaining 250 new tests. Every doc, every help string, every architecture diagram has been rewritten to match reality.
@@ -594,6 +706,7 @@ A sustained cleanup across 10+ PRs deleted dead code from every layer — unused
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.15.0]: https://github.com/arockwell/emdx/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/arockwell/emdx/compare/v0.12.0...v0.14.0
 [0.12.0]: https://github.com/arockwell/emdx/compare/v0.10.0...v0.12.0
 [0.10.0]: https://github.com/arockwell/emdx/compare/v0.8.0...v0.10.0
