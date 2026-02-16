@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.table import Table
 
 from emdx.database import db
@@ -773,8 +773,16 @@ def _find_keyword_search(
 def view(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
-    no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
+    rich_mode: bool = typer.Option(
+        False, "--rich", help="Rich formatted output with colors and panel header"
+    ),
+    no_pager: bool = typer.Option(
+        False, "--no-pager", help="Disable pager (for piping output)"
+    ),
+    no_header: bool = typer.Option(
+        False, "--no-header", help="Hide document header information"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """View a document from the knowledge base"""
     try:
@@ -788,57 +796,133 @@ def view(
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
 
-        # Display document with or without pager
-        if no_pager:
-            # Direct output without pager
+        doc_tags = get_document_tags(doc["id"])
+
+        # JSON output
+        if json_output:
+            content = doc["content"]
+            output = {
+                "id": doc["id"],
+                "title": doc["title"],
+                "content": content,
+                "project": doc["project"],
+                "created_at": str(doc.get("created_at") or ""),
+                "updated_at": str(doc.get("updated_at") or ""),
+                "accessed_at": str(doc.get("accessed_at") or ""),
+                "access_count": doc["access_count"],
+                "parent_id": doc.get("parent_id"),
+                "tags": doc_tags,
+                "word_count": len(content.split()),
+                "char_count": len(content),
+                "line_count": content.count("\n") + 1 if content else 0,
+            }
+            print(json.dumps(output, indent=2))
+            return
+
+        def _render_output() -> None:
             if not no_header:
-                console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-                console.print("=" * 60)
-                console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                console.print(f"[dim]Created:[/dim] {str(doc['created_at'] or '')[:16]}")
-                console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-                # Show tags
-                doc_tags = get_document_tags(doc["id"])
-                if doc_tags:
-                    console.print(f"[dim]Tags:[/dim] {format_tags(doc_tags)}")
-                console.print("=" * 60 + "\n")
+                if rich_mode:
+                    _print_view_header_rich(doc, doc_tags)
+                else:
+                    _print_view_header_plain(doc, doc_tags)
+                print()
 
             if raw:
-                console.print(doc["content"])
+                print(doc["content"])
+            elif rich_mode:
+                from emdx.ui.markdown_config import MarkdownConfig
+                console.print(MarkdownConfig.create_markdown(doc["content"]))
             else:
-                markdown = Markdown(doc["content"])
-                console.print(markdown)
+                print(doc["content"])
+
+        if no_pager:
+            _render_output()
         else:
-            # Use Rich's pager with color support
-            # Set LESS environment variable if not already set
             if "LESS" not in os.environ:
                 os.environ["LESS"] = "-R"
-            with console.pager():
-                if not no_header:
-                    console.print(
-                        f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]"
-                    )
-                    console.print("=" * 60)
-                    console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                    console.print(
-                        f"[dim]Created:[/dim] {str(doc['created_at'] or '')[:16]}"
-                    )
-                    console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-                    # Show tags
-                    doc_tags = get_document_tags(doc["id"])
-                    if doc_tags:
-                        console.print(f"[dim]Tags:[/dim] {format_tags(doc_tags)}")
-                    console.print("=" * 60 + "\n")
-
-                if raw:
-                    console.print(doc["content"])
-                else:
-                    markdown = Markdown(doc["content"])
-                    console.print(markdown)
+            if rich_mode:
+                with console.pager(styles=True, links=True):
+                    _render_output()
+            else:
+                with console.pager():
+                    _render_output()
 
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def _print_view_header_plain(
+    doc: Mapping[str, Any], doc_tags: list[str]
+) -> None:
+    """Print a plain text header for machine-friendly output."""
+    print(f"#{doc['id']}  {doc['title']}")
+
+    meta = []
+    if doc.get("project"):
+        meta.append(f"Project: {doc['project']}")
+    created = str(doc.get("created_at") or "")[:16]
+    if created:
+        meta.append(f"Created: {created}")
+    updated = str(doc.get("updated_at") or "")[:16]
+    if updated and updated != created:
+        meta.append(f"Updated: {updated}")
+    if doc_tags:
+        meta.append(f"Tags: {format_tags(doc_tags)}")
+    if meta:
+        print("  ".join(meta))
+    print("---")
+
+
+def _print_view_header_rich(
+    doc: Mapping[str, Any], doc_tags: list[str]
+) -> None:
+    """Print a rich panel header for document view, matching the TUI."""
+    content = doc.get("content", "")
+    word_count = len(content.split())
+    char_count = len(content)
+    line_count = content.count("\n") + 1 if content else 0
+
+    lines = []
+    lines.append(
+        f"[bold cyan]#{doc['id']}[/bold cyan]  "
+        f"[bold]{doc['title']}[/bold]"
+    )
+    lines.append("")
+
+    if doc.get("project"):
+        lines.append(f"  [dim]Project:[/dim]   {doc['project']}")
+
+    if doc_tags:
+        lines.append(f"  [dim]Tags:[/dim]      {format_tags(doc_tags)}")
+
+    created = str(doc.get("created_at") or "")[:16]
+    updated = str(doc.get("updated_at") or "")[:16]
+    accessed = str(doc.get("accessed_at") or "")[:16]
+
+    if created:
+        lines.append(f"  [dim]Created:[/dim]   {created}")
+    if updated and updated != created:
+        lines.append(f"  [dim]Updated:[/dim]   {updated}")
+    if accessed:
+        lines.append(f"  [dim]Accessed:[/dim]  {accessed}")
+
+    lines.append(
+        f"  [dim]Views:[/dim]     {doc.get('access_count', 0)}   "
+        f"[dim]Words:[/dim] {word_count}   "
+        f"[dim]Lines:[/dim] {line_count}   "
+        f"[dim]Chars:[/dim] {char_count}"
+    )
+
+    if doc.get("parent_id"):
+        lines.append(f"  [dim]Parent:[/dim]    #{doc['parent_id']}")
+
+    panel = Panel(
+        "\n".join(lines),
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    console.print(panel)
 
 
 @app.command()
