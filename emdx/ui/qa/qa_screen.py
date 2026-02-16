@@ -48,7 +48,6 @@ class QAScreen(HelpMixin, Widget):
         Binding("1", "switch_activity", "Activity"),
         Binding("2", "switch_tasks", "Tasks"),
         Binding("3", "switch_search", "Search"),
-        Binding("4", "switch_cascade", "Cascade"),
     ]
 
     DEFAULT_CSS = """
@@ -125,7 +124,7 @@ class QAScreen(HelpMixin, Widget):
         yield Static("Ready | Type a question and press Enter", id="qa-status")
         yield Static(
             "[dim]1[/dim] Activity | [dim]2[/dim] Tasks | "
-            "[bold]3[/bold] Search/QA | [dim]4[/dim] Cascade | "
+            "[bold]3[/bold] Search/QA | "
             "[dim]/[/dim] input | [dim]s[/dim] save | [dim]c[/dim] clear",
             id="qa-nav",
         )
@@ -328,10 +327,6 @@ class QAScreen(HelpMixin, Widget):
     async def action_switch_activity(self) -> None:
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
-
-    async def action_switch_cascade(self) -> None:
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
 
     async def action_switch_tasks(self) -> None:
         if hasattr(self.app, "switch_browser"):

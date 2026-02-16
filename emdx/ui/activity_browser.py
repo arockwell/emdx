@@ -47,7 +47,7 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ [dim]3[/dim] Search │ [dim]4[/dim] Cascade │ "  # noqa: E501
+            "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ [dim]3[/dim] Search │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
             id="help-bar",
         )
@@ -64,7 +64,6 @@ class ActivityBrowser(Widget):
     async def action_switch_activity(self) -> None:
         """Already on activity, do nothing."""
         pass
-
 
     async def action_switch_tasks(self) -> None:
         """Switch to task browser."""

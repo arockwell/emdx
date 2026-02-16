@@ -47,8 +47,7 @@ class TaskBrowser(Widget):
         self.task_view = TaskView(id="task-view")
         yield self.task_view
         yield Static(
-            "[dim]1[/dim] Activity │ [bold]2[/bold] Tasks │ "
-            "[dim]3[/dim] Search │ [dim]4[/dim] Cascade │ "
+            "[dim]1[/dim] Activity │ [bold]2[/bold] Tasks │ [dim]3[/dim] Search │ "
             "[dim]j/k[/dim] nav │ [dim]r[/dim] refresh │ [dim]?[/dim] help",
             id="task-help-bar",
         )
@@ -57,7 +56,6 @@ class TaskBrowser(Widget):
         """Switch to activity browser."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
-
 
     async def action_switch_search(self) -> None:
         """Switch to search screen."""

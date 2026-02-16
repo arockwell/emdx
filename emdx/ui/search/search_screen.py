@@ -158,7 +158,7 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ [bold]3[/bold] Search │ [dim]4[/dim] Cascade │ "  # noqa: E501
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ [bold]3[/bold] Search │ "
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
             id="search-nav",
         )
@@ -570,7 +570,6 @@ class SearchScreen(HelpMixin, Widget):
         """Switch to activity browser."""
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
-
 
     async def action_switch_tasks(self) -> None:
         """Switch to task browser."""
