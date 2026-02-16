@@ -366,7 +366,7 @@ def _run_single(
     quiet: bool,
     pr: bool = False,
     pr_branch: str | None = None,
-    draft: bool = True,
+    draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
@@ -500,7 +500,7 @@ def _run_parallel(
     model: str | None,
     quiet: bool,
     pr: bool = False,
-    draft: bool = True,
+    draft: bool = False,
     base_branch: str = "main",
     source_doc_id: int | None = None,
     worktree: bool = False,
@@ -570,8 +570,8 @@ def _run_parallel(
                 epic_key=epic_key,
             )
         finally:
-            # Clean up worktree unless --pr (keep for the PR branch)
-            if task_worktree_path and not pr:
+            # Always clean up worktree — branch is pushed to remote for PRs
+            if task_worktree_path:
                 from ..utils.git import cleanup_worktree
                 cleanup_worktree(task_worktree_path)
 
@@ -669,7 +669,7 @@ def _run_chain(
     model: str | None,
     quiet: bool,
     pr: bool = False,
-    draft: bool = True,
+    draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     epic_key: str | None = None,
@@ -1023,7 +1023,7 @@ def delegate(
                 epic_parent_id=epic_parent_id,
             )
     finally:
-        if worktree_path and not pr:
+        if worktree_path:
             from ..utils.git import cleanup_worktree
             if not quiet:
                 sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
