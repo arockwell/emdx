@@ -126,9 +126,16 @@ class TestExecuteSteps:
         # Step 3 should not have been executed
         assert mock_run_single.call_count == 2
 
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch(
+        "emdx.utils.git.create_worktree",
+        return_value=("/tmp/wt", "delegate/test-branch"),
+    )
     @patch("emdx.services.recipe_executor.get_document")
     @patch("emdx.commands.delegate._run_single")
-    def test_pr_url_captured(self, mock_run_single, mock_get_doc):
+    def test_pr_url_captured(
+        self, mock_run_single, mock_get_doc, mock_create_wt, mock_cleanup_wt
+    ):
         mock_run_single.return_value = _make_single_result(
             doc_id=10, pr_url="https://github.com/test/repo/pull/1"
         )
@@ -171,9 +178,16 @@ class TestExecuteSteps:
         assert "auth-module" in prompt
         assert "medium" in prompt  # default value
 
+    @patch("emdx.utils.git.cleanup_worktree")
+    @patch(
+        "emdx.utils.git.create_worktree",
+        return_value=("/tmp/wt", "delegate/test-branch"),
+    )
     @patch("emdx.services.recipe_executor.get_document")
     @patch("emdx.commands.delegate._run_single")
-    def test_step_flags_passed_through(self, mock_run_single, mock_get_doc):
+    def test_step_flags_passed_through(
+        self, mock_run_single, mock_get_doc, mock_create_wt, mock_cleanup_wt
+    ):
         mock_run_single.return_value = _make_single_result(doc_id=10)
         mock_get_doc.return_value = {"content": "done"}
 
