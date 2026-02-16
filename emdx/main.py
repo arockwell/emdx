@@ -72,11 +72,10 @@ def get_lazy_help() -> dict[str, str]:
 
 def create_disabled_command(name: str) -> Callable[[], None]:
     """Create a command that shows a disabled message in safe mode."""
+
     def disabled_command() -> None:
         typer.echo(
-            f"Command '{name}' is disabled in safe mode. "
-            f"Set EMDX_SAFE_MODE=0 to enable.",
-            err=True
+            f"Command '{name}' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.", err=True
         )
         raise typer.Exit(1)
 
@@ -101,6 +100,7 @@ from emdx.commands.executions import app as executions_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.groups import app as groups_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
+from emdx.commands.next import next_action as next_command  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.review import app as review_app  # noqa: E402
 from emdx.commands.stale import app as stale_app  # noqa: E402
@@ -173,6 +173,9 @@ app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness track
 # Add touch as a top-level command for convenience
 app.command(name="touch")(touch_command)
 
+# Add the next command for single next-action recommendations
+app.command(name="next")(next_command)
+
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
 
@@ -184,7 +187,6 @@ app.command(name="briefing")(briefing_command)
 
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
-
 
 
 # =============================================================================
@@ -217,8 +219,10 @@ def main(
         None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
     ),
     safe_mode: bool = typer.Option(
-        False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (delegate, recipe)"
+        False,
+        "--safe-mode",
+        envvar="EMDX_SAFE_MODE",
+        help="Disable execution commands (delegate, recipe)",
     ),
 ) -> None:
     """
@@ -309,10 +313,7 @@ def _rewrite_tag_shorthand(argv: list[str]) -> None:
     """
     # Find the position of 'tag' in argv (skip argv[0] which is the program name)
     try:
-        tag_idx = next(
-            i for i in range(1, len(argv))
-            if argv[i] == "tag"
-        )
+        tag_idx = next(i for i in range(1, len(argv)) if argv[i] == "tag")
     except StopIteration:
         return
 
