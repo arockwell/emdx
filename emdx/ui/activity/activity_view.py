@@ -129,7 +129,7 @@ class ActivityView(HelpMixin, Widget):
     BINDINGS = [
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
-        ("enter", "select", "Select/Expand"),
+        ("enter", "fullscreen", "Open"),
         ("l", "expand", "Expand"),
         ("h", "collapse", "Collapse"),
         ("f", "fullscreen", "Fullscreen"),
@@ -883,13 +883,14 @@ class ActivityView(HelpMixin, Widget):
             tree.move_cursor(node.parent)
 
     def action_fullscreen(self) -> None:
-        """Toggle fullscreen preview."""
+        """Open document in fullscreen preview modal."""
         item = self._get_selected_item()
         if item is None:
             return
 
         if item.doc_id:
-            self.post_message(self.ViewDocument(item.doc_id))
+            from emdx.ui.modals import DocumentPreviewModal
+            self.app.push_screen(DocumentPreviewModal(item.doc_id))
 
     async def action_refresh(self) -> None:
         """Manual refresh."""
@@ -909,8 +910,8 @@ class ActivityView(HelpMixin, Widget):
         await self._update_context_panel()
 
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Handle tree node selection (Enter key)."""
-        await self.action_select()
+        """Handle tree node selection (Enter key) — open fullscreen."""
+        self.action_fullscreen()
 
     async def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
         """Handle lazy child loading when a node is expanded."""
