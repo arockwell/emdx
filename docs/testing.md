@@ -20,7 +20,6 @@ tests/
 ├── conftest.py                       # Pytest configuration and fixtures
 ├── test_auto_tagger.py               # Automatic tagging system
 ├── test_browse.py                    # Browse commands (list, stats, recent)
-├── test_cascade_metadata.py          # Cascade stage operations
 ├── test_cli.py                       # CLI integration tests
 ├── test_commands_core.py             # Core command tests (save, find, view)
 ├── test_commands_groups.py           # Group command tests
@@ -69,7 +68,6 @@ tests/
 ### **Advanced Feature Tests**
 - **Execution System** (`test_execution_system.py`, `test_execution_system_comprehensive.py`, `test_execution_monitor.py`, `test_unified_executor.py`) - execution tracking and monitoring
 - **TUI Components** (`test_log_browser.py`, `test_vim_line_numbers.py`, `test_modal_keys.py`) - UI widget tests
-- **Cascade** (`test_cascade_metadata.py`) - cascade stage operations
 - **Similarity** (`test_similarity.py`, `test_duplicate_detector.py`) - document similarity and dedup
 
 ### **Infrastructure Tests**

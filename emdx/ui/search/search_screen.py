@@ -61,7 +61,6 @@ class SearchScreen(HelpMixin, Widget):
         Binding("1", "switch_activity", "Activity"),
         Binding("2", "switch_tasks", "Tasks"),
         Binding("3", "switch_search", "Search"),
-        Binding("4", "switch_cascade", "Cascade"),
     ]
 
     DEFAULT_CSS = """
@@ -572,10 +571,6 @@ class SearchScreen(HelpMixin, Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
 
-    async def action_switch_cascade(self) -> None:
-        """Switch to cascade browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
 
     async def action_switch_tasks(self) -> None:
         """Switch to task browser."""

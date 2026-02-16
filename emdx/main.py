@@ -4,7 +4,7 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (cascade, delegate, ai, etc.) are only imported when
+fast. Heavy commands (delegate, ai, etc.) are only imported when
 actually invoked.
 """
 
@@ -24,7 +24,6 @@ from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
     "recipe": "emdx.commands.recipe:app",
-    "cascade": "emdx.commands.cascade:app",
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
@@ -35,8 +34,7 @@ LAZY_SUBCOMMANDS = {
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
     "recipe": "Manage and run EMDX recipes",
-    "cascade": "Cascade ideas through stages to working code",
-    "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
+    "delegate": "One-shot AI execution (parallel, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
     "distill": "Distill KB content into audience-aware summaries",
     "compact": "Compact related documents through AI-powered synthesis",
@@ -46,14 +44,14 @@ LAZY_HELP = {
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (cascade, delegate, recipe).
+    Safe mode disables execution commands (delegate, recipe).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "delegate", "recipe"}
+UNSAFE_COMMANDS = {"delegate", "recipe"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -220,7 +218,7 @@ def main(
     ),
     safe_mode: bool = typer.Option(
         False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (cascade, delegate, recipe)"
+        help="Disable execution commands (delegate, recipe)"
     ),
 ) -> None:
     """
@@ -231,7 +229,7 @@ def main(
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (cascade, delegate, recipe). Useful for read-only access
+    (delegate, recipe). Useful for read-only access
     or when external execution should be prevented.
 
     Examples:
@@ -254,7 +252,7 @@ def main(
 
     Enable safe mode:
         [cyan]EMDX_SAFE_MODE=1 emdx --help[/cyan]
-        [cyan]emdx --safe-mode cascade add "idea"[/cyan]  # Will show disabled message
+        [cyan]emdx --safe-mode delegate "task"[/cyan]  # Will show disabled message
     """
     # Handle --version flag
     if version:

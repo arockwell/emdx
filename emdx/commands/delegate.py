@@ -16,9 +16,6 @@ With synthesis:
 With document context:
     emdx delegate --doc 42 "implement this plan"
 
-Sequential pipeline:
-    emdx delegate --chain "analyze" "plan" "implement"
-
 With PR creation:
     emdx delegate --pr "fix the auth bug"
 
@@ -861,121 +858,6 @@ def _run_parallel(
     return doc_ids
 
 
-def _run_chain(
-    tasks: list[str],
-    tags: list[str],
-    title: str | None,
-    model: str | None,
-    quiet: bool,
-    pr: bool = False,
-    branch: bool = False,
-    draft: bool = False,
-    working_dir: str | None = None,
-    source_doc_id: int | None = None,
-    epic_key: str | None = None,
-    epic_parent_id: int | None = None,
-) -> list[int]:
-    """Run tasks sequentially, piping output from each step to the next.
-
-    Returns list of doc_ids from all steps.
-    """
-    # Create parent task for the chain (does NOT get epic numbering)
-    parent_task_id = epic_parent_id or _safe_create_task(
-        title=title or f"Chain: {len(tasks)} steps",
-        prompt=" → ".join(t[:40] for t in tasks),
-        task_type="chain",
-        status="active",
-        source_doc_id=source_doc_id,
-        tags=",".join(tags) if tags else None,
-    )
-
-    # Pre-create all step tasks
-    step_task_ids = []
-    prev_step_id = None
-    for i, task in enumerate(tasks):
-        step_id = _safe_create_task(
-            title=f"Step {i + 1}/{len(tasks)}: {task[:60]}",
-            prompt=task[:500],
-            task_type="single",
-            status="open",
-            parent_task_id=parent_task_id,
-            seq=i + 1,
-            depends_on=[prev_step_id] if prev_step_id else None,
-        )
-        step_task_ids.append(step_id)
-        prev_step_id = step_id
-
-    doc_ids = []
-    previous_output = None
-
-    for i, task in enumerate(tasks):
-        step_num = i + 1
-        total_steps = len(tasks)
-        is_last_step = step_num == total_steps
-
-        # Mark step as active
-        _safe_update_task(step_task_ids[i], status="active")
-
-        # Build prompt with previous context
-        if previous_output:
-            prompt = (
-                f"Previous step output:\n\n{previous_output}\n\n---\n\n"
-                f"Your task (step {step_num}/{total_steps}): {task}"
-            )
-        else:
-            prompt = f"Your task (step {step_num}/{total_steps}): {task}"
-
-        sys.stdout.write(f"\n=== Step {step_num}/{total_steps}: {task[:60]} ===\n")
-
-        # Only last step gets --pr/--branch
-        step_pr = pr and is_last_step
-        step_branch = branch and is_last_step
-
-        step_title = title or f"Delegate chain step {step_num}/{total_steps}"
-
-        step_result = _run_single(
-            prompt=prompt,
-            tags=tags,
-            title=f"{step_title} [{step_num}/{total_steps}]",
-            model=model,
-            quiet=quiet,
-            pr=step_pr,
-            branch=step_branch,
-            draft=draft,
-            working_dir=working_dir,
-            parent_task_id=parent_task_id,
-            seq=step_num,
-            epic_key=epic_key,
-        )
-        doc_id = step_result.doc_id
-
-        if doc_id is None:
-            sys.stderr.write(f"delegate: chain aborted at step {step_num}/{total_steps}\n")
-            # Mark current step as failed
-            _safe_update_task(step_task_ids[i], status="failed", error="execution failed")
-            # Mark remaining steps as failed
-            for j in range(i + 1, len(step_task_ids)):
-                _safe_update_task(step_task_ids[j], status="failed", error="chain aborted")
-            _safe_update_task(parent_task_id, status="failed", error=f"aborted at step {step_num}")
-            break
-
-        # Update step task with output
-        _safe_update_task(step_task_ids[i], status="done", output_doc_id=doc_id)
-        doc_ids.append(doc_id)
-
-        # Read output for next step
-        doc = get_document(doc_id)
-        if doc:
-            previous_output = doc.get("content", "")
-
-    # If all steps completed, mark parent as done
-    if len(doc_ids) == len(tasks):
-        _safe_update_task(parent_task_id, status="done", output_doc_id=doc_ids[-1])
-
-    if not quiet and doc_ids:
-        ids_str = ",".join(str(d) for d in doc_ids)
-        final_id = doc_ids[-1] if doc_ids else "none"
-        sys.stderr.write(f"task_id:{parent_task_id} doc_ids:{ids_str} chain_final:{final_id}\n")
 
     return doc_ids
 
@@ -1056,11 +938,6 @@ def delegate(
         "-b",
         help="Base branch for worktree/branch (default: main)",
     ),
-    chain: bool = typer.Option(
-        False,
-        "--chain",
-        help="Run tasks sequentially, piping output forward",
-    ),
     each: str | None = typer.Option(
         None,
         "--each",
@@ -1110,9 +987,6 @@ def delegate(
     With document context:
         emdx delegate --doc 42 "implement the plan"
 
-    Sequential pipeline:
-        emdx delegate --chain "analyze code" "create plan" "implement changes"
-
     With PR creation:
         emdx delegate --pr "fix the auth bug"
 
@@ -1141,10 +1015,6 @@ def delegate(
             return
 
     # Validate mutually exclusive options
-    if chain and synthesize:
-        typer.echo("Error: --chain and --synthesize are mutually exclusive", err=True)
-        raise typer.Exit(1) from None
-
     if pr and branch:
         typer.echo("Error: --pr and --branch are mutually exclusive", err=True)
         raise typer.Exit(1) from None
@@ -1180,7 +1050,6 @@ def delegate(
         "-w",
         "--base-branch",
         "-b",
-        "--chain",
         "--each",
         "--do",
         "--epic",
@@ -1242,12 +1111,12 @@ def delegate(
         if not epic_key and epic_task.get("epic_key"):
             epic_key = epic_task["epic_key"]
 
-    # 3. Setup worktree for single/chain paths (parallel creates per-task worktrees)
+    # 3. Setup worktree for single task paths (parallel creates per-task worktrees)
     #    --pr/--branch always imply --worktree for a clean git environment
     use_worktree = worktree or pr or branch
     worktree_path = None
     worktree_branch = None
-    if use_worktree and (len(task_list) == 1 or chain):
+    if use_worktree and len(task_list) == 1:
         from ..utils.git import create_worktree
 
         try:
@@ -1264,22 +1133,7 @@ def delegate(
 
     try:
         # 4. Route
-        if chain and len(task_list) > 1:
-            _run_chain(
-                tasks=task_list,
-                tags=flat_tags,
-                title=title,
-                model=model,
-                quiet=quiet,
-                pr=pr,
-                branch=branch,
-                draft=draft,
-                working_dir=worktree_path,
-                source_doc_id=doc,
-                epic_key=epic_key,
-                epic_parent_id=epic_parent_id,
-            )
-        elif len(task_list) == 1:
+        if len(task_list) == 1:
             single_result = _run_single(
                 prompt=task_list[0],
                 tags=flat_tags,

@@ -9,24 +9,6 @@ from __future__ import annotations
 from typing import TypedDict
 
 
-class CascadeRunDict(TypedDict, total=False):
-    """Cascade run data used by CascadeRunItem in the activity view.
-
-    Contains both database fields and display-derived fields.
-    """
-
-    id: int
-    status: str
-    started_at: str | None
-    completed_at: str | None
-    pipeline_name: str
-    pipeline_display_name: str
-    current_stage: str
-    initial_doc_title: str | None
-    doc_id: int | None
-    error_message: str | None
-
-
 class GroupDict(TypedDict, total=False):
     """Document group data used by GroupItem in the activity view.
 
@@ -65,23 +47,3 @@ class AgentExecutionDict(TypedDict, total=False):
     working_dir: str | None
     cost_usd: float
     tokens_used: int
-
-
-class PipelineActivityDict(TypedDict, total=False):
-    """Pipeline activity data used in cascade_view.py.
-
-    Mirrors PipelineActivityItem from database/types.py.
-    """
-
-    exec_id: int
-    input_id: int | None
-    input_title: str | None
-    output_id: int | None
-    output_title: str | None
-    output_stage: str | None
-    from_stage: str
-    status: str | None
-    started_at: str | None
-    completed_at: str | None
-    log_file: str | None
-    doc_title: str | None

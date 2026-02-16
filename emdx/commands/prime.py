@@ -26,7 +26,7 @@ def prime(
     verbose: bool = typer.Option(
         False,
         "--verbose", "-v",
-        help="Include execution guidance, recent docs, cascade status"
+        help="Include execution guidance and recent docs"
     ),
     quiet: bool = typer.Option(
         False,
@@ -45,7 +45,7 @@ def prime(
         # Basic priming
         emdx prime
 
-        # With full context (execution guidance, recent docs, cascade)
+        # With full context (execution guidance, recent docs)
         emdx prime --verbose
 
         # Minimal (just ready tasks)
@@ -141,15 +141,6 @@ def _output_text(
             lines.append("")
             for rdoc in recent[:5]:
                 lines.append(f"  #{rdoc['id']}  {rdoc['title']}")
-            lines.append("")
-
-        cascade_status = _get_cascade_status()
-        if any(cascade_status.values()):
-            lines.append("CASCADE QUEUE:")
-            lines.append("")
-            for stage, count in cascade_status.items():
-                if count > 0:
-                    lines.append(f"  {stage}: {count} item(s)")
             lines.append("")
 
     # Footer
@@ -292,31 +283,6 @@ def _get_recent_docs() -> list[dict[str, Any]]:
         ]
 
 
-def _get_cascade_status() -> dict:
-    """Get cascade queue status by stage."""
-    stages = ["idea", "prompt", "analyzed", "planned", "done"]
-    status = dict.fromkeys(stages, 0)
-
-    try:
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT cascade_stage, COUNT(*)
-                FROM documents
-                WHERE cascade_stage IS NOT NULL AND cascade_stage != ''
-                AND is_deleted = 0
-                GROUP BY cascade_stage
-            """)
-            for stage, count in cursor.fetchall():
-                if stage in status:
-                    status[stage] = count
-    except Exception:
-        # cascade_stage column may not exist in older databases
-        pass
-
-    return status
-
-
 def _get_stale_docs() -> list:
     """Get stale documents for priming context."""
     try:
@@ -346,7 +312,6 @@ def _get_usage_instructions() -> list[str]:
         "  Delegate: emdx delegate \"task\"             Single AI execution",
         "            emdx delegate \"t1\" \"t2\" \"t3\"     Parallel execution",
         "            emdx delegate --pr \"task\"         Execute + create PR",
-        "            emdx delegate --chain \"a\" \"b\"     Sequential pipeline",
         "            emdx delegate --doc 42 \"task\"     With doc context",
         "",
     ]
@@ -362,9 +327,9 @@ def _get_execution_methods_json() -> list[dict[str, Any]]:
         {
             "command": "emdx delegate",
             "usage": 'emdx delegate "task" --tags analysis',
-            "when": "All one-shot AI execution (single, parallel, chain, PR, worktree)",
+            "when": "All one-shot AI execution (single, parallel, PR, worktree)",
             "key_flags": [
-                "--doc", "--each/--do", "--chain", "--pr",
+                "--doc", "--each/--do", "--pr",
                 "--worktree", "--synthesize", "--tags",
             ],
         },
@@ -386,7 +351,6 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
     if verbose:
         data["execution_methods"] = _get_execution_methods_json()
         data["recent_docs"] = _get_recent_docs()
-        data["cascade_status"] = _get_cascade_status()
         # Include stale documents needing review
         stale_docs = _get_stale_docs()
         if stale_docs:

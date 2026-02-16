@@ -7,8 +7,6 @@ Organized database operations split into focused modules:
 - groups: Document group operations
 - search: Full-text search operations
 - migrations: Database schema migrations
-- cascade: Cascade-specific operations (stage management, PR URLs)
-
 This package maintains backward compatibility with the original sqlite_database.py API.
 """
 
@@ -19,7 +17,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Union, cast
 
-from . import cascade, groups
+from . import groups
 from .connection import DatabaseConnection, db_connection
 from .documents import (
     delete_document,
@@ -409,7 +407,6 @@ __all__ = [
     "SQLiteDatabase",
     "db_connection",
     "groups",
-    "cascade",
     "save_document",
     "get_document",
     "list_documents",
