@@ -16,9 +16,6 @@ class ActivityBrowser(Widget):
     """Browser wrapper for ActivityView - Mission Control."""
 
     BINDINGS = [
-        ("1", "switch_activity", "Activity"),
-        ("2", "switch_tasks", "Tasks"),
-        ("3", "switch_search", "Search"),
         ("?", "show_help", "Help"),
     ]
 
@@ -47,7 +44,7 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ [dim]3[/dim] Search │ [dim]4[/dim] Cascade │ "  # noqa: E501
+            "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
             id="help-bar",
         )
@@ -60,20 +57,6 @@ class ActivityBrowser(Widget):
         else:
             # Fallback: switch to document browser and select the doc
             logger.info(f"Would view document #{event.doc_id}")
-
-    async def action_switch_activity(self) -> None:
-        """Already on activity, do nothing."""
-        pass
-
-    async def action_switch_tasks(self) -> None:
-        """Switch to task browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("task")
-
-    async def action_switch_search(self) -> None:
-        """Switch to search screen."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("search")
 
     def action_show_help(self) -> None:
         """Show help."""

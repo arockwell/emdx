@@ -58,9 +58,6 @@ class SearchScreen(HelpMixin, Widget):
         Binding("slash", "focus_search", "Search"),
         Binding("r", "refresh", "Refresh"),
         Binding("question_mark", "show_help", "Help"),
-        Binding("1", "switch_activity", "Activity"),
-        Binding("2", "switch_tasks", "Tasks"),
-        Binding("3", "switch_search", "Search"),
     ]
 
     DEFAULT_CSS = """
@@ -158,7 +155,7 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ [bold]3[/bold] Search │ [dim]4[/dim] Cascade │ "  # noqa: E501
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ "
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
             id="search-nav",
         )
@@ -557,26 +554,9 @@ class SearchScreen(HelpMixin, Widget):
                     "slash",
                     "1",
                     "2",
-                    "3",
-                    "4",
-                }  # noqa: E501
+                }
                 if event.key in vim_keys:
                     # Don't stop - let the input handle it
                     return
         except Exception:
             pass
-
-    async def action_switch_activity(self) -> None:
-        """Switch to activity browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("activity")
-
-
-    async def action_switch_tasks(self) -> None:
-        """Switch to task browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("task")
-
-    async def action_switch_search(self) -> None:
-        """Already on search, do nothing."""
-        pass

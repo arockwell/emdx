@@ -69,6 +69,8 @@ class BrowserContainer(App[None]):
     # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
 
     BINDINGS = [
+        Binding("1", "switch_activity", "Activity", show=True),
+        Binding("2", "switch_tasks", "Tasks", show=True),
         Binding("backslash", "cycle_theme", "Theme", show=True),
         Binding("ctrl+k", "open_command_palette", "Search", show=True),
         Binding("ctrl+p", "open_command_palette", "Search", show=False),
@@ -274,6 +276,14 @@ class BrowserContainer(App[None]):
 
         # Let each browser handle its own status updates
 
+    async def action_switch_activity(self) -> None:
+        """Switch to the Activity browser."""
+        await self.switch_browser("activity")
+
+    async def action_switch_tasks(self) -> None:
+        """Switch to the Tasks browser."""
+        await self.switch_browser("task")
+
     async def action_quit(self) -> None:
         """Quit the application."""
         logger.debug("action_quit called")
@@ -302,20 +312,6 @@ class BrowserContainer(App[None]):
         # Debug key - dump widget tree
         if key == "ctrl+d":
             self._dump_widget_tree()
-            event.stop()
-            return
-
-        # Global number keys for screen switching (1=Activity, 2=Tasks, 3=Search)
-        if key == "1":
-            await self.switch_browser("activity")
-            event.stop()
-            return
-        elif key == "2":
-            await self.switch_browser("task")
-            event.stop()
-            return
-        elif key == "3":
-            await self.switch_browser("search")
             event.stop()
             return
 
