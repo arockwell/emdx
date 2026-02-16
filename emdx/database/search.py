@@ -71,7 +71,7 @@ def search_documents(
                 FROM documents d
                 WHERE d.deleted_at IS NULL
             """
-            params: list[str | int] = []
+            params: list[str | int | None] = []
         else:
             base_query = """
                 SELECT

@@ -1,7 +1,7 @@
 """Tag management operations for emdx."""
 
 import sqlite3
-from typing import Any, cast
+from typing import cast
 
 from emdx.database import db
 from emdx.models.types import TagSearchResultDict, TagStatsDict
@@ -291,7 +291,7 @@ def search_by_tags(
                 ",".join("?" * len(tag_names_lower))
             )
 
-            params: list[Any] = list(tag_names_lower) + [len(tag_names_lower)]
+            params: list[str | int | None] = list(tag_names_lower) + [len(tag_names_lower)]
         else:
             # Documents with ANY of the specified tags (or prefix matches)
             query = f"""

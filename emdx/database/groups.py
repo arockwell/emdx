@@ -21,7 +21,6 @@ def create_group(
     project: str | None = None,
     description: str | None = None,
     created_by: str | None = None,
-    **kwargs: Any,
 ) -> int:
     """Create a new document group.
 
@@ -81,7 +80,6 @@ def list_groups(
     group_type: str | None = None,
     include_inactive: bool = False,
     top_level_only: bool = False,
-    **kwargs: Any,
 ) -> list[DocumentGroup]:
     """List groups with optional filters.
 
@@ -96,7 +94,7 @@ def list_groups(
         List of group dicts
     """
     conditions: list[str] = []
-    params: list[Any] = []
+    params: list[str | int | None] = []
 
     if not include_inactive:
         conditions.append("is_active = TRUE")

@@ -153,7 +153,7 @@ def list_documents(
     with db_connection.get_connection() as conn:
         # Build query with filters
         conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
-        params: list[Any] = []
+        params: list[str | int | None] = []
 
         # Parent filter
         if parent_id is None:
@@ -207,7 +207,7 @@ def count_documents(
     """
     with db_connection.get_connection() as conn:
         conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
-        params: list[Any] = []
+        params: list[str | int | None] = []
 
         if parent_id is None:
             conditions.append("parent_id IS NULL")

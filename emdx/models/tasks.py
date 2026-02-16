@@ -133,7 +133,7 @@ def list_tasks(
         parent_task_id: Filter by parent task (epic) ID.
     """
     conditions: list[str] = ["1=1"]
-    params: list[Any] = []
+    params: list[str | int | None] = []
 
     if status:
         conditions.append(f"status IN ({','.join('?' * len(status))})")
@@ -259,7 +259,7 @@ def get_ready_tasks(
         epic_key: Filter by category key.
     """
     conditions = ["t.status = 'open'"]
-    params: list[Any] = []
+    params: list[str | int | None] = []
 
     if gameplan_id:
         conditions.append("t.gameplan_id = ?")
