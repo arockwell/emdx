@@ -78,7 +78,7 @@ emdx/
 │   ├── themes.py              # theme system
 │   └── theme_selector.py      # theme selection UI
 ├── services/               # Business logic
-│   ├── unified_executor.py    # CLI execution (Claude/Cursor)
+│   ├── unified_executor.py    # CLI execution (Claude)
 │   ├── cli_executor/          # CLI executor components
 │   ├── log_stream.py         # event-driven log streaming
 │   ├── file_watcher.py       # file monitoring

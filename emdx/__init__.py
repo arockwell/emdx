@@ -1,5 +1,5 @@
 """
-emdx - Documentation Index Management System
+emdx - A knowledge base that AI agents can read, write, and search
 """
 
 import hashlib
