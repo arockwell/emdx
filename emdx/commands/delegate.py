@@ -55,14 +55,17 @@ app = typer.Typer(
     context_settings={"allow_interspersed_args": False},
 )
 
+
 def _safe_create_task(**kwargs: Any) -> int | None:
     """Create task, never fail delegate."""
     try:
         from ..models.tasks import create_task
+
         return create_task(**kwargs)
     except Exception as e:
         sys.stderr.write(f"delegate: task tracking failed: {e}\n")
         return None
+
 
 def _safe_update_task(task_id: int | None, **kwargs: Any) -> None:
     """Update task, never fail delegate."""
@@ -70,9 +73,11 @@ def _safe_update_task(task_id: int | None, **kwargs: Any) -> None:
         return
     try:
         from ..models.tasks import update_task
+
         update_task(task_id, **kwargs)
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
+
 
 def _safe_update_execution(exec_id: int | None, **kwargs: Any) -> None:
     """Update execution record, never fail delegate."""
@@ -80,25 +85,25 @@ def _safe_update_execution(exec_id: int | None, **kwargs: Any) -> None:
         return
     try:
         from ..models.executions import update_execution
+
         update_execution(exec_id, **kwargs)
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
+
 
 PR_INSTRUCTION_GENERIC = (
     "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
     "1. Create a new branch with a descriptive name\n"
     "2. Commit your changes with a clear message\n"
-    "3. Push and create a PR using: gh pr create --title \"...\" --body \"...\"\n"
+    '3. Push and create a PR using: gh pr create --title "..." --body "..."\n'
     "4. Report the PR URL that was created."
 )
 
 # Regex to find PR URLs in agent output
-_PR_URL_RE = re.compile(r'https://github\.com/[^/]+/[^/]+/pull/\d+')
+_PR_URL_RE = re.compile(r"https://github\.com/[^/]+/[^/]+/pull/\d+")
 
 # Regex to find pushed branch references in agent output
-_BRANCH_PUSH_RE = re.compile(
-    r'(?:origin/|pushed to |branch [\'"`])([a-zA-Z0-9_./-]+)'
-)
+_BRANCH_PUSH_RE = re.compile(r'(?:origin/|pushed to |branch [\'"`])([a-zA-Z0-9_./-]+)')
 
 
 def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) -> str:
@@ -118,8 +123,8 @@ def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) ->
             "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
             "1. Create a new branch with a descriptive name\n"
             "2. Commit your changes with a clear message\n"
-            f"3. Push and create a PR using: gh pr create{draft_flag} --title \"...\" "
-            "--body \"...\"\n"
+            f'3. Push and create a PR using: gh pr create{draft_flag} --title "..." '
+            '--body "..."\n'
             "4. Report the PR URL that was created."
         )
     return (
@@ -127,8 +132,8 @@ def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) ->
         f"1. You are already on branch `{branch_name}` — commit your changes there\n"
         "2. Write a clear commit message summarizing the changes\n"
         f"3. Push: git push -u origin {branch_name}\n"
-        f"4. Create the PR: gh pr create{draft_flag} --title \"<short title>\" "
-        "--body \"<description of changes>\"\n"
+        f'4. Create the PR: gh pr create{draft_flag} --title "<short title>" '
+        '--body "<description of changes>"\n'
         "5. Report the PR URL in your output (e.g. https://github.com/.../pull/123)"
     )
 
@@ -232,14 +237,18 @@ def _slugify_title(title: str) -> str:
         "Smart Priming (context-aware)" -> "smart-priming-context-aware"
     """
     import re
+
     # Remove common prefixes like "Gameplan #1:", "Feature:", etc.
-    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()  # noqa: E501
+    slug = re.sub(
+        r"^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*", "", title, flags=re.IGNORECASE
+    ).strip()  # noqa: E501
     # Keep only alphanumeric and spaces/hyphens
-    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', slug)
+    slug = re.sub(r"[^a-zA-Z0-9\s-]", "", slug)
     # Collapse whitespace to hyphens, lowercase
-    slug = re.sub(r'\s+', '-', slug).strip('-').lower()
+    slug = re.sub(r"\s+", "-", slug).strip("-").lower()
     # Truncate to reasonable branch name length
-    return slug[:50].rstrip('-') or 'feature'
+    return slug[:50].rstrip("-") or "feature"
+
 
 def _resolve_task(task: str, pr: bool = False) -> str:
     """Resolve a task argument — if it's a numeric doc ID, load the document content.
@@ -269,30 +278,34 @@ def _resolve_task(task: str, pr: bool = False) -> str:
             f"1. Implement the feature exactly as described in the gameplan above\n"
             f"2. Create a branch named `{branch}`\n"
             f"3. Commit your changes with a clear message\n"
-            f"4. Push and create a PR via: gh pr create --title \"feat: {title}\" --body \"...\"\n"
+            f'4. Push and create a PR via: gh pr create --title "feat: {title}" --body "..."\n'
             f"5. Use `poetry run emdx` to test your changes\n"
         )
 
     return f"Execute the following document:\n\n# {title}\n\n{content}"
 
+
 # Allowlist of safe discovery commands that can be used with --each
 # These commands are designed for file/directory discovery and are safe to execute
-SAFE_DISCOVERY_COMMANDS = frozenset({
-    "fd",           # Modern find alternative
-    "find",         # Traditional file finder
-    "ls",           # List files
-    "eza",          # Modern ls alternative
-    "exa",          # Another ls alternative
-    "rg",           # ripgrep (with --files flag for discovery)
-    "git",          # git ls-files, etc.
-    "locate",       # File location database
-    "tree",         # Directory tree
-    "echo",         # Simple output
-    "cat",          # Read file contents
-    "head",         # First lines
-    "tail",         # Last lines
-    "seq",          # Generate sequences
-})
+SAFE_DISCOVERY_COMMANDS = frozenset(
+    {
+        "fd",  # Modern find alternative
+        "find",  # Traditional file finder
+        "ls",  # List files
+        "eza",  # Modern ls alternative
+        "exa",  # Another ls alternative
+        "rg",  # ripgrep (with --files flag for discovery)
+        "git",  # git ls-files, etc.
+        "locate",  # File location database
+        "tree",  # Directory tree
+        "echo",  # Simple output
+        "cat",  # Read file contents
+        "head",  # First lines
+        "tail",  # Last lines
+        "seq",  # Generate sequences
+    }
+)
+
 
 def _validate_discovery_command(command: str) -> list[str]:
     """Parse and validate a discovery command against the allowlist.
@@ -328,6 +341,7 @@ def _validate_discovery_command(command: str) -> list[str]:
 
     return args
 
+
 def _run_discovery(command: str) -> list[str]:
     """Run a validated discovery command and return output lines as items.
 
@@ -360,6 +374,7 @@ def _run_discovery(command: str) -> list[str]:
         sys.stderr.write("delegate: discovery command timed out after 30s\n")
         raise typer.Exit(1) from None
 
+
 def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     """Load a document and combine it with an optional prompt.
 
@@ -379,6 +394,7 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
     else:
         return f"Execute the following document:\n\n# {title}\n\n{content}"
 
+
 def _print_doc_content(doc_id: int) -> None:
     """Print a document's content to stdout."""
     doc = get_document(doc_id)
@@ -386,13 +402,15 @@ def _print_doc_content(doc_id: int) -> None:
         sys.stdout.write(doc.get("content", ""))
         sys.stdout.write("\n")
 
+
 def _cleanup_stale_worktrees(quiet: bool = False) -> None:
     """Remove delegate worktrees older than 1 hour."""
     import time
 
     result = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         return
@@ -415,14 +433,12 @@ def _cleanup_stale_worktrees(quiet: bool = False) -> None:
             if age < one_hour:
                 continue
             from ..utils.git import cleanup_worktree
+
             cleanup_worktree(path)
             removed += 1
             if not quiet:
                 age_h = age / 3600
-                sys.stderr.write(
-                    f"delegate: removed stale worktree "
-                    f"({age_h:.1f}h old): {path}\n"
-                )
+                sys.stderr.write(f"delegate: removed stale worktree ({age_h:.1f}h old): {path}\n")
         except (OSError, Exception) as e:
             sys.stderr.write(f"delegate: failed to clean {path}: {e}\n")
 
@@ -433,10 +449,13 @@ def _cleanup_stale_worktrees(quiet: bool = False) -> None:
 @dataclass
 class SingleResult:
     """Result from a single delegate execution."""
+
     doc_id: int | None = None
     task_id: int | None = None
     pr_url: str | None = None
     branch_name: str | None = None
+    success: bool = True
+    error_message: str | None = None
 
 
 def _run_single(
@@ -512,7 +531,7 @@ def _run_single(
     if not result.success:
         sys.stderr.write(f"delegate: task failed: {result.error_message}\n")
         _safe_update_task(task_id, status="failed", error=result.error_message)
-        return SingleResult(task_id=task_id)
+        return SingleResult(task_id=task_id, success=False, error_message=result.error_message)
 
     # Extract PR URL from output content
     pr_url = _extract_pr_url(result.output_content)
@@ -524,12 +543,13 @@ def _run_single(
     # Fallback: if agent didn't save, try output file then captured output
     if not doc_id:
         doc_id = _save_output_fallback(
-            output_file, result.output_content, doc_title, all_tags,
+            output_file,
+            result.output_content,
+            doc_title,
+            all_tags,
         )
         if doc_id:
-            sys.stderr.write(
-                f"delegate: auto-saved from fallback → #{doc_id}\n"
-            )
+            sys.stderr.write(f"delegate: auto-saved from fallback → #{doc_id}\n")
 
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
@@ -542,9 +562,7 @@ def _run_single(
         _print_doc_content(doc_id)
         if not quiet:
             pr_info = f" pr:{pr_url}" if pr_url else ""
-            branch_info = (
-                f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
-            )
+            branch_info = f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
             sys.stderr.write(
                 f"task_id:{task_id} doc_id:{doc_id} "
                 f"tokens:{result.tokens_used} "
@@ -561,18 +579,19 @@ def _run_single(
         sys.stderr.write("delegate: agent completed with no output\n")
 
     return SingleResult(
-        doc_id=doc_id, task_id=task_id,
-        pr_url=pr_url, branch_name=pushed_branch,
+        doc_id=doc_id,
+        task_id=task_id,
+        pr_url=pr_url,
+        branch_name=pushed_branch,
     )
 
+
 def _print_pr_summary(
-    tasks: list[str], results: dict[int, SingleResult],
+    tasks: list[str],
+    results: dict[int, SingleResult],
 ) -> None:
     """Print a summary table of PRs created by parallel tasks."""
-    pr_results = [
-        (i, results[i]) for i in sorted(results)
-        if results[i].pr_url
-    ]
+    pr_results = [(i, results[i]) for i in sorted(results) if results[i].pr_url]
     if not pr_results:
         return
 
@@ -584,19 +603,17 @@ def _print_pr_summary(
 
 
 def _print_branch_summary(
-    tasks: list[str], results: dict[int, SingleResult],
+    tasks: list[str],
+    results: dict[int, SingleResult],
 ) -> None:
     """Print a summary table of branches pushed by parallel tasks."""
     branch_results = [
-        (i, results[i]) for i in sorted(results)
-        if results[i].branch_name and not results[i].pr_url
+        (i, results[i]) for i in sorted(results) if results[i].branch_name and not results[i].pr_url
     ]
     if not branch_results:
         return
 
-    sys.stderr.write(
-        f"\ndelegate: {len(branch_results)} branch(es) pushed:\n"
-    )
+    sys.stderr.write(f"\ndelegate: {len(branch_results)} branch(es) pushed:\n")
     for i, sr in branch_results:
         label = tasks[i][:60] if i < len(tasks) else "?"
         sys.stderr.write(f"  [{i + 1}] {sr.branch_name}  {label}\n")
@@ -654,6 +671,7 @@ def _run_parallel(
         task_worktree_path = None
         if worktree:
             from ..utils.git import create_worktree
+
             try:
                 task_worktree_path, _ = create_worktree(base_branch)
                 if not quiet:
@@ -662,27 +680,27 @@ def _run_parallel(
                         f"created at {task_worktree_path}\n"
                     )
             except Exception as e:
-                sys.stderr.write(
-                    f"delegate: failed to create worktree "
-                    f"for task {idx + 1}: {e}\n"
-                )
+                sys.stderr.write(f"delegate: failed to create worktree for task {idx + 1}: {e}\n")
                 return idx, SingleResult()
 
         try:
-            result = idx, _run_single(
-                prompt=task,
-                tags=tags,
-                title=task_title,
-                model=model,
-                quiet=True,  # suppress per-task metadata in parallel mode
-                pr=pr,
-                branch=branch,
-                pr_branch=branch_names[idx],
-                draft=draft,
-                working_dir=task_worktree_path,
-                parent_task_id=parent_task_id,
-                seq=idx + 1,
-                epic_key=epic_key,
+            result = (
+                idx,
+                _run_single(
+                    prompt=task,
+                    tags=tags,
+                    title=task_title,
+                    model=model,
+                    quiet=True,  # suppress per-task metadata in parallel mode
+                    pr=pr,
+                    branch=branch,
+                    pr_branch=branch_names[idx],
+                    draft=draft,
+                    working_dir=task_worktree_path,
+                    parent_task_id=parent_task_id,
+                    seq=idx + 1,
+                    epic_key=epic_key,
+                ),
             )
             return result
         finally:
@@ -690,31 +708,47 @@ def _run_parallel(
             # For --pr: branch is already pushed, worktree no longer needed
             if task_worktree_path and not branch:
                 from ..utils.git import cleanup_worktree
+
                 cleanup_worktree(task_worktree_path)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(run_task, i, task): i
-            for i, task in enumerate(tasks)
-        }
+        futures = {executor.submit(run_task, i, task): i for i, task in enumerate(tasks)}
         for future in as_completed(futures):
             idx, single_result = future.result()
             results[idx] = single_result
 
     # Collect doc_ids in original task order (filter out None values)
     doc_ids: list[int] = [
-        r.doc_id for i in range(len(tasks))
-        if (r := results.get(i)) and r.doc_id is not None
+        r.doc_id for i in range(len(tasks)) if (r := results.get(i)) and r.doc_id is not None
     ]
+
+    # Collect failed tasks for synthesis context
+    failed_tasks: list[tuple[int, str, str | None]] = [
+        (i, tasks[i], results[i].error_message)
+        for i in range(len(tasks))
+        if (r := results.get(i)) and not r.success
+    ]
+
+    # Track success/failure counts
+    succeeded_count = len(doc_ids)
+    failed_count = len(failed_tasks)
 
     if not doc_ids:
         sys.stderr.write(
-            "delegate: parallel run completed but no output documents found\n"
+            f"delegate: parallel run completed but all {failed_count} task(s) failed\n"
         )
         _safe_update_task(
-            parent_task_id, status="failed", error="no output documents",
+            parent_task_id,
+            status="failed",
+            error="all tasks failed",
         )
         raise typer.Exit(1) from None
+
+    # Log partial failures
+    if failed_count > 0:
+        sys.stderr.write(
+            f"delegate: {succeeded_count}/{len(tasks)} task(s) succeeded, {failed_count} failed\n"
+        )
 
     # Print PR/branch summary if any were created
     if pr:
@@ -723,22 +757,45 @@ def _run_parallel(
         _print_branch_summary(tasks, results)
 
     # Update parent task
-    if synthesize and len(doc_ids) > 1:
+    if synthesize and (len(doc_ids) > 1 or (len(doc_ids) >= 1 and failed_count > 0)):
         # Run a synthesis task that combines all outputs
+        # Include both successful results and note about failed tasks
         combined = []
-        for i, doc_id in enumerate(doc_ids):
-            doc = get_document(doc_id)
-            if doc:
-                combined.append(
-                    f"## Task {i + 1}: {tasks[i][:80]}\n\n"
-                    f"{doc.get('content', '')}"
-                )
 
-        synthesis_prompt = (
-            "Synthesize the following task results into a unified summary. "
-            "Highlight key findings, common themes, and actionable items.\n\n"
-            + "\n\n---\n\n".join(combined)
-        )
+        # Add successful task results
+        for i in range(len(tasks)):
+            r = results.get(i)
+            if r and r.doc_id is not None:
+                doc = get_document(r.doc_id)
+                if doc:
+                    combined.append(
+                        f"## Task {i + 1} (SUCCESS): {tasks[i][:80]}\n\n{doc.get('content', '')}"
+                    )
+
+        # Add failed task summaries
+        if failed_tasks:
+            failed_section = "## Failed Tasks\n\nThe following tasks failed:\n\n"
+            for idx, task_prompt, error_msg in failed_tasks:
+                error_info = f": {error_msg}" if error_msg else ""
+                failed_section += f"- **Task {idx + 1}**: {task_prompt[:80]}{error_info}\n"
+            combined.append(failed_section)
+
+        # Build synthesis prompt with failure context
+        if failed_tasks:
+            synthesis_intro = (
+                f"Synthesize the following task results into a unified summary. "
+                f"Note: {succeeded_count} of {len(tasks)} tasks succeeded. "
+                f"{failed_count} task(s) failed and are noted below. "
+                f"Highlight key findings, common themes, and actionable items. "
+                f"Also note the impact of the failed tasks on the overall analysis.\n\n"
+            )
+        else:
+            synthesis_intro = (
+                "Synthesize the following task results into a unified summary. "
+                "Highlight key findings, common themes, and actionable items.\n\n"
+            )
+
+        synthesis_prompt = synthesis_intro + "\n\n---\n\n".join(combined)
         synthesis_title = title or "Delegate synthesis"
         synthesis_result = _run_single(
             prompt=synthesis_prompt,
@@ -752,34 +809,44 @@ def _run_parallel(
             doc_ids.append(synthesis_result.doc_id)
             # Print just the synthesis
             _print_doc_content(synthesis_result.doc_id)
+
+        # Set status based on partial failures
+        final_status = "partial" if failed_count > 0 else "done"
+        error_msg = f"{failed_count}/{len(tasks)} tasks failed" if failed_count > 0 else None
         _safe_update_task(
-            parent_task_id, status="done",
+            parent_task_id,
+            status=final_status,
             output_doc_id=synthesis_result.doc_id,
+            error=error_msg,
         )
         if not quiet:
+            status_suffix = f" ({failed_count} failed)" if failed_count > 0 else ""
             sys.stderr.write(
                 f"task_id:{parent_task_id} "
                 f"doc_ids:{','.join(str(d) for d in doc_ids)} "
-                f"synthesis_id:{synthesis_result.doc_id or 'none'}\n"
+                f"synthesis_id:{synthesis_result.doc_id or 'none'}{status_suffix}\n"
             )
     else:
-        _safe_update_task(parent_task_id, status="done")
+        # Set status based on partial failures
+        final_status = "partial" if failed_count > 0 else "done"
+        error_msg = f"{failed_count}/{len(tasks)} tasks failed" if failed_count > 0 else None
+        _safe_update_task(parent_task_id, status=final_status, error=error_msg)
+
         # Print each result separated
         for i, doc_id in enumerate(doc_ids):
             if len(doc_ids) > 1:
-                sys.stdout.write(
-                    f"\n=== Task {i + 1}: "
-                    f"{tasks[i] if i < len(tasks) else '?'} ===\n"
-                )
+                sys.stdout.write(f"\n=== Task {i + 1}: {tasks[i] if i < len(tasks) else '?'} ===\n")
             _print_doc_content(doc_id)
 
         if not quiet:
+            status_suffix = f" ({failed_count} failed)" if failed_count > 0 else ""
             sys.stderr.write(
                 f"task_id:{parent_task_id} "
-                f"doc_ids:{','.join(str(d) for d in doc_ids)}\n"
+                f"doc_ids:{','.join(str(d) for d in doc_ids)}{status_suffix}\n"
             )
 
     return doc_ids
+
 
 def _run_chain(
     tasks: list[str],
@@ -814,7 +881,7 @@ def _run_chain(
     prev_step_id = None
     for i, task in enumerate(tasks):
         step_id = _safe_create_task(
-            title=f"Step {i+1}/{len(tasks)}: {task[:60]}",
+            title=f"Step {i + 1}/{len(tasks)}: {task[:60]}",
             prompt=task[:500],
             task_type="single",
             status="open",
@@ -899,6 +966,7 @@ def _run_chain(
 
     return doc_ids
 
+
 @app.callback(invoke_without_command=True)
 def delegate(
     ctx: typer.Context,
@@ -907,75 +975,104 @@ def delegate(
         help="Task prompt(s) or document IDs. Numeric args load doc content.",
     ),
     tags: list[str] | None = typer.Option(
-        None, "--tags", "-t",
+        None,
+        "--tags",
+        "-t",
         help="Tags to apply to outputs (comma-separated)",
     ),
     title: str | None = typer.Option(
-        None, "--title", "-T",
+        None,
+        "--title",
+        "-T",
         help="Title for output document(s)",
     ),
     synthesize: bool = typer.Option(
-        False, "--synthesize", "-s",
+        False,
+        "--synthesize",
+        "-s",
         help="Combine parallel outputs with synthesis",
     ),
     jobs: int = typer.Option(
-        None, "-j", "--jobs",
+        None,
+        "-j",
+        "--jobs",
         help="Max parallel tasks (default: auto)",
     ),
     model: str = typer.Option(
-        None, "--model", "-m",
+        None,
+        "--model",
+        "-m",
         help="Model to use (overrides default)",
     ),
     quiet: bool = typer.Option(
-        False, "--quiet", "-q",
+        False,
+        "--quiet",
+        "-q",
         help="Suppress metadata on stderr (just content on stdout)",
     ),
     doc: int = typer.Option(
-        None, "--doc", "-d",
+        None,
+        "--doc",
+        "-d",
         help="Document ID to use as input context",
     ),
     pr: bool = typer.Option(
-        False, "--pr",
+        False,
+        "--pr",
         help="Instruct agent to create a PR (implies --worktree)",
     ),
     branch: bool = typer.Option(
-        False, "--branch",
+        False,
+        "--branch",
         help="Commit and push to origin branch (implies --worktree, no PR)",
     ),
     draft: bool = typer.Option(
-        False, "--draft/--no-draft",
+        False,
+        "--draft/--no-draft",
         help="Create PR as draft (default: False, use --draft for draft PRs)",
     ),
     worktree: bool = typer.Option(
-        False, "--worktree", "-w",
+        False,
+        "--worktree",
+        "-w",
         help="Run in isolated git worktree",
     ),
     base_branch: str = typer.Option(
-        "main", "--base-branch", "-b",
+        "main",
+        "--base-branch",
+        "-b",
         help="Base branch for worktree/branch (default: main)",
     ),
     chain: bool = typer.Option(
-        False, "--chain",
+        False,
+        "--chain",
         help="Run tasks sequentially, piping output forward",
     ),
     each: str = typer.Option(
-        None, "--each",
+        None,
+        "--each",
         help="Shell command to discover items (one per line)",
     ),
     do: str = typer.Option(
-        None, "--do",
+        None,
+        "--do",
         help="Template for each discovered item (use {{item}})",
     ),
     epic: int | None = typer.Option(
-        None, "--epic", "-e",
+        None,
+        "--epic",
+        "-e",
         help="Epic task ID to add tasks to",
     ),
     cat: str | None = typer.Option(
-        None, "--cat", "-c",
+        None,
+        "--cat",
+        "-c",
         help="Category key for auto-numbered tasks",
     ),
     cleanup: bool = typer.Option(
-        False, "--cleanup",
+        False,
+        "--cleanup",
         help="Remove stale delegate worktrees (>1 hour old)",
     ),
 ) -> None:
@@ -1047,10 +1144,38 @@ def delegate(
 
     # Guard: detect flags accidentally consumed as task arguments.
     # This can happen if allow_interspersed_args is misconfigured or bypassed.
-    known_flags = {"--tags", "-t", "--title", "-T", "--synthesize", "-s", "--jobs", "-j",
-                   "--model", "-m", "--quiet", "-q", "--doc", "-d", "--pr", "--branch",
-                   "--draft", "--no-draft", "--worktree", "-w", "--base-branch", "-b",
-                   "--chain", "--each", "--do", "--epic", "-e", "--cat", "-c", "--cleanup"}
+    known_flags = {
+        "--tags",
+        "-t",
+        "--title",
+        "-T",
+        "--synthesize",
+        "-s",
+        "--jobs",
+        "-j",
+        "--model",
+        "-m",
+        "--quiet",
+        "-q",
+        "--doc",
+        "-d",
+        "--pr",
+        "--branch",
+        "--draft",
+        "--no-draft",
+        "--worktree",
+        "-w",
+        "--base-branch",
+        "-b",
+        "--chain",
+        "--each",
+        "--do",
+        "--epic",
+        "-e",
+        "--cat",
+        "-c",
+        "--cleanup",
+    }
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
         sys.stderr.write(
@@ -1095,6 +1220,7 @@ def delegate(
 
     if isinstance(epic, int) and epic:
         from ..models.tasks import get_task as _get_task
+
         epic_task = _get_task(epic)
         if not epic_task:
             typer.echo(f"Error: Epic #{epic} not found", err=True)
@@ -1109,6 +1235,7 @@ def delegate(
     worktree_path = None
     if use_worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
+
         try:
             worktree_path, _ = create_worktree(base_branch)
             if not quiet:
@@ -1152,9 +1279,7 @@ def delegate(
             if single_result.pr_url and not quiet:
                 sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
             elif single_result.branch_name and not quiet:
-                sys.stderr.write(
-                    f"delegate: branch pushed: {single_result.branch_name}\n"
-                )
+                sys.stderr.write(f"delegate: branch pushed: {single_result.branch_name}\n")
             if single_result.doc_id is None:
                 raise typer.Exit(1) from None
         else:
@@ -1180,8 +1305,7 @@ def delegate(
         # For --pr: branch is already pushed, worktree no longer needed
         if worktree_path and not branch:
             from ..utils.git import cleanup_worktree
+
             if not quiet:
-                sys.stderr.write(
-                    f"delegate: cleaning up worktree {worktree_path}\n"
-                )
+                sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
             cleanup_worktree(worktree_path)
