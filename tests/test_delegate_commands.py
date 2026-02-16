@@ -21,6 +21,8 @@ from emdx.commands.delegate import (
     PR_INSTRUCTION_GENERIC,
     SingleResult,
     _extract_pr_url,
+    _format_time_ago,
+    _get_memory_context,
     _load_doc_context,
     _make_branch_instruction,
     _make_output_file_id,
@@ -692,8 +694,6 @@ class TestRunParallel:
         assert mock_cleanup_worktree.call_count == 2
 
 
-
-
 # =============================================================================
 # Tests for delegate command (CLI entry point)
 # =============================================================================
@@ -726,6 +726,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_run_single.assert_called_once()
@@ -756,6 +760,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_run_parallel.assert_called_once()
@@ -780,7 +788,7 @@ class TestDelegateCommand:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each="find . -name '*.py'",
+                each="find . -name '*.py'",
                 do=None,
             )
 
@@ -810,6 +818,10 @@ class TestDelegateCommand:
             base_branch="main",
             each="find . -name '*.py'",
             do="Review {{item}} for issues",
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_run_discovery.assert_called_once_with("find . -name '*.py'")
@@ -845,6 +857,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_load_doc.assert_called_once_with(42, "implement this")
@@ -876,6 +892,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_create_wt.assert_called_once_with("main", task_title="fix bug")
@@ -908,6 +928,10 @@ class TestDelegateCommand:
             base_branch="develop",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         # Worktree should be created even though --worktree not set
@@ -939,6 +963,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         call_kwargs = mock_run_parallel.call_args[1]
@@ -973,6 +1001,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1007,6 +1039,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1036,6 +1072,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         call_kwargs = mock_run_parallel.call_args[1]
@@ -1061,8 +1101,12 @@ class TestDelegateCommand:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
+                epic=None,
+                cat=None,
+                cleanup=False,
+                memory=None,
             )
 
     @patch("emdx.commands.delegate.get_document")
@@ -1095,6 +1139,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_get_doc.assert_called_once_with(42)
@@ -1126,6 +1174,10 @@ class TestDelegateCommand:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1261,6 +1313,10 @@ class TestBranchFlag:
             base_branch="main",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         # Worktree should be created
@@ -1294,6 +1350,10 @@ class TestBranchFlag:
             base_branch="develop",
             each=None,
             do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
         )
 
         mock_create_wt.assert_called_once_with("develop", task_title="add feature")
@@ -1319,8 +1379,12 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
+                epic=None,
+                cat=None,
+                cleanup=False,
+                memory=None,
             )
 
     @patch("emdx.commands.delegate._run_single")
@@ -1348,8 +1412,12 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
+                epic=None,
+                cat=None,
+                cleanup=False,
+                memory=None,
             )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1388,8 +1456,12 @@ class TestErrorHandling:
                 branch=False,
                 worktree=True,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
+                epic=None,
+                cat=None,
+                cleanup=False,
+                memory=None,
             )
 
     @patch("emdx.commands.delegate._run_single")
@@ -1414,8 +1486,12 @@ class TestErrorHandling:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
+                epic=None,
+                cat=None,
+                cleanup=False,
+                memory=None,
             )
 
 
@@ -1658,3 +1734,281 @@ class TestRunSingleFallback:
         )
 
         assert result.doc_id is None
+
+
+# =============================================================================
+# Tests for --memory flag (cross-session context)
+# =============================================================================
+
+
+class TestFormatTimeAgo:
+    """Tests for _format_time_ago — formats datetime as relative time string."""
+
+    def test_minutes_ago(self):
+        from datetime import datetime, timedelta
+
+        dt = datetime.now() - timedelta(minutes=30)
+        result = _format_time_ago(dt.isoformat())
+        assert result == "30m ago"
+
+    def test_hours_ago(self):
+        from datetime import datetime, timedelta
+
+        dt = datetime.now() - timedelta(hours=5)
+        result = _format_time_ago(dt.isoformat())
+        assert result == "5h ago"
+
+    def test_days_ago(self):
+        from datetime import datetime, timedelta
+
+        dt = datetime.now() - timedelta(days=2)
+        result = _format_time_ago(dt.isoformat())
+        assert result == "2d ago"
+
+    def test_invalid_datetime_returns_unknown(self):
+        result = _format_time_ago("not-a-datetime")
+        assert result == "unknown"
+
+
+class TestGetMemoryContext:
+    """Tests for _get_memory_context — loads recent delegate outputs as memory."""
+
+    @patch("emdx.models.tags.search_by_tags")
+    def test_returns_empty_when_no_docs(self, mock_search):
+        mock_search.return_value = []
+        result = _get_memory_context(5)
+        assert result == ""
+
+    @patch("emdx.commands.delegate.get_document")
+    @patch("emdx.models.tags.get_document_tags")
+    @patch("emdx.models.tags.search_by_tags")
+    def test_excludes_rejected_docs(self, mock_search, mock_get_tags, mock_get_doc):
+        mock_search.return_value = [
+            {"id": 1, "title": "Rejected", "created_at": "2024-01-01T00:00:00"},
+            {"id": 2, "title": "Good", "created_at": "2024-01-02T00:00:00"},
+        ]
+        mock_get_tags.side_effect = [
+            ["needs-review", "rejected"],  # Doc 1 rejected
+            ["needs-review"],  # Doc 2 not rejected
+        ]
+        mock_get_doc.return_value = {"title": "Good", "content": "Content"}
+
+        result = _get_memory_context(1)
+
+        assert "Doc #2" in result
+        assert "Doc #1" not in result
+
+    @patch("emdx.commands.delegate.get_document")
+    @patch("emdx.models.tags.get_document_tags")
+    @patch("emdx.models.tags.search_by_tags")
+    def test_excludes_rejected_emoji(self, mock_search, mock_get_tags, mock_get_doc):
+        """Test that 🚫 emoji is also treated as rejected."""
+        mock_search.return_value = [
+            {"id": 1, "title": "Rejected", "created_at": "2024-01-01T00:00:00"},
+            {"id": 2, "title": "Good", "created_at": "2024-01-02T00:00:00"},
+        ]
+        mock_get_tags.side_effect = [
+            ["needs-review", "🚫"],  # Doc 1 rejected via emoji
+            ["needs-review"],  # Doc 2 not rejected
+        ]
+        mock_get_doc.return_value = {"title": "Good", "content": "Content"}
+
+        result = _get_memory_context(1)
+
+        assert "Doc #2" in result
+        assert "Doc #1" not in result
+
+    @patch("emdx.commands.delegate.get_document")
+    @patch("emdx.models.tags.get_document_tags")
+    @patch("emdx.models.tags.search_by_tags")
+    def test_truncates_long_content(self, mock_search, mock_get_tags, mock_get_doc):
+        mock_search.return_value = [{"id": 1, "title": "Long", "created_at": "2024-01-01T00:00:00"}]
+        mock_get_tags.return_value = ["needs-review"]
+        mock_get_doc.return_value = {"title": "Long", "content": "x" * 3000}
+
+        result = _get_memory_context(1, max_chars_per_doc=100)
+
+        assert "[...truncated]" in result
+        assert len(result) < 3000
+
+    @patch("emdx.commands.delegate.get_document")
+    @patch("emdx.models.tags.get_document_tags")
+    @patch("emdx.models.tags.search_by_tags")
+    def test_formats_memory_section(self, mock_search, mock_get_tags, mock_get_doc):
+        mock_search.return_value = [
+            {"id": 42, "title": "Test", "created_at": "2024-01-01T00:00:00"}
+        ]
+        mock_get_tags.return_value = ["needs-review"]
+        mock_get_doc.return_value = {"title": "Test Doc", "content": "Test content"}
+
+        result = _get_memory_context(1)
+
+        assert "--- PRIOR DELEGATE MEMORY" in result
+        assert "--- END MEMORY ---" in result
+        assert "Doc #42: Test Doc" in result
+        assert "Test content" in result
+
+    @patch("emdx.commands.delegate.get_document")
+    @patch("emdx.models.tags.get_document_tags")
+    @patch("emdx.models.tags.search_by_tags")
+    def test_limits_to_n_docs(self, mock_search, mock_get_tags, mock_get_doc):
+        """Test that only N documents are included even if more are available."""
+        mock_search.return_value = [
+            {"id": i, "title": f"Doc {i}", "created_at": "2024-01-01T00:00:00"} for i in range(1, 6)
+        ]
+        mock_get_tags.return_value = ["needs-review"]
+        mock_get_doc.side_effect = lambda doc_id: {
+            "title": f"Doc {doc_id}",
+            "content": f"Content {doc_id}",
+        }
+
+        result = _get_memory_context(2)
+
+        # Should only include first 2 docs
+        assert "Doc #1" in result
+        assert "Doc #2" in result
+        assert "Doc #3" not in result
+
+
+class TestMemoryFlagIntegration:
+    """Tests for --memory flag in delegate command."""
+
+    @patch("emdx.commands.delegate._get_memory_context")
+    @patch("emdx.commands.delegate._run_single")
+    def test_memory_context_injected(self, mock_run_single, mock_get_memory):
+        """Test that memory context is prepended to task prompts."""
+        mock_get_memory.return_value = "--- PRIOR MEMORY ---\nPrevious work\n--- END ---\n"
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["new task"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            each=None,
+            do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=3,
+        )
+
+        mock_get_memory.assert_called_once_with(3)
+        # Verify memory was prepended to prompt
+        call_kwargs = mock_run_single.call_args[1]
+        assert "--- PRIOR MEMORY ---" in call_kwargs["prompt"]
+        assert "new task" in call_kwargs["prompt"]
+
+    @patch("emdx.commands.delegate._get_memory_context")
+    @patch("emdx.commands.delegate._run_single")
+    def test_memory_zero_skipped(self, mock_run_single, mock_get_memory):
+        """Test that --memory 0 does not call _get_memory_context."""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["task"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            each=None,
+            do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=0,
+        )
+
+        mock_get_memory.assert_not_called()
+
+    @patch("emdx.commands.delegate._get_memory_context")
+    @patch("emdx.commands.delegate._run_single")
+    def test_memory_none_skipped(self, mock_run_single, mock_get_memory):
+        """Test that memory=None does not call _get_memory_context."""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["task"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            each=None,
+            do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=None,
+        )
+
+        mock_get_memory.assert_not_called()
+
+    @patch("emdx.commands.delegate._get_memory_context")
+    @patch("emdx.commands.delegate._run_single")
+    def test_memory_empty_result_not_prepended(self, mock_run_single, mock_get_memory):
+        """Test that empty memory context is not prepended."""
+        mock_get_memory.return_value = ""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["task"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            each=None,
+            do=None,
+            epic=None,
+            cat=None,
+            cleanup=False,
+            memory=5,
+        )
+
+        # Prompt should just be the task, not prepended with empty string
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["prompt"] == "task"

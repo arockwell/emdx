@@ -403,6 +403,94 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
         return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+def _format_time_ago(dt_str: str) -> str:
+    """Format datetime as relative time string."""
+    from datetime import datetime
+
+    from ..utils.datetime_utils import parse_datetime
+
+    dt = parse_datetime(dt_str)
+    if not dt:
+        return "unknown"
+
+    now = datetime.now()
+    if dt.tzinfo:
+        now = now.replace(tzinfo=dt.tzinfo)
+
+    delta = now - dt
+    hours = delta.total_seconds() / 3600
+
+    if hours < 1:
+        return f"{int(delta.total_seconds() / 60)}m ago"
+    elif hours < 24:
+        return f"{int(hours)}h ago"
+    else:
+        return f"{int(hours / 24)}d ago"
+
+
+def _get_memory_context(n: int, max_chars_per_doc: int = 2000) -> str:
+    """Load N most recent delegate outputs as memory context.
+
+    Args:
+        n: Number of recent documents to include
+        max_chars_per_doc: Character limit per document (~500 tokens)
+
+    Returns:
+        Formatted memory section or empty string if no docs found
+    """
+    from ..models.tags import get_document_tags, search_by_tags
+
+    # Search for delegate outputs (needs-review OR delegate-output, not rejected)
+    docs = search_by_tags(
+        ["needs-review", "delegate-output"],
+        mode="any",
+        limit=n * 2,  # Fetch extra to filter rejected
+        prefix_match=False,
+    )
+
+    if not docs:
+        return ""
+
+    # Filter out rejected docs and limit to N
+    memory_docs = []
+    for doc_meta in docs:
+        doc_tags = get_document_tags(doc_meta["id"])
+        if "rejected" not in doc_tags and "🚫" not in doc_tags:
+            memory_docs.append(doc_meta)
+        if len(memory_docs) >= n:
+            break
+
+    if not memory_docs:
+        return ""
+
+    # Build memory section
+    lines = [f"--- PRIOR DELEGATE MEMORY ({len(memory_docs)} most recent) ---\n"]
+
+    for i, doc_meta in enumerate(memory_docs, 1):
+        doc = get_document(doc_meta["id"])
+        if not doc:
+            continue
+
+        title = doc.get("title", f"Document #{doc_meta['id']}")
+        content = doc.get("content", "")
+        created = doc_meta.get("created_at", "")
+
+        # Format relative time
+        time_ago = _format_time_ago(created) if created else "unknown time"
+
+        # Truncate content
+        if len(content) > max_chars_per_doc:
+            content = content[:max_chars_per_doc] + "\n[...truncated]"
+
+        lines.append(f"## [{i}] Doc #{doc_meta['id']}: {title} ({time_ago})")
+        lines.append(content)
+        lines.append("")
+
+    lines.append("--- END MEMORY ---\n")
+
+    return "\n".join(lines)
+
+
 def _print_doc_content(doc_id: int) -> None:
     """Print a document's content to stdout."""
     doc = get_document(doc_id)
@@ -857,8 +945,6 @@ def _run_parallel(
 
     return doc_ids
 
-
-
     return doc_ids
 
 
@@ -965,6 +1051,12 @@ def delegate(
         "--cleanup",
         help="Remove stale delegate worktrees (>1 hour old)",
     ),
+    memory: int | None = typer.Option(
+        None,
+        "--memory",
+        "-M",
+        help="Inject N most recent delegate outputs as context",
+    ),
 ) -> None:
     """Delegate tasks to Claude agents with results on stdout.
 
@@ -1057,6 +1149,8 @@ def delegate(
         "--cat",
         "-c",
         "--cleanup",
+        "--memory",
+        "-M",
     }
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
@@ -1084,6 +1178,14 @@ def delegate(
             task_list = [_load_doc_context(doc, t) for t in task_list]
         else:
             task_list = [_load_doc_context(doc, None)]
+
+    # 2.5. Inject memory context if requested
+    if memory and memory > 0:
+        memory_context = _get_memory_context(memory)
+        if memory_context:
+            task_list = [memory_context + task for task in task_list]
+            if not quiet:
+                sys.stderr.write(f"delegate: injected memory from {memory} recent doc(s)\n")
 
     if not task_list:
         typer.echo("Error: No tasks provided", err=True)
