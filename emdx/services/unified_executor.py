@@ -28,27 +28,39 @@ logger = logging.getLogger(__name__)
 
 class ProcResult:
     """Mock result object for subprocess compatibility."""
+
     stdout: str
     stderr: str
     returncode: int | None
 
     def __init__(self) -> None:
-        self.stdout = ''
-        self.stderr = ''
+        self.stdout = ""
+        self.stderr = ""
         self.returncode = None
 
 
 # Tool emojis for log formatting
 TOOL_EMOJIS = {
-    "Read": "📖", "Write": "📝", "Edit": "✏️", "MultiEdit": "✏️",
-    "Bash": "💻", "Glob": "🔍", "Grep": "🔎", "LS": "📂",
-    "Task": "📋", "TodoWrite": "✅", "WebFetch": "🌐", "WebSearch": "🔍",
+    "Read": "📖",
+    "Write": "📝",
+    "Edit": "✏️",
+    "MultiEdit": "✏️",
+    "Bash": "💻",
+    "Glob": "🔍",
+    "Grep": "🔎",
+    "LS": "📂",
+    "Task": "📋",
+    "TodoWrite": "✅",
+    "WebFetch": "🌐",
+    "WebSearch": "🔍",
 }
+
 
 def format_timestamp(ts: float) -> str:
     """Format timestamp as [HH:MM:SS]."""
     dt = datetime.fromtimestamp(ts)
     return f"[{dt.strftime('%H:%M:%S')}]"
+
 
 def format_stream_line(line: str, timestamp: float) -> str | None:
     """Format a stream-json line into readable log output.
@@ -147,6 +159,7 @@ def format_stream_line(line: str, timestamp: float) -> str | None:
             return f"{format_timestamp(timestamp)} 💬 {line}"
         return None
 
+
 def _reader_thread(pipe: IO[str], line_queue: queue.Queue) -> None:
     """Read lines from a pipe and put them on a queue.
 
@@ -166,6 +179,7 @@ def _reader_thread(pipe: IO[str], line_queue: queue.Queue) -> None:
 @dataclass
 class ExecutionConfig:
     """Configuration for a CLI execution."""
+
     prompt: str
     working_dir: str = field(default_factory=lambda: str(Path.cwd()))
     title: str = "CLI Execution"
@@ -177,9 +191,11 @@ class ExecutionConfig:
     model: str | None = None  # Override default model for the CLI
     verbose: bool = False  # Stream output in real-time
 
+
 @dataclass
 class ExecutionResult:
     """Result of a CLI execution."""
+
     success: bool
     execution_id: int
     log_file: Path
@@ -196,20 +212,21 @@ class ExecutionResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'success': self.success,
-            'execution_id': self.execution_id,
-            'log_file': str(self.log_file),
-            'output_doc_id': self.output_doc_id,
-            'output_content': self.output_content,
-            'tokens_used': self.tokens_used,
-            'input_tokens': self.input_tokens,
-            'output_tokens': self.output_tokens,
-            'cost_usd': self.cost_usd,
-            'execution_time_ms': self.execution_time_ms,
-            'error_message': self.error_message,
-            'exit_code': self.exit_code,
-            'cli_tool': self.cli_tool,
+            "success": self.success,
+            "execution_id": self.execution_id,
+            "log_file": str(self.log_file),
+            "output_doc_id": self.output_doc_id,
+            "output_content": self.output_content,
+            "tokens_used": self.tokens_used,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cost_usd": self.cost_usd,
+            "execution_time_ms": self.execution_time_ms,
+            "error_message": self.error_message,
+            "exit_code": self.exit_code,
+            "cli_tool": self.cli_tool,
         }
+
 
 class UnifiedExecutor:
     """Unified executor for all CLI execution paths.
@@ -249,7 +266,7 @@ class UnifiedExecutor:
                 cli_tool=config.cli_tool,
             )
 
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
         thread_id = threading.get_ident()
         log_file = self.log_dir / f"unified-{config.cli_tool}-{timestamp}-{thread_id}.log"
 
@@ -281,15 +298,16 @@ class UnifiedExecutor:
             # Ensure log file directory exists
             log_file.parent.mkdir(parents=True, exist_ok=True)
 
+            stdout_lines: list[str] = []
+            stderr_lines: list[str] = []
+
             if config.verbose:
                 # Stream output in real-time using Popen + reader thread
                 import sys
 
-                stdout_lines: list[str] = []
-                stderr_lines: list[str] = []
                 deadline = start_time + config.timeout_seconds
 
-                with open(log_file, 'w') as f:
+                with open(log_file, "w") as f:
                     process = subprocess.Popen(
                         cmd.args,
                         stdout=subprocess.PIPE,
@@ -312,9 +330,7 @@ class UnifiedExecutor:
                         if time.time() > deadline:
                             process.kill()
                             process.wait()
-                            raise subprocess.TimeoutExpired(
-                                cmd.args, config.timeout_seconds
-                            )
+                            raise subprocess.TimeoutExpired(cmd.args, config.timeout_seconds)
 
                         try:
                             line = stdout_q.get(timeout=1.0)
@@ -346,8 +362,8 @@ class UnifiedExecutor:
 
                 # Create a mock result object for compatibility
                 proc_result = ProcResult()
-                proc_result.stdout = ''.join(stdout_lines)
-                proc_result.stderr = ''.join(stderr_lines)
+                proc_result.stdout = "".join(stdout_lines)
+                proc_result.stderr = "".join(stderr_lines)
                 proc_result.returncode = exit_code
             else:
                 # Stream output to log file in real-time (without terminal output)
@@ -356,7 +372,7 @@ class UnifiedExecutor:
                 stderr_lines = []
                 deadline = start_time + config.timeout_seconds
 
-                with open(log_file, 'w') as f:
+                with open(log_file, "w") as f:
                     process = subprocess.Popen(
                         cmd.args,
                         stdout=subprocess.PIPE,
@@ -379,9 +395,7 @@ class UnifiedExecutor:
                         if time.time() > deadline:
                             process.kill()
                             process.wait()
-                            raise subprocess.TimeoutExpired(
-                                cmd.args, config.timeout_seconds
-                            )
+                            raise subprocess.TimeoutExpired(cmd.args, config.timeout_seconds)
 
                         try:
                             line = stdout_q.get(timeout=1.0)
@@ -411,8 +425,8 @@ class UnifiedExecutor:
 
                 # Create a mock result object for compatibility
                 proc_result = ProcResult()
-                proc_result.stdout = ''.join(stdout_lines)
-                proc_result.stderr = ''.join(stderr_lines)
+                proc_result.stdout = "".join(stdout_lines)
+                proc_result.stderr = "".join(stderr_lines)
                 proc_result.returncode = exit_code
 
             # Parse the result
@@ -424,7 +438,7 @@ class UnifiedExecutor:
 
             success = cli_result.success
             exit_code = cli_result.exit_code
-            status = 'completed' if success else 'failed'
+            status = "completed" if success else "failed"
             update_execution_status(exec_id, status, exit_code)
 
             result = ExecutionResult(
@@ -439,7 +453,7 @@ class UnifiedExecutor:
                 result.output_doc_id = extract_output_doc_id(log_file)
                 result.output_content = cli_result.output
             else:
-                result.error_message = cli_result.error or 'Unknown error'
+                result.error_message = cli_result.error or "Unknown error"
 
             result.execution_time_ms = int((time.time() - start_time) * 1000)
 
@@ -452,16 +466,21 @@ class UnifiedExecutor:
             # Try to extract from log file as fallback (for stream-json format)
             if result.tokens_used == 0 and log_file.exists():
                 usage = extract_token_usage_detailed(log_file)
-                if usage.get('total', 0) > 0:
-                    result.tokens_used = int(usage.get('total', 0))
-                    result.input_tokens = int(usage.get('input', 0)) + int(usage.get('cache_in', 0)) + int(usage.get('cache_create', 0))  # noqa: E501
-                    result.output_tokens = int(usage.get('output', 0))
-                    result.cost_usd = usage.get('cost_usd', 0.0)
+                if usage.get("total", 0) > 0:
+                    result.tokens_used = int(usage.get("total", 0))
+                    result.input_tokens = (
+                        int(usage.get("input", 0))
+                        + int(usage.get("cache_in", 0))
+                        + int(usage.get("cache_create", 0))
+                    )  # noqa: E501
+                    result.output_tokens = int(usage.get("output", 0))
+                    result.cost_usd = usage.get("cost_usd", 0.0)
 
             # Persist metrics to execution record
             if result.tokens_used > 0 or result.cost_usd > 0:
                 try:
                     from ..models.executions import update_execution
+
                     update_execution(
                         exec_id,
                         cost_usd=result.cost_usd,
@@ -476,7 +495,7 @@ class UnifiedExecutor:
 
         except subprocess.TimeoutExpired:
             logger.error(f"Execution timed out after {config.timeout_seconds}s")
-            update_execution_status(exec_id, 'failed', -1)
+            update_execution_status(exec_id, "failed", -1)
             return ExecutionResult(
                 success=False,
                 execution_id=exec_id,
@@ -488,7 +507,7 @@ class UnifiedExecutor:
 
         except Exception as e:
             logger.exception("Execution failed: %s", e)
-            update_execution_status(exec_id, 'failed', -1)
+            update_execution_status(exec_id, "failed", -1)
             return ExecutionResult(
                 success=False,
                 execution_id=exec_id,
