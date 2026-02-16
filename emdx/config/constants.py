@@ -190,7 +190,7 @@ DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
 # CLAUDE MODEL CONFIGURATION
 # =============================================================================
 
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+DEFAULT_CLAUDE_MODEL = "claude-opus-4-6"
 DEFAULT_CLAUDE_SONNET_MODEL = "claude-sonnet-4-5-20250929"
 
 # =============================================================================

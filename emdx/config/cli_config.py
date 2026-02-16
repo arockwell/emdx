@@ -74,7 +74,7 @@ CLI_CONFIGS: dict[CliTool, CliConfig] = {
         default_output_format="stream-json",
         requires_verbose_for_stream=True,
         model_flag="--model",
-        default_model="claude-opus-4-5-20251101",
+        default_model="claude-opus-4-6",
         supports_allowed_tools=True,
         allowed_tools_flag="--allowedTools",
         force_flag=None,
@@ -87,7 +87,7 @@ CLI_CONFIGS: dict[CliTool, CliConfig] = {
 # Model aliases for convenience
 MODEL_ALIASES: dict[str, dict[str, str]] = {
     "opus": {
-        "claude": "claude-opus-4-5-20251101",
+        "claude": "claude-opus-4-6",
     },
     "sonnet": {
         "claude": "claude-sonnet-4-5-20250929",
@@ -150,7 +150,7 @@ def get_available_models(cli_tool: CliTool) -> list[str]:
     """
     if cli_tool == CliTool.CLAUDE:
         return [
-            "claude-opus-4-5-20251101",
+            "claude-opus-4-6",
             "claude-sonnet-4-5-20250929",
             "opus",
             "sonnet",
