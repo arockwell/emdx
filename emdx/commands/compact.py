@@ -56,6 +56,7 @@ def _fetch_all_documents() -> list[dict[str, Any]]:
             WHERE d.is_deleted = FALSE
             AND LENGTH(d.content) > 50
             GROUP BY d.id
+            HAVING COALESCE(GROUP_CONCAT(t.name), '') NOT LIKE '%superseded%'
             ORDER BY d.id
         """)
         return [dict(row) for row in cursor.fetchall()]
