@@ -13,10 +13,16 @@ import logging
 import re
 import shutil
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ..database import db
 from ..utils.emoji_aliases import normalize_tag_to_emoji
+
+if TYPE_CHECKING:
+    from .embedding_service import EmbeddingService
+
+# Type alias for SQL parameters used in dynamic query building
+SqlParam = str | int
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +94,9 @@ class AskService:
 
     def __init__(self, model: str | None = None):
         self.model = model or self.DEFAULT_MODEL
-        self._embedding_service: Any = None
+        self._embedding_service: EmbeddingService | None = None
 
-    def _get_embedding_service(self) -> Any:
+    def _get_embedding_service(self) -> EmbeddingService | None:
         if self._embedding_service is None:
             try:
                 from .embedding_service import EmbeddingService
@@ -194,7 +200,7 @@ class AskService:
 
             # Start with all non-deleted docs
             base_conditions = ["d.is_deleted = 0"]
-            params: list[Any] = []
+            params: list[SqlParam] = []
 
             if project:
                 base_conditions.append("d.project = ?")
@@ -285,7 +291,7 @@ class AskService:
                     SELECT id, title, content FROM documents
                     WHERE content LIKE ? AND is_deleted = 0
                 """
-                params: list[Any] = [f"%{ticket}%"]
+                params: list[SqlParam] = [f"%{ticket}%"]
 
                 if project:
                     query += " AND project = ?"
@@ -309,18 +315,18 @@ class AskService:
                     JOIN documents_fts fts ON d.id = fts.rowid
                     WHERE fts.documents_fts MATCH ? AND d.is_deleted = 0
                 """
-                params = [terms]
+                fts_params: list[SqlParam] = [terms]
 
                 if project:
                     query += " AND d.project = ?"
-                    params.append(project)
+                    fts_params.append(project)
 
                 query += " ORDER BY rank LIMIT ?"
                 # Fetch more than needed since we'll filter
-                params.append((limit - len(docs)) * 3)
+                fts_params.append((limit - len(docs)) * 3)
 
                 try:
-                    cursor.execute(query, params)
+                    cursor.execute(query, fts_params)
                     for row in cursor.fetchall():
                         if row[0] not in seen and passes_filter(row[0]):
                             docs.append(row)
@@ -337,7 +343,7 @@ class AskService:
                     SELECT id, title, content FROM documents
                     WHERE is_deleted = 0
                 """
-                fallback_params: list[Any] = []
+                fallback_params: list[SqlParam] = []
 
                 if project:
                     query += " AND project = ?"
@@ -385,13 +391,13 @@ class AskService:
                         continue
 
                     query = "SELECT id, title, content FROM documents WHERE id = ?"
-                    params: list[Any] = [match.doc_id]
+                    sem_params: list[SqlParam] = [match.doc_id]
 
                     if project:
                         query += " AND project = ?"
-                        params.append(project)
+                        sem_params.append(project)
 
-                    cursor.execute(query, params)
+                    cursor.execute(query, sem_params)
                     row = cursor.fetchone()
                     if row:
                         docs.append(row)
