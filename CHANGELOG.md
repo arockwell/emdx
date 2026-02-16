@@ -69,6 +69,8 @@ Tasks gained structure and visibility:
 - **Auto-save fallback** — File-based output fallback when agents skip `emdx save` (#610, #622)
 - **Worktree cleanup** — `--cleanup` flag, worktrees always cleaned up after execution (#624, #629)
 - **Synthesis uses Claude CLI** — `compact` and `distill` use the same auth path as `delegate`, no API key required (#631)
+- **`--synthesize` resilience** — synthesis no longer fails if one agent in a parallel batch errors; partial results are still combined (#634)
+- **Unified branch naming** — delegate-created branches now follow `delegate/{slug}-{hash}` pattern instead of inconsistent prefixes; PR validation checks for commits and pushed changes before creating PRs (#637)
 
 #### TUI reorganization (#626)
 - Screens reordered: **1=Activity, 2=Tasks, 3=Search, 4=Cascade**

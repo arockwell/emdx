@@ -1,6 +1,6 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.14.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.15.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -194,11 +194,11 @@ emdx find "docker" --project myapp
 Find documents by meaning, not just keywords (requires `emdx[ai]` extra):
 
 ```bash
-# Build the index (one-time)
-emdx ai index
+# Search by concept — finds related content even without keyword matches
+emdx find "how we handle rate limiting" --mode semantic
 
-# Search by concept
-emdx ai search "how we handle rate limiting"
+# Extract key information from results
+emdx find "authentication" --extract
 ```
 
 ### Q&A over your knowledge base
@@ -212,6 +212,31 @@ emdx ai ask "How did we solve the auth bug?"
 ```
 
 ## Going Further
+
+### Compact: deduplicate your knowledge base
+
+As your KB grows, related documents pile up. `compact` finds clusters of similar docs using TF-IDF and merges them via Claude:
+
+```bash
+emdx compact --dry-run                  # Show clusters (free, no API calls)
+emdx compact --dry-run --threshold 0.7  # Tighter similarity requirement
+emdx compact 32 33                      # Merge specific documents
+emdx compact --auto                     # Merge all discovered clusters
+emdx compact --topic "auth"             # Only cluster docs matching a topic
+```
+
+Originals are tagged `superseded` (not deleted) and excluded from future clustering.
+
+### Distill: synthesize topics for any audience
+
+Search the KB and synthesize matching documents into a coherent summary:
+
+```bash
+emdx distill "authentication"                    # Personal summary (default)
+emdx distill --for docs "API design"             # Documentation style
+emdx distill --for coworkers "sprint progress"   # Team briefing
+emdx distill --tags "security,active" --save     # Save result to KB
+```
 
 ### Cascade: ideas to code
 
@@ -275,8 +300,10 @@ emdx status   # Quick overview
 | Chain tasks | `emdx delegate --chain "analyze" "plan" "implement"` |
 | Discover + process items | `emdx delegate --each "cmd" --do "Review {{item}}"` |
 | Create a PR | `emdx delegate --pr "fix the bug"` |
-| Search by meaning | `emdx ai search "concept"` |
+| Search by meaning | `emdx find "concept" --mode semantic` |
 | Ask a question | `emdx ai context "question" \| claude` |
+| Deduplicate the KB | `emdx compact --dry-run` |
+| Synthesize a topic | `emdx distill "topic"` |
 | Idea to PR pipeline | `emdx cascade add "idea"` |
 
 ## Documentation
