@@ -957,6 +957,10 @@ class ActivityView(HelpMixin, Widget):
         """Handle tree node selection (Enter key) — open fullscreen."""
         self.action_fullscreen()
 
+    def on_activity_tree_double_clicked(self, event: ActivityTree.DoubleClicked) -> None:
+        """Handle double-click on tree node — open fullscreen."""
+        self.action_fullscreen()
+
     async def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
         """Handle lazy child loading when a node is expanded."""
         node = event.node

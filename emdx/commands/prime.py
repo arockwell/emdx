@@ -5,6 +5,7 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
+import subprocess
 from datetime import datetime
 from typing import Any
 
@@ -19,20 +20,12 @@ console = Console()
 
 def prime(
     format: str = typer.Option(
-        "text",
-        "--format", "-f",
-        help="Output format: text (for injection), markdown, or json"
+        "text", "--format", "-f", help="Output format: text (for injection), markdown, or json"
     ),
     verbose: bool = typer.Option(
-        False,
-        "--verbose", "-v",
-        help="Include execution guidance and recent docs"
+        False, "--verbose", "-v", help="Include execution guidance, recent docs, cascade status"
     ),
-    quiet: bool = typer.Option(
-        False,
-        "--quiet", "-q",
-        help="Minimal output - just ready tasks"
-    ),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output - just ready tasks"),
 ) -> None:
     """
     Output priming context for Claude Code session injection.
@@ -67,9 +60,13 @@ def prime(
 # Text output
 # ---------------------------------------------------------------------------
 
+
 def _output_text(
-    project: str | None, verbose: bool, quiet: bool,
-    markdown: bool = False, execution: bool = False,
+    project: str | None,
+    verbose: bool,
+    quiet: bool,
+    markdown: bool = False,
+    execution: bool = False,
 ) -> None:
     """Output priming context as text."""
     lines = []
@@ -101,11 +98,11 @@ def _output_text(
         lines.append("")
         for task in ready_tasks[:15]:
             label = _task_label(task)
-            doc = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
-            lines.append(f"  {label}  {task['title']}{doc}")
-            if task.get('description') and verbose:
-                desc = task['description'][:100]
-                if len(task['description']) > 100:
+            doc_ref = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
+            lines.append(f"  {label}  {task['title']}{doc_ref}")
+            if task.get("description") and verbose:
+                desc = task["description"][:100]
+                if len(task["description"]) > 100:
                     desc += "..."
                 lines.append(f"         {desc}")
         lines.append("")
@@ -122,6 +119,24 @@ def _output_text(
             label = _task_label(task)
             lines.append(f"  {label}  {task['title']}")
         lines.append("")
+
+    # Git context (always shown, not quiet-only)
+    if not quiet:
+        git_ctx = _get_git_context()
+        if git_ctx["branch"] or git_ctx["commits"] or git_ctx["prs"]:
+            lines.append("GIT CONTEXT:")
+            lines.append("")
+            if git_ctx["branch"]:
+                lines.append(f"  Branch: {git_ctx['branch']}")
+            if git_ctx["commits"]:
+                lines.append("  Recent commits:")
+                for commit in git_ctx["commits"]:
+                    lines.append(f"    {commit}")
+            if git_ctx["prs"]:
+                lines.append("  Open PRs:")
+                for pr in git_ctx["prs"]:
+                    lines.append(f"    #{pr['number']} {pr['title']} ({pr['headRefName']})")
+            lines.append("")
 
     # Verbose additions
     if verbose and not quiet:
@@ -143,6 +158,23 @@ def _output_text(
                 lines.append(f"  #{rdoc['id']}  {rdoc['title']}")
             lines.append("")
 
+        key_docs = _get_key_docs()
+        if key_docs:
+            lines.append("KEY DOCS (most accessed):")
+            lines.append("")
+            for kdoc in key_docs:
+                lines.append(f'  #{kdoc["id"]} "{kdoc["title"]}" — {kdoc["access_count"]} views')
+            lines.append("")
+
+        cascade_status = _get_cascade_status()
+        if any(cascade_status.values()):
+            lines.append("CASCADE QUEUE:")
+            lines.append("")
+            for stage, count in cascade_status.items():
+                if count > 0:
+                    lines.append(f"  {stage}: {count} item(s)")
+            lines.append("")
+
     # Footer
     if not quiet:
         lines.append("=" * 60)
@@ -153,6 +185,7 @@ def _output_text(
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
+
 
 def _task_label(task: dict) -> str:
     """Format a task label: use epic key (e.g. DEBT-10) if available, else #id."""
@@ -190,6 +223,7 @@ def _format_epic_line(epic: dict) -> str:
 # Data queries
 # ---------------------------------------------------------------------------
 
+
 def _get_active_epics() -> list[dict[str, Any]]:
     """Get active/open epics with child task counts."""
     with db.get_connection() as conn:
@@ -207,8 +241,12 @@ def _get_active_epics() -> list[dict[str, Any]]:
         rows = cursor.fetchall()
         return [
             {
-                "id": r[0], "title": r[1], "status": r[2], "epic_key": r[3],
-                "child_count": r[4], "children_done": r[5],
+                "id": r[0],
+                "title": r[1],
+                "status": r[2],
+                "epic_key": r[3],
+                "child_count": r[4],
+                "children_done": r[5],
             }
             for r in rows
         ]
@@ -235,9 +273,14 @@ def _get_ready_tasks() -> list[dict[str, Any]]:
         rows = cursor.fetchall()
         return [
             {
-                "id": r[0], "title": r[1], "description": r[2],
-                "priority": r[3], "status": r[4], "source_doc_id": r[5],
-                "epic_key": r[6], "epic_seq": r[7],
+                "id": r[0],
+                "title": r[1],
+                "description": r[2],
+                "priority": r[3],
+                "status": r[4],
+                "source_doc_id": r[5],
+                "epic_key": r[6],
+                "epic_seq": r[7],
             }
             for r in rows
         ]
@@ -258,8 +301,12 @@ def _get_in_progress_tasks() -> list[dict[str, Any]]:
         rows = cursor.fetchall()
         return [
             {
-                "id": r[0], "title": r[1], "description": r[2], "priority": r[3],
-                "epic_key": r[4], "epic_seq": r[5],
+                "id": r[0],
+                "title": r[1],
+                "description": r[2],
+                "priority": r[3],
+                "epic_key": r[4],
+                "epic_seq": r[5],
             }
             for r in rows
         ]
@@ -277,25 +324,148 @@ def _get_recent_docs() -> list[dict[str, Any]]:
             LIMIT 10
         """)
         rows = cursor.fetchall()
-        return [
-            {"id": r[0], "title": r[1], "project": r[2]}
-            for r in rows
-        ]
+        return [{"id": r[0], "title": r[1], "project": r[2]} for r in rows]
+
+
+def _get_cascade_status() -> dict:
+    """Get cascade queue status by stage."""
+    stages = ["idea", "prompt", "analyzed", "planned", "done"]
+    status = dict.fromkeys(stages, 0)
+
+    try:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT cascade_stage, COUNT(*)
+                FROM documents
+                WHERE cascade_stage IS NOT NULL AND cascade_stage != ''
+                AND is_deleted = 0
+                GROUP BY cascade_stage
+            """)
+            for stage, count in cursor.fetchall():
+                if stage in status:
+                    status[stage] = count
+    except Exception:
+        # cascade_stage column may not exist in older databases
+        pass
+
+    return status
 
 
 def _get_stale_docs() -> list:
     """Get stale documents for priming context."""
     try:
         from emdx.commands.stale import get_top_stale_for_priming
+
         return get_top_stale_for_priming(limit=5)
     except Exception:
         # stale module may not be available or have issues
         return []
 
 
+def _get_git_context() -> dict[str, Any]:
+    """
+    Get git context: current branch, recent commits, and open PRs.
+
+    Returns a dict with:
+        - branch: str | None — current branch name
+        - commits: list[str] — last 3 commit summaries (oneline)
+        - prs: list[dict] — open PRs with number, title, headRefName
+        - error: str | None — error message if git/gh not available
+    """
+    result: dict[str, Any] = {
+        "branch": None,
+        "commits": [],
+        "prs": [],
+        "error": None,
+    }
+
+    # Current branch
+    try:
+        proc = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode == 0:
+            result["branch"] = proc.stdout.strip() or None
+    except FileNotFoundError:
+        result["error"] = "git not installed"
+        return result
+    except subprocess.TimeoutExpired:
+        result["error"] = "git command timed out"
+        return result
+    except Exception as e:
+        result["error"] = f"git error: {e}"
+        return result
+
+    # Last 3 commits
+    try:
+        proc = subprocess.run(
+            ["git", "log", "--oneline", "-3"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            result["commits"] = proc.stdout.strip().split("\n")
+    except Exception:
+        # Not critical, continue without commits
+        pass
+
+    # Open PRs via gh CLI
+    try:
+        import json as json_module
+
+        proc = subprocess.run(
+            ["gh", "pr", "list", "--state=open", "--limit=5", "--json", "number,title,headRefName"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            result["prs"] = json_module.loads(proc.stdout)
+    except FileNotFoundError:
+        # gh not installed, that's okay
+        pass
+    except Exception:
+        # gh error, continue without PRs
+        pass
+
+    return result
+
+
+def _get_key_docs(limit: int = 5) -> list[dict[str, Any]]:
+    """
+    Get the most frequently accessed documents.
+
+    Args:
+        limit: Maximum number of documents to return
+
+    Returns:
+        List of dicts with id, title, access_count
+    """
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, title, access_count
+            FROM documents
+            WHERE deleted_at IS NULL AND access_count > 0
+            ORDER BY access_count DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        return [{"id": r[0], "title": r[1], "access_count": r[2]} for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Execution guidance (verbose only)
 # ---------------------------------------------------------------------------
+
 
 def _get_usage_instructions() -> list[str]:
     """Return concise emdx usage instructions for Claude sessions."""
@@ -303,16 +473,17 @@ def _get_usage_instructions() -> list[str]:
         "RULES: Save significant outputs. Check ready tasks. Mark tasks done.",
         "",
         "EMDX COMMANDS:",
-        "  Save:     echo \"output\" | emdx save --title \"Title\" --tags \"tag1,tag2\"",
-        "  Search:   emdx find \"query\"",
+        '  Save:     echo "output" | emdx save --title "Title" --tags "tag1,tag2"',
+        '  Search:   emdx find "query"',
         "  View:     emdx view <id>",
         "  Tasks:    emdx task ready | emdx task view <id> | emdx task active <id>",
-        "            emdx task add \"title\" | emdx task done <id> | emdx task log <id>",
+        '            emdx task add "title" | emdx task done <id> | emdx task log <id>',
         "  Epics:    emdx epic list | emdx epic view <id>",
-        "  Delegate: emdx delegate \"task\"             Single AI execution",
-        "            emdx delegate \"t1\" \"t2\" \"t3\"     Parallel execution",
-        "            emdx delegate --pr \"task\"         Execute + create PR",
-        "            emdx delegate --doc 42 \"task\"     With doc context",
+        '  Delegate: emdx delegate "task"             Single AI execution',
+        '            emdx delegate "t1" "t2" "t3"     Parallel execution',
+        '            emdx delegate --pr "task"         Execute + create PR',
+        '            emdx delegate --chain "a" "b"     Sequential pipeline',
+        '            emdx delegate --doc 42 "task"     With doc context',
         "",
     ]
 
@@ -320,6 +491,7 @@ def _get_usage_instructions() -> list[str]:
 # ---------------------------------------------------------------------------
 # JSON output
 # ---------------------------------------------------------------------------
+
 
 def _get_execution_methods_json() -> list[dict[str, Any]]:
     """Return execution methods as structured data for JSON output."""
@@ -329,8 +501,13 @@ def _get_execution_methods_json() -> list[dict[str, Any]]:
             "usage": 'emdx delegate "task" --tags analysis',
             "when": "All one-shot AI execution (single, parallel, PR, worktree)",
             "key_flags": [
-                "--doc", "--each/--do", "--pr",
-                "--worktree", "--synthesize", "--tags",
+                "--doc",
+                "--each/--do",
+                "--chain",
+                "--pr",
+                "--worktree",
+                "--synthesize",
+                "--tags",
             ],
         },
     ]
@@ -346,11 +523,14 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
         "active_epics": _get_active_epics(),
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "git_context": _get_git_context(),
     }
 
     if verbose:
         data["execution_methods"] = _get_execution_methods_json()
         data["recent_docs"] = _get_recent_docs()
+        data["key_docs"] = _get_key_docs()
+        data["cascade_status"] = _get_cascade_status()
         # Include stale documents needing review
         stale_docs = _get_stale_docs()
         if stale_docs:
