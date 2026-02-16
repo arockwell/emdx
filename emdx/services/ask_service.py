@@ -21,8 +21,13 @@ except ImportError:
     HAS_ANTHROPIC = False
 
 from ..database import db
+from ..utils.emoji_aliases import normalize_tag_to_emoji
 
 logger = logging.getLogger(__name__)
+
+# Context budget: ~12000 chars (~3000 tokens) max for LLM context
+CONTEXT_BUDGET_CHARS = 12000
+
 
 @dataclass
 class Answer:
@@ -30,8 +35,11 @@ class Answer:
 
     text: str
     sources: list[int]  # Document IDs used
+    source_titles: list[tuple[int, str]]  # (doc_id, title) pairs for display
     method: str  # "semantic" or "keyword"
     context_size: int  # Characters of context used
+    confidence: str  # "high", "medium", or "low" based on source count
+
 
 class AskService:
     """Answer questions using your knowledge base."""
@@ -48,8 +56,7 @@ class AskService:
         """Lazy load Anthropic client."""
         if not HAS_ANTHROPIC:
             raise ImportError(
-                "anthropic is required for AI Q&A features. "
-                "Install it with: pip install 'emdx[ai]'"
+                "anthropic is required for AI Q&A features. Install it with: pip install 'emdx[ai]'"
             )
         if self._client is None:
             self._client = anthropic.Anthropic()
@@ -85,38 +92,145 @@ class AskService:
         limit: int = 10,
         project: str | None = None,
         force_keyword: bool = False,
+        tags: str | None = None,
+        recent_days: int | None = None,
     ) -> Answer:
         """
         Ask a question about your knowledge base.
 
         Automatically chooses semantic or keyword search based on
         whether embeddings are available.
+
+        Args:
+            question: The question to answer
+            limit: Max documents to retrieve
+            project: Limit to specific project
+            force_keyword: Force keyword search even if embeddings available
+            tags: Comma-separated tags to filter by (text aliases auto-expand)
+            recent_days: Limit to documents created in last N days
         """
         # Choose retrieval method
         if force_keyword or not self._has_embeddings():
-            docs, method = self._retrieve_keyword(question, limit, project)
+            docs, method = self._retrieve_keyword(
+                question, limit, project, tags=tags, recent_days=recent_days
+            )
         else:
-            docs, method = self._retrieve_semantic(question, limit, project)
+            docs, method = self._retrieve_semantic(
+                question, limit, project, tags=tags, recent_days=recent_days
+            )
 
-        # Generate answer
+        # Generate answer with context budget
         answer_text, context_size = self._generate_answer(question, docs)
+
+        # Calculate confidence based on source count
+        confidence = self._calculate_confidence(len(docs))
+
+        # Build source titles list
+        source_titles = [(d[0], d[1]) for d in docs]
 
         return Answer(
             text=answer_text,
             sources=[d[0] for d in docs],
+            source_titles=source_titles,
             method=method,
             context_size=context_size,
+            confidence=confidence,
         )
 
-    def _retrieve_keyword(
-        self, question: str, limit: int, project: str | None = None
-    ) -> tuple[list[tuple], str]:
-        """Retrieve documents using FTS keyword search."""
-        docs = []
-        seen = set()
+    def _calculate_confidence(self, source_count: int) -> str:
+        """Calculate confidence level based on number of sources."""
+        if source_count >= 3:
+            return "high"
+        elif source_count >= 1:
+            return "medium"
+        else:
+            return "low"
+
+    def _get_filtered_doc_ids(
+        self,
+        tags: str | None = None,
+        recent_days: int | None = None,
+        project: str | None = None,
+    ) -> set[int] | None:
+        """
+        Get document IDs matching tag and recency filters.
+
+        Returns None if no filters applied (meaning all docs match).
+        Returns empty set if filters applied but no docs match.
+        """
+        if not tags and not recent_days:
+            return None  # No filtering needed
 
         with db.get_connection() as conn:
             cursor = conn.cursor()
+
+            # Start with all non-deleted docs
+            base_conditions = ["d.is_deleted = 0"]
+            params: list[Any] = []
+
+            if project:
+                base_conditions.append("d.project = ?")
+                params.append(project)
+
+            # Recent days filter
+            if recent_days:
+                base_conditions.append("d.created_at > datetime('now', ?)")
+                params.append(f"-{recent_days} days")
+
+            # Tag filter
+            if tags:
+                # Parse and normalize tags (expand text aliases to emojis)
+                tag_list = [normalize_tag_to_emoji(t.strip()) for t in tags.split(",") if t.strip()]
+
+                if tag_list:
+                    # Get docs that have ALL specified tags
+                    placeholders = ", ".join("?" * len(tag_list))
+                    query = f"""
+                        SELECT d.id FROM documents d
+                        JOIN document_tags dt ON d.id = dt.document_id
+                        JOIN tags t ON dt.tag_id = t.id
+                        WHERE {" AND ".join(base_conditions)}
+                        AND t.name IN ({placeholders})
+                        GROUP BY d.id
+                        HAVING COUNT(DISTINCT t.name) = ?
+                    """
+                    params.extend(tag_list)
+                    params.append(len(tag_list))
+
+                    cursor.execute(query, params)
+                    return {row[0] for row in cursor.fetchall()}
+
+            # No tags, just recent filter
+            query = f"""
+                SELECT d.id FROM documents d
+                WHERE {" AND ".join(base_conditions)}
+            """
+            cursor.execute(query, params)
+            return {row[0] for row in cursor.fetchall()}
+
+    def _retrieve_keyword(
+        self,
+        question: str,
+        limit: int,
+        project: str | None = None,
+        tags: str | None = None,
+        recent_days: int | None = None,
+    ) -> tuple[list[tuple[int, str, str]], str]:
+        """Retrieve documents using FTS keyword search."""
+        docs: list[tuple[int, str, str]] = []
+        seen: set[int] = set()
+
+        # Get filtered doc IDs if filters are applied
+        filtered_ids = self._get_filtered_doc_ids(tags, recent_days, project)
+
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Helper to check if doc passes filters
+            def passes_filter(doc_id: int) -> bool:
+                if filtered_ids is None:
+                    return True
+                return doc_id in filtered_ids
 
             # 1. Extract and search for explicit references (AUTH-123, #42)
             ticket_refs = re.findall(r"[A-Z]{2,10}-\d+", question)
@@ -131,7 +245,7 @@ class AskService:
                         (doc_id_int,),
                     )
                     row = cursor.fetchone()
-                    if row and row[0] not in seen:
+                    if row and row[0] not in seen and passes_filter(row[0]):
                         docs.append(row)
                         seen.add(row[0])
                 except ValueError:
@@ -153,7 +267,7 @@ class AskService:
                 cursor.execute(query, params)
 
                 for row in cursor.fetchall():
-                    if row[0] not in seen:
+                    if row[0] not in seen and passes_filter(row[0]):
                         docs.append(row)
                         seen.add(row[0])
 
@@ -172,14 +286,17 @@ class AskService:
                     params.append(project)
 
                 query += " ORDER BY rank LIMIT ?"
-                params.append(limit - len(docs))
+                # Fetch more than needed since we'll filter
+                params.append((limit - len(docs)) * 3)
 
                 try:
                     cursor.execute(query, params)
                     for row in cursor.fetchall():
-                        if row[0] not in seen:
+                        if row[0] not in seen and passes_filter(row[0]):
                             docs.append(row)
                             seen.add(row[0])
+                            if len(docs) >= limit:
+                                break
                 except Exception as e:
                     # FTS query might fail on complex queries
                     logger.debug(f"FTS search failed: {e}")
@@ -197,31 +314,48 @@ class AskService:
                     fallback_params.append(project)
 
                 query += " ORDER BY updated_at DESC LIMIT ?"
-                fallback_params.append(limit)
+                fallback_params.append(limit * 3)
 
                 cursor.execute(query, fallback_params)
-                docs = cursor.fetchall()
+                for row in cursor.fetchall():
+                    if passes_filter(row[0]):
+                        docs.append(row)
+                        if len(docs) >= limit:
+                            break
 
         return docs[:limit], "keyword"
 
     def _retrieve_semantic(
-        self, question: str, limit: int, project: str | None = None
-    ) -> tuple[list[tuple], str]:
+        self,
+        question: str,
+        limit: int,
+        project: str | None = None,
+        tags: str | None = None,
+        recent_days: int | None = None,
+    ) -> tuple[list[tuple[int, str, str]], str]:
         """Retrieve documents using semantic (embedding) search."""
         embedding_service = self._get_embedding_service()
         if embedding_service is None:
-            return self._retrieve_keyword(question, limit, project)
+            return self._retrieve_keyword(question, limit, project, tags, recent_days)
+
+        # Get filtered doc IDs if filters are applied
+        filtered_ids = self._get_filtered_doc_ids(tags, recent_days, project)
 
         try:
-            matches = embedding_service.search(question, limit=limit * 2)
+            # Fetch more matches since we may filter some out
+            matches = embedding_service.search(question, limit=limit * 3)
 
             # Fetch full content for matches
-            docs = []
+            docs: list[tuple[int, str, str]] = []
             with db.get_connection() as conn:
                 cursor = conn.cursor()
                 for match in matches:
+                    # Check filter first
+                    if filtered_ids is not None and match.doc_id not in filtered_ids:
+                        continue
+
                     query = "SELECT id, title, content FROM documents WHERE id = ?"
-                    params = [match.doc_id]
+                    params: list[Any] = [match.doc_id]
 
                     if project:
                         query += " AND project = ?"
@@ -239,15 +373,13 @@ class AskService:
                 return docs, "semantic"
 
             # Fall back to keyword if semantic returns nothing
-            return self._retrieve_keyword(question, limit, project)
+            return self._retrieve_keyword(question, limit, project, tags, recent_days)
 
         except Exception as e:
             logger.warning(f"Semantic search failed, falling back to keyword: {e}")
-            return self._retrieve_keyword(question, limit, project)
+            return self._retrieve_keyword(question, limit, project, tags, recent_days)
 
-    def _generate_answer(
-        self, question: str, docs: list[tuple]
-    ) -> tuple[str, int]:
+    def _generate_answer(self, question: str, docs: list[tuple[int, str, str]]) -> tuple[str, int]:
         """Generate answer from retrieved documents using Claude."""
         if not docs:
             return (
@@ -256,12 +388,27 @@ class AskService:
                 0,
             )
 
-        # Build context from documents
-        context_parts = []
+        # Build context from documents with budget enforcement
+        context_parts: list[str] = []
+        total_chars = 0
+
         for doc_id, title, content in docs:
-            # Truncate very long documents
-            truncated = content[:3000] if len(content) > 3000 else content
-            context_parts.append(f"# Document #{doc_id}: {title}\n\n{truncated}")
+            # Calculate how much budget remains
+            remaining_budget = CONTEXT_BUDGET_CHARS - total_chars
+
+            if remaining_budget <= 0:
+                logger.debug(f"Context budget exhausted, skipping doc #{doc_id}")
+                break
+
+            # Truncate document to fit in remaining budget, with per-doc cap
+            max_doc_chars = min(3000, remaining_budget - 100)  # Leave room for header
+            if max_doc_chars <= 100:
+                break
+
+            truncated = content[:max_doc_chars] if len(content) > max_doc_chars else content
+            doc_context = f"# Document #{doc_id}: {title}\n\n{truncated}"
+            context_parts.append(doc_context)
+            total_chars += len(doc_context) + 10  # Account for separator
 
         context = "\n\n---\n\n".join(context_parts)
         context_size = len(context)
@@ -348,8 +495,10 @@ Rules:
             return Answer(
                 text=response.content[0].text,
                 sources=[d[0] for d in docs],
+                source_titles=[(d[0], d[1]) for d in docs],
                 method=method,
                 context_size=len(context),
+                confidence=self._calculate_confidence(len(docs)),
             )
 
         except Exception as e:
@@ -358,7 +507,9 @@ Rules:
                 return Answer(
                     text=f"Error generating answer: {e}",
                     sources=[d[0] for d in docs],
+                    source_titles=[(d[0], d[1]) for d in docs],
                     method=method,
                     context_size=len(context),
+                    confidence=self._calculate_confidence(len(docs)),
                 )
             raise
