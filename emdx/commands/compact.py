@@ -56,6 +56,7 @@ def _fetch_all_documents() -> list[dict[str, Any]]:
             WHERE d.is_deleted = FALSE
             AND LENGTH(d.content) > 50
             GROUP BY d.id
+            HAVING COALESCE(GROUP_CONCAT(t.name), '') NOT LIKE '%superseded%'
             ORDER BY d.id
         """)
         return [dict(row) for row in cursor.fetchall()]
@@ -389,8 +390,15 @@ def compact(
             raise typer.Exit(0)
 
         # Synthesize
-        console.print("\n[bold]Synthesizing...[/bold]")
-        result = _synthesize_cluster(doc_ids, model=model)
+        total_chars = sum(
+            len(doc_map[did].get("content", "")) for did in doc_ids
+        )
+        status_msg = (
+            f"Synthesizing {len(doc_ids)} documents "
+            f"({total_chars:,} chars)"
+        )
+        with console.status(f"[bold]{status_msg}[/bold]"):
+            result = _synthesize_cluster(doc_ids, model=model)
 
         # Save
         original_docs = [doc_map[doc_id] for doc_id in doc_ids]

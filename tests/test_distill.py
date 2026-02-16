@@ -51,29 +51,33 @@ class TestDistillService:
         assert result.input_tokens == 0
         assert result.output_tokens == 0
 
-    @patch("emdx.services.synthesis_service.HAS_ANTHROPIC", False)
-    def test_synthesize_without_anthropic(self):
-        """Synthesizing without anthropic raises ImportError."""
-        service = DistillService()
-        service._client = None  # Reset any cached client
+    @patch("emdx.services.synthesis_service._execute_prompt")
+    def test_synthesize_cli_failure_raises(self, mock_execute):
+        """Synthesizing raises RuntimeError when CLI execution fails."""
+        mock_execute.side_effect = RuntimeError("Synthesis failed: CLI error")
 
-        with pytest.raises(ImportError, match="anthropic is required"):
+        service = DistillService()
+        with pytest.raises(RuntimeError, match="Synthesis failed"):
             service.synthesize_documents(
                 documents=[{"id": 1, "title": "Test", "content": "content"}],
                 topic="test",
             )
 
-    @patch("emdx.services.synthesis_service.HAS_ANTHROPIC", True)
-    @patch("emdx.services.synthesis_service.anthropic")
-    def test_synthesize_with_mocked_client(self, mock_anthropic):
-        """Synthesizing with mocked Claude client returns result."""
-        # Setup mock
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="Synthesized content here")]
-        mock_response.usage = MagicMock(input_tokens=500, output_tokens=200)
-        mock_client.messages.create.return_value = mock_response
-        mock_anthropic.Anthropic.return_value = mock_client
+    @patch("emdx.services.synthesis_service._execute_prompt")
+    def test_synthesize_with_mocked_executor(self, mock_execute):
+        """Synthesizing with mocked UnifiedExecutor returns result."""
+        from pathlib import Path
+
+        from emdx.services.synthesis_service import ExecutionResult
+
+        mock_execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            output_content="Synthesized content here",
+            input_tokens=500,
+            output_tokens=200,
+        )
 
         service = DistillService()
         result = service.synthesize_documents(
@@ -92,37 +96,39 @@ class TestDistillService:
         assert result.input_tokens == 500
         assert result.output_tokens == 200
 
-        # Verify API was called with correct parameters
-        mock_client.messages.create.assert_called_once()
-        call_kwargs = mock_client.messages.create.call_args.kwargs
-        assert "authentication" in call_kwargs["system"]
-        assert "Doc 1" in call_kwargs["messages"][0]["content"]
-        assert "Doc 2" in call_kwargs["messages"][0]["content"]
+        # Verify _execute_prompt was called with correct parameters
+        mock_execute.assert_called_once()
+        call_kwargs = mock_execute.call_args.kwargs
+        assert "authentication" in call_kwargs["system_prompt"]
+        assert "Doc 1" in call_kwargs["user_message"]
+        assert "Doc 2" in call_kwargs["user_message"]
 
-    @patch("emdx.services.synthesis_service.HAS_ANTHROPIC", True)
-    @patch("emdx.services.synthesis_service.anthropic")
-    def test_audience_prompts_differ(self, mock_anthropic):
+    @patch("emdx.services.synthesis_service._execute_prompt")
+    def test_audience_prompts_differ(self, mock_execute):
         """Different audiences produce different system prompts."""
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="Result")]
-        mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
-        mock_client.messages.create.return_value = mock_response
-        mock_anthropic.Anthropic.return_value = mock_client
+        from pathlib import Path
+
+        from emdx.services.synthesis_service import ExecutionResult
+
+        mock_execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            output_content="Result",
+            input_tokens=100,
+            output_tokens=50,
+        )
 
         service = DistillService()
         docs = [{"id": 1, "title": "Test", "content": "Content"}]
 
         # Call with ME audience
-        service._client = None  # Reset client
         service.synthesize_documents(documents=docs, audience=Audience.ME)
-        me_prompt = mock_client.messages.create.call_args.kwargs["system"]
+        me_prompt = mock_execute.call_args.kwargs["system_prompt"]
 
-        # Reset and call with DOCS audience
-        service._client = None
-        mock_anthropic.Anthropic.return_value = mock_client
+        # Call with DOCS audience
         service.synthesize_documents(documents=docs, audience=Audience.DOCS)
-        docs_prompt = mock_client.messages.create.call_args.kwargs["system"]
+        docs_prompt = mock_execute.call_args.kwargs["system_prompt"]
 
         # Prompts should be different
         assert me_prompt != docs_prompt

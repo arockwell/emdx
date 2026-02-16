@@ -6,7 +6,7 @@ Tests cover:
 - Integration tests for the compact command
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -194,25 +194,6 @@ class TestClusteringLogic:
 class TestSynthesisService:
     """Unit tests for SynthesisService with mocked Anthropic API."""
 
-    def test_require_anthropic_raises_when_missing(self):
-        """_require_anthropic raises ImportError when anthropic not installed."""
-
-        # This test only runs if we can mock the import check
-        with patch("emdx.services.synthesis_service.HAS_ANTHROPIC", False):
-            # Need to reload the function to pick up the patched value
-            import emdx.services.synthesis_service as synth_module
-
-            # Save original
-            original_has = synth_module.HAS_ANTHROPIC
-            synth_module.HAS_ANTHROPIC = False
-
-            try:
-                with pytest.raises(ImportError) as exc_info:
-                    synth_module._require_anthropic()
-                assert "emdx[ai]" in str(exc_info.value)
-            finally:
-                synth_module.HAS_ANTHROPIC = original_has
-
     def test_fetch_documents_returns_dict_list(self, clean_db):
         """_fetch_documents returns list of document dicts."""
         from emdx.database import db
@@ -325,15 +306,11 @@ class TestSynthesisService:
         assert estimate["input_tokens"] > 0
         assert estimate["estimated_cost"] >= 0
 
-    @patch("emdx.services.synthesis_service.anthropic")
-    def test_synthesize_documents_success(self, mock_anthropic, clean_db):
-        """synthesize_documents calls API and returns result."""
-        import emdx.services.synthesis_service as synth_module
+    @patch("emdx.services.synthesis_service._execute_prompt")
+    def test_synthesize_documents_success(self, mock_execute, clean_db):
+        """synthesize_documents calls CLI and returns result."""
         from emdx.database import db
-        from emdx.services.synthesis_service import SynthesisService
-
-        # Mock HAS_ANTHROPIC to True
-        synth_module.HAS_ANTHROPIC = True
+        from emdx.services.synthesis_service import ExecutionResult, SynthesisService
 
         # Create test documents
         with db.get_connection() as conn:
@@ -352,14 +329,17 @@ class TestSynthesisService:
             ids.append(cursor.lastrowid)
             conn.commit()
 
-        # Mock the Anthropic client
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="# Python Programming Guide\n\nSynthesized.")]
-        mock_response.usage.input_tokens = 500
-        mock_response.usage.output_tokens = 100
-        mock_client.messages.create.return_value = mock_response
-        mock_anthropic.Anthropic.return_value = mock_client
+        # Mock the unified executor
+        from pathlib import Path
+
+        mock_execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            output_content="# Python Programming Guide\n\nSynthesized.",
+            input_tokens=500,
+            output_tokens=100,
+        )
 
         service = SynthesisService()
         result = service.synthesize_documents(ids)

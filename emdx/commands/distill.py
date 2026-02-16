@@ -171,15 +171,7 @@ def distill(
     # Parse audience
     target_audience = _parse_audience(audience)
 
-    # Import synthesis service (optional dependency)
-    try:
-        from ..services.synthesis_service import DistillService
-    except ImportError:
-        console.print(
-            "[red]Anthropic SDK is required for distill command.[/red]\n"
-            "Install with: pip install 'emdx[ai]'"
-        )
-        raise typer.Exit(1) from None
+    from ..services.synthesis_service import DistillService
 
     # Gather documents
     if not quiet:
@@ -212,17 +204,27 @@ def distill(
     # Trim to limit
     documents = documents[:limit]
 
-    if not quiet:
-        console.print(f"[dim]Synthesizing {len(documents)} documents for audience: {audience}...[/dim]")  # noqa: E501
-
     # Perform synthesis
     try:
         service = DistillService()
-        result = service.synthesize_documents(
-            documents=documents,
-            topic=topic,
-            audience=target_audience,
+        total_chars = sum(len(d.get("content", "")) for d in documents)
+        status_msg = (
+            f"Synthesizing {len(documents)} documents "
+            f"({total_chars:,} chars) for audience: {audience}"
         )
+        if quiet:
+            result = service.synthesize_documents(
+                documents=documents,
+                topic=topic,
+                audience=target_audience,
+            )
+        else:
+            with console.status(f"[bold]{status_msg}[/bold]"):
+                result = service.synthesize_documents(
+                    documents=documents,
+                    topic=topic,
+                    audience=target_audience,
+                )
     except Exception as e:
         console.print(f"[red]Synthesis failed: {e}[/red]")
         raise typer.Exit(1) from None
