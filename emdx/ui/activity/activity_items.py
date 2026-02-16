@@ -320,16 +320,25 @@ class AgentExecutionItem(ActivityItem):
             if doc:
                 return doc.get("content", ""), f"{self.type_icon} #{self.doc_id}"
 
-        # Otherwise show the log file
+        # If execution has persisted output text, show as markdown
+        output_text = self.execution.get("output_text") or ""
+        if output_text:
+            return output_text, f"{self.type_icon} Answer"
+
+        # Fallback: show filtered log file
         if self.log_file:
             log_path = Path(self.log_file)
             if log_path.exists():
                 try:
                     content = log_path.read_text()
-                    # Show last 100 lines max
-                    lines = content.split("\n")
+                    lines = [
+                        line
+                        for line in content.split("\n")
+                        if not line.startswith("__RAW_RESULT_JSON__:")
+                    ]
                     if len(lines) > 100:
-                        content = "\n".join(lines[-100:])
+                        lines = lines[-100:]
+                    content = "\n".join(lines)
                     return f"```\n{content}\n```", f"{self.type_icon} Log"
                 except Exception:
                     pass
