@@ -47,3 +47,4 @@ class AgentExecutionDict(TypedDict, total=False):
     working_dir: str | None
     cost_usd: float
     tokens_used: int
+    output_text: str | None

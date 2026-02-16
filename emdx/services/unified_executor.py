@@ -452,6 +452,10 @@ class UnifiedExecutor:
             if success:
                 result.output_doc_id = extract_output_doc_id(log_file)
                 result.output_content = cli_result.output
+                if cli_result.output:
+                    from ..models.executions import update_execution
+
+                    update_execution(exec_id, output_text=cli_result.output)
             else:
                 result.error_message = cli_result.error or "Unknown error"
 
