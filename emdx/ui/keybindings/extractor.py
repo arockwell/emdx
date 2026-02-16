@@ -19,6 +19,7 @@ from .registry import KeybindingEntry
 
 logger = logging.getLogger(__name__)
 
+
 class KeybindingExtractor:
     """
     Extract BINDINGS from all UI widgets.
@@ -130,9 +131,7 @@ class KeybindingExtractor:
                 show=binding.show,
             )
         except Exception as e:
-            logger.warning(
-                f"Failed to convert binding {binding} from {widget_class.__name__}: {e}"
-            )
+            logger.warning(f"Failed to convert binding {binding} from {widget_class.__name__}: {e}")
             return None
 
     def _tuple_to_entry(
@@ -153,10 +152,10 @@ class KeybindingExtractor:
             )
         except Exception as e:
             logger.warning(
-                f"Failed to convert tuple binding {binding} "
-                f"from {widget_class.__name__}: {e}"
+                f"Failed to convert tuple binding {binding} from {widget_class.__name__}: {e}"
             )
             return None
+
 
 def extract_all_keybindings() -> list[KeybindingEntry]:
     """

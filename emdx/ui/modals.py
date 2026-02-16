@@ -15,6 +15,7 @@ from textual.widgets import RichLog, Static
 
 logger = logging.getLogger(__name__)
 
+
 class KeybindingsHelpScreen(ModalScreen):
     """Modal screen showing available keybindings."""
 
@@ -131,6 +132,7 @@ class KeybindingsHelpScreen(ModalScreen):
             # Let specific bindings handle their keys
             pass
 
+
 class HelpMixin:
     """Mixin to add ? keybinding help to any widget.
 
@@ -210,16 +212,16 @@ class HelpMixin:
         categories = {**self._DEFAULT_CATEGORIES, **self.HELP_CATEGORIES}
 
         # Get BINDINGS from the class
-        raw_bindings = getattr(self, 'BINDINGS', [])
+        raw_bindings = getattr(self, "BINDINGS", [])
 
         for binding in raw_bindings:
             # Handle both tuple and Binding object formats
-            if hasattr(binding, 'key'):
+            if hasattr(binding, "key"):
                 # Textual Binding object
                 key = binding.key
                 action = binding.action
                 description = binding.description
-                show = getattr(binding, 'show', True)
+                show = getattr(binding, "show", True)
             else:
                 # Tuple format: (key, action, description)
                 key, action, description = binding[:3]
@@ -230,7 +232,7 @@ class HelpMixin:
                 continue
 
             # Skip internal actions
-            if action in ('close', 'cancel'):
+            if action in ("close", "cancel"):
                 continue
 
             # Get category
@@ -242,7 +244,16 @@ class HelpMixin:
             bindings_list.append((category, display_key, description))
 
         # Sort by category, then by key
-        category_order = ["Navigation", "Actions", "Editing", "Tags", "Search", "View", "Other", "General"]  # noqa: E501
+        category_order = [
+            "Navigation",
+            "Actions",
+            "Editing",
+            "Tags",
+            "Search",
+            "View",
+            "Other",
+            "General",
+        ]  # noqa: E501
 
         def sort_key(item: tuple[str, str, str]) -> tuple[int, str]:
             cat = item[0]
@@ -263,8 +274,9 @@ class HelpMixin:
     def action_show_help(self) -> None:
         """Show keybindings help modal."""
         bindings = self.get_help_bindings()
-        title = getattr(self, 'HELP_TITLE', 'Keybindings')
+        title = getattr(self, "HELP_TITLE", "Keybindings")
         self.app.push_screen(KeybindingsHelpScreen(bindings=bindings, title=title))  # type: ignore[attr-defined]
+
 
 class DocumentPreviewModal(ModalScreen):
     """Modal for previewing a document without leaving the current screen."""
@@ -356,7 +368,9 @@ class DocumentPreviewModal(ModalScreen):
             result = get_document(self.doc_id)
             self._doc_data = dict(result) if result else None
             if not self._doc_data:
-                self.query_one("#preview-title", Static).update(f"Document #{self.doc_id} not found")  # noqa: E501
+                self.query_one("#preview-title", Static).update(
+                    f"Document #{self.doc_id} not found"
+                )  # noqa: E501
                 return
 
             # Update header
@@ -382,6 +396,7 @@ class DocumentPreviewModal(ModalScreen):
 
                 try:
                     from .markdown_config import MarkdownConfig
+
                     markdown = MarkdownConfig.create_markdown(content)
                     preview.write(markdown)
                 except Exception:

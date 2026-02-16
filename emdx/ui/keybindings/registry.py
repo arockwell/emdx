@@ -13,6 +13,7 @@ from .context import Context
 
 logger = logging.getLogger(__name__)
 
+
 class ConflictType(Enum):
     """Types of keybinding conflicts."""
 
@@ -20,12 +21,14 @@ class ConflictType(Enum):
     PARENT_CHILD = "parent_child"  # Child overrides parent (usually OK)
     SIBLING = "sibling"  # Different contexts that might overlap
 
+
 class ConflictSeverity(Enum):
     """Severity levels for conflicts."""
 
     CRITICAL = "critical"  # Will likely crash
     WARNING = "warning"  # Might cause issues
     INFO = "info"  # Intentional override, just informational
+
 
 @dataclass
 class KeybindingEntry:
@@ -64,6 +67,7 @@ class KeybindingEntry:
             "priority": self.priority,
         }
 
+
 @dataclass
 class ConflictReport:
     """Describes a keybinding conflict."""
@@ -96,6 +100,7 @@ class ConflictReport:
             "binding1": self.binding1.to_dict(),
             "binding2": self.binding2.to_dict(),
         }
+
 
 @dataclass
 class KeybindingRegistry:
@@ -258,9 +263,7 @@ class KeybindingRegistry:
         if ctx1 == ctx2:
             if binding1.action != binding2.action:
                 # Check if actions are semantically similar (both do same thing)
-                similar_actions = self._are_actions_similar(
-                    binding1.action, binding2.action
-                )
+                similar_actions = self._are_actions_similar(binding1.action, binding2.action)
                 return ConflictReport(
                     key=key,
                     context1=ctx1,
@@ -269,7 +272,9 @@ class KeybindingRegistry:
                     binding2=binding2,
                     conflict_type=ConflictType.SAME_CONTEXT,
                     # Downgrade to INFO if actions do the same thing
-                    severity=ConflictSeverity.INFO if similar_actions else ConflictSeverity.CRITICAL,  # noqa: E501
+                    severity=ConflictSeverity.INFO
+                    if similar_actions
+                    else ConflictSeverity.CRITICAL,  # noqa: E501
                 )
             # Same action = duplicate, not a conflict
             return None
@@ -355,9 +360,7 @@ class KeybindingRegistry:
         """Get all registered keys."""
         return set(self.by_key.keys())
 
-    def get_binding_for_key(
-        self, key: str, context: Context
-    ) -> KeybindingEntry | None:
+    def get_binding_for_key(self, key: str, context: Context) -> KeybindingEntry | None:
         """
         Get the active binding for a key in a context.
 
@@ -369,9 +372,7 @@ class KeybindingRegistry:
                 return binding
         return None
 
-    def get_conflicts_by_severity(
-        self, severity: ConflictSeverity
-    ) -> list[ConflictReport]:
+    def get_conflicts_by_severity(self, severity: ConflictSeverity) -> list[ConflictReport]:
         """Get conflicts filtered by severity."""
         return [c for c in self.conflicts if c.severity == severity]
 
