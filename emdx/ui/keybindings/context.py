@@ -162,8 +162,7 @@ class Context(Enum):
             # Log browser
             "LogBrowser": cls.LOG_NORMAL,
             "LogView": cls.LOG_VIEW,
-            # Vim editor
-            "VimEditTextArea": cls.VIM_NORMAL,
+            # Selection text area
             "SelectionTextArea": cls.DOCUMENT_SELECTION,
             # Theme selector
             "ThemeSelectorScreen": cls.MODAL_THEME,

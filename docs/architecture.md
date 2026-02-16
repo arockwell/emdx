@@ -67,8 +67,6 @@ emdx/
 │   ├── run_browser.py         # execution run browser
 │   ├── task_browser.py        # task management browser
 │   ├── task_view.py           # task detail view
-│   ├── vim_editor.py          # vim modal editing
-│   ├── vim_line_numbers.py    # line number gutter
 │   ├── command_palette/       # command palette system
 │   ├── keybindings/           # keybinding management
 │   ├── search/                # search UI components

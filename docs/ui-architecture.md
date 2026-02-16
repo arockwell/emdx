@@ -169,17 +169,6 @@ GLOBAL_BINDINGS = [
 - **Log Mode**: live toggle (space), follow (f), kill (k)
 - **Activity Mode**: expand/collapse (l/h), refresh (r), fullscreen (f)
 
-### **Modal Editing (Vim Mode)**
-```python
-class VimEditTextArea(TextArea):
-    """Complete vim-like editing experience."""
-    
-    # Modes: NORMAL, INSERT, VISUAL, VISUAL_LINE
-    # Commands: h/j/k/l, w/b/e, 0/$, gg/G, i/a/I/A/o/O, x/dd/yy/p
-    # Repeat counts: 3j, 5w, 2dd
-    # Dual ESC: INSERT→NORMAL→EXIT
-```
-
 ## 🎨 **Styling & Theming**
 
 ### **CSS-like Styling with Textual**

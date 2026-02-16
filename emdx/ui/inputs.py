@@ -48,7 +48,7 @@ class TitleInput(Input):
         # Input widget might not have on_blur either
 
     def on_key(self, event: events.Key) -> None:
-        """Handle Tab to switch to content editor in new document mode."""
+        """Handle Tab and other special keys."""
         logger.debug(f"TitleInput.on_key: key={event.key}")
 
         # Handle Ctrl+S to save
@@ -57,33 +57,6 @@ class TitleInput(Input):
             event.stop()
             event.prevent_default()
             return
-
-        if event.key == "tab":
-            # Switch focus to vim editor container
-            try:
-                from .vim_editor import VimEditor
-                vim_editor = self.app_instance.query_one("#vim-editor-container", VimEditor)
-                vim_editor.focus_editor()
-
-                # First time tabbing to content?
-                if not hasattr(vim_editor.text_area, '_has_been_focused'):
-                    vim_editor.text_area._has_been_focused = True
-                    # For NEW documents, start in INSERT mode
-                    # For EDIT documents, start in NORMAL mode
-                    if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:  # noqa: E501
-                        vim_editor.text_area.vim_mode = "INSERT"
-                    else:
-                        vim_editor.text_area.vim_mode = "NORMAL"
-
-                vim_editor.text_area._update_cursor_style()
-                mode_name = vim_editor.text_area.vim_mode
-                self.app_instance._update_vim_status(f"{mode_name} | Tab=switch to title | Ctrl+S=save | ESC=exit")  # noqa: E501
-                event.stop()
-                event.prevent_default()
-                return
-            except Exception as e:
-                logger.debug(f"Could not switch to vim editor: {e}")
-                # Editor might not exist
 
         # For other keys (typing), let Input handle normally
         # Input widget doesn't have on_key method, so don't call super()
