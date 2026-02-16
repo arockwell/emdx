@@ -63,6 +63,29 @@ poetry run ruff check .         # Verify zero errors remain
 - When writing SQL strings that exceed 100 chars, break across lines or use implicit string concatenation
 - All `--flags` must come BEFORE positional arguments in `emdx delegate` calls
 
+## Type Safety — MANDATORY
+
+The codebase uses mypy strict checking. Pre-commit hooks run mypy on staged files.
+
+**Patterns:**
+- Use `TypedDict` for dict return types with known shapes — never `dict[str, Any]` when the keys are known
+- Existing TypedDicts live in `database/types.py`, `models/types.py`, and `services/types.py`
+- Use `TYPE_CHECKING` guards for optional/heavy imports (e.g., `EmbeddingService`, `SentenceTransformer`, `Observer`)
+- Use `from __future__ import annotations` in files with forward references or TYPE_CHECKING guards
+- Use `SqlParam = str | int` (or `Union[str, int, float, None]`) for dynamic SQL parameter lists — never `list[Any]`
+- Use `cast()` when converting sqlite `Row` objects to TypedDicts
+- Use `total=False` on TypedDicts where some fields are only present in certain code paths
+
+**Avoid:**
+- `dict[str, Any]` when the dict shape is known — define a TypedDict instead
+- Bare `Any` for optional dependency types — use `TYPE_CHECKING` + `SomeType | None`
+- `list[Any]` for SQL params — use a concrete union type alias
+
+**Exceptions (intentionally `Any`):**
+- `cli_executor/` — genuinely polymorphic JSON from Claude CLI streaming
+- `unified_executor.py` `ExecutionResult.to_dict()` — serialization method
+- Textual widget `*args: Any, **kwargs: Any` — framework convention
+
 ## CLI Output Mode Convention
 
 - Default CLI output should be plain text (no Rich markup) for machine/pipe friendliness
