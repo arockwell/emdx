@@ -4,7 +4,7 @@ This module provides a LazyTyperGroup class that extends Typer's group
 to support lazy loading of subcommands. This significantly improves
 startup performance for CLI applications with many heavy dependencies.
 
-Heavy commands (cascade, delegate, ai, etc.) are only imported
+Heavy commands (delegate, ai, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
 
@@ -80,6 +80,7 @@ class LazyCommand(click.MultiCommand):
         except ImportError as e:
             # Create an error command
             import_err = str(e)
+
             @click.command(name=self.name)
             def error_cmd() -> None:
                 click.echo(f"Command '{self.name}' is not available: {import_err}", err=True)
@@ -93,6 +94,7 @@ class LazyCommand(click.MultiCommand):
             return self._real_command
         except Exception as e:
             load_err = str(e)
+
             @click.command(name=self.name)
             def error_cmd() -> None:
                 click.echo(f"Command '{self.name}' failed to load: {load_err}", err=True)
@@ -110,10 +112,7 @@ class LazyCommand(click.MultiCommand):
             from typer.main import get_command, get_group
 
             # Check if it has multiple commands (use group) or single (use command)
-            if (
-                len(cmd_object.registered_commands) > 1
-                or cmd_object.registered_groups
-            ):
+            if len(cmd_object.registered_commands) > 1 or cmd_object.registered_groups:
                 cmd: click.BaseCommand = get_group(cmd_object)
             else:
                 cmd = get_command(cmd_object)

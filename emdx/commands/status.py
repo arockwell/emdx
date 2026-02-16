@@ -5,7 +5,6 @@ Provides a quick overview of:
 - Active delegate tasks (running now)
 - Recent completed tasks
 - Failed tasks (with retry hints)
-- Cascade queue
 """
 
 from datetime import datetime, timedelta
@@ -14,7 +13,6 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from ..database import db
 from ..models.tasks import (
     get_active_delegate_tasks,
     get_children,
@@ -33,7 +31,7 @@ def _parse_timestamp(value: object) -> datetime | None:
     if isinstance(value, datetime):
         return value
     try:
-        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
     except Exception:
         return None
 
@@ -94,8 +92,7 @@ def _show_active_tasks() -> None:
             task.get("children_active", 0)
             progress = f"step {children_done + 1}/{child_count}" if child_count else ""
             console.print(
-                f"  [cyan]#{task_id}[/cyan]  {task_type:<7} "
-                f'"{title}"  {progress}  {duration}'
+                f'  [cyan]#{task_id}[/cyan]  {task_type:<7} "{title}"  {progress}  {duration}'
             )
 
             # Show children
@@ -113,31 +110,28 @@ def _show_active_tasks() -> None:
                     time_ref = _relative_time(child.get("completed_at"))
                     console.print(
                         f"       {prefix} [cyan]#{child_id}[/cyan]  "
-                        f"[green]done[/green]    \"{child_title}\"  "
+                        f'[green]done[/green]    "{child_title}"  '
                         f"[dim]{doc_ref}  {time_ref}[/dim]"
                     )
                 elif child_status == "active":
                     dur = _running_duration(child.get("updated_at") or child.get("created_at"))
                     console.print(
                         f"       {prefix} [cyan]#{child_id}[/cyan]  "
-                        f"[yellow]active[/yellow]  \"{child_title}\"  "
+                        f'[yellow]active[/yellow]  "{child_title}"  '
                         f"running {dur}"
                     )
                 elif child_status == "failed":
                     console.print(
                         f"       {prefix} [cyan]#{child_id}[/cyan]  "
-                        f"[red]failed[/red]  \"{child_title}\""
+                        f'[red]failed[/red]  "{child_title}"'
                     )
                 else:
                     console.print(
                         f"       {prefix} [cyan]#{child_id}[/cyan]  "
-                        f"[dim]open[/dim]    \"{child_title}\"  waiting"
+                        f'[dim]open[/dim]    "{child_title}"  waiting'
                     )
         else:
-            console.print(
-                f"  [cyan]#{task_id}[/cyan]  single  "
-                f'"{title}"  running {duration}'
-            )
+            console.print(f'  [cyan]#{task_id}[/cyan]  single  "{title}"  running {duration}')
 
     console.print()
 
@@ -174,9 +168,7 @@ def _show_failed_tasks() -> None:
         title = task.get("title", "")[:50]
         time_ref = _relative_time(task.get("updated_at"))
         error = task.get("error", "")
-        console.print(
-            f'  [cyan]#{task_id}[/cyan]  "{title}"  [dim]{time_ref}[/dim]'
-        )
+        console.print(f'  [cyan]#{task_id}[/cyan]  "{title}"  [dim]{time_ref}[/dim]')
         if error:
             console.print(f"       error: {error[:80]}")
         # Show retry hint using delegate
@@ -187,47 +179,11 @@ def _show_failed_tasks() -> None:
     console.print()
 
 
-def _get_cascade_counts() -> dict[str, int]:
-    """Get cascade queue counts by stage."""
-    try:
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT cascade_stage, COUNT(*)
-                FROM documents
-                WHERE cascade_stage IS NOT NULL AND cascade_stage != '' AND cascade_stage != 'done'
-                AND is_deleted = 0
-                GROUP BY cascade_stage
-            """)
-            return dict(cursor.fetchall())
-    except Exception:
-        # cascade_stage column may not exist in older databases
-        return {}
-
-
-def _show_cascade_status() -> None:
-    """Show cascade queue status."""
-    stages = ["idea", "prompt", "analyzed", "planned"]
-    counts = _get_cascade_counts()
-
-    total = sum(counts.values())
-    if total > 0:
-        console.print("[bold magenta]🌊 Cascade Queue:[/bold magenta]")
-        parts = []
-        for stage in stages:
-            if counts.get(stage, 0) > 0:
-                parts.append(f"{stage}: {counts[stage]}")
-        console.print("  " + " → ".join(parts))
-        console.print("  [dim]Run [cyan]emdx cascade process <stage>[/cyan] to advance[/dim]")
-        console.print()
-
-
 def _collect_status_data() -> dict[str, Any]:
     """Collect all status data for JSON output."""
     active = get_active_delegate_tasks()
     recent = get_recent_completed_tasks(limit=5)
     failed = get_failed_tasks(limit=3)
-    cascade_counts = _get_cascade_counts()
 
     # Enrich active tasks with children
     enriched: list[dict[str, Any]] = [dict(t) for t in active]
@@ -239,23 +195,17 @@ def _collect_status_data() -> dict[str, Any]:
         "active": enriched,
         "recent": recent,
         "failed": failed,
-        "cascade": cascade_counts,
     }
 
 
 def status(
-    verbose: bool = typer.Option(
-        False,
-        "--verbose", "-v",
-        help="Show additional details"
-    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show additional details"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """
     Show delegate activity index and project status.
 
-    Displays active delegate tasks, recent completions, failures,
-    and cascade queue status.
+    Displays active delegate tasks, recent completions, and failures.
 
     Examples:
         emdx status
@@ -276,12 +226,9 @@ def status(
     # Failed tasks with retry hints
     _show_failed_tasks()
 
-    # Cascade status
-    _show_cascade_status()
-
     # Quick tips
     console.print("[dim]Quick commands:[/dim]")
-    console.print("  [cyan]emdx delegate \"task\"[/cyan]    - Run a task")
+    console.print('  [cyan]emdx delegate "task"[/cyan]    - Run a task')
     console.print("  [cyan]emdx task ready[/cyan]         - Show work queue")
     console.print("  [cyan]emdx task list --all[/cyan]    - Full task list")
     console.print()

@@ -29,7 +29,7 @@ We chose **Textual** as the TUI framework.
 ### Key implementation details:
 
 - **Multi-modal browser** in `emdx/ui/browser_container.py`
-- **Specialized browsers**: DocumentBrowser, LogBrowser, ActivityView, CascadeBrowser
+- **Specialized browsers**: DocumentBrowser, LogBrowser, ActivityView
 - **Vim-style keybindings**: j/k navigation, g/G for top/bottom, modal selection
 - **Reactive data binding**: UI automatically updates when data changes
 - **Theme system** in `emdx/ui/themes.py` for visual customization
@@ -50,9 +50,6 @@ App (emdx gui)
     ├── ActivityView (press 'a')
     │   ├── ActivityTree
     │   └── ContextPanel
-    └── CascadeBrowser (press '4')
-        ├── Stage columns
-        └── Document controls
 ```
 
 ## Consequences
