@@ -30,6 +30,7 @@ Dynamic discovery:
 """
 
 import os
+import random
 import re
 import shlex
 import subprocess
@@ -481,6 +482,7 @@ def _run_single(
     parent_task_id: int | None = None,
     seq: int | None = None,
     epic_key: str | None = None,
+    max_retries: int = 0,
 ) -> SingleResult:
     """Run a single task via UnifiedExecutor. Returns SingleResult."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -531,9 +533,49 @@ def _run_single(
         model=model,
     )
 
-    result = UnifiedExecutor().execute(config)
+    # Retry loop with exponential backoff
+    from ..services.unified_executor import is_retryable_error
 
-    # Link execution to task
+    attempt = 0
+    result = None
+    base_delay = 2.0
+    max_delay = 60.0
+
+    while True:
+        attempt += 1
+
+        if attempt > 1:
+            # Calculate delay with jitter (±20%)
+            delay = min(base_delay * (2 ** (attempt - 2)), max_delay)
+            jitter = delay * (0.8 + random.random() * 0.4)
+            sys.stderr.write(
+                f"delegate: retry {attempt - 1}/{max_retries} after {jitter:.1f}s...\n"
+            )
+            time.sleep(jitter)
+
+        result = UnifiedExecutor().execute(config)
+
+        # Check if we should retry
+        if result.success:
+            break  # Success, exit loop
+
+        if attempt > max_retries:
+            break  # No more retries
+
+        if not is_retryable_error(result):
+            # Non-retryable error, exit immediately
+            if not quiet:
+                sys.stderr.write(
+                    f"delegate: non-retryable error, skipping {max_retries - attempt + 1} "
+                    f"remaining retries\n"
+                )
+            break
+
+        # Log what we're retrying
+        if not quiet:
+            sys.stderr.write(f"delegate: retryable error detected: {result.error_message}\n")
+
+    # Link execution to task (uses final attempt's execution_id)
     _safe_update_task(task_id, execution_id=result.execution_id)
 
     if not result.success:
@@ -648,6 +690,7 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
+    max_retries: int = 0,
 ) -> list[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -710,6 +753,7 @@ def _run_parallel(
                     parent_task_id=parent_task_id,
                     seq=idx + 1,
                     epic_key=epic_key,
+                    max_retries=max_retries,
                 ),
             )
             return result
@@ -857,8 +901,6 @@ def _run_parallel(
 
     return doc_ids
 
-
-
     return doc_ids
 
 
@@ -965,6 +1007,14 @@ def delegate(
         "--cleanup",
         help="Remove stale delegate worktrees (>1 hour old)",
     ),
+    retry: int = typer.Option(
+        0,
+        "--retry",
+        "-r",
+        help="Max retry attempts for transient failures (timeout, rate limit)",
+        min=0,
+        max=10,
+    ),
 ) -> None:
     """Delegate tasks to Claude agents with results on stdout.
 
@@ -1057,6 +1107,8 @@ def delegate(
         "--cat",
         "-c",
         "--cleanup",
+        "--retry",
+        "-r",
     }
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
@@ -1148,6 +1200,7 @@ def delegate(
                 source_doc_id=doc,
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
+                max_retries=retry,
             )
             if single_result.pr_url and not quiet:
                 sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
@@ -1172,6 +1225,7 @@ def delegate(
                 worktree=use_worktree,
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
+                max_retries=retry,
             )
     finally:
         # Clean up worktree unless --branch (needs local branch)

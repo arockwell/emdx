@@ -228,6 +228,42 @@ class ExecutionResult:
         }
 
 
+def is_retryable_error(result: ExecutionResult) -> bool:
+    """Determine if an execution failure is worth retrying.
+
+    Retryable errors are transient issues that may succeed on retry:
+    - Timeouts (network/API)
+    - Rate limits (429, Claude CLI rate limit messages)
+
+    Non-retryable errors should not be retried:
+    - Validation errors (bad input)
+    - Environment errors (missing deps)
+    - User abort (exit 130)
+    - Generic/unknown errors
+    """
+    if result.success:
+        return False
+
+    error_msg = (result.error_message or "").lower()
+
+    # Timeout is always retryable
+    if "timeout" in error_msg:
+        return True
+
+    # Rate limit indicators
+    if "rate limit" in error_msg or "rate_limit" in error_msg:
+        return True
+    if "429" in error_msg or "too many requests" in error_msg:
+        return True
+
+    # Claude CLI specific rate limit
+    if result.exit_code == 1 and "rate" in error_msg:
+        return True
+
+    # Everything else is not retryable
+    return False
+
+
 class UnifiedExecutor:
     """Unified executor for all CLI execution paths.
 

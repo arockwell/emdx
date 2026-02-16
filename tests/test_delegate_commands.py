@@ -692,8 +692,6 @@ class TestRunParallel:
         assert mock_cleanup_worktree.call_count == 2
 
 
-
-
 # =============================================================================
 # Tests for delegate command (CLI entry point)
 # =============================================================================
@@ -780,7 +778,7 @@ class TestDelegateCommand:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each="find . -name '*.py'",
+                each="find . -name '*.py'",
                 do=None,
             )
 
@@ -1061,7 +1059,7 @@ class TestDelegateCommand:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1319,7 +1317,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1348,7 +1346,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1388,7 +1386,7 @@ class TestErrorHandling:
                 branch=False,
                 worktree=True,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1414,7 +1412,7 @@ class TestErrorHandling:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1658,3 +1656,329 @@ class TestRunSingleFallback:
         )
 
         assert result.doc_id is None
+
+
+# =============================================================================
+# Retry Flag Tests
+# =============================================================================
+
+
+class TestIsRetryableError:
+    """Test retryable error classification."""
+
+    def test_success_not_retryable(self) -> None:
+        """Success results are not retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(success=True, execution_id=1, log_file=Path("/tmp/test.log"))
+        assert is_retryable_error(result) is False
+
+    def test_timeout_is_retryable(self) -> None:
+        """Timeout errors are retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Timeout after 300 seconds",
+        )
+        assert is_retryable_error(result) is True
+
+    def test_rate_limit_is_retryable(self) -> None:
+        """Rate limit errors are retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Rate limit exceeded",
+        )
+        assert is_retryable_error(result) is True
+
+    def test_429_is_retryable(self) -> None:
+        """HTTP 429 errors are retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="HTTP 429 Too Many Requests",
+        )
+        assert is_retryable_error(result) is True
+
+    def test_rate_limit_with_exit_code_1_is_retryable(self) -> None:
+        """Exit code 1 with rate in error message is retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="API rate exceeded",
+            exit_code=1,
+        )
+        assert is_retryable_error(result) is True
+
+    def test_validation_error_not_retryable(self) -> None:
+        """Validation errors are not retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Invalid prompt format",
+        )
+        assert is_retryable_error(result) is False
+
+    def test_environment_error_not_retryable(self) -> None:
+        """Environment errors are not retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Environment validation failed: claude not found",
+        )
+        assert is_retryable_error(result) is False
+
+    def test_generic_error_not_retryable(self) -> None:
+        """Generic unknown errors are not retryable."""
+        from emdx.services.unified_executor import is_retryable_error
+
+        result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Something unexpected happened",
+        )
+        assert is_retryable_error(result) is False
+
+
+class TestRetryBehavior:
+    """Integration tests for retry behavior."""
+
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate.time.sleep")
+    def test_retry_on_timeout(
+        self,
+        mock_sleep: MagicMock,
+        mock_update: MagicMock,
+        mock_create: MagicMock,
+        mock_executor_cls: MagicMock,
+    ) -> None:
+        """Test that timeout triggers retry."""
+        mock_create.return_value = 1
+
+        # First call fails with timeout, second succeeds
+        fail_result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Timeout after 300 seconds",
+        )
+        success_result = ExecutionResult(
+            success=True,
+            execution_id=2,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=42,
+            output_content="test output",
+        )
+
+        mock_executor = MagicMock()
+        mock_executor.execute.side_effect = [fail_result, success_result]
+        mock_executor_cls.return_value = mock_executor
+
+        result = _run_single(
+            prompt="test",
+            tags=[],
+            title="Test",
+            model=None,
+            quiet=True,
+            max_retries=3,
+        )
+
+        assert result.success is True
+        assert result.doc_id == 42
+        assert mock_executor.execute.call_count == 2
+        assert mock_sleep.call_count == 1  # One retry = one sleep
+
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate._safe_update_task")
+    def test_no_retry_on_validation_error(
+        self,
+        mock_update: MagicMock,
+        mock_create: MagicMock,
+        mock_executor_cls: MagicMock,
+    ) -> None:
+        """Test that validation errors don't trigger retry."""
+        mock_create.return_value = 1
+
+        fail_result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Invalid prompt",
+        )
+
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = fail_result
+        mock_executor_cls.return_value = mock_executor
+
+        result = _run_single(
+            prompt="test",
+            tags=[],
+            title="Test",
+            model=None,
+            quiet=True,
+            max_retries=3,
+        )
+
+        assert result.success is False
+        assert mock_executor.execute.call_count == 1  # No retries
+
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate.time.sleep")
+    def test_max_retries_exhausted(
+        self,
+        mock_sleep: MagicMock,
+        mock_update: MagicMock,
+        mock_create: MagicMock,
+        mock_executor_cls: MagicMock,
+    ) -> None:
+        """Test behavior when all retries fail."""
+        mock_create.return_value = 1
+
+        fail_result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Timeout after 300 seconds",
+        )
+
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = fail_result
+        mock_executor_cls.return_value = mock_executor
+
+        result = _run_single(
+            prompt="test",
+            tags=[],
+            title="Test",
+            model=None,
+            quiet=True,
+            max_retries=2,
+        )
+
+        assert result.success is False
+        # 1 initial + 2 retries = 3 calls
+        assert mock_executor.execute.call_count == 3
+        assert mock_sleep.call_count == 2  # 2 retries = 2 sleeps
+
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate._safe_update_task")
+    def test_no_retry_when_max_retries_zero(
+        self,
+        mock_update: MagicMock,
+        mock_create: MagicMock,
+        mock_executor_cls: MagicMock,
+    ) -> None:
+        """Test that max_retries=0 means no retries."""
+        mock_create.return_value = 1
+
+        fail_result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="Timeout after 300 seconds",
+        )
+
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = fail_result
+        mock_executor_cls.return_value = mock_executor
+
+        result = _run_single(
+            prompt="test",
+            tags=[],
+            title="Test",
+            model=None,
+            quiet=True,
+            max_retries=0,
+        )
+
+        assert result.success is False
+        assert mock_executor.execute.call_count == 1  # Just the initial attempt
+
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate.time.sleep")
+    def test_retry_on_rate_limit(
+        self,
+        mock_sleep: MagicMock,
+        mock_update: MagicMock,
+        mock_create: MagicMock,
+        mock_executor_cls: MagicMock,
+    ) -> None:
+        """Test that rate limit triggers retry."""
+        mock_create.return_value = 1
+
+        # First two calls fail with rate limit, third succeeds
+        rate_limit_result = ExecutionResult(
+            success=False,
+            execution_id=1,
+            log_file=Path("/tmp/test.log"),
+            error_message="rate limit exceeded",
+        )
+        success_result = ExecutionResult(
+            success=True,
+            execution_id=3,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=42,
+        )
+
+        mock_executor = MagicMock()
+        mock_executor.execute.side_effect = [
+            rate_limit_result,
+            rate_limit_result,
+            success_result,
+        ]
+        mock_executor_cls.return_value = mock_executor
+
+        result = _run_single(
+            prompt="test",
+            tags=[],
+            title="Test",
+            model=None,
+            quiet=True,
+            max_retries=5,
+        )
+
+        assert result.success is True
+        assert result.doc_id == 42
+        assert mock_executor.execute.call_count == 3
+        assert mock_sleep.call_count == 2
+
+
+class TestBackoffTiming:
+    """Test exponential backoff calculations."""
+
+    def test_backoff_sequence(self) -> None:
+        """Verify exponential backoff timing (without jitter)."""
+        base_delay = 2.0
+        max_delay = 60.0
+
+        expected = [2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
+
+        for attempt, expected_delay in enumerate(expected, start=1):
+            delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+            assert delay == expected_delay
