@@ -953,10 +953,6 @@ class ActivityView(HelpMixin, Widget):
         await self._update_preview(force=True)
         await self._update_context_panel()
 
-    async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Handle tree node selection (Enter key) — open fullscreen."""
-        self.action_fullscreen()
-
     def on_activity_tree_double_clicked(self, event: ActivityTree.DoubleClicked) -> None:
         """Handle double-click on tree node — open fullscreen."""
         self.action_fullscreen()
