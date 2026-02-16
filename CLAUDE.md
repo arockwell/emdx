@@ -202,6 +202,22 @@ These commands work but are not yet stable:
 - **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
 - **Mocked internal functions in tests**: When refactoring a function's signature (parameters, return type), grep for tests that mock it — they break silently. Use: `rg "mock.*<func_name>\|patch.*<func_name>" tests/`
 
+## Delegate Debugging
+
+### Stuck Delegate Diagnostics
+If a delegate appears stuck (no output beyond worktree creation):
+
+1. Check process: `ps -o etime=,%cpu= -p <PID>`
+2. Check TCP connections: `lsof -p <PID> 2>/dev/null | grep TCP | wc -l`
+   - **2+ connections** = healthy, waiting on API response
+   - **0 connections** = stuck, kill and re-dispatch
+3. Check worktree: `cd <worktree> && git status` — see if files were created
+4. Kill: `kill <PID>` then clean up worktree: `git worktree remove <path> --force`
+
+### Common Causes of Hanging
+- Very large `--doc` content embedded in CLI arguments
+- Shared virtualenv editable install pointing to deleted worktree (fix: `poetry lock && poetry install`)
+
 ## Release Process
 
 ```bash
