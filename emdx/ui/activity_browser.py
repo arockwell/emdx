@@ -19,7 +19,6 @@ class ActivityBrowser(Widget):
         ("1", "switch_activity", "Activity"),
         ("2", "switch_tasks", "Tasks"),
         ("3", "switch_search", "Search"),
-        ("4", "switch_cascade", "Cascade"),
         ("?", "show_help", "Help"),
     ]
 
@@ -66,10 +65,6 @@ class ActivityBrowser(Widget):
         """Already on activity, do nothing."""
         pass
 
-    async def action_switch_cascade(self) -> None:
-        """Switch to cascade browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
 
     async def action_switch_tasks(self) -> None:
         """Switch to task browser."""

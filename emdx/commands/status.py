@@ -88,7 +88,7 @@ def _show_active_tasks() -> None:
         task_id = task["id"]
         duration = _running_duration(task.get("created_at"))
 
-        if task_type in ("group", "chain"):
+        if task_type == "group":
             child_count = task.get("child_count", 0)
             children_done = task.get("children_done", 0)
             task.get("children_active", 0)
@@ -232,7 +232,7 @@ def _collect_status_data() -> dict[str, Any]:
     # Enrich active tasks with children
     enriched: list[dict[str, Any]] = [dict(t) for t in active]
     for task in enriched:
-        if task.get("type") in ("group", "chain"):
+        if task.get("type") == "group":
             task["children"] = get_children(task["id"])
 
     return {

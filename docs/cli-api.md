@@ -672,14 +672,13 @@ Safe mode disables execution commands that can spawn external processes or make 
 ```bash
 # Via environment variable
 export EMDX_SAFE_MODE=1
-emdx cascade add "idea"  # Will show: Command 'cascade' is disabled in safe mode.
+emdx delegate "task"  # Will show: Command 'delegate' is disabled in safe mode.
 
 # Or set per-command
 EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 ```
 
 **Disabled commands in safe mode:**
-- `cascade` - Autonomous document transformation pipeline
 - `delegate` - One-shot AI execution
 - `recipe` - Recipe execution
 
@@ -696,7 +695,7 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 **Error message:**
 When a disabled command is invoked, you'll see:
 ```
-Command 'cascade' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.
+Command 'delegate' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.
 ```
 
 ### **Default Locations**
@@ -754,13 +753,12 @@ emdx find --tags "gameplan" --project "myproject"
 
 ## 📡 Delegate — One-Shot AI Execution (`emdx delegate`)
 
-`emdx delegate` is the **single command for all one-shot AI execution**. It handles single tasks, parallel execution, sequential chains, PR creation, worktree isolation, and document context — all in one command.
+`emdx delegate` is the **single command for all one-shot AI execution**. It handles single tasks, parallel execution, PR creation, worktree isolation, and document context — all in one command.
 
 **The Execution Ladder:**
 | Level | Command | Use When |
 |-------|---------|----------|
 | 1 | `emdx delegate` | All one-shot AI execution |
-| 2 | `emdx cascade` | Ideas → code through stages |
 
 ### Basic Usage
 
@@ -796,21 +794,6 @@ emdx delegate --doc 42
 emdx delegate --doc 42 "check for bugs" "review tests" "check docs"
 ```
 
-### Sequential Chains
-
-Run tasks sequentially where each step receives the previous step's output:
-
-```bash
-# Three-step pipeline
-emdx delegate --chain "analyze the auth module" "create an implementation plan" "implement the plan"
-
-# Chain with PR creation (only last step creates PR)
-emdx delegate --chain --pr "analyze the issue" "implement the fix"
-
-# Chain with document context
-emdx delegate --doc 42 --chain "analyze" "implement"
-```
-
 ### PR Creation
 
 Instruct the agent to create a PR after making code changes. `--pr` automatically creates an isolated git worktree.
@@ -834,8 +817,6 @@ emdx delegate --worktree "fix X"
 # Worktree with PR (worktree kept for the PR branch)
 emdx delegate --worktree --pr "fix X"
 
-# Chain in worktree (all steps share same worktree)
-emdx delegate --worktree --chain "analyze" "fix" "test"
 ```
 
 ### Dynamic Discovery
@@ -867,18 +848,15 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
 | `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | | Base branch for worktree (default: main) |
-| `--chain` | | Run tasks sequentially, piping output forward |
 | `--each` | | Shell command to discover items (one per line) |
 | `--do` | | Template for each discovered item (use `{{item}}`) |
 
-**Note:** `--chain` and `--synthesize` are mutually exclusive. `--each` requires `--do`.
+**Note:** `--each` requires `--do`.
 
 ### Output Format
 
 - **stdout**: Full content of the result (for reading inline)
 - **stderr**: `doc_id:XXXX tokens:N cost:$X.XX duration:Xs`
-
-For chains: `doc_ids:101,102,103 chain_final:103`
 
 ---
 
@@ -942,7 +920,7 @@ Retrieve context and pipe to the `claude` CLI to use your Claude Max subscriptio
 
 ```bash
 # Basic usage - pipe to claude
-emdx ai context "How does the cascade system work?" | claude
+emdx ai context "How does the auth system work?" | claude
 
 # With a specific prompt
 emdx ai context "What are the tag conventions?" | claude "summarize briefly"
@@ -1151,134 +1129,6 @@ emdx task delete 1 --force
 | `blocked` | ⚠ | Waiting on dependencies or external factors |
 | `done` | ✓ | Completed successfully |
 | `failed` | ✗ | Could not be completed |
-
----
-
-## 🌊 Cascade - Ideas to Code
-
-The Cascade system transforms raw ideas through stages into working code with PRs.
-
-### Stage Flow
-
-| Stage | Description |
-|-------|-------------|
-| `idea` | Raw idea enters the cascade |
-| `prompt` | Claude transforms idea into well-formed prompt |
-| `analyzed` | Claude analyzes the prompt thoroughly |
-| `planned` | Claude creates detailed implementation gameplan |
-| `done` | Claude implements code and creates PR |
-
-### Adding Ideas
-
-```bash
-# Add an idea to the cascade
-emdx cascade add "Add dark mode toggle to settings"
-
-# Add with custom title
-emdx cascade add "Feature idea" --title "Dark Mode Implementation"
-
-# Add and auto-run through stages
-emdx cascade add "Add dark mode" --auto
-
-# Auto-run and stop at specific stage
-emdx cascade add "Add dark mode" --auto --stop planned
-
-# Shortcuts for common patterns
-emdx cascade add "Add dark mode" --analyze    # idea → analyzed
-emdx cascade add "Add dark mode" --plan       # idea → planned
-
-# Add at a specific starting stage
-emdx cascade add "My gameplan content" --stage planned --auto
-```
-
-### Checking Status
-
-```bash
-# Show cascade status (documents at each stage)
-emdx cascade status
-
-# Show documents at specific stage
-emdx cascade show idea
-emdx cascade show analyzed --limit 20
-```
-
-### Processing Documents
-
-```bash
-# Process one document at a stage (sync - waits for completion)
-emdx cascade process idea --sync
-emdx cascade process prompt --sync
-emdx cascade process analyzed --sync
-emdx cascade process planned --sync  # Creates code and PR
-
-# Process specific document
-emdx cascade process analyzed --doc 123 --sync
-
-# Dry run (show what would be processed)
-emdx cascade process idea --dry-run
-```
-
-### Running Continuously
-
-```bash
-# Run cascade continuously (one stage at a time)
-emdx cascade run
-
-# Auto mode: process ideas end-to-end
-emdx cascade run --auto
-
-# Auto mode with stop stage
-emdx cascade run --auto --stop planned
-
-# Process one document then exit
-emdx cascade run --once
-
-# Custom check interval
-emdx cascade run --interval 10
-```
-
-### Manual Operations
-
-```bash
-# Manually advance a document to next stage
-emdx cascade advance 123
-
-# Advance to specific stage
-emdx cascade advance 123 --to done
-
-# Remove from cascade (keeps document)
-emdx cascade remove 123
-```
-
-### Synthesizing Documents
-
-```bash
-# Combine multiple documents at a stage into one
-emdx cascade synthesize analyzed
-
-# With custom title
-emdx cascade synthesize analyzed --title "Combined Analysis"
-
-# Keep source documents (don't advance to done)
-emdx cascade synthesize analyzed --keep
-
-# Output to different stage
-emdx cascade synthesize analyzed --next planned
-```
-
-### Viewing Run History
-
-```bash
-# Show cascade run history
-emdx cascade runs
-
-# Filter by status
-emdx cascade runs --status running
-emdx cascade runs --status completed
-
-# Show more runs
-emdx cascade runs --limit 20
-```
 
 ---
 

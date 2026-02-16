@@ -6,7 +6,6 @@ This folder contains detailed documentation for EMDX.
 
 ### Getting Started
 - [CLI Reference](cli-api.md) - Complete command documentation
-- [Cascade System](cascade.md) - Autonomous idea-to-code pipeline
 - [AI System](ai-system.md) - Semantic search and Q&A over your knowledge base
 
 ### Architecture & Design
@@ -24,7 +23,6 @@ This folder contains detailed documentation for EMDX.
 | I want to... | Read this |
 |--------------|-----------|
 | Learn all CLI commands | [CLI Reference](cli-api.md) |
-| Transform ideas to code | [Cascade System](cascade.md) |
 | Use semantic search & Q&A | [AI System](ai-system.md) |
 | Understand the codebase | [Architecture](architecture.md) |
 | Contribute code | [Development Setup](development-setup.md) |

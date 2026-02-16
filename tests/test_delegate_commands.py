@@ -3,7 +3,6 @@
 Tests cover:
 - Basic delegate call with single task
 - --synthesize flag for parallel task synthesis
-- --chain flag for sequential task execution
 - --each/--do flags for dynamic discovery
 - --pr flag for pull request creation
 - --worktree flag for git worktree isolation
@@ -28,7 +27,6 @@ from emdx.commands.delegate import (
     _make_output_file_path,
     _make_pr_instruction,
     _resolve_task,
-    _run_chain,
     _run_discovery,
     _run_parallel,
     _run_single,
@@ -694,151 +692,6 @@ class TestRunParallel:
         assert mock_cleanup_worktree.call_count == 2
 
 
-# =============================================================================
-# Tests for _run_chain
-# =============================================================================
-
-
-class TestRunChain:
-    """Tests for _run_chain — runs tasks sequentially with output piping."""
-
-    @patch("emdx.commands.delegate.get_document")
-    @patch("emdx.commands.delegate._safe_update_task")
-    @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_chain_success(self, mock_executor_cls, mock_create, mock_update, mock_get_doc):
-        mock_create.return_value = 1
-        mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Step output"}
-        mock_executor = MagicMock()
-        mock_executor.execute.side_effect = [
-            ExecutionResult(
-                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30
-            ),  # noqa: E501
-        ]
-        mock_executor_cls.return_value = mock_executor
-
-        doc_ids = _run_chain(
-            tasks=["analyze", "plan", "implement"],
-            tags=["chain-test"],
-            title="Test Chain",
-            model=None,
-            quiet=True,
-        )
-
-        assert len(doc_ids) == 3
-        assert doc_ids == [10, 20, 30]
-
-    @patch("emdx.commands.delegate.get_document")
-    @patch("emdx.commands.delegate._safe_update_task")
-    @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_chain_pipes_output(self, mock_executor_cls, mock_create, mock_update, mock_get_doc):
-        """Verify that output from one step is passed to the next."""
-        mock_create.return_value = 1
-        mock_get_doc.return_value = {
-            "id": 10,
-            "title": "Step",
-            "content": "Previous step output content",
-        }  # noqa: E501
-        mock_executor = MagicMock()
-        mock_executor.execute.side_effect = [
-            ExecutionResult(
-                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
-            ),  # noqa: E501
-        ]
-        mock_executor_cls.return_value = mock_executor
-
-        _run_chain(
-            tasks=["step1", "step2"],
-            tags=[],
-            title=None,
-            model=None,
-            quiet=True,
-        )
-
-        # Second call should include "Previous step output" from first step
-        calls = mock_executor.execute.call_args_list
-        second_config = calls[1][0][0]
-        assert "Previous step output" in second_config.prompt
-
-    @patch("emdx.commands.delegate.get_document")
-    @patch("emdx.commands.delegate._safe_update_task")
-    @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_chain_aborts_on_failure(
-        self, mock_executor_cls, mock_create, mock_update, mock_get_doc
-    ):
-        mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.side_effect = [
-            ExecutionResult(
-                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-            ),  # noqa: E501
-            ExecutionResult(
-                success=False, execution_id=2, log_file=Path("/tmp/2.log"), error_message="Failed"
-            ),  # noqa: E501
-        ]
-        mock_executor_cls.return_value = mock_executor
-        mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Step output"}
-
-        doc_ids = _run_chain(
-            tasks=["step1", "step2", "step3"],
-            tags=[],
-            title=None,
-            model=None,
-            quiet=True,
-        )
-
-        # Should only have first successful step
-        assert len(doc_ids) == 1
-        assert doc_ids == [10]
-
-    @patch("emdx.commands.delegate.get_document")
-    @patch("emdx.commands.delegate._safe_update_task")
-    @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_chain_with_pr_only_last_step(
-        self, mock_executor_cls, mock_create, mock_update, mock_get_doc
-    ):
-        """Verify --pr only applies to the last step."""
-        mock_create.return_value = 1
-        mock_get_doc.return_value = {"id": 10, "title": "Step", "content": "Content"}
-        mock_executor = MagicMock()
-        mock_executor.execute.side_effect = [
-            ExecutionResult(
-                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
-            ),  # noqa: E501
-        ]
-        mock_executor_cls.return_value = mock_executor
-
-        _run_chain(
-            tasks=["step1", "step2"],
-            tags=[],
-            title=None,
-            model=None,
-            quiet=True,
-            pr=True,
-        )
-
-        calls = mock_executor.execute.call_args_list
-        # First step should NOT have PR instruction
-        first_config = calls[0][0][0]
-        assert "gh pr create" not in (first_config.output_instruction or "")
-        # Last step SHOULD have PR instruction
-        last_config = calls[1][0][0]
-        assert "gh pr create" in last_config.output_instruction
 
 
 # =============================================================================
@@ -871,7 +724,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -902,66 +754,11 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
 
         mock_run_parallel.assert_called_once()
-
-    @patch("emdx.commands.delegate._run_chain")
-    def test_chain_flag_triggers_chain(self, mock_run_chain):
-        """Test that --chain flag triggers sequential execution."""
-        mock_run_chain.return_value = [10, 20]
-        ctx = MagicMock()
-        ctx.invoked_subcommand = None
-
-        delegate(
-            ctx=ctx,
-            tasks=["step1", "step2"],
-            tags=None,
-            title=None,
-            synthesize=False,
-            jobs=None,
-            model=None,
-            quiet=False,
-            doc=None,
-            pr=False,
-            branch=False,
-            draft=False,
-            worktree=False,
-            base_branch="main",
-            chain=True,
-            each=None,
-            do=None,
-        )
-
-        mock_run_chain.assert_called_once()
-
-    def test_chain_and_synthesize_mutually_exclusive(self):
-        """Test that --chain and --synthesize cannot be used together."""
-        ctx = MagicMock()
-        ctx.invoked_subcommand = None
-
-        with pytest.raises(typer.Exit):
-            delegate(
-                ctx=ctx,
-                tasks=["task1", "task2"],
-                tags=None,
-                title=None,
-                synthesize=True,
-                jobs=None,
-                model=None,
-                quiet=False,
-                doc=None,
-                pr=False,
-                branch=False,
-                worktree=False,
-                base_branch="main",
-                chain=True,
-                each=None,
-                do=None,
-            )
 
     def test_each_requires_do(self):
         """Test that --each requires --do to be specified."""
@@ -983,8 +780,7 @@ class TestDelegateCommand:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                chain=False,
-                each="find . -name '*.py'",
+                    each="find . -name '*.py'",
                 do=None,
             )
 
@@ -1012,7 +808,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each="find . -name '*.py'",
             do="Review {{item}} for issues",
         )
@@ -1048,7 +843,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1080,7 +874,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=True,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1113,7 +906,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,  # Not explicitly set, but should be implied
             base_branch="develop",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1145,7 +937,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1180,7 +971,6 @@ class TestDelegateCommand:
             draft=True,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1215,7 +1005,6 @@ class TestDelegateCommand:
             draft=False,  # --no-draft
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1245,7 +1034,6 @@ class TestDelegateCommand:
             draft=False,  # --no-draft
             worktree=True,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1273,8 +1061,7 @@ class TestDelegateCommand:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                chain=False,
-                each=None,
+                    each=None,
                 do=None,
             )
 
@@ -1306,7 +1093,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1338,7 +1124,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1474,7 +1259,6 @@ class TestBranchFlag:
             draft=False,
             worktree=False,
             base_branch="main",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1508,7 +1292,6 @@ class TestBranchFlag:
             draft=False,
             worktree=False,
             base_branch="develop",
-            chain=False,
             each=None,
             do=None,
         )
@@ -1536,8 +1319,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                chain=False,
-                each=None,
+                    each=None,
                 do=None,
             )
 
@@ -1566,8 +1348,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                chain=False,
-                each=None,
+                    each=None,
                 do=None,
             )
 
@@ -1607,8 +1388,7 @@ class TestErrorHandling:
                 branch=False,
                 worktree=True,
                 base_branch="main",
-                chain=False,
-                each=None,
+                    each=None,
                 do=None,
             )
 
@@ -1634,8 +1414,7 @@ class TestErrorHandling:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                chain=False,
-                each=None,
+                    each=None,
                 do=None,
             )
 

@@ -81,8 +81,6 @@ CREATE TABLE executions (
 ### **Additional Tables**
 
 The database also includes tables for:
-- **`cascade_metadata`** — Tracks cascade stage and parent/child relationships for documents
-- **`cascade_runs`** — End-to-end cascade pipeline executions (idea → done)
 - **`document_groups`** — Hierarchical document organization
 - **`tasks`** — Task management with dependencies and status tracking
 - **`document_embeddings`** — Semantic search vectors (384-dimensional)

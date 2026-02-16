@@ -38,7 +38,7 @@ def prime(
         # Basic priming
         emdx prime
 
-        # With full context (execution guidance, recent docs, cascade)
+        # With full context (execution guidance, recent docs)
         emdx prime --verbose
 
         # Minimal (just ready tasks)
@@ -352,7 +352,7 @@ def _get_cascade_status() -> dict:
     return status
 
 
-def _get_stale_docs() -> list[dict[str, Any]]:
+def _get_stale_docs() -> list:
     """Get stale documents for priming context."""
     try:
         from emdx.commands.stale import get_top_stale_for_priming
@@ -499,7 +499,7 @@ def _get_execution_methods_json() -> list[dict[str, Any]]:
         {
             "command": "emdx delegate",
             "usage": 'emdx delegate "task" --tags analysis',
-            "when": "All one-shot AI execution (single, parallel, chain, PR, worktree)",
+            "when": "All one-shot AI execution (single, parallel, PR, worktree)",
             "key_flags": [
                 "--doc",
                 "--each/--do",

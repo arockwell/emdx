@@ -133,14 +133,6 @@ emdx delegate "t1" "t2" "t3" "t4" "t5" -j 3
 emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
 ```
 
-### Sequential pipelines
-
-Chain tasks so each step sees the previous output:
-
-```bash
-emdx delegate --chain "analyze the problem" "design a solution" "implement it"
-```
-
 ### Dynamic discovery
 
 Find items at runtime, then process each one:
@@ -173,7 +165,7 @@ emdx delegate --pr "fix the null pointer in auth"
 emdx delegate --worktree --pr "fix X"
 
 # All flags compose together
-emdx delegate --doc 42 --chain --worktree --pr "analyze" "implement"
+emdx delegate --doc 42 --worktree --pr "fix the auth module"
 ```
 
 ## Searching Your Knowledge Base
@@ -238,18 +230,6 @@ emdx distill --for coworkers "sprint progress"   # Team briefing
 emdx distill --tags "security,active" --save     # Save result to KB
 ```
 
-### Cascade: ideas to code
-
-Transform raw ideas through stages — idea → prompt → analyzed → planned → done — with the final stage creating a PR.
-
-```bash
-emdx cascade add "Add dark mode toggle to settings"
-emdx cascade status
-emdx cascade run          # Process all stages automatically
-```
-
-See [Cascade documentation](docs/cascade.md) for details.
-
 ### Recipes — reusable instructions
 
 Save instructions as recipes and run them repeatedly:
@@ -297,19 +277,15 @@ emdx status   # Quick overview
 | Tag a document | `emdx tag 42 analysis active` |
 | Run an AI task | `emdx delegate "task"` |
 | Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
-| Chain tasks | `emdx delegate --chain "analyze" "plan" "implement"` |
 | Discover + process items | `emdx delegate --each "cmd" --do "Review {{item}}"` |
 | Create a PR | `emdx delegate --pr "fix the bug"` |
 | Search by meaning | `emdx find "concept" --mode semantic` |
 | Ask a question | `emdx ai context "question" \| claude` |
 | Deduplicate the KB | `emdx compact --dry-run` |
 | Synthesize a topic | `emdx distill "topic"` |
-| Idea to PR pipeline | `emdx cascade add "idea"` |
-
 ## Documentation
 
 - [CLI Reference](docs/cli-api.md) — Complete command documentation
-- [Cascade](docs/cascade.md) — Idea-to-code pipeline
 - [AI System](docs/ai-system.md) — Semantic search and Q&A
 - [Architecture](docs/architecture.md) — System design
 - [Development Setup](docs/development-setup.md) — Contributing guide
