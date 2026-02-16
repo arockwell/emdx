@@ -2,7 +2,6 @@
 AI-powered Q&A and semantic search commands for EMDX.
 """
 
-
 import typer
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -18,9 +17,15 @@ def ask_question(
     question: str = typer.Argument(..., help="Your question"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to search"),
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
-    keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search (no embeddings)"),  # noqa: E501
+    keyword: bool = typer.Option(
+        False, "--keyword", "-k", help="Force keyword search (no embeddings)"
+    ),  # noqa: E501
     show_sources: bool = typer.Option(True, "--sources/--no-sources", help="Show source documents"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
+    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    recent: int | None = typer.Option(
+        None, "--recent", "-r", help="Limit to docs created in last N days"
+    ),  # noqa: E501
 ) -> None:
     """
     Ask a question about your knowledge base.
@@ -31,6 +36,8 @@ def ask_question(
         emdx ai ask "What's our caching strategy?"
         emdx ai ask "How did we solve the auth bug?" --project myapp
         emdx ai ask "What does AUTH-123 involve?"
+        emdx ai ask "What are our security patterns?" --tags "security,active"
+        emdx ai ask "What changed recently?" --recent 7
     """
     from ..services.ask_service import AskService
 
@@ -38,22 +45,36 @@ def ask_question(
 
     try:
         with console.status("[bold blue]Thinking...", spinner="dots"):
-            result = service.ask(question, limit=limit, project=project, force_keyword=keyword)
+            result = service.ask(
+                question,
+                limit=limit,
+                project=project,
+                force_keyword=keyword,
+                tags=tags,
+                recent_days=recent,
+            )
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
 
-    # Display answer
-    console.print()
-    console.print(Panel(result.text, title="Answer", border_style="green"))
+    # Display answer with confidence indicator
+    confidence_colors = {"high": "green", "medium": "yellow", "low": "red"}
+    confidence_color = confidence_colors.get(result.confidence, "dim")
+    panel_title = f"Answer [{result.confidence.upper()} confidence]"
 
-    # Display metadata
-    if show_sources and result.sources:
+    console.print()
+    console.print(Panel(result.text, title=panel_title, border_style=confidence_color))
+
+    # Display metadata with source titles
+    if show_sources and result.source_titles:
         console.print()
-        console.print(f"[dim]Sources: {', '.join(f'#{id}' for id in result.sources)}[/dim]")
+        source_strs = [f'#{doc_id} "{title}"' for doc_id, title in result.source_titles]
+        console.print(f"[dim]Sources: {', '.join(source_strs)}[/dim]")
 
     if verbose:
-        console.print(f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]")  # noqa: E501
+        console.print(
+            f"[dim]Method: {result.method} | Context: {result.context_size:,} chars[/dim]"
+        )  # noqa: E501
 
 
 @app.command("context")
@@ -62,7 +83,13 @@ def get_context(
     limit: int = typer.Option(10, "--limit", "-n", help="Max documents to retrieve"),
     project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
     keyword: bool = typer.Option(False, "--keyword", "-k", help="Force keyword search"),
-    include_question: bool = typer.Option(True, "--question/--no-question", help="Include question in output"),  # noqa: E501
+    include_question: bool = typer.Option(
+        True, "--question/--no-question", help="Include question in output"
+    ),  # noqa: E501
+    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    recent: int | None = typer.Option(
+        None, "--recent", "-r", help="Limit to docs created in last N days"
+    ),  # noqa: E501
 ) -> None:
     """
     Retrieve context for a question (for piping to claude CLI).
@@ -73,6 +100,7 @@ def get_context(
         emdx ai context "How does auth work?" | claude
         emdx ai context "What's the API design?" | claude "summarize this"
         emdx ai context "error handling" --no-question | claude "list the patterns"
+        emdx ai context "security best practices" --tags "security" | claude
     """
     import sys
 
@@ -83,9 +111,13 @@ def get_context(
     try:
         # Retrieve docs (reuse the retrieval logic)
         if keyword or not service._has_embeddings():
-            docs, method = service._retrieve_keyword(question, limit, project)
+            docs, method = service._retrieve_keyword(
+                question, limit, project, tags=tags, recent_days=recent
+            )
         else:
-            docs, method = service._retrieve_semantic(question, limit, project)
+            docs, method = service._retrieve_semantic(
+                question, limit, project, tags=tags, recent_days=recent
+            )
     except ImportError as e:
         console.print(f"[red]{e}[/red]", highlight=False)
         raise typer.Exit(1) from None
@@ -119,7 +151,9 @@ def build_index(
     force: bool = typer.Option(False, "--force", "-f", help="Reindex all documents"),
     batch_size: int = typer.Option(50, "--batch-size", "-b", help="Documents per batch"),
     chunks: bool = typer.Option(
-        True, "--chunks/--no-chunks", help="Also build chunk-level index",
+        True,
+        "--chunks/--no-chunks",
+        help="Also build chunk-level index",
     ),
 ) -> None:
     """
@@ -230,7 +264,9 @@ def semantic_search(
         raise typer.Exit(1) from None
 
     if not results:
-        console.print(f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]")  # noqa: E501
+        console.print(
+            f"[yellow]No documents found matching '{query}' (threshold: {threshold})[/yellow]"
+        )  # noqa: E501
         return
 
     # Filter by project if specified
@@ -331,7 +367,9 @@ def show_stats() -> None:
 
     total_size = stats.index_size_bytes + stats.chunk_index_size_bytes
 
-    console.print(Panel(f"""[bold]Embedding Index Statistics[/bold]
+    console.print(
+        Panel(
+            f"""[bold]Embedding Index Statistics[/bold]
 
 Documents:    {stats.indexed_documents} / {stats.total_documents} indexed
 Coverage:     {stats.coverage_percent}%
@@ -340,7 +378,10 @@ Model:        {stats.model_name}
 Doc index:    {format_bytes(stats.index_size_bytes)}
 Chunk index:  {format_bytes(stats.chunk_index_size_bytes)}
 Total size:   {format_bytes(total_size)}
-""", title="AI Index"))
+""",
+            title="AI Index",
+        )
+    )
 
 
 @app.command("clear")

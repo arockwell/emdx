@@ -82,8 +82,11 @@ CREATE TABLE executions (
 
 The database also includes tables for:
 - **`document_groups`** — Hierarchical document organization
-- **`tasks`** — Task management with dependencies and status tracking
-- **`document_embeddings`** — Semantic search vectors (384-dimensional)
+- **`tasks`** — Agent work queue with status, epics, and categories
+- **`task_categories`** — Category definitions for auto-numbered task titles
+- **`document_embeddings`** — Document-level semantic search vectors (384-dimensional)
+- **`chunk_embeddings`** — Chunk-level semantic search vectors for fine-grained retrieval
+- **`delegate_runs`** / **`cascade_metadata`** — Delegate execution tracking
 
 See `emdx/database/migrations.py` for complete schema definitions.
 
@@ -126,7 +129,7 @@ CREATE INDEX idx_executions_doc_id ON executions(doc_id);
 ```python
 # Migration structure in emdx/database/migrations.py
 # Each migration is a tuple: (version, description, function)
-# Currently 36 migrations (0-35)
+# Currently 41 migrations (0-40)
 # See emdx/database/migrations.py for the full list
 ```
 
@@ -367,7 +370,6 @@ def backup_database(source_path: Path, backup_path: Path) -> None:
 - **Document versioning** - Track document history and changes
 - **User system** - Multi-user support with permissions
 - **Attachment support** - File attachments linked to documents
-- **Advanced search** - Semantic search and AI-powered discovery
 
 ### **Performance Scaling**
 - **Read replicas** - Multiple read-only database copies

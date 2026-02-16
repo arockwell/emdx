@@ -105,9 +105,7 @@ def execute_recipe(
 
         try:
             task_title = recipe.title or "recipe execution"
-            worktree_path, worktree_branch = create_worktree(
-                base_branch, task_title=task_title
-            )
+            worktree_path, worktree_branch = create_worktree(base_branch, task_title=task_title)
             if not quiet:
                 sys.stderr.write(f"recipe: worktree created at {worktree_path}\n")
         except Exception as e:
@@ -135,7 +133,11 @@ def execute_recipe(
 
             if not quiet:
                 sys.stderr.write(f"recipe: cleaning up worktree {worktree_path}\n")
-            cleanup_worktree(worktree_path)
+            try:
+                cleanup_worktree(worktree_path)
+            except Exception as cleanup_err:
+                # Log cleanup failure but don't mask original exception
+                sys.stderr.write(f"recipe: worktree cleanup failed: {cleanup_err}\n")
 
 
 def _execute_steps(
@@ -171,13 +173,13 @@ def _execute_steps(
             full_prompt = f"Your task (step {step_num}/{total}): {prompt}"
 
         if not quiet:
-            sys.stdout.write(
-                f"\n=== Step {step_num}/{total}: {step.name} ===\n"
-            )
+            sys.stdout.write(f"\n=== Step {step_num}/{total}: {step.name} ===\n")
 
         # Resolve per-step flags
         step_pr = bool(step.flags.get("pr", False))
         step_branch = bool(step.flags.get("branch", False))
+        step_timeout_raw = step.flags.get("timeout")
+        step_timeout = int(step_timeout_raw) if step_timeout_raw is not None else None
 
         step_title = f"{recipe.title} [step {step_num}/{total}: {step.name}]"
 
@@ -193,6 +195,7 @@ def _execute_steps(
             working_dir=worktree_path,
             source_doc_id=parent_doc_id,
             seq=step_num,
+            timeout=step_timeout,
         )
 
         step_result = StepResult(
@@ -212,9 +215,7 @@ def _execute_steps(
             step_result.success = False
             step_result.error = "Step produced no output"
             if not quiet:
-                sys.stderr.write(
-                    f"recipe: failed at step {step_num}/{total}: {step.name}\n"
-                )
+                sys.stderr.write(f"recipe: failed at step {step_num}/{total}: {step.name}\n")
             return RecipeResult(
                 success=False,
                 steps=step_results,
