@@ -176,8 +176,6 @@ class ActivityDataLoader:
                 timestamp = parse_datetime(started_at) or datetime.now()
 
                 cli_tool = "claude"
-                if log_file and "cursor" in log_file.lower():
-                    cli_tool = "cursor"
 
                 title = doc_title or f"Execution #{exec_id}"
                 if title.startswith("Agent: "):

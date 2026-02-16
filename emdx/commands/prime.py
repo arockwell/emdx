@@ -7,13 +7,23 @@ It outputs priming context that should be injected at session start.
 
 import subprocess
 from datetime import datetime
-from typing import Any
 
 import typer
 from rich.console import Console
 
 from ..database import db
 from ..utils.git import get_git_project
+from .types import (
+    EpicInfo,
+    ExecutionMethod,
+    GitContext,
+    InProgressTask,
+    KeyDoc,
+    PrimeOutput,
+    ReadyTask,
+    RecentDoc,
+    StaleDoc,
+)
 
 console = Console()
 
@@ -100,9 +110,10 @@ def _output_text(
             label = _task_label(task)
             doc_ref = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
             lines.append(f"  {label}  {task['title']}{doc_ref}")
-            if task.get("description") and verbose:
-                desc = task["description"][:100]
-                if len(task["description"]) > 100:
+            description = task.get("description")
+            if description and verbose:
+                desc = description[:100]
+                if len(description) > 100:
                     desc += "..."
                 lines.append(f"         {desc}")
         lines.append("")
@@ -115,9 +126,9 @@ def _output_text(
     if in_progress:
         lines.append(f"IN-PROGRESS ({len(in_progress)}):")
         lines.append("")
-        for task in in_progress[:5]:
-            label = _task_label(task)
-            lines.append(f"  {label}  {task['title']}")
+        for in_prog_task in in_progress[:5]:
+            label = _task_label(in_prog_task)
+            lines.append(f"  {label}  {in_prog_task['title']}")
         lines.append("")
 
     # Git context (always shown, not quiet-only)
@@ -178,7 +189,7 @@ def _output_text(
 # ---------------------------------------------------------------------------
 
 
-def _task_label(task: dict) -> str:
+def _task_label(task: ReadyTask | InProgressTask) -> str:
     """Format a task label: use epic key (e.g. DEBT-10) if available, else #id."""
     epic_key = task.get("epic_key")
     epic_seq = task.get("epic_seq")
@@ -190,7 +201,7 @@ def _task_label(task: dict) -> str:
     return f"{label:<8}"
 
 
-def _format_epic_line(epic: dict) -> str:
+def _format_epic_line(epic: EpicInfo) -> str:
     """Format an epic line with progress bar."""
     done = epic["children_done"]
     total = epic["child_count"]
@@ -215,7 +226,7 @@ def _format_epic_line(epic: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _get_active_epics() -> list[dict[str, Any]]:
+def _get_active_epics() -> list[EpicInfo]:
     """Get active/open epics with child task counts."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -231,19 +242,19 @@ def _get_active_epics() -> list[dict[str, Any]]:
         """)
         rows = cursor.fetchall()
         return [
-            {
-                "id": r[0],
-                "title": r[1],
-                "status": r[2],
-                "epic_key": r[3],
-                "child_count": r[4],
-                "children_done": r[5],
-            }
+            EpicInfo(
+                id=r[0],
+                title=r[1],
+                status=r[2],
+                epic_key=r[3],
+                child_count=r[4],
+                children_done=r[5],
+            )
             for r in rows
         ]
 
 
-def _get_ready_tasks() -> list[dict[str, Any]]:
+def _get_ready_tasks() -> list[ReadyTask]:
     """Get tasks that are ready to work on (open + no blockers, excludes delegate)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -263,21 +274,21 @@ def _get_ready_tasks() -> list[dict[str, Any]]:
         """)
         rows = cursor.fetchall()
         return [
-            {
-                "id": r[0],
-                "title": r[1],
-                "description": r[2],
-                "priority": r[3],
-                "status": r[4],
-                "source_doc_id": r[5],
-                "epic_key": r[6],
-                "epic_seq": r[7],
-            }
+            ReadyTask(
+                id=r[0],
+                title=r[1],
+                description=r[2],
+                priority=r[3],
+                status=r[4],
+                source_doc_id=r[5],
+                epic_key=r[6],
+                epic_seq=r[7],
+            )
             for r in rows
         ]
 
 
-def _get_in_progress_tasks() -> list[dict[str, Any]]:
+def _get_in_progress_tasks() -> list[InProgressTask]:
     """Get manually created tasks currently in progress (excludes delegate)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -291,19 +302,19 @@ def _get_in_progress_tasks() -> list[dict[str, Any]]:
         """)
         rows = cursor.fetchall()
         return [
-            {
-                "id": r[0],
-                "title": r[1],
-                "description": r[2],
-                "priority": r[3],
-                "epic_key": r[4],
-                "epic_seq": r[5],
-            }
+            InProgressTask(
+                id=r[0],
+                title=r[1],
+                description=r[2],
+                priority=r[3],
+                epic_key=r[4],
+                epic_seq=r[5],
+            )
             for r in rows
         ]
 
 
-def _get_recent_docs() -> list[dict[str, Any]]:
+def _get_recent_docs() -> list[RecentDoc]:
     """Get recently accessed documents."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -315,7 +326,7 @@ def _get_recent_docs() -> list[dict[str, Any]]:
             LIMIT 10
         """)
         rows = cursor.fetchall()
-        return [{"id": r[0], "title": r[1], "project": r[2]} for r in rows]
+        return [RecentDoc(id=r[0], title=r[1], project=r[2]) for r in rows]
 
 
 def _get_stale_docs() -> list:
@@ -329,17 +340,17 @@ def _get_stale_docs() -> list:
         return []
 
 
-def _get_git_context() -> dict[str, Any]:
+def _get_git_context() -> GitContext:
     """
     Get git context: current branch, recent commits, and open PRs.
 
-    Returns a dict with:
+    Returns a GitContext dict with:
         - branch: str | None — current branch name
         - commits: list[str] — last 3 commit summaries (oneline)
-        - prs: list[dict] — open PRs with number, title, headRefName
+        - prs: list[GitContextPR] — open PRs with number, title, headRefName
         - error: str | None — error message if git/gh not available
     """
-    result: dict[str, Any] = {
+    result: GitContext = {
         "branch": None,
         "commits": [],
         "prs": [],
@@ -402,7 +413,7 @@ def _get_git_context() -> dict[str, Any]:
     return result
 
 
-def _get_key_docs(limit: int = 5) -> list[dict[str, Any]]:
+def _get_key_docs(limit: int = 5) -> list[KeyDoc]:
     """
     Get the most frequently accessed documents.
 
@@ -410,7 +421,7 @@ def _get_key_docs(limit: int = 5) -> list[dict[str, Any]]:
         limit: Maximum number of documents to return
 
     Returns:
-        List of dicts with id, title, access_count
+        List of KeyDoc dicts with id, title, access_count
     """
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -425,7 +436,7 @@ def _get_key_docs(limit: int = 5) -> list[dict[str, Any]]:
             (limit,),
         )
         rows = cursor.fetchall()
-        return [{"id": r[0], "title": r[1], "access_count": r[2]} for r in rows]
+        return [KeyDoc(id=r[0], title=r[1], access_count=r[2]) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -458,14 +469,14 @@ def _get_usage_instructions() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _get_execution_methods_json() -> list[dict[str, Any]]:
+def _get_execution_methods_json() -> list[ExecutionMethod]:
     """Return execution methods as structured data for JSON output."""
     return [
-        {
-            "command": "emdx delegate",
-            "usage": 'emdx delegate "task" --tags analysis',
-            "when": "All one-shot AI execution (single, parallel, PR, worktree)",
-            "key_flags": [
+        ExecutionMethod(
+            command="emdx delegate",
+            usage='emdx delegate "task" --tags analysis',
+            when="All one-shot AI execution (single, parallel, PR, worktree)",
+            key_flags=[
                 "--doc",
                 "--each/--do",
                 "--pr",
@@ -473,7 +484,7 @@ def _get_execution_methods_json() -> list[dict[str, Any]]:
                 "--synthesize",
                 "--tags",
             ],
-        },
+        ),
     ]
 
 
@@ -481,7 +492,7 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
     """Output priming context as JSON."""
     import json
 
-    data: dict[str, Any] = {
+    data: PrimeOutput = {
         "project": project,
         "timestamp": datetime.now().isoformat(),
         "active_epics": _get_active_epics(),
@@ -498,12 +509,12 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
         stale_docs = _get_stale_docs()
         if stale_docs:
             data["stale_docs"] = [
-                {
-                    "id": d["id"],
-                    "title": d["title"],
-                    "level": d["level"].value if hasattr(d["level"], "value") else d["level"],
-                    "days_stale": d["days_stale"],
-                }
+                StaleDoc(
+                    id=d["id"],
+                    title=d["title"],
+                    level=d["level"].value if hasattr(d["level"], "value") else d["level"],
+                    days_stale=d["days_stale"],
+                )
                 for d in stale_docs
             ]
 

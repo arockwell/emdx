@@ -20,7 +20,7 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import RichLog, Static, Tree
+from textual.widgets import Log, RichLog, Static, Tree
 
 from emdx.utils.datetime_utils import parse_datetime
 
@@ -148,6 +148,7 @@ class ActivityView(HelpMixin, Widget):
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
+        ("c", "toggle_copy_mode", "Copy Mode"),
     ]
 
     DEFAULT_CSS = """
@@ -225,6 +226,12 @@ class ActivityView(HelpMixin, Widget):
         padding: 0 1;
     }
 
+    #preview-copy {
+        height: 1fr;
+        padding: 0 1;
+        display: none;
+    }
+
     #preview-log {
         height: 1fr;
         display: none;
@@ -260,6 +267,8 @@ class ActivityView(HelpMixin, Widget):
         self._fullscreen = False
         # Cache to prevent flickering during refresh
         self._last_preview_key: tuple | None = None  # (item_type, item_id, status)
+        self._preview_raw_content: str = ""  # Raw markdown for copy mode
+        self._copy_mode = False
         # Flag to only run zombie cleanup once on startup
         self._zombies_cleaned = False
         # Reentrance guard: prevents overlapping async refreshes
@@ -313,8 +322,18 @@ class ActivityView(HelpMixin, Widget):
                         markup=True,
                         wrap=True,
                         auto_scroll=False,
-                    )  # noqa: E501
-                yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
+                    )
+                yield Log(
+                    id="preview-copy",
+                    highlight=True,
+                    auto_scroll=False,
+                )
+                yield RichLog(
+                    id="preview-log",
+                    highlight=True,
+                    markup=True,
+                    wrap=True,
+                )
 
         # Group picker (inline at bottom, hidden by default)
         yield GroupPicker(id="group-picker")
@@ -431,21 +450,53 @@ class ActivityView(HelpMixin, Widget):
         """Render markdown content to the preview RichLog."""
         from emdx.ui.markdown_config import MarkdownConfig
 
+        # Cache raw content for copy mode
+        self._preview_raw_content = content[:50000] if content else ""
+
         preview = self.query_one("#preview-content", RichLog)
         preview.clear()
 
         try:
-            # Limit preview to first 50000 chars for performance
             if len(content) > 50000:
-                content = content[:50000] + "\n\n[dim]... (truncated for preview)[/dim]"
+                content = content[:50000] + "\n\n[dim]... (truncated)[/dim]"
             if content.strip():
                 markdown = MarkdownConfig.create_markdown(content)
                 preview.write(markdown)
             else:
                 preview.write("[dim]Empty document[/dim]")
         except Exception:
-            # Fallback to plain text if markdown fails
             preview.write(content[:50000] if content else "[dim]No content[/dim]")
+
+        # If in copy mode, also update the copy Log
+        if self._copy_mode:
+            self._update_copy_widget()
+
+    def _update_copy_widget(self) -> None:
+        """Populate the copy-mode Log with raw markdown."""
+        try:
+            copy_log = self.query_one("#preview-copy", Log)
+            copy_log.clear()
+            if self._preview_raw_content.strip():
+                copy_log.write(self._preview_raw_content)
+        except Exception:
+            pass
+
+    def action_toggle_copy_mode(self) -> None:
+        """Toggle between rendered preview and selectable copy mode."""
+        try:
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            copy_log = self.query_one("#preview-copy", Log)
+        except Exception:
+            return
+
+        self._copy_mode = not self._copy_mode
+        if self._copy_mode:
+            self._update_copy_widget()
+            preview_scroll.display = False
+            copy_log.display = True
+        else:
+            preview_scroll.display = True
+            copy_log.display = False
 
     async def _update_preview(self, force: bool = False) -> None:
         """Update the preview pane with selected item."""
@@ -459,8 +510,14 @@ class ActivityView(HelpMixin, Widget):
             return
 
         def show_markdown() -> None:
-            preview_scroll.display = True
+            copy_log = self.query_one("#preview-copy", Log)
             preview_log.display = False
+            if self._copy_mode:
+                preview_scroll.display = False
+                copy_log.display = True
+            else:
+                preview_scroll.display = True
+                copy_log.display = False
 
         item = self._get_selected_item()
 
@@ -732,6 +789,10 @@ class ActivityView(HelpMixin, Widget):
             return
 
         preview_scroll.display = False
+        try:
+            self.query_one("#preview-copy", Log).display = False
+        except Exception:
+            pass
         preview_log.display = True
         preview_log.clear()
 
@@ -939,9 +1000,9 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if item.doc_id:
-            from emdx.ui.modals import DocumentPreviewModal
+            from emdx.ui.modals import DocumentPreviewScreen
 
-            self.app.push_screen(DocumentPreviewModal(item.doc_id))
+            self.app.push_screen(DocumentPreviewScreen(item.doc_id))
 
     async def action_refresh(self) -> None:
         """Manual refresh."""

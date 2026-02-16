@@ -38,7 +38,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import typer
 
@@ -54,37 +53,116 @@ app = typer.Typer(
 )
 
 
-def _safe_create_task(**kwargs: Any) -> int | None:
-    """Create task, never fail delegate."""
+def _safe_create_task(
+    title: str,
+    prompt: str | None = None,
+    task_type: str = "single",
+    status: str = "open",
+    source_doc_id: int | None = None,
+    parent_task_id: int | None = None,
+    seq: int | None = None,
+    tags: str | None = None,
+    epic_key: str | None = None,
+) -> int | None:
+    """Create task, never fail delegate.
+
+    Args:
+        title: Task title
+        prompt: The prompt used for delegate execution
+        task_type: Type of task (single, group, epic)
+        status: Initial status (open, active, etc.)
+        source_doc_id: Source document ID if derived from a doc
+        parent_task_id: Parent task ID for subtasks
+        seq: Sequence number within parent
+        tags: Comma-separated tags
+        epic_key: Epic category key for auto-numbering
+
+    Returns:
+        Created task ID or None on failure
+    """
     try:
         from ..models.tasks import create_task
 
-        return create_task(**kwargs)
+        return create_task(
+            title=title,
+            prompt=prompt,
+            task_type=task_type,
+            status=status,
+            source_doc_id=source_doc_id,
+            parent_task_id=parent_task_id,
+            seq=seq,
+            tags=tags,
+            epic_key=epic_key,
+        )
     except Exception as e:
         sys.stderr.write(f"delegate: task tracking failed: {e}\n")
         return None
 
 
-def _safe_update_task(task_id: int | None, **kwargs: Any) -> None:
-    """Update task, never fail delegate."""
+def _safe_update_task(
+    task_id: int | None,
+    *,
+    status: str | None = None,
+    error: str | None = None,
+    execution_id: int | None = None,
+    output_doc_id: int | None = None,
+) -> None:
+    """Update task, never fail delegate.
+
+    Args:
+        task_id: Task ID to update (no-op if None)
+        status: New status (open, active, done, failed, partial)
+        error: Error message (for failed status)
+        execution_id: Link to execution record
+        output_doc_id: Output document ID
+    """
     if task_id is None:
         return
     try:
+        from typing import Any
+
         from ..models.tasks import update_task
 
-        update_task(task_id, **kwargs)
+        kwargs: dict[str, Any] = {}
+        if status is not None:
+            kwargs["status"] = status
+        if error is not None:
+            kwargs["error"] = error
+        if execution_id is not None:
+            kwargs["execution_id"] = execution_id
+        if output_doc_id is not None:
+            kwargs["output_doc_id"] = output_doc_id
+
+        if kwargs:
+            update_task(task_id, **kwargs)
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
 
-def _safe_update_execution(exec_id: int | None, **kwargs: Any) -> None:
-    """Update execution record, never fail delegate."""
+def _safe_update_execution(
+    exec_id: int | None,
+    *,
+    doc_id: int | None = None,
+) -> None:
+    """Update execution record, never fail delegate.
+
+    Args:
+        exec_id: Execution ID to update (no-op if None)
+        doc_id: Output document ID to link
+    """
     if exec_id is None:
         return
     try:
+        from typing import Any
+
         from ..models.executions import update_execution
 
-        update_execution(exec_id, **kwargs)
+        kwargs: dict[str, Any] = {}
+        if doc_id is not None:
+            kwargs["doc_id"] = doc_id
+
+        if kwargs:
+            update_execution(exec_id, **kwargs)
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
 

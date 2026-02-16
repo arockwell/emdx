@@ -68,8 +68,7 @@ tests/
 ├── test_text_formatting.py           # Text formatting utilities
 ├── test_title_normalization.py       # Title normalization
 ├── test_unified_executor.py          # Unified CLI executor
-├── test_utils.py                     # Utility functions
-└── test_vim_line_numbers.py          # Vim editor line numbering
+└── test_utils.py                     # Utility functions
 ```
 
 ## 🎯 **Test Categories**
@@ -84,7 +83,7 @@ tests/
 ### **Advanced Feature Tests**
 - **Execution System** (`test_execution_system.py`, `test_execution_system_comprehensive.py`, `test_execution_monitor.py`, `test_unified_executor.py`) - execution tracking and monitoring
 - **Delegate** (`test_delegate_commands.py`) - delegate command tests
-- **TUI Components** (`test_log_browser.py`, `test_vim_line_numbers.py`, `test_modal_keys.py`) - UI widget tests
+- **TUI Components** (`test_log_browser.py`, `test_modal_keys.py`) - UI widget tests
 - **Similarity** (`test_similarity.py`, `test_duplicate_detector.py`) - document similarity and dedup
 - **AI Features** (`test_compact.py`, `test_distill.py`, `test_hybrid_search.py`) - compaction, distillation, hybrid search
 

@@ -1,17 +1,16 @@
 """Unified executor for CLI execution paths.
 
-This module provides a unified interface for executing tasks with different
-CLI tools (Claude, Cursor). It abstracts the differences between CLIs and
-provides consistent execution tracking and result handling.
+This module provides a unified interface for executing tasks with the
+Claude CLI. It provides consistent execution tracking and result handling.
 
 Uses stream-json output format by default for real-time log streaming.
 """
 
-import json
 import logging
 import queue
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -62,102 +61,82 @@ def format_timestamp(ts: float) -> str:
     return f"[{dt.strftime('%H:%M:%S')}]"
 
 
-def format_stream_line(line: str, timestamp: float) -> str | None:
-    """Format a stream-json line into readable log output.
+def format_stream_message(msg: Mapping[str, Any], timestamp: float) -> str | None:
+    """Format a pre-parsed stream message into readable log output.
 
-    Works with both Claude and Cursor output formats.
+    Accepts the dict returned by CliExecutor.parse_stream_line().
+    Typed as Mapping[str, Any] because the function reads keys from multiple
+    message types; type safety is enforced at the construction site.
     """
-    line = line.strip()
-    if not line:
+    msg_type = msg.get("type")
+    ts = format_timestamp(timestamp)
+
+    if msg_type == "system":
+        if msg.get("subtype") == "init":
+            model = msg.get("model", "Unknown")
+            return f"{ts} 🚀 Session started (model: {model})"
         return None
 
-    try:
-        data = json.loads(line)
-        msg_type = data.get("type")
+    elif msg_type == "thinking":
+        if msg.get("subtype") == "completed":
+            return f"{ts} 💭 Thinking completed"
+        # Skip delta messages (too spammy)
+        return None
 
-        if msg_type == "system":
-            if data.get("subtype") == "init":
-                model = data.get("model", "Unknown")
-                return f"{format_timestamp(timestamp)} 🚀 Session started (model: {model})"
-            return None
+    elif msg_type == "assistant":
+        text = msg.get("text", "").strip()
+        if text:
+            if len(text) > 200:
+                text = text[:200] + "..."
+            return f"{ts} 🤖 Assistant: {text}"
+        # Check for tool uses
+        tool_uses = msg.get("tool_uses", [])
+        if tool_uses:
+            tool_name = tool_uses[0].get("name", "Unknown")
+            emoji = TOOL_EMOJIS.get(tool_name, "🛠️")
+            return f"{ts} {emoji} Using tool: {tool_name}"
 
-        elif msg_type == "thinking":
-            # Cursor thinking - accumulate but don't spam logs
-            text = data.get("text", "")
-            if data.get("subtype") == "completed":
-                return f"{format_timestamp(timestamp)} 💭 Thinking completed"
-            # Skip delta messages (too spammy)
-            return None
+    elif msg_type == "tool_call":
+        subtype = msg.get("subtype")
+        tool_call = msg.get("tool_call", {})
 
-        elif msg_type == "assistant":
-            msg = data.get("message", {})
-            content = msg.get("content", [])
-            for item in content:
-                if item.get("type") == "text":
-                    text = item.get("text", "").strip()
-                    if text:
-                        # Truncate long messages
-                        if len(text) > 200:
-                            text = text[:200] + "..."
-                        return f"{format_timestamp(timestamp)} 🤖 Assistant: {text}"
-                elif item.get("type") == "tool_use":
-                    tool_name = item.get("name", "Unknown")
-                    emoji = TOOL_EMOJIS.get(tool_name, "🛠️")
-                    return f"{format_timestamp(timestamp)} {emoji} Using tool: {tool_name}"
-
-        elif msg_type == "tool_call":
-            subtype = data.get("subtype")
-            tool_call = data.get("tool_call", {})
-
-            if subtype == "started":
-                # Extract tool name from various formats
-                if "shellToolCall" in tool_call:
-                    cmd = tool_call["shellToolCall"].get("args", {}).get("command", "")[:60]
-                    return f"{format_timestamp(timestamp)} 💻 Running: {cmd}..."
-                elif "readToolCall" in tool_call:
-                    path = tool_call["readToolCall"].get("args", {}).get("path", "")
-                    return f"{format_timestamp(timestamp)} 📖 Reading: {path}"
-                elif "globToolCall" in tool_call:
-                    pattern = tool_call["globToolCall"].get("args", {}).get("globPattern", "")
-                    return f"{format_timestamp(timestamp)} 🔍 Glob: {pattern}"
-                else:
-                    return f"{format_timestamp(timestamp)} 🛠️ Tool call started"
-
-            elif subtype == "completed":
-                # Check for success/failure
-                result = tool_call.get("result", {})
-                if "success" in result:
-                    return f"{format_timestamp(timestamp)} ✅ Tool completed"
-                elif "error" in result:
-                    err = result.get("error", {}).get("message", "Unknown error")[:100]
-                    return f"{format_timestamp(timestamp)} ❌ Tool error: {err}"
-
-        elif msg_type == "user":
-            # Tool result or user message - usually can skip
-            return None
-
-        elif msg_type == "result":
-            # Final result
-            is_error = data.get("is_error", False)
-            duration = data.get("duration_ms", 0)
-            if is_error:
-                result_text = data.get("result", "Unknown error")[:100]
-                return f"{format_timestamp(timestamp)} ❌ Failed ({duration}ms): {result_text}\n__RAW_RESULT_JSON__:{line}"  # noqa: E501
+        if subtype == "started":
+            if "shellToolCall" in tool_call:
+                cmd = tool_call["shellToolCall"].get("args", {}).get("command", "")[:60]
+                return f"{ts} 💻 Running: {cmd}..."
+            elif "readToolCall" in tool_call:
+                path = tool_call["readToolCall"].get("args", {}).get("path", "")
+                return f"{ts} 📖 Reading: {path}"
+            elif "globToolCall" in tool_call:
+                pattern = tool_call["globToolCall"].get("args", {}).get("globPattern", "")
+                return f"{ts} 🔍 Glob: {pattern}"
             else:
-                return f"{format_timestamp(timestamp)} ✅ Completed ({duration}ms)\n__RAW_RESULT_JSON__:{line}"  # noqa: E501
+                return f"{ts} 🛠️ Tool call started"
 
-        elif msg_type == "error":
-            error = data.get("error", {}).get("message", "Unknown error")
-            return f"{format_timestamp(timestamp)} ❌ Error: {error}"
+        elif subtype == "completed":
+            result = tool_call.get("result", {})
+            if "success" in result:
+                return f"{ts} ✅ Tool completed"
+            elif "error" in result:
+                err = result.get("error", {}).get("message", "Unknown error")[:100]
+                return f"{ts} ❌ Tool error: {err}"
 
-        # Unknown type - skip
-        return None
+    elif msg_type == "result":
+        success = msg.get("success", True)
+        duration = msg.get("duration_ms", 0)
+        raw_line = msg.get("raw_line", "")
+        if not success:
+            result_text = (msg.get("result") or "Unknown error")[:100]
+            return f"{ts} ❌ Failed ({duration}ms): {result_text}\n__RAW_RESULT_JSON__:{raw_line}"  # noqa: E501
+        else:
+            return f"{ts} ✅ Completed ({duration}ms)\n__RAW_RESULT_JSON__:{raw_line}"  # noqa: E501
 
-    except json.JSONDecodeError:
-        # Not JSON - return as plain text
-        if line and not line.startswith("{"):
-            return f"{format_timestamp(timestamp)} 💬 {line}"
-        return None
+    elif msg_type == "error":
+        error = msg.get("error", {}).get("message", "Unknown error")
+        return f"{ts} ❌ Error: {error}"
+
+    # Unknown type or user message - skip
+    return None
 
 
 def _reader_thread(pipe: IO[str], line_queue: queue.Queue[str | None]) -> None:
@@ -187,7 +166,7 @@ class ExecutionConfig:
     output_instruction: str | None = None
     allowed_tools: list[str] = field(default_factory=lambda: DEFAULT_ALLOWED_TOOLS.copy())
     timeout_seconds: int = 300
-    cli_tool: str = "claude"  # "claude" or "cursor"
+    cli_tool: str = "claude"
     model: str | None = None  # Override default model for the CLI
     verbose: bool = False  # Stream output in real-time
 
@@ -229,10 +208,7 @@ class ExecutionResult:
 
 
 class UnifiedExecutor:
-    """Unified executor for all CLI execution paths.
-
-    Supports multiple CLI tools (Claude, Cursor) through the strategy pattern.
-    """
+    """Unified executor for all CLI execution paths."""
 
     def __init__(self, log_dir: Path | None = None):
         self.log_dir = log_dir or EMDX_LOG_DIR
@@ -341,7 +317,8 @@ class UnifiedExecutor:
                             break
 
                         stdout_lines.append(line)
-                        formatted = format_stream_line(line, time.time())
+                        parsed = executor.parse_stream_line(line)
+                        formatted = format_stream_message(parsed, time.time()) if parsed else None
                         if formatted:
                             f.write(formatted + "\n")
                             f.flush()
@@ -406,7 +383,8 @@ class UnifiedExecutor:
                             break
 
                         stdout_lines.append(line)
-                        formatted = format_stream_line(line, time.time())
+                        parsed = executor.parse_stream_line(line)
+                        formatted = format_stream_message(parsed, time.time()) if parsed else None
                         if formatted:
                             f.write(formatted + "\n")
                             f.flush()  # Flush immediately for live viewing
