@@ -32,6 +32,7 @@ except ImportError:
     HAS_DOCS = False
     HAS_GROUPS = False
 
+
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
@@ -60,9 +61,7 @@ class ActivityDataLoader:
 
         # Sort: running items first (pinned), then by timestamp descending
         def sort_key(item: ActivityItem) -> tuple:
-            is_running = (
-                item.item_type == "agent_execution" and item.status == "running"
-            )
+            is_running = item.item_type == "agent_execution" and item.status == "running"
             return (
                 0 if is_running else 1,
                 -item.timestamp.timestamp() if item.timestamp else 0,
@@ -252,6 +251,12 @@ class ActivityDataLoader:
                 log_file = row["log_file"]
                 exit_code = row["exit_code"]
                 working_dir = row["working_dir"]
+
+                # Skip completed executions that produced a doc — the doc
+                # already shows in the activity feed (standalone or grouped).
+                # Only keep running/failed executions for visibility.
+                if status == "completed" and doc_id:
+                    continue
 
                 timestamp = parse_datetime(started_at) or datetime.now()
 
