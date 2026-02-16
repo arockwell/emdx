@@ -5,8 +5,9 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import cast
 
+from emdx.ui.types import CascadeRunDict, GroupDict
 from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
@@ -91,7 +92,7 @@ class ActivityDataLoader:
                     item_id=group_id,
                     title=group["name"],
                     timestamp=created,
-                    group=dict(group),
+                    group=cast(GroupDict, dict(group)),
                     doc_count=group["doc_count"],
                     total_cost=group["total_cost_usd"] or 0,
                     total_tokens=group["total_tokens"],
@@ -176,7 +177,7 @@ class ActivityDataLoader:
                     doc_title = run["initial_doc_title"]
                     title = (doc_title or f"Cascade Run #{run_id}")[:40]
                     executions = get_cascade_run_executions(run_id)
-                    run_dict: dict[str, Any] = dict(run)
+                    run_dict = cast(CascadeRunDict, dict(run))
 
                     item = CascadeRunItem(
                         item_id=run_id,
