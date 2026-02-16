@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_doc_datetimes(
-    doc: dict[str, Any], fields: list[str] | None = None,
+    doc: dict[str, Any],
+    fields: list[str] | None = None,
 ) -> dict[str, Any]:
     """Parse datetime string fields in a document dictionary, in place.
 
@@ -62,6 +63,7 @@ def save_document(
         # Add tags if provided - pass connection for atomic transaction
         if tags:
             from emdx.models.tags import add_tags_to_document
+
             add_tags_to_document(doc_id, tags, conn=conn)
 
         # Commit after both document and tags are inserted (atomic transaction)
@@ -728,4 +730,35 @@ def list_recent_documents(
             raw = dict(row)
             _parse_doc_datetimes(raw)
             docs.append(cast(DocumentRow, raw))
+        return docs
+
+
+def get_docs_in_window(hours: int, limit: int = 100) -> list[DocumentListItem]:
+    """Get documents created within a time window.
+
+    Args:
+        hours: Number of hours to look back
+        limit: Maximum number of documents to return
+
+    Returns:
+        List of documents created within the window
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, title, project, created_at, access_count,
+                   parent_id, relationship, archived_at, accessed_at
+            FROM documents
+            WHERE is_deleted = 0
+            AND created_at > datetime('now', ? || ' hours')
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (f"-{hours}", limit),
+        )
+        docs: list[DocumentListItem] = []
+        for row in cursor.fetchall():
+            raw = dict(row)
+            _parse_doc_datetimes(raw, ["created_at", "accessed_at", "archived_at"])
+            docs.append(cast(DocumentListItem, raw))
         return docs
