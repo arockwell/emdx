@@ -103,7 +103,7 @@ class ActivityTree(Tree[ActivityItem]):
         """Get the ID string for an item."""
         if item.item_type == "group":
             return f"#{item.item_id}" if item.item_id else ""
-        elif item.item_type in ("document", "cascade"):
+        elif item.item_type == "document":
             return f"#{item.doc_id}" if getattr(item, "doc_id", None) else ""
         else:
             return f"#{item.item_id}" if item.item_id else ""

@@ -2,9 +2,9 @@
 
 The primary interface for monitoring Claude Code's work:
 - Status bar with active count, docs today, cost, errors, sparkline
-- Activity stream showing cascades, agents, groups, and direct saves
+- Activity stream showing agents, groups, and direct saves
 - Preview pane with document content
-- Hierarchical drill-in for groups and cascade runs
+- Hierarchical drill-in for groups
 
 Uses Textual's Tree widget for native hierarchy, expand/collapse,
 and cursor tracking by node reference — eliminating scroll jumping.
