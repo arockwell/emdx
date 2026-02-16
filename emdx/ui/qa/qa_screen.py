@@ -120,7 +120,7 @@ class QAScreen(HelpMixin, Widget):
 
         yield Static("Ready | Type a question and press Enter", id="qa-status")
         yield Static(
-            "[dim]1[/dim] Activity | [dim]2[/dim] Tasks | "
+            "[dim]1[/dim] Activity | [dim]2[/dim] Tasks | [bold]3[/bold] Q&A | "
             "[dim]/[/dim] input | [dim]s[/dim] save | [dim]c[/dim] clear",
             id="qa-nav",
         )

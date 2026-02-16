@@ -44,7 +44,7 @@ class TaskBrowser(Widget):
         self.task_view = TaskView(id="task-view")
         yield self.task_view
         yield Static(
-            "[dim]1[/dim] Activity │ [bold]2[/bold] Tasks │ "
+            "[dim]1[/dim] Activity │ [bold]2[/bold] Tasks │ [dim]3[/dim] Q&A │ "
             "[dim]j/k[/dim] nav │ [dim]r[/dim] refresh │ [dim]?[/dim] help",
             id="task-help-bar",
         )
