@@ -352,8 +352,8 @@ class UnifiedExecutor:
             else:
                 # Stream output to log file in real-time (without terminal output)
                 # This enables Activity browser to show live logs
-                stdout_lines: list[str] = []
-                stderr_lines: list[str] = []
+                stdout_lines = []
+                stderr_lines = []
                 deadline = start_time + config.timeout_seconds
 
                 with open(log_file, 'w') as f:
@@ -367,7 +367,7 @@ class UnifiedExecutor:
                     )
 
                     # Read stdout via background thread (reliable on macOS)
-                    stdout_q: queue.Queue[str | None] = queue.Queue()
+                    stdout_q = queue.Queue()
                     reader = threading.Thread(
                         target=_reader_thread,
                         args=(process.stdout, stdout_q),
