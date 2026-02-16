@@ -5,8 +5,9 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import cast
 
+from emdx.ui.types import CascadeRunDict, GroupDict
 from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
@@ -31,6 +32,7 @@ except ImportError:
     group_svc = None  # type: ignore[assignment]
     HAS_DOCS = False
     HAS_GROUPS = False
+
 
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
@@ -60,9 +62,7 @@ class ActivityDataLoader:
 
         # Sort: running items first (pinned), then by timestamp descending
         def sort_key(item: ActivityItem) -> tuple:
-            is_running = (
-                item.item_type == "agent_execution" and item.status == "running"
-            )
+            is_running = item.item_type == "agent_execution" and item.status == "running"
             return (
                 0 if is_running else 1,
                 -item.timestamp.timestamp() if item.timestamp else 0,
@@ -92,7 +92,7 @@ class ActivityDataLoader:
                     item_id=group_id,
                     title=group["name"],
                     timestamp=created,
-                    group=dict(group),
+                    group=cast(GroupDict, dict(group)),
                     doc_count=group["doc_count"],
                     total_cost=group["total_cost_usd"] or 0,
                     total_tokens=group["total_tokens"],
@@ -177,7 +177,7 @@ class ActivityDataLoader:
                     doc_title = run["initial_doc_title"]
                     title = (doc_title or f"Cascade Run #{run_id}")[:40]
                     executions = get_cascade_run_executions(run_id)
-                    run_dict: dict[str, Any] = dict(run)
+                    run_dict = cast(CascadeRunDict, dict(run))
 
                     item = CascadeRunItem(
                         item_id=run_id,
@@ -252,6 +252,12 @@ class ActivityDataLoader:
                 log_file = row["log_file"]
                 exit_code = row["exit_code"]
                 working_dir = row["working_dir"]
+
+                # Skip completed executions that produced a doc — the doc
+                # already shows in the activity feed (standalone or grouped).
+                # Only keep running/failed executions for visibility.
+                if status == "completed" and doc_id:
+                    continue
 
                 timestamp = parse_datetime(started_at) or datetime.now()
 

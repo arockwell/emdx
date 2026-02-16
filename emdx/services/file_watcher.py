@@ -1,18 +1,27 @@
 """Cross-platform file watching with fallback to polling."""
 
+from __future__ import annotations
+
 import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from watchdog.events import FileSystemEvent
+    from watchdog.observers import Observer
 
 # Try to use watchdog for efficient file watching
 try:
     from watchdog.events import FileSystemEventHandler  # type: ignore[import-not-found]
-    from watchdog.observers import Observer  # type: ignore[import-not-found]
+    from watchdog.observers import Observer as ObserverClass  # type: ignore[import-not-found]
+
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
+    FileSystemEventHandler = object  # type: ignore[misc,assignment]
+    ObserverClass = None  # type: ignore[misc,assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +32,7 @@ class FileWatcher:
     def __init__(self, file_path: Path, callback: Callable[[], None]):
         self.file_path = file_path
         self.callback = callback
-        self.observer: Any = None
+        self.observer: Observer | None = None
         self.polling_thread: threading.Thread | None = None
         self.stop_event = threading.Event()
 
@@ -47,18 +56,19 @@ class FileWatcher:
 
     def _start_watchdog(self) -> None:
         """Use watchdog for efficient file watching."""
+
         class LogFileHandler(FileSystemEventHandler):
-            def __init__(self, file_path: Path, callback: Callable):
+            def __init__(self, file_path: Path, callback: Callable[[], None]):
                 self.file_path = file_path
                 self.callback = callback
 
-            def on_modified(self, event: Any) -> None:
+            def on_modified(self, event: FileSystemEvent) -> None:
                 if not event.is_directory and Path(event.src_path) == self.file_path:
                     self.callback()
 
         try:
             handler = LogFileHandler(self.file_path, self.callback)
-            self.observer = Observer()
+            self.observer = ObserverClass()
             self.observer.schedule(handler, str(self.file_path.parent), recursive=False)
             self.observer.start()
             logger.debug(f"Started watchdog monitoring for {self.file_path}")
@@ -68,6 +78,7 @@ class FileWatcher:
 
     def _start_polling(self) -> None:
         """Fallback to polling-based watching."""
+
         def poll() -> None:
             last_mtime: float = 0
             last_size: int = 0

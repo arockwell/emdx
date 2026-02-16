@@ -1005,13 +1005,13 @@ def delegate(
         "-s",
         help="Combine parallel outputs with synthesis",
     ),
-    jobs: int = typer.Option(
+    jobs: int | None = typer.Option(
         None,
         "-j",
         "--jobs",
         help="Max parallel tasks (default: auto)",
     ),
-    model: str = typer.Option(
+    model: str | None = typer.Option(
         None,
         "--model",
         "-m",
@@ -1023,7 +1023,7 @@ def delegate(
         "-q",
         help="Suppress metadata on stderr (just content on stdout)",
     ),
-    doc: int = typer.Option(
+    doc: int | None = typer.Option(
         None,
         "--doc",
         "-d",
@@ -1061,12 +1061,12 @@ def delegate(
         "--chain",
         help="Run tasks sequentially, piping output forward",
     ),
-    each: str = typer.Option(
+    each: str | None = typer.Option(
         None,
         "--each",
         help="Shell command to discover items (one per line)",
     ),
-    do: str = typer.Option(
+    do: str | None = typer.Option(
         None,
         "--do",
         help="Template for each discovered item (use {{item}})",

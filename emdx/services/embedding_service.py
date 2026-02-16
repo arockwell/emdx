@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 try:
     import numpy as np
@@ -25,16 +28,16 @@ from ..database import db
 logger = logging.getLogger(__name__)
 
 # Lazy load - model is ~90MB, loads in ~2 seconds
-_model = None
+_model: SentenceTransformer | None = None
 
-def _get_model() -> Any:
+
+def _get_model() -> SentenceTransformer:
     """Lazy load the embedding model."""
     global _model
     if _model is None:
         if not HAS_NUMPY:
             raise ImportError(
-                "numpy is required for embedding features. "
-                "Install it with: pip install 'emdx[ai]'"
+                "numpy is required for embedding features. Install it with: pip install 'emdx[ai]'"
             ) from None
         try:
             from sentence_transformers import SentenceTransformer
@@ -50,6 +53,7 @@ def _get_model() -> Any:
         logger.info("Loaded embedding model: all-MiniLM-L6-v2")
     return _model
 
+
 @dataclass
 class SemanticMatch:
     """A semantically similar document."""
@@ -59,6 +63,7 @@ class SemanticMatch:
     project: str | None
     similarity: float
     snippet: str
+
 
 @dataclass
 class ChunkMatch:
@@ -91,6 +96,7 @@ class EmbeddingStats:
     index_size_bytes: int
     indexed_chunks: int = 0
     chunk_index_size_bytes: int = 0
+
 
 class EmbeddingService:
     """Manages document embeddings for semantic search."""
@@ -174,9 +180,7 @@ class EmbeddingService:
 
             if force:
                 # Get all documents
-                cursor.execute(
-                    "SELECT id, title, content FROM documents WHERE is_deleted = 0"
-                )
+                cursor.execute("SELECT id, title, content FROM documents WHERE is_deleted = 0")
             else:
                 # Only get documents without embeddings
                 cursor.execute(
@@ -236,9 +240,7 @@ class EmbeddingService:
 
         return count
 
-    def search(
-        self, query: str, limit: int = 10, threshold: float = 0.3
-    ) -> list[SemanticMatch]:
+    def search(self, query: str, limit: int = 10, threshold: float = 0.3) -> list[SemanticMatch]:
         """Semantic search across all documents."""
         return self._search_sync(query, limit, threshold)
 
@@ -280,9 +282,7 @@ class EmbeddingService:
                         title=title,
                         project=project,
                         similarity=similarity,
-                        snippet=snippet.replace("\n", " ")[:150] + "..."
-                        if snippet
-                        else "",
+                        snippet=snippet.replace("\n", " ")[:150] + "..." if snippet else "",
                     )
                 )
 
@@ -295,10 +295,9 @@ class EmbeddingService:
     ) -> list[SemanticMatch]:
         """Async semantic search - runs embedding in thread pool to avoid blocking."""
         import asyncio
+
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self._search_sync(query, limit, threshold)
-        )
+        return await loop.run_in_executor(None, lambda: self._search_sync(query, limit, threshold))
 
     def find_similar(self, doc_id: int, limit: int = 5) -> list[SemanticMatch]:
         """Find documents similar to a given document."""
@@ -393,9 +392,7 @@ class EmbeddingService:
         """Delete embedding for a document."""
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM document_embeddings WHERE document_id = ?", (doc_id,)
-            )
+            cursor.execute("DELETE FROM document_embeddings WHERE document_id = ?", (doc_id,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -421,9 +418,7 @@ class EmbeddingService:
 
             if force:
                 # Get all documents
-                cursor.execute(
-                    "SELECT id, title, content FROM documents WHERE is_deleted = 0"
-                )
+                cursor.execute("SELECT id, title, content FROM documents WHERE is_deleted = 0")
             else:
                 # Only get documents without chunk embeddings
                 cursor.execute(
@@ -565,8 +560,6 @@ class EmbeddingService:
         """Delete chunk embeddings for a document."""
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM chunk_embeddings WHERE document_id = ?", (doc_id,)
-            )
+            cursor.execute("DELETE FROM chunk_embeddings WHERE document_id = ?", (doc_id,))
             conn.commit()
             return cursor.rowcount > 0

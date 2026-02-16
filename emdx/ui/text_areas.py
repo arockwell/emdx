@@ -11,6 +11,7 @@ from textual.widgets import TextArea
 
 # Set up logging using shared utility
 from ..utils.logging_utils import setup_tui_logging
+from .protocols import SelectionModeHost, VimEditorHost
 
 logger, _key_logger = setup_tui_logging(__name__)
 
@@ -18,7 +19,7 @@ logger, _key_logger = setup_tui_logging(__name__)
 class SelectionTextArea(TextArea):
     """TextArea that captures 's' key to exit selection mode."""
 
-    def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, app_instance: SelectionModeHost, *args: Any, **kwargs: Any) -> None:
         # Textual 6.x changed defaults - explicitly set the behavior we want
         kwargs.setdefault("soft_wrap", False)
         kwargs.setdefault("show_line_numbers", True)
@@ -32,11 +33,24 @@ class SelectionTextArea(TextArea):
             # - 's' and 'escape' to exit selection mode
             # - 'ctrl+c' to copy
             # - Arrow keys and mouse for navigation/selection
-            allowed_keys = {'escape', 'ctrl+c', 'up', 'down', 'left', 'right',
-                          'page_up', 'page_down', 'home', 'end',
-                          'shift+up', 'shift+down', 'shift+left', 'shift+right'}
+            allowed_keys = {
+                "escape",
+                "ctrl+c",
+                "up",
+                "down",
+                "left",
+                "right",
+                "page_up",
+                "page_down",
+                "home",
+                "end",
+                "shift+up",
+                "shift+down",
+                "shift+left",
+                "shift+right",
+            }
 
-            if event.key == "escape" or (hasattr(event, 'character') and event.character == "s"):
+            if event.key == "escape" or (hasattr(event, "character") and event.character == "s"):
                 # Exit selection mode
                 event.stop()
                 event.prevent_default()
@@ -68,7 +82,7 @@ class VimEditTextArea(TextArea):
     VIM_VISUAL_LINE = "V-LINE"
     VIM_COMMAND = "COMMAND"
 
-    def __init__(self, app_instance: Any, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, app_instance: VimEditorHost, *args: Any, **kwargs: Any) -> None:
         # Textual 6.x changed defaults - explicitly set the behavior we want
         kwargs.setdefault("soft_wrap", False)
         kwargs.setdefault("show_line_numbers", True)
@@ -85,7 +99,9 @@ class VimEditTextArea(TextArea):
         self.yanked_text = ""
         self.command_buffer = ""  # For vim commands like :w, :q, etc.
         # Store original content to detect changes
-        self.original_content = kwargs.get('text', '') if 'text' in kwargs else args[0] if args else ''  # noqa: E501
+        self.original_content = (
+            kwargs.get("text", "") if "text" in kwargs else args[0] if args else ""
+        )  # noqa: E501
 
         # Set initial cursor style for NORMAL mode (solid, non-blinking)
         self.show_cursor = True
@@ -109,16 +125,16 @@ class VimEditTextArea(TextArea):
     def _update_line_numbers(self) -> None:
         """Update line numbers widget if it exists."""
         try:
-            if hasattr(self, 'line_numbers_widget') and self.line_numbers_widget:
+            if hasattr(self, "line_numbers_widget") and self.line_numbers_widget:
                 # Use selection.end for cursor position as it's more reliable
-                if hasattr(self, 'selection') and self.selection:
+                if hasattr(self, "selection") and self.selection:
                     current_line = self.selection.end[0]
-                elif hasattr(self, 'cursor_location'):
+                elif hasattr(self, "cursor_location"):
                     current_line = self.cursor_location[0]
                 else:
                     current_line = 0
 
-                total_lines = len(self.text.split('\n'))
+                total_lines = len(self.text.split("\n"))
 
                 # Pass the raw cursor position - no adjustment
                 # The issue might be in the display, not the data
@@ -127,10 +143,10 @@ class VimEditTextArea(TextArea):
                 # Update line number widget width if parent has the method
                 parent = self.parent
                 while parent:
-                    if hasattr(parent, '_update_line_number_width'):
+                    if hasattr(parent, "_update_line_number_width"):
                         parent._update_line_number_width()
                         break
-                    parent = parent.parent if hasattr(parent, 'parent') else None
+                    parent = parent.parent if hasattr(parent, "parent") else None
         except Exception as e:
             logger.debug(f"Error updating line numbers: {e}")
 
@@ -154,7 +170,9 @@ class VimEditTextArea(TextArea):
                     # Use call_after_refresh to avoid blocking the UI
                     # Call the appropriate exit method
                     try:
-                        self.app_instance.call_after_refresh(self.app_instance.action_save_and_exit_edit)
+                        self.app_instance.call_after_refresh(
+                            self.app_instance.action_save_and_exit_edit
+                        )
                     except Exception:
                         # Fallback - just call the action method directly
                         self.app_instance.action_save_and_exit_edit()
@@ -182,7 +200,7 @@ class VimEditTextArea(TextArea):
     def _handle_normal_mode(self, event: events.Key) -> None:
         """Handle keys in NORMAL mode."""
         key = event.key
-        char = event.character if hasattr(event, 'character') else None
+        char = event.character if hasattr(event, "character") else None
 
         # Handle Ctrl+S to save
         if key == "ctrl+s":
@@ -194,7 +212,7 @@ class VimEditTextArea(TextArea):
         event.prevent_default()
 
         # Handle repeat counts (e.g., 3j to move down 3 lines)
-        if char and char.isdigit() and (self.repeat_count or char != '0'):
+        if char and char.isdigit() and (self.repeat_count or char != "0"):
             self.repeat_count += char
             return
 
@@ -344,10 +362,17 @@ class VimEditTextArea(TextArea):
                 title_input = self.app_instance.query_one("#title-input")
                 title_input.focus()
                 # Update status based on mode
-                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:  # noqa: E501
-                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")  # noqa: E501
+                new_doc_msg = (
+                    "NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel"
+                )
+                edit_doc_msg = "EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel"
+                if (
+                    hasattr(self.app_instance, "new_document_mode")
+                    and self.app_instance.new_document_mode
+                ):
+                    self.app_instance._update_vim_status(new_doc_msg)
                 else:
-                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")  # noqa: E501
+                    self.app_instance._update_vim_status(edit_doc_msg)
                 event.stop()
                 return
             except Exception as e:
@@ -372,10 +397,17 @@ class VimEditTextArea(TextArea):
                 title_input = self.app_instance.query_one("#title-input")
                 title_input.focus()
                 # Update status based on mode
-                if hasattr(self.app_instance, 'new_document_mode') and self.app_instance.new_document_mode:  # noqa: E501
-                    self.app_instance._update_vim_status("NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel")  # noqa: E501
+                new_doc_msg = (
+                    "NEW DOCUMENT | Enter title | Tab=switch to content | Ctrl+S=save | ESC=cancel"
+                )
+                edit_doc_msg = "EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel"
+                if (
+                    hasattr(self.app_instance, "new_document_mode")
+                    and self.app_instance.new_document_mode
+                ):
+                    self.app_instance._update_vim_status(new_doc_msg)
                 else:
-                    self.app_instance._update_vim_status("EDIT DOCUMENT | Tab=switch fields | Ctrl+S=save | ESC=cancel")  # noqa: E501
+                    self.app_instance._update_vim_status(edit_doc_msg)
                 event.stop()
                 return
             except Exception as e:
@@ -442,7 +474,12 @@ class VimEditTextArea(TextArea):
                 self._update_cursor_style()
                 self.command_buffer = ""
                 self.app_instance._update_vim_status("NORMAL | ESC=exit")
-        elif hasattr(event, 'character') and event.character and hasattr(event, 'is_printable') and event.is_printable:  # noqa: E501
+        elif (
+            hasattr(event, "character")
+            and event.character
+            and hasattr(event, "is_printable")
+            and event.is_printable
+        ):  # noqa: E501
             # Add character to command buffer
             self.command_buffer += event.character
             self.app_instance._update_vim_status(f"COMMAND {self.command_buffer}")
@@ -453,10 +490,10 @@ class VimEditTextArea(TextArea):
 
         if cmd in ["w", "write"]:
             # Save without exiting
-            if hasattr(self.app_instance, 'save_document_without_exit'):
+            if hasattr(self.app_instance, "save_document_without_exit"):
                 # Try new save method
                 self.app_instance.save_document_without_exit()
-            elif hasattr(self.app_instance, 'action_save_and_exit_edit'):
+            elif hasattr(self.app_instance, "action_save_and_exit_edit"):
                 # Fall back to save and exit, but return to edit mode
                 self.app_instance.action_save_and_exit_edit()
                 return
@@ -469,15 +506,18 @@ class VimEditTextArea(TextArea):
             # Quit without saving (check for changes)
             if self.text != self.original_content:
                 # Show error - changes not saved
-                self.app_instance._update_vim_status("No write since last change (add ! to override)")  # noqa: E501
+                self.app_instance._update_vim_status(
+                    "No write since last change (add ! to override)"
+                )  # noqa: E501
                 self.command_buffer = ""
                 return
             else:
                 self.app_instance.action_save_and_exit_edit()
         elif cmd in ["q!", "quit!"]:
             # Force quit without saving - use the exit method
-            if hasattr(self.app_instance, 'exit_edit_mode'):
+            if hasattr(self.app_instance, "exit_edit_mode"):
                 import asyncio
+
                 asyncio.create_task(self.app_instance.exit_edit_mode())
             else:
                 self.app_instance.action_save_and_exit_edit()
@@ -486,9 +526,9 @@ class VimEditTextArea(TextArea):
             self.app_instance.action_save_and_exit_edit()
         elif cmd in ["wa", "wall"]:
             # Save all (just save current in our case)
-            if hasattr(self.app_instance, 'action_save_document'):
+            if hasattr(self.app_instance, "action_save_document"):
                 self.app_instance.action_save_document()
-            elif hasattr(self.app_instance, 'action_save'):
+            elif hasattr(self.app_instance, "action_save"):
                 self.app_instance.action_save()
             else:
                 # Fallback: just update status to indicate save attempt
@@ -507,7 +547,7 @@ class VimEditTextArea(TextArea):
     def _move_word_forward(self, count: int = 1) -> None:
         """Move cursor forward by word boundaries."""
         text = self.text
-        lines = text.split('\n')
+        lines = text.split("\n")
         row, col = self.cursor_location
 
         for _ in range(count):
@@ -517,7 +557,7 @@ class VimEditTextArea(TextArea):
             line = lines[row]
             # Find next word boundary
             remaining = line[col:]
-            match = re.search(r'\b\w', remaining)
+            match = re.search(r"\b\w", remaining)
 
             if match:
                 col += match.start()
@@ -527,7 +567,7 @@ class VimEditTextArea(TextArea):
                 col = 0
                 if row < len(lines):
                     # Find first word on next line
-                    match = re.search(r'\b\w', lines[row])
+                    match = re.search(r"\b\w", lines[row])
                     if match:
                         col = match.start()
 
@@ -536,7 +576,7 @@ class VimEditTextArea(TextArea):
     def _move_word_backward(self, count: int = 1) -> None:
         """Move cursor backward by word boundaries."""
         text = self.text
-        lines = text.split('\n')
+        lines = text.split("\n")
         row, col = self.cursor_location
 
         for _ in range(count):
@@ -547,7 +587,7 @@ class VimEditTextArea(TextArea):
                 line = lines[row]
                 # Find previous word boundary
                 before = line[:col]
-                matches = list(re.finditer(r'\b\w', before))
+                matches = list(re.finditer(r"\b\w", before))
                 if matches:
                     col = matches[-1].start()
                 else:
@@ -563,7 +603,7 @@ class VimEditTextArea(TextArea):
     def _move_word_end(self, count: int = 1) -> None:
         """Move cursor to end of word."""
         text = self.text
-        lines = text.split('\n')
+        lines = text.split("\n")
         row, col = self.cursor_location
 
         for _ in range(count):
@@ -573,7 +613,7 @@ class VimEditTextArea(TextArea):
             line = lines[row]
             # Find end of current/next word
             remaining = line[col:]
-            match = re.search(r'\w+', remaining)
+            match = re.search(r"\w+", remaining)
 
             if match:
                 col += match.end() - 1
@@ -582,7 +622,7 @@ class VimEditTextArea(TextArea):
                 row += 1
                 col = 0
                 if row < len(lines):
-                    match = re.search(r'\w+', lines[row])
+                    match = re.search(r"\w+", lines[row])
                     if match:
                         col = match.end() - 1
 
@@ -590,17 +630,17 @@ class VimEditTextArea(TextArea):
 
     def _delete_line(self, count: int = 1) -> None:
         """Delete entire line(s)."""
-        lines = self.text.split('\n')
+        lines = self.text.split("\n")
         current_line = self.cursor_location[0]
 
         if current_line < len(lines):
             # Yank before deleting
             end_line = min(current_line + count, len(lines))
-            self.yanked_text = '\n'.join(lines[current_line:end_line]) + '\n'
+            self.yanked_text = "\n".join(lines[current_line:end_line]) + "\n"
 
             # Create new text without the deleted lines
             new_lines = lines[:current_line] + lines[end_line:]
-            new_text = '\n'.join(new_lines)
+            new_text = "\n".join(new_lines)
 
             # Replace all text
             self.text = new_text
@@ -615,12 +655,12 @@ class VimEditTextArea(TextArea):
 
     def _yank_line(self, count: int = 1) -> None:
         """Yank (copy) entire line(s)."""
-        lines = self.text.split('\n')
+        lines = self.text.split("\n")
         current_line = self.cursor_location[0]
 
         if current_line < len(lines):
             end_line = min(current_line + count, len(lines))
-            self.yanked_text = '\n'.join(lines[current_line:end_line]) + '\n'
+            self.yanked_text = "\n".join(lines[current_line:end_line]) + "\n"
 
     def _cursor_to_line_start(self) -> None:
         """Move cursor to start of current line."""
@@ -629,7 +669,7 @@ class VimEditTextArea(TextArea):
 
     def _cursor_to_line_end(self) -> None:
         """Move cursor to end of current line."""
-        lines = self.text.split('\n')
+        lines = self.text.split("\n")
         row, _ = self.cursor_location
         if row < len(lines):
             self.cursor_location = (row, len(lines[row]))
@@ -640,7 +680,7 @@ class VimEditTextArea(TextArea):
 
     def _cursor_to_end(self) -> None:
         """Move cursor to end of document."""
-        lines = self.text.split('\n')
+        lines = self.text.split("\n")
         last_line = len(lines) - 1
         self.cursor_location = (last_line, len(lines[last_line]))
 
@@ -653,12 +693,15 @@ class VimEditTextArea(TextArea):
             logger.debug("Could not delete right (at boundary): %s", e)
 
     def _clear_title_selection(self, title_input: Any) -> None:
-        """Clear selection in title input."""
+        """Clear selection in title input (expects Input widget)."""
         try:
             # Position cursor at end without selection
             title_input.cursor_position = len(title_input.value)
-            if hasattr(title_input, 'selection'):
-                title_input.selection = (title_input.cursor_position, title_input.cursor_position)
+            if hasattr(title_input, "selection"):
+                title_input.selection = (
+                    title_input.cursor_position,
+                    title_input.cursor_position,
+                )
         except Exception as e:
             logger.debug("Could not clear title selection: %s", e)
 

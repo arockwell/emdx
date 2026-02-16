@@ -58,7 +58,6 @@ class DocumentMetadata:
 
     title: str
     project: str | None = None
-    tags: list[str] | None = None
 
 
 def get_input_content(input_arg: str | None) -> InputContent:
@@ -194,22 +193,27 @@ def save(
     ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
     group_id: int | None = typer.Option(
-        None, "--group", "-g",
-        help="Add document to group",
-        envvar="EMDX_GROUP_ID"
+        None, "--group", "-g", help="Add document to group", envvar="EMDX_GROUP_ID"
     ),
     group_role: str = typer.Option(
-        "member", "--group-role",
-        help="Role in group (primary, exploration, synthesis, variant, member)"
+        "member",
+        "--group-role",
+        help="Role in group (primary, exploration, synthesis, variant, member)",
     ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
-    suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),  # noqa: E501
+    suggest_tags: bool = typer.Option(
+        False, "--suggest-tags", help="Show tag suggestions after saving"
+    ),  # noqa: E501
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
-    gist: bool = typer.Option(False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"),  # noqa: E501
+    gist: bool = typer.Option(
+        False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"
+    ),  # noqa: E501
     public: bool = typer.Option(False, "--public", help="Make gist public (default: secret)"),
-    secret: bool = typer.Option(False, "--secret", help="Make gist secret (default, for explicitness)"),  # noqa: E501
+    secret: bool = typer.Option(
+        False, "--secret", help="Make gist secret (default, for explicitness)"
+    ),  # noqa: E501
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
 ) -> None:
@@ -248,6 +252,7 @@ def save(
     # Step 6.5: Add to group if specified
     if group_id is not None:
         from emdx.database import groups
+
         group = groups.get_group(group_id)
         if group:
             success = groups.add_document_to_group(group_id, doc_id, role=group_role)
@@ -296,7 +301,9 @@ def save(
 
         token = get_github_auth()
         if not token:
-            console.print("[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]")  # noqa: E501
+            console.print(
+                "[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]"
+            )  # noqa: E501
         else:
             filename = sanitize_filename(metadata.title)
             description = f"{metadata.title} - emdx knowledge base"
@@ -334,7 +341,9 @@ def save(
                     wb.open(gist_url)
                     console.print("   [green]✓ Opened in browser[/green]")
             else:
-                console.print("[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]")  # noqa: E501
+                console.print(
+                    "[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]"
+                )  # noqa: E501
 
 
 @app.command()
@@ -346,36 +355,44 @@ def find(
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
     fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy search"),
-    tags: str | None = typer.Option(
-        None, "--tags", "-t", help="Filter by tags (comma-separated)"
-    ),
+    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
     no_tags: str | None = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
-    ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),  # noqa: E501
+    ids_only: bool = typer.Option(
+        False, "--ids-only", help="Output only document IDs (for piping)"
+    ),  # noqa: E501
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
     created_after: str | None = typer.Option(
-        None, "--created-after",
+        None,
+        "--created-after",
         help="Show documents created after date (YYYY-MM-DD)",
     ),
     created_before: str | None = typer.Option(
-        None, "--created-before",
+        None,
+        "--created-before",
         help="Show documents created before date (YYYY-MM-DD)",
     ),
     modified_after: str | None = typer.Option(
-        None, "--modified-after",
+        None,
+        "--modified-after",
         help="Show documents modified after date (YYYY-MM-DD)",
     ),
     modified_before: str | None = typer.Option(
-        None, "--modified-before",
+        None,
+        "--modified-before",
         help="Show documents modified before date (YYYY-MM-DD)",
     ),
     mode: str | None = typer.Option(
-        None, "--mode", "-m",
+        None,
+        "--mode",
+        "-m",
         help="Search mode: keyword (FTS5), semantic (embeddings), "
         "hybrid (both, default if index exists)",
     ),
     extract: bool = typer.Option(
-        False, "--extract", "-e",
+        False,
+        "--extract",
+        "-e",
         help="Show matching chunk text instead of document snippets",
     ),
 ) -> None:
@@ -417,9 +434,20 @@ def find(
         # For tag-only or date-filtered searches, use the old FTS path
         if not use_hybrid:
             _find_keyword_search(
-                search_query, project, limit, snippets, fuzzy, tags, any_tags,
-                no_tags, ids_only, json_output, created_after, created_before,
-                modified_after, modified_before
+                search_query,
+                project,
+                limit,
+                snippets,
+                fuzzy,
+                tags,
+                any_tags,
+                no_tags,
+                ids_only,
+                json_output,
+                created_after,
+                created_before,
+                modified_after,
+                modified_before,
             )
             return
 
@@ -454,14 +482,12 @@ def find(
             no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
             if no_tag_list:
                 hybrid_results = [
-                    r for r in hybrid_results
-                    if not any(tag in r.tags for tag in no_tag_list)
+                    r for r in hybrid_results if not any(tag in r.tags for tag in no_tag_list)
                 ]
 
         if not hybrid_results:
             console.print(
-                f"[yellow]No results found for '[/yellow]{search_query}"
-                "[yellow]'[/yellow]"
+                f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
             )
             return
 
@@ -489,9 +515,7 @@ def find(
                 if result.chunk_heading:
                     output_result["chunk_heading"] = result.chunk_heading
                 if snippets or extract:
-                    output_result["snippet"] = (
-                        result.chunk_text or result.snippet
-                    )
+                    output_result["snippet"] = result.chunk_text or result.snippet
                 output_results.append(output_result)
             print(json.dumps(output_results, indent=2))
             return
@@ -512,8 +536,7 @@ def find(
                 )
             else:
                 console.print(
-                    f"[bold cyan]#{result.doc_id}[/bold cyan] "
-                    f"[bold]{result.title}[/bold]"
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]"
                 )
 
             # Display metadata
@@ -536,9 +559,9 @@ def find(
                     chunk_preview += "..."
                 console.print(f"[dim]{chunk_preview}[/dim]")
             elif snippets and result.snippet:
-                snippet = result.snippet.replace(
-                    "<b>", "[bold yellow]"
-                ).replace("</b>", "[/bold yellow]")
+                snippet = result.snippet.replace("<b>", "[bold yellow]").replace(
+                    "</b>", "[/bold yellow]"
+                )
                 console.print(f"[dim]...{snippet}...[/dim]")
 
             if i < len(hybrid_results):
@@ -552,11 +575,20 @@ def find(
 
 
 def _find_keyword_search(
-    search_query: str, project: str | None, limit: int, snippets: bool,
-    fuzzy: bool, tags: str | None, any_tags: bool, no_tags: str | None,
-    ids_only: bool, json_output: bool, created_after: str | None,
-    created_before: str | None, modified_after: str | None,
-    modified_before: str | None
+    search_query: str,
+    project: str | None,
+    limit: int,
+    snippets: bool,
+    fuzzy: bool,
+    tags: str | None,
+    any_tags: bool,
+    no_tags: str | None,
+    ids_only: bool,
+    json_output: bool,
+    created_after: str | None,
+    created_before: str | None,
+    modified_after: str | None,
+    modified_before: str | None,
 ) -> None:
     """Original keyword-based search for tag/date filtered queries."""
     # Handle tag-based search
@@ -574,15 +606,19 @@ def _find_keyword_search(
 
             # Get documents matching search query
             search_results = search_documents(
-                search_query, project=project, limit=limit * 2, fuzzy=fuzzy,
-                created_after=created_after, created_before=created_before,
-                modified_after=modified_after, modified_before=modified_before
+                search_query,
+                project=project,
+                limit=limit * 2,
+                fuzzy=fuzzy,
+                created_after=created_after,
+                created_before=created_before,
+                modified_after=modified_after,
+                modified_before=modified_before,
             )
 
             # Combine: only show documents that match both criteria
             results: list[dict[str, Any]] = [
-                dict(doc) for doc in search_results
-                if doc["id"] in tag_doc_ids
+                dict(doc) for doc in search_results if doc["id"] in tag_doc_ids
             ][:limit]
 
             if not results:
@@ -594,8 +630,12 @@ def _find_keyword_search(
         else:
             # Tag-only search
             results = [
-                dict(d) for d in search_by_tags(
-                    tag_list, mode=tag_mode, project=project, limit=limit,
+                dict(d)
+                for d in search_by_tags(
+                    tag_list,
+                    mode=tag_mode,
+                    project=project,
+                    limit=limit,
                 )
             ]
             if not results:
@@ -611,11 +651,19 @@ def _find_keyword_search(
         # If we have no search query but have date filters, use a wildcard
         effective_query = search_query if search_query else "*"
 
-        results = [dict(r) for r in search_documents(
-            effective_query, project=project, limit=limit, fuzzy=fuzzy,
-            created_after=created_after, created_before=created_before,
-            modified_after=modified_after, modified_before=modified_before
-        )]
+        results = [
+            dict(r)
+            for r in search_documents(
+                effective_query,
+                project=project,
+                limit=limit,
+                fuzzy=fuzzy,
+                created_after=created_after,
+                created_before=created_before,
+                modified_after=modified_after,
+                modified_before=modified_before,
+            )
+        ]
 
         if not results:
             if search_query:
@@ -658,7 +706,7 @@ def _find_keyword_search(
     if ids_only:
         # Output only IDs, one per line
         for result in results:
-            print(result['id'])
+            print(result["id"])
         return
 
     if json_output:
@@ -689,9 +737,7 @@ def _find_keyword_search(
                 # Clean snippet of HTML tags
                 snippet = result["snippet"]
                 if snippet:
-                    output_result["snippet"] = (
-                        snippet.replace("<b>", "").replace("</b>", "")
-                    )
+                    output_result["snippet"] = snippet.replace("<b>", "").replace("</b>", "")
 
             output_results.append(output_result)
 
@@ -720,9 +766,7 @@ def _find_keyword_search(
         search_desc.append(f"modified {' and '.join(date_range)}")
 
     search_description = " ".join(search_desc) if search_desc else "all documents"
-    console.print(
-        f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n"
-    )
+    console.print(f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n")
 
     for i, result in enumerate(results, 1):
         # Display result header
@@ -753,11 +797,7 @@ def _find_keyword_search(
         if snippets and result.get("snippet"):
             # Clean up the snippet (remove HTML tags from highlighting)
             raw_snippet = result["snippet"] or ""
-            snippet = (
-                raw_snippet
-                .replace("<b>", "[bold yellow]")
-                .replace("</b>", "[/bold yellow]")
-            )
+            snippet = raw_snippet.replace("<b>", "[bold yellow]").replace("</b>", "[/bold yellow]")
             console.print(f"[dim]...{snippet}...[/dim]")
 
         # Add spacing between results
@@ -776,12 +816,8 @@ def view(
     rich_mode: bool = typer.Option(
         False, "--rich", help="Rich formatted output with colors and panel header"
     ),
-    no_pager: bool = typer.Option(
-        False, "--no-pager", help="Disable pager (for piping output)"
-    ),
-    no_header: bool = typer.Option(
-        False, "--no-header", help="Hide document header information"
-    ),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
+    no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """View a document from the knowledge base"""
@@ -831,6 +867,7 @@ def view(
                 print(doc["content"])
             elif rich_mode:
                 from emdx.ui.markdown_config import MarkdownConfig
+
                 console.print(MarkdownConfig.create_markdown(doc["content"]))
             else:
                 print(doc["content"])
@@ -852,9 +889,7 @@ def view(
         raise typer.Exit(1) from e
 
 
-def _print_view_header_plain(
-    doc: Mapping[str, Any], doc_tags: list[str]
-) -> None:
+def _print_view_header_plain(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
     """Print a plain text header for machine-friendly output."""
     print(f"#{doc['id']}  {doc['title']}")
 
@@ -874,9 +909,7 @@ def _print_view_header_plain(
     print("---")
 
 
-def _print_view_header_rich(
-    doc: Mapping[str, Any], doc_tags: list[str]
-) -> None:
+def _print_view_header_rich(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
     """Print a rich panel header for document view, matching the TUI."""
     content = doc.get("content", "")
     word_count = len(content.split())
@@ -884,10 +917,7 @@ def _print_view_header_rich(
     line_count = content.count("\n") + 1 if content else 0
 
     lines = []
-    lines.append(
-        f"[bold cyan]#{doc['id']}[/bold cyan]  "
-        f"[bold]{doc['title']}[/bold]"
-    )
+    lines.append(f"[bold cyan]#{doc['id']}[/bold cyan]  [bold]{doc['title']}[/bold]")
     lines.append("")
 
     if doc.get("project"):
@@ -1140,7 +1170,9 @@ def delete(
         # Report results
         if deleted_count > 0:
             if hard:
-                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")  # noqa: E501
+                console.print(
+                    f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]"
+                )  # noqa: E501
             else:
                 console.print(f"\n[green]✅ Moved {deleted_count} document(s) to trash[/green]")
                 console.print("[dim]💡 Use 'emdx trash' to view deleted documents[/dim]")

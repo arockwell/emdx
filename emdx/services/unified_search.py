@@ -5,19 +5,42 @@ Orchestrates FTS5, tag-based, and semantic search into a single interface.
 Supports query parsing with special syntax for different search modes.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Any
+from typing import TYPE_CHECKING, TypedDict
 
 from ..database import db
+
+if TYPE_CHECKING:
+    from .embedding_service import EmbeddingService, SemanticMatch
 from ..database.search import search_documents
 from ..models.tags import get_tags_for_documents, search_by_tags
 from ..utils.datetime_utils import parse_datetime
 
 logger = logging.getLogger(__name__)
+
+
+class FuzzyMatchDoc(TypedDict):
+    """Document data used in fuzzy matching."""
+
+    id: int
+    title: str
+    project: str | None
+    created_at: str | None
+    updated_at: str | None
+
+
+class PopularTagDict(TypedDict):
+    """Popular tag with count."""
+
+    name: str
+    count: int
+
 
 @dataclass
 class SearchQuery:
@@ -34,6 +57,7 @@ class SearchQuery:
     project: str | None = None
     limit: int = 50
 
+
 @dataclass
 class SearchResult:
     """A single search result with unified scoring."""
@@ -47,6 +71,7 @@ class SearchResult:
     project: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
 
 class UnifiedSearchService:
     """
@@ -64,10 +89,10 @@ class UnifiedSearchService:
     """
 
     def __init__(self) -> None:
-        self._embedding_service: Any = None  # Lazy load
+        self._embedding_service: EmbeddingService | None = None  # Lazy load
 
     @property
-    def embedding_service(self) -> Any:
+    def embedding_service(self) -> EmbeddingService | None:
         """Lazy load the embedding service."""
         if self._embedding_service is None:
             try:
@@ -106,7 +131,9 @@ class UnifiedSearchService:
                 query.tag_mode = "any"
             tag_str = tags_match.group(2)
             query.tags = [t.strip() for t in tag_str.split(",") if t.strip()]
-            remaining_text = remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]  # noqa: E501
+            remaining_text = (
+                remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]
+            )  # noqa: E501
 
         # Extract @tag patterns (alternative syntax)
         at_tags = re.findall(r"@(\w+)", remaining_text)
@@ -123,25 +150,33 @@ class UnifiedSearchService:
         after_match = re.search(r"after:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if after_match:
             query.created_after = parse_datetime(after_match.group(1))
-            remaining_text = remaining_text[: after_match.start()] + remaining_text[after_match.end() :]  # noqa: E501
+            remaining_text = (
+                remaining_text[: after_match.start()] + remaining_text[after_match.end() :]
+            )  # noqa: E501
 
         # Extract before: date
         before_match = re.search(r"before:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if before_match:
             query.created_before = parse_datetime(before_match.group(1))
-            remaining_text = remaining_text[: before_match.start()] + remaining_text[before_match.end() :]  # noqa: E501
+            remaining_text = (
+                remaining_text[: before_match.start()] + remaining_text[before_match.end() :]
+            )  # noqa: E501
 
         # Extract modified: date
         modified_match = re.search(r"modified:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if modified_match:
             query.modified_after = parse_datetime(modified_match.group(1))
-            remaining_text = remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]  # noqa: E501
+            remaining_text = (
+                remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]
+            )  # noqa: E501
 
         # Extract project: filter
         project_match = re.search(r"project:(\S+)", remaining_text, re.IGNORECASE)
         if project_match:
             query.project = project_match.group(1)
-            remaining_text = remaining_text[: project_match.start()] + remaining_text[project_match.end() :]  # noqa: E501
+            remaining_text = (
+                remaining_text[: project_match.start()] + remaining_text[project_match.end() :]
+            )  # noqa: E501
 
         # Clean up remaining text
         query.text = " ".join(remaining_text.split()).strip()
@@ -361,7 +396,7 @@ class UnifiedSearchService:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
-    def _convert_semantic_matches(self, matches: list[Any]) -> list[SearchResult]:
+    def _convert_semantic_matches(self, matches: list[SemanticMatch]) -> list[SearchResult]:
         """Convert semantic matches to SearchResult objects."""
         results = []
         for match in matches:
@@ -406,7 +441,7 @@ class UnifiedSearchService:
             rows = cursor.fetchall()
 
         query_lower = query.lower()
-        scored: list[tuple[float, dict[str, Any]]] = []
+        scored: list[tuple[float, FuzzyMatchDoc]] = []
 
         for row in rows:
             doc_id = row[0]
@@ -515,7 +550,7 @@ class UnifiedSearchService:
 
         return results
 
-    def get_popular_tags(self, limit: int = 15) -> list[dict[str, Any]]:
+    def get_popular_tags(self, limit: int = 15) -> list[PopularTagDict]:
         """Get popular tags for empty state suggestions."""
         with db.get_connection() as conn:
             cursor = conn.cursor()

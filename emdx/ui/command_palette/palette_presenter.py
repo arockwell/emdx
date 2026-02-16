@@ -4,15 +4,21 @@ Presenter for the command palette.
 Handles search logic, result ranking, and action dispatch.
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .palette_commands import CommandContext, PaletteCommand, get_command_registry
 
+if TYPE_CHECKING:
+    from emdx.services.unified_search import UnifiedSearchService
+
 logger = logging.getLogger(__name__)
+
 
 class ResultType(Enum):
     """Types of results in the palette."""
@@ -22,6 +28,7 @@ class ResultType(Enum):
     SCREEN = "screen"
     TAG = "tag"
     RECENT = "recent"
+
 
 @dataclass
 class PaletteResultItem:
@@ -35,6 +42,7 @@ class PaletteResultItem:
     score: float  # Relevance score for sorting
     data: dict[str, Any] = field(default_factory=dict)  # Type-specific payload
 
+
 @dataclass
 class PaletteState:
     """Current state of the palette."""
@@ -44,6 +52,7 @@ class PaletteState:
     selected_index: int = 0
     is_searching: bool = False
     recent_items: list[PaletteResultItem] = field(default_factory=list)
+
 
 class PalettePresenter:
     """
@@ -66,12 +75,12 @@ class PalettePresenter:
         self.context = context or CommandContext.GLOBAL
         self._state = PaletteState()
         self._command_registry = get_command_registry()
-        self._search_service: Any = None  # Lazy load
+        self._search_service: UnifiedSearchService | None = None  # Lazy load
         self._history: list[PaletteResultItem] = []
         self._max_history = 10
 
     @property
-    def search_service(self) -> Any:
+    def search_service(self) -> UnifiedSearchService | None:
         """Lazy load the unified search service."""
         if self._search_service is None:
             try:
@@ -126,7 +135,7 @@ class PalettePresenter:
             except Exception as e:
                 logger.debug(f"Could not load recent documents: {e}")
 
-        return items[:self._max_history]
+        return items[: self._max_history]
 
     async def search(self, query: str) -> None:
         """
@@ -430,7 +439,7 @@ class PalettePresenter:
         # Trim
         self._history = self._history[: self._max_history]
 
-    async def execute_selected(self, app: Any) -> dict[str, Any] | None:
+    async def execute_selected(self, app: object) -> dict[str, Any] | None:
         """
         Execute the selected result.
 

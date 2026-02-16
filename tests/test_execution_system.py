@@ -460,11 +460,11 @@ class TestExecutionService:
     """Tests for the execution service facade."""
 
     def test_get_agent_executions(self, isolate_test_database):
-        """Test getting agent/delegate executions."""
+        """Test getting non-cascade executions."""
         from emdx.models.executions import create_execution
         from emdx.services.execution_service import get_agent_executions
 
-        # Create agent and delegate executions
+        # Create various executions (all non-cascade)
         create_execution(
             doc_id=None,
             doc_title="Agent: test task",
@@ -477,21 +477,21 @@ class TestExecutionService:
         )
         create_execution(
             doc_id=None,
-            doc_title="Regular execution",
-            log_file="/tmp/regular.log",
+            doc_title="Any Type Analysis [1/5]",
+            log_file="/tmp/analysis.log",
         )
 
-        # Get agent executions from recent time
+        # Get all non-cascade executions from recent time
         from datetime import datetime, timezone
 
         cutoff = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
         agents = get_agent_executions(cutoff, limit=10)
 
-        # Should only get Agent: and Delegate: prefixed ones
+        # Should get all non-cascade executions regardless of title
         titles = [a["doc_title"] for a in agents]
         assert any("Agent:" in t for t in titles)
         assert any("Delegate:" in t for t in titles)
-        assert not any(t == "Regular execution" for t in titles)
+        assert any("Any Type Analysis" in t for t in titles)
 
     def test_get_execution_log_file(self, isolate_test_database):
         """Test getting log file for running execution."""

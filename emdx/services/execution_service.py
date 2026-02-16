@@ -45,7 +45,6 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
             FROM executions e
             LEFT JOIN tasks t ON t.execution_id = e.id
             WHERE e.started_at > ?
-              AND (e.doc_title LIKE 'Agent:%' OR e.doc_title LIKE 'Delegate:%')
               AND e.cascade_run_id IS NULL
             ORDER BY e.started_at DESC
             LIMIT ?
@@ -58,30 +57,30 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
     for row in rows:
         # Use execution.doc_id if set, otherwise fall back to task.output_doc_id
         doc_id = row[1] or row[13]
-        results.append({
-            "id": row[0],
-            "doc_id": doc_id,
-            "doc_title": row[2],
-            "status": row[3],
-            "started_at": row[4],
-            "completed_at": row[5],
-            "log_file": row[6],
-            "exit_code": row[7],
-            "working_dir": row[8],
-            "cost_usd": row[9] or 0.0,
-            "tokens_used": row[10] or 0,
-            "input_tokens": row[11] or 0,
-            "output_tokens": row[12] or 0,
-            "tags": row[14],
-            "source_doc_id": row[15],
-        })
+        results.append(
+            {
+                "id": row[0],
+                "doc_id": doc_id,
+                "doc_title": row[2],
+                "status": row[3],
+                "started_at": row[4],
+                "completed_at": row[5],
+                "log_file": row[6],
+                "exit_code": row[7],
+                "working_dir": row[8],
+                "cost_usd": row[9] or 0.0,
+                "tokens_used": row[10] or 0,
+                "input_tokens": row[11] or 0,
+                "output_tokens": row[12] or 0,
+                "tags": row[14],
+                "source_doc_id": row[15],
+            }
+        )
     return results
 
 
 def get_execution_log_file(doc_title_pattern: str) -> str | None:
-    """Find the log file for a running execution matching a title pattern.
-
-"""
+    """Find the log file for a running execution matching a title pattern."""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """

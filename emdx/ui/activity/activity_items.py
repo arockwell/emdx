@@ -7,7 +7,9 @@ replacing the stringly-typed item_type field with proper polymorphism.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
+
+from emdx.ui.types import AgentExecutionDict, CascadeRunDict, GroupDict
 
 
 @dataclass
@@ -60,6 +62,7 @@ class ActivityItem(ABC):
             Tuple of (content_markdown, header_text)
         """
         ...
+
 
 @dataclass
 class DocumentItem(ActivityItem):
@@ -131,15 +134,13 @@ class DocumentItem(ActivityItem):
 
             # Check if content already has title header
             content_stripped = content.lstrip()
-            if not (
-                content_stripped.startswith(f"# {title}")
-                or content_stripped.startswith("# ")
-            ):
+            if not (content_stripped.startswith(f"# {title}") or content_stripped.startswith("# ")):
                 content = f"# {title}\n\n{content}"
 
             return content, f"📄 #{self.doc_id}"
 
         return "", "PREVIEW"
+
 
 @dataclass
 class CascadeRunItem(ActivityItem):
@@ -149,7 +150,7 @@ class CascadeRunItem(ActivityItem):
     with all associated stage transitions shown as children.
     """
 
-    cascade_run: dict[str, Any] = field(default_factory=dict)
+    cascade_run: CascadeRunDict = field(default_factory=dict)  # type: ignore[assignment]
     status: str = "running"
     pipeline_name: str = "default"
     current_stage: str = ""
@@ -223,7 +224,8 @@ class CascadeRunItem(ActivityItem):
         run = self.cascade_run
 
         content_parts = [f"# Cascade Run #{run.get('id', '?')}\n"]
-        content_parts.append(f"\n**Pipeline:** {run.get('pipeline_display_name', run.get('pipeline_name', 'default'))}")  # noqa: E501
+        pipeline_name = run.get("pipeline_display_name", run.get("pipeline_name", "default"))
+        content_parts.append(f"\n**Pipeline:** {pipeline_name}")
         content_parts.append(f"\n**Status:** {self.status}")
 
         if self.current_stage:
@@ -243,6 +245,7 @@ class CascadeRunItem(ActivityItem):
 
         content = "".join(content_parts)
         return content, f"🌊 Cascade #{run.get('id', '?')}"
+
 
 @dataclass
 class CascadeStageItem(ActivityItem):
@@ -295,11 +298,12 @@ class CascadeStageItem(ActivityItem):
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
 
+
 @dataclass
 class GroupItem(ActivityItem):
     """A document group (batch, round, initiative) in the activity stream."""
 
-    group: dict[str, Any] = field(default_factory=dict)
+    group: GroupDict = field(default_factory=dict)  # type: ignore[assignment]
     doc_count: int = 0
     total_cost: float = 0.0
     total_tokens: int = 0
@@ -354,7 +358,7 @@ class GroupItem(ActivityItem):
                     item_id=cg["id"],
                     title=cg["name"],
                     timestamp=self.timestamp,
-                    group=dict(cg),
+                    group=cast(GroupDict, dict(cg)),
                     doc_count=cg["doc_count"],
                     total_cost=cg["total_cost_usd"],
                     total_tokens=cg["total_tokens"],
@@ -425,6 +429,7 @@ class GroupItem(ActivityItem):
         content = "".join(content_parts)
         return content, f"{self.type_icon} Group #{self.group.get('id', '?')}"
 
+
 @dataclass
 class AgentExecutionItem(ActivityItem):
     """A standalone agent execution (from `emdx delegate` command).
@@ -432,7 +437,7 @@ class AgentExecutionItem(ActivityItem):
     These are direct CLI delegate runs not part of any workflow or cascade.
     """
 
-    execution: dict[str, Any] = field(default_factory=dict)
+    execution: AgentExecutionDict = field(default_factory=dict)  # type: ignore[assignment]
     status: str = "running"
     doc_id: int | None = None
     log_file: str = ""
@@ -482,12 +487,11 @@ class AgentExecutionItem(ActivityItem):
                 try:
                     content = log_path.read_text()
                     # Show last 100 lines max
-                    lines = content.split('\n')
+                    lines = content.split("\n")
                     if len(lines) > 100:
-                        content = '\n'.join(lines[-100:])
+                        content = "\n".join(lines[-100:])
                     return f"```\n{content}\n```", f"{self.type_icon} Log"
                 except Exception:
                     pass
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
-
