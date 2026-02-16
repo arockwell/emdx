@@ -46,6 +46,17 @@ poetry run ruff check .         # Verify zero errors remain
 - When writing SQL strings that exceed 100 chars, break across lines or use implicit string concatenation
 - All `--flags` must come BEFORE positional arguments in `emdx delegate` calls
 
+## CLI Output Mode Convention
+
+- Default CLI output should be plain text (no Rich markup) for machine/pipe friendliness
+- `--rich` flag enables colored Rich output (panels, markdown rendering, syntax highlighting)
+- `--json` flag for structured machine output
+- Use `print()` for plain output, `console.print()` only in `--rich` mode
+
+## Rich Console Gotcha
+
+- `console.pager()` defaults to `styles=False`, stripping all colors. Always use `console.pager(styles=True)` when rendering Rich markup inside a pager.
+
 ## Claude Code Integration - MANDATORY
 
 ### Session Start Protocol
