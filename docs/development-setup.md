@@ -155,11 +155,12 @@ tests/
 ├── test_commands_core.py    # Core command tests (save, find, view)
 ├── test_commands_tags.py    # Tag command tests
 ├── test_commands_groups.py  # Group command tests
+├── test_task_commands.py    # Task command tests
 ├── test_database.py         # Database operations
 ├── test_documents.py        # Document CRUD
 ├── test_core.py             # Core CLI commands
 ├── test_log_browser.py      # TUI component tests
-└── ...                      # 38 test files total (see testing.md)
+└── ...                      # 52 test files total (see testing.md)
 ```
 
 ### **Common Test Patterns**
@@ -222,7 +223,7 @@ def test_log_stream():
 1. Create command function in appropriate `commands/` module
 2. Add typer decorators and type hints
 3. Register with main CLI app in `main.py`
-4. Add tests in `tests/test_commands/`
+4. Add tests in `tests/` (e.g., `tests/test_commands_<name>.py`)
 5. Update CLI documentation
 
 ### **Adding a New UI Component**

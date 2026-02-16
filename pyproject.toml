@@ -36,17 +36,16 @@ pyyaml = ">=6.0"
 scikit-learn = {version = "^1.6.0", optional = true}
 datasketch = {version = "^1.6.0", optional = true}
 sentence-transformers = {version = "^5.2.2", optional = true}
-anthropic = {version = "^0.79.0", optional = true}
 numpy = {version = "^2.4.2", optional = true}
 google-api-python-client = {version = "^2.100.0", optional = true}
 google-auth-httplib2 = {version = "^0.3.0", optional = true}
 google-auth-oauthlib = {version = "^1.2.0", optional = true}
 
 [tool.poetry.extras]
-ai = ["sentence-transformers", "scikit-learn", "numpy", "anthropic"]
+ai = ["sentence-transformers", "scikit-learn", "numpy"]
 similarity = ["scikit-learn", "datasketch", "numpy"]
 google = ["google-api-python-client", "google-auth-httplib2", "google-auth-oauthlib"]
-all = ["sentence-transformers", "scikit-learn", "numpy", "anthropic",
+all = ["sentence-transformers", "scikit-learn", "numpy",
        "datasketch", "google-api-python-client", "google-auth-httplib2",
        "google-auth-oauthlib"]
 
@@ -98,8 +97,6 @@ module = [
     "numpy.*",
     "datasketch",
     "datasketch.*",
-    "anthropic",
-    "anthropic.*",
     "sentence_transformers",
     "sentence_transformers.*",
     "psutil",

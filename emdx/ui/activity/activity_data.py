@@ -202,6 +202,7 @@ class ActivityDataLoader:
                         "working_dir": working_dir,
                         "cost_usd": row.get("cost_usd", 0.0),
                         "tokens_used": row.get("tokens_used", 0),
+                        "output_text": row.get("output_text"),
                     },
                     status=status or "unknown",
                     doc_id=doc_id,

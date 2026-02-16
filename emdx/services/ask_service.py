@@ -3,22 +3,17 @@ Q&A service for EMDX - RAG over your knowledge base.
 
 Uses semantic search when available (embeddings indexed),
 falls back to keyword search (FTS) otherwise.
+
+Uses the Claude CLI (via UnifiedExecutor) for answer generation.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import shutil
 from dataclasses import dataclass
 from typing import Any
-
-try:
-    import anthropic
-
-    HAS_ANTHROPIC = True
-except ImportError:
-    anthropic = None  # type: ignore[assignment]
-    HAS_ANTHROPIC = False
 
 from ..database import db
 from ..utils.emoji_aliases import normalize_tag_to_emoji
@@ -27,6 +22,50 @@ logger = logging.getLogger(__name__)
 
 # Context budget: ~12000 chars (~3000 tokens) max for LLM context
 CONTEXT_BUDGET_CHARS = 12000
+
+ANSWER_TIMEOUT = 120  # seconds
+
+
+def _has_claude_cli() -> bool:
+    """Check if the Claude CLI is available."""
+    return shutil.which("claude") is not None
+
+
+def _execute_claude_prompt(
+    system_prompt: str,
+    user_message: str,
+    title: str,
+    model: str | None = None,
+) -> str:
+    """Execute a Q&A prompt via the Claude CLI.
+
+    Combines system and user messages into a single prompt for --print mode.
+
+    Returns:
+        The answer text from Claude.
+
+    Raises:
+        RuntimeError: If the CLI execution fails.
+    """
+    from .unified_executor import ExecutionConfig, UnifiedExecutor
+
+    prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
+
+    config = ExecutionConfig(
+        prompt=prompt,
+        title=title,
+        allowed_tools=[],
+        timeout_seconds=ANSWER_TIMEOUT,
+        model=model,
+    )
+
+    executor = UnifiedExecutor()
+    result = executor.execute(config)
+
+    if not result.success:
+        raise RuntimeError(f"Answer generation failed: {result.error_message or 'unknown error'}")
+
+    return result.output_content or ""
 
 
 @dataclass
@@ -49,18 +88,7 @@ class AskService:
 
     def __init__(self, model: str | None = None):
         self.model = model or self.DEFAULT_MODEL
-        self._client: Any = None
         self._embedding_service: Any = None
-
-    def _get_client(self) -> Any:
-        """Lazy load Anthropic client."""
-        if not HAS_ANTHROPIC:
-            raise ImportError(
-                "anthropic is required for AI Q&A features. Install it with: pip install 'emdx[ai]'"
-            )
-        if self._client is None:
-            self._client = anthropic.Anthropic()
-        return self._client
 
     def _get_embedding_service(self) -> Any:
         if self._embedding_service is None:
@@ -380,12 +408,18 @@ class AskService:
             return self._retrieve_keyword(question, limit, project, tags, recent_days)
 
     def _generate_answer(self, question: str, docs: list[tuple[int, str, str]]) -> tuple[str, int]:
-        """Generate answer from retrieved documents using Claude."""
+        """Generate answer from retrieved documents using Claude CLI."""
         if not docs:
             return (
                 "I couldn't find any relevant documents to answer this question. "
                 "Try rephrasing or check if you have documents on this topic.",
                 0,
+            )
+
+        if not _has_claude_cli():
+            raise ImportError(
+                "Claude CLI is required for AI Q&A features. "
+                "Install it from: https://docs.anthropic.com/claude-code"
             )
 
         # Build context from documents with budget enforcement
@@ -413,35 +447,32 @@ class AskService:
         context = "\n\n---\n\n".join(context_parts)
         context_size = len(context)
 
-        # Generate answer with Claude
+        # Generate answer via Claude CLI
+        system_prompt = (
+            "You answer questions using the provided knowledge base context.\n\n"
+            "Rules:\n"
+            "- Only answer based on the provided documents\n"
+            "- Cite document IDs when referencing information "
+            '(e.g., "According to Document #42...")\n'
+            "- If the context doesn't contain relevant information, say so clearly\n"
+            "- Be concise but complete\n"
+            "- If documents contain conflicting information, note the discrepancy"
+        )
+        user_message = (
+            f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
+        )
+
         try:
-            client = self._get_client()
-            response = client.messages.create(
+            result = _execute_claude_prompt(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                title=f"Ask: {question[:50]}",
                 model=self.model,
-                max_tokens=1000,
-                system="""You answer questions using the provided knowledge base context.
-
-Rules:
-- Only answer based on the provided documents
-- Cite document IDs when referencing information (e.g., "According to Document #42...")
-- If the context doesn't contain relevant information, say so clearly
-- Be concise but complete
-- If documents contain conflicting information, note the discrepancy""",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}",  # noqa: E501
-                    }
-                ],
             )
-
-            return response.content[0].text, context_size
-
-        except Exception as e:
-            if HAS_ANTHROPIC and isinstance(e, anthropic.APIError):
-                logger.error(f"Claude API error: {e}")
-                return f"Error generating answer: {e}", context_size
-            raise
+            return result, context_size
+        except RuntimeError as e:
+            logger.error(f"Claude CLI error: {e}")
+            return f"Error generating answer: {e}", context_size
 
     def ask_with_context(
         self,
@@ -455,6 +486,12 @@ Rules:
 
         The additional_context is prepended to the retrieved documents.
         """
+        if not _has_claude_cli():
+            raise ImportError(
+                "Claude CLI is required for AI Q&A features. "
+                "Install it from: https://docs.anthropic.com/claude-code"
+            )
+
         # Retrieve relevant docs
         if self._has_embeddings():
             docs, method = self._retrieve_semantic(question, limit, project)
@@ -470,46 +507,40 @@ Rules:
 
         context = "\n\n---\n\n".join(context_parts)
 
-        # Generate answer
+        # Generate answer via Claude CLI
+        system_prompt = (
+            "You answer questions using the provided context which may include:\n"
+            "1. External resource data (Jira tickets, GitHub issues, etc.)\n"
+            "2. Documents from the user's knowledge base\n\n"
+            "Rules:\n"
+            "- Cite sources clearly (Jira tickets by ID, documents by #ID)\n"
+            "- If sources conflict, note the discrepancy\n"
+            "- Be concise but complete"
+        )
+        user_message = f"Context:\n\n{context}\n\n---\n\nQuestion: {question}"
+
         try:
-            client = self._get_client()
-            response = client.messages.create(
+            answer_text = _execute_claude_prompt(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                title=f"Ask (with context): {question[:40]}",
                 model=self.model,
-                max_tokens=1000,
-                system="""You answer questions using the provided context which may include:
-1. External resource data (Jira tickets, GitHub issues, etc.)
-2. Documents from the user's knowledge base
-
-Rules:
-- Cite sources clearly (Jira tickets by ID, documents by #ID)
-- If sources conflict, note the discrepancy
-- Be concise but complete""",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Context:\n\n{context}\n\n---\n\nQuestion: {question}",
-                    }
-                ],
             )
-
             return Answer(
-                text=response.content[0].text,
+                text=answer_text,
                 sources=[d[0] for d in docs],
                 source_titles=[(d[0], d[1]) for d in docs],
                 method=method,
                 context_size=len(context),
                 confidence=self._calculate_confidence(len(docs)),
             )
-
-        except Exception as e:
-            if HAS_ANTHROPIC and isinstance(e, anthropic.APIError):
-                logger.error(f"Claude API error: {e}")
-                return Answer(
-                    text=f"Error generating answer: {e}",
-                    sources=[d[0] for d in docs],
-                    source_titles=[(d[0], d[1]) for d in docs],
-                    method=method,
-                    context_size=len(context),
-                    confidence=self._calculate_confidence(len(docs)),
-                )
-            raise
+        except RuntimeError as e:
+            logger.error(f"Claude CLI error: {e}")
+            return Answer(
+                text=f"Error generating answer: {e}",
+                sources=[d[0] for d in docs],
+                source_titles=[(d[0], d[1]) for d in docs],
+                method=method,
+                context_size=len(context),
+                confidence=self._calculate_confidence(len(docs)),
+            )

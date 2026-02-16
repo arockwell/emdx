@@ -30,6 +30,7 @@ class Execution:
     tokens_used: int | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    output_text: str | None = None
 
     @property
     def duration(self) -> float | None:
@@ -107,7 +108,7 @@ def get_execution(exec_id: int) -> Execution | None:
         cursor.execute(
             """
             SELECT id, doc_id, doc_title, status, started_at, completed_at,
-                   log_file, exit_code, working_dir, pid
+                   log_file, exit_code, working_dir, pid, output_text
             FROM executions WHERE id = ?
         """,
             (exec_id,),
@@ -131,7 +132,8 @@ def get_execution(exec_id: int) -> Execution | None:
             log_file=row[6],
             exit_code=row[7],
             working_dir=row[8],
-            pid=row[9] if len(row) > 9 else None,  # Handle old records without PID
+            pid=row[9] if len(row) > 9 else None,
+            output_text=row[10] if len(row) > 10 else None,
         )
 
 
@@ -142,7 +144,7 @@ def get_recent_executions(limit: int = 20) -> list[Execution]:
         cursor.execute(
             """
             SELECT id, doc_id, doc_title, status, started_at, completed_at,
-                   log_file, exit_code, working_dir, pid
+                   log_file, exit_code, working_dir, pid, output_text
             FROM executions
             ORDER BY id DESC
             LIMIT ?
@@ -168,6 +170,7 @@ def get_recent_executions(limit: int = 20) -> list[Execution]:
                     exit_code=row[7],
                     working_dir=row[8],
                     pid=row[9] if len(row) > 9 else None,
+                    output_text=row[10] if len(row) > 10 else None,
                 )
             )
 
@@ -181,7 +184,7 @@ def get_running_executions() -> list[Execution]:
         cursor.execute(
             """
             SELECT id, doc_id, doc_title, status, started_at, completed_at,
-                   log_file, exit_code, working_dir, pid
+                   log_file, exit_code, working_dir, pid, output_text
             FROM executions
             WHERE status = 'running'
             ORDER BY started_at DESC
@@ -206,6 +209,7 @@ def get_running_executions() -> list[Execution]:
                     exit_code=row[7],
                     working_dir=row[8],
                     pid=row[9] if len(row) > 9 else None,
+                    output_text=row[10] if len(row) > 10 else None,
                 )
             )
 
@@ -253,6 +257,7 @@ ALLOWED_EXECUTION_COLUMNS = frozenset(
         "tokens_used",
         "input_tokens",
         "output_tokens",
+        "output_text",
     }
 )
 
@@ -347,7 +352,7 @@ def get_stale_executions(timeout_seconds: int = 1800) -> list[Execution]:
         cursor.execute(
             """
             SELECT id, doc_id, doc_title, status, started_at, completed_at,
-                   log_file, exit_code, working_dir, pid
+                   log_file, exit_code, working_dir, pid, output_text
             FROM executions
             WHERE status = 'running'
             AND datetime('now') > datetime(started_at, ?)
@@ -374,6 +379,7 @@ def get_stale_executions(timeout_seconds: int = 1800) -> list[Execution]:
                     exit_code=row[7],
                     working_dir=row[8],
                     pid=row[9] if len(row) > 9 else None,
+                    output_text=row[10] if len(row) > 10 else None,
                 )
             )
 
