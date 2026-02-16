@@ -41,18 +41,23 @@ def extract_output_doc_id(log_file: Path) -> int | None:
         rich_codes = re.compile(r'\[\d+(?:;\d+)*m')
         clean_content = rich_codes.sub('', clean_content)
 
+        # Strip markdown bold (**text**) and backtick (`text`) markers
+        clean_content = clean_content.replace('**', '')
+        clean_content = clean_content.replace('`', '')
+
         # Look for document creation patterns (check LAST match to get final save)
         patterns = [
             r'saved as document #(\d+)',  # Agent natural language
             r'Saved as #(\d+)',           # CLI output
             r'Created document #(\d+)',
-            r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',  # Agent output (with optional "created" and markdown bold)  # noqa: E501
-            r'\*\*Document ID:\*\*\s*(\d+)',  # Cursor markdown: **Document ID:** 5714
+            r'Document saved[:\s]+#?(\d+)',  # "Document saved: #6436"
+            r'Document ID(?:\s+created)?[:\s]*#?(\d+)',  # "Document ID: 123"
             r'document ID[:\s]+#?(\d+)',
             r'doc_id[:\s]+(\d+)',
             r'✅ Saved as\s*#(\d+)',      # With emoji
-            r'doc ID\s*`(\d+)`',          # Markdown backtick format: doc ID `123`
-            r'Saved to EMDX as.*?(\d+)',  # "Saved to EMDX as **doc ID `5704`**"
+            r'doc ID\s*(\d+)',            # "doc ID 123" or "doc ID `123`" (backticks stripped)
+            r'Saved to EMDX as.*?(\d+)',  # "Saved to EMDX as doc ID 5704"
+            r'saved as #(\d+)',           # Generic catch-all
         ]
 
         # Find ALL matches and return the LAST one (most likely the final output)
