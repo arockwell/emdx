@@ -178,14 +178,38 @@ def view(
         meta.append(f"Category: {task['epic_key']}")
     if task.get("parent_task_id"):
         meta.append(f"Epic: #{task['parent_task_id']}")
-    if task.get("source_doc_id"):
-        meta.append(f"Doc: #{task['source_doc_id']}")
     if task.get("priority") and task["priority"] != 3:
         meta.append(f"Priority: {task['priority']}")
     console.print(f"[dim]{' | '.join(meta)}[/dim]")
 
     if task.get("created_at"):
         console.print(f"[dim]Created: {task['created_at']}[/dim]")
+
+    # Linked documents
+    from emdx.models.documents import get_document
+
+    source_id = task.get("source_doc_id")
+    output_id = task.get("output_doc_id")
+    if source_id or output_id:
+        console.print()
+        if source_id:
+            source_doc = get_document(source_id)
+            if source_doc:
+                console.print(
+                    f"  [dim]Input:[/dim]  #{source_id} "
+                    f"[cyan]{source_doc['title']}[/cyan]"
+                )
+            else:
+                console.print(f"  [dim]Input:[/dim]  #{source_id} [dim](deleted)[/dim]")
+        if output_id:
+            output_doc = get_document(output_id)
+            if output_doc:
+                console.print(
+                    f"  [dim]Output:[/dim] #{output_id} "
+                    f"[cyan]{output_doc['title']}[/cyan]"
+                )
+            else:
+                console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
 
     # Description
     if task.get("description"):
