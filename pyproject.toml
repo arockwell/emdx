@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "emdx"
 version = "0.16.0"
-description = "Documentation Index Management System - A powerful knowledge base for developers"
+description = "A knowledge base that AI agents can read, write, and search — and so can you"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/arockwell/emdx"
 repository = "https://github.com/arockwell/emdx"
 documentation = "https://github.com/arockwell/emdx#readme"
-keywords = ["knowledge-base", "documentation", "cli", "sqlite", "full-text-search"]
+keywords = ["knowledge-base", "ai-agents", "claude", "cli", "sqlite"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
