@@ -766,6 +766,7 @@ class ActivityView(HelpMixin, Widget):
                 from emdx.utils.stream_json_parser import parse_and_format_live_logs
 
                 formatted = parse_and_format_live_logs(initial)
+                formatted = [ln for ln in formatted if "__RAW_RESULT_JSON__:" not in ln]
                 for line in formatted[-50:]:
                     preview_log.write(line)
                 preview_log.scroll_end(animate=False)
@@ -778,6 +779,12 @@ class ActivityView(HelpMixin, Widget):
 
     def _handle_log_content(self, content: str) -> None:
         """Handle new log content from stream - LIVE LOGS formatted."""
+        # Filter out raw result JSON markers from live display
+        content = "\n".join(
+            ln for ln in content.split("\n") if not ln.startswith("__RAW_RESULT_JSON__:")
+        )
+        if not content.strip():
+            return
 
         def update_ui() -> None:
             try:

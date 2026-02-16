@@ -41,7 +41,7 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
             SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at,
                    e.completed_at, e.log_file, e.exit_code, e.working_dir,
                    e.cost_usd, e.tokens_used, e.input_tokens, e.output_tokens,
-                   t.output_doc_id, t.tags, t.source_doc_id
+                   t.output_doc_id, t.tags, t.source_doc_id, e.output_text
             FROM executions e
             LEFT JOIN tasks t ON t.execution_id = e.id
             WHERE e.started_at > ?
@@ -73,6 +73,7 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
                 "output_tokens": row[12] or 0,
                 "tags": row[14],
                 "source_doc_id": row[15],
+                "output_text": row[16],
             }
         )
     return results
