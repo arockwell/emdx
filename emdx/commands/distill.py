@@ -173,7 +173,7 @@ def distill(
 
     # Import synthesis service (optional dependency)
     try:
-        from ..services.synthesis_service import SynthesisService
+        from ..services.synthesis_service import DistillService
     except ImportError:
         console.print(
             "[red]Anthropic SDK is required for distill command.[/red]\n"
@@ -217,7 +217,7 @@ def distill(
 
     # Perform synthesis
     try:
-        service = SynthesisService()
+        service = DistillService()
         result = service.synthesize_documents(
             documents=documents,
             topic=topic,

@@ -23,12 +23,15 @@ from emdx.commands.delegate import (
     SingleResult,
     _extract_pr_url,
     _load_doc_context,
+    _make_output_file_id,
+    _make_output_file_path,
     _make_pr_instruction,
     _resolve_task,
     _run_chain,
     _run_discovery,
     _run_parallel,
     _run_single,
+    _save_output_fallback,
     _slugify_title,
     delegate,
 )
@@ -1040,8 +1043,8 @@ class TestDelegateCommand:
 
         # Worktree should be created even though --worktree not set
         mock_create_wt.assert_called_once_with("develop")
-        # Worktree should NOT be cleaned up when --pr is set
-        mock_cleanup_wt.assert_not_called()
+        # Worktree IS cleaned up — branch is pushed to remote for PRs
+        mock_cleanup_wt.assert_called_once_with("/tmp/worktree")
 
     @patch("emdx.commands.delegate._run_parallel")
     def test_synthesize_flag_passed_to_parallel(self, mock_run_parallel):
@@ -1392,3 +1395,248 @@ class TestErrorHandling:
                 each=None,
                 do=None,
             )
+
+
+# =============================================================================
+# Tests for output file helpers (kink 1 — file-based output fallback)
+# =============================================================================
+
+
+class TestOutputFileId:
+    """Tests for _make_output_file_id — generates traceable IDs for output files."""
+
+    def test_uses_worktree_basename(self):
+        """When working_dir is a worktree path, extract its basename."""
+        result = _make_output_file_id(
+            "/Users/alex/dev/worktrees/emdx-worktree-123-456-789", seq=1
+        )
+        assert result == "emdx-worktree-123-456-789"
+
+    def test_falls_back_to_pid_seq_timestamp(self):
+        """When working_dir is not a worktree path, use pid-seq-timestamp."""
+        result = _make_output_file_id("/some/regular/path", seq=5)
+        parts = result.split("-")
+        assert len(parts) == 3
+        # First part is PID (int), second is seq, third is timestamp
+        assert parts[1] == "5"
+
+    def test_none_working_dir(self):
+        """When working_dir is None, use pid-seq-timestamp."""
+        result = _make_output_file_id(None, seq=0)
+        parts = result.split("-")
+        assert len(parts) == 3
+        assert parts[1] == "0"
+
+
+class TestMakeOutputFilePath:
+    """Tests for _make_output_file_path — builds /tmp path for output file."""
+
+    def test_path_in_tmp(self):
+        path = _make_output_file_path("emdx-worktree-123-456-789")
+        assert str(path).startswith("/tmp/")
+        assert "emdx-delegate-" in str(path)
+
+    def test_md_extension(self):
+        path = _make_output_file_path("test-id")
+        assert str(path).endswith(".md")
+
+    def test_contains_file_id(self):
+        path = _make_output_file_path("my-unique-id")
+        assert "my-unique-id" in str(path)
+
+
+class TestSaveOutputFallback:
+    """Tests for _save_output_fallback — three-tier fallback save."""
+
+    @patch("emdx.commands.delegate.save_document")
+    def test_prefers_file_over_content(self, mock_save, tmp_path):
+        """File content takes priority over output_content."""
+        output_file = tmp_path / "output.md"
+        output_file.write_text("file content")
+        mock_save.return_value = 42
+
+        doc_id = _save_output_fallback(
+            output_file=output_file,
+            output_content="captured content",
+            title="Test",
+            tags=["test"],
+        )
+
+        assert doc_id == 42
+        mock_save.assert_called_once()
+        call_kwargs = mock_save.call_args[1]
+        assert call_kwargs["content"] == "file content"
+
+    @patch("emdx.commands.delegate.save_document")
+    def test_falls_back_to_content(self, mock_save, tmp_path):
+        """When file doesn't exist, falls back to output_content."""
+        output_file = tmp_path / "nonexistent.md"
+        mock_save.return_value = 43
+
+        doc_id = _save_output_fallback(
+            output_file=output_file,
+            output_content="captured content",
+            title="Test",
+            tags=["test"],
+        )
+
+        assert doc_id == 43
+        call_kwargs = mock_save.call_args[1]
+        assert call_kwargs["content"] == "captured content"
+
+    def test_returns_none_when_nothing_available(self, tmp_path):
+        """When no file and no content, returns None without saving."""
+        output_file = tmp_path / "nonexistent.md"
+
+        doc_id = _save_output_fallback(
+            output_file=output_file,
+            output_content=None,
+            title="Test",
+            tags=["test"],
+        )
+
+        assert doc_id is None
+
+    def test_returns_none_for_empty_content(self, tmp_path):
+        """Whitespace-only content is treated as empty."""
+        output_file = tmp_path / "nonexistent.md"
+
+        doc_id = _save_output_fallback(
+            output_file=output_file,
+            output_content="   \n  ",
+            title="Test",
+            tags=["test"],
+        )
+
+        assert doc_id is None
+
+    @patch("emdx.commands.delegate.save_document")
+    def test_skips_empty_file(self, mock_save, tmp_path):
+        """Empty file is skipped, falls back to content."""
+        output_file = tmp_path / "empty.md"
+        output_file.write_text("")
+        mock_save.return_value = 44
+
+        doc_id = _save_output_fallback(
+            output_file=output_file,
+            output_content="fallback content",
+            title="Test",
+            tags=["test"],
+        )
+
+        assert doc_id == 44
+        call_kwargs = mock_save.call_args[1]
+        assert call_kwargs["content"] == "fallback content"
+
+    @patch("emdx.commands.delegate.save_document")
+    def test_handles_save_failure(self, mock_save, tmp_path):
+        """When save_document raises, returns None gracefully."""
+        output_file = tmp_path / "output.md"
+        output_file.write_text("good content")
+        mock_save.side_effect = Exception("DB error")
+
+        doc_id = _save_output_fallback(
+            output_file=output_file,
+            output_content=None,
+            title="Test",
+            tags=["test"],
+        )
+
+        assert doc_id is None
+
+
+class TestRunSingleFallback:
+    """Tests for _run_single fallback integration."""
+
+    @patch("emdx.commands.delegate._save_output_fallback")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_fallback_called_when_no_doc_id(
+        self, mock_executor_cls, mock_create, mock_update,
+        mock_print, mock_fallback
+    ):
+        """When executor returns no doc_id, fallback is attempted."""
+        mock_create.return_value = 1
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=100,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=None,
+            output_content="some captured output",
+        )
+        mock_executor_cls.return_value = mock_executor
+        mock_fallback.return_value = 99
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+        )
+
+        mock_fallback.assert_called_once()
+        assert result.doc_id == 99
+
+    @patch("emdx.commands.delegate._save_output_fallback")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_fallback_not_called_when_doc_id_present(
+        self, mock_executor_cls, mock_create, mock_update,
+        mock_print, mock_fallback
+    ):
+        """When executor returns a doc_id, fallback is NOT called."""
+        mock_create.return_value = 1
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=100,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=42,
+        )
+        mock_executor_cls.return_value = mock_executor
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+        )
+
+        mock_fallback.assert_not_called()
+        assert result.doc_id == 42
+
+    @patch("emdx.commands.delegate._save_output_fallback")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.UnifiedExecutor")
+    def test_fallback_returns_none_still_fails(
+        self, mock_executor_cls, mock_create, mock_update, mock_fallback
+    ):
+        """When fallback also returns None, doc_id stays None."""
+        mock_create.return_value = 1
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = ExecutionResult(
+            success=True,
+            execution_id=100,
+            log_file=Path("/tmp/test.log"),
+            output_doc_id=None,
+        )
+        mock_executor_cls.return_value = mock_executor
+        mock_fallback.return_value = None
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+        )
+
+        assert result.doc_id is None

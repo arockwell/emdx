@@ -1,4 +1,4 @@
-"""Tests for the distill command and SynthesisService."""
+"""Tests for the distill command and DistillService."""
 
 import re
 from unittest.mock import MagicMock, patch
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from emdx.services.synthesis_service import Audience, SynthesisResult, SynthesisService
+from emdx.services.synthesis_service import Audience, DistillResult, DistillService
 
 runner = CliRunner()
 
@@ -17,10 +17,10 @@ def _out(result) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SynthesisService tests
+# DistillService tests
 # ---------------------------------------------------------------------------
-class TestSynthesisService:
-    """Tests for the SynthesisService."""
+class TestDistillService:
+    """Tests for the DistillService."""
 
     def test_audience_enum_values(self):
         """Audience enum has expected values."""
@@ -30,7 +30,7 @@ class TestSynthesisService:
 
     def test_synthesis_result_total_tokens(self):
         """SynthesisResult calculates total tokens correctly."""
-        result = SynthesisResult(
+        result = DistillResult(
             content="test",
             source_ids=[1, 2],
             source_count=2,
@@ -42,7 +42,7 @@ class TestSynthesisService:
 
     def test_synthesize_empty_documents(self):
         """Synthesizing empty document list returns appropriate message."""
-        service = SynthesisService()
+        service = DistillService()
         result = service.synthesize_documents(documents=[], topic="test")
 
         assert result.content == "No documents to synthesize."
@@ -54,7 +54,7 @@ class TestSynthesisService:
     @patch("emdx.services.synthesis_service.HAS_ANTHROPIC", False)
     def test_synthesize_without_anthropic(self):
         """Synthesizing without anthropic raises ImportError."""
-        service = SynthesisService()
+        service = DistillService()
         service._client = None  # Reset any cached client
 
         with pytest.raises(ImportError, match="anthropic is required"):
@@ -75,7 +75,7 @@ class TestSynthesisService:
         mock_client.messages.create.return_value = mock_response
         mock_anthropic.Anthropic.return_value = mock_client
 
-        service = SynthesisService()
+        service = DistillService()
         result = service.synthesize_documents(
             documents=[
                 {"id": 1, "title": "Doc 1", "content": "Content 1"},
@@ -110,7 +110,7 @@ class TestSynthesisService:
         mock_client.messages.create.return_value = mock_response
         mock_anthropic.Anthropic.return_value = mock_client
 
-        service = SynthesisService()
+        service = DistillService()
         docs = [{"id": 1, "title": "Test", "content": "Content"}]
 
         # Call with ME audience
@@ -130,10 +130,10 @@ class TestSynthesisService:
 
     def test_distill_single_delegates_to_synthesize(self):
         """distill_single calls synthesize_documents with single doc."""
-        service = SynthesisService()
+        service = DistillService()
 
         with patch.object(service, "synthesize_documents") as mock_synth:
-            mock_synth.return_value = SynthesisResult(
+            mock_synth.return_value = DistillResult(
                 content="distilled",
                 source_ids=[1],
                 source_count=1,
@@ -171,7 +171,7 @@ class TestDistillCommand:
         assert result.exit_code != 0
         assert "topic" in _out(result).lower() or "tags" in _out(result).lower()
 
-    @patch("emdx.services.synthesis_service.SynthesisService")
+    @patch("emdx.services.synthesis_service.DistillService")
     @patch("emdx.commands.distill._get_documents_by_query")
     @patch("emdx.commands.distill.db")
     def test_distill_with_topic(self, mock_db, mock_get_docs, mock_service_class):
@@ -184,7 +184,7 @@ class TestDistillCommand:
         ]
 
         mock_service = MagicMock()
-        mock_service.synthesize_documents.return_value = SynthesisResult(
+        mock_service.synthesize_documents.return_value = DistillResult(
             content="# Authentication Summary\n\nKey points here.",
             source_ids=[1],
             source_count=1,
@@ -198,7 +198,7 @@ class TestDistillCommand:
         assert result.exit_code == 0
         assert "Authentication Summary" in _out(result)
 
-    @patch("emdx.services.synthesis_service.SynthesisService")
+    @patch("emdx.services.synthesis_service.DistillService")
     @patch("emdx.commands.distill._get_documents_by_tags")
     @patch("emdx.commands.distill.db")
     def test_distill_with_tags(self, mock_db, mock_get_docs, mock_service_class):
@@ -211,7 +211,7 @@ class TestDistillCommand:
         ]
 
         mock_service = MagicMock()
-        mock_service.synthesize_documents.return_value = SynthesisResult(
+        mock_service.synthesize_documents.return_value = DistillResult(
             content="Security summary",
             source_ids=[5],
             source_count=1,
@@ -225,7 +225,7 @@ class TestDistillCommand:
         assert result.exit_code == 0
         mock_get_docs.assert_called_once_with(["security", "active"], limit=20)
 
-    @patch("emdx.services.synthesis_service.SynthesisService")
+    @patch("emdx.services.synthesis_service.DistillService")
     @patch("emdx.commands.distill._get_documents_by_query")
     @patch("emdx.commands.distill.db")
     def test_distill_audience_option(self, mock_db, mock_get_docs, mock_service_class):
@@ -236,7 +236,7 @@ class TestDistillCommand:
         mock_get_docs.return_value = [{"id": 1, "title": "T", "content": "C"}]
 
         mock_service = MagicMock()
-        mock_service.synthesize_documents.return_value = SynthesisResult(
+        mock_service.synthesize_documents.return_value = DistillResult(
             content="Doc output",
             source_ids=[1],
             source_count=1,
@@ -254,7 +254,7 @@ class TestDistillCommand:
         call_kwargs = mock_service.synthesize_documents.call_args.kwargs
         assert call_kwargs["audience"] == Audience.DOCS
 
-    @patch("emdx.services.synthesis_service.SynthesisService")
+    @patch("emdx.services.synthesis_service.DistillService")
     @patch("emdx.commands.distill._get_documents_by_query")
     @patch("emdx.commands.distill.db")
     def test_distill_quiet_mode(self, mock_db, mock_get_docs, mock_service_class):
@@ -265,7 +265,7 @@ class TestDistillCommand:
         mock_get_docs.return_value = [{"id": 1, "title": "T", "content": "C"}]
 
         mock_service = MagicMock()
-        mock_service.synthesize_documents.return_value = SynthesisResult(
+        mock_service.synthesize_documents.return_value = DistillResult(
             content="Just the content",
             source_ids=[1],
             source_count=1,
@@ -309,7 +309,7 @@ class TestDistillCommand:
 
     @patch("emdx.models.tags.add_tags_to_document")
     @patch("emdx.database.documents.save_document")
-    @patch("emdx.services.synthesis_service.SynthesisService")
+    @patch("emdx.services.synthesis_service.DistillService")
     @patch("emdx.commands.distill._get_documents_by_query")
     @patch("emdx.commands.distill.db")
     def test_distill_save_option(
@@ -322,7 +322,7 @@ class TestDistillCommand:
         mock_get_docs.return_value = [{"id": 1, "title": "T", "content": "C"}]
 
         mock_service = MagicMock()
-        mock_service.synthesize_documents.return_value = SynthesisResult(
+        mock_service.synthesize_documents.return_value = DistillResult(
             content="Saved content",
             source_ids=[1],
             source_count=1,

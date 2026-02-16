@@ -29,6 +29,7 @@ LAZY_SUBCOMMANDS = {
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
     "distill": "emdx.commands.distill:app",
+    "compact": "emdx.commands.compact:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -38,6 +39,7 @@ LAZY_HELP = {
     "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
     "distill": "Distill KB content into audience-aware summaries",
+    "compact": "Compact related documents through AI-powered synthesis",
 }
 
 
@@ -103,6 +105,8 @@ from emdx.commands.groups import app as groups_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.review import app as review_app  # noqa: E402
+from emdx.commands.stale import app as stale_app  # noqa: E402
+from emdx.commands.stale import touch as touch_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
@@ -164,6 +168,12 @@ app.add_typer(review_app, name="review", help="Triage agent-produced documents")
 
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
+
+# Add stale as a subcommand group for knowledge decay
+app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
+
+# Add touch as a top-level command for convenience
+app.command(name="touch")(touch_command)
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)

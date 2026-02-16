@@ -29,10 +29,12 @@ Dynamic discovery:
     emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
+import os
 import re
 import shlex
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -129,6 +131,62 @@ def _extract_pr_url(text: str | None) -> str | None:
         return None
     match = _PR_URL_RE.search(text)
     return match.group(0) if match else None
+
+
+def _make_output_file_id(working_dir: str | None, seq: int | None) -> str:
+    """Generate a traceable ID for the agent's output file.
+
+    Uses the worktree basename when available (so the file can be traced
+    back to its worktree), otherwise falls back to pid-seq-timestamp.
+    """
+    if working_dir:
+        basename = Path(working_dir).name
+        if "emdx-worktree-" in basename:
+            return basename
+    return f"{os.getpid()}-{seq or 0}-{int(time.time())}"
+
+
+def _make_output_file_path(file_id: str) -> Path:
+    """Build the /tmp path for a delegate output file."""
+    return Path(f"/tmp/emdx-delegate-{file_id}.md")
+
+
+def _save_output_fallback(
+    output_file: Path,
+    output_content: str | None,
+    title: str,
+    tags: list[str],
+) -> int | None:
+    """Try to save agent output via fallback methods.
+
+    Priority:
+    1. Read the output file the agent was asked to write
+    2. Save captured stdout/result content
+    Returns doc_id or None.
+    """
+    content = None
+
+    # Fallback 1: agent wrote the file
+    if output_file.exists() and output_file.stat().st_size > 0:
+        try:
+            content = output_file.read_text(encoding="utf-8")
+        except Exception as e:
+            sys.stderr.write(f"delegate: failed to read {output_file}: {e}\n")
+
+    # Fallback 2: captured output from executor
+    if not content and output_content and output_content.strip():
+        content = output_content
+
+    if not content:
+        return None
+
+    try:
+        doc_id: int = save_document(title=title, content=content, tags=tags)
+        return doc_id
+    except Exception as e:
+        sys.stderr.write(f"delegate: fallback save failed: {e}\n")
+        return None
+
 
 def _slugify_title(title: str) -> str:
     """Convert a document title to a git branch slug.
@@ -308,7 +366,7 @@ def _run_single(
     quiet: bool,
     pr: bool = False,
     pr_branch: str | None = None,
-    draft: bool = True,
+    draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
@@ -337,17 +395,17 @@ def _run_single(
     if "needs-review" not in all_tags:
         all_tags.append("needs-review")
 
-    cmd_parts = [f'emdx save --title "{doc_title}"']
-    cmd_parts.append(f'--tags "{",".join(all_tags)}"')
-    save_cmd = " ".join(cmd_parts)
+    # Generate a traceable output file path for the agent
+    file_id = _make_output_file_id(working_dir, seq)
+    output_file = _make_output_file_path(file_id)
+    tags_str = ",".join(all_tags)
 
     output_instruction = (
-        "\n\nIMPORTANT — SAVE YOUR OUTPUT: When done, pipe your complete "
-        "findings to emdx. Example:\n"
-        f"cat <<'RESULT' | {save_cmd}\n"
-        "Your full analysis/output here as markdown\n"
-        "RESULT\n"
-        "Report the document ID shown after saving."
+        "\n\nIMPORTANT — SAVE YOUR OUTPUT:\n"
+        f"1. Write your complete findings/analysis to: {output_file}\n"
+        f'2. Save it: emdx save {output_file} --title "{doc_title}" '
+        f'--tags "{tags_str}"\n'
+        "3. Report the document ID shown after saving."
     )
 
     if pr:
@@ -376,11 +434,21 @@ def _run_single(
     pr_url = _extract_pr_url(result.output_content)
 
     doc_id = result.output_doc_id
+
+    # Fallback: if agent didn't save, try output file then captured output
+    if not doc_id:
+        doc_id = _save_output_fallback(
+            output_file, result.output_content, doc_title, all_tags,
+        )
+        if doc_id:
+            sys.stderr.write(
+                f"delegate: auto-saved from fallback → #{doc_id}\n"
+            )
+
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
-        # Write doc_id back to execution so activity browser can show the output
         _safe_update_execution(result.execution_id, doc_id=doc_id)
-        # Also try to extract PR URL from saved doc content
+        # Try to extract PR URL from saved doc content
         if not pr_url:
             doc = get_document(doc_id)
             if doc:
@@ -389,46 +457,19 @@ def _run_single(
         if not quiet:
             pr_info = f" pr:{pr_url}" if pr_url else ""
             sys.stderr.write(
-                f"task_id:{task_id} doc_id:{doc_id} tokens:{result.tokens_used} "
+                f"task_id:{task_id} doc_id:{doc_id} "
+                f"tokens:{result.tokens_used} "
                 f"cost:${result.cost_usd:.4f} "
-                f"duration:{result.execution_time_ms / 1000:.1f}s{pr_info}\n"
+                f"duration:{result.execution_time_ms / 1000:.1f}s"
+                f"{pr_info}\n"
             )
     else:
-        # Agent didn't save — auto-save the output content
-        if result.output_content and result.output_content.strip():
-            try:
-                doc_id = save_document(
-                    title=doc_title,
-                    content=result.output_content,
-                    tags=all_tags,
-                )
-                _safe_update_task(
-                    task_id, status="done", output_doc_id=doc_id,
-                )
-                _safe_update_execution(result.execution_id, doc_id=doc_id)
-                _print_doc_content(doc_id)
-                if not quiet:
-                    pr_info = f" pr:{pr_url}" if pr_url else ""
-                    sys.stderr.write(
-                        f"task_id:{task_id} doc_id:{doc_id} "
-                        f"tokens:{result.tokens_used} "
-                        f"cost:${result.cost_usd:.4f} "
-                        f"duration:{result.execution_time_ms / 1000:.1f}s"
-                        f"{pr_info} (auto-saved)\n"
-                    )
-            except Exception as e:
-                _safe_update_task(task_id, status="done")
-                sys.stdout.write(result.output_content)
-                sys.stdout.write("\n")
-                sys.stderr.write(
-                    f"delegate: auto-save failed ({e}), "
-                    "output printed to stdout\n"
-                )
-        else:
-            _safe_update_task(task_id, status="done")
-            sys.stderr.write(
-                "delegate: agent completed with no output\n"
-            )
+        _safe_update_task(task_id, status="done")
+        # Last resort: print whatever we have to stdout
+        if result.output_content:
+            sys.stdout.write(result.output_content)
+            sys.stdout.write("\n")
+        sys.stderr.write("delegate: agent completed with no output\n")
 
     return SingleResult(doc_id=doc_id, task_id=task_id, pr_url=pr_url)
 
@@ -459,7 +500,7 @@ def _run_parallel(
     model: str | None,
     quiet: bool,
     pr: bool = False,
-    draft: bool = True,
+    draft: bool = False,
     base_branch: str = "main",
     source_doc_id: int | None = None,
     worktree: bool = False,
@@ -529,8 +570,8 @@ def _run_parallel(
                 epic_key=epic_key,
             )
         finally:
-            # Clean up worktree unless --pr (keep for the PR branch)
-            if task_worktree_path and not pr:
+            # Always clean up worktree — branch is pushed to remote for PRs
+            if task_worktree_path:
                 from ..utils.git import cleanup_worktree
                 cleanup_worktree(task_worktree_path)
 
@@ -628,7 +669,7 @@ def _run_chain(
     model: str | None,
     quiet: bool,
     pr: bool = False,
-    draft: bool = True,
+    draft: bool = False,
     working_dir: str | None = None,
     source_doc_id: int | None = None,
     epic_key: str | None = None,
@@ -982,7 +1023,7 @@ def delegate(
                 epic_parent_id=epic_parent_id,
             )
     finally:
-        if worktree_path and not pr:
+        if worktree_path:
             from ..utils.git import cleanup_worktree
             if not quiet:
                 sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")

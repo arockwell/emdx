@@ -1,5 +1,6 @@
 """Tests for core CRUD commands (save, view, edit, delete, restore, etc.)."""
 
+import json
 import re
 from datetime import datetime
 from unittest.mock import Mock, patch
@@ -354,6 +355,34 @@ class TestViewCommand:
         assert result.exit_code == 0
         assert "Project:" not in out
         assert "Views:" not in out
+
+    @patch("emdx.commands.core.get_document_tags")
+    @patch("emdx.commands.core.get_document")
+    @patch("emdx.commands.core.db")
+    def test_view_json(self, mock_db, mock_get_doc, mock_get_tags):
+        """View with --json outputs valid JSON."""
+        mock_db.ensure_schema = Mock()
+        mock_get_doc.return_value = {
+            "id": 1,
+            "title": "JSON Doc",
+            "content": "Hello world",
+            "project": "test",
+            "created_at": datetime(2024, 1, 1),
+            "updated_at": datetime(2024, 1, 2),
+            "accessed_at": datetime(2024, 1, 3),
+            "access_count": 5,
+        }
+        mock_get_tags.return_value = ["python"]
+
+        result = runner.invoke(app, ["view", "1", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == 1
+        assert data["title"] == "JSON Doc"
+        assert data["content"] == "Hello world"
+        assert data["project"] == "test"
+        assert data["tags"] == ["python"]
+        assert data["access_count"] == 5
 
     def test_view_missing_id(self):
         """View with no ID should fail."""
