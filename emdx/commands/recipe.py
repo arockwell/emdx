@@ -69,8 +69,7 @@ def list_recipes() -> None:
         console.print("[dim]No recipes found. Create one with:[/dim]")
         console.print("  [cyan]emdx recipe create recipe.md[/cyan]")
         console.print(
-            '  [cyan]echo "instructions" | emdx save'
-            ' --title "My Recipe" --tags "recipe"[/cyan]'
+            '  [cyan]echo "instructions" | emdx save --title "My Recipe" --tags "recipe"[/cyan]'
         )
         return
 
@@ -88,9 +87,7 @@ def list_recipes() -> None:
         # Show first line of content as description
         first_line = content.split("\n")[0].strip().lstrip("# ") if content else ""
         if first_line == title:
-            lines = [
-                line.strip() for line in content.split("\n")[1:] if line.strip()
-            ]
+            lines = [line.strip() for line in content.split("\n")[1:] if line.strip()]
             first_line = lines[0] if lines else ""
         if len(first_line) > 70:
             first_line = first_line[:67] + "..."
@@ -104,22 +101,37 @@ def list_recipes() -> None:
 def run_recipe(
     id_or_name: str = typer.Argument(..., help="Recipe ID or title search"),
     extra: list[str] | None = typer.Argument(
-        None, help="Extra arguments passed to the recipe",
+        None,
+        help="Extra arguments passed to the recipe",
     ),
     quiet: bool = typer.Option(
-        False, "--quiet", "-q", help="Suppress metadata on stderr",
+        False,
+        "--quiet",
+        "-q",
+        help="Suppress metadata on stderr",
     ),
     model: str | None = typer.Option(
-        None, "--model", "-m", help="Model to use",
+        None,
+        "--model",
+        "-m",
+        help="Model to use",
     ),
     pr: bool = typer.Option(
-        False, "--pr", help="Instruct agent to create a PR",
+        False,
+        "--pr",
+        help="Instruct agent to create a PR",
     ),
     worktree: bool = typer.Option(
-        False, "--worktree", "-w", help="Run in isolated git worktree",
+        False,
+        "--worktree",
+        "-w",
+        help="Run in isolated git worktree",
     ),
     input_vals: list[str] | None = typer.Option(
-        None, "--input", "-i", help="Input values as key=value",
+        None,
+        "--input",
+        "-i",
+        help="Input values as key=value",
     ),
 ) -> None:
     """Run a recipe by ID or title.
@@ -199,7 +211,7 @@ def _run_structured(
         recipe = parse_recipe(content)
     except RecipeParseError as e:
         console.print(f"[red]Failed to parse recipe: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from e
 
     # If --pr passed at CLI level but no step has [--pr], add it to last step
     if pr and not any(s.flags.get("pr") for s in recipe.steps):
@@ -293,7 +305,7 @@ def show_recipe(
         recipe = parse_recipe(content)
     except RecipeParseError as e:
         console.print(f"[red]Failed to parse recipe: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from e
 
     console.print(f"[bold]{recipe.title}[/bold] (#{doc_id})\n")
 
@@ -331,7 +343,10 @@ def show_recipe(
 def create_recipe(
     file: str = typer.Argument(..., help="Markdown file to save as a recipe"),
     title: str | None = typer.Option(
-        None, "--title", "-T", help="Custom title (default: filename)",
+        None,
+        "--title",
+        "-T",
+        help="Custom title (default: filename)",
     ),
 ) -> None:
     """Create a recipe from a markdown file.
@@ -354,7 +369,8 @@ def create_recipe(
 @app.command("install")
 def install_recipe(
     name: str = typer.Argument(
-        None, help="Built-in recipe name (or 'all' to install all)",
+        None,
+        help="Built-in recipe name (or 'all' to install all)",
     ),
 ) -> None:
     """Install a built-in recipe into your knowledge base.
@@ -406,6 +422,4 @@ def _install_builtin(rpath: Path) -> None:
     if result.returncode == 0:
         console.print(f"  [green]Installed:[/green] {rpath.stem}")
     else:
-        console.print(
-            f"  [red]Failed:[/red] {rpath.stem}: {result.stderr.strip()}"
-        )
+        console.print(f"  [red]Failed:[/red] {rpath.stem}: {result.stderr.strip()}")

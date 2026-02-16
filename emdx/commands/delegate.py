@@ -481,6 +481,7 @@ def _run_single(
     parent_task_id: int | None = None,
     seq: int | None = None,
     epic_key: str | None = None,
+    timeout: int | None = None,
 ) -> SingleResult:
     """Run a single task via UnifiedExecutor. Returns SingleResult."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -527,7 +528,7 @@ def _run_single(
         title=doc_title,
         output_instruction=output_instruction,
         working_dir=working_dir or str(Path.cwd()),
-        timeout_seconds=DELEGATE_EXECUTION_TIMEOUT,
+        timeout_seconds=timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT,
         model=model,
     )
 
@@ -856,8 +857,6 @@ def _run_parallel(
             )
 
     return doc_ids
-
-
 
     return doc_ids
 
