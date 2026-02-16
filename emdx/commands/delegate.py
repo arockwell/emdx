@@ -818,8 +818,7 @@ def _run_parallel(
         )
         if synthesis_result.doc_id:
             doc_ids.append(synthesis_result.doc_id)
-            # Print just the synthesis
-            _print_doc_content(synthesis_result.doc_id)
+            # _run_single already printed the synthesis content to stdout
 
         # Set status based on partial failures
         final_status = "partial" if failed_count > 0 else "done"
@@ -855,8 +854,6 @@ def _run_parallel(
                 f"task_id:{parent_task_id} "
                 f"doc_ids:{','.join(str(d) for d in doc_ids)}{status_suffix}\n"
             )
-
-    return doc_ids
 
     return doc_ids
 
