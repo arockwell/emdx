@@ -10,6 +10,7 @@ EMDX is a CLI knowledge base and documentation management system. Python 3.11+, 
 
 **Key Components:**
 - `commands/` - CLI command implementations
+- `config/` - Configuration management (settings, constants, tagging rules)
 - `database/` - SQLite operations and migrations
 - `ui/` - TUI components (Textual widgets)
 - `services/` - Business logic (log streaming, file watching, etc.)
@@ -78,7 +79,7 @@ emdx status   # Quick overview
 
 1. **Check ready tasks** before starting work: `emdx task ready`
 2. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
-3. **Create tasks** for discovered work: `emdx task create "Title" --description "Details"`
+3. **Create tasks** for discovered work: `emdx task add "Title" --description "Details"`
 4. **Never end session** without updating task status and creating tasks for remaining work
 
 ### CRITICAL: Use `emdx delegate` Instead of Task Tool Sub-Agents
@@ -144,13 +145,13 @@ emdx save "text content" --title "Title"
 echo "text" | emdx save --title "Title" --tags "notes"
 
 # Search
-emdx find "query"                      # Full-text search (default)
+emdx find "query"                      # Hybrid search (default when index exists)
 emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
 emdx find --tags "gameplan,active"
 
 # Tags
-emdx tag 42 gameplan active
+emdx tag add 42 gameplan active
 emdx tag list
 
 # AI search (requires emdx[ai] extra)
