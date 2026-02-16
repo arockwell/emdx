@@ -216,8 +216,28 @@ def save(
     ),  # noqa: E501
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
+    task: int | None = typer.Option(
+        None, "--task", help="Link saved document to a task as its output"
+    ),
+    mark_done: bool = typer.Option(
+        False, "--done", help="Also mark the linked task as done (requires --task)"
+    ),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
+    # Validate --done requires --task
+    if mark_done and task is None:
+        console.print("[red]Error: --done requires --task[/red]")
+        raise typer.Exit(1)
+
+    # Validate task exists before doing any work
+    if task is not None:
+        from emdx.models.tasks import get_task
+
+        linked_task = get_task(task)
+        if not linked_task:
+            console.print(f"[red]Error: Task #{task} not found[/red]")
+            raise typer.Exit(1)
+
     # Step 1: Get input content
     input_content = get_input_content(input)
 
@@ -261,6 +281,15 @@ def save(
         else:
             console.print(f"   [yellow]Warning: Group #{group_id} not found[/yellow]")
 
+    # Step 6.7: Link to task if specified
+    if task is not None:
+        from emdx.models.tasks import update_task
+
+        update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
+        if mark_done:
+            update_kwargs["status"] = "done"
+        update_task(task, **update_kwargs)
+
     # Step 7: Auto-tagging if requested
     if auto_tag:
         tagger = AutoTagger()
@@ -271,6 +300,13 @@ def save(
 
     # Step 8: Display result
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
+
+    # Step 8.5: Display task link
+    if task is not None:
+        if mark_done:
+            console.print(f"   [dim]Task:[/dim] #{task} [green](done)[/green]")
+        else:
+            console.print(f"   [dim]Task:[/dim] #{task}")
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
