@@ -1161,6 +1161,38 @@ emdx briefing --json
 
 ---
 
+## 📝 Wrapup (`emdx wrapup`)
+
+Generate a session summary from recent tasks, documents, and delegate executions.
+
+```bash
+# Summarize last 4 hours (default)
+emdx wrapup
+
+# Wider time window
+emdx wrapup --hours 8
+
+# Preview what would be summarized
+emdx wrapup --dry-run
+
+# Raw activity data without synthesis
+emdx wrapup --json
+
+# Suppress metadata output
+emdx wrapup --quiet
+```
+
+**Options:**
+- `--hours, -h INTEGER` - Time window to summarize (default: 4)
+- `--model, -m TEXT` - Model override for synthesis
+- `--quiet, -q` - Suppress metadata output
+- `--json` - Output raw activity data without synthesis
+- `--dry-run` - Preview what would be summarized
+
+Summaries are auto-saved with `session-summary,active` tags.
+
+---
+
 ## 📦 Compact (`emdx compact`)
 
 AI-powered document synthesis to reduce knowledge base sprawl.
