@@ -24,7 +24,6 @@ class Execution:
     exit_code: int | None = None
     working_dir: str | None = None
     pid: int | None = None
-    cascade_run_id: int | None = None
     task_id: int | None = None
     cost_usd: float | None = None
     tokens_used: int | None = None
@@ -208,7 +207,7 @@ def update_execution_status(exec_id: int, status: str, exit_code: int | None = N
 # Allowed columns for execution updates (prevents SQL injection via column names)
 ALLOWED_EXECUTION_COLUMNS = frozenset({
     'doc_id', 'doc_title', 'status', 'completed_at', 'log_file', 'exit_code',
-    'working_dir', 'pid', 'cascade_run_id', 'task_id', 'cost_usd',
+    'working_dir', 'pid', 'task_id', 'cost_usd',
     'tokens_used', 'input_tokens', 'output_tokens',
 })
 

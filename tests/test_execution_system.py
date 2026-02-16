@@ -460,11 +460,11 @@ class TestExecutionService:
     """Tests for the execution service facade."""
 
     def test_get_agent_executions(self, isolate_test_database):
-        """Test getting non-cascade executions."""
+        """Test getting standalone executions."""
         from emdx.models.executions import create_execution
         from emdx.services.execution_service import get_agent_executions
 
-        # Create various executions (all non-cascade)
+        # Create various executions (all standalone)
         create_execution(
             doc_id=None,
             doc_title="Agent: test task",
@@ -481,13 +481,13 @@ class TestExecutionService:
             log_file="/tmp/analysis.log",
         )
 
-        # Get all non-cascade executions from recent time
+        # Get all standalone executions from recent time
         from datetime import datetime, timezone
 
         cutoff = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
         agents = get_agent_executions(cutoff, limit=10)
 
-        # Should get all non-cascade executions regardless of title
+        # Should get all standalone executions regardless of title
         titles = [a["doc_title"] for a in agents]
         assert any("Agent:" in t for t in titles)
         assert any("Delegate:" in t for t in titles)

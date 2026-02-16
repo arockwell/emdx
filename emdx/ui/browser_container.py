@@ -220,18 +220,6 @@ class BrowserContainer(App):
                 from .log_browser import LogBrowser
 
                 self.browsers[browser_type] = LogBrowser()
-            elif browser_type == "cascade":
-                try:
-                    from .cascade import CascadeBrowser
-
-                    self.browsers[browser_type] = CascadeBrowser()
-                    logger.debug("CascadeBrowser created")
-                except Exception as e:
-                    logger.error(f"Failed to create CascadeBrowser: {e}", exc_info=True)
-                    from textual.widgets import Static
-
-                    msg = f"Cascade browser failed to load:\n{escape(str(e))}"
-                    self.browsers[browser_type] = Static(msg)
             elif browser_type == "task":
                 try:
                     from .task_browser import TaskBrowser
@@ -247,15 +235,15 @@ class BrowserContainer(App):
                     )  # noqa: E501
             elif browser_type == "search":
                 try:
-                    from .search import SearchScreen
+                    from .qa import QAScreen
 
-                    self.browsers[browser_type] = SearchScreen()
-                    logger.debug("SearchScreen created")
+                    self.browsers[browser_type] = QAScreen()
+                    logger.debug("QAScreen created")
                 except Exception as e:
-                    logger.error(f"Failed to create SearchScreen: {e}", exc_info=True)
+                    logger.error(f"Failed to create QAScreen: {e}", exc_info=True)
                     from textual.widgets import Static
 
-                    msg = f"Search screen failed to load:\n{escape(str(e))}"
+                    msg = f"Q&A screen failed to load:\n{escape(str(e))}"
                     self.browsers[browser_type] = Static(msg)
             else:
                 # Unknown browser type - fallback to activity
@@ -317,7 +305,7 @@ class BrowserContainer(App):
             event.stop()
             return
 
-        # Global number keys for screen switching (1=Activity, 2=Tasks, 3=Search, 4=Cascade)
+        # Global number keys for screen switching (1=Activity, 2=Tasks, 3=Search)
         if key == "1":
             await self.switch_browser("activity")
             event.stop()
@@ -330,13 +318,9 @@ class BrowserContainer(App):
             await self.switch_browser("search")
             event.stop()
             return
-        elif key == "4":
-            await self.switch_browser("cascade")
-            event.stop()
-            return
 
-        # Q to quit from activity, task, cascade, or search browser
-        if key == "q" and self.current_browser in ["activity", "task", "cascade", "search"]:
+        # Q to quit from activity, task, or search browser
+        if key == "q" and self.current_browser in ["activity", "task", "search"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
@@ -458,8 +442,6 @@ class BrowserContainer(App):
             await self.switch_browser("task")
         elif command_id == "nav.search":
             await self.switch_browser("search")
-        elif command_id == "nav.cascade":
-            await self.switch_browser("cascade")
         elif command_id == "nav.logs":
             await self.switch_browser("log")
 

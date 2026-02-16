@@ -82,12 +82,12 @@ emdx ai similar 42
 **Option A: Using Claude API** (requires `ANTHROPIC_API_KEY`):
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-emdx ai ask "How does the cascade system work?"
+emdx ai ask "How does the delegate system work?"
 ```
 
 **Option B: Using Claude CLI** (uses Claude Max subscription):
 ```bash
-emdx ai context "How does the cascade system work?" | claude
+emdx ai context "How does the delegate system work?" | claude
 ```
 
 ## Commands Reference

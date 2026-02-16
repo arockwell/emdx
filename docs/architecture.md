@@ -25,8 +25,7 @@ emdx/
 │   ├── gist.py            # GitHub gist integration
 │   ├── gdoc.py            # Google Docs integration
 │   ├── executions.py      # execution monitoring
-│   ├── delegate.py        # one-shot AI execution (parallel, chain, worktree, PR)
-│   ├── cascade.py         # idea-to-code pipeline
+│   ├── delegate.py        # one-shot AI execution (parallel, worktree, PR)
 │   ├── recipe.py          # reusable recipe management
 │   ├── similarity.py      # TF-IDF document similarity
 │   ├── ask.py             # AI Q&A over knowledge base
@@ -38,7 +37,6 @@ emdx/
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
 │   ├── search.py          # FTS5 search
-│   ├── cascade.py         # cascade metadata
 │   ├── groups.py          # document group operations
 │   └── migrations.py      # schema migrations
 ├── models/                 # Data models
@@ -51,7 +49,6 @@ emdx/
 │   ├── document_browser.py    # document management
 │   ├── log_browser.py         # execution logs
 │   ├── activity_browser.py    # unified activity display
-│   ├── run_browser.py         # cascade run browser
 │   ├── vim_editor.py          # vim modal editing
 │   └── themes.py              # theme system
 ├── services/               # Business logic
@@ -75,7 +72,6 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **Document Mode** (default) - `d` or start here
 - **Log Mode** - `l` to switch from document mode
 - **Activity Mode** - `a` to view execution activity
-- **Cascade Mode** - `4` to view cascade stages
 - **Back to Document** - `q` from any other mode
 
 ### **Actual Key Bindings** (from real code):
@@ -113,7 +109,6 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **`document_tags`** - Many-to-many document-tag relationships
 - **`executions`** - Execution tracking and lifecycle
 - **`documents_fts`** - Full-text search virtual table
-- **`cascade_runs`** - Cascade pipeline executions
 - **`document_groups`** - Hierarchical document organization
 - **`tasks`** - Task management with dependencies
 
