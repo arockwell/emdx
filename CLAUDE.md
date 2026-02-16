@@ -6,7 +6,14 @@
 
 ## Project Overview
 
-EMDX is a CLI knowledge base and documentation management system. Python 3.11+, SQLite + FTS5, Textual TUI, Typer CLI.
+EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+, SQLite + FTS5, Textual TUI, Typer CLI.
+
+**Design principle:** Same commands, different output modes. Same data, different views. `--json` is the agent lens. Rich tables/TUI is the human lens. Epics/categories serve both — they organize for humans and scope for agents. Agents populate the KB; humans curate and direct it.
+
+**What's good for whom:**
+- **Humans:** Hierarchy (epics/categories/groups), TUI, rendered markdown, fuzzy search, briefings
+- **Agents:** `--json` output, flat task queue (`task ready`), exact ID access, `prime --json`
+- **Both:** Tags, save, find, delegate, task dependencies
 
 **Key Components:**
 - `commands/` - CLI command implementations
@@ -143,11 +150,12 @@ emdx save document.md
 emdx save "text content" --title "Title"
 echo "text" | emdx save --title "Title" --tags "notes"
 
-# Search
+# Search — FTS5 keyword search (default). OR/AND/NOT do NOT work (terms are quoted).
+# To search for multiple concepts, run separate find commands or use --tags.
 emdx find "query"                      # Full-text search (default)
 emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
-emdx find --tags "gameplan,active"
+emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-tags for OR)
 
 # Tags
 emdx tag 42 gameplan active
