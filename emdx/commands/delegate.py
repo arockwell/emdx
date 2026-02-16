@@ -48,6 +48,7 @@ import typer
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document, save_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
+from ..utils.git import generate_delegate_branch_name
 
 app = typer.Typer(
     name="delegate",
@@ -224,28 +225,14 @@ def _save_output_fallback(
         return None
 
 
-def _slugify_title(title: str) -> str:
-    """Convert a document title to a git branch slug.
-
-    Examples:
-        "Gameplan #1: Contextual Save" -> "contextual-save"
-        "Smart Priming (context-aware)" -> "smart-priming-context-aware"
-    """
-    import re
-    # Remove common prefixes like "Gameplan #1:", "Feature:", etc.
-    slug = re.sub(r'^(?:gameplan|feature|plan|doc(?:ument)?)\s*#?\d*[:\s—-]*', '', title, flags=re.IGNORECASE).strip()  # noqa: E501
-    # Keep only alphanumeric and spaces/hyphens
-    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', slug)
-    # Collapse whitespace to hyphens, lowercase
-    slug = re.sub(r'\s+', '-', slug).strip('-').lower()
-    # Truncate to reasonable branch name length
-    return slug[:50].rstrip('-') or 'feature'
+# Branch naming now uses generate_delegate_branch_name from utils.git
+# which provides consistent delegate/{slug}-{hash} pattern
 
 def _resolve_task(task: str, pr: bool = False) -> str:
     """Resolve a task argument — if it's a numeric doc ID, load the document content.
 
     When pr=True and the task is a doc ID, adds implementation and PR instructions
-    with a branch name derived from the document title.
+    with a branch name derived from the document title using the unified naming pattern.
     """
     try:
         doc_id = int(task)
@@ -261,7 +248,8 @@ def _resolve_task(task: str, pr: bool = False) -> str:
     content = doc.get("content", "")
 
     if pr:
-        branch = f"feat/{_slugify_title(title)}"
+        # Use unified delegate branch naming pattern
+        branch = generate_delegate_branch_name(title)
         return (
             f"Read and implement the following gameplan:\n\n# {title}\n\n{content}\n\n"
             f"---\n\n"
@@ -634,13 +622,11 @@ def _run_parallel(
         tags=flat_tags,
     )
 
-    # Pre-generate branch names for --pr/--branch tasks
+    # Pre-generate branch names for --pr/--branch tasks using unified naming
     branch_names: list[str | None] = [None] * len(tasks)
     if pr or branch:
-        prefix = "fix" if pr else "feat"
         for i, task in enumerate(tasks):
-            slug = _slugify_title(task) or f"task-{i + 1}"
-            branch_names[i] = f"{prefix}/{slug}-{i + 1}"
+            branch_names[i] = generate_delegate_branch_name(task)
 
     # Results indexed by task position to preserve order
     results: dict[int, SingleResult] = {}
@@ -655,7 +641,8 @@ def _run_parallel(
         if worktree:
             from ..utils.git import create_worktree
             try:
-                task_worktree_path, _ = create_worktree(base_branch)
+                # Pass task title for unified delegate branch naming
+                task_worktree_path, _ = create_worktree(base_branch, task_title=task)
                 if not quiet:
                     sys.stderr.write(
                         f"delegate: worktree [{idx + 1}/{len(tasks)}] "
@@ -1107,10 +1094,15 @@ def delegate(
     #    --pr/--branch always imply --worktree for a clean git environment
     use_worktree = worktree or pr or branch
     worktree_path = None
+    worktree_branch = None
     if use_worktree and (len(task_list) == 1 or chain):
         from ..utils.git import create_worktree
         try:
-            worktree_path, _ = create_worktree(base_branch)
+            # Use first task title for unified branch naming
+            task_title_for_branch = title or task_list[0][:80] if task_list else None
+            worktree_path, worktree_branch = create_worktree(
+                base_branch, task_title=task_title_for_branch
+            )
             if not quiet:
                 sys.stderr.write(f"delegate: worktree created at {worktree_path}\n")
         except Exception as e:
@@ -1143,6 +1135,7 @@ def delegate(
                 quiet=quiet,
                 pr=pr,
                 branch=branch,
+                pr_branch=worktree_branch,  # Use the unified delegate branch name
                 draft=draft,
                 working_dir=worktree_path,
                 source_doc_id=doc,
