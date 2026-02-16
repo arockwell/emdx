@@ -53,7 +53,7 @@ class TestQADataclasses:
         state = QAStateVM()
         assert state.entries == []
         assert state.is_asking is False
-        assert state.has_anthropic is False
+        assert state.has_claude_cli is False
         assert state.has_embeddings is False
         assert state.status_text == ""
 
@@ -62,83 +62,58 @@ class TestQAPresenterInitialization:
     """Tests for QAPresenter initialization."""
 
     @pytest.mark.asyncio
-    async def test_initialize_with_anthropic_available(self) -> None:
-        """Test initialization when anthropic package is available."""
-        import sys
+    async def test_initialize_with_claude_cli_available(self) -> None:
+        """Test initialization when Claude CLI is available."""
+        presenter = QAPresenter()
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch.object(presenter, "_has_embeddings", return_value=False),
+        ):
+            await presenter.initialize()
 
-        # Create a mock anthropic module
-        mock_anthropic = MagicMock()
-        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
-            presenter = QAPresenter()
-            # Mock the embedding service check
-            with patch.object(presenter, "_has_embeddings", return_value=False):
-                await presenter.initialize()
-
-            assert presenter.state.has_anthropic is True
-            assert "Ready" in presenter.state.status_text
+        assert presenter.state.has_claude_cli is True
+        assert "Ready" in presenter.state.status_text
 
     @pytest.mark.asyncio
-    async def test_initialize_without_anthropic(self) -> None:
-        """Test initialization when anthropic package is not available."""
+    async def test_initialize_without_claude_cli(self) -> None:
+        """Test initialization when Claude CLI is not available."""
         presenter = QAPresenter()
+        with (
+            patch("shutil.which", return_value=None),
+            patch.object(presenter, "_has_embeddings", return_value=False),
+        ):
+            await presenter.initialize()
 
-        # Directly set state to simulate missing anthropic
-        presenter._state.has_anthropic = False
-        presenter._state.status_text = "anthropic not installed — run: pip install 'emdx[ai]'"
-
-        # Verify the state
-        assert presenter.state.has_anthropic is False
-        assert "not installed" in presenter.state.status_text
-
-    @pytest.mark.asyncio
-    async def test_initialize_detects_missing_anthropic(self) -> None:
-        """Test that initialize() sets has_anthropic=False when import fails."""
-        # We test this indirectly by checking that the presenter correctly
-        # handles the case when anthropic is not available
-        presenter = QAPresenter()
-
-        # Simulate the import check failing
-        with patch("builtins.__import__", side_effect=ImportError("No module")):
-            # Manually run the check logic that initialize() does
-            try:
-                import anthropic  # noqa: F401
-
-                presenter._state.has_anthropic = True
-            except ImportError:
-                presenter._state.has_anthropic = False
-
-        assert presenter.state.has_anthropic is False
+        assert presenter.state.has_claude_cli is False
+        assert "Claude CLI not found" in presenter.state.status_text
 
     @pytest.mark.asyncio
     async def test_initialize_with_embeddings(self) -> None:
         """Test initialization when embeddings are available."""
-        import sys
+        presenter = QAPresenter()
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch.object(presenter, "_has_embeddings", return_value=True),
+        ):
+            await presenter.initialize()
 
-        mock_anthropic = MagicMock()
-        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
-            presenter = QAPresenter()
-            with patch.object(presenter, "_has_embeddings", return_value=True):
-                await presenter.initialize()
-
-            assert presenter.state.has_embeddings is True
-            assert "semantic" in presenter.state.status_text
+        assert presenter.state.has_embeddings is True
+        assert "semantic" in presenter.state.status_text
 
     @pytest.mark.asyncio
     async def test_initialize_calls_on_state_update(self) -> None:
         """Test that initialization triggers state update callback."""
-        import sys
-
-        mock_anthropic = MagicMock()
         mock_callback = AsyncMock()
+        presenter = QAPresenter(on_state_update=mock_callback)
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch.object(presenter, "_has_embeddings", return_value=False),
+        ):
+            await presenter.initialize()
 
-        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
-            presenter = QAPresenter(on_state_update=mock_callback)
-            with patch.object(presenter, "_has_embeddings", return_value=False):
-                await presenter.initialize()
-
-            mock_callback.assert_called()
-            # Callback should receive the state
-            assert mock_callback.call_args[0][0] == presenter.state
+        mock_callback.assert_called()
+        # Callback should receive the state
+        assert mock_callback.call_args[0][0] == presenter.state
 
 
 class TestQAPresenterEmptyQuestion:
@@ -177,14 +152,14 @@ class TestQAPresenterEmptyQuestion:
         assert presenter.state.is_asking is False
 
 
-class TestQAPresenterAnthropicMissing:
-    """Tests for handling when anthropic package is missing."""
+class TestQAPresenterCLIMissing:
+    """Tests for handling when Claude CLI is missing."""
 
     @pytest.mark.asyncio
-    async def test_ask_without_anthropic_adds_error_entry(self) -> None:
-        """When anthropic is missing, asking should add an error entry."""
+    async def test_ask_without_cli_adds_error_entry(self) -> None:
+        """When Claude CLI is missing, asking should add an error entry."""
         presenter = QAPresenter()
-        presenter._state.has_anthropic = False
+        presenter._state.has_claude_cli = False
 
         await presenter.ask("What is Python?")
 
@@ -193,15 +168,14 @@ class TestQAPresenterAnthropicMissing:
         entry = presenter.state.entries[0]
         assert entry.question == "What is Python?"
         assert entry.error is not None
-        assert "anthropic" in entry.error.lower()
-        assert "not installed" in entry.error.lower() or "pip install" in entry.error.lower()
+        assert "claude cli" in entry.error.lower()
 
     @pytest.mark.asyncio
-    async def test_ask_without_anthropic_triggers_state_update(self) -> None:
-        """When anthropic is missing, should still trigger state update."""
+    async def test_ask_without_cli_triggers_state_update(self) -> None:
+        """When Claude CLI is missing, should still trigger state update."""
         mock_callback = AsyncMock()
         presenter = QAPresenter(on_state_update=mock_callback)
-        presenter._state.has_anthropic = False
+        presenter._state.has_claude_cli = False
 
         await presenter.ask("Test question")
 
@@ -215,7 +189,7 @@ class TestQAPresenterIsAskingFlag:
     async def test_is_asking_set_during_question_processing(self) -> None:
         """is_asking should be True while processing a question."""
         presenter = QAPresenter()
-        presenter._state.has_anthropic = True
+        presenter._state.has_claude_cli = True
 
         is_asking_during_call = None
 
@@ -242,7 +216,7 @@ class TestQAPresenterIsAskingFlag:
     async def test_is_asking_cleared_after_completion(self) -> None:
         """is_asking should be False after question completes."""
         presenter = QAPresenter()
-        presenter._state.has_anthropic = True
+        presenter._state.has_claude_cli = True
 
         with patch.object(presenter, "_retrieve", return_value=([], "keyword")):
             with patch.object(presenter, "_stream_answer", new_callable=AsyncMock) as mock_stream:
@@ -255,7 +229,7 @@ class TestQAPresenterIsAskingFlag:
     async def test_is_asking_cleared_on_error(self) -> None:
         """is_asking should be False even when an error occurs."""
         presenter = QAPresenter()
-        presenter._state.has_anthropic = True
+        presenter._state.has_claude_cli = True
 
         with patch.object(presenter, "_retrieve", side_effect=Exception("Test error")):
             await presenter.ask("Test question")
@@ -523,56 +497,49 @@ class TestQAPresenterStateProperty:
         """Test that state property returns the internal state object."""
         presenter = QAPresenter()
         presenter._state.is_asking = True
-        presenter._state.has_anthropic = True
+        presenter._state.has_claude_cli = True
 
         state = presenter.state
 
         assert state.is_asking is True
-        assert state.has_anthropic is True
+        assert state.has_claude_cli is True
 
 
 class TestQAPresenterStreamAnswer:
     """Tests for _stream_answer method."""
 
     @pytest.mark.asyncio
-    async def test_stream_answer_calls_anthropic(self) -> None:
-        """Test that _stream_answer calls the Anthropic API."""
+    async def test_stream_answer_calls_claude_cli(self) -> None:
+        """Test that _stream_answer calls the Claude CLI via _execute_claude_prompt."""
         presenter = QAPresenter()
 
-        mock_client = MagicMock()
-        mock_stream = MagicMock()
-        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
-        mock_stream.__exit__ = MagicMock(return_value=False)
-        mock_stream.text_stream = iter(["Hello", " world"])
-        mock_client.messages.stream.return_value = mock_stream
-
-        with patch.object(presenter, "_get_client", return_value=mock_client):
+        with patch(
+            "emdx.services.ask_service._execute_claude_prompt",
+            return_value="Hello world",
+        ):
             result = await presenter._stream_answer("Test question", "Test context")
 
-        assert "Hello" in result or "world" in result
+        assert result == "Hello world"
 
     @pytest.mark.asyncio
     async def test_stream_answer_calls_chunk_callback(self) -> None:
         """Test that _stream_answer calls the on_answer_chunk callback."""
-        chunks_received = []
+        chunks_received: list[str] = []
 
         async def capture_chunk(chunk: str) -> None:
             chunks_received.append(chunk)
 
         presenter = QAPresenter(on_answer_chunk=capture_chunk)
 
-        mock_client = MagicMock()
-        mock_stream = MagicMock()
-        mock_stream.__enter__ = MagicMock(return_value=mock_stream)
-        mock_stream.__exit__ = MagicMock(return_value=False)
-        mock_stream.text_stream = iter(["Chunk1", "Chunk2"])
-        mock_client.messages.stream.return_value = mock_stream
-
-        with patch.object(presenter, "_get_client", return_value=mock_client):
+        with patch(
+            "emdx.services.ask_service._execute_claude_prompt",
+            return_value="Test answer",
+        ):
             await presenter._stream_answer("Question", "Context")
 
-        # Should have received chunks
-        assert len(chunks_received) >= 1
+        # Should have received the answer as a single chunk
+        assert len(chunks_received) == 1
+        assert chunks_received[0] == "Test answer"
 
 
 if __name__ == "__main__":

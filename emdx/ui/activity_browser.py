@@ -65,7 +65,6 @@ class ActivityBrowser(Widget):
         """Already on activity, do nothing."""
         pass
 
-
     async def action_switch_tasks(self) -> None:
         """Switch to task browser."""
         if hasattr(self.app, "switch_browser"):
@@ -85,7 +84,7 @@ class ActivityBrowser(Widget):
         """Update status - for compatibility with browser container."""
         pass
 
-    def focus(self, scroll_visible: bool = True) -> Self:  # type: ignore[override]
+    def focus(self, scroll_visible: bool = True) -> Self:
         """Focus the activity view."""
         if self.activity_view:
             try:
@@ -95,7 +94,7 @@ class ActivityBrowser(Widget):
             except Exception:
                 # Widget not mounted yet, will focus on mount
                 pass
-        return self  # type: ignore[return-value]
+        return self
 
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Select and show a document by its ID in the activity view."""

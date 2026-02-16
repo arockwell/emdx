@@ -101,3 +101,7 @@ bump version:
 # Prepare a release (bump version + update changelog)
 release version:
     python3 scripts/release.py release {{version}}
+
+# Run environment diagnostic (fingerprint worktree, python, venv, packages)
+diag:
+    bash scripts/env-diag.sh

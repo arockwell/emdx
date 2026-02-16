@@ -6,7 +6,14 @@
 
 ## Project Overview
 
-EMDX is a CLI knowledge base and documentation management system. Python 3.11+, SQLite + FTS5, Textual TUI, Typer CLI.
+EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+, SQLite + FTS5, Textual TUI, Typer CLI.
+
+**Design principle:** Same commands, different output modes. Same data, different views. `--json` is the agent lens. Rich tables/TUI is the human lens. Epics/categories serve both — they organize for humans and scope for agents. Agents populate the KB; humans curate and direct it.
+
+**What's good for whom:**
+- **Humans:** Hierarchy (epics/categories/groups), TUI, rendered markdown, fuzzy search, briefings
+- **Agents:** `--json` output, flat task queue (`task ready`), exact ID access, `prime --json`
+- **Both:** Tags, save, find, delegate, task dependencies
 
 **Key Components:**
 - `commands/` - CLI command implementations
@@ -102,6 +109,15 @@ emdx delegate --doc 42 "implement the plan described here"
 # With PR creation (--pr implies --worktree)
 emdx delegate --pr "fix the auth bug"
 
+# Push branch only, no PR (--branch implies --worktree)
+emdx delegate --branch "add logging to auth module"
+
+# Draft PR
+emdx delegate --pr --draft "experimental feature"
+
+# Custom base branch
+emdx delegate --branch -b develop "add feature X"
+
 # All flags compose together
 emdx delegate --doc 42 --pr "fix the bug"
 
@@ -109,7 +125,7 @@ emdx delegate --doc 42 --pr "fix the bug"
 emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 ```
 
-**Other options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `-q` (quiet), `--base-branch`
+**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--each`/`--do`, `--epic`/`-e`, `--cat`/`-c`, `--cleanup`
 
 ### Quick Reference
 
@@ -121,6 +137,8 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 | Discover + process | `emdx delegate --each "cmd" --do "Review {{item}}"` |
 | Doc as input | `emdx delegate --doc 42 "implement this"` |
 | Code changes with PR | `emdx delegate --pr "fix the bug"` |
+| Push branch, no PR | `emdx delegate --branch "add feature"` |
+| Clean up worktrees | `emdx delegate --cleanup` |
 | Run saved recipe | `emdx recipe run 42` |
 
 ### Auto-Tagging Guidelines
@@ -141,14 +159,20 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 ```bash
 # Save
 emdx save document.md
-emdx save "text content" --title "Title"
 echo "text" | emdx save --title "Title" --tags "notes"
 
-# Search
+# Search — FTS5 keyword search (default). OR/AND/NOT do NOT work (terms are quoted).
+# To search for multiple concepts, run separate find commands or use --tags.
 emdx find "query"                      # Hybrid search (default when index exists)
 emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
-emdx find --tags "gameplan,active"
+emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-tags for OR)
+
+# Tasks
+emdx task add "Title" --description "Details"
+emdx task ready                        # Show unblocked tasks
+emdx task active <id>                  # Mark in-progress
+emdx task done <id>                    # Mark complete
 
 # Tags
 emdx tag add 42 gameplan active
@@ -163,8 +187,17 @@ emdx ai context "question" | claude
 For complete command reference, see [CLI Reference](docs/cli-api.md).
 For AI system docs, see [AI System](docs/ai-system.md).
 
+## Experimental Commands
+
+These commands work but are not yet stable:
+
+- **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
+
 ## Known Gotchas
 
+- **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
+- **`emdx task add`** not `emdx task create` — the subcommand is `add`.
+- **`emdx save "text"`** looks for a FILE named "text" — use `echo "text" | emdx save --title "Title"` for stdin.
 - **`select.select()` on macOS**: Python's `select.select()` does not work reliably on `subprocess.Popen` stdout/stderr pipes on macOS. Use background threads with `queue.Queue` instead (see `_reader_thread()` in `unified_executor.py`).
 - **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
 
