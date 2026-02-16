@@ -127,7 +127,9 @@ emdx save "text content" --title "Title"
 echo "text" | emdx save --title "Title" --tags "notes"
 
 # Search
-emdx find "query"
+emdx find "query"                      # Full-text search (default)
+emdx find "concept" --mode semantic    # Semantic/conceptual search
+emdx find "query" --extract            # Extract key info from results
 emdx find --tags "gameplan,active"
 
 # Tags
@@ -135,6 +137,7 @@ emdx tag 42 gameplan active
 emdx tag list
 
 # AI search (requires emdx[ai] extra)
+# Note: emdx find now supports semantic search natively via --mode semantic
 emdx ai search "concept"
 emdx ai context "question" | claude
 ```
