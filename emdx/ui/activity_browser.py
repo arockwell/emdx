@@ -18,7 +18,7 @@ class ActivityBrowser(Widget):
     BINDINGS = [
         ("1", "switch_activity", "Activity"),
         ("2", "switch_tasks", "Tasks"),
-        ("3", "switch_search", "Search"),
+        ("3", "switch_qa", "Q&A"),
         ("?", "show_help", "Help"),
     ]
 
@@ -70,10 +70,10 @@ class ActivityBrowser(Widget):
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("task")
 
-    async def action_switch_search(self) -> None:
-        """Switch to search screen."""
+    async def action_switch_qa(self) -> None:
+        """Switch to Q&A screen."""
         if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("search")
+            await self.app.switch_browser("qa")
 
     def action_show_help(self) -> None:
         """Show help."""

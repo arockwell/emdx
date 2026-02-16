@@ -235,7 +235,7 @@ class BrowserContainer(App[None]):
                     self.browsers[browser_type] = Static(
                         f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details."
                     )  # noqa: E501
-            elif browser_type == "search":
+            elif browser_type == "qa":
                 try:
                     from .qa import QAScreen
 
@@ -315,8 +315,8 @@ class BrowserContainer(App[None]):
             event.stop()
             return
 
-        # Q to quit from activity, task, or search browser
-        if key == "q" and self.current_browser in ["activity", "task", "search"]:
+        # Q to quit from activity, task, or qa browser
+        if key == "q" and self.current_browser in ["activity", "task", "qa"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
@@ -421,11 +421,11 @@ class BrowserContainer(App[None]):
         elif action == "search_tag":
             tag = result.get("tag")
             if tag:
-                # Switch to search screen with tag query
-                await self.switch_browser("search")
-                search_browser = self.browsers.get("search")
-                if search_browser and hasattr(search_browser, "set_query"):
-                    search_browser.set_query(f"@{tag}")
+                # Switch to Q&A screen with tag query
+                await self.switch_browser("qa")
+                qa_browser = self.browsers.get("qa")
+                if qa_browser and hasattr(qa_browser, "set_query"):
+                    qa_browser.set_query(f"@{tag}")
 
     async def _execute_palette_command(self, command_id: str) -> None:
         """Execute a command from the palette by ID."""
@@ -436,8 +436,8 @@ class BrowserContainer(App[None]):
             await self.switch_browser("activity")
         elif command_id == "nav.tasks":
             await self.switch_browser("task")
-        elif command_id == "nav.search":
-            await self.switch_browser("search")
+        elif command_id == "nav.qa":
+            await self.switch_browser("qa")
         elif command_id == "nav.logs":
             await self.switch_browser("log")
 
