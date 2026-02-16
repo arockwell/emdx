@@ -38,9 +38,7 @@ def _parse_since(since: str) -> datetime:
 
     # Handle 'yesterday'
     if since == "yesterday":
-        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
-            days=1
-        )
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
     # Handle 'last week'
     if since == "last week":
@@ -384,7 +382,7 @@ def _build_json_output(
 @app.callback(invoke_without_command=True)
 def briefing(
     ctx: typer.Context,
-    since: str = typer.Option(
+    since: str | None = typer.Option(
         None,
         "--since",
         "-s",
