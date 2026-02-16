@@ -403,6 +403,7 @@ def _load_doc_context(doc_id: int, prompt: str | None) -> str:
         return f"Execute the following document:\n\n# {title}\n\n{content}"
 
 
+# Note: _run_single already calls this internally, so callers don't need to print separately.
 def _print_doc_content(doc_id: int) -> None:
     """Print a document's content to stdout."""
     doc = get_document(doc_id)
