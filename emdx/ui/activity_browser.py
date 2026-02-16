@@ -16,9 +16,6 @@ class ActivityBrowser(Widget):
     """Browser wrapper for ActivityView - Mission Control."""
 
     BINDINGS = [
-        ("1", "switch_activity", "Activity"),
-        ("2", "switch_tasks", "Tasks"),
-        ("3", "switch_qa", "Q&A"),
         ("?", "show_help", "Help"),
     ]
 
@@ -60,20 +57,6 @@ class ActivityBrowser(Widget):
         else:
             # Fallback: switch to document browser and select the doc
             logger.info(f"Would view document #{event.doc_id}")
-
-    async def action_switch_activity(self) -> None:
-        """Already on activity, do nothing."""
-        pass
-
-    async def action_switch_tasks(self) -> None:
-        """Switch to task browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("task")
-
-    async def action_switch_qa(self) -> None:
-        """Switch to Q&A screen."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("qa")
 
     def action_show_help(self) -> None:
         """Show help."""
