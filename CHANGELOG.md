@@ -56,10 +56,28 @@ emdx save findings.md --task 42 --done   # Link + mark task done
 #### Anthropic SDK fully removed (#661)
 The `ask` service and TUI Q&A presenter were the last consumers of the `anthropic` Python package. Both now use the Claude CLI via `UnifiedExecutor`, matching `delegate`, `compact`, and `distill`. No API key needed — just a Claude CLI installation.
 
-#### Typing hardening
+#### Copy mode for document previews (#682)
+Toggle copy mode in the preview pane to select and copy text from document previews.
+
+#### Typing hardening (Phases 1–5)
+A comprehensive multi-phase refactor replacing `dict[str, Any]` with concrete TypedDicts across the entire codebase:
 - **Protocols** for UI callbacks — type-safe event handling without concrete coupling (#646)
 - **TypedDicts** across compact, distill, unified search, and UI layers — replacing `dict[str, Any]` with named shapes
 - **Concrete generics** — `App[None]`, `Queue[str | None]`, `ModalScreen[str]`, reducing strict mypy `type-arg` errors from 64 to 51 (#671)
+- **Services layer** — TypedDicts for execution, log streaming, synthesis, and hybrid search results (#678)
+- **Ask service** — concrete return types replacing `dict[str, Any]` in ask_service.py (#679)
+- **Commands layer** — TypedDicts for browse, groups, tags, stale, and task commands (#681)
+- **CLI executor** — `StreamMessage` union type (6 TypedDicts) for stream-json parsing, `EnvironmentInfo` for validation; `parse_stream_line()` now handles all message types (#684)
+
+#### Dead code removal
+- **VimEditor and vim_line_numbers** — removed unused VimEditor class and related dead code (#680)
+- **CursorCliExecutor** — removed entire Cursor CLI executor and all Cursor references (unused dead code, -271 lines) (#684)
+
+#### Stream refactor (#684)
+`format_stream_line()` in `unified_executor.py` previously re-parsed JSON inline. Replaced with `format_stream_message()` that accepts pre-parsed `StreamMessage` dicts from `parse_stream_line()`, eliminating duplicated `json.loads` calls.
+
+#### Q&A screen renamed (#683)
+The TUI search browser (screen position 3) renamed from "Search" to "Q&A" to better reflect its conversational purpose. Screen-switching keybindings centralized.
 
 #### Activity view improvements
 - Execution output text persisted to database for richer preview display
@@ -76,7 +94,15 @@ Single-click now highlights items; double-click opens fullscreen — fixing the 
 - **recipes**: mypy errors in recipe parser and command resolved; git worktree mocked in recipe executor tests
 - **activity**: Broadened execution query to include all non-cascade executions (was filtering too aggressively)
 
+### 📖 Documentation
+- Added delegate debugging guide and batch-delegate command docs (#675)
+- Added FTS5 virtual table query gotcha to CLAUDE.md (#677)
+- Added test mock gotcha to CLAUDE.md (#674)
+
 ### 💥 Breaking Changes
+
+#### Cursor CLI executor removed (#684)
+The `CursorCliExecutor` and all Cursor-related configuration have been removed. Only the Claude CLI is supported. If you were using `EMDX_CLI_TOOL=cursor`, switch to `claude` (the default).
 
 #### Cascade system removed (#651)
 The cascade pipeline (`emdx cascade` commands) and the `--chain` flag on `emdx delegate` have been removed (~5,500 lines). The recipe system provides a simpler, more flexible alternative.
