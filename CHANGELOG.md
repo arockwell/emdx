@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.16.0] - 2026-02-16
 
-**The autonomy release.** EMDX shed its last API key requirement — the `ask` and Q&A systems now run through the Claude CLI like everything else. The cascade system was removed entirely (~5,500 lines), replaced by recipes. New commands (`wrapup`, structured recipes) and smarter existing ones (`prime` with git context, `ask` with tag/recent filters, `save --task`) round out the agent workflow. Under the hood, strict typing continued with Protocols, TypedDicts, and concrete generics.
+**The cleanup release.** EMDX shed its last API key dependency and removed the cascade system entirely (~5,500 lines) — everything now runs through the Claude CLI. New session-aware commands (`wrapup`, git-enriched `prime`, `save --task`) help agents and humans track what happened. The Q&A system got a conversational TUI redesign and tag/recent filters. Under the hood, type safety tightened with Protocols, TypedDicts, and concrete generics.
 
 ### 🚀 Major Features
 
