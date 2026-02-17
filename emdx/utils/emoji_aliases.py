@@ -12,101 +12,82 @@ EMOJI_ALIASES: dict[str, str] = {
     "plan": "🎯",
     "strategy": "🎯",
     "goal": "🎯",
-
     "analysis": "🔍",
     "investigate": "🔍",
     "research": "🔍",
     "explore": "🔍",
-
     "notes": "📝",
     "note": "📝",
     "memo": "📝",
     "thoughts": "📝",
-
     "docs": "📚",
     "documentation": "📚",
     "readme": "📚",
     "guide": "📚",
-
     "architecture": "🏗️",
     "arch": "🏗️",
     "design": "🏗️",
     "structure": "🏗️",
-
     # Workflow Status
     "active": "🚀",
     "current": "🚀",
     "working": "🚀",
     "wip": "🚀",
-
     "done": "✅",
     "complete": "✅",
     "finished": "✅",
     "completed": "✅",
-
     "blocked": "🚧",
     "stuck": "🚧",
     "waiting": "🚧",
     "pending": "🚧",
-
     # Outcomes (Success Tracking)
     "success": "🎉",
     "works": "🎉",
     "good": "🎉",
-
     "failed": "❌",
     "broken": "❌",
     "error": "❌",
     "bad": "❌",
-
     "partial": "⚡",
     "mixed": "⚡",
     "halfway": "⚡",
     "some": "⚡",
-
     # Technical Work
     "refactor": "🔧",
     "refactoring": "🔧",
     "cleanup": "🔧",
     "improve": "🔧",
-
     "test": "🧪",
     "testing": "🧪",
     "tests": "🧪",
     "qa": "🧪",
-
     "bug": "🐛",
     "fix": "🐛",
     "issue": "🐛",
     "problem": "🐛",
-
     "feature": "✨",
     "new": "✨",
     "add": "✨",
     "enhancement": "✨",
-
     "quality": "💎",
     "code-quality": "💎",
     "codequality": "💎",
     "clean": "💎",
-
     # Priority
     "urgent": "🚨",
     "important": "🚨",
     "critical": "🚨",
     "asap": "🚨",
-
     "low": "🐌",
     "later": "🐌",
     "someday": "🐌",
     "maybe": "🐌",
-
     # Project Management
     "project": "📊",
     "management": "📊",
     "pm": "📊",
     "tracking": "📊",
-
     # Recipes
     "recipe": "📋",
     "template": "📋",
@@ -122,6 +103,7 @@ for alias, emoji in EMOJI_ALIASES.items():
 
 # Set of all emoji tags for validation
 EMOJI_TAGS: set[str] = set(EMOJI_ALIASES.values())
+
 
 def expand_aliases(tags: list[str]) -> list[str]:
     """
@@ -149,6 +131,7 @@ def expand_aliases(tags: list[str]) -> list[str]:
             expanded.append(tag)
     return expanded
 
+
 def expand_alias_string(tag_string: str) -> str:
     """
     Expand aliases in a comma-separated tag string.
@@ -172,6 +155,7 @@ def expand_alias_string(tag_string: str) -> str:
     expanded = expand_aliases(tags)
     return ", ".join(expanded)
 
+
 def get_aliases_for_emoji(emoji: str) -> list[str]:
     """
     Get all text aliases for a given emoji.
@@ -188,6 +172,7 @@ def get_aliases_for_emoji(emoji: str) -> list[str]:
     """
     return REVERSE_ALIASES.get(emoji, [])
 
+
 def is_emoji_tag(tag: str) -> bool:
     """
     Check if a tag is a known emoji tag.
@@ -200,6 +185,7 @@ def is_emoji_tag(tag: str) -> bool:
     """
     return tag in EMOJI_TAGS
 
+
 def is_text_alias(tag: str) -> bool:
     """
     Check if a tag is a known text alias.
@@ -211,6 +197,7 @@ def is_text_alias(tag: str) -> bool:
         True if the tag is a known text alias
     """
     return tag.lower() in EMOJI_ALIASES
+
 
 def normalize_tag_to_emoji(tag: str) -> str:
     """
@@ -233,6 +220,7 @@ def normalize_tag_to_emoji(tag: str) -> str:
     tag_lower = tag.strip().lower()
     return EMOJI_ALIASES.get(tag_lower, tag)
 
+
 def get_all_aliases() -> dict[str, str]:
     """
     Get all emoji aliases.
@@ -241,6 +229,7 @@ def get_all_aliases() -> dict[str, str]:
         Dictionary mapping text aliases to emojis
     """
     return EMOJI_ALIASES.copy()
+
 
 def get_category_emojis() -> dict[str, list[str]]:
     """
@@ -259,6 +248,7 @@ def get_category_emojis() -> dict[str, list[str]]:
         "Recipes": ["📋"],
     }
     return categories
+
 
 def suggest_aliases(partial: str) -> list[str]:
     """

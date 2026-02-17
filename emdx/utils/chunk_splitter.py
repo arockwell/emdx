@@ -193,9 +193,7 @@ def _split_large_chunks(chunks: list[Chunk]) -> list[Chunk]:
                 # Start new chunk with this paragraph
                 # If paragraph itself is too large, split by sentences
                 if len(para) > MAX_CHUNK_CHARS:
-                    sentence_chunks = _split_by_sentences(
-                        para, chunk.heading_path, current_start
-                    )
+                    sentence_chunks = _split_by_sentences(para, chunk.heading_path, current_start)
                     result.extend(sentence_chunks)
                     current_text = ""
                 else:

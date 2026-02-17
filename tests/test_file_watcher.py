@@ -17,7 +17,7 @@ class TestFileWatcherPolling:
     @pytest.fixture
     def temp_file(self):
         """Create a temporary file for testing."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("initial content\n")
             temp_path = Path(f.name)
 
@@ -38,7 +38,7 @@ class TestFileWatcherPolling:
                 callback_called.set()
 
         # Force polling mode by mocking WATCHDOG_AVAILABLE
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(temp_file, callback)
             watcher.start()
 
@@ -47,13 +47,15 @@ class TestFileWatcherPolling:
                 time.sleep(0.55)
 
                 # Modify the file
-                with open(temp_file, 'a') as f:
+                with open(temp_file, "a") as f:
                     f.write("new content\n")
 
                 # Wait for callback to be triggered
                 result = callback_called.wait(timeout=2.0)
                 assert result, "Callback was not triggered after file modification"
-                assert callback_count[0] >= 2, "Expected at least 2 callbacks (initial + modification)"  # noqa: E501
+                assert callback_count[0] >= 2, (
+                    "Expected at least 2 callbacks (initial + modification)"
+                )  # noqa: E501
             finally:
                 watcher.stop()
 
@@ -67,7 +69,7 @@ class TestFileWatcherPolling:
             if callback_count[0] >= 2:
                 callback_called.set()
 
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(temp_file, callback)
             watcher.start()
 
@@ -76,7 +78,7 @@ class TestFileWatcherPolling:
                 time.sleep(0.55)
 
                 # Append to file to change size
-                with open(temp_file, 'a') as f:
+                with open(temp_file, "a") as f:
                     f.write("x" * 100)
 
                 result = callback_called.wait(timeout=2.0)
@@ -89,7 +91,7 @@ class TestFileWatcherPolling:
         nonexistent = Path("/tmp/nonexistent_file_12345.txt")
         callback = MagicMock()
 
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(nonexistent, callback)
             watcher.start()
 
@@ -104,7 +106,7 @@ class TestFileWatcherPolling:
         """Test that stop() properly terminates the polling thread."""
         callback = MagicMock()
 
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(temp_file, callback)
             watcher.start()
 
@@ -124,7 +126,7 @@ class TestFileWatcherWatchdog:
     @pytest.fixture
     def temp_file(self):
         """Create a temporary file for testing."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("initial content\n")
             temp_path = Path(f.name)
 
@@ -175,7 +177,7 @@ class TestFileWatcherWatchdog:
         try:
             # Modify the file
             time.sleep(0.1)  # Give observer time to start
-            with open(temp_file, 'a') as f:
+            with open(temp_file, "a") as f:
                 f.write("new content\n")
 
             # Wait for callback
@@ -191,7 +193,7 @@ class TestFileWatcherFallback:
     @pytest.fixture
     def temp_file(self):
         """Create a temporary file for testing."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("initial content\n")
             temp_path = Path(f.name)
 
@@ -204,10 +206,11 @@ class TestFileWatcherFallback:
     def test_fallback_to_polling_on_watchdog_failure(self, temp_file):
         """Test fallback to polling when watchdog fails."""
         from watchdog.observers import Observer
+
         callback = MagicMock()
 
         # Mock the Observer to fail on start
-        with patch.object(Observer, 'start', side_effect=Exception("Watchdog failed")):
+        with patch.object(Observer, "start", side_effect=Exception("Watchdog failed")):
             watcher = FileWatcher(temp_file, callback)
             watcher.start()
 
@@ -222,7 +225,7 @@ class TestFileWatcherFallback:
         """Test that polling is used when watchdog is not available."""
         callback = MagicMock()
 
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(temp_file, callback)
             watcher.start()
 
@@ -263,7 +266,7 @@ class TestFileWatcherIntegration:
     @pytest.fixture
     def temp_file(self):
         """Create a temporary file for testing."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("initial content\n")
             temp_path = Path(f.name)
 
@@ -281,7 +284,7 @@ class TestFileWatcherIntegration:
             with lock:
                 callback_count[0] += 1
 
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(temp_file, callback)
             watcher.start()
 
@@ -293,7 +296,7 @@ class TestFileWatcherIntegration:
                 # Make multiple modifications
                 for i in range(3):
                     time.sleep(0.55)  # Wait for one poll cycle
-                    with open(temp_file, 'a') as f:
+                    with open(temp_file, "a") as f:
                         f.write(f"modification {i}\n")
 
                 # Wait for final poll cycle
@@ -308,7 +311,7 @@ class TestFileWatcherIntegration:
         """Test that watcher can be started and stopped multiple times."""
         callback = MagicMock()
 
-        with patch('emdx.services.file_watcher.WATCHDOG_AVAILABLE', False):
+        with patch("emdx.services.file_watcher.WATCHDOG_AVAILABLE", False):
             watcher = FileWatcher(temp_file, callback)
 
             # First cycle

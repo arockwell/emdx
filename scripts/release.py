@@ -151,7 +151,7 @@ def bump_version(new_version: str) -> None:
     new_content = re.sub(
         r'(\[tool\.poetry\]\nname = "emdx"\n)version = "[^"]+"',
         f'\\1version = "{new_version}"',
-        content
+        content,
     )
 
     pyproject.write_text(new_content)
@@ -161,11 +161,7 @@ def bump_version(new_version: str) -> None:
     init_file = Path("emdx/__init__.py")
     if init_file.exists():
         init_content = init_file.read_text()
-        new_init = re.sub(
-            r'__version__ = "[^"]+"',
-            f'__version__ = "{new_version}"',
-            init_content
-        )
+        new_init = re.sub(r'__version__ = "[^"]+"', f'__version__ = "{new_version}"', init_content)
         init_file.write_text(new_init)
         print(f"Updated emdx/__init__.py to version {new_version}")
 
@@ -186,7 +182,7 @@ def update_changelog(entry: str) -> None:
                 break
             header_lines.append(line)
         header = "\n".join(header_lines)
-        rest = "\n".join(lines[len(header_lines):])
+        rest = "\n".join(lines[len(header_lines) :])
         new_content = header + "\n" + entry + "\n" + rest
     else:
         new_content = content[:header_end] + "\n" + entry + "\n" + content[header_end:]
@@ -212,12 +208,20 @@ def main():
         print("=== Features ===")
         for f in categories["features"][:20]:
             print(f"  - {f}")
-        print(f"\n  ... and {len(categories['features']) - 20} more" if len(categories["features"]) > 20 else "")  # noqa: E501
+        print(
+            f"\n  ... and {len(categories['features']) - 20} more"
+            if len(categories["features"]) > 20
+            else ""
+        )  # noqa: E501
 
         print("\n=== Fixes ===")
         for f in categories["fixes"][:20]:
             print(f"  - {f}")
-        print(f"\n  ... and {len(categories['fixes']) - 20} more" if len(categories["fixes"]) > 20 else "")  # noqa: E501
+        print(
+            f"\n  ... and {len(categories['fixes']) - 20} more"
+            if len(categories["fixes"]) > 20
+            else ""
+        )  # noqa: E501
 
         print(f"\nTotal: {len(categories['features'])} features, {len(categories['fixes'])} fixes")
 

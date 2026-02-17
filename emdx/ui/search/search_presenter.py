@@ -12,6 +12,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
 class SearchMode(Enum):
     """Available search modes."""
 
@@ -19,6 +20,7 @@ class SearchMode(Enum):
     TAGS = "tags"  # Tag-based search
     SEMANTIC = "semantic"  # AI-powered semantic search
     COMBINED = "combined"  # FTS + semantic
+
 
 @dataclass
 class SearchResultItem:
@@ -35,6 +37,7 @@ class SearchResultItem:
     updated_at: str | None = None
     is_selected: bool = False  # For multi-select
 
+
 @dataclass
 class SearchStateVM:
     """Complete search state for the UI."""
@@ -50,6 +53,7 @@ class SearchStateVM:
     selected_indices: set[int] = field(default_factory=set)
     active_filters: list[str] = field(default_factory=list)
     status_text: str = ""
+
 
 class SearchPresenter:
     """
@@ -121,9 +125,7 @@ class SearchPresenter:
 
         try:
             # Run blocking DB calls in thread pool to avoid blocking UI
-            recent, popular_tags = await asyncio.to_thread(
-                self._load_initial_data_sync
-            )
+            recent, popular_tags = await asyncio.to_thread(self._load_initial_data_sync)
 
             self._state.recent_docs = [
                 SearchResultItem(
@@ -175,12 +177,18 @@ class SearchPresenter:
 
         # Don't search for very short queries (just show recent)
         query_stripped = query.strip()
-        if len(query_stripped) < self.MIN_QUERY_LENGTH and not query_stripped.startswith('@') and not query_stripped.startswith('tags:'):  # noqa: E501
+        if (
+            len(query_stripped) < self.MIN_QUERY_LENGTH
+            and not query_stripped.startswith("@")
+            and not query_stripped.startswith("tags:")
+        ):  # noqa: E501
             self._state.results = self._state.recent_docs.copy()
             self._state.total_count = len(self._state.results)
             self._state.search_time_ms = 0
             self._state.is_searching = False
-            self._state.status_text = f"Type {self.MIN_QUERY_LENGTH}+ chars to search | {len(self._state.results)} recent"  # noqa: E501
+            self._state.status_text = (
+                f"Type {self.MIN_QUERY_LENGTH}+ chars to search | {len(self._state.results)} recent"  # noqa: E501
+            )
             await self._notify_update()
             return
 
@@ -198,7 +206,9 @@ class SearchPresenter:
             return
 
         # Check cache - include active filters and tags in the key
-        filters_str = ",".join(sorted(self._state.active_filters)) if self._state.active_filters else ""  # noqa: E501
+        filters_str = (
+            ",".join(sorted(self._state.active_filters)) if self._state.active_filters else ""
+        )  # noqa: E501
         cache_key = f"{self._state.mode.value}:{query}:filters={filters_str}"
         if cache_key in self._cache:
             self._state.results = self._cache[cache_key]

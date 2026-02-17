@@ -13,7 +13,7 @@ def create_category(key: str, name: str, description: str = "") -> str:
     Validates: uppercase alpha only, 2-8 chars.
     """
     key = key.upper()
-    if not re.match(r'^[A-Z]{2,8}$', key):
+    if not re.match(r"^[A-Z]{2,8}$", key):
         raise ValueError(f"Category key must be 2-8 uppercase letters, got: {key!r}")
 
     with db.get_connection() as conn:
@@ -58,7 +58,7 @@ def list_categories() -> list[CategoryWithStatsDict]:
 def ensure_category(key: str) -> str:
     """Auto-create category with key as name if doesn't exist. Returns key."""
     key = key.upper()
-    if not re.match(r'^[A-Z]{2,8}$', key):
+    if not re.match(r"^[A-Z]{2,8}$", key):
         raise ValueError(f"Category key must be 2-8 uppercase letters, got: {key!r}")
 
     with db.get_connection() as conn:
@@ -82,7 +82,7 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
     Returns dict with counts: adopted, skipped, epics_found.
     """
     key = key.upper()
-    pattern = re.compile(rf'^{re.escape(key)}-(\d+):\s*')
+    pattern = re.compile(rf"^{re.escape(key)}-(\d+):\s*")
 
     # Ensure category exists
     if name:
@@ -102,9 +102,7 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
 
     with db.get_connection() as conn:
         # Find tasks matching KEY-N: pattern that aren't already adopted
-        cursor = conn.execute(
-            "SELECT id, title, parent_task_id FROM tasks WHERE epic_key IS NULL"
-        )
+        cursor = conn.execute("SELECT id, title, parent_task_id FROM tasks WHERE epic_key IS NULL")
         rows = cursor.fetchall()
 
         for row in rows:

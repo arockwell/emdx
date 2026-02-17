@@ -74,11 +74,7 @@ class TestCLIBasics:
     def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""
         mock_db.ensure_schema = Mock()
-        mock_get_stats.return_value = {
-            "total": 0,
-            "by_project": {},
-            "recent_activity": []
-        }
+        mock_get_stats.return_value = {"total": 0, "by_project": {}, "recent_activity": []}
 
         result = runner.invoke(app, ["stats"])
         # Should show some statistics

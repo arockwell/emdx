@@ -73,11 +73,13 @@ class TestRecipeList:
     def test_list_shows_recipes(self, mock_tags):
         mock_tags.return_value = [
             {
-                "id": 42, "title": "Security Audit",
+                "id": 42,
+                "title": "Security Audit",
                 "content": "# Security Audit\nCheck all endpoints",
             },
             {
-                "id": 43, "title": "Code Review",
+                "id": 43,
+                "title": "Code Review",
                 "content": "Review code quality",
             },
         ]
@@ -93,7 +95,8 @@ class TestRecipeList:
     def test_list_shows_steps_badge_for_structured(self, mock_tags):
         mock_tags.return_value = [
             {
-                "id": 42, "title": "Multi-Step",
+                "id": 42,
+                "title": "Multi-Step",
                 "content": "# Multi-Step\n\n## Step 1: Scan\nDo it.\n",
             },
         ]
@@ -117,7 +120,9 @@ class TestRecipeRun:
     def test_run_simple_builds_delegate_command(self, mock_find, mock_subprocess):
         """Simple recipes (no steps) still delegate via subprocess."""
         mock_find.return_value = {
-            "id": 42, "title": "My Recipe", "content": "Just do it.",
+            "id": 42,
+            "title": "My Recipe",
+            "content": "Just do it.",
         }
         mock_subprocess.run.return_value = MagicMock(returncode=0)
         runner.invoke(app, ["run", "42"])
@@ -130,7 +135,9 @@ class TestRecipeRun:
     @patch("emdx.commands.recipe._find_recipe")
     def test_run_simple_with_pr_flag(self, mock_find, mock_subprocess):
         mock_find.return_value = {
-            "id": 42, "title": "My Recipe", "content": "Just do it.",
+            "id": 42,
+            "title": "My Recipe",
+            "content": "Just do it.",
         }
         mock_subprocess.run.return_value = MagicMock(returncode=0)
         runner.invoke(app, ["run", "42", "--pr"])
@@ -141,7 +148,9 @@ class TestRecipeRun:
     @patch("emdx.commands.recipe._find_recipe")
     def test_run_simple_with_extra_args(self, mock_find, mock_subprocess):
         mock_find.return_value = {
-            "id": 42, "title": "My Recipe", "content": "Just do it.",
+            "id": 42,
+            "title": "My Recipe",
+            "content": "Just do it.",
         }
         mock_subprocess.run.return_value = MagicMock(returncode=0)
         runner.invoke(app, ["run", "42", "--", "analyze", "auth"])
@@ -154,7 +163,8 @@ class TestRecipeRun:
     def test_run_structured_detected(self, mock_find, mock_run_structured):
         """Structured recipes (with steps) use the recipe executor."""
         mock_find.return_value = {
-            "id": 42, "title": "Multi-Step",
+            "id": 42,
+            "title": "Multi-Step",
             "content": "# Multi\n\n## Step 1: Scan\nScan.\n\n## Step 2: Fix\nFix.\n",
         }
         runner.invoke(app, ["run", "42"])
@@ -164,7 +174,8 @@ class TestRecipeRun:
     @patch("emdx.commands.recipe._find_recipe")
     def test_run_structured_with_inputs(self, mock_find, mock_run_structured):
         mock_find.return_value = {
-            "id": 42, "title": "Multi-Step",
+            "id": 42,
+            "title": "Multi-Step",
             "content": "# Multi\n\n## Step 1: Scan\nScan {{target}}.\n",
         }
         runner.invoke(app, ["run", "42", "--input", "target=api"])
@@ -184,7 +195,9 @@ class TestRecipeShow:
     @patch("emdx.commands.recipe._find_recipe")
     def test_show_simple_recipe(self, mock_find):
         mock_find.return_value = {
-            "id": 42, "title": "Simple", "content": "No steps here.",
+            "id": 42,
+            "title": "Simple",
+            "content": "No steps here.",
         }
         result = runner.invoke(app, ["show", "42"])
         assert result.exit_code == 0
@@ -193,7 +206,8 @@ class TestRecipeShow:
     @patch("emdx.commands.recipe._find_recipe")
     def test_show_structured_recipe(self, mock_find):
         mock_find.return_value = {
-            "id": 42, "title": "Multi",
+            "id": 42,
+            "title": "Multi",
             "content": (
                 "---\n"
                 "inputs:\n"

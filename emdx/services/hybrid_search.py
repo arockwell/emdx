@@ -227,7 +227,9 @@ class HybridSearchService:
 
         try:
             matches = self.embedding_service.search_chunks(
-                query, limit=limit * 2, threshold=0.3  # Get more, then dedupe
+                query,
+                limit=limit * 2,
+                threshold=0.3,  # Get more, then dedupe
             )
         except Exception as e:
             logger.warning(f"Chunk search failed: {e}")
@@ -254,9 +256,7 @@ class HybridSearchService:
 
             # Build snippet from chunk
             chunk_preview = (
-                match.chunk_text[:200] + "..."
-                if len(match.chunk_text) > 200
-                else match.chunk_text
+                match.chunk_text[:200] + "..." if len(match.chunk_text) > 200 else match.chunk_text
             )
 
             results.append(

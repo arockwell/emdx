@@ -1,6 +1,5 @@
 """Tests for the stale command module (knowledge decay)."""
 
-
 import pytest
 from typer.testing import CliRunner
 
@@ -67,32 +66,28 @@ class TestStalenessLevel:
     def test_high_importance_critical(self):
         """High importance docs are CRITICAL after threshold."""
         level = _get_staleness_level(
-            days_stale=35, importance=6.0,
-            critical_days=30, warning_days=14, info_days=60
+            days_stale=35, importance=6.0, critical_days=30, warning_days=14, info_days=60
         )
         assert level == StalenessLevel.CRITICAL
 
     def test_medium_importance_warning(self):
         """Medium importance docs are WARNING after threshold."""
         level = _get_staleness_level(
-            days_stale=20, importance=3.0,
-            critical_days=30, warning_days=14, info_days=60
+            days_stale=20, importance=3.0, critical_days=30, warning_days=14, info_days=60
         )
         assert level == StalenessLevel.WARNING
 
     def test_low_importance_info(self):
         """Low importance docs are INFO after threshold (archive candidates)."""
         level = _get_staleness_level(
-            days_stale=70, importance=1.0,
-            critical_days=30, warning_days=14, info_days=60
+            days_stale=70, importance=1.0, critical_days=30, warning_days=14, info_days=60
         )
         assert level == StalenessLevel.INFO
 
     def test_not_stale_returns_none(self):
         """Recent docs return None (not stale)."""
         level = _get_staleness_level(
-            days_stale=5, importance=6.0,
-            critical_days=30, warning_days=14, info_days=60
+            days_stale=5, importance=6.0, critical_days=30, warning_days=14, info_days=60
         )
         assert level is None
 
@@ -100,8 +95,7 @@ class TestStalenessLevel:
         """Custom day thresholds work."""
         # With shorter threshold, should become CRITICAL
         level = _get_staleness_level(
-            days_stale=10, importance=6.0,
-            critical_days=7, warning_days=3, info_days=30
+            days_stale=10, importance=6.0, critical_days=7, warning_days=3, info_days=30
         )
         assert level == StalenessLevel.CRITICAL
 
@@ -135,13 +129,14 @@ class TestStaleCommand:
         """JSON output works with stale documents."""
         # Create a document with old access date
         from emdx.database.documents import save_document
+
         doc_id = save_document("Test Stale Doc", "Content", tags=["gameplan"])
 
         # Manually set old accessed_at to make it stale
         with db.get_connection() as conn:
             conn.execute(
                 "UPDATE documents SET accessed_at = datetime('now', '-100 days') WHERE id = ?",
-                (doc_id,)
+                (doc_id,),
             )
             conn.commit()
 
@@ -149,6 +144,7 @@ class TestStaleCommand:
         assert result.exit_code == 0
         # Should be valid JSON
         import json
+
         data = json.loads(result.output)
         assert isinstance(data, list)
         # Should contain our stale doc
@@ -181,6 +177,7 @@ class TestTouchCommand:
         """Touching existing document succeeds."""
         # Create a document first
         from emdx.database.documents import save_document
+
         doc_id = save_document("Test Doc", "Test content")
 
         result = runner.invoke(app, ["touch", str(doc_id)])
@@ -190,6 +187,7 @@ class TestTouchCommand:
     def test_touch_multiple_docs(self):
         """Touching multiple documents at once works."""
         from emdx.database.documents import save_document
+
         doc1 = save_document("Test Doc 1", "Content 1")
         doc2 = save_document("Test Doc 2", "Content 2")
 

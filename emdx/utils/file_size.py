@@ -33,14 +33,14 @@ def format_file_size(size_bytes: int) -> str:
     elif size >= 10:
         # Strip trailing zeros for cleaner display
         formatted = f"{size:.1f}"
-        if formatted.endswith('0'):
+        if formatted.endswith("0"):
             formatted = formatted[:-1]
         return f"{formatted} {units[unit_index]}"
     else:
         # Strip trailing zeros for cleaner display
         formatted = f"{size:.2f}"
-        if formatted.endswith('0'):
+        if formatted.endswith("0"):
             formatted = formatted[:-1]
-            if formatted.endswith('0'):
+            if formatted.endswith("0"):
                 formatted = formatted[:-1]
         return f"{formatted} {units[unit_index]}"

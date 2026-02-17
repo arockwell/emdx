@@ -133,19 +133,21 @@ class TestExecuteSteps:
     )
     @patch("emdx.services.recipe_executor.get_document")
     @patch("emdx.commands.delegate._run_single")
-    def test_pr_url_captured(
-        self, mock_run_single, mock_get_doc, mock_create_wt, mock_cleanup_wt
-    ):
+    def test_pr_url_captured(self, mock_run_single, mock_get_doc, mock_create_wt, mock_cleanup_wt):
         mock_run_single.return_value = _make_single_result(
             doc_id=10, pr_url="https://github.com/test/repo/pull/1"
         )
         mock_get_doc.return_value = {"content": "done"}
 
         recipe = _make_recipe(
-            steps=[RecipeStep(
-                number=1, name="Fix", prompt="Fix it",
-                flags={"pr": True},
-            )],
+            steps=[
+                RecipeStep(
+                    number=1,
+                    name="Fix",
+                    prompt="Fix it",
+                    flags={"pr": True},
+                )
+            ],
         )
         result = execute_recipe(recipe, quiet=True)
         assert result.success
@@ -162,14 +164,15 @@ class TestExecuteSteps:
                 RecipeInput(name="target", required=True),
                 RecipeInput(name="severity", default="medium"),
             ],
-            steps=[RecipeStep(
-                number=1, name="Scan",
-                prompt="Scan {{target}} at {{severity}} level",
-            )],
+            steps=[
+                RecipeStep(
+                    number=1,
+                    name="Scan",
+                    prompt="Scan {{target}} at {{severity}} level",
+                )
+            ],
         )
-        result = execute_recipe(
-            recipe, inputs={"target": "auth-module"}, quiet=True
-        )
+        result = execute_recipe(recipe, inputs={"target": "auth-module"}, quiet=True)
         assert result.success
 
         # Verify substitution happened
@@ -192,10 +195,14 @@ class TestExecuteSteps:
         mock_get_doc.return_value = {"content": "done"}
 
         recipe = _make_recipe(
-            steps=[RecipeStep(
-                number=1, name="Fix", prompt="Fix it",
-                flags={"pr": True, "timeout": 1800},
-            )],
+            steps=[
+                RecipeStep(
+                    number=1,
+                    name="Fix",
+                    prompt="Fix it",
+                    flags={"pr": True, "timeout": 1800},
+                )
+            ],
         )
         result = execute_recipe(recipe, quiet=True)
         assert result.success

@@ -224,21 +224,13 @@ class TestHybridMerging:
         semantic_score = 0.7
 
         # Expected combined score
-        expected = (
-            KEYWORD_WEIGHT * keyword_score
-            + SEMANTIC_WEIGHT * semantic_score
-            + HYBRID_BOOST
-        )
+        expected = KEYWORD_WEIGHT * keyword_score + SEMANTIC_WEIGHT * semantic_score + HYBRID_BOOST
 
         # Should be clamped to max 1.0
         expected = min(1.0, expected)
 
         # The actual calculation in _search_hybrid
-        actual = (
-            KEYWORD_WEIGHT * keyword_score
-            + SEMANTIC_WEIGHT * semantic_score
-            + HYBRID_BOOST
-        )
+        actual = KEYWORD_WEIGHT * keyword_score + SEMANTIC_WEIGHT * semantic_score + HYBRID_BOOST
         actual = min(1.0, actual)
 
         assert actual == expected

@@ -48,12 +48,19 @@ class TestGroupCreateCommand:
         mock_db.ensure_schema = Mock()
         mock_groups.create_group.return_value = 2
 
-        result = runner.invoke(app, [
-            "create", "Initiative X",
-            "--type", "initiative",
-            "--project", "my-proj",
-            "--description", "Big initiative",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "Initiative X",
+                "--type",
+                "initiative",
+                "--project",
+                "my-proj",
+                "--description",
+                "Big initiative",
+            ],
+        )
         out = _out(result)
         assert result.exit_code == 0
         assert "Created group #2" in out
@@ -475,12 +482,19 @@ class TestGroupEditCommand:
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.update_group.return_value = True
 
-        result = runner.invoke(app, [
-            "edit", "1",
-            "--name", "Updated",
-            "--description", "New desc",
-            "--type", "initiative",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "edit",
+                "1",
+                "--name",
+                "Updated",
+                "--description",
+                "New desc",
+                "--type",
+                "initiative",
+            ],
+        )
         assert result.exit_code == 0
         mock_groups.update_group.assert_called_once_with(
             1,

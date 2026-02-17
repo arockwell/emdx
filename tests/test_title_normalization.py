@@ -119,34 +119,49 @@ class TestTitlesMatch:
         assert titles_match("Hello", "World") is False
 
     def test_match_after_date_removal(self):
-        assert titles_match(
-            "Report - 2025-01-10",
-            "Report - 2025-02-15",
-        ) is True
+        assert (
+            titles_match(
+                "Report - 2025-01-10",
+                "Report - 2025-02-15",
+            )
+            is True
+        )
 
     def test_match_after_agent_removal(self):
-        assert titles_match(
-            "Task Output (Agent 1)",
-            "Task Output (Agent 5)",
-        ) is True
+        assert (
+            titles_match(
+                "Task Output (Agent 1)",
+                "Task Output (Agent 5)",
+            )
+            is True
+        )
 
     def test_match_after_version_removal(self):
-        assert titles_match(
-            "Design Doc v1",
-            "Design Doc v2",
-        ) is True
+        assert (
+            titles_match(
+                "Design Doc v1",
+                "Design Doc v2",
+            )
+            is True
+        )
 
     def test_match_after_number_removal(self):
-        assert titles_match(
-            "Fix Bug #100",
-            "Fix Bug #200",
-        ) is True
+        assert (
+            titles_match(
+                "Fix Bug #100",
+                "Fix Bug #200",
+            )
+            is True
+        )
 
     def test_no_match_different_base(self):
-        assert titles_match(
-            "Report A - 2025-01-10",
-            "Report B - 2025-01-10",
-        ) is False
+        assert (
+            titles_match(
+                "Report A - 2025-01-10",
+                "Report B - 2025-01-10",
+            )
+            is False
+        )
 
     def test_empty_titles(self):
         assert titles_match("", "") is True
@@ -156,10 +171,13 @@ class TestTitlesMatch:
         assert titles_match("", "Hello") is False
 
     def test_match_with_multiple_differences(self):
-        assert titles_match(
-            "Plan (Agent 1) - 2025-01-01 v1",
-            "Plan (Agent 3) - 2025-06-15 v5",
-        ) is True
+        assert (
+            titles_match(
+                "Plan (Agent 1) - 2025-01-01 v1",
+                "Plan (Agent 3) - 2025-06-15 v5",
+            )
+            is True
+        )
 
 
 class TestTitleSimilarity:

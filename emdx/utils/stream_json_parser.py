@@ -20,6 +20,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class StreamEvent:
     """Structured event from stream-json parsing."""
@@ -30,6 +31,7 @@ class StreamEvent:
     tool_name: str | None = None  # For tool_use events
     tool_input: str | None = None  # Brief summary of tool input
     raw_line: str = ""  # Original line for debugging
+
 
 def parse_stream_json_line(line: str) -> tuple[str, str]:
     """Parse a single stream-json line and extract text content.
@@ -88,6 +90,7 @@ def parse_stream_json_line(line: str) -> tuple[str, str]:
         # Not valid JSON, treat as plain text
         return ("plain", line)
 
+
 def extract_text_from_stream_json(content: str) -> str:
     """Extract all text content from stream-json format.
 
@@ -122,6 +125,7 @@ def extract_text_from_stream_json(content: str) -> str:
 
     return result.strip()
 
+
 def filter_stream_json_for_display(content: str) -> list[str]:
     """Filter stream-json content and return lines suitable for display.
 
@@ -148,6 +152,7 @@ def filter_stream_json_for_display(content: str) -> list[str]:
         # Skip "skip" type
 
     return lines
+
 
 def parse_stream_json_line_rich(line: str) -> StreamEvent:
     """Parse a stream-json line and return structured event data.
@@ -218,11 +223,17 @@ def parse_stream_json_line_rich(line: str) -> StreamEvent:
                                     for t in todos[:5]:  # Show up to 5 todos
                                         status = t.get("status", "pending")
                                         content = t.get("content", "")[:40]
-                                        icon = "✅" if status == "completed" else "⏳" if status == "in_progress" else "○"  # noqa: E501
+                                        icon = (
+                                            "✅"
+                                            if status == "completed"
+                                            else "⏳"
+                                            if status == "in_progress"
+                                            else "○"
+                                        )  # noqa: E501
                                         todo_lines.append(f"{icon} {content}")
                                     summary = " | ".join(todo_lines)
                                     if len(todos) > 5:
-                                        summary += f" (+{len(todos)-5} more)"
+                                        summary += f" (+{len(todos) - 5} more)"
                                 else:
                                     summary = "empty"
                             elif "file_path" in tool_input:
@@ -295,6 +306,7 @@ def parse_stream_json_line_rich(line: str) -> StreamEvent:
         # Not valid JSON, treat as plain text
         return StreamEvent(event_type="text", content=line, raw_line=line)
 
+
 def format_live_log_line(event: StreamEvent) -> str:
     """Format a StreamEvent for live log display with timestamps.
 
@@ -323,6 +335,7 @@ def format_live_log_line(event: StreamEvent) -> str:
     else:
         # Plain text
         return f"{ts_prefix}{event.content}" if ts_prefix else event.content
+
 
 def parse_and_format_live_logs(content: str) -> list[str]:
     """Parse stream-json content and return formatted lines for live display.

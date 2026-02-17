@@ -101,9 +101,7 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_all_options(self, mock_tasks):
         mock_tasks.create_task.return_value = 6
-        result = runner.invoke(
-            app, ["add", "Full task", "-d", "10", "-D", "Full description"]
-        )
+        result = runner.invoke(app, ["add", "Full task", "-d", "10", "-D", "Full description"])
         assert result.exit_code == 0
         out = _out(result)
         assert "Task #6" in out
@@ -217,12 +215,21 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_tasks(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open task", "status": "open",
-             "epic_key": None, "epic_seq": None},
-            {"id": 2, "title": "Active task", "status": "active",
-             "epic_key": None, "epic_seq": None},
-            {"id": 3, "title": "Blocked task", "status": "blocked",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": "Open task", "status": "open", "epic_key": None, "epic_seq": None},
+            {
+                "id": 2,
+                "title": "Active task",
+                "status": "active",
+                "epic_key": None,
+                "epic_seq": None,
+            },
+            {
+                "id": 3,
+                "title": "Blocked task",
+                "status": "blocked",
+                "epic_key": None,
+                "epic_seq": None,
+            },
         ]
         mock_tasks.get_dependencies.return_value = []
         result = runner.invoke(app, ["list"])
@@ -236,8 +243,7 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_status_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Task", "status": "active",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": "Task", "status": "active", "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
@@ -246,8 +252,13 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_epic_label_and_strips_prefix(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "SEC-1: Harden auth", "status": "open",
-             "epic_key": "SEC", "epic_seq": 1},
+            {
+                "id": 1,
+                "title": "SEC-1: Harden auth",
+                "status": "open",
+                "epic_key": "SEC",
+                "epic_seq": 1,
+            },
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
@@ -261,8 +272,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -271,8 +285,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--done"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=None,
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -281,8 +298,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=20, exclude_delegate=False,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=20,
+            exclude_delegate=False,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -291,8 +311,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-a"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=20, exclude_delegate=False,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=20,
+            exclude_delegate=False,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -301,8 +324,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--status", "open"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open"], limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -311,8 +337,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-s", "open,active"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active"], limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -321,8 +350,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--limit", "5"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=5, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=5,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -331,21 +363,20 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-n", "10"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=10, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=10,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_displays_status_as_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open", "status": "open",
-             "epic_key": None, "epic_seq": None},
-            {"id": 2, "title": "Active", "status": "active",
-             "epic_key": None, "epic_seq": None},
-            {"id": 3, "title": "Done", "status": "done",
-             "epic_key": None, "epic_seq": None},
-            {"id": 4, "title": "Failed", "status": "failed",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": "Open", "status": "open", "epic_key": None, "epic_seq": None},
+            {"id": 2, "title": "Active", "status": "active", "epic_key": None, "epic_seq": None},
+            {"id": 3, "title": "Done", "status": "done", "epic_key": None, "epic_seq": None},
+            {"id": 4, "title": "Failed", "status": "failed", "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
@@ -357,13 +388,9 @@ class TestTaskList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_does_not_truncate_title(self, mock_tasks):
-        long_title = (
-            "This is a very long task title that exceeds fifty"
-            " characters by quite a bit"
-        )
+        long_title = "This is a very long task title that exceeds fifty characters by quite a bit"
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": long_title, "status": "open",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": long_title, "status": "open", "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
@@ -429,10 +456,16 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_basic_info(self, mock_tasks):
         mock_tasks.get_task.return_value = {
-            "id": 42, "title": "Fix auth bug", "status": "open",
+            "id": 42,
+            "title": "Fix auth bug",
+            "status": "open",
             "description": "The auth middleware has a race condition",
-            "epic_key": None, "epic_seq": None, "parent_task_id": None,
-            "source_doc_id": None, "priority": 3, "created_at": "2026-01-15",
+            "epic_key": None,
+            "epic_seq": None,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
+            "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
@@ -450,10 +483,17 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_epic_label(self, mock_tasks, mock_get_doc):
         mock_tasks.get_task.return_value = {
-            "id": 10, "title": "SEC-1: Harden auth", "status": "active",
-            "description": "", "epic_key": "SEC", "epic_seq": 1,
-            "parent_task_id": 500, "source_doc_id": 99, "output_doc_id": None,
-            "priority": 1, "created_at": "2026-01-15",
+            "id": 10,
+            "title": "SEC-1: Harden auth",
+            "status": "active",
+            "description": "",
+            "epic_key": "SEC",
+            "epic_seq": 1,
+            "parent_task_id": 500,
+            "source_doc_id": 99,
+            "output_doc_id": None,
+            "priority": 1,
+            "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
@@ -473,9 +513,15 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_dependencies(self, mock_tasks):
         mock_tasks.get_task.return_value = {
-            "id": 5, "title": "Task with deps", "status": "blocked",
-            "description": "", "epic_key": None, "epic_seq": None,
-            "parent_task_id": None, "source_doc_id": None, "priority": 3,
+            "id": 5,
+            "title": "Task with deps",
+            "status": "blocked",
+            "description": "",
+            "epic_key": None,
+            "epic_seq": None,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
             "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = [
@@ -498,9 +544,15 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_work_log(self, mock_tasks):
         mock_tasks.get_task.return_value = {
-            "id": 7, "title": "Some task", "status": "active",
-            "description": "", "epic_key": None, "epic_seq": None,
-            "parent_task_id": None, "source_doc_id": None, "priority": 3,
+            "id": 7,
+            "title": "Some task",
+            "status": "active",
+            "description": "",
+            "epic_key": None,
+            "epic_seq": None,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
             "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []

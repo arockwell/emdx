@@ -692,8 +692,6 @@ class TestRunParallel:
         assert mock_cleanup_worktree.call_count == 2
 
 
-
-
 # =============================================================================
 # Tests for delegate command (CLI entry point)
 # =============================================================================
@@ -780,7 +778,7 @@ class TestDelegateCommand:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each="find . -name '*.py'",
+                each="find . -name '*.py'",
                 do=None,
             )
 
@@ -1061,7 +1059,7 @@ class TestDelegateCommand:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1319,7 +1317,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1348,7 +1346,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1388,7 +1386,7 @@ class TestErrorHandling:
                 branch=False,
                 worktree=True,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 
@@ -1414,7 +1412,7 @@ class TestErrorHandling:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
+                each=None,
                 do=None,
             )
 

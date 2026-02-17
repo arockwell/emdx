@@ -38,7 +38,7 @@ def get_github_auth() -> str | None:
             capture_output=True,
             text=True,
             check=True,
-            timeout=10  # Prevent hanging
+            timeout=10,  # Prevent hanging
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -76,7 +76,7 @@ def create_gist_with_gh(
         fd, temp_path = tempfile.mkstemp(suffix=".md", prefix="emdx_gist_")
         try:
             # Write content through the file descriptor for atomic operation
-            os.write(fd, content.encode('utf-8'))
+            os.write(fd, content.encode("utf-8"))
         finally:
             os.close(fd)
 
@@ -119,7 +119,7 @@ def update_gist_with_gh(gist_id: str, content: str, filename: str) -> bool:
         fd, temp_path = tempfile.mkstemp(suffix=".md", prefix="emdx_gist_")
         try:
             # Write content through the file descriptor for atomic operation
-            os.write(fd, content.encode('utf-8'))
+            os.write(fd, content.encode("utf-8"))
         finally:
             os.close(fd)
 

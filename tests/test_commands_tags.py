@@ -278,9 +278,17 @@ class TestTagMergeCommand:
         ]
         mock_merge.return_value = 8
 
-        result = runner.invoke(app, [
-            "merge", "tag1", "tag2", "--into", "combined", "--force",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "merge",
+                "tag1",
+                "tag2",
+                "--into",
+                "combined",
+                "--force",
+            ],
+        )
         assert result.exit_code == 0
         assert "Merged" in _out(result)
 
@@ -291,8 +299,16 @@ class TestTagMergeCommand:
         mock_db.ensure_schema = Mock()
         mock_list_all.return_value = []
 
-        result = runner.invoke(app, [
-            "merge", "nope1", "nope2", "--into", "target", "--force",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "merge",
+                "nope1",
+                "nope2",
+                "--into",
+                "target",
+                "--force",
+            ],
+        )
         assert result.exit_code != 0
         assert "No valid source tags" in _out(result)

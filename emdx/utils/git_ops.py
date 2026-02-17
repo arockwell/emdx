@@ -12,9 +12,11 @@ from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+
 @dataclass
 class GitWorktree:
     """Represents a git worktree."""
+
     path: str
     branch: str
     commit: str
@@ -25,12 +27,14 @@ class GitWorktree:
         """Get a display name for the worktree."""
         return Path(self.path).name
 
+
 @dataclass
 class GitProject:
     """Represents a git project with its worktrees."""
+
     name: str
     main_path: str
-    worktrees: list['GitWorktree'] | None = None
+    worktrees: list["GitWorktree"] | None = None
 
     def __post_init__(self) -> None:
         if self.worktrees is None:
@@ -46,9 +50,11 @@ class GitProject:
         """Get a display name for the project."""
         return f"{self.name} ({self.worktree_count} worktrees)"
 
+
 @dataclass
 class GitFileStatus:
     """Represents a file's git status."""
+
     path: str
     status: str  # M, A, D, ??, etc.
     staged: bool
@@ -57,27 +63,28 @@ class GitFileStatus:
     def status_icon(self) -> str:
         """Get icon for file status."""
         icons = {
-            'M': '📝',  # Modified
-            'A': '➕',  # Added
-            'D': '🗑️',  # Deleted
-            'R': '🔄',  # Renamed
-            'C': '📋',  # Copied
-            '??': '❓',  # Untracked
+            "M": "📝",  # Modified
+            "A": "➕",  # Added
+            "D": "🗑️",  # Deleted
+            "R": "🔄",  # Renamed
+            "C": "📋",  # Copied
+            "??": "❓",  # Untracked
         }
-        return icons.get(self.status, '❓')
+        return icons.get(self.status, "❓")
 
     @property
     def status_description(self) -> str:
         """Get human-readable status description."""
         descriptions = {
-            'M': 'Modified',
-            'A': 'Added',
-            'D': 'Deleted',
-            'R': 'Renamed',
-            'C': 'Copied',
-            '??': 'Untracked',
+            "M": "Modified",
+            "A": "Added",
+            "D": "Deleted",
+            "R": "Renamed",
+            "C": "Copied",
+            "??": "Untracked",
         }
-        return descriptions.get(self.status, 'Unknown')
+        return descriptions.get(self.status, "Unknown")
+
 
 def extract_project_name_from_worktree(worktree_path: str) -> str:
     """
@@ -92,9 +99,16 @@ def extract_project_name_from_worktree(worktree_path: str) -> str:
 
     # Common suffixes that indicate branch names
     branch_indicators = [
-        '-main', '-master', '-develop', '-dev',
-        '-feature-', '-fix-', '-hotfix-',
-        '-release-', '-staging-', '-prod-'
+        "-main",
+        "-master",
+        "-develop",
+        "-dev",
+        "-feature-",
+        "-fix-",
+        "-hotfix-",
+        "-release-",
+        "-staging-",
+        "-prod-",
     ]
 
     # Try to find project name by removing branch suffix
@@ -106,7 +120,7 @@ def extract_project_name_from_worktree(worktree_path: str) -> str:
                 return name[:idx]
 
     # If no indicator found, try to split on last dash and see if remainder looks like a branch
-    parts = name.rsplit('-', 1)
+    parts = name.rsplit("-", 1)
     if len(parts) == 2:
         potential_project, potential_branch = parts
         # If it looks like a valid project name, use it
@@ -115,6 +129,7 @@ def extract_project_name_from_worktree(worktree_path: str) -> str:
 
     # Fallback: return the whole name
     return name
+
 
 def discover_projects_from_main_repos() -> list[GitProject]:
     """
@@ -160,27 +175,22 @@ def discover_projects_from_main_repos() -> list[GitProject]:
                 # Get worktrees from this repo
                 worktrees = get_worktrees(main_path)
 
-                projects.append(GitProject(
-                    name=project_name,
-                    main_path=main_path,
-                    worktrees=worktrees
-                ))
+                projects.append(
+                    GitProject(name=project_name, main_path=main_path, worktrees=worktrees)
+                )
 
                 logger.debug(f"Found project '{project_name}' with {len(worktrees)} worktrees")
 
             except Exception as e:
                 logger.warning(f"Failed to get worktrees for {project_name}: {e}")
                 # Still add the project even if we can't get worktrees
-                projects.append(GitProject(
-                    name=project_name,
-                    main_path=main_path,
-                    worktrees=[]
-                ))
+                projects.append(GitProject(name=project_name, main_path=main_path, worktrees=[]))
 
     # Sort projects by name
     projects.sort(key=lambda p: p.name.lower())
     logger.info(f"Discovered {len(projects)} projects from main repos")
     return projects
+
 
 def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> list[GitProject]:
     """
@@ -223,31 +233,31 @@ def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> 
                 try:
                     # Get the main repo path from this worktree
                     result = subprocess.run(
-                        ['git', 'rev-parse', '--show-toplevel'],
+                        ["git", "rev-parse", "--show-toplevel"],
                         capture_output=True,
                         text=True,
                         cwd=str(item),
-                        check=True
+                        check=True,
                     )
                     main_path = result.stdout.strip()
 
                     # Get branch info
                     result = subprocess.run(
-                        ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                         capture_output=True,
                         text=True,
                         cwd=str(item),
-                        check=True
+                        check=True,
                     )
                     branch = result.stdout.strip()
 
                     # Get commit hash
                     result = subprocess.run(
-                        ['git', 'rev-parse', 'HEAD'],
+                        ["git", "rev-parse", "HEAD"],
                         capture_output=True,
                         text=True,
                         cwd=str(item),
-                        check=True
+                        check=True,
                     )
                     commit = result.stdout.strip()
 
@@ -256,7 +266,7 @@ def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> 
                         path=str(item),
                         branch=branch,
                         commit=commit,
-                        is_current=(str(item) == os.getcwd())
+                        is_current=(str(item) == os.getcwd()),
                     )
 
                     # Add to project map
@@ -278,17 +288,16 @@ def discover_projects_from_worktrees(worktree_dirs: list[str] | None = None) -> 
     for project_name, (main_path, worktrees) in projects_map.items():
         # Sort worktrees by branch name
         worktrees.sort(key=lambda w: w.branch)
-        projects.append(GitProject(
-            name=project_name,
-            main_path=main_path,
-            worktrees=worktrees
-        ))
+        projects.append(GitProject(name=project_name, main_path=main_path, worktrees=worktrees))
 
     # Sort projects by name
     projects.sort(key=lambda p: p.name.lower())
     return projects
 
-def discover_git_projects(search_paths: list[str] | None = None, max_depth: int = 1) -> list[GitProject]:  # noqa: E501
+
+def discover_git_projects(
+    search_paths: list[str] | None = None, max_depth: int = 1
+) -> list[GitProject]:  # noqa: E501
     """
     Discover git projects in common locations.
 
@@ -341,19 +350,23 @@ def discover_git_projects(search_paths: list[str] | None = None, max_depth: int 
                     try:
                         # Count worktrees (quick check)
                         worktrees = get_worktrees(str(item))
-                        projects.append(GitProject(
-                            name=item.name,
-                            main_path=str(item),
-                            worktrees=worktrees,
-                        ))
+                        projects.append(
+                            GitProject(
+                                name=item.name,
+                                main_path=str(item),
+                                worktrees=worktrees,
+                            )
+                        )
                     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
                         # Failed to get worktrees, but it's still a git repo
                         logger.debug(f"Could not get worktrees for {item.name}: {e}")
-                        projects.append(GitProject(
-                            name=item.name,
-                            main_path=str(item),
-                            worktrees=[],
-                        ))
+                        projects.append(
+                            GitProject(
+                                name=item.name,
+                                main_path=str(item),
+                                worktrees=[],
+                            )
+                        )
         except (OSError, PermissionError) as e:
             # Skip directories we can't read
             logger.debug(f"Could not scan directory {search_path}: {e}")
@@ -362,6 +375,7 @@ def discover_git_projects(search_paths: list[str] | None = None, max_depth: int 
     # Sort by name
     projects.sort(key=lambda p: p.name.lower())
     return projects
+
 
 def get_worktrees(project_path: str | None = None) -> list[GitWorktree]:
     """
@@ -375,63 +389,62 @@ def get_worktrees(project_path: str | None = None) -> list[GitWorktree]:
     """
     try:
         result = subprocess.run(
-            ['git', 'worktree', 'list', '--porcelain'],
+            ["git", "worktree", "list", "--porcelain"],
             capture_output=True,
             text=True,
             check=True,
-            cwd=project_path
+            cwd=project_path,
         )
 
         worktrees = []
         current_worktree: dict[str, str] = {}
 
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             if not line:
                 if current_worktree:
-                    worktrees.append(GitWorktree(
-                        path=current_worktree.get('worktree', ''),
-                        branch=current_worktree.get('branch', 'detached'),
-                        commit=current_worktree.get('HEAD', ''),
-                        is_current=current_worktree.get('worktree') == os.getcwd()
-                    ))
+                    worktrees.append(
+                        GitWorktree(
+                            path=current_worktree.get("worktree", ""),
+                            branch=current_worktree.get("branch", "detached"),
+                            commit=current_worktree.get("HEAD", ""),
+                            is_current=current_worktree.get("worktree") == os.getcwd(),
+                        )
+                    )
                 current_worktree = {}
-            elif line.startswith('worktree '):
-                current_worktree['worktree'] = line[9:]
-            elif line.startswith('HEAD '):
-                current_worktree['HEAD'] = line[5:]
-            elif line.startswith('branch '):
-                current_worktree['branch'] = line[7:]
+            elif line.startswith("worktree "):
+                current_worktree["worktree"] = line[9:]
+            elif line.startswith("HEAD "):
+                current_worktree["HEAD"] = line[5:]
+            elif line.startswith("branch "):
+                current_worktree["branch"] = line[7:]
 
         # Handle last worktree
         if current_worktree:
-            worktrees.append(GitWorktree(
-                path=current_worktree.get('worktree', ''),
-                branch=current_worktree.get('branch', 'detached'),
-                commit=current_worktree.get('HEAD', ''),
-                is_current=current_worktree.get('worktree') == os.getcwd()
-            ))
+            worktrees.append(
+                GitWorktree(
+                    path=current_worktree.get("worktree", ""),
+                    branch=current_worktree.get("branch", "detached"),
+                    commit=current_worktree.get("HEAD", ""),
+                    is_current=current_worktree.get("worktree") == os.getcwd(),
+                )
+            )
 
         return worktrees
     except subprocess.CalledProcessError as e:
         logger.debug("Failed to get worktree list: %s", e)
         return []
 
+
 def get_git_status(worktree_path: str | None = None) -> list[GitFileStatus]:
     """Get git status for current directory or specified worktree."""
     try:
-        cmd = ['git', 'status', '--porcelain']
+        cmd = ["git", "status", "--porcelain"]
         cwd = worktree_path if worktree_path else None
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=cwd)
 
         files = []
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             if not line:
                 continue
 
@@ -450,25 +463,18 @@ def get_git_status(worktree_path: str | None = None) -> list[GitFileStatus]:
 
             # Determine primary status and whether file has staged changes
             # Priority: staged changes > unstaged changes > untracked
-            if staged_char != ' ' and staged_char != '?':
+            if staged_char != " " and staged_char != "?":
                 # File has staged changes - show as staged
-                files.append(GitFileStatus(
-                    path=filename,
-                    status=staged_char,
-                    staged=True
-                ))
-            elif unstaged_char != ' ':
+                files.append(GitFileStatus(path=filename, status=staged_char, staged=True))
+            elif unstaged_char != " ":
                 # File has unstaged changes only
-                files.append(GitFileStatus(
-                    path=filename,
-                    status=unstaged_char,
-                    staged=False
-                ))
+                files.append(GitFileStatus(path=filename, status=unstaged_char, staged=False))
 
         return files
     except subprocess.CalledProcessError as e:
         logger.debug("Failed to get git status: %s", e)
         return []
+
 
 def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None) -> str:
     """Get comprehensive diff showing both staged and unstaged changes."""
@@ -478,13 +484,21 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None)
     output_parts = []
 
     # Add staged changes if they exist
-    if staged_diff and not staged_diff.startswith("No staged changes") and not staged_diff.startswith("Error:"):  # noqa: E501
+    if (
+        staged_diff
+        and not staged_diff.startswith("No staged changes")
+        and not staged_diff.startswith("Error:")
+    ):  # noqa: E501
         output_parts.append("[bold green]📦 STAGED CHANGES[/bold green]")
         output_parts.append(staged_diff)
         output_parts.append("")
 
     # Add unstaged changes if they exist
-    if unstaged_diff and not unstaged_diff.startswith("No unstaged changes") and not unstaged_diff.startswith("Error:"):  # noqa: E501
+    if (
+        unstaged_diff
+        and not unstaged_diff.startswith("No unstaged changes")
+        and not unstaged_diff.startswith("Error:")
+    ):  # noqa: E501
         output_parts.append("[bold yellow]📝 UNSTAGED CHANGES[/bold yellow]")
         output_parts.append(unstaged_diff)
         output_parts.append("")
@@ -495,23 +509,18 @@ def get_comprehensive_git_diff(file_path: str, worktree_path: str | None = None)
 
     return "\n".join(output_parts)
 
+
 def get_git_diff(file_path: str, staged: bool = False, worktree_path: str | None = None) -> str:
     """Get git diff for a specific file with beautiful formatting."""
     try:
-        cmd = ['git', 'diff']
+        cmd = ["git", "diff"]
         if staged:
-            cmd.append('--cached')
+            cmd.append("--cached")
         cmd.append(file_path)
 
         cwd = worktree_path if worktree_path else None
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=cwd)
 
         raw_diff = result.stdout
 
@@ -523,21 +532,24 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: str | None
         # Try to format with delta for beautiful output
         try:
             delta_result = subprocess.run(
-                ['delta',
-                 '--no-gitconfig',
-                 '--side-by-side=never',
-                 '--width=70',
-                 '--tabs=2',
-                 '--wrap-max-lines=unlimited',
-                 '--max-line-length=0'],
+                [
+                    "delta",
+                    "--no-gitconfig",
+                    "--side-by-side=never",
+                    "--width=70",
+                    "--tabs=2",
+                    "--wrap-max-lines=unlimited",
+                    "--max-line-length=0",
+                ],
                 input=raw_diff,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
             # Strip ANSI codes for better TUI display
             import re
-            clean_output = re.sub(r'\x1b\[[0-9;]*m', '', delta_result.stdout)
+
+            clean_output = re.sub(r"\x1b\[[0-9;]*m", "", delta_result.stdout)
             return clean_output
         except (subprocess.CalledProcessError, FileNotFoundError):
             # Fallback to raw diff if delta fails or isn't available
@@ -546,111 +558,103 @@ def get_git_diff(file_path: str, staged: bool = False, worktree_path: str | None
     except subprocess.CalledProcessError:
         return f"Error: Could not get diff for {file_path}"
 
+
 def is_git_repository(path: str | None = None) -> bool:
     """Check if directory is a git repository."""
     try:
         cwd = path if path else None
-        subprocess.run(
-            ['git', 'rev-parse', '--git-dir'],
-            capture_output=True,
-            check=True,
-            cwd=cwd
-        )
+        subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True, check=True, cwd=cwd)
         return True
     except subprocess.CalledProcessError:
         return False
+
 
 def get_current_branch(worktree_path: str | None = None) -> str:
     """Get current git branch name."""
     try:
         cwd = worktree_path if worktree_path else None
         result = subprocess.run(
-            ['git', 'branch', '--show-current'],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
+            ["git", "branch", "--show-current"], capture_output=True, text=True, check=True, cwd=cwd
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return "unknown"
+
 
 def get_repository_root(path: str | None = None) -> str | None:
     """Get the root directory of the git repository."""
     try:
         cwd = path if path else None
         result = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
+            ["git", "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
             check=True,
-            cwd=cwd
+            cwd=cwd,
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
+
 
 def git_stage_file(file_path: str, worktree_path: str | None = None) -> bool:
     """Stage a file for commit."""
     try:
         cwd = worktree_path if worktree_path else None
         subprocess.run(
-            ['git', 'add', file_path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
+            ["git", "add", file_path], capture_output=True, text=True, check=True, cwd=cwd
         )
         return True
     except subprocess.CalledProcessError:
         return False
+
 
 def git_unstage_file(file_path: str, worktree_path: str | None = None) -> bool:
     """Unstage a file (remove from staging area)."""
     try:
         cwd = worktree_path if worktree_path else None
         subprocess.run(
-            ['git', 'reset', 'HEAD', file_path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
+            ["git", "reset", "HEAD", file_path], capture_output=True, text=True, check=True, cwd=cwd
         )
         return True
     except subprocess.CalledProcessError:
         return False
+
 
 def git_commit(message: str, worktree_path: str | None = None) -> tuple[bool, str]:
     """Commit staged changes with a message."""
     try:
         cwd = worktree_path if worktree_path else None
         result = subprocess.run(
-            ['git', 'commit', '-m', message],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd
+            ["git", "commit", "-m", message], capture_output=True, text=True, check=True, cwd=cwd
         )
         return True, result.stdout.strip()
     except subprocess.CalledProcessError as e:
         return False, e.stderr.strip() if e.stderr else "Commit failed"
+
 
 def git_discard_changes(file_path: str, worktree_path: str | None = None) -> bool:
     """Discard unstaged changes to a file."""
     try:
         cwd = worktree_path if worktree_path else None
         subprocess.run(
-            ['git', 'checkout', 'HEAD', '--', file_path],
+            ["git", "checkout", "HEAD", "--", file_path],
             capture_output=True,
             text=True,
             check=True,
-            cwd=cwd
+            cwd=cwd,
         )
         return True
     except subprocess.CalledProcessError:
         return False
 
-def create_worktree(branch_name: str, path: str | None = None, base_branch: str | None = None, repo_path: str | None = None) -> tuple[bool, str, str]:  # noqa: E501
+
+def create_worktree(
+    branch_name: str,
+    path: str | None = None,
+    base_branch: str | None = None,
+    repo_path: str | None = None,
+) -> tuple[bool, str, str]:  # noqa: E501
     """
     Create a new git worktree.
 
@@ -668,7 +672,11 @@ def create_worktree(branch_name: str, path: str | None = None, base_branch: str 
         # Use provided repo_path or current directory
         repo_root = get_repository_root(repo_path)
         if not repo_root:
-            return False, "", f"Not in a git repository (checked path: {repo_path or 'current directory'})"  # noqa: E501
+            return (
+                False,
+                "",
+                f"Not in a git repository (checked path: {repo_path or 'current directory'})",
+            )  # noqa: E501
 
         # Auto-generate path if not provided
         if not path:
@@ -679,19 +687,13 @@ def create_worktree(branch_name: str, path: str | None = None, base_branch: str 
             path = str(worktrees_dir / branch_name)
 
         # Build git worktree add command
-        cmd = ['git', 'worktree', 'add', '-b', branch_name, path]
+        cmd = ["git", "worktree", "add", "-b", branch_name, path]
         if base_branch:
             cmd.append(base_branch)
 
         logger.info(f"Creating worktree in repo {repo_root}: {' '.join(cmd)}")
 
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=repo_root
-        )
+        subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=repo_root)
 
         return True, path, ""
 
@@ -702,6 +704,7 @@ def create_worktree(branch_name: str, path: str | None = None, base_branch: str 
     except Exception as e:
         logger.error(f"Exception creating worktree: {e}", exc_info=True)
         return False, "", str(e)
+
 
 def remove_worktree(path: str, force: bool = False) -> tuple[bool, str]:
     """
@@ -715,16 +718,11 @@ def remove_worktree(path: str, force: bool = False) -> tuple[bool, str]:
         Tuple of (success, error_message)
     """
     try:
-        cmd = ['git', 'worktree', 'remove', path]
+        cmd = ["git", "worktree", "remove", path]
         if force:
-            cmd.append('--force')
+            cmd.append("--force")
 
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         return True, ""
 

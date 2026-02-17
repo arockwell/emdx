@@ -137,8 +137,12 @@ def update_group(group_id: int, **kwargs: Any) -> bool:
         True if update succeeded
     """
     allowed_fields = {
-        "name", "description", "parent_group_id", "group_type",
-        "project", "is_active",
+        "name",
+        "description",
+        "parent_group_id",
+        "group_type",
+        "project",
+        "is_active",
     }
 
     updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
@@ -317,9 +321,7 @@ def get_all_grouped_document_ids() -> set[int]:
         Set of document IDs
     """
     with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT DISTINCT document_id FROM document_group_members"
-        )
+        cursor = conn.execute("SELECT DISTINCT document_id FROM document_group_members")
         return {row[0] for row in cursor.fetchall()}
 
 

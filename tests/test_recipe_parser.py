@@ -142,21 +142,13 @@ class TestValidateInputs:
     """Tests for validate_inputs function."""
 
     def test_all_required_provided(self):
-        content = (
-            "---\ninputs:\n"
-            "  - name: target\n    required: true\n"
-            "---\n\n# R\n"
-        )
+        content = "---\ninputs:\n  - name: target\n    required: true\n---\n\n# R\n"
         recipe = parse_recipe(content)
         errors = validate_inputs(recipe, {"target": "api"})
         assert errors == []
 
     def test_missing_required(self):
-        content = (
-            "---\ninputs:\n"
-            "  - name: target\n    required: true\n"
-            "---\n\n# R\n"
-        )
+        content = "---\ninputs:\n  - name: target\n    required: true\n---\n\n# R\n"
         recipe = parse_recipe(content)
         errors = validate_inputs(recipe, {})
         assert len(errors) == 1
@@ -173,11 +165,7 @@ class TestValidateInputs:
         assert errors == []
 
     def test_optional_not_provided(self):
-        content = (
-            "---\ninputs:\n"
-            "  - name: severity\n    default: medium\n"
-            "---\n\n# R\n"
-        )
+        content = "---\ninputs:\n  - name: severity\n    default: medium\n---\n\n# R\n"
         recipe = parse_recipe(content)
         errors = validate_inputs(recipe, {})
         assert errors == []
@@ -190,9 +178,7 @@ class TestSubstitute:
         assert substitute("Scan {{target}}", {"target": "api"}) == "Scan api"
 
     def test_multiple_vars(self):
-        result = substitute(
-            "{{a}} and {{b}}", {"a": "one", "b": "two"}
-        )
+        result = substitute("{{a}} and {{b}}", {"a": "one", "b": "two"})
         assert result == "one and two"
 
     def test_missing_var_left_as_is(self):
@@ -206,31 +192,19 @@ class TestResolveInputs:
     """Tests for resolve_inputs function."""
 
     def test_provided_overrides_default(self):
-        content = (
-            "---\ninputs:\n"
-            "  - name: severity\n    default: medium\n"
-            "---\n\n# R\n"
-        )
+        content = "---\ninputs:\n  - name: severity\n    default: medium\n---\n\n# R\n"
         recipe = parse_recipe(content)
         values = resolve_inputs(recipe, {"severity": "high"})
         assert values == {"severity": "high"}
 
     def test_default_used_when_not_provided(self):
-        content = (
-            "---\ninputs:\n"
-            "  - name: severity\n    default: medium\n"
-            "---\n\n# R\n"
-        )
+        content = "---\ninputs:\n  - name: severity\n    default: medium\n---\n\n# R\n"
         recipe = parse_recipe(content)
         values = resolve_inputs(recipe, {})
         assert values == {"severity": "medium"}
 
     def test_no_default_no_value(self):
-        content = (
-            "---\ninputs:\n"
-            "  - name: target\n    required: true\n"
-            "---\n\n# R\n"
-        )
+        content = "---\ninputs:\n  - name: target\n    required: true\n---\n\n# R\n"
         recipe = parse_recipe(content)
         values = resolve_inputs(recipe, {})
         assert values == {}

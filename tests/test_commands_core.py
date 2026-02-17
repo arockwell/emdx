@@ -119,7 +119,9 @@ class TestSaveCommand:
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
-    def test_save_with_title_and_project(self, mock_detect, mock_create, mock_tags, mock_display, tmp_path):  # noqa: E501
+    def test_save_with_title_and_project(
+        self, mock_detect, mock_create, mock_tags, mock_display, tmp_path
+    ):  # noqa: E501
         """Save with explicit --title and --project."""
         f = tmp_path / "note.md"
         f.write_text("content")
@@ -128,11 +130,17 @@ class TestSaveCommand:
         mock_create.return_value = 1
         mock_tags.return_value = []
 
-        result = runner.invoke(app, [
-            "save", str(f),
-            "--title", "Custom Title",
-            "--project", "my-project",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "save",
+                str(f),
+                "--title",
+                "Custom Title",
+                "--project",
+                "my-project",
+            ],
+        )
         assert result.exit_code == 0
         args = mock_create.call_args
         assert args[0][0] == "Custom Title"
@@ -150,9 +158,15 @@ class TestSaveCommand:
         mock_create.return_value = 5
         mock_tags.return_value = ["python", "testing"]
 
-        result = runner.invoke(app, [
-            "save", str(f), "--tags", "python,testing",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "save",
+                str(f),
+                "--tags",
+                "python,testing",
+            ],
+        )
         assert result.exit_code == 0
         mock_tags.assert_called_once_with(5, "python,testing")
 
@@ -537,8 +551,20 @@ class TestDeleteCommand:
 
         def side_effect(identifier):
             docs = {
-                "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},  # noqa: E501
-                "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},  # noqa: E501
+                "1": {
+                    "id": 1,
+                    "title": "Doc 1",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 1),
+                    "access_count": 0,
+                },  # noqa: E501
+                "2": {
+                    "id": 2,
+                    "title": "Doc 2",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 2),
+                    "access_count": 0,
+                },  # noqa: E501
             }
             return docs.get(identifier)
 
@@ -684,11 +710,11 @@ class TestPurgeCommand:
     def test_purge_with_force(self, mock_db, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
         mock_db.ensure_schema = Mock()
-        mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]  # noqa: E501
+        mock_list_deleted.return_value = [
+            {"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}
+        ]  # noqa: E501
         mock_purge.return_value = 1
 
         result = runner.invoke(main_app, ["trash", "purge", "--force"])
         assert result.exit_code == 0
         assert "Permanently deleted" in _out(result)
-
-

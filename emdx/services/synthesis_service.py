@@ -59,9 +59,7 @@ def _execute_prompt(
     result = executor.execute(config)
 
     if not result.success:
-        raise RuntimeError(
-            f"Synthesis failed: {result.error_message or 'unknown error'}"
-        )
+        raise RuntimeError(f"Synthesis failed: {result.error_message or 'unknown error'}")
 
     return result
 
@@ -290,9 +288,7 @@ class SynthesisService:
         # Build context from documents
         context_parts = []
         for doc in documents:
-            context_parts.append(
-                f"## Document #{doc['id']}: {doc['title']}\n\n{doc['content']}"
-            )
+            context_parts.append(f"## Document #{doc['id']}: {doc['title']}\n\n{doc['content']}")
         context = "\n\n---\n\n".join(context_parts)
 
         # Build title hint for the prompt
@@ -379,10 +375,7 @@ class SynthesisService:
         # Fallback: combine original titles
         if len(fallback_titles) == 1:
             return f"{fallback_titles[0]} (synthesized)"
-        return (
-            f"Synthesis: {fallback_titles[0]} + "
-            f"{len(fallback_titles) - 1} more"
-        )
+        return f"Synthesis: {fallback_titles[0]} + {len(fallback_titles) - 1} more"
 
     def estimate_cost(
         self,
@@ -398,16 +391,12 @@ class SynthesisService:
             }
 
         # Estimate input tokens (rough approximation: 1 token ~ 4 characters)
-        total_chars = sum(
-            len(doc["title"]) + len(doc["content"]) for doc in documents
-        )
+        total_chars = sum(len(doc["title"]) + len(doc["content"]) for doc in documents)
         # Add overhead for prompts
         estimated_input_tokens = (total_chars // 4) + 500
 
         # Estimate output tokens (synthesis usually shorter than input)
-        estimated_output_tokens = min(
-            estimated_input_tokens // 2, self.MAX_TOKENS
-        )
+        estimated_output_tokens = min(estimated_input_tokens // 2, self.MAX_TOKENS)
 
         # Claude Opus pricing: $15/M input, $75/M output
         input_cost = (estimated_input_tokens / 1_000_000) * 15

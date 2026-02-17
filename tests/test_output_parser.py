@@ -9,7 +9,9 @@ from emdx.utils.output_parser import extract_output_doc_id
 def _write_log(content: str) -> Path:
     """Write content to a temp file and return its path."""
     tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".log", delete=False,
+        mode="w",
+        suffix=".log",
+        delete=False,
     )
     tmp.write(content)
     tmp.flush()
@@ -80,11 +82,7 @@ class TestExtractOutputDocId:
 
     def test_returns_last_match(self):
         """When multiple doc IDs appear, return the last one."""
-        log = _write_log(
-            "Created document #100\n"
-            "...some output...\n"
-            "Saved as #200\n"
-        )
+        log = _write_log("Created document #100\n...some output...\nSaved as #200\n")
         assert extract_output_doc_id(log) == 200
 
     def test_no_match_returns_none(self):

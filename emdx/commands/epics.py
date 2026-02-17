@@ -89,8 +89,7 @@ def view(
 
     cat_label = f" ({epic['epic_key']})" if epic.get("epic_key") else ""
     console.print(
-        f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold]"
-        f" — {epic['status']}"
+        f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold] — {epic['status']}"
     )
     if epic.get("description"):
         console.print(f"[dim]{epic['description']}[/dim]")

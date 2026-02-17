@@ -43,12 +43,15 @@ class LogBrowserFilteringMixin:
                 return True
 
         # Filter out execution metadata lines
-        if any(line.startswith(prefix) for prefix in [
-            "⚡ Execution type:",
-            "📋 Available tools:",
-            "🔧 Background process",
-            "📄 Output is being",
-        ]):
+        if any(
+            line.startswith(prefix)
+            for prefix in [
+                "⚡ Execution type:",
+                "📋 Available tools:",
+                "🔧 Background process",
+                "📄 Output is being",
+            ]
+        ):
             return True
 
         return False
@@ -64,7 +67,7 @@ class LogBrowserFilteringMixin:
                 continue
             filtered_lines.append(line)
 
-        return '\n'.join(filtered_lines)
+        return "\n".join(filtered_lines)
 
     def _format_initial_content(self, content: str, execution: "Execution") -> str:
         """Apply same filtering and formatting logic as current LogBrowser."""
@@ -82,10 +85,14 @@ class LogBrowserFilteringMixin:
 
         for line in content_lines:
             if in_header and (
-                line.startswith('=') or line.startswith('Version:') or
-                line.startswith('Doc ID:') or line.startswith('Execution ID:') or
-                line.startswith('Worktree:') or line.startswith('Started:') or
-                line.startswith('Build ID:') or line.startswith('-')
+                line.startswith("=")
+                or line.startswith("Version:")
+                or line.startswith("Doc ID:")
+                or line.startswith("Execution ID:")
+                or line.startswith("Worktree:")
+                or line.startswith("Started:")
+                or line.startswith("Build ID:")
+                or line.startswith("-")
             ):
                 header_lines.append(line)
             else:
@@ -127,4 +134,4 @@ class LogBrowserFilteringMixin:
         # Add the filtered log content
         lines.extend(filtered_lines)
 
-        return '\n'.join(lines)
+        return "\n".join(lines)

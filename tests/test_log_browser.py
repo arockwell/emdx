@@ -17,7 +17,7 @@ class TestLogBrowserTimestamps:
     @pytest.fixture
     def temp_log_file(self):
         """Create a temporary log file."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".log") as f:
             # Write sample log content with timestamps
             f.write("=== EMDX Claude Execution ===\n")
             f.write("Version: 1.0.0\n")
@@ -51,7 +51,7 @@ class TestLogBrowserTimestamps:
             started_at=datetime(2023, 12, 15, 14, 0, 0),
             completed_at=datetime(2023, 12, 15, 14, 0, 30),
             log_file=str(temp_log_file),
-            working_dir="/tmp/test-worktree"
+            working_dir="/tmp/test-worktree",
         )
 
     @pytest.mark.asyncio
@@ -108,7 +108,7 @@ class TestLogBrowserTimestamps:
     async def test_log_browser_handles_missing_timestamps(self, mock_execution):
         """Test that log browser handles lines without timestamps gracefully."""
         # Create a log file with mixed content
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".log") as f:
             f.write("[14:00:01] First line with timestamp\n")
             f.write("This line has no timestamp\n")
             f.write("[14:00:05] Another line with timestamp\n")
@@ -144,6 +144,7 @@ class TestLogBrowserTimestamps:
 
         finally:
             temp_file.unlink()
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

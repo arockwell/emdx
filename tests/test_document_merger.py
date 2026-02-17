@@ -99,12 +99,12 @@ def high_access_documents(temp_db):
     doc1_id = temp_db.save_document(
         title="Popular Guide A",
         content="This is a very popular document about Python programming.",
-        project="test-project"
+        project="test-project",
     )
     doc2_id = temp_db.save_document(
         title="Popular Guide B",
         content="This is a very popular document about Python programming.",
-        project="test-project"
+        project="test-project",
     )
 
     # Set high access counts
@@ -127,7 +127,7 @@ class TestMergeCandidate:
             doc2_title="Document B",
             similarity_score=0.85,
             merge_reason="Similar content",
-            recommended_action="Merge into #1 (more views)"
+            recommended_action="Merge into #1 (more views)",
         )
 
         assert candidate.doc1_id == 1
@@ -150,7 +150,7 @@ class TestMergeStrategy:
             merged_title="Combined Document",
             merged_content="Full merged content here",
             merged_tags=["python", "testing"],
-            preserve_metadata={"original_ids": [1, 2]}
+            preserve_metadata={"original_ids": [1, 2]},
         )
 
         assert strategy.keep_doc_id == 1
@@ -176,8 +176,7 @@ class TestDocumentMergerUnit:
         merger = DocumentMerger.__new__(DocumentMerger)
 
         similarity = merger._calculate_similarity(
-            "Python machine learning guide",
-            "Python machine learning tutorial"
+            "Python machine learning guide", "Python machine learning tutorial"
         )
         assert similarity > 0.7
 
@@ -187,7 +186,7 @@ class TestDocumentMergerUnit:
 
         similarity = merger._calculate_similarity(
             "Docker containers and kubernetes orchestration",
-            "Python programming language fundamentals"
+            "Python programming language fundamentals",
         )
         assert similarity < 0.5
 
@@ -204,26 +203,35 @@ class TestDocumentMergerUnit:
 class TestDocumentMergerIntegration:
     """Integration tests for DocumentMerger with TF-IDF pre-filtering."""
 
-    def test_find_merge_candidates_finds_similar_docs(
-        self, merger_documents, temp_cache_dir
-    ):
+    def test_find_merge_candidates_finds_similar_docs(self, merger_documents, temp_cache_dir):
         """Test that find_merge_candidates identifies similar documents."""
         db = merger_documents["db"]
         doc_ids = merger_documents["doc_ids"]
 
-        with patch("emdx.services.similarity.db"), \
-             patch("emdx.services.document_merger.SimilarityService") as MockSimilarityService:
-
+        with (
+            patch("emdx.services.similarity.db"),
+            patch("emdx.services.document_merger.SimilarityService") as MockSimilarityService,
+        ):
             # Set up mock similarity service
             mock_service = MagicMock()
             MockSimilarityService.return_value = mock_service
 
             # Mock the find_all_duplicate_pairs to return similar pairs
             mock_service.find_all_duplicate_pairs.return_value = [
-                (doc_ids[0], doc_ids[1], "Python Machine Learning Guide",
-                 "Python Machine Learning Tutorial", 0.85),
-                (doc_ids[2], doc_ids[3], "Docker Container Guide",
-                 "Docker Container Tutorial", 0.82),
+                (
+                    doc_ids[0],
+                    doc_ids[1],
+                    "Python Machine Learning Guide",
+                    "Python Machine Learning Tutorial",
+                    0.85,
+                ),
+                (
+                    doc_ids[2],
+                    doc_ids[3],
+                    "Docker Container Guide",
+                    "Docker Container Tutorial",
+                    0.82,
+                ),
             ]
             mock_service.build_index.return_value = None
 
@@ -236,11 +244,36 @@ class TestDocumentMergerIntegration:
             # Mock _get_document_metadata
             def mock_metadata(project=None):
                 return {
-                    doc_ids[0]: {"title": "Python Machine Learning Guide", "content": "ML content", "project": "ml-project", "access_count": 5},  # noqa: E501
-                    doc_ids[1]: {"title": "Python Machine Learning Tutorial", "content": "ML tutorial", "project": "ml-project", "access_count": 3},  # noqa: E501
-                    doc_ids[2]: {"title": "Docker Container Guide", "content": "Docker content", "project": "devops-project", "access_count": 10},  # noqa: E501
-                    doc_ids[3]: {"title": "Docker Container Tutorial", "content": "Docker tutorial", "project": "devops-project", "access_count": 2},  # noqa: E501
-                    doc_ids[4]: {"title": "Git Version Control", "content": "Git content", "project": "tools-project", "access_count": 1},  # noqa: E501
+                    doc_ids[0]: {
+                        "title": "Python Machine Learning Guide",
+                        "content": "ML content",
+                        "project": "ml-project",
+                        "access_count": 5,
+                    },  # noqa: E501
+                    doc_ids[1]: {
+                        "title": "Python Machine Learning Tutorial",
+                        "content": "ML tutorial",
+                        "project": "ml-project",
+                        "access_count": 3,
+                    },  # noqa: E501
+                    doc_ids[2]: {
+                        "title": "Docker Container Guide",
+                        "content": "Docker content",
+                        "project": "devops-project",
+                        "access_count": 10,
+                    },  # noqa: E501
+                    doc_ids[3]: {
+                        "title": "Docker Container Tutorial",
+                        "content": "Docker tutorial",
+                        "project": "devops-project",
+                        "access_count": 2,
+                    },  # noqa: E501
+                    doc_ids[4]: {
+                        "title": "Git Version Control",
+                        "content": "Git content",
+                        "project": "tools-project",
+                        "access_count": 1,
+                    },  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -254,9 +287,7 @@ class TestDocumentMergerIntegration:
             for i in range(len(candidates) - 1):
                 assert candidates[i].similarity_score >= candidates[i + 1].similarity_score
 
-    def test_find_merge_candidates_respects_project_filter(
-        self, merger_documents, temp_cache_dir
-    ):
+    def test_find_merge_candidates_respects_project_filter(self, merger_documents, temp_cache_dir):
         """Test that project filter works correctly."""
         db = merger_documents["db"]
         doc_ids = merger_documents["doc_ids"]
@@ -279,10 +310,30 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 all_docs = {
-                    doc_ids[0]: {"title": "Python ML Guide", "content": "content", "project": "ml-project", "access_count": 5},  # noqa: E501
-                    doc_ids[1]: {"title": "Python ML Tutorial", "content": "content", "project": "ml-project", "access_count": 3},  # noqa: E501
-                    doc_ids[2]: {"title": "Docker Guide", "content": "content", "project": "devops-project", "access_count": 10},  # noqa: E501
-                    doc_ids[3]: {"title": "Docker Tutorial", "content": "content", "project": "devops-project", "access_count": 2},  # noqa: E501
+                    doc_ids[0]: {
+                        "title": "Python ML Guide",
+                        "content": "content",
+                        "project": "ml-project",
+                        "access_count": 5,
+                    },  # noqa: E501
+                    doc_ids[1]: {
+                        "title": "Python ML Tutorial",
+                        "content": "content",
+                        "project": "ml-project",
+                        "access_count": 3,
+                    },  # noqa: E501
+                    doc_ids[2]: {
+                        "title": "Docker Guide",
+                        "content": "content",
+                        "project": "devops-project",
+                        "access_count": 10,
+                    },  # noqa: E501
+                    doc_ids[3]: {
+                        "title": "Docker Tutorial",
+                        "content": "content",
+                        "project": "devops-project",
+                        "access_count": 2,
+                    },  # noqa: E501
                 }
                 if project:
                     return {k: v for k, v in all_docs.items() if v["project"] == project}
@@ -292,8 +343,7 @@ class TestDocumentMergerIntegration:
 
             # Filter by ml-project
             candidates = merger.find_merge_candidates(
-                project="ml-project",
-                similarity_threshold=0.7
+                project="ml-project", similarity_threshold=0.7
             )
 
             # Should only find ML document pair
@@ -326,8 +376,18 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    doc_ids[0]: {"title": "Popular Guide A", "content": "content", "project": "test-project", "access_count": 100},  # noqa: E501
-                    doc_ids[1]: {"title": "Popular Guide B", "content": "content", "project": "test-project", "access_count": 75},  # noqa: E501
+                    doc_ids[0]: {
+                        "title": "Popular Guide A",
+                        "content": "content",
+                        "project": "test-project",
+                        "access_count": 100,
+                    },  # noqa: E501
+                    doc_ids[1]: {
+                        "title": "Popular Guide B",
+                        "content": "content",
+                        "project": "test-project",
+                        "access_count": 75,
+                    },  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -337,9 +397,7 @@ class TestDocumentMergerIntegration:
             # Should skip pairs where both have high access counts
             assert len(candidates) == 0
 
-    def test_find_merge_candidates_progress_callback(
-        self, merger_documents, temp_cache_dir
-    ):
+    def test_find_merge_candidates_progress_callback(self, merger_documents, temp_cache_dir):
         """Test that progress callback is called correctly."""
         db = merger_documents["db"]
         merger_documents["doc_ids"]
@@ -362,8 +420,7 @@ class TestDocumentMergerIntegration:
             merger._get_document_metadata = lambda p=None: {}
 
             merger.find_merge_candidates(
-                similarity_threshold=0.7,
-                progress_callback=progress_callback
+                similarity_threshold=0.7, progress_callback=progress_callback
             )
 
             # Should have called progress callback multiple times
@@ -371,9 +428,7 @@ class TestDocumentMergerIntegration:
             # Last call should be at 100%
             assert progress_calls[-1][0] == 100
 
-    def test_find_merge_candidates_merge_reason_titles(
-        self, merger_documents, temp_cache_dir
-    ):
+    def test_find_merge_candidates_merge_reason_titles(self, merger_documents, temp_cache_dir):
         """Test that merge reason correctly identifies similar titles."""
         db = merger_documents["db"]
         merger_documents["doc_ids"]
@@ -395,8 +450,18 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    1: {"title": "Python Machine Learning Guide", "content": "a" * 100, "project": "ml", "access_count": 5},  # noqa: E501
-                    2: {"title": "Python Machine Learning Guide", "content": "b" * 50, "project": "ml", "access_count": 3},  # noqa: E501
+                    1: {
+                        "title": "Python Machine Learning Guide",
+                        "content": "a" * 100,
+                        "project": "ml",
+                        "access_count": 5,
+                    },  # noqa: E501
+                    2: {
+                        "title": "Python Machine Learning Guide",
+                        "content": "b" * 50,
+                        "project": "ml",
+                        "access_count": 3,
+                    },  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -407,9 +472,7 @@ class TestDocumentMergerIntegration:
             # Identical titles should give "Nearly identical titles" reason
             assert candidates[0].merge_reason == "Nearly identical titles"
 
-    def test_find_merge_candidates_recommended_action_views(
-        self, merger_documents, temp_cache_dir
-    ):
+    def test_find_merge_candidates_recommended_action_views(self, merger_documents, temp_cache_dir):
         """Test recommended action based on view count."""
         db = merger_documents["db"]
 
@@ -429,8 +492,18 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    1: {"title": "Doc A", "content": "content", "project": "test", "access_count": 20},  # noqa: E501
-                    2: {"title": "Doc B", "content": "content", "project": "test", "access_count": 5},  # noqa: E501
+                    1: {
+                        "title": "Doc A",
+                        "content": "content",
+                        "project": "test",
+                        "access_count": 20,
+                    },  # noqa: E501
+                    2: {
+                        "title": "Doc B",
+                        "content": "content",
+                        "project": "test",
+                        "access_count": 5,
+                    },  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -463,8 +536,18 @@ class TestDocumentMergerIntegration:
 
             def mock_metadata(project=None):
                 return {
-                    1: {"title": "Doc A", "content": "a" * 500, "project": "test", "access_count": 5},  # noqa: E501
-                    2: {"title": "Doc B", "content": "b" * 100, "project": "test", "access_count": 5},  # noqa: E501
+                    1: {
+                        "title": "Doc A",
+                        "content": "a" * 500,
+                        "project": "test",
+                        "access_count": 5,
+                    },  # noqa: E501
+                    2: {
+                        "title": "Doc B",
+                        "content": "b" * 100,
+                        "project": "test",
+                        "access_count": 5,
+                    },  # noqa: E501
                 }
 
             merger._get_document_metadata = mock_metadata
@@ -561,7 +644,7 @@ class TestTFIDFPrefiltering:
             temp_db.save_document(
                 title=f"Document {i}",
                 content=f"Content for document {i} with some text",
-                project="test-project"
+                project="test-project",
             )
 
         comparison_count = [0]
@@ -584,6 +667,7 @@ class TestTFIDFPrefiltering:
 
             # Track calls to _calculate_similarity
             original_calc = DocumentMerger._calculate_similarity
+
             def tracking_calc(self, t1, t2):
                 comparison_count[0] += 1
                 return original_calc(self, t1, t2)

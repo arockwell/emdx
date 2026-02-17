@@ -33,13 +33,7 @@ class ExecutionSystemTester:
     def run_command(self, cmd: str) -> tuple[int, str, str]:
         """Run a command and return exit code, stdout, stderr."""
         try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             return -1, "", "Command timed out"
@@ -147,15 +141,16 @@ class ExecutionSystemTester:
 
         # Extract document ID - look for different patterns
         import re
+
         # Try multiple patterns
         patterns = [
-            r'Document #(\d+) saved',
-            r'Document saved with ID: (\d+)',
-            r'Saved as document #(\d+)',
-            r'#(\d+):',  # Sometimes just shows the ID
-            r'#\x1b\[0m\x1b\[1;32m(\d+)\x1b\[0m\x1b\[32m:',  # With ANSI color codes
-            r'Saved as #\x1b\[0m\x1b\[1;32m(\d+)\x1b\[0m',  # Another ANSI pattern
-            r'Saved as #.*?(\d+)',  # Generic pattern to catch ID
+            r"Document #(\d+) saved",
+            r"Document saved with ID: (\d+)",
+            r"Saved as document #(\d+)",
+            r"#(\d+):",  # Sometimes just shows the ID
+            r"#\x1b\[0m\x1b\[1;32m(\d+)\x1b\[0m\x1b\[32m:",  # With ANSI color codes
+            r"Saved as #\x1b\[0m\x1b\[1;32m(\d+)\x1b\[0m",  # Another ANSI pattern
+            r"Saved as #.*?(\d+)",  # Generic pattern to catch ID
         ]
 
         doc_id = None
@@ -169,7 +164,7 @@ class ExecutionSystemTester:
             # Try to get the most recent document
             exit_code2, stdout2, stderr2 = self.run_command("emdx list --limit 1")
             if exit_code2 == 0:
-                match2 = re.search(r'#(\d+):', stdout2)
+                match2 = re.search(r"#(\d+):", stdout2)
                 if match2:
                     doc_id = match2.group(1)
 
@@ -263,31 +258,35 @@ class ExecutionSystemTester:
                 panel_style = "red"
                 status = "Tests Failed"
 
-            console.print(Panel(
-                f"[bold]{status}[/bold]\n\n"
-                f"Passed: [green]{self.tests_passed}[/green]\n"
-                f"Failed: [red]{self.tests_failed}[/red]\n"
-                f"Success Rate: {success_rate:.1f}%",
-                title="[bold]Test Summary[/bold]",
-                border_style=panel_style,
-                box=box.DOUBLE
-            ))
+            console.print(
+                Panel(
+                    f"[bold]{status}[/bold]\n\n"
+                    f"Passed: [green]{self.tests_passed}[/green]\n"
+                    f"Failed: [red]{self.tests_failed}[/red]\n"
+                    f"Success Rate: {success_rate:.1f}%",
+                    title="[bold]Test Summary[/bold]",
+                    border_style=panel_style,
+                    box=box.DOUBLE,
+                )
+            )
         else:
             console.print("[yellow]No tests were run[/yellow]")
 
 
 def main():
     """Run all tests."""
-    console.print(Panel(
-        "[bold cyan]EMDX Execution System Comprehensive Test Suite[/bold cyan]\n\n"
-        "This script tests all improvements made to the execution system:\n"
-        "• Cleanup utilities (branches, processes, executions)\n"
-        "• Environment validation\n"
-        "• Execution monitoring\n"
-        "• Execution creation and tracking\n"
-        "• Directory cleanup",
-        box=box.DOUBLE
-    ))
+    console.print(
+        Panel(
+            "[bold cyan]EMDX Execution System Comprehensive Test Suite[/bold cyan]\n\n"
+            "This script tests all improvements made to the execution system:\n"
+            "• Cleanup utilities (branches, processes, executions)\n"
+            "• Environment validation\n"
+            "• Execution monitoring\n"
+            "• Execution creation and tracking\n"
+            "• Directory cleanup",
+            box=box.DOUBLE,
+        )
+    )
 
     tester = ExecutionSystemTester()
 

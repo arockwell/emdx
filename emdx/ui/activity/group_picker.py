@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Import groups service
 try:
     from emdx.services import group_service as groups_db
+
     HAS_GROUPS = True
 except ImportError:
     groups_db = None  # type: ignore[assignment]
@@ -36,6 +37,7 @@ class GroupPicker(Widget):
 
     class GroupSelected(Message):
         """Fired when a group is selected."""
+
         def __init__(
             self,
             group_id: int,
@@ -51,6 +53,7 @@ class GroupPicker(Widget):
 
     class GroupCreated(Message):
         """Fired when a new group is created."""
+
         def __init__(
             self,
             group_id: int,
@@ -66,6 +69,7 @@ class GroupPicker(Widget):
 
     class Cancelled(Message):
         """Fired when picker is cancelled."""
+
         pass
 
     DEFAULT_CSS = """
@@ -166,9 +170,7 @@ class GroupPicker(Widget):
             all_groups = groups_db.list_groups(include_inactive=False)
             # Exclude the source group if nesting (can't nest under itself)
             if self.source_group_id:
-                self.groups = [
-                    dict(g) for g in all_groups if g["id"] != self.source_group_id
-                ]
+                self.groups = [dict(g) for g in all_groups if g["id"] != self.source_group_id]
             else:
                 self.groups = [dict(g) for g in all_groups]
             self.filtered_groups = self.groups.copy()
@@ -184,10 +186,7 @@ class GroupPicker(Widget):
             self.filtered_groups = self.groups.copy()
         else:
             query_lower = query.lower()
-            self.filtered_groups = [
-                g for g in self.groups
-                if query_lower in g["name"].lower()
-            ]
+            self.filtered_groups = [g for g in self.groups if query_lower in g["name"].lower()]
         self.selected_index = 0
         self._update_list()
 
@@ -198,9 +197,13 @@ class GroupPicker(Widget):
         if not self.filtered_groups:
             input_widget = self.query_one("#group-input", Input)
             if input_widget.value:
-                list_widget.update(f"  [dim]Press Tab to create '[/dim]{input_widget.value}[dim]'[/dim]")  # noqa: E501
+                list_widget.update(
+                    f"  [dim]Press Tab to create '[/dim]{input_widget.value}[dim]'[/dim]"
+                )  # noqa: E501
             else:
-                list_widget.update("  [dim]No groups yet. Type a name and press Tab to create.[/dim]")  # noqa: E501
+                list_widget.update(
+                    "  [dim]No groups yet. Type a name and press Tab to create.[/dim]"
+                )  # noqa: E501
             return
 
         lines = []

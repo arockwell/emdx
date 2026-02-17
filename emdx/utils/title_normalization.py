@@ -30,31 +30,33 @@ def normalize_title(title: str) -> str:
     result = title
 
     # Remove ISO timestamps with optional timezone: - 2026-01-11T00:05:45.123456+00:00
-    result = re.sub(r'\s*-?\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?', '', result)  # noqa: E501
+    result = re.sub(
+        r"\s*-?\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?", "", result
+    )  # noqa: E501
 
     # Remove dates in parentheses: (2025-01-10)
-    result = re.sub(r'\s*\(\d{4}-\d{2}-\d{2}\)', '', result)
+    result = re.sub(r"\s*\(\d{4}-\d{2}-\d{2}\)", "", result)
 
     # Remove dates after dash: - 2025-01-10
-    result = re.sub(r'\s*-\s*\d{4}-\d{2}-\d{2}', '', result)
+    result = re.sub(r"\s*-\s*\d{4}-\d{2}-\d{2}", "", result)
 
     # Remove standalone dates: 2025-01-10
-    result = re.sub(r'\s+\d{4}-\d{2}-\d{2}(?:\s|$)', ' ', result)
+    result = re.sub(r"\s+\d{4}-\d{2}-\d{2}(?:\s|$)", " ", result)
 
     # Remove agent numbers: (Agent 1), (Agent 5)
-    result = re.sub(r'\s*\(Agent\s+\d+\)', '', result, flags=re.IGNORECASE)
+    result = re.sub(r"\s*\(Agent\s+\d+\)", "", result, flags=re.IGNORECASE)
 
     # Remove task/issue numbers: #123, Task #45, Issue #678
-    result = re.sub(r'\s*(?:Task|Issue)?\s*#\d+', '', result, flags=re.IGNORECASE)
+    result = re.sub(r"\s*(?:Task|Issue)?\s*#\d+", "", result, flags=re.IGNORECASE)
 
     # Remove version suffixes: v1, v2, (v1), (v2)
-    result = re.sub(r'\s*\(?v\d+\)?', '', result, flags=re.IGNORECASE)
+    result = re.sub(r"\s*\(?v\d+\)?", "", result, flags=re.IGNORECASE)
 
     # Remove (error) suffix from synthesis docs
-    result = re.sub(r'\s*\(error\)', '', result, flags=re.IGNORECASE)
+    result = re.sub(r"\s*\(error\)", "", result, flags=re.IGNORECASE)
 
     # Normalize whitespace
-    result = re.sub(r'\s+', ' ', result).strip()
+    result = re.sub(r"\s+", " ", result).strip()
 
     return result
 

@@ -8,10 +8,10 @@ from .duplicate_detector import DuplicateDetector
 from .similarity import IndexStats, SimilarDocument, SimilarityService
 
 __all__ = [
-    'AutoTagger',
-    'DuplicateDetector',
-    'IndexStats',
-    'SimilarDocument',
-    'SimilarityService',
-    'execute_claude_detached',
+    "AutoTagger",
+    "DuplicateDetector",
+    "IndexStats",
+    "SimilarDocument",
+    "SimilarityService",
+    "execute_claude_detached",
 ]

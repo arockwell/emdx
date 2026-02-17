@@ -12,7 +12,7 @@ from emdx.services.auto_tagger import AutoTagger
 @pytest.fixture
 def test_db():
     """Create a temporary test database."""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
 
     # Initialize database schema
@@ -81,7 +81,7 @@ class TestAutoTaggerPatterns:
         # Content match
         suggestions = tagger.analyze_document(
             "Implementation Strategy",
-            "## Goals\n- Implement feature\n## Success Criteria\n- Tests pass"
+            "## Goals\n- Implement feature\n## Success Criteria\n- Tests pass",
         )
         assert any(tag == "🎯" for tag, _ in suggestions)
 
@@ -94,8 +94,7 @@ class TestAutoTaggerPatterns:
 
         # Content match
         suggestions = tagger.analyze_document(
-            "Login issue",
-            "Error: TypeError exception thrown when user clicks login"
+            "Login issue", "Error: TypeError exception thrown when user clicks login"
         )
         assert any(tag == "🐛" for tag, _ in suggestions)
 
@@ -117,7 +116,7 @@ class TestAutoTaggerPatterns:
         """Test detection of multiple patterns."""
         suggestions = tagger.analyze_document(
             "Urgent Bug: Fix critical error in payment system",
-            "Error traceback shows exception in payment processing"
+            "Error traceback shows exception in payment processing",
         )
 
         tags = [tag for tag, _ in suggestions]
@@ -129,9 +128,7 @@ class TestAutoTaggerPatterns:
         """Test that existing tags are not suggested again."""
         existing_tags = ["🎯", "🚀"]
         suggestions = tagger.analyze_document(
-            "Gameplan: New project",
-            "## Goals",
-            existing_tags=existing_tags
+            "Gameplan: New project", "## Goals", existing_tags=existing_tags
         )
 
         suggested_tags = [tag for tag, _ in suggestions]
@@ -149,7 +146,7 @@ class TestAutoTaggerDatabase:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Bug: Test fails randomly", "Error in test_auth.py line 42")
+            ("Bug: Test fails randomly", "Error in test_auth.py line 42"),
         )
         doc_id = cursor.lastrowid
         conn.commit()
@@ -167,7 +164,7 @@ class TestAutoTaggerDatabase:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Gameplan: Refactor authentication", "## Goals\n- Improve security")
+            ("Gameplan: Refactor authentication", "## Goals\n- Improve security"),
         )
         doc_id = cursor.lastrowid
         conn.commit()
@@ -178,11 +175,14 @@ class TestAutoTaggerDatabase:
         assert "🎯" in applied_tags
 
         # Verify tags were saved
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT t.name FROM tags t
             JOIN document_tags dt ON t.id = dt.tag_id
             WHERE dt.document_id = ?
-        """, (doc_id,))
+        """,
+            (doc_id,),
+        )
         saved_tags = [row[0] for row in cursor.fetchall()]
         conn.close()
 
@@ -201,10 +201,7 @@ class TestAutoTaggerDatabase:
         ]
 
         for title, content in docs:
-            cursor.execute(
-                "INSERT INTO documents (title, content) VALUES (?, ?)",
-                (title, content)
-            )
+            cursor.execute("INSERT INTO documents (title, content) VALUES (?, ?)", (title, content))
 
         conn.commit()
         conn.close()
@@ -225,13 +222,13 @@ class TestAutoTaggerDatabase:
         # Create documents
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Test: API endpoints", "def test_get_user():")
+            ("Test: API endpoints", "def test_get_user():"),
         )
         doc1_id = cursor.lastrowid
 
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Bug: 500 error on save", "Server error when saving")
+            ("Bug: 500 error on save", "Server error when saving"),
         )
         doc2_id = cursor.lastrowid
 
@@ -240,14 +237,12 @@ class TestAutoTaggerDatabase:
 
         # Batch auto-tag
         results = tagger.batch_auto_tag(
-            document_ids=[doc1_id, doc2_id],
-            confidence_threshold=0.7,
-            dry_run=False
+            document_ids=[doc1_id, doc2_id], confidence_threshold=0.7, dry_run=False
         )
 
-        assert results['processed'] == 2
-        assert results['tagged'] == 2
-        assert results['tags_applied'] > 0
+        assert results["processed"] == 2
+        assert results["tagged"] == 2
+        assert results["tags_applied"] > 0
 
 
 class TestCustomPatterns:
@@ -260,10 +255,12 @@ class TestCustomPatterns:
             title_patterns=[r"meeting:", r"standup:"],
             content_patterns=[r"action items:", r"decisions:"],
             tags=["📝", "meeting"],
-            confidence=0.85
+            confidence=0.85,
         )
 
-        suggestions = tagger.analyze_document("Meeting: Sprint planning", "Action items: Plan tasks")  # noqa: E501
+        suggestions = tagger.analyze_document(
+            "Meeting: Sprint planning", "Action items: Plan tasks"
+        )  # noqa: E501
         assert any(tag == "📝" for tag, _ in suggestions)
 
     def test_remove_pattern(self, tagger):
@@ -299,8 +296,7 @@ class TestEdgeCases:
         conn = sqlite3.connect(test_db)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Test doc", "content")
+            "INSERT INTO documents (title, content) VALUES (?, ?)", ("Test doc", "content")
         )
         doc_id = cursor.lastrowid
         conn.commit()

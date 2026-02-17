@@ -4,7 +4,6 @@ Document groups provide hierarchical organization of related documents
 into batches, rounds, and initiatives.
 """
 
-
 from typing import Any
 
 import typer
@@ -22,18 +21,11 @@ app = typer.Typer(help="Organize documents into hierarchical groups")
 def create(
     name: str = typer.Argument(..., help="Group name"),
     group_type: str = typer.Option(
-        "batch", "--type", "-t",
-        help="Group type: batch, initiative, round, session, custom"
+        "batch", "--type", "-t", help="Group type: batch, initiative, round, session, custom"
     ),
-    parent: int | None = typer.Option(
-        None, "--parent", "-p", help="Parent group ID for nesting"
-    ),
-    project: str | None = typer.Option(
-        None, "--project", help="Associated project name"
-    ),
-    description: str | None = typer.Option(
-        None, "--description", "-d", help="Group description"
-    ),
+    parent: int | None = typer.Option(None, "--parent", "-p", help="Parent group ID for nesting"),
+    project: str | None = typer.Option(None, "--project", help="Associated project name"),
+    description: str | None = typer.Option(None, "--description", "-d", help="Group description"),
 ) -> None:
     """Create a new document group."""
     try:
@@ -76,8 +68,10 @@ def add(
     group_id: int = typer.Argument(..., help="Group ID to add documents to"),
     doc_ids: list[int] = typer.Argument(..., help="Document IDs to add"),
     role: str = typer.Option(
-        "member", "--role", "-r",
-        help="Role in group: primary, exploration, synthesis, variant, member"
+        "member",
+        "--role",
+        "-r",
+        help="Role in group: primary, exploration, synthesis, variant, member",
     ),
 ) -> None:
     """Add documents to a group."""
@@ -174,15 +168,9 @@ def list_groups_cmd(
     parent: int | None = typer.Option(
         None, "--parent", "-p", help="Filter by parent group ID (-1 for top-level)"
     ),
-    project: str | None = typer.Option(
-        None, "--project", help="Filter by project"
-    ),
-    group_type: str | None = typer.Option(
-        None, "--type", "-t", help="Filter by type"
-    ),
-    tree: bool = typer.Option(
-        False, "--tree", help="Show as tree structure"
-    ),
+    project: str | None = typer.Option(None, "--project", help="Filter by project"),
+    group_type: str | None = typer.Option(None, "--type", "-t", help="Filter by type"),
+    tree: bool = typer.Option(False, "--tree", help="Show as tree structure"),
     include_inactive: bool = typer.Option(
         False, "--all", "-a", help="Include inactive (deleted) groups"
     ),
@@ -220,15 +208,15 @@ def list_groups_cmd(
         table.add_column("Project", style="dim", width=12)
 
         for g in all_groups:
-            parent_str = f"#{g['parent_group_id']}" if g['parent_group_id'] else "-"
-            project_str = g['project'][:12] if g['project'] else "-"
+            parent_str = f"#{g['parent_group_id']}" if g["parent_group_id"] else "-"
+            project_str = g["project"][:12] if g["project"] else "-"
 
             table.add_row(
-                str(g['id']),
-                g['name'][:35],
-                g['group_type'],
+                str(g["id"]),
+                g["name"][:35],
+                g["group_type"],
                 parent_str,
-                str(g['doc_count']),
+                str(g["doc_count"]),
                 project_str,
             )
 
@@ -263,28 +251,30 @@ def _display_groups_tree(project: str | None, include_inactive: bool) -> None:
 def _add_group_to_tree(parent_tree: Tree, group: dict[str, Any], include_inactive: bool) -> None:
     """Recursively add a group and its children to the tree."""
     type_icons = {
-        'initiative': '📋',
-        'round': '🔄',
-        'batch': '📦',
-        'session': '💾',
-        'custom': '🏷️',
+        "initiative": "📋",
+        "round": "🔄",
+        "batch": "📦",
+        "session": "💾",
+        "custom": "🏷️",
     }
-    icon = type_icons.get(group['group_type'], '📁')
+    icon = type_icons.get(group["group_type"], "📁")
 
-    label = f"{icon} [cyan]#{group['id']}[/cyan] {group['name']} [dim]({group['doc_count']} docs)[/dim]"  # noqa: E501
+    label = (
+        f"{icon} [cyan]#{group['id']}[/cyan] {group['name']} [dim]({group['doc_count']} docs)[/dim]"  # noqa: E501
+    )
     branch = parent_tree.add(label)
 
     # Add child groups
-    children = groups.get_child_groups(group['id'])
+    children = groups.get_child_groups(group["id"])
     for child in children:
-        if include_inactive or child.get('is_active', True):
+        if include_inactive or child.get("is_active", True):
             _add_group_to_tree(branch, dict(child), include_inactive)
 
     # Add member documents (limited to 5)
-    members = groups.get_group_members(group['id'])
+    members = groups.get_group_members(group["id"])
     if members:
         for m in members[:5]:
-            role_icon = {'primary': '★', 'synthesis': '📝', 'exploration': '◇'}.get(m['role'], '•')
+            role_icon = {"primary": "★", "synthesis": "📝", "exploration": "◇"}.get(m["role"], "•")
             branch.add(f"  {role_icon} [dim]#{m['id']}[/dim] {m['title'][:30]}")
         if len(members) > 5:
             branch.add(f"  [dim]... and {len(members) - 5} more[/dim]")
@@ -305,37 +295,39 @@ def show(
 
         # Header
         type_icons = {
-            'initiative': '📋',
-            'round': '🔄',
-            'batch': '📦',
-            'session': '💾',
-            'custom': '🏷️',
+            "initiative": "📋",
+            "round": "🔄",
+            "batch": "📦",
+            "session": "💾",
+            "custom": "🏷️",
         }
-        icon = type_icons.get(group['group_type'], '📁')
+        icon = type_icons.get(group["group_type"], "📁")
 
-        console.print(f"\n{icon} [bold cyan]#{group['id']}:[/bold cyan] [bold]{group['name']}[/bold]")  # noqa: E501
+        console.print(
+            f"\n{icon} [bold cyan]#{group['id']}:[/bold cyan] [bold]{group['name']}[/bold]"
+        )  # noqa: E501
         console.print("=" * 50)
 
         # Metadata
         console.print(f"[dim]Type:[/dim] {group['group_type']}")
-        if group['description']:
+        if group["description"]:
             console.print(f"[dim]Description:[/dim] {group['description']}")
-        if group['project']:
+        if group["project"]:
             console.print(f"[dim]Project:[/dim] {group['project']}")
-        if group['parent_group_id']:
-            parent = groups.get_group(group['parent_group_id'])
-            parent_name = parent['name'] if parent else "Unknown"
+        if group["parent_group_id"]:
+            parent = groups.get_group(group["parent_group_id"])
+            parent_name = parent["name"] if parent else "Unknown"
             console.print(f"[dim]Parent:[/dim] #{group['parent_group_id']} ({parent_name})")
         console.print(f"[dim]Created:[/dim] {group['created_at']}")
-        if group['created_by']:
+        if group["created_by"]:
             console.print(f"[dim]Created by:[/dim] {group['created_by']}")
 
         # Stats
         console.print("\n[bold]Statistics:[/bold]")
         console.print(f"  Documents: {group['doc_count']}")
-        if group['total_tokens']:
+        if group["total_tokens"]:
             console.print(f"  Total tokens: {group['total_tokens']:,}")
-        if group['total_cost_usd']:
+        if group["total_cost_usd"]:
             console.print(f"  Total cost: ${group['total_cost_usd']:.4f}")
 
         # Child groups
@@ -343,17 +335,26 @@ def show(
         if children:
             console.print(f"\n[bold]Child Groups ({len(children)}):[/bold]")
             for child in children:
-                child_icon = type_icons.get(child['group_type'], '📁')
-                console.print(f"  {child_icon} #{child['id']} {child['name']} ({child['doc_count']} docs)")  # noqa: E501
+                child_icon = type_icons.get(child["group_type"], "📁")
+                console.print(
+                    f"  {child_icon} #{child['id']} {child['name']} ({child['doc_count']} docs)"
+                )  # noqa: E501
 
         # Members
         members = groups.get_group_members(group_id)
         if members:
             console.print(f"\n[bold]Documents ({len(members)}):[/bold]")
             for m in members[:20]:
-                role_icon = {'primary': '★', 'synthesis': '📝', 'exploration': '◇', 'variant': '≈'}.get(m['role'], '•')  # noqa: E501
-                title = m['title'][:40] if len(m['title']) > 40 else m['title']
-                console.print(f"  {role_icon} [cyan]#{m['id']}[/cyan] {title} [dim]({m['role']})[/dim]")  # noqa: E501
+                role_icon = {
+                    "primary": "★",
+                    "synthesis": "📝",
+                    "exploration": "◇",
+                    "variant": "≈",
+                }.get(m["role"], "•")  # noqa: E501
+                title = m["title"][:40] if len(m["title"]) > 40 else m["title"]
+                console.print(
+                    f"  {role_icon} [cyan]#{m['id']}[/cyan] {title} [dim]({m['role']})[/dim]"
+                )  # noqa: E501
             if len(members) > 20:
                 console.print(f"  [dim]... and {len(members) - 20} more documents[/dim]")
         else:
@@ -386,9 +387,12 @@ def delete(
         if not force:
             console.print(f"\n[bold]Will delete group:[/bold] #{group_id} ({group['name']})")
             if children:
-                console.print(f"[yellow]Warning: This group has {len(children)} child group(s) that will also be deleted[/yellow]")  # noqa: E501
+                msg = f"This group has {len(children)} child group(s) that will also be deleted"
+                console.print(f"[yellow]Warning: {msg}[/yellow]")
             if members:
-                console.print(f"[dim]Note: {len(members)} document(s) will be removed from group (documents not deleted)[/dim]")  # noqa: E501
+                n = len(members)
+                msg = f"{n} document(s) will be removed from group (documents not deleted)"
+                console.print(f"[dim]Note: {msg}[/dim]")
 
             if not typer.confirm("Continue?"):
                 raise typer.Abort()
@@ -413,7 +417,9 @@ def edit(
     group_id: int = typer.Argument(..., help="Group ID to edit"),
     name: str | None = typer.Option(None, "--name", "-n", help="New name"),
     description: str | None = typer.Option(None, "--description", "-d", help="New description"),
-    parent: int | None = typer.Option(None, "--parent", "-p", help="New parent group ID (0 to remove)"),  # noqa: E501
+    parent: int | None = typer.Option(
+        None, "--parent", "-p", help="New parent group ID (0 to remove)"
+    ),  # noqa: E501
     group_type: str | None = typer.Option(None, "--type", "-t", help="New group type"),
 ) -> None:
     """Edit group properties."""
@@ -427,13 +433,13 @@ def edit(
 
         updates: dict[str, str | int | None] = {}
         if name is not None:
-            updates['name'] = name
+            updates["name"] = name
         if description is not None:
-            updates['description'] = description
+            updates["description"] = description
         if parent is not None:
-            updates['parent_group_id'] = None if parent == 0 else parent
+            updates["parent_group_id"] = None if parent == 0 else parent
         if group_type is not None:
-            updates['group_type'] = group_type
+            updates["group_type"] = group_type
 
         if not updates:
             console.print("[yellow]No changes specified[/yellow]")

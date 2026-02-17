@@ -22,6 +22,7 @@ from emdx.services.execution_monitor import ExecutionMonitor
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_execution(
     id=1,
     doc_id=1,
@@ -54,6 +55,7 @@ def _make_execution(
 # ExecutionMonitor init
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionMonitorInit:
     def test_default_stale_timeout(self):
         monitor = ExecutionMonitor()
@@ -67,6 +69,7 @@ class TestExecutionMonitorInit:
 # ---------------------------------------------------------------------------
 # check_process_health
 # ---------------------------------------------------------------------------
+
 
 class TestCheckProcessHealth:
     def setup_method(self):
@@ -153,8 +156,12 @@ class TestCheckProcessHealth:
         execution = _make_execution(pid=None)
         health = self.monitor.check_process_health(execution)
         expected_keys = {
-            "execution_id", "is_zombie", "is_running",
-            "process_exists", "is_stale", "reason"
+            "execution_id",
+            "is_zombie",
+            "is_running",
+            "process_exists",
+            "is_stale",
+            "reason",
         }
         assert set(health.keys()) == expected_keys
 
@@ -162,6 +169,7 @@ class TestCheckProcessHealth:
 # ---------------------------------------------------------------------------
 # cleanup_stuck_executions
 # ---------------------------------------------------------------------------
+
 
 class TestCleanupStuckExecutions:
     def setup_method(self):
@@ -273,6 +281,7 @@ class TestCleanupStuckExecutions:
 # kill_zombie_processes
 # ---------------------------------------------------------------------------
 
+
 class TestKillZombieProcesses:
     def setup_method(self):
         self.monitor = ExecutionMonitor()
@@ -370,6 +379,7 @@ class TestKillZombieProcesses:
 # get_execution_metrics (uses session test DB)
 # ---------------------------------------------------------------------------
 
+
 class TestGetExecutionMetrics:
     def test_metrics_returns_expected_keys(self):
         """Test that metrics returns a dict with all expected keys.
@@ -381,9 +391,13 @@ class TestGetExecutionMetrics:
             metrics = monitor.get_execution_metrics()
 
         expected_keys = {
-            "total_executions", "status_breakdown", "recent_24h",
-            "currently_running", "unhealthy_running",
-            "average_duration_minutes", "failure_rate_percent",
+            "total_executions",
+            "status_breakdown",
+            "recent_24h",
+            "currently_running",
+            "unhealthy_running",
+            "average_duration_minutes",
+            "failure_rate_percent",
             "metrics_timestamp",
         }
         assert expected_keys.issubset(set(metrics.keys()))
@@ -400,6 +414,7 @@ class TestGetExecutionMetrics:
 # ---------------------------------------------------------------------------
 # Execution dataclass properties
 # ---------------------------------------------------------------------------
+
 
 class TestExecutionDataclass:
     def test_duration_when_completed(self):

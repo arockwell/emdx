@@ -1,6 +1,5 @@
 """Tests for the chunk splitter utility."""
 
-
 from emdx.utils.chunk_splitter import (
     MAX_CHUNK_CHARS,
     MIN_CHUNK_CHARS,

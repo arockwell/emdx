@@ -4,7 +4,6 @@ Agent-facing commands for creating and consuming work items.
 Delegate activity tracking is separate (shown via `emdx status`).
 """
 
-
 import typer
 from rich.table import Table
 from rich.text import Text
@@ -24,7 +23,6 @@ STATUS_STYLE = {
     "failed": "red",
     "closed": "green",
 }
-
 
 
 def _blocker_summary(task_id: int) -> str:
@@ -196,8 +194,7 @@ def view(
             source_doc = get_document(source_id)
             if source_doc:
                 console.print(
-                    f"  [dim]Input:[/dim]  #{source_id} "
-                    f"[cyan]{source_doc['title']}[/cyan]"
+                    f"  [dim]Input:[/dim]  #{source_id} [cyan]{source_doc['title']}[/cyan]"
                 )
             else:
                 console.print(f"  [dim]Input:[/dim]  #{source_id} [dim](deleted)[/dim]")
@@ -205,8 +202,7 @@ def view(
             output_doc = get_document(output_id)
             if output_doc:
                 console.print(
-                    f"  [dim]Output:[/dim] #{output_id} "
-                    f"[cyan]{output_doc['title']}[/cyan]"
+                    f"  [dim]Output:[/dim] #{output_id} [cyan]{output_doc['title']}[/cyan]"
                 )
             else:
                 console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
@@ -351,9 +347,7 @@ def blocked(
 
 @app.command("list")
 def list_cmd(
-    status: str | None = typer.Option(
-        None, "-s", "--status", help="Filter by status (comma-sep)"
-    ),
+    status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
     done: bool = typer.Option(False, "--done", help="Include done/failed tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
@@ -431,7 +425,7 @@ def _display_title(task: TaskDict) -> str:
     if epic_key and epic_seq:
         prefix = f"{epic_key}-{epic_seq}: "
         if title.startswith(prefix):
-            return title[len(prefix):]
+            return title[len(prefix) :]
     return title
 
 

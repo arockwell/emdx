@@ -229,20 +229,28 @@ def list_all_tags(sort_by: str = "usage") -> list[TagStatsDict]:
             # Normalize tag name to emoji for display
             normalized_name = normalize_tag_to_emoji(row[1])
 
-            tags.append(cast(TagStatsDict, {
-                "id": row[0],
-                "name": normalized_name,
-                "count": row[2],
-                "created_at": created_at,
-                "last_used": last_used,
-            }))
+            tags.append(
+                cast(
+                    TagStatsDict,
+                    {
+                        "id": row[0],
+                        "name": normalized_name,
+                        "count": row[2],
+                        "created_at": created_at,
+                        "last_used": last_used,
+                    },
+                )
+            )
 
         return tags
 
 
 def search_by_tags(
-    tag_names: list[str], mode: str = "all", project: str | None = None, limit: int = 20,
-    prefix_match: bool = True
+    tag_names: list[str],
+    mode: str = "all",
+    project: str | None = None,
+    limit: int = 20,
+    prefix_match: bool = True,
 ) -> list[TagSearchResultDict]:
     """Search documents by tags.
 
@@ -287,9 +295,7 @@ def search_by_tags(
                     GROUP BY document_id
                     HAVING COUNT(DISTINCT t.name) = ?
                 )
-            """.format(
-                ",".join("?" * len(tag_names_lower))
-            )
+            """.format(",".join("?" * len(tag_names_lower)))
 
             params: list[str | int | None] = list(tag_names_lower) + [len(tag_names_lower)]
         else:
@@ -318,9 +324,13 @@ def search_by_tags(
 
         docs = []
         for row in cursor.fetchall():
-            doc = dict(zip(
-                [col[0] for col in cursor.description], row, strict=False,
-            ))
+            doc = dict(
+                zip(
+                    [col[0] for col in cursor.description],
+                    row,
+                    strict=False,
+                )
+            )
             docs.append(cast(TagSearchResultDict, doc))
 
         return docs

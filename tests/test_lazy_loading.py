@@ -20,6 +20,7 @@ class TestLazyTyperGroup:
 
     def test_list_commands_includes_lazy(self):
         """Test that list_commands returns both eager and lazy commands."""
+
         # Create a group with one eager command
         @click.command()
         def eager():
@@ -55,6 +56,7 @@ class TestLazyTyperGroup:
 
     def test_get_command_returns_eager_command(self):
         """Test that get_command returns eager commands directly."""
+
         @click.command()
         def eager():
             """Help for eager."""
@@ -188,10 +190,10 @@ class TestCLIIntegration:
         """Test that --help doesn't load lazy modules."""
         # Track which modules are loaded
         lazy_modules = [
-            'emdx.commands.recipe',
-            'emdx.commands.delegate',
-            'emdx.commands.claude_execute',
-            'emdx.commands.ask',
+            "emdx.commands.recipe",
+            "emdx.commands.delegate",
+            "emdx.commands.claude_execute",
+            "emdx.commands.ask",
         ]
 
         # Clear any cached imports
@@ -205,8 +207,10 @@ class TestCLIIntegration:
         import importlib
 
         import emdx.main
+
         importlib.reload(emdx.main)
         from emdx.main import app
+
         result = runner.invoke(app, ["--help"])
 
         after = set(sys.modules.keys())
@@ -223,6 +227,7 @@ class TestCLIIntegration:
         import importlib
 
         import emdx.main
+
         importlib.reload(emdx.main)
         from emdx.main import app
 

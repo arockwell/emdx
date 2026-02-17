@@ -31,11 +31,7 @@ class TestParseStreamJsonLine:
     def test_assistant_text_message(self):
         obj = {
             "type": "assistant",
-            "message": {
-                "content": [
-                    {"type": "text", "text": "Hello from Claude"}
-                ]
-            },
+            "message": {"content": [{"type": "text", "text": "Hello from Claude"}]},
         }
         content_type, text = parse_stream_json_line(json.dumps(obj))
         assert content_type == "text"
@@ -59,11 +55,7 @@ class TestParseStreamJsonLine:
     def test_assistant_empty_text(self):
         obj = {
             "type": "assistant",
-            "message": {
-                "content": [
-                    {"type": "text", "text": ""}
-                ]
-            },
+            "message": {"content": [{"type": "text", "text": ""}]},
         }
         content_type, text = parse_stream_json_line(json.dumps(obj))
         assert content_type == "skip"
@@ -72,9 +64,7 @@ class TestParseStreamJsonLine:
         obj = {
             "type": "assistant",
             "message": {
-                "content": [
-                    {"type": "tool_use", "name": "Read", "input": {"file": "test.py"}}
-                ]
+                "content": [{"type": "tool_use", "name": "Read", "input": {"file": "test.py"}}]
             },
         }
         content_type, text = parse_stream_json_line(json.dumps(obj))
@@ -146,9 +136,7 @@ class TestExtractTextFromStreamJson:
     def test_single_text_line(self):
         obj = {
             "type": "assistant",
-            "message": {
-                "content": [{"type": "text", "text": "Hello"}]
-            },
+            "message": {"content": [{"type": "text", "text": "Hello"}]},
         }
         result = extract_text_from_stream_json(json.dumps(obj))
         assert "Hello" in result
@@ -158,9 +146,7 @@ class TestExtractTextFromStreamJson:
         for text in ["First", "Second"]:
             obj = {
                 "type": "assistant",
-                "message": {
-                    "content": [{"type": "text", "text": text}]
-                },
+                "message": {"content": [{"type": "text", "text": text}]},
             }
             lines.append(json.dumps(obj))
         content = "\n".join(lines)
@@ -177,10 +163,12 @@ class TestExtractTextFromStreamJson:
     def test_skips_system_messages(self):
         lines = [
             json.dumps({"type": "system", "subtype": "init"}),
-            json.dumps({
-                "type": "assistant",
-                "message": {"content": [{"type": "text", "text": "Hello"}]},
-            }),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "Hello"}]},
+                }
+            ),
         ]
         result = extract_text_from_stream_json("\n".join(lines))
         assert "Hello" in result
@@ -230,9 +218,7 @@ class TestFilterStreamJsonForDisplay:
     def test_multiline_text_split(self):
         obj = {
             "type": "assistant",
-            "message": {
-                "content": [{"type": "text", "text": "Line 1\nLine 2\nLine 3"}]
-            },
+            "message": {"content": [{"type": "text", "text": "Line 1\nLine 2\nLine 3"}]},
         }
         lines = filter_stream_json_for_display(json.dumps(obj))
         assert "Line 1" in lines
@@ -383,9 +369,7 @@ class TestParseStreamJsonLineRich:
     def test_assistant_text_message(self):
         obj = {
             "type": "assistant",
-            "message": {
-                "content": [{"type": "text", "text": "Hello from Claude"}]
-            },
+            "message": {"content": [{"type": "text", "text": "Hello from Claude"}]},
         }
         event = parse_stream_json_line_rich(json.dumps(obj))
         assert event.event_type == "text"
@@ -517,9 +501,7 @@ class TestParseAndFormatLiveLogs:
     def test_multiline_split(self):
         obj = {
             "type": "assistant",
-            "message": {
-                "content": [{"type": "text", "text": "Line1\nLine2"}]
-            },
+            "message": {"content": [{"type": "text", "text": "Line1\nLine2"}]},
         }
         lines = parse_and_format_live_logs(json.dumps(obj))
         assert len(lines) >= 2

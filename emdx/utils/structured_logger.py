@@ -19,24 +19,29 @@ from typing import Any, Union
 
 class LogLevel(Enum):
     """Log levels for structured logging."""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
 
+
 class ProcessType(Enum):
     """Types of processes that write logs."""
+
     MAIN = "main"
     WRAPPER = "wrapper"
     CLAUDE = "claude"
     TUI = "tui"
 
+
 class StructuredLogger:
     """Thread-safe structured logger for EMDX processes."""
 
-    def __init__(self, log_file: Union[str, Path], process_type: ProcessType,
-                 process_id: int | None = None):
+    def __init__(
+        self, log_file: Union[str, Path], process_type: ProcessType, process_id: int | None = None
+    ):
         """Initialize the structured logger.
 
         Args:
@@ -52,8 +57,9 @@ class StructuredLogger:
         # Ensure log directory exists
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def _create_entry(self, level: LogLevel, message: str,
-                      context: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _create_entry(
+        self, level: LogLevel, message: str, context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Create a structured log entry.
 
         Args:
@@ -70,9 +76,9 @@ class StructuredLogger:
             "process": {
                 "type": self.process_type.value,
                 "pid": self.process_id,
-                "name": f"{self.process_type.value}-{self.process_id}"
+                "name": f"{self.process_type.value}-{self.process_id}",
             },
-            "message": message
+            "message": message,
         }
 
         if context:
@@ -89,10 +95,10 @@ class StructuredLogger:
         with self._lock:
             try:
                 # Write as a single JSON line with newline
-                json_line = json.dumps(entry, separators=(',', ':')) + '\n'
+                json_line = json.dumps(entry, separators=(",", ":")) + "\n"
 
                 # Open in append mode and write atomically
-                with open(self.log_file, 'a', encoding='utf-8') as f:
+                with open(self.log_file, "a", encoding="utf-8") as f:
                     f.write(json_line)
                     f.flush()  # Ensure immediate write
                     os.fsync(f.fileno())  # Force write to disk
@@ -100,10 +106,10 @@ class StructuredLogger:
             except Exception as e:
                 # If we can't write to log, at least print to stderr
                 import sys
+
                 print(f"Failed to write log entry: {e}", file=sys.stderr)
 
-    def log(self, level: LogLevel, message: str,
-            context: dict[str, Any] | None = None) -> None:
+    def log(self, level: LogLevel, message: str, context: dict[str, Any] | None = None) -> None:
         """Write a log entry.
 
         Args:
@@ -152,11 +158,10 @@ class StructuredLogger:
             # Tool usage
             tool_name = json_data.get("name", "unknown")
             tool_params = json_data.get("parameters", {})
-            self.info(f"Tool use: {tool_name}", {
-                "claude_type": "tool_use",
-                "tool": tool_name,
-                "parameters": tool_params
-            })
+            self.info(
+                f"Tool use: {tool_name}",
+                {"claude_type": "tool_use", "tool": tool_name, "parameters": tool_params},
+            )
 
         elif msg_type == "tool_result":
             # Tool result
@@ -165,11 +170,10 @@ class StructuredLogger:
             # Truncate very long results
             if isinstance(result, str) and len(result) > 1000:
                 result = result[:1000] + "... (truncated)"
-            self.info(f"Tool result: {tool_name}", {
-                "claude_type": "tool_result",
-                "tool": tool_name,
-                "result": result
-            })
+            self.info(
+                f"Tool result: {tool_name}",
+                {"claude_type": "tool_result", "tool": tool_name, "result": result},
+            )
 
         elif msg_type == "error":
             # Error from Claude
@@ -180,38 +184,44 @@ class StructuredLogger:
             # Final result
             subtype = json_data.get("subtype", "unknown")
             if subtype == "success":
-                self.info("Task completed successfully", {"claude_type": "result", "subtype": "success"})  # noqa: E501
+                self.info(
+                    "Task completed successfully", {"claude_type": "result", "subtype": "success"}
+                )  # noqa: E501
             else:
-                result = json_data.get('result', 'Unknown error')
-                self.error(f"Task failed: {result}", {"claude_type": "result", "subtype": "failure"})  # noqa: E501
+                result = json_data.get("result", "Unknown error")
+                self.error(
+                    f"Task failed: {result}", {"claude_type": "result", "subtype": "failure"}
+                )  # noqa: E501
         else:
             # Unknown type - log for debugging
             self.debug(f"Unknown Claude message type: {msg_type}", {"claude_data": json_data})
 
     def log_execution_start(self, exec_id: int, doc_title: str, working_dir: str) -> None:
         """Log the start of an execution with metadata."""
-        self.info(f"Starting execution #{exec_id}: {doc_title}", {
-            "event": "execution_start",
-            "exec_id": exec_id,
-            "doc_title": doc_title,
-            "working_dir": working_dir
-        })
+        self.info(
+            f"Starting execution #{exec_id}: {doc_title}",
+            {
+                "event": "execution_start",
+                "exec_id": exec_id,
+                "doc_title": doc_title,
+                "working_dir": working_dir,
+            },
+        )
 
     def log_execution_complete(self, exec_id: int, exit_code: int, duration: float) -> None:
         """Log the completion of an execution."""
         status = "success" if exit_code == 0 else "failure"
-        self.info(f"Execution #{exec_id} completed with {status} (exit code: {exit_code})", {
-            "event": "execution_complete",
-            "exec_id": exec_id,
-            "exit_code": exit_code,
-            "status": status,
-            "duration_seconds": duration
-        })
+        self.info(
+            f"Execution #{exec_id} completed with {status} (exit code: {exit_code})",
+            {
+                "event": "execution_complete",
+                "exec_id": exec_id,
+                "exit_code": exit_code,
+                "status": status,
+                "duration_seconds": duration,
+            },
+        )
 
     def log_process_lifecycle(self, event: str, details: dict[str, Any] | None = None) -> None:
         """Log process lifecycle events (start, heartbeat, stop)."""
-        self.info(f"Process {event}", {
-            "event": f"process_{event}",
-            "details": details or {}
-        })
-
+        self.info(f"Process {event}", {"event": f"process_{event}", "details": details or {}})

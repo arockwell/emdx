@@ -57,17 +57,24 @@ class TestBrowseCommands:
         result = runner.invoke(app, ["list", "--project", "test-project"])
 
         assert result.exit_code == 0
-        mock_list_docs.assert_called_once_with(
-            project="test-project", limit=50
-        )
+        mock_list_docs.assert_called_once_with(project="test-project", limit=50)
 
     @patch("emdx.commands._helpers.db")
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_json_format(self, mock_list_docs, mock_db):
         """Test list command with JSON format."""
         from datetime import datetime
+
         mock_db.ensure_schema = Mock()
-        mock_list_docs.return_value = [{"id": 1, "title": "Test", "project": "test", "created_at": datetime.now(), "access_count": 0}]  # noqa: E501
+        mock_list_docs.return_value = [
+            {
+                "id": 1,
+                "title": "Test",
+                "project": "test",
+                "created_at": datetime.now(),
+                "access_count": 0,
+            }
+        ]  # noqa: E501
 
         result = runner.invoke(app, ["list", "--format", "json"])
 
@@ -122,4 +129,3 @@ class TestBrowseCommands:
         assert "100" in result.stdout  # total documents
         assert "Popular Doc" in result.stdout
         mock_get_stats.assert_called_once_with(project=None)
-

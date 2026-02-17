@@ -33,6 +33,7 @@ def retry(
         max_delay: Maximum delay between retries in seconds.
         exceptions: Tuple of exception types to retry on.
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -43,10 +44,14 @@ def retry(
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_retries:
-                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        delay = min(base_delay * (2**attempt), max_delay)
                         logger.warning(
                             "Retry %d/%d for %s after %s: %s",
-                            attempt + 1, max_retries, func.__name__, type(e).__name__, e,
+                            attempt + 1,
+                            max_retries,
+                            func.__name__,
+                            type(e).__name__,
+                            e,
                         )
                         time.sleep(delay)
             raise last_exception  # type: ignore[misc]
@@ -60,10 +65,14 @@ def retry(
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_retries:
-                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        delay = min(base_delay * (2**attempt), max_delay)
                         logger.warning(
                             "Retry %d/%d for %s after %s: %s",
-                            attempt + 1, max_retries, func.__name__, type(e).__name__, e,
+                            attempt + 1,
+                            max_retries,
+                            func.__name__,
+                            type(e).__name__,
+                            e,
                         )
                         await asyncio.sleep(delay)
             raise last_exception  # type: ignore[misc]

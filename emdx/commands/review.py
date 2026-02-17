@@ -79,13 +79,15 @@ def list_cmd(
             output = []
             for doc in docs:
                 doc_tags = get_document_tags(doc["id"])
-                output.append({
-                    "id": doc["id"],
-                    "title": doc["title"],
-                    "project": doc.get("project"),
-                    "created_at": doc.get("created_at"),
-                    "tags": doc_tags,
-                })
+                output.append(
+                    {
+                        "id": doc["id"],
+                        "title": doc["title"],
+                        "project": doc.get("project"),
+                        "created_at": doc.get("created_at"),
+                        "tags": doc_tags,
+                    }
+                )
             _output_json({"documents": output, "count": len(output)})
             return
 
@@ -150,10 +152,12 @@ def approve(
 
         if "needs-review" not in current_tags:
             if json_output:
-                _output_json({
-                    "success": False,
-                    "error": f"Document #{doc_id} is not pending review",
-                })
+                _output_json(
+                    {
+                        "success": False,
+                        "error": f"Document #{doc_id} is not pending review",
+                    }
+                )
             else:
                 console.print(f"[yellow]Document #{doc_id} is not pending review[/yellow]")
             raise typer.Exit(1)
@@ -221,10 +225,12 @@ def reject(
 
         if "needs-review" not in current_tags:
             if json_output:
-                _output_json({
-                    "success": False,
-                    "error": f"Document #{doc_id} is not pending review",
-                })
+                _output_json(
+                    {
+                        "success": False,
+                        "error": f"Document #{doc_id} is not pending review",
+                    }
+                )
             else:
                 console.print(f"[yellow]Document #{doc_id} is not pending review[/yellow]")
             raise typer.Exit(1)
@@ -234,14 +240,16 @@ def reject(
         add_tags_to_document(doc_id, ["rejected"])
 
         if json_output:
-            _output_json({
-                "success": True,
-                "doc_id": doc_id,
-                "action": "rejected",
-                "reason": reason,
-                "tags_added": ["rejected"],
-                "tags_removed": ["needs-review"],
-            })
+            _output_json(
+                {
+                    "success": True,
+                    "doc_id": doc_id,
+                    "action": "rejected",
+                    "reason": reason,
+                    "tags_added": ["rejected"],
+                    "tags_removed": ["needs-review"],
+                }
+            )
         else:
             console.print(f"[red]❌ Rejected:[/red] #{doc_id} {doc['title']}")
             console.print(f"[dim]Reason: {reason}[/dim]")
@@ -282,12 +290,14 @@ def stats(
         total = needs_review + reviewed + rejected
 
         if json_output:
-            _output_json({
-                "needs_review": needs_review,
-                "reviewed": reviewed,
-                "rejected": rejected,
-                "total": total,
-            })
+            _output_json(
+                {
+                    "needs_review": needs_review,
+                    "reviewed": reviewed,
+                    "rejected": rejected,
+                    "total": total,
+                }
+            )
         else:
             console.print("\n[bold]📊 Review Statistics:[/bold]\n")
 
@@ -304,9 +314,7 @@ def stats(
             console.print(table)
 
             if needs_review > 0:
-                console.print(
-                    "\n[yellow]Run 'emdx review list' to see pending documents[/yellow]"
-                )
+                console.print("\n[yellow]Run 'emdx review list' to see pending documents[/yellow]")
 
     except Exception as e:
         if json_output:

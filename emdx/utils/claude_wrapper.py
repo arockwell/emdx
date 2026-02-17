@@ -5,6 +5,7 @@ Wrapper script for Claude executions that tracks completion status.
 This script runs a Claude command and updates the database with the final status,
 solving the issue where background executions remain 'running' forever.
 """
+
 import json
 import os
 import subprocess
@@ -31,6 +32,7 @@ def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
             # Database might be locked during heavy operations
             # Silently continue, but log for debugging
             import logging
+
             logging.debug(f"Heartbeat update failed: {e}")
 
         # Wait 30 seconds or until stop event
@@ -48,11 +50,11 @@ def main() -> None:
     cmd = sys.argv[3:]
 
     # Open log file directly for human-readable output
-    log_handle = open(log_file, 'w', buffering=1)  # Line buffered
+    log_handle = open(log_file, "w", buffering=1)  # Line buffered
 
     # Helper to write timestamped log entries
     def write_log(message: str) -> None:
-        timestamp = datetime.now().strftime('%H:%M:%S')
+        timestamp = datetime.now().strftime("%H:%M:%S")
         log_handle.write(f"[{timestamp}] {message}\n")
         log_handle.flush()
 
@@ -75,6 +77,7 @@ def main() -> None:
 
     # Quick check if claude exists without subprocess
     import shutil
+
     if not shutil.which(cmd[0]):
         write_log(f"❌ Command '{cmd[0]}' not found in PATH")
         write_log(f"PATH: {os.environ.get('PATH', 'not set')}")
@@ -106,7 +109,7 @@ def main() -> None:
 
         # Stream and format output
         lines_processed = 0
-        for line in (process.stdout or []):
+        for line in process.stdout or []:
             lines_processed += 1
             line = line.strip()
             if not line:
@@ -139,14 +142,14 @@ def main() -> None:
                         write_log(f"📍 Working directory: {data.get('cwd', 'unknown')}")
                         write_log(f"🤖 Model: {data.get('model', 'unknown')}")
                         # List available tools
-                        tools = data.get('tools', [])
+                        tools = data.get("tools", [])
                         if tools:
                             # Group tools into categories for better display
                             basic_tools = []
                             mcp_tools = []
                             for tool in tools:
-                                if tool.startswith('mcp__'):
-                                    mcp_tools.append(tool.replace('mcp__gmail-mcp__', ''))
+                                if tool.startswith("mcp__"):
+                                    mcp_tools.append(tool.replace("mcp__gmail-mcp__", ""))
                                 else:
                                     basic_tools.append(tool)
 
@@ -154,7 +157,9 @@ def main() -> None:
                                 write_log("🛠️ Tools available:")
                                 for i, tool in enumerate(basic_tools, 1):
                                     write_log(f"    {i:2d}. {tool}")
-                                if len(basic_tools) > 20:  # Only show first 20 to keep logs readable  # noqa: E501
+                                if (
+                                    len(basic_tools) > 20
+                                ):  # Only show first 20 to keep logs readable  # noqa: E501
                                     write_log(f"         ...and {len(basic_tools) - 20} more")
 
                             if mcp_tools:

@@ -35,7 +35,7 @@ def escape_fts5_query(query: str) -> str:
         escaped = term.replace('"', '""')
         quoted_terms.append(f'"{escaped}"')
 
-    return ' '.join(quoted_terms)
+    return " ".join(quoted_terms)
 
 
 def search_documents(

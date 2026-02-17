@@ -166,9 +166,7 @@ class TestAddTagsToDocument:
         add_tags_to_document(doc2, ["python"])
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             count = cursor.fetchone()[0]
             assert count == 2
 
@@ -182,9 +180,7 @@ class TestAddTagsToDocument:
         add_tags_to_document(doc_id, ["python"])
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             count = cursor.fetchone()[0]
             assert count == 1
 
@@ -250,17 +246,13 @@ class TestRemoveTagsFromDocument:
 
         # usage_count should be 2
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             assert cursor.fetchone()[0] == 2
 
         remove_tags_from_document(doc1, ["python"])
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             assert cursor.fetchone()[0] == 1
 
     def test_remove_multiple_tags_at_once(self):
@@ -335,9 +327,7 @@ class TestGetDocumentTags:
 
         with db_connection.get_connection() as conn:
             # Insert 'gameplan' text tag
-            conn.execute(
-                "INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)"
-            )
+            conn.execute("INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)")
             cursor = conn.execute("SELECT id FROM tags WHERE name = 'gameplan'")
             text_tag_id = cursor.fetchone()[0]
 
@@ -438,9 +428,7 @@ class TestGetTagsForDocuments:
         doc_id = _create_document()
 
         with db_connection.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)"
-            )
+            conn.execute("INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)")
             cursor = conn.execute("SELECT id FROM tags WHERE name = 'gameplan'")
             text_id = cursor.fetchone()[0]
 
@@ -558,9 +546,7 @@ class TestListAllTags:
         from emdx.models.tags import list_all_tags
 
         with db_connection.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO tags (name, usage_count) VALUES ('gameplan', 3)"
-            )
+            conn.execute("INSERT INTO tags (name, usage_count) VALUES ('gameplan', 3)")
             conn.commit()
 
         tags = list_all_tags()
@@ -614,9 +600,7 @@ class TestSearchByTags:
         add_tags_to_document(doc1, ["python", "testing"])
         add_tags_to_document(doc2, ["python"])
 
-        results = search_by_tags(
-            ["python", "testing"], mode="all", prefix_match=False
-        )
+        results = search_by_tags(["python", "testing"], mode="all", prefix_match=False)
         result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
         assert doc2 not in result_ids
@@ -666,9 +650,7 @@ class TestSearchByTags:
         add_tags_to_document(doc1, ["python"])
         add_tags_to_document(doc2, ["python"])
 
-        results = search_by_tags(
-            ["python"], project="project-a", prefix_match=False
-        )
+        results = search_by_tags(["python"], project="project-a", prefix_match=False)
         result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
         assert doc2 not in result_ids
@@ -692,9 +674,7 @@ class TestSearchByTags:
 
         # Soft-delete the document
         with db_connection.get_connection() as conn:
-            conn.execute(
-                "UPDATE documents SET is_deleted = TRUE WHERE id = ?", (doc_id,)
-            )
+            conn.execute("UPDATE documents SET is_deleted = TRUE WHERE id = ?", (doc_id,))
             conn.commit()
 
         results = search_by_tags(["python"], prefix_match=False)
@@ -731,9 +711,7 @@ class TestSearchByTags:
         add_tags_to_document(doc2, ["worker"])
 
         # mode="all" + prefix_match=True uses the 'any' branch
-        results = search_by_tags(
-            ["workflow", "worker"], mode="all", prefix_match=True
-        )
+        results = search_by_tags(["workflow", "worker"], mode="all", prefix_match=True)
         result_ids = [r["id"] for r in results]
         # Both should match since prefix_match forces 'any' behavior
         assert doc1 in result_ids
@@ -871,9 +849,7 @@ class TestMergeTags:
         merge_tags(["obsolete"], "current")
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM tags WHERE name = 'obsolete'"
-            )
+            cursor = conn.execute("SELECT COUNT(*) FROM tags WHERE name = 'obsolete'")
             assert cursor.fetchone()[0] == 0
 
     def test_merge_updates_target_usage_count(self):
@@ -889,9 +865,7 @@ class TestMergeTags:
         merge_tags(["tag-a", "tag-b"], "merged")
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = 'merged'"
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = 'merged'")
             count = cursor.fetchone()[0]
             assert count == 2
 

@@ -10,7 +10,9 @@ Tests cover:
 import pytest
 
 # Skip all tests if datasketch not installed - must come before module imports
-datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")  # noqa: E501
+datasketch = pytest.importorskip(
+    "datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')"
+)  # noqa: E501
 
 from emdx.services.duplicate_detector import (  # noqa: E402
     DEFAULT_NUM_PERM,
@@ -149,7 +151,11 @@ class TestDuplicateDetector:
             conn.execute(
                 """INSERT INTO documents (title, content, project, is_deleted)
                    VALUES (?, ?, ?, 0)""",
-                ("Test Doc", "This is a test document with enough content to be indexed." * 5, "test"),  # noqa: E501
+                (
+                    "Test Doc",
+                    "This is a test document with enough content to be indexed." * 5,
+                    "test",
+                ),  # noqa: E501
             )
             conn.commit()
 
@@ -161,19 +167,25 @@ class TestDuplicateDetector:
         from emdx.database import db
 
         # Create two very similar documents
-        base_content = """
+        base_content = (
+            """
         This is a comprehensive guide to Python programming. It covers
         variables, functions, classes, and modules. Python is a versatile
         language used for web development, data science, and automation.
         Learning Python opens many career opportunities in technology.
-        """ * 3
+        """
+            * 3
+        )
 
-        similar_content = """
+        similar_content = (
+            """
         This is a comprehensive guide to Python programming. It covers
         variables, functions, classes, and modules. Python is a versatile
         language used for web development, data science, and automation.
         Learning Python opens many career opportunities in tech industry.
-        """ * 3
+        """
+            * 3
+        )
 
         with db.get_connection() as conn:
             conn.execute(
@@ -215,8 +227,14 @@ class TestDuplicateDetector:
         from emdx.database import db
 
         # Create documents with moderate similarity
-        content1 = "Python is a programming language. It is widely used for data science and web development." * 5  # noqa: E501
-        content2 = "JavaScript is a programming language. It is widely used for web development and frontend." * 5  # noqa: E501
+        content1 = (
+            "Python is a programming language. "
+            "It is widely used for data science and web development."
+        ) * 5
+        content2 = (
+            "JavaScript is a programming language. "
+            "It is widely used for web development and frontend."
+        ) * 5
 
         with db.get_connection() as conn:
             conn.execute(

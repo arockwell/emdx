@@ -103,7 +103,7 @@ def parse_recipe(content: str) -> Recipe:
             frontmatter = yaml.safe_load(fm_match.group(1)) or {}
         except yaml.YAMLError as e:
             raise RecipeParseError(f"Invalid YAML frontmatter: {e}") from e
-        body = content[fm_match.end():]
+        body = content[fm_match.end() :]
 
     # Parse inputs from frontmatter
     inputs = _parse_inputs(frontmatter.get("inputs", []))
@@ -133,9 +133,7 @@ def is_structured_recipe(content: str) -> bool:
     return bool(_STEP_RE.search(content))
 
 
-def validate_inputs(
-    recipe: Recipe, provided: dict[str, str]
-) -> list[str]:
+def validate_inputs(recipe: Recipe, provided: dict[str, str]) -> list[str]:
     """Validate that required inputs are provided.
 
     Returns list of error messages (empty = valid).
@@ -150,6 +148,7 @@ def validate_inputs(
 
 def substitute(text: str, values: dict[str, str]) -> str:
     """Replace {{var}} placeholders with values."""
+
     def replacer(match: re.Match[str]) -> str:
         name: str = match.group(1)
         return values.get(name, match.group(0))
@@ -157,9 +156,7 @@ def substitute(text: str, values: dict[str, str]) -> str:
     return str(_VAR_RE.sub(replacer, text))
 
 
-def resolve_inputs(
-    recipe: Recipe, provided: dict[str, str]
-) -> dict[str, str]:
+def resolve_inputs(recipe: Recipe, provided: dict[str, str]) -> dict[str, str]:
     """Build final input values by merging provided values with defaults."""
     values: dict[str, str] = {}
     for inp in recipe.inputs:
@@ -180,12 +177,14 @@ def _parse_inputs(raw: list | None) -> list[RecipeInput]:
         if isinstance(item, str):
             inputs.append(RecipeInput(name=item))
         elif isinstance(item, dict):
-            inputs.append(RecipeInput(
-                name=item.get("name", ""),
-                description=item.get("description", ""),
-                required=bool(item.get("required", False)),
-                default=str(item["default"]) if "default" in item else None,
-            ))
+            inputs.append(
+                RecipeInput(
+                    name=item.get("name", ""),
+                    description=item.get("description", ""),
+                    required=bool(item.get("required", False)),
+                    default=str(item["default"]) if "default" in item else None,
+                )
+            )
     return inputs
 
 
@@ -218,12 +217,14 @@ def _parse_steps(body: str) -> list[RecipeStep]:
         end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
         prompt = body[start:end].strip()
 
-        steps.append(RecipeStep(
-            number=number,
-            name=name,
-            prompt=prompt,
-            flags=flags,
-        ))
+        steps.append(
+            RecipeStep(
+                number=number,
+                name=name,
+                prompt=prompt,
+                flags=flags,
+            )
+        )
 
     return steps
 

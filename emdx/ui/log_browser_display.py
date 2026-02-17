@@ -54,11 +54,9 @@ class LogBrowserDisplayMixin:
             metadata_lines.append(f"[yellow]Duration:[/yellow] {minutes}m {seconds}s")
 
         # Add status
-        status_icon = {
-            'running': '🔄',
-            'completed': '✅',
-            'failed': '❌'
-        }.get(execution.status, '❓')
+        status_icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(
+            execution.status, "❓"
+        )
         metadata_lines.append(f"[yellow]Status:[/yellow] {status_icon} {execution.status}")
 
         return "\n".join(metadata_lines)

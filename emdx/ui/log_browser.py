@@ -49,11 +49,7 @@ class LogBrowserSubscriber(LogStreamSubscriber):
 
 
 class LogBrowser(
-    HelpMixin,
-    LogBrowserDisplayMixin,
-    LogBrowserFilteringMixin,
-    LogBrowserNavigationMixin,
-    Widget
+    HelpMixin, LogBrowserDisplayMixin, LogBrowserFilteringMixin, LogBrowserNavigationMixin, Widget
 ):
     """Log browser widget for viewing execution logs with event-driven streaming.
 
@@ -170,12 +166,7 @@ class LogBrowser(
                     details_container.styles.padding = 0
                     details_container.styles.border_top = ("heavy", "gray")
 
-                    yield RichLog(
-                        id="log-details",
-                        wrap=True,
-                        markup=True,
-                        auto_scroll=False
-                    )
+                    yield RichLog(id="log-details", wrap=True, markup=True, auto_scroll=False)
 
             # Right preview panel (50% width) - equal split
             with Vertical(id="log-preview-container") as preview_container:
@@ -184,9 +175,10 @@ class LogBrowser(
                 preview_container.styles.padding = (0, 1)
 
                 yield ScrollableContainer(
-                    RichLog(id="log-content", wrap=True, highlight=True, markup=True,
-                            auto_scroll=False),
-                    id="log-preview"
+                    RichLog(
+                        id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+                    ),
+                    id="log-preview",
                 )
 
         # Status bar
@@ -232,11 +224,9 @@ class LogBrowser(
             table.clear()
 
             for execution in self.executions:
-                status_icon = {
-                    'running': '🔄',
-                    'completed': '✅',
-                    'failed': '❌'
-                }.get(execution.status, '❓')
+                status_icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(
+                    execution.status, "❓"
+                )
 
                 # Format title with ID prefix
                 title_with_id = f"#{execution.id} - {execution.doc_title}"
@@ -244,14 +234,10 @@ class LogBrowser(
                 if len(title_with_id) > 47:
                     title_with_id = title_with_id[:44] + "..."
 
-                table.add_row(
-                    status_icon,
-                    title_with_id
-                )
+                table.add_row(status_icon, title_with_id)
 
             status_text = (
-                f"📋 {len(self.executions)} executions | "
-                "j/k=navigate | s=select | l=live | q=back"
+                f"📋 {len(self.executions)} executions | j/k=navigate | s=select | l=live | q=back"
             )
             self.update_status(status_text)
 
@@ -313,7 +299,7 @@ class LogBrowser(
             # Update status to show live mode hint for running executions
             if self.is_live_mode:
                 self.update_status("🔴 LIVE MODE | l=toggle off | Event-driven streaming")
-            elif execution.status == 'running' and not self.selection_mode:
+            elif execution.status == "running" and not self.selection_mode:
                 self.update_status("📋 Execution running | Press 'l' for live mode | q=back")
 
     async def action_refresh(self) -> None:

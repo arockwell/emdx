@@ -487,7 +487,9 @@ class TestSearchResultFields:
         """Test that search snippet contains context around the match."""
         db = mock_db_connection
 
-        db.save_document("Python Guide", "This is a comprehensive guide to Python programming", "project1")  # noqa: E501
+        db.save_document(
+            "Python Guide", "This is a comprehensive guide to Python programming", "project1"
+        )  # noqa: E501
 
         results = search_documents("Python")
         assert len(results) == 1
@@ -624,15 +626,9 @@ class TestHyphenatedSearch:
         db = mock_db_connection
 
         db.save_document(
-            "Event-Driven Architecture",
-            "Learn about event-driven programming patterns",
-            "project1"
+            "Event-Driven Architecture", "Learn about event-driven programming patterns", "project1"
         )
-        db.save_document(
-            "Other Doc",
-            "Some other content without the term",
-            "project1"
-        )
+        db.save_document("Other Doc", "Some other content without the term", "project1")
 
         # This should NOT fail with "no such column: driven" error
         results = search_documents("event-driven")
@@ -644,9 +640,7 @@ class TestHyphenatedSearch:
         db = mock_db_connection
 
         db.save_document(
-            "Multi-Stage Pipeline",
-            "A multi-stage, event-driven workflow system",
-            "project1"
+            "Multi-Stage Pipeline", "A multi-stage, event-driven workflow system", "project1"
         )
 
         results = search_documents("multi-stage event-driven")
@@ -657,9 +651,7 @@ class TestHyphenatedSearch:
         db = mock_db_connection
 
         db.save_document(
-            "Full-Text Search",
-            "Implementing full-text search with SQLite FTS5",
-            "project1"
+            "Full-Text Search", "Implementing full-text search with SQLite FTS5", "project1"
         )
 
         results = search_documents("full-text SQLite")
@@ -669,11 +661,7 @@ class TestHyphenatedSearch:
         """Test that dash at start doesn't break the query."""
         db = mock_db_connection
 
-        db.save_document(
-            "Test Doc",
-            "Some test content here",
-            "project1"
-        )
+        db.save_document("Test Doc", "Some test content here", "project1")
 
         # This used to be interpreted as NOT operator
         # Now it should search for the literal term
