@@ -432,19 +432,23 @@ def find(
         help="Show matching chunk text instead of document snippets",
     ),
 ) -> None:
-    """Search the knowledge base with full-text search.
+    """Search the knowledge base (keyword, semantic, or hybrid).
 
     Supports three search modes:
       - keyword: Fast FTS5 full-text search (exact keyword matches)
-      - semantic: Embedding-based search (conceptual similarity)
+      - semantic: Embedding-based search (conceptual similarity, requires 'emdx ai index')
       - hybrid: Both combined (default when index exists)
 
     Use --extract to see the matching paragraph/section instead of the full document.
+
+    Looking for Q&A? Use 'emdx ask "question"' to get a synthesized answer,
+    or 'emdx ai context "question" | claude' for a zero-API-cost alternative.
 
     Examples:
         emdx find "authentication patterns"              # hybrid search
         emdx find "auth" --mode keyword                  # keyword only
         emdx find "how to configure logging" --extract   # show matching chunks
+        emdx find "concept" --mode semantic              # meaning-based search
     """
     search_query = " ".join(query) if query else ""
 

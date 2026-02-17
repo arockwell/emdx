@@ -9,7 +9,17 @@ from rich.table import Table
 
 from ..utils.output import console
 
-app = typer.Typer(help="AI-powered knowledge base features")
+app = typer.Typer(
+    help=(
+        "AI-powered knowledge base features.\n\n"
+        "Getting started:\n"
+        "  1. emdx ai index            Build the embedding index (one-time)\n"
+        "  2. emdx find 'query'        Search with hybrid keyword+semantic\n"
+        "  3. emdx ask 'question'      Ask your KB a question (uses Claude CLI)\n\n"
+        "Tip: 'emdx ask' is a top-level shortcut for 'emdx ai ask'.\n"
+        "Tip: 'emdx ai context \"q\" | claude' uses Claude Max (no API cost)."
+    ),
+)
 
 
 @app.command("ask")
@@ -31,6 +41,10 @@ def ask_question(
     Ask a question about your knowledge base.
 
     Uses semantic search if embeddings are indexed, otherwise falls back to keyword search.
+    Requires Claude CLI for answer generation.
+
+    Tip: 'emdx ask' is a top-level shortcut for this command.
+    Tip: Use 'emdx ai context "q" | claude' for a zero-API-cost alternative.
 
     Examples:
         emdx ai ask "What's our caching strategy?"
@@ -95,6 +109,9 @@ def get_context(
     Retrieve context for a question (for piping to claude CLI).
 
     Outputs retrieved documents as plain text, suitable for piping to claude.
+    This uses your Claude Max subscription — no API cost.
+
+    See also: 'emdx ask' for direct Q&A without piping.
 
     Examples:
         emdx ai context "How does auth work?" | claude
@@ -237,6 +254,9 @@ def semantic_search(
     Semantic search across your documents.
 
     Finds conceptually similar documents, not just keyword matches.
+    Requires 'emdx ai index' to be run first.
+
+    Tip: 'emdx find "query" --mode semantic' does the same thing with tag/date filters.
 
     Examples:
         emdx ai search "authentication flow"

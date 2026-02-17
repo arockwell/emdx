@@ -35,7 +35,18 @@ LAZY_SUBCOMMANDS = {
 LAZY_HELP = {
     "recipe": "Manage and run EMDX recipes",
     "delegate": "One-shot AI execution (parallel, worktree, PR)",
-    "ai": "AI-powered Q&A and semantic search",
+    "ai": (
+        "AI-powered Q&A and semantic search.\n\n"
+        "\b\n"
+        "Getting started:\n"
+        "  1. emdx ai index         Build the embedding index\n"
+        "  2. emdx find 'query'     Hybrid keyword+semantic search\n"
+        "  3. emdx ask 'question'   Ask your KB a question\n\n"
+        "\b\n"
+        "Shortcuts:\n"
+        "  emdx ask = emdx ai ask (top-level shortcut)\n"
+        "  emdx ai context 'q' | claude (no API cost)\n"
+    ),
     "distill": "Distill KB content into audience-aware summaries",
     "compact": "Compact related documents through AI-powered synthesis",
 }
@@ -189,6 +200,52 @@ app.command(name="gui")(gui_command)
 app.command(name="wrapup")(wrapup_command)
 
 
+# Top-level shortcut: `emdx ask` → `emdx ai ask`
+@app.command(name="ask", hidden=False)
+def ask_shortcut(
+    question: str = typer.Argument(..., help="Your question"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Max documents to search"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Limit to project"),
+    keyword: bool = typer.Option(
+        False, "--keyword", "-k", help="Force keyword search (no embeddings)"
+    ),
+    show_sources: bool = typer.Option(
+        True, "--sources/--no-sources", help="Show source documents"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug info"),
+    tags: str | None = typer.Option(
+        None, "--tags", "-t", help="Filter by tags (comma-separated)"
+    ),
+    recent: int | None = typer.Option(
+        None, "--recent", "-r", help="Limit to docs created in last N days"
+    ),
+) -> None:
+    """Ask a question about your knowledge base.
+
+    Shortcut for 'emdx ai ask'. Uses semantic search if embeddings are indexed,
+    otherwise falls back to keyword search.
+
+    Tip: Use 'emdx ai context "q" | claude' for a zero-API-cost alternative.
+
+    Examples:
+        emdx ask "What's our caching strategy?"
+        emdx ask "How did we solve the auth bug?" --project myapp
+        emdx ask "What are our security patterns?" --tags "security"
+    """
+    from emdx.commands.ask import ask_question
+
+    ask_question(
+        question=question,
+        limit=limit,
+        project=project,
+        keyword=keyword,
+        show_sources=show_sources,
+        verbose=verbose,
+        tags=tags,
+        recent=recent,
+    )
+
+
 # =============================================================================
 # Handle safe mode for unsafe commands
 # =============================================================================
@@ -241,22 +298,20 @@ def main(
     Save a file:
         [cyan]emdx save README.md[/cyan]
 
-    Save text directly:
-        [cyan]emdx save "Remember to fix the API endpoint"[/cyan]
-
-    Save from pipe:
-        [cyan]docker ps | emdx save --title "Running containers"[/cyan]
-
     Search for content:
         [cyan]emdx find "docker compose"[/cyan]
 
+    Ask your knowledge base a question:
+        [cyan]emdx ask "How does the auth system work?"[/cyan]
+
+    Pipe context to Claude (no API cost):
+        [cyan]emdx ai context "auth patterns" | claude[/cyan]
+
     View a document:
         [cyan]emdx view 42[/cyan]
-        [cyan]emdx view "My Document Title"[/cyan]
 
     Enable safe mode:
         [cyan]EMDX_SAFE_MODE=1 emdx --help[/cyan]
-        [cyan]emdx --safe-mode delegate "task"[/cyan]  # Will show disabled message
     """
     # Handle --version flag
     if version:
