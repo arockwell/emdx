@@ -243,6 +243,16 @@ These commands work but are not yet stable:
 - **FTS5 virtual table queries**: `documents_fts` is a separate FTS5 virtual table, NOT a column on `documents`. You must JOIN it: `SELECT d.id FROM documents d JOIN documents_fts fts ON d.id = fts.rowid WHERE fts.documents_fts MATCH ?`. Never use `WHERE documents_fts MATCH ?` directly on the documents table — it silently fails with "no such column". See `emdx/database/search.py` for the canonical pattern.
 - **Mocked internal functions in tests**: When refactoring a function's signature (parameters, return type), grep for tests that mock it — they break silently. Use: `rg "mock.*<func_name>\|patch.*<func_name>" tests/`
 
+## Textual Pilot Testing Patterns
+
+- `Static.content` returns `VisualType` (not `str`) — always wrap with `str()` for mypy: `assert "text" in str(bar.content)`
+- `RichLog.lines` contains `Strip` objects with `.text` property — use helper: `"\n".join(line.text for line in widget.lines)`
+- OptionList doesn't auto-fire `OptionHighlighted` on mount — press `j` then `k` to trigger detail pane rendering in tests
+- Mouse click tests need explicit `offset=(x, y)` to hit specific rows; clicking without offset may hit disabled headers
+- BrowserContainer tests: let `register_all_themes` run normally, mock `get_theme` to return `"textual-dark"` (a built-in theme) to avoid `InvalidThemeError`
+- `Static` has no `.renderable` attribute — use `.content` property instead
+- See `tests/test_task_browser.py` for canonical patterns: `TaskTestApp`, `mock_task_data` fixture, `_richlog_text()` helper, `_select_first_task()` helper
+
 ## Delegate Debugging
 
 ### Stuck Delegate Diagnostics
@@ -258,6 +268,10 @@ If a delegate appears stuck (no output beyond worktree creation):
 ### Common Causes of Hanging
 - Very large `--doc` content embedded in CLI arguments
 - Shared virtualenv editable install pointing to deleted worktree (fix: `poetry lock && poetry install`)
+
+### Small/Precise Changes
+- **Delegates with `--pr` may go off-script on small tasks** — if a delegate needs a specific 2-3 line change, it's often faster to do it manually in a worktree than to launch a delegate that may misinterpret the task or get distracted by unrelated issues (e.g., reformatting the whole codebase instead of the requested fix)
+- **Always verify delegate PRs match the requested task** — check `gh pr list --state open` after delegate completes to confirm the PR title/content matches what was requested
 
 ## Release Process
 
