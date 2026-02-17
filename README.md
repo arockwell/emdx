@@ -67,20 +67,11 @@ emdx recent                         # See what you worked on recently
 
 ### Tag and organize
 
-Tags are plain text strings for flexible classification:
-
 ```bash
 emdx tag 42 gameplan active         # Add tags
 emdx find --tags "gameplan,active"  # Search by tags
 ```
 
-| Tag | Use for |
-|-----|---------|
-| `gameplan` | Plans and strategy |
-| `analysis` | Research and investigation |
-| `active` | Currently working on |
-| `done` | Completed |
-| `blocked` | Stuck or waiting |
 
 ## Delegate work to Claude agents
 
@@ -117,44 +108,14 @@ emdx delegate --doc 42 "implement the plan described here"
 emdx delegate 42                                         # Run a doc directly
 ```
 
-## Search and synthesize
+## AI features
 
-### Semantic search
-
-Find documents by meaning, not just keywords (requires `emdx[ai]`):
+With `emdx[ai]` installed, search by meaning and query your knowledge base:
 
 ```bash
-emdx find "how we handle rate limiting" --mode semantic
-```
-
-### Q&A over your knowledge base
-
-```bash
-# Pipe relevant docs to Claude (uses Claude Max — no API cost)
-emdx ai context "How does the auth system work?" | claude
-
-# Or query directly (requires ANTHROPIC_API_KEY)
-emdx ai ask "What did we decide about the API redesign?"
-```
-
-### Compact: deduplicate over time
-
-As your KB grows, related documents pile up. `compact` clusters similar docs and merges them:
-
-```bash
-emdx compact --dry-run           # Preview clusters (no API calls)
-emdx compact --auto              # Merge all discovered clusters
-emdx compact --topic "auth"      # Only cluster docs about a topic
-```
-
-Originals are tagged `superseded` (not deleted) so nothing is lost.
-
-### Distill: synthesize for any audience
-
-```bash
-emdx distill "authentication"                    # Personal summary
-emdx distill --for coworkers "sprint progress"   # Team briefing
-emdx distill --for docs "API design" --save      # Save result to KB
+emdx find "how we handle rate limiting" --mode semantic   # Semantic search
+emdx ai context "How does auth work?" | claude            # Q&A (Claude Max — no API cost)
+emdx ai ask "What did we decide about the API redesign?"  # Direct query (needs API key)
 ```
 
 ## Claude Code integration
@@ -170,13 +131,28 @@ emdx wrapup   # Generate a session summary before ending
 ## More features
 
 <details>
-<summary>Recipes, execution monitoring, TUI, and more</summary>
+<summary>Compact, distill, recipes, execution monitoring, TUI, and more</summary>
+
+### Compact — deduplicate over time
+
+As your KB grows, `compact` clusters similar docs and merges them:
+
+```bash
+emdx compact --dry-run           # Preview clusters
+emdx compact --auto              # Merge all discovered clusters
+```
+
+### Distill — synthesize for any audience
+
+```bash
+emdx distill "authentication"                    # Personal summary
+emdx distill --for coworkers "sprint progress"   # Team briefing
+```
 
 ### Recipes — reusable agent instructions
 
 ```bash
 emdx recipe create security-audit.md --title "Security Audit"
-emdx recipe list
 emdx recipe run "Security Audit" -- "check auth module"
 ```
 
@@ -185,23 +161,18 @@ emdx recipe run "Security Audit" -- "check auth module"
 ```bash
 emdx exec running          # List active executions
 emdx exec show 42          # Follow logs
-emdx exec kill 42          # Kill a stuck execution
 ```
 
 ### Interactive TUI
 
-Browse, edit, and manage your knowledge base visually:
-
 ```bash
-emdx gui
+emdx gui                   # Browse, edit, and manage your KB visually
 ```
 
 ### Briefings
 
-See what happened in your knowledge base recently:
-
 ```bash
-emdx briefing              # Activity summary
+emdx briefing              # Recent activity summary
 ```
 
 </details>
@@ -218,10 +189,7 @@ emdx briefing              # Activity summary
 | Run an AI task | `emdx delegate "task"` |
 | Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
 | Create a PR from a task | `emdx delegate --pr "fix the bug"` |
-| Search by meaning | `emdx find "concept" --mode semantic` |
 | Ask your KB a question | `emdx ai context "question" \| claude` |
-| Deduplicate the KB | `emdx compact --dry-run` |
-| Synthesize a topic | `emdx distill "topic"` |
 | Start a Claude session | `emdx prime` |
 
 ## Documentation
