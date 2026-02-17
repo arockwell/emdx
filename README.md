@@ -4,11 +4,11 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**A knowledge base that AI agents can read, write, and search — and so can you.**
+**The knowledge base that can go get its own knowledge.**
 
 Every Claude Code session starts from zero. Your research, decisions, and AI-generated analysis vanish when the session ends. You re-explain context. You re-run searches. You lose work.
 
-emdx fixes this. It's a local knowledge base backed by SQLite. Save your research, pipe in command output, or delegate tasks to Claude agents — every result lands in one searchable place. Next session, it's all still there.
+emdx fixes this. It's a CLI tool — a local knowledge base backed by SQLite. Save your research, pipe in command output, or delegate tasks to Claude agents — every result lands in one searchable place. Next session, it's all still there.
 
 ## See it in action
 
@@ -38,7 +38,7 @@ $ emdx delegate --doc 43 --pr "fix the issues from this analysis"
 🔀 PR #87: fix the issues from this analysis
 ```
 
-Everything prints to stdout and gets saved to your knowledge base. Next session, it's all still there.
+Everything prints to stdout and gets saved to your knowledge base.
 
 ## Install
 
