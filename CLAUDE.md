@@ -226,6 +226,36 @@ These commands work but are not yet stable:
 
 - **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
+## TUI Debugging & Logging
+
+### Log File Locations
+| File | Purpose | Written by |
+|------|---------|------------|
+| `~/.config/emdx/tui_debug.log` | TUI runtime logs | `setup_tui_logging()` in `run_browser.py` |
+| `~/.config/emdx/emdx.log` | CLI command logs | `get_logger()` in `logging_utils.py` |
+| `~/.config/emdx/key_events.log` | Key events (WARNING+ only) | `setup_tui_logging()` |
+
+### Log Levels
+- **Root logger**: WARNING (suppresses noisy third-party libs)
+- **`emdx.*` loggers**: INFO (all emdx modules)
+- To see `logger.debug()` calls, you must temporarily change the level in `setup_tui_logging()` or set it per-module
+
+### Quick Debug Workflow
+```bash
+# Watch TUI logs live while running GUI in another terminal
+tail -f ~/.config/emdx/tui_debug.log
+
+# Check recent TUI logs after a session
+tail -100 ~/.config/emdx/tui_debug.log
+
+# Check for errors only
+grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
+```
+
+### Common Pitfall
+- `logger.debug("msg")` will NOT appear in TUI logs — emdx.* level is INFO. Use `logger.info()` or `logger.warning()` for debug output that must be visible.
+- TUI logs and CLI logs go to DIFFERENT files. If you're debugging the GUI, check `tui_debug.log`, not `emdx.log`.
+
 ## Known Gotchas
 
 - **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
