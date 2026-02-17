@@ -241,7 +241,7 @@ def execute_cli_sync(
 ) -> dict:
     """Execute a task with specified CLI tool synchronously, waiting for completion.
 
-    This is the unified function that supports both Claude and Cursor CLIs.
+    This is the unified function that supports CLI tools.
     Uses stream-json output format by default for real-time log streaming.
 
     Args:

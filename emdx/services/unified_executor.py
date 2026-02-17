@@ -440,7 +440,7 @@ class UnifiedExecutor:
 
             result.execution_time_ms = int((time.time() - start_time) * 1000)
 
-            # Get token usage from CLI result (may be zero for Cursor)
+            # Get token usage from CLI result
             result.tokens_used = cli_result.total_tokens
             result.input_tokens = cli_result.input_tokens + cli_result.cache_read_tokens
             result.output_tokens = cli_result.output_tokens
