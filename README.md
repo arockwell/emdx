@@ -54,76 +54,78 @@ uv tool install 'emdx[all]'    # Everything
 
 ## The knowledge base
 
-The foundation of emdx: save anything, find it later, organize with tags.
-
-### Save anything
+Anything you save becomes searchable — files, notes, piped command output. Tag things so you can find them by topic later.
 
 ```bash
-emdx save meeting-notes.md                              # Save a file
-emdx save "the auth bug is in token refresh" --title "Auth Bug"  # Save a note
-echo "plan: migrate to v2 API" | emdx save --title "Migration Plan"  # Pipe text
-```
+# Save a file
+$ emdx save meeting-notes.md
+✅ Saved as #12: meeting-notes
 
-### Find it later
+# Save a quick note
+$ emdx save "the auth bug is in token refresh" --title "Auth Bug"
+✅ Saved as #13: Auth Bug
 
-```bash
-emdx find "auth bug"                # Full-text search (SQLite FTS5)
-emdx find --tags "security,active"  # Filter by tags
-emdx view 42                        # View a specific document
-emdx recent                         # See what you worked on recently
-```
+# Pipe in anything
+$ docker logs api --since 1h | emdx save --title "API errors"
+✅ Saved as #14: API errors
 
-### Tag and organize
+# Tag things so you can slice by topic
+$ emdx tag 12 planning active
+$ emdx tag 13 bugfix security
 
-```bash
-emdx tag 42 gameplan active         # Add tags
-emdx find --tags "gameplan,active"  # Search by tags
+# Find by keyword — full-text search across everything
+$ emdx find "auth"
+🔍 Found 3 results for 'auth'
+
+# Or filter by tags
+$ emdx find --tags "security"
 ```
 
 ## Delegate work to agents
 
-This is where emdx gets powerful. `delegate` sends tasks to Claude Code agents. Each agent runs independently, and its output is saved to your knowledge base automatically.
+You saw the basics in the hero. Here's where it gets interesting — you can control how agents work, combine their output, and chain results together.
 
 ```bash
-# Send a task to a Claude agent
-emdx delegate "analyze the auth module for security issues"
+# Throttle concurrency when you have a lot of tasks
+$ emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
 
-# Run multiple tasks in parallel — each gets its own agent
-emdx delegate "check auth" "review tests" "scan for XSS"
+# Combine outputs into one synthesized summary
+$ emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
+📋 Saved as #60: Synthesis: analyze auth, analyze api, analyze db
 
-# Control concurrency
-emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
+# Feed previous results into new tasks
+$ emdx delegate --doc 60 "write an action plan based on this analysis"
+📋 Saved as #61: Delegate: write an action plan...
 
-# Combine outputs into a synthesized summary
-emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
+# Or run a saved document as a prompt directly
+$ emdx delegate 61
 ```
 
-### Code changes with PRs
-
-Agents work in isolated git worktrees and can open PRs directly:
+Agents can also make code changes. They work in isolated git worktrees so your working tree stays clean:
 
 ```bash
-emdx delegate --pr "fix the auth bug"                   # Branch + PR
-emdx delegate --doc 42 --pr "implement this plan"        # Use a doc as context
-```
+# Create a branch and open a PR
+$ emdx delegate --pr "fix the auth bug"
+🔀 PR #88: fix the auth bug
 
-### Build on past work
-
-The knowledge base and delegate feed into each other. Save research, delegate work based on it, find the results later, delegate more:
-
-```bash
-emdx delegate --doc 42 "implement the plan described here"
-emdx delegate 42                                         # Run a doc directly
+# Use a doc as context for the change
+$ emdx delegate --doc 42 --pr "implement this plan"
+🔀 PR #89: implement this plan
 ```
 
 ## AI features
 
-With `emdx[ai]` installed, search by meaning and query your knowledge base:
+With `emdx[ai]` installed, search by meaning instead of just keywords:
 
 ```bash
-emdx find "how we handle rate limiting" --mode semantic   # Semantic search
-emdx ai context "How does auth work?" | claude            # Q&A (Claude Max — no API cost)
-emdx ai ask "What did we decide about the API redesign?"  # Direct query (needs API key)
+# "rate limiting" finds docs about throttling, backoff, quotas...
+$ emdx find "how we handle rate limiting" --mode semantic
+
+# Build a context package and pipe it to Claude
+$ emdx ai context "How does auth work?" | claude
+
+# Or ask your KB directly (needs API key)
+$ emdx ai ask "What did we decide about the API redesign?"
 ```
 
 ## Claude Code integration
@@ -131,13 +133,14 @@ emdx ai ask "What did we decide about the API redesign?"  # Direct query (needs 
 Add `emdx prime` to your CLAUDE.md and every Claude Code session starts with context — ready tasks, recent documents, and in-progress work.
 
 ```bash
-emdx prime    # Output current work context for Claude Code session injection
+$ emdx prime    # Output current work context for Claude Code session injection
 ```
 
 ## More features
 
 ```bash
 emdx compact --dry-run                           # Deduplicate similar docs
+emdx compact --auto                              # Merge discovered clusters
 emdx distill "authentication"                    # Synthesize a topic summary
 emdx distill --for coworkers "sprint progress"   # Audience-aware summaries
 emdx status                                      # Delegate activity dashboard
