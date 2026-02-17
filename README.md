@@ -13,19 +13,32 @@ emdx fixes this. It's a local knowledge base backed by SQLite. Save your researc
 ## See it in action
 
 ```bash
-# Save your research
+# You're working on a project. Save what you know.
 $ emdx save security-audit.md
 ✅ Saved as #42: security-audit
 
-# Dispatch agents to act on it — in parallel
-$ emdx delegate --doc 42 "fix the critical issues" "write tests for the fixes"
+# Have Claude analyze it for you
+$ emdx delegate --doc 42 "analyze each finding and suggest fixes"
+📋 Saved as #43: Delegate: analyze each finding...
 
-# A week later, find everything — your notes and the agents' output
+# Or run three analyses in parallel — each gets its own agent
+$ emdx delegate "audit auth for vulnerabilities" \
+                "review error handling patterns" \
+                "check for missing input validation"
+📋 Saved as #44: Delegate: audit auth...
+📋 Saved as #45: Delegate: review error handling...
+📋 Saved as #46: Delegate: check for missing input...
+
+# A week later, find everything — your notes and all the agent output
 $ emdx find "security"
-🔍 Found 4 results for 'security'
+🔍 Found 5 results for 'security'
+
+# Go straight from analysis to pull request
+$ emdx delegate --doc 43 --pr "fix the issues from this analysis"
+🔀 PR #87: fix the issues from this analysis
 ```
 
-Every result prints to stdout and gets saved to your knowledge base. Next session, it's all still there.
+Everything prints to stdout and gets saved to your knowledge base. Next session, it's all still there.
 
 ## Install
 
