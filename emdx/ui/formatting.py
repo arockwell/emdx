@@ -1,18 +1,19 @@
 """Tag display utilities for consistent ordering and formatting."""
 
+
 def order_tags(tags: list[str]) -> list[str]:
     """
     Order tags according to category: Document Type -> Status -> Other
 
     Args:
-        tags: List of tag strings (usually emojis)
+        tags: List of tag strings
 
     Returns:
         Ordered list of tags
     """
     # Define tag categories
-    document_types = {"🎯", "🔍", "📝", "📚", "🏗️"}
-    status_tags = {"🚀", "✅", "🚧"}
+    document_types = {"gameplan", "plan", "analysis", "notes", "docs", "architecture"}
+    status_tags = {"active", "done", "blocked"}
 
     # Sort tags into categories
     doc_type_tags = [t for t in tags if t in document_types]
@@ -22,50 +23,19 @@ def order_tags(tags: list[str]) -> list[str]:
     # Combine in order
     return doc_type_tags + status_list + other_tags
 
+
 def format_tags(tags: list[str]) -> str:
     """
-    Format tags for display with proper ordering and spacing.
+    Format tags for display with proper ordering and comma separation.
 
     Args:
         tags: List of tag strings
 
     Returns:
-        Formatted tag string with space separation
+        Formatted tag string with comma separation
     """
     if not tags:
         return ""
 
     ordered = order_tags(tags)
-    return " ".join(ordered)
-
-def truncate_emoji_safe(text: str, max_chars: int) -> tuple[str, bool]:
-    """
-    Truncate text at emoji boundaries to avoid breaking multi-char emojis.
-
-    This is important for emojis like 🏗️ which consist of multiple Unicode
-    code points (base emoji + variation selector).
-
-    Args:
-        text: Text to truncate
-        max_chars: Maximum character count
-
-    Returns:
-        Tuple of (truncated_text, was_truncated)
-    """
-    if len(text) <= max_chars:
-        return text, False
-
-    # Find safe truncation point
-    truncate_at = max_chars
-
-    # Check if we're in the middle of a multi-char sequence
-    while truncate_at > 0 and truncate_at < len(text):
-        next_char = text[truncate_at]
-        # Check for variation selectors (U+FE00-U+FE0F) and other combining marks
-        if 0xFE00 <= ord(next_char) <= 0xFE0F:
-            # Move back to include the whole emoji
-            truncate_at -= 1
-        else:
-            break
-
-    return text[:truncate_at], True
+    return ", ".join(ordered)
