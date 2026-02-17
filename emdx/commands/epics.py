@@ -20,8 +20,8 @@ def create(
     """Create a new epic.
 
     Examples:
-        emdx epic create "Security Hardening" --cat SEC
-        emdx epic create "Security Hardening" --cat SEC -D "January 2026 security sweep"
+        emdx task epic create "Security Hardening" --cat SEC
+        emdx task epic create "Security Hardening" --cat SEC -D "January 2026 security sweep"
     """
     try:
         epic_id = tasks.create_epic(name, cat, description or "")
@@ -39,9 +39,9 @@ def list_cmd(
     """List epics with child task counts.
 
     Examples:
-        emdx epic list
-        emdx epic list --cat SEC
-        emdx epic list --status open,active
+        emdx task epic list
+        emdx task epic list --cat SEC
+        emdx task epic list --status open,active
     """
     status_list = [s.strip() for s in status.split(",")] if status else None
     epics = tasks.list_epics(category_key=cat, status=status_list)
@@ -80,7 +80,7 @@ def view(
     """View an epic and its tasks.
 
     Examples:
-        emdx epic view 510
+        emdx task epic view 510
     """
     epic = tasks.get_epic_view(epic_id)
     if not epic:
@@ -89,8 +89,7 @@ def view(
 
     cat_label = f" ({epic['epic_key']})" if epic.get("epic_key") else ""
     console.print(
-        f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold]"
-        f" — {epic['status']}"
+        f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold] — {epic['status']}"
     )
     if epic.get("description"):
         console.print(f"[dim]{epic['description']}[/dim]")
@@ -118,7 +117,7 @@ def done(
     """Mark an epic as done.
 
     Examples:
-        emdx epic done 510
+        emdx task epic done 510
     """
     epic = tasks.get_task(epic_id)
     if not epic:
@@ -136,7 +135,7 @@ def active(
     """Mark an epic as active.
 
     Examples:
-        emdx epic active 510
+        emdx task epic active 510
     """
     epic = tasks.get_task(epic_id)
     if not epic:

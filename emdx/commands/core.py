@@ -36,7 +36,6 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.emoji_aliases import expand_alias_string
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 
@@ -137,13 +136,6 @@ def detect_project(input_content: InputContent, provided_project: str | None) ->
 
 def create_document(title: str, content: str, project: str | None) -> int:
     """Save document to database and return document ID"""
-    # Ensure database schema exists
-    try:
-        db.ensure_schema()
-    except Exception as e:
-        console.print(f"[red]Database error: {e}[/red]")
-        raise typer.Exit(1) from e
-
     # Save to database
     try:
         doc_id = save_document(title, content, project)
@@ -158,9 +150,7 @@ def apply_tags(doc_id: int, tags_str: str | None) -> list[str]:
     if not tags_str:
         return []
 
-    # Expand aliases in the tag string before parsing
-    expanded_tags_str = expand_alias_string(tags_str)
-    tag_list = [t.strip() for t in expanded_tags_str.split(",") if t.strip()]
+    tag_list = [t.strip() for t in tags_str.split(",") if t.strip()]
     if tag_list:
         return add_tags_to_document(doc_id, tag_list)
     return []
@@ -449,8 +439,6 @@ def find(
     search_query = " ".join(query) if query else ""
 
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Validate that we have something to search for
         has_date_filters = any([created_after, created_before, modified_after, modified_before])
@@ -501,8 +489,7 @@ def find(
 
         # Apply tag filters if specified
         if tags:
-            expanded_tags = expand_alias_string(tags)
-            tag_list = [t.strip() for t in expanded_tags.split(",") if t.strip()]
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             tag_mode = "any" if any_tags else "all"
 
             # Get docs matching tags
@@ -514,8 +501,7 @@ def find(
 
         # Apply --no-tags filter
         if no_tags:
-            expanded_no_tags = expand_alias_string(no_tags)
-            no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
+            no_tag_list = [t.strip() for t in no_tags.split(",") if t.strip()]
             if no_tag_list:
                 hybrid_results = [
                     r for r in hybrid_results if not any(tag in r.tags for tag in no_tag_list)
@@ -629,9 +615,7 @@ def _find_keyword_search(
     """Original keyword-based search for tag/date filtered queries."""
     # Handle tag-based search
     if tags:
-        # Expand aliases in the tag string before parsing
-        expanded_tags = expand_alias_string(tags)
-        tag_list = [t.strip() for t in expanded_tags.split(",") if t.strip()]
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
         tag_mode = "any" if any_tags else "all"
 
         # If we have both tags and search query, we need to combine results
@@ -716,8 +700,7 @@ def _find_keyword_search(
 
     # Filter out documents with excluded tags if --no-tags is specified
     if no_tags:
-        expanded_no_tags = expand_alias_string(no_tags)
-        no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
+        no_tag_list = [t.strip() for t in no_tags.split(",") if t.strip()]
 
         if no_tag_list:
             # Filter results to exclude documents with any of the no_tags
@@ -858,8 +841,6 @@ def view(
 ) -> None:
     """View a document from the knowledge base"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Fetch document
         doc = get_document(identifier)
@@ -1003,8 +984,6 @@ def edit(
 ) -> None:
     """Edit a document in the knowledge base"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Fetch document
         doc = get_document(identifier)
@@ -1120,8 +1099,6 @@ def delete(
 ) -> None:
     """Delete one or more documents (soft delete by default)"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Collect documents to delete
         docs_to_delete = []

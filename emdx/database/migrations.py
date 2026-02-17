@@ -2310,6 +2310,90 @@ def migration_041_add_execution_output_text(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_042_convert_emoji_tags_to_text(conn: sqlite3.Connection) -> None:
+    """Convert emoji tags to their canonical text equivalents.
+
+    This migration removes the emoji alias system. All emoji tags in the
+    tags table are converted to their text form (e.g., 🎯 → gameplan).
+    If both the emoji and text tag exist, document_tags associations are
+    moved from the emoji tag to the text tag, then the emoji tag is deleted.
+    """
+    cursor = conn.cursor()
+
+    # Hardcoded reverse map: emoji → canonical text name
+    emoji_to_text: dict[str, str] = {
+        "🎯": "gameplan",
+        "🔍": "analysis",
+        "📝": "notes",
+        "📚": "docs",
+        "🏗️": "architecture",
+        "🚀": "active",
+        "✅": "done",
+        "🚧": "blocked",
+        "🎉": "success",
+        "❌": "failed",
+        "⚡": "partial",
+        "🔧": "refactor",
+        "🧪": "test",
+        "🐛": "bug",
+        "✨": "feature",
+        "💎": "quality",
+        "🚨": "urgent",
+        "🐌": "low",
+        "📊": "project",
+        "📋": "recipe",
+        "🟢": "active",  # anomaly — merge into active
+    }
+
+    for emoji, text_name in emoji_to_text.items():
+        # Check if the emoji tag exists
+        cursor.execute("SELECT id FROM tags WHERE name = ?", (emoji,))
+        emoji_row = cursor.fetchone()
+        if not emoji_row:
+            continue
+        emoji_tag_id = emoji_row[0]
+
+        # Check if the text equivalent already exists
+        cursor.execute("SELECT id FROM tags WHERE name = ?", (text_name,))
+        text_row = cursor.fetchone()
+
+        if text_row:
+            # Text tag exists — move associations from emoji to text tag
+            text_tag_id = text_row[0]
+
+            # Move document_tags: update emoji→text, ignore duplicates
+            cursor.execute(
+                "UPDATE OR IGNORE document_tags SET tag_id = ? WHERE tag_id = ?",
+                (text_tag_id, emoji_tag_id),
+            )
+            # Delete any remaining emoji associations (duplicates that were ignored)
+            cursor.execute(
+                "DELETE FROM document_tags WHERE tag_id = ?",
+                (emoji_tag_id,),
+            )
+            # Delete the emoji tag
+            cursor.execute("DELETE FROM tags WHERE id = ?", (emoji_tag_id,))
+
+            # Update usage count on the text tag
+            cursor.execute(
+                """
+                UPDATE tags SET usage_count = (
+                    SELECT COUNT(DISTINCT document_id)
+                    FROM document_tags WHERE tag_id = ?
+                ) WHERE id = ?
+                """,
+                (text_tag_id, text_tag_id),
+            )
+        else:
+            # No text equivalent — just rename the emoji tag
+            cursor.execute(
+                "UPDATE tags SET name = ? WHERE id = ?",
+                (text_name, emoji_tag_id),
+            )
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2354,6 +2438,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (39, "Add categories and epic fields to tasks", migration_039_add_categories_and_epic_fields),
     (40, "Add chunk embeddings for semantic search", migration_040_add_chunk_embeddings),
     (41, "Add output_text to executions", migration_041_add_execution_output_text),
+    (42, "Convert emoji tags to text", migration_042_convert_emoji_tags_to_text),
 ]
 
 

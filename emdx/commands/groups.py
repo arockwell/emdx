@@ -11,7 +11,7 @@ import typer
 from rich.table import Table
 from rich.tree import Tree
 
-from emdx.database import db, groups
+from emdx.database import groups
 from emdx.models.documents import get_document
 from emdx.utils.output import console
 
@@ -37,7 +37,6 @@ def create(
 ) -> None:
     """Create a new document group."""
     try:
-        db.ensure_schema()
 
         # Validate parent exists if specified
         if parent is not None:
@@ -82,7 +81,6 @@ def add(
 ) -> None:
     """Add documents to a group."""
     try:
-        db.ensure_schema()
 
         # Verify group exists
         group = groups.get_group(group_id)
@@ -136,7 +134,6 @@ def remove(
 ) -> None:
     """Remove documents from a group."""
     try:
-        db.ensure_schema()
 
         # Verify group exists
         group = groups.get_group(group_id)
@@ -189,7 +186,6 @@ def list_groups_cmd(
 ) -> None:
     """List document groups."""
     try:
-        db.ensure_schema()
 
         if tree:
             _display_groups_tree(project, include_inactive)
@@ -296,7 +292,6 @@ def show(
 ) -> None:
     """Show detailed information about a group."""
     try:
-        db.ensure_schema()
 
         group = groups.get_group(group_id)
         if not group:
@@ -372,7 +367,6 @@ def delete(
 ) -> None:
     """Delete a document group."""
     try:
-        db.ensure_schema()
 
         group = groups.get_group(group_id)
         if not group:
@@ -418,7 +412,6 @@ def edit(
 ) -> None:
     """Edit group properties."""
     try:
-        db.ensure_schema()
 
         group = groups.get_group(group_id)
         if not group:

@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..database import db
-from ..utils.emoji_aliases import normalize_tag_to_emoji
 
 if TYPE_CHECKING:
     from .embedding_service import EmbeddingService
@@ -213,8 +212,7 @@ class AskService:
 
             # Tag filter
             if tags:
-                # Parse and normalize tags (expand text aliases to emojis)
-                tag_list = [normalize_tag_to_emoji(t.strip()) for t in tags.split(",") if t.strip()]
+                tag_list = [t.strip().lower() for t in tags.split(",") if t.strip()]
 
                 if tag_list:
                     # Get docs that have ALL specified tags

@@ -343,9 +343,6 @@ def compact(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from e
 
-    # Ensure database schema
-    db.ensure_schema()
-
     # Fetch all documents
     documents = _fetch_all_documents()
     if not documents:
