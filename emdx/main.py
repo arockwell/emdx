@@ -93,9 +93,7 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # =============================================================================
 from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.browse import app as browse_app  # noqa: E402
-from emdx.commands.categories import app as categories_app  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
-from emdx.commands.epics import app as epics_app  # noqa: E402
 from emdx.commands.executions import app as executions_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.groups import app as groups_app  # noqa: E402
@@ -157,9 +155,6 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
 
-# Add epics and categories as subcommand groups
-app.add_typer(epics_app, name="epic", help="Manage task epics")
-app.add_typer(categories_app, name="cat", help="Manage task categories")
 
 # Add review commands for triaging agent outputs
 app.add_typer(review_app, name="review", help="Triage agent-produced documents")

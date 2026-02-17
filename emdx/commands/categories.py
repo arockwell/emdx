@@ -20,8 +20,8 @@ def create(
     """Create a new category.
 
     Examples:
-        emdx cat create SEC "Security"
-        emdx cat create SEC "Security" -D "All security-related work"
+        emdx task cat create SEC "Security"
+        emdx task cat create SEC "Security" -D "All security-related work"
     """
     try:
         result_key = categories.create_category(key, name, description or "")
@@ -41,7 +41,7 @@ def list_cmd() -> None:
     """List all categories with task counts.
 
     Examples:
-        emdx cat list
+        emdx task cat list
     """
     cats = categories.list_categories()
 
@@ -81,8 +81,8 @@ def adopt(
     Also detects parent EPIC tasks and marks them.
 
     Examples:
-        emdx cat adopt SEC
-        emdx cat adopt DEBT --name "Tech Debt"
+        emdx task cat adopt SEC
+        emdx task cat adopt DEBT --name "Tech Debt"
     """
     try:
         result = categories.adopt_category(key, name)
