@@ -1,22 +1,27 @@
 """
 QA Screen - Conversational Q&A over your knowledge base.
 
-Bypasses UnifiedExecutor to avoid terminal corruption caused by
-the executor's subprocess environment. Runs claude CLI directly.
+Runs claude CLI directly via subprocess.Popen, bypassing UnifiedExecutor
+to avoid terminal corruption that breaks Textual's mouse event parsing.
 """
 
 import asyncio
 import json
 import logging
 import queue
+import shutil
 import subprocess
 import threading
 from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
-from textual.containers import ScrollableContainer
+from textual.binding import Binding
+from textual.containers import Horizontal, ScrollableContainer
 from textual.widget import Widget
-from textual.widgets import Input, Static
+from textual.widgets import Input, Markdown, Static
+
+from ..modals import HelpMixin
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,14 @@ def _next_msg_id() -> str:
     global _msg_counter
     _msg_counter += 1
     return f"qa-msg-{_msg_counter}"
+
+
+# ---------------------------------------------------------------------------
+# Subprocess helpers (run in thread pool, no UnifiedExecutor)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+_ANSWER_TIMEOUT = 120.0
 
 
 def _run_claude(question: str, context: str) -> str:
@@ -49,7 +62,7 @@ def _run_claude(question: str, context: str) -> str:
         "--print",
         prompt,
         "--model",
-        "claude-sonnet-4-5-20250929",
+        _DEFAULT_MODEL,
         "--output-format",
         "stream-json",
         "--verbose",
@@ -79,7 +92,7 @@ def _run_claude(question: str, context: str) -> str:
     stdout_lines: list[str] = []
     while True:
         try:
-            line = stdout_q.get(timeout=120.0)
+            line = stdout_q.get(timeout=_ANSWER_TIMEOUT)
         except queue.Empty:
             break
         if line is None:
@@ -89,7 +102,7 @@ def _run_claude(question: str, context: str) -> str:
     t.join(timeout=5.0)
     process.wait()
 
-    # Parse result
+    # Parse result from stream-json
     for line in stdout_lines:
         try:
             data = json.loads(line)
@@ -102,10 +115,9 @@ def _run_claude(question: str, context: str) -> str:
     return "(no answer parsed)"
 
 
-def _retrieve_context(question: str) -> tuple[list[tuple[int, str, str]], str]:
+def _retrieve_context(question: str, limit: int = 8) -> tuple[list[tuple[int, str, str]], str]:
     """Retrieve relevant documents for context."""
     import re
-    import shutil
 
     from emdx.database import db
 
@@ -131,7 +143,7 @@ def _retrieve_context(question: str) -> tuple[list[tuple[int, str, str]], str]:
                     pass
 
     # Keyword retrieval
-    remaining = 8 - len(docs)
+    remaining = limit - len(docs)
     if remaining > 0:
         terms = re.sub(r"[^\w\s]", " ", question).strip()
         if terms:
@@ -149,34 +161,32 @@ def _retrieve_context(question: str) -> tuple[list[tuple[int, str, str]], str]:
                         if row[0] not in seen:
                             docs.append(row)
                             seen.add(row[0])
-                            if len(docs) >= 8:
+                            if len(docs) >= limit:
                                 break
             except Exception as e:
                 logger.debug(f"FTS retrieval failed: {e}")
 
-    # Try semantic if available
+    # Semantic fallback if keyword found nothing
     if not docs:
         try:
-            has_semantic = shutil.which("claude") is not None
-            if has_semantic:
-                from emdx.services.embedding_service import EmbeddingService
+            from emdx.services.embedding_service import EmbeddingService
 
-                svc = EmbeddingService()
-                stats = svc.stats()
-                if stats.indexed_documents >= 50:
-                    matches = svc.search(question, limit=8)
-                    with db.get_connection() as conn:
-                        cursor = conn.cursor()
-                        for m in matches:
-                            cursor.execute(
-                                "SELECT id, title, content FROM documents WHERE id = ?",
-                                (m.doc_id,),
-                            )
-                            row = cursor.fetchone()
-                            if row:
-                                docs.append(row)
-                            if len(docs) >= 8:
-                                break
+            svc = EmbeddingService()
+            stats = svc.stats()
+            if stats.indexed_documents >= 50:
+                matches = svc.search(question, limit=limit)
+                with db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    for m in matches:
+                        cursor.execute(
+                            "SELECT id, title, content FROM documents WHERE id = ?",
+                            (m.doc_id,),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            docs.append(row)
+                        if len(docs) >= limit:
+                            break
         except Exception:
             pass
 
@@ -190,24 +200,66 @@ def _retrieve_context(question: str) -> tuple[list[tuple[int, str, str]], str]:
     return docs, context
 
 
-class QAScreen(Widget):
-    """Q&A screen — runs claude directly, bypassing UnifiedExecutor."""
+# ---------------------------------------------------------------------------
+# QAScreen widget
+# ---------------------------------------------------------------------------
+
+
+class QAScreen(HelpMixin, Widget):
+    """
+    Conversational Q&A widget over your knowledge base.
+
+    Layout: Input bar | Scrollable conversation | Status bar | Nav bar
+    """
+
+    HELP_TITLE = "Q&A"
+
+    BINDINGS = [
+        Binding("enter", "submit_question", "Ask", show=True),
+        Binding("escape", "exit_qa", "Exit"),
+        Binding("slash", "focus_input", "Focus Input"),
+        Binding("s", "save_exchange", "Save"),
+        Binding("c", "clear_history", "Clear"),
+        Binding("question_mark", "show_help", "Help"),
+    ]
 
     DEFAULT_CSS = """
     QAScreen {
         layout: grid;
         grid-size: 1;
-        grid-rows: auto 1fr 1;
+        grid-rows: auto 1fr 1 1;
+    }
+
+    #qa-input-bar {
+        height: auto;
+        max-height: 5;
+        padding: 0 1;
+        background: $surface;
     }
 
     #qa-input {
-        width: 100%;
+        width: 1fr;
+        border: solid $primary-darken-1;
+    }
+
+    #qa-input:focus {
+        border: solid $primary;
+    }
+
+    #qa-mode-label {
+        width: auto;
+        height: 1;
+        margin: 1 0 0 1;
+        padding: 0 1;
+        background: $primary;
+        color: $text;
     }
 
     #qa-conversation {
         height: 1fr;
         width: 100%;
         padding: 0 1;
+        scrollbar-gutter: stable;
     }
 
     .qa-message {
@@ -216,9 +268,21 @@ class QAScreen(Widget):
         padding: 0;
     }
 
+    .qa-answer {
+        width: 100%;
+        margin: 0 0 1 0;
+        padding: 0;
+    }
+
     #qa-status {
         height: 1;
         background: $surface-darken-1;
+        padding: 0 1;
+    }
+
+    #qa-nav {
+        height: 1;
+        background: $surface;
         padding: 0 1;
     }
     """
@@ -226,33 +290,93 @@ class QAScreen(Widget):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._is_asking = False
+        self._has_claude_cli = shutil.which("claude") is not None
+        self._source_ids: list[int] = []
+        self._entries: list[dict[str, Any]] = []
 
     def compose(self) -> ComposeResult:
-        yield Input(placeholder="Ask a question...", id="qa-input")
+        with Horizontal(id="qa-input-bar"):
+            yield Input(
+                placeholder="Ask a question about your knowledge base...",
+                id="qa-input",
+            )
+            yield Static("Q&A", id="qa-mode-label")
+
         yield ScrollableContainer(id="qa-conversation")
-        yield Static("Ready", id="qa-status")
+
+        yield Static("Ready | Type a question and press Enter", id="qa-status")
+        yield Static(
+            "[dim]1[/dim] Activity | [dim]2[/dim] Tasks | [bold]3[/bold] Q&A | "
+            "[dim]/[/dim] type | [dim]Enter[/dim] ask | "
+            "[dim]s[/dim] save | [dim]c[/dim] clear",
+            id="qa-nav",
+        )
 
     async def on_mount(self) -> None:
+        """Initialize the Q&A screen."""
         logger.info("QAScreen mounted")
+        self._show_welcome()
+        # Focus conversation, not Input — avoids mouse sequence corruption
         self.query_one("#qa-conversation", ScrollableContainer).focus()
 
     def _append_message(self, markup: str) -> None:
+        """Append a Rich markup message to the conversation."""
         container = self.query_one("#qa-conversation", ScrollableContainer)
         msg = Static(markup, classes="qa-message", id=_next_msg_id())
         container.mount(msg)
         msg.scroll_visible()
 
+    def _append_markdown(self, content: str) -> None:
+        """Append a rendered Markdown widget to the conversation."""
+        container = self.query_one("#qa-conversation", ScrollableContainer)
+        md = Markdown(content, classes="qa-answer", id=_next_msg_id())
+        container.mount(md)
+        md.scroll_visible()
+
+    def _show_welcome(self) -> None:
+        """Show welcome message."""
+        self._append_message(
+            "[bold]Welcome to Q&A[/bold]\n"
+            "\n"
+            "Ask questions about your knowledge base in natural language.\n"
+            "Answers are generated from your documents using Claude.\n"
+            "\n"
+            "[dim]Examples:[/dim]\n"
+            "  [italic]What's our caching strategy?[/italic]\n"
+            "  [italic]How did we fix the auth bug?[/italic]\n"
+            "  [italic]Summarize the architecture decisions[/italic]\n"
+            "\n"
+            "[dim]Tip: Reference docs directly with #42 syntax[/dim]\n"
+            "[dim]─────────────────────────────────────────[/dim]"
+        )
+
+    def _update_status(self, text: str) -> None:
+        """Update the status bar text."""
+        try:
+            self.query_one("#qa-status", Static).update(text)
+        except Exception:
+            pass
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter press in the input."""
         if event.input.id != "qa-input":
             return
         question = event.value.strip()
         if not question:
             return
         if self._is_asking:
+            self.notify("Please wait for the current answer", timeout=2)
             return
 
+        if not self._has_claude_cli:
+            self.notify("Claude CLI not found", severity="error", timeout=3)
+            return
+
+        # Clear input and unfocus
         event.input.value = ""
         self.query_one("#qa-conversation", ScrollableContainer).focus()
+
+        # Show the question
         self._append_message(f"\n[bold cyan]Q:[/bold cyan] {question}\n")
 
         self.run_worker(
@@ -264,31 +388,118 @@ class QAScreen(Widget):
         )
 
     async def _ask_and_render(self, question: str) -> None:
+        """Ask the question and render the answer."""
         self._is_asking = True
         self._append_message("[dim]Thinking...[/dim]")
+        self.call_later(self._update_status, "Retrieving context...")
 
         try:
-            # Retrieve context docs
             docs, context = await asyncio.to_thread(_retrieve_context, question)
+            self.call_later(self._update_status, "Generating answer...")
 
-            # Run claude
             answer = await asyncio.to_thread(_run_claude, question, context)
 
-            self._append_message(f"[bold green]A:[/bold green] {answer}")
+            # Store for save feature
+            self._entries.append({"question": question, "answer": answer, "sources": docs})
+
+            # Render answer as markdown
+            self._append_message("[bold green]A:[/bold green]")
+            self._append_markdown(answer)
 
             # Show sources
             if docs:
+                self._source_ids = [d[0] for d in docs]
                 source_parts = [f"#{d[0]} {d[1]}" for d in docs]
                 self._append_message(f"[dim]Sources: {' · '.join(source_parts)}[/dim]")
+
+            src_count = len(docs)
+            self.call_later(self._update_status, f"Done | {src_count} sources")
         except Exception as e:
             logger.error(f"Q&A failed: {e}", exc_info=True)
             self._append_message(f"[bold red]Error:[/bold red] {e}")
+            self.call_later(self._update_status, f"Error: {e}")
 
         self._append_message("[dim]─────────────────────────────────────────[/dim]")
         self._is_asking = False
 
+    # -- Actions --
+
+    def action_submit_question(self) -> None:
+        """Submit the current question (Enter key)."""
+        inp = self.query_one("#qa-input", Input)
+        if inp.has_focus:
+            return
+        inp.focus()
+
+    def action_focus_input(self) -> None:
+        """Focus the question input."""
+        self.query_one("#qa-input", Input).focus()
+
+    def action_clear_history(self) -> None:
+        """Clear conversation history."""
+        container = self.query_one("#qa-conversation", ScrollableContainer)
+        container.remove_children()
+        self._entries.clear()
+        self._source_ids.clear()
+        self._show_welcome()
+        self.notify("History cleared", timeout=1)
+
+    def action_save_exchange(self) -> None:
+        """Save the most recent Q&A exchange as a document."""
+        if not self._entries:
+            self.notify("Nothing to save", timeout=2)
+            return
+
+        entry = self._entries[-1]
+        question = entry["question"]
+        answer = entry["answer"]
+        docs = entry["sources"]
+
+        content = f"# Q: {question}\n\n{answer}\n"
+        if docs:
+            content += "\n## Sources\n\n"
+            for d in docs:
+                content += f"- Document #{d[0]}: {d[1]}\n"
+
+        try:
+            from emdx.models.documents import save_document
+
+            doc_id = save_document(
+                title=f"Q&A: {question[:60]}",
+                content=content,
+                tags=["qa", "auto"],
+            )
+            self.notify(f"Saved as document #{doc_id}", timeout=3)
+        except Exception as e:
+            logger.error(f"Failed to save Q&A: {e}")
+            self.notify(f"Save failed: {e}", severity="error", timeout=3)
+
+    async def action_exit_qa(self) -> None:
+        """Exit Q&A screen."""
+        if hasattr(self.app, "switch_browser"):
+            await self.app.switch_browser("activity")
+
+    def on_key(self, event: events.Key) -> None:
+        """Block action keys when input is focused (let user type freely)."""
+        try:
+            search_input = self.query_one("#qa-input", Input)
+            if search_input.has_focus:
+                pass_through_keys = {"s", "c", "1", "2", "slash"}
+                if event.key in pass_through_keys:
+                    return
+        except Exception:
+            pass
+
+    def set_query(self, query: str) -> None:
+        """Set the input query programmatically (from command palette)."""
+        inp = self.query_one("#qa-input", Input)
+        inp.value = query
+        inp.focus()
+
     def save_state(self) -> dict:
-        return {}
+        """Save current state for restoration."""
+        return {"entry_count": len(self._entries)}
 
     def restore_state(self, state: dict) -> None:
+        """Restore saved state (conversation persists in memory)."""
         pass
