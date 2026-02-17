@@ -12,6 +12,7 @@ import queue
 import shutil
 import subprocess
 import threading
+import time
 from typing import Any
 
 from textual import events
@@ -419,10 +420,29 @@ class QAScreen(HelpMixin, Widget):
             if worker.name == "qa_ask":
                 worker.cancel()
 
+    def _set_thinking(self, text: str) -> None:
+        """Update or create the thinking indicator."""
+        try:
+            existing = self.query_one("#qa-thinking", Static)
+            existing.update(text)
+        except Exception:
+            container = self.query_one("#qa-conversation", ScrollableContainer)
+            indicator = Static(text, id="qa-thinking", classes="qa-message")
+            container.mount(indicator)
+            indicator.scroll_visible()
+
+    def _remove_thinking(self) -> None:
+        """Remove the thinking indicator."""
+        try:
+            self.query_one("#qa-thinking", Static).remove()
+        except Exception:
+            pass
+
     async def _ask_and_render(self, question: str) -> None:
         """Ask the question and render the answer."""
         self._is_asking = True
-        self._append_message("[dim]Thinking...[/dim]")
+        t0 = time.monotonic()
+        self._set_thinking("[dim]Searching knowledge base...[/dim]")
         self.call_later(self._update_status, "Retrieving context...")
 
         # Save terminal state once on the main thread. Background threads
@@ -433,10 +453,19 @@ class QAScreen(HelpMixin, Widget):
         try:
             docs, context = await asyncio.to_thread(_retrieve_context, question)
             _restore_terminal_state(term_state)
+
+            t_retrieve = time.monotonic() - t0
+            src_count = len(docs)
+            self._set_thinking(
+                f"[dim]Found {src_count} sources ({t_retrieve:.1f}s) — generating answer...[/dim]"
+            )
             self.call_later(self._update_status, "Generating answer...")
 
             answer = await asyncio.to_thread(_run_claude, question, context)
             _restore_terminal_state(term_state)
+
+            t_total = time.monotonic() - t0
+            self._remove_thinking()
 
             # Store for save feature
             self._entries.append({"question": question, "answer": answer, "sources": docs})
@@ -445,19 +474,23 @@ class QAScreen(HelpMixin, Widget):
             self._append_message("[bold green]A:[/bold green]")
             self._append_markdown(answer)
 
-            # Show sources
+            # Show sources and timing
+            meta_parts: list[str] = []
             if docs:
                 self._source_ids = [d[0] for d in docs]
                 source_parts = [f"#{d[0]} {d[1]}" for d in docs]
-                self._append_message(f"[dim]Sources: {' · '.join(source_parts)}[/dim]")
+                meta_parts.append(f"Sources: {' · '.join(source_parts)}")
+            meta_parts.append(f"{t_total:.1f}s")
+            self._append_message(f"[dim]{' | '.join(meta_parts)}[/dim]")
 
-            src_count = len(docs)
-            self.call_later(self._update_status, f"Done | {src_count} sources")
+            self.call_later(self._update_status, f"Done | {src_count} sources | {t_total:.1f}s")
         except asyncio.CancelledError:
             logger.info("Q&A worker cancelled")
+            self._remove_thinking()
             return
         except Exception as e:
             logger.error(f"Q&A failed: {e}", exc_info=True)
+            self._remove_thinking()
             self._append_message(f"[bold red]Error:[/bold red] {e}")
             self.call_later(self._update_status, f"Error: {e}")
         finally:
@@ -542,10 +575,23 @@ class QAScreen(HelpMixin, Widget):
         inp.value = query
         inp.focus()
 
-    def save_state(self) -> dict:
+    def save_state(self) -> dict[str, Any]:
         """Save current state for restoration."""
-        return {"entry_count": len(self._entries)}
+        return {
+            "entry_count": len(self._entries),
+            "is_asking": self._is_asking,
+        }
 
-    def restore_state(self, state: dict) -> None:
-        """Restore saved state (conversation persists in memory)."""
-        pass
+    def restore_state(self, state: dict[str, Any]) -> None:
+        """Restore saved state after switching back to Q&A.
+
+        The conversation DOM persists because BrowserContainer caches
+        the widget instance.  If we were mid-question when the user
+        left, the worker kept running in the background and the answer
+        will have been rendered into the (detached) DOM already.
+        Just refresh status bar.
+        """
+        if state.get("is_asking") and not self._is_asking:
+            # Worker finished while we were away
+            self._update_status("Ready")
+        self.query_one("#qa-conversation", ScrollableContainer).scroll_end(animate=False)
