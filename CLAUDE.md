@@ -22,7 +22,7 @@ EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+
 - `ui/` - TUI components (Textual widgets)
 - `services/` - Business logic (log streaming, file watching, etc.)
 - `models/` - Data models and operations
-- `utils/` - Shared utilities (git, emoji aliases, Claude integration)
+- `utils/` - Shared utilities (git, tags, Claude integration)
 
 **Detailed docs:** [docs/](docs/) | [Architecture](docs/architecture.md) | [CLI Reference](docs/cli-api.md) | [Development Setup](docs/development-setup.md)
 
@@ -166,7 +166,7 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 
 ### Document Tags vs Task Organization
 
-**Documents** use tags (emoji aliases) for classification:
+**Documents** use plain text tags for classification:
 
 | Content Type | Tags |
 |--------------|------|
