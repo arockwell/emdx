@@ -28,7 +28,7 @@ python = "^3.11"
 typer = {extras = ["all"], version = "^0.23.1"}
 click = ">=8.1.0"  # Typer 0.15+ requires click 8.1+
 rich = "^14.3.0"
-textual = "^7.5.0"
+textual = "^8.0.0"
 psutil = "^7.0.0"
 pyyaml = ">=6.0"
 
