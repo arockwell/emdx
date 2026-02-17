@@ -365,7 +365,7 @@ class QAScreen(HelpMixin, Widget):
         if not question:
             return
         if self._is_asking:
-            self.notify("Please wait for the current answer", timeout=2)
+            self.notify("Still waiting — press Escape to cancel", timeout=2)
             return
 
         if not self._has_claude_cli:
@@ -386,6 +386,19 @@ class QAScreen(HelpMixin, Widget):
             exclusive=True,
             exit_on_error=False,
         )
+
+    def _cancel_asking(self) -> None:
+        """Cancel the current Q&A operation and reset state."""
+        self._is_asking = False
+        self._append_message("[dim italic]Cancelled[/dim italic]")
+        self._append_message("[dim]─────────────────────────────────────────[/dim]")
+        self._update_status("Cancelled | Ready")
+        # Kill the worker — exclusive=True means the next run_worker will
+        # cancel it too, but this handles the Escape-to-cancel case.
+        workers = self.workers
+        for worker in workers:
+            if worker.name == "qa_ask":
+                worker.cancel()
 
     async def _ask_and_render(self, question: str) -> None:
         """Ask the question and render the answer."""
@@ -414,13 +427,17 @@ class QAScreen(HelpMixin, Widget):
 
             src_count = len(docs)
             self.call_later(self._update_status, f"Done | {src_count} sources")
+        except asyncio.CancelledError:
+            logger.info("Q&A worker cancelled")
+            return
         except Exception as e:
             logger.error(f"Q&A failed: {e}", exc_info=True)
             self._append_message(f"[bold red]Error:[/bold red] {e}")
             self.call_later(self._update_status, f"Error: {e}")
+        finally:
+            self._is_asking = False
 
         self._append_message("[dim]─────────────────────────────────────────[/dim]")
-        self._is_asking = False
 
     # -- Actions --
 
@@ -475,7 +492,10 @@ class QAScreen(HelpMixin, Widget):
             self.notify(f"Save failed: {e}", severity="error", timeout=3)
 
     async def action_exit_qa(self) -> None:
-        """Exit Q&A screen."""
+        """Cancel current question if asking, otherwise exit Q&A screen."""
+        if self._is_asking:
+            self._cancel_asking()
+            return
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
 
