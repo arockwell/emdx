@@ -17,39 +17,27 @@ emdx fixes this. It's a local knowledge base backed by SQLite. Save your researc
 $ emdx save security-audit.md
 ✅ Saved as #42: security-audit
 
-# Dispatch an agent to act on it
-$ emdx delegate --doc 42 "implement the fixes from this audit"
+# Dispatch agents to act on it — in parallel
+$ emdx delegate --doc 42 "fix the critical issues" "write tests for the fixes"
 
-# A week later, find what they did
+# A week later, find everything — your notes and the agents' output
 $ emdx find "security"
 🔍 Found 4 results for 'security'
-
-# Run three agents in parallel
-$ emdx delegate "check auth" "review tests" "scan for XSS"
-
-# Go straight from idea to pull request
-$ emdx delegate --pr "fix the null pointer in token refresh"
 ```
 
-Everything prints to stdout (so you can read it inline) and gets saved to your knowledge base (so you can find it later).
+Every result prints to stdout and gets saved to your knowledge base. Next session, it's all still there.
 
 ## Install
 
 ```bash
-pip install emdx        # or: uv tool install emdx
+uv tool install emdx    # or: pip install emdx
 emdx --help
 ```
 
-<details>
-<summary>Optional extras</summary>
-
 ```bash
-pip install 'emdx[ai]'          # Semantic search, embeddings, Q&A
-pip install 'emdx[similarity]'  # TF-IDF duplicate detection
-pip install 'emdx[all]'         # Everything
+uv tool install 'emdx[ai]'     # Add semantic search, embeddings, Q&A
+uv tool install 'emdx[all]'    # Everything
 ```
-
-</details>
 
 ## The knowledge base
 
@@ -60,7 +48,7 @@ The foundation of emdx: save anything, find it later, organize with tags.
 ```bash
 emdx save meeting-notes.md                              # Save a file
 emdx save "the auth bug is in token refresh" --title "Auth Bug"  # Save a note
-docker ps | emdx save --title "Running containers"       # Pipe any command
+echo "plan: migrate to v2 API" | emdx save --title "Migration Plan"  # Pipe text
 ```
 
 ### Find it later
@@ -127,62 +115,22 @@ emdx ai ask "What did we decide about the API redesign?"  # Direct query (needs 
 
 ## Claude Code integration
 
-emdx is designed to work alongside Claude Code. Add emdx commands to your CLAUDE.md and agents will use them as part of their workflow.
+Add `emdx prime` to your CLAUDE.md and every Claude Code session starts with context — ready tasks, recent documents, and in-progress work.
 
 ```bash
-emdx prime    # Inject current work context at session start
-emdx status   # Quick overview of recent activity
-emdx wrapup   # Generate a session summary before ending
+emdx prime    # Output current work context for Claude Code session injection
 ```
 
 ## More features
 
-<details>
-<summary>Compact, distill, recipes, execution monitoring, TUI, and more</summary>
-
-### Compact — deduplicate over time
-
-As your KB grows, `compact` clusters similar docs and merges them:
-
 ```bash
-emdx compact --dry-run           # Preview clusters
-emdx compact --auto              # Merge all discovered clusters
+emdx compact --dry-run                           # Deduplicate similar docs
+emdx distill "authentication"                    # Synthesize a topic summary
+emdx distill --for coworkers "sprint progress"   # Audience-aware summaries
+emdx status                                      # Delegate activity dashboard
+emdx exec running                                # Monitor running agents
+emdx gui                                         # Interactive TUI browser
 ```
-
-### Distill — synthesize for any audience
-
-```bash
-emdx distill "authentication"                    # Personal summary
-emdx distill --for coworkers "sprint progress"   # Team briefing
-```
-
-### Recipes — reusable agent instructions
-
-```bash
-emdx recipe create security-audit.md --title "Security Audit"
-emdx recipe run "Security Audit" -- "check auth module"
-```
-
-### Monitor running agents
-
-```bash
-emdx exec running          # List active executions
-emdx exec show 42          # Follow logs
-```
-
-### Interactive TUI
-
-```bash
-emdx gui                   # Browse, edit, and manage your KB visually
-```
-
-### Briefings
-
-```bash
-emdx briefing              # Recent activity summary
-```
-
-</details>
 
 ## Quick reference
 
