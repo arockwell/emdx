@@ -155,3 +155,24 @@ class DocumentMetadata(TypedDict):
     content: str
     project: str | None
     access_count: int
+
+
+# ── Unified Executor types ──────────────────────────────────────────
+
+
+class ExecutionResultDict(TypedDict):
+    """Typed dict for ExecutionResult.to_dict() return value."""
+
+    success: bool
+    execution_id: int
+    log_file: str
+    output_doc_id: int | None
+    output_content: str | None
+    tokens_used: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    execution_time_ms: int
+    error_message: str | None
+    exit_code: int | None
+    cli_tool: str
