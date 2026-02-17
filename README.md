@@ -13,25 +13,24 @@ emdx fixes this. It's a local knowledge base backed by SQLite. Save your researc
 ## See it in action
 
 ```bash
-# Dispatch three agents in parallel — results saved to your KB
-emdx delegate "analyze auth module" "review test coverage" "check for XSS"
+# Save your research
+$ emdx save security-audit.md
+✅ Saved as #42: security-audit
 
-# A week later, find what they discovered
-emdx find "XSS"
+# Dispatch agents to act on it — in parallel
+$ emdx delegate --doc 42 "fix the critical issues" "write tests for the fixes"
 
-# Build on past work — feed a previous analysis into a new task
-emdx delegate --doc 84 "implement the fixes from this security analysis"
-
-# Or go straight to a PR
-emdx delegate --pr "fix the null pointer in token refresh"
+# A week later, find everything — your notes and the agents' output
+$ emdx find "security"
+🔍 Found 4 results for 'security'
 ```
 
-Each result prints to stdout (so you can read it inline) and gets saved to your knowledge base (so you can find it later).
+Every result prints to stdout and gets saved to your knowledge base. Next session, it's all still there.
 
 ## Install
 
 ```bash
-pip install emdx        # or: uv tool install emdx
+uv tool install emdx    # or: pip install emdx
 emdx --help
 ```
 
@@ -46,14 +45,16 @@ pip install 'emdx[all]'         # Everything
 
 </details>
 
-## The basics: save, find, build
+## The knowledge base
+
+The foundation of emdx: save anything, find it later, organize with tags.
 
 ### Save anything
 
 ```bash
 emdx save meeting-notes.md                              # Save a file
 emdx save "the auth bug is in token refresh" --title "Auth Bug"  # Save a note
-docker ps | emdx save --title "Running containers"       # Pipe any command
+echo "plan: migrate to v2 API" | emdx save --title "Migration Plan"  # Pipe text
 ```
 
 ### Find it later
@@ -72,36 +73,36 @@ emdx tag 42 gameplan active         # Add tags
 emdx find --tags "gameplan,active"  # Search by tags
 ```
 
+## Delegate work to agents
 
-## Delegate work to Claude agents
-
-This is where emdx gets powerful. `delegate` sends tasks to Claude Code agents and saves their output to your knowledge base.
-
-### Parallel execution
-
-Run multiple tasks concurrently — each gets its own agent:
+This is where emdx gets powerful. `delegate` sends tasks to Claude Code agents. Each agent runs independently, and its output is saved to your knowledge base automatically.
 
 ```bash
+# Send a task to a Claude agent
+emdx delegate "analyze the auth module for security issues"
+
+# Run multiple tasks in parallel — each gets its own agent
 emdx delegate "check auth" "review tests" "scan for XSS"
 
 # Control concurrency
 emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
 
-# Combine outputs into a single synthesized summary
+# Combine outputs into a synthesized summary
 emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
 ```
 
 ### Code changes with PRs
 
-Agents can make changes in isolated git worktrees and open PRs:
+Agents work in isolated git worktrees and can open PRs directly:
 
 ```bash
 emdx delegate --pr "fix the auth bug"                   # Branch + PR
-emdx delegate --worktree --pr "fix X"                    # Isolated worktree + PR
 emdx delegate --doc 42 --pr "implement this plan"        # Use a doc as context
 ```
 
-### Use your knowledge base as input
+### Build on past work
+
+The knowledge base and delegate feed into each other. Save research, delegate work based on it, find the results later, delegate more:
 
 ```bash
 emdx delegate --doc 42 "implement the plan described here"
@@ -120,12 +121,10 @@ emdx ai ask "What did we decide about the API redesign?"  # Direct query (needs 
 
 ## Claude Code integration
 
-emdx is designed to work alongside Claude Code. Add emdx commands to your CLAUDE.md and agents will use them as part of their workflow.
+Add `emdx prime` to your CLAUDE.md and every Claude Code session starts with context — ready tasks, recent documents, and in-progress work.
 
 ```bash
-emdx prime    # Inject current work context at session start
-emdx status   # Quick overview of recent activity
-emdx wrapup   # Generate a session summary before ending
+emdx prime    # Output current work context for Claude Code session injection
 ```
 
 ## More features
@@ -169,10 +168,12 @@ emdx exec show 42          # Follow logs
 emdx gui                   # Browse, edit, and manage your KB visually
 ```
 
-### Briefings
+### Activity overview
 
 ```bash
+emdx status                # Delegate activity dashboard
 emdx briefing              # Recent activity summary
+emdx wrapup                # Synthesize what happened in the last few hours
 ```
 
 </details>
