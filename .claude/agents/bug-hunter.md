@@ -53,18 +53,6 @@ After removing ~8,400 LOC of TUI components (PR #405), some imports and registra
 - **silent-bug**: Code runs but produces wrong results (swallowed error, missing tracking)
 - **code-smell**: Not broken now but fragile (blanket except, hardcoded path)
 
-### Pattern 7: Terminal State Corruption from Background Imports (PR #694)
-Importing heavy libraries (torch, sentence-transformers) in `asyncio.to_thread` background threads resets the terminal from raw to cooked mode, killing Textual's mouse/key handling. The symptom is the entire TUI freezing — no mouse, no keys.
-- **How to find**: Look for `asyncio.to_thread` calls that import heavy ML/GPU libraries, or any background thread that might call `termios.tcsetattr`
-- **Fix pattern**: Save terminal state with `termios.tcgetattr()` before the threaded call, restore with `termios.tcsetattr()` after. See `qa_screen.py` `_save_terminal_state()`/`_restore_terminal_state()`
-- **Common cause**: Library init code (especially torch) resetting terminal attrs as a side effect
-
-### Pattern 8: Textual Worker Cancelled on Widget Unmount (PR #694)
-`run_worker` tasks are cancelled when their widget is unmounted via `remove_children()`. If the worker stores results, they're lost silently.
-- **How to find**: `run_worker` in widgets that can be unmounted/remounted (browser switching pattern), especially when the worker stores state like `_entries.append()`
-- **Fix pattern**: Use `asyncio.create_task` for work that must survive unmount. Guard UI updates with `_is_mounted_in_dom()` checks. Store durable state on the Python object (survives unmount), rebuild DOM from it in `on_mount`
-- **Common cause**: BrowserContainer's switch pattern calls `remove_children()` + `mount()` which triggers unmount → worker cancellation → `CancelledError` → state loss
-
 ## Important
 
 - Do NOT invent issues. If the code is clean, say "No bugs found."
