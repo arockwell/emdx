@@ -93,6 +93,16 @@ The codebase uses mypy strict checking. Pre-commit hooks run mypy on staged file
 - `--json` flag for structured machine output
 - Use `print()` for plain output, `console.print()` only in `--rich` mode
 
+## README Examples Convention
+
+When writing CLI examples in README.md or docs:
+- Use `$` prompts for commands
+- Show realistic output (✅ Saved as #42, 📋 Saved as #43, 🔍 Found N results, 🔀 PR #87)
+- Use sequential doc IDs that make narrative sense (save produces #42, delegate references --doc 42)
+- Comments should narrate the story, not describe flags
+- Each code block should build progressively — later commands reference earlier output
+- Don't use `<details>` collapsible sections — content is either worth showing or not
+
 ## Rich Console Gotcha
 
 - `console.pager()` defaults to `styles=False`, stripping all colors. Always use `console.pager(styles=True)` when rendering Rich markup inside a pager.
