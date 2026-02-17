@@ -313,6 +313,7 @@ class QAScreen(HelpMixin, Widget):
         self._has_claude_cli = shutil.which("claude") is not None
         self._source_ids: list[int] = []
         self._entries: list[dict[str, Any]] = []
+        self._pending_question: str | None = None  # In-flight question text
         # Background task that survives widget unmount/remount
         self._bg_task: asyncio.Task[None] | None = None
 
@@ -391,7 +392,8 @@ class QAScreen(HelpMixin, Widget):
             self._append_message(f"\n[bold cyan]Q:[/bold cyan] {entry['question']}\n")
             self._render_entry(entry)
 
-        if self._is_asking:
+        if self._is_asking and self._pending_question:
+            self._append_message(f"\n[bold cyan]Q:[/bold cyan] {self._pending_question}\n")
             self._set_thinking("[dim]Still generating answer...[/dim]")
 
     def _update_status(self, text: str) -> None:
@@ -426,6 +428,7 @@ class QAScreen(HelpMixin, Widget):
         # Launch as a free-standing asyncio task so it survives widget
         # unmount/remount (run_worker gets cancelled on unmount).
         self._is_asking = True
+        self._pending_question = question
         self._bg_task = asyncio.get_event_loop().create_task(self._fetch_and_store(question))
 
     def _cancel_asking(self) -> None:
@@ -433,6 +436,7 @@ class QAScreen(HelpMixin, Widget):
         if self._bg_task and not self._bg_task.done():
             self._bg_task.cancel()
         self._is_asking = False
+        self._pending_question = None
         self._remove_thinking()
         self._append_message("[dim italic]Cancelled[/dim italic]")
         self._append_message("[dim]─────────────────────────────────────────[/dim]")
@@ -542,6 +546,7 @@ class QAScreen(HelpMixin, Widget):
                 self._update_status(f"Error: {e}")
         finally:
             self._is_asking = False
+            self._pending_question = None
 
     # -- Actions --
 
