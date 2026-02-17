@@ -21,6 +21,7 @@ from ..config.constants import EMDX_LOG_DIR
 from ..models.executions import create_execution, update_execution_status
 from ..utils.environment import get_subprocess_env
 from .cli_executor import get_cli_executor
+from .types import ExecutionResultDict
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +190,7 @@ class ExecutionResult:
     exit_code: int | None = None
     cli_tool: str = "claude"  # Which CLI was used
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> ExecutionResultDict:
         return {
             "success": self.success,
             "execution_id": self.execution_id,
