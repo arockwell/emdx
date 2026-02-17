@@ -6,7 +6,6 @@ from typing import cast
 from emdx.database import db
 from emdx.models.types import TagSearchResultDict, TagStatsDict
 from emdx.utils.datetime_utils import parse_datetime
-from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
 
 def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
@@ -36,12 +35,10 @@ def add_tags_to_document(
         conn: Optional existing connection for atomic transactions.
               If provided, caller is responsible for commit.
     """
-    # Expand aliases before processing
-    expanded_tags = expand_aliases(tag_names)
 
     def _add_tags(connection: sqlite3.Connection) -> list[str]:
         added_tags = []
-        for tag_name in expanded_tags:
+        for tag_name in tag_names:
             tag_name = tag_name.lower().strip()
             if not tag_name:
                 continue
@@ -84,13 +81,10 @@ def add_tags_to_document(
 
 def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
     """Remove tags from a document. Returns list of removed tags."""
-    # Expand aliases before processing
-    expanded_tags = expand_aliases(tag_names)
-
     with db.get_connection() as conn:
         removed_tags = []
 
-        for tag_name in expanded_tags:
+        for tag_name in tag_names:
             tag_name = tag_name.lower().strip()
 
             cursor = conn.execute(
@@ -120,7 +114,7 @@ def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
 
 
 def get_document_tags(doc_id: int) -> list[str]:
-    """Get all tags for a document, automatically converting text aliases to emojis."""
+    """Get all tags for a document."""
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -133,19 +127,7 @@ def get_document_tags(doc_id: int) -> list[str]:
             (doc_id,),
         )
 
-        # Convert any text aliases to emojis for display
-        raw_tags = [row[0] for row in cursor.fetchall()]
-        normalized_tags = [normalize_tag_to_emoji(tag) for tag in raw_tags]
-
-        # Remove duplicates while preserving order (in case both "gameplan" and "🎯" exist)
-        seen = set()
-        unique_tags = []
-        for tag in normalized_tags:
-            if tag not in seen:
-                seen.add(tag)
-                unique_tags.append(tag)
-
-        return unique_tags
+        return [row[0] for row in cursor.fetchall()]
 
 
 def get_tags_for_documents(doc_ids: list[int]) -> dict[int, list[str]]:
@@ -158,7 +140,7 @@ def get_tags_for_documents(doc_ids: list[int]) -> dict[int, list[str]]:
         doc_ids: List of document IDs
 
     Returns:
-        Dict mapping doc_id to list of tag names (normalized to emojis)
+        Dict mapping doc_id to list of tag names
     """
     if not doc_ids:
         return {}
@@ -181,10 +163,7 @@ def get_tags_for_documents(doc_ids: list[int]) -> dict[int, list[str]]:
 
         for row in cursor.fetchall():
             doc_id, tag_name = row
-            normalized = normalize_tag_to_emoji(tag_name)
-            # Dedupe (in case both text alias and emoji exist)
-            if normalized not in result[doc_id]:
-                result[doc_id].append(normalized)
+            result[doc_id].append(tag_name)
 
         return result
 
@@ -226,23 +205,28 @@ def list_all_tags(sort_by: str = "usage") -> list[TagStatsDict]:
             created_at = parse_datetime(created_at)
             last_used = parse_datetime(last_used)
 
-            # Normalize tag name to emoji for display
-            normalized_name = normalize_tag_to_emoji(row[1])
-
-            tags.append(cast(TagStatsDict, {
-                "id": row[0],
-                "name": normalized_name,
-                "count": row[2],
-                "created_at": created_at,
-                "last_used": last_used,
-            }))
+            tags.append(
+                cast(
+                    TagStatsDict,
+                    {
+                        "id": row[0],
+                        "name": row[1],
+                        "count": row[2],
+                        "created_at": created_at,
+                        "last_used": last_used,
+                    },
+                )
+            )
 
         return tags
 
 
 def search_by_tags(
-    tag_names: list[str], mode: str = "all", project: str | None = None, limit: int = 20,
-    prefix_match: bool = True
+    tag_names: list[str],
+    mode: str = "all",
+    project: str | None = None,
+    limit: int = 20,
+    prefix_match: bool = True,
 ) -> list[TagSearchResultDict]:
     """Search documents by tags.
 
@@ -253,11 +237,8 @@ def search_by_tags(
         limit: Maximum results to return
         prefix_match: If True, 'workflow' matches 'workflow-output' etc.
     """
-    # Expand aliases before processing
-    expanded_tags = expand_aliases(tag_names)
-
     with db.get_connection() as conn:
-        tag_names_lower = [tag.lower().strip() for tag in expanded_tags]
+        tag_names_lower = [tag.lower().strip() for tag in tag_names]
 
         # Build tag matching conditions - use LIKE for prefix matching
         if prefix_match:
@@ -287,9 +268,7 @@ def search_by_tags(
                     GROUP BY document_id
                     HAVING COUNT(DISTINCT t.name) = ?
                 )
-            """.format(
-                ",".join("?" * len(tag_names_lower))
-            )
+            """.format(",".join("?" * len(tag_names_lower)))
 
             params: list[str | int | None] = list(tag_names_lower) + [len(tag_names_lower)]
         else:
@@ -318,9 +297,13 @@ def search_by_tags(
 
         docs = []
         for row in cursor.fetchall():
-            doc = dict(zip(
-                [col[0] for col in cursor.description], row, strict=False,
-            ))
+            doc = dict(
+                zip(
+                    [col[0] for col in cursor.description],
+                    row,
+                    strict=False,
+                )
+            )
             docs.append(cast(TagSearchResultDict, doc))
 
         return docs

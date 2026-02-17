@@ -9,15 +9,17 @@ which provides a real SQLite database with migrations applied. A function-scoped
 autouse fixture cleans up tags and related tables before/after each test.
 """
 
+from collections.abc import Generator
+
 import pytest
 
 
 @pytest.fixture(autouse=True)
-def clean_tags_tables(isolate_test_database):
+def clean_tags_tables(isolate_test_database: object) -> Generator[None, None, None]:
     """Clean up tags-related tables before and after each test."""
     from emdx.database.connection import db_connection
 
-    def _clean():
+    def _clean() -> None:
         with db_connection.get_connection() as conn:
             conn.execute("PRAGMA foreign_keys = OFF")
             conn.execute("DELETE FROM document_tags")
@@ -31,7 +33,9 @@ def clean_tags_tables(isolate_test_database):
     _clean()
 
 
-def _create_document(title="Test Doc", content="Test content", project=None):
+def _create_document(
+    title: str = "Test Doc", content: str = "Test content", project: str | None = None
+) -> int:
     """Helper to create a document via the database module."""
     from emdx.database.documents import save_document
 
@@ -46,7 +50,7 @@ def _create_document(title="Test Doc", content="Test content", project=None):
 class TestGetOrCreateTag:
     """Test get_or_create_tag() which takes a raw connection."""
 
-    def test_creates_new_tag(self):
+    def test_creates_new_tag(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import get_or_create_tag
 
@@ -55,7 +59,7 @@ class TestGetOrCreateTag:
             assert isinstance(tag_id, int)
             assert tag_id > 0
 
-    def test_returns_existing_tag(self):
+    def test_returns_existing_tag(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import get_or_create_tag
 
@@ -64,7 +68,7 @@ class TestGetOrCreateTag:
             tag_id_2 = get_or_create_tag(conn, "python")
             assert tag_id_1 == tag_id_2
 
-    def test_normalizes_case_and_whitespace(self):
+    def test_normalizes_case_and_whitespace(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import get_or_create_tag
 
@@ -74,7 +78,7 @@ class TestGetOrCreateTag:
             tag_id_3 = get_or_create_tag(conn, "PYTHON")
             assert tag_id_1 == tag_id_2 == tag_id_3
 
-    def test_different_tags_get_different_ids(self):
+    def test_different_tags_get_different_ids(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import get_or_create_tag
 
@@ -92,14 +96,14 @@ class TestGetOrCreateTag:
 class TestAddTagsToDocument:
     """Test add_tags_to_document() including emoji alias expansion."""
 
-    def test_add_simple_tags(self):
+    def test_add_simple_tags(self) -> None:
         from emdx.models.tags import add_tags_to_document
 
         doc_id = _create_document()
         added = add_tags_to_document(doc_id, ["python", "rust"])
         assert sorted(added) == ["python", "rust"]
 
-    def test_returns_only_newly_added_tags(self):
+    def test_returns_only_newly_added_tags(self) -> None:
         from emdx.models.tags import add_tags_to_document
 
         doc_id = _create_document()
@@ -110,7 +114,7 @@ class TestAddTagsToDocument:
         added_second = add_tags_to_document(doc_id, ["python", "testing"])
         assert added_second == []
 
-    def test_partially_new_tags(self):
+    def test_partially_new_tags(self) -> None:
         from emdx.models.tags import add_tags_to_document
 
         doc_id = _create_document()
@@ -118,32 +122,31 @@ class TestAddTagsToDocument:
         added = add_tags_to_document(doc_id, ["python", "javascript"])
         assert added == ["javascript"]
 
-    def test_emoji_alias_expansion(self):
-        """Text aliases like 'gameplan' should be expanded to emojis."""
+    def test_text_tags_stored_as_is(self) -> None:
+        """Text tags should be stored and retrieved as-is (no emoji conversion)."""
         from emdx.models.tags import add_tags_to_document, get_document_tags
 
         doc_id = _create_document()
         added = add_tags_to_document(doc_id, ["gameplan", "active"])
-        # Should be stored as emojis
-        assert "🎯" in added
-        assert "🚀" in added
+        assert "gameplan" in added
+        assert "active" in added
 
         tags = get_document_tags(doc_id)
-        assert "🎯" in tags
-        assert "🚀" in tags
+        assert "gameplan" in tags
+        assert "active" in tags
 
-    def test_mixed_aliases_and_plain_tags(self):
-        """Mix of aliases and non-alias tags."""
+    def test_mixed_tags(self) -> None:
+        """Mix of known and custom tags."""
         from emdx.models.tags import add_tags_to_document, get_document_tags
 
         doc_id = _create_document()
         add_tags_to_document(doc_id, ["gameplan", "custom-tag"])
 
         tags = get_document_tags(doc_id)
-        assert "🎯" in tags
+        assert "gameplan" in tags
         assert "custom-tag" in tags
 
-    def test_empty_and_whitespace_tags_ignored(self):
+    def test_empty_and_whitespace_tags_ignored(self) -> None:
         from emdx.models.tags import add_tags_to_document
 
         doc_id = _create_document()
@@ -155,7 +158,7 @@ class TestAddTagsToDocument:
         # Only 2 real tags should be added (empty and whitespace skipped)
         assert len(added) == 2
 
-    def test_updates_usage_count(self):
+    def test_updates_usage_count(self) -> None:
         """Adding tags should increment usage_count on the tags table."""
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document
@@ -166,13 +169,11 @@ class TestAddTagsToDocument:
         add_tags_to_document(doc2, ["python"])
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             count = cursor.fetchone()[0]
             assert count == 2
 
-    def test_duplicate_add_does_not_increment_usage(self):
+    def test_duplicate_add_does_not_increment_usage(self) -> None:
         """Re-adding a tag to the same doc should NOT increment usage_count."""
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document
@@ -182,9 +183,7 @@ class TestAddTagsToDocument:
         add_tags_to_document(doc_id, ["python"])
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             count = cursor.fetchone()[0]
             assert count == 1
 
@@ -197,7 +196,7 @@ class TestAddTagsToDocument:
 class TestRemoveTagsFromDocument:
     """Test remove_tags_from_document()."""
 
-    def test_remove_existing_tag(self):
+    def test_remove_existing_tag(self) -> None:
         from emdx.models.tags import (
             add_tags_to_document,
             get_document_tags,
@@ -211,9 +210,9 @@ class TestRemoveTagsFromDocument:
 
         remaining = get_document_tags(doc_id)
         assert "python" not in remaining
-        assert "testing" in [t.lower() for t in remaining] or "🧪" in remaining
+        assert "testing" in remaining
 
-    def test_remove_nonexistent_tag_returns_empty(self):
+    def test_remove_nonexistent_tag_returns_empty(self) -> None:
         from emdx.models.tags import add_tags_to_document, remove_tags_from_document
 
         doc_id = _create_document()
@@ -221,8 +220,8 @@ class TestRemoveTagsFromDocument:
         removed = remove_tags_from_document(doc_id, ["nonexistent"])
         assert removed == []
 
-    def test_remove_with_alias_expansion(self):
-        """Removing with text aliases should expand to emojis."""
+    def test_remove_text_tags(self) -> None:
+        """Removing text tags should work directly."""
         from emdx.models.tags import (
             add_tags_to_document,
             get_document_tags,
@@ -231,15 +230,15 @@ class TestRemoveTagsFromDocument:
 
         doc_id = _create_document()
         add_tags_to_document(doc_id, ["gameplan", "active"])
-        assert "🎯" in get_document_tags(doc_id)
+        assert "gameplan" in get_document_tags(doc_id)
 
         removed = remove_tags_from_document(doc_id, ["gameplan"])
-        assert "🎯" in removed
+        assert "gameplan" in removed
 
         tags = get_document_tags(doc_id)
-        assert "🎯" not in tags
+        assert "gameplan" not in tags
 
-    def test_remove_decrements_usage_count(self):
+    def test_remove_decrements_usage_count(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document, remove_tags_from_document
 
@@ -250,20 +249,16 @@ class TestRemoveTagsFromDocument:
 
         # usage_count should be 2
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             assert cursor.fetchone()[0] == 2
 
         remove_tags_from_document(doc1, ["python"])
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = ?", ("python",)
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = ?", ("python",))
             assert cursor.fetchone()[0] == 1
 
-    def test_remove_multiple_tags_at_once(self):
+    def test_remove_multiple_tags_at_once(self) -> None:
         from emdx.models.tags import (
             add_tags_to_document,
             get_document_tags,
@@ -288,7 +283,7 @@ class TestRemoveTagsFromDocument:
 class TestGetDocumentTags:
     """Test get_document_tags()."""
 
-    def test_returns_tags_for_document(self):
+    def test_returns_tags_for_document(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_document_tags
 
         doc_id = _create_document()
@@ -296,21 +291,21 @@ class TestGetDocumentTags:
         tags = get_document_tags(doc_id)
         assert sorted(tags) == ["alpha", "beta", "gamma"]
 
-    def test_empty_list_for_untagged_document(self):
+    def test_empty_list_for_untagged_document(self) -> None:
         from emdx.models.tags import get_document_tags
 
         doc_id = _create_document()
         tags = get_document_tags(doc_id)
         assert tags == []
 
-    def test_normalizes_text_aliases_to_emojis(self):
-        """Tags stored as text aliases should be normalized to emojis on read."""
+    def test_returns_text_tags_as_stored(self) -> None:
+        """Tags stored as text should be returned as text (no emoji conversion)."""
         from emdx.database.connection import db_connection
         from emdx.models.tags import get_document_tags
 
         doc_id = _create_document()
 
-        # Insert a tag with a text alias name directly via SQL
+        # Insert a tag with a text name directly via SQL
         with db_connection.get_connection() as conn:
             conn.execute("INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)")
             cursor = conn.execute("SELECT id FROM tags WHERE name = 'gameplan'")
@@ -322,46 +317,9 @@ class TestGetDocumentTags:
             conn.commit()
 
         tags = get_document_tags(doc_id)
-        # "gameplan" should be normalized to the emoji
-        assert "🎯" in tags
-        assert "gameplan" not in tags
+        assert "gameplan" in tags
 
-    def test_deduplicates_when_both_alias_and_emoji_exist(self):
-        """If both 'gameplan' and its emoji exist, result should be deduped."""
-        from emdx.database.connection import db_connection
-        from emdx.models.tags import get_document_tags
-
-        doc_id = _create_document()
-
-        with db_connection.get_connection() as conn:
-            # Insert 'gameplan' text tag
-            conn.execute(
-                "INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)"
-            )
-            cursor = conn.execute("SELECT id FROM tags WHERE name = 'gameplan'")
-            text_tag_id = cursor.fetchone()[0]
-
-            # Insert emoji tag directly
-            conn.execute("INSERT INTO tags (name, usage_count) VALUES ('🎯', 1)")
-            cursor = conn.execute("SELECT id FROM tags WHERE name = '🎯'")
-            emoji_tag_id = cursor.fetchone()[0]
-
-            # Link both to the same document
-            conn.execute(
-                "INSERT INTO document_tags (document_id, tag_id) VALUES (?, ?)",
-                (doc_id, text_tag_id),
-            )
-            conn.execute(
-                "INSERT INTO document_tags (document_id, tag_id) VALUES (?, ?)",
-                (doc_id, emoji_tag_id),
-            )
-            conn.commit()
-
-        tags = get_document_tags(doc_id)
-        # Should have only one 🎯, not two
-        assert tags.count("🎯") == 1
-
-    def test_returns_tags_sorted_by_name(self):
+    def test_returns_tags_sorted_by_name(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_document_tags
 
         doc_id = _create_document()
@@ -378,7 +336,7 @@ class TestGetDocumentTags:
 class TestGetTagsForDocuments:
     """Test get_tags_for_documents() batch operation."""
 
-    def test_returns_tags_for_multiple_documents(self):
+    def test_returns_tags_for_multiple_documents(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tags_for_documents
 
         doc1 = _create_document(title="Doc 1")
@@ -393,13 +351,13 @@ class TestGetTagsForDocuments:
         assert sorted(result[doc1]) == ["python", "rust"]
         assert result[doc2] == ["javascript"]
 
-    def test_empty_input_returns_empty_dict(self):
+    def test_empty_input_returns_empty_dict(self) -> None:
         from emdx.models.tags import get_tags_for_documents
 
         result = get_tags_for_documents([])
         assert result == {}
 
-    def test_untagged_documents_have_empty_lists(self):
+    def test_untagged_documents_have_empty_lists(self) -> None:
         from emdx.models.tags import get_tags_for_documents
 
         doc1 = _create_document(title="Untagged 1")
@@ -409,17 +367,17 @@ class TestGetTagsForDocuments:
         assert result[doc1] == []
         assert result[doc2] == []
 
-    def test_normalizes_aliases_to_emojis(self):
+    def test_returns_text_tags_as_stored(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tags_for_documents
 
         doc_id = _create_document()
         add_tags_to_document(doc_id, ["gameplan", "active"])
 
         result = get_tags_for_documents([doc_id])
-        assert "🎯" in result[doc_id]
-        assert "🚀" in result[doc_id]
+        assert "gameplan" in result[doc_id]
+        assert "active" in result[doc_id]
 
-    def test_handles_mixed_tagged_and_untagged(self):
+    def test_handles_mixed_tagged_and_untagged(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tags_for_documents
 
         doc1 = _create_document(title="Tagged")
@@ -430,36 +388,16 @@ class TestGetTagsForDocuments:
         assert result[doc1] == ["python"]
         assert result[doc2] == []
 
-    def test_deduplicates_alias_and_emoji(self):
-        """Batch operation should also deduplicate alias/emoji pairs."""
-        from emdx.database.connection import db_connection
-        from emdx.models.tags import get_tags_for_documents
+    def test_returns_distinct_tags(self) -> None:
+        """Batch operation should return tags without duplication."""
+        from emdx.models.tags import add_tags_to_document, get_tags_for_documents
 
         doc_id = _create_document()
-
-        with db_connection.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO tags (name, usage_count) VALUES ('gameplan', 1)"
-            )
-            cursor = conn.execute("SELECT id FROM tags WHERE name = 'gameplan'")
-            text_id = cursor.fetchone()[0]
-
-            conn.execute("INSERT INTO tags (name, usage_count) VALUES ('🎯', 1)")
-            cursor = conn.execute("SELECT id FROM tags WHERE name = '🎯'")
-            emoji_id = cursor.fetchone()[0]
-
-            conn.execute(
-                "INSERT INTO document_tags (document_id, tag_id) VALUES (?, ?)",
-                (doc_id, text_id),
-            )
-            conn.execute(
-                "INSERT INTO document_tags (document_id, tag_id) VALUES (?, ?)",
-                (doc_id, emoji_id),
-            )
-            conn.commit()
+        add_tags_to_document(doc_id, ["gameplan", "active"])
 
         result = get_tags_for_documents([doc_id])
-        assert result[doc_id].count("🎯") == 1
+        assert result[doc_id].count("gameplan") == 1
+        assert result[doc_id].count("active") == 1
 
 
 # =========================================================================
@@ -470,7 +408,7 @@ class TestGetTagsForDocuments:
 class TestListAllTags:
     """Test list_all_tags() with various sort orders."""
 
-    def test_lists_tags_with_usage_stats(self):
+    def test_lists_tags_with_usage_stats(self) -> None:
         from emdx.models.tags import add_tags_to_document, list_all_tags
 
         doc1 = _create_document(title="Doc 1")
@@ -485,7 +423,7 @@ class TestListAllTags:
         assert "python" in tag_names
         assert "javascript" in tag_names
 
-    def test_sort_by_usage_default(self):
+    def test_sort_by_usage_default(self) -> None:
         from emdx.models.tags import add_tags_to_document, list_all_tags
 
         doc1 = _create_document(title="Doc 1")
@@ -502,7 +440,7 @@ class TestListAllTags:
         # "popular" has 3 usages, "rare" has 1
         assert tag_names.index("popular") < tag_names.index("rare")
 
-    def test_sort_by_name(self):
+    def test_sort_by_name(self) -> None:
         from emdx.models.tags import add_tags_to_document, list_all_tags
 
         doc_id = _create_document()
@@ -512,7 +450,7 @@ class TestListAllTags:
         tag_names = [t["name"] for t in tags]
         assert tag_names == sorted(tag_names)
 
-    def test_sort_by_created_raises_due_to_ambiguous_column(self):
+    def test_sort_by_created_raises_due_to_ambiguous_column(self) -> None:
         """sort_by='created' currently triggers an ambiguous column error.
 
         The SQL query joins tags and document_tags, both of which have a
@@ -530,7 +468,7 @@ class TestListAllTags:
         with pytest.raises(sqlite3.OperationalError, match="ambiguous"):
             list_all_tags(sort_by="created")
 
-    def test_tag_dict_structure(self):
+    def test_tag_dict_structure(self) -> None:
         """Each tag dict should have the expected keys."""
         from emdx.models.tags import add_tags_to_document, list_all_tags
 
@@ -546,29 +484,26 @@ class TestListAllTags:
         assert "created_at" in tag
         assert "last_used" in tag
 
-    def test_empty_database_returns_empty_list(self):
+    def test_empty_database_returns_empty_list(self) -> None:
         from emdx.models.tags import list_all_tags
 
         tags = list_all_tags()
         assert tags == []
 
-    def test_normalizes_tag_names_to_emoji(self):
-        """Tags stored as text aliases should be normalized in output."""
+    def test_returns_text_tag_names(self) -> None:
+        """Tags stored as text should be returned as text."""
         from emdx.database.connection import db_connection
         from emdx.models.tags import list_all_tags
 
         with db_connection.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO tags (name, usage_count) VALUES ('gameplan', 3)"
-            )
+            conn.execute("INSERT INTO tags (name, usage_count) VALUES ('gameplan', 3)")
             conn.commit()
 
         tags = list_all_tags()
         tag_names = [t["name"] for t in tags]
-        assert "🎯" in tag_names
-        assert "gameplan" not in tag_names
+        assert "gameplan" in tag_names
 
-    def test_unknown_sort_falls_back_to_usage(self):
+    def test_unknown_sort_falls_back_to_usage(self) -> None:
         """An unrecognized sort_by value should fall back to usage order."""
         from emdx.models.tags import add_tags_to_document, list_all_tags
 
@@ -591,7 +526,7 @@ class TestListAllTags:
 class TestSearchByTags:
     """Test search_by_tags() with different modes and options."""
 
-    def test_search_any_mode(self):
+    def test_search_any_mode(self) -> None:
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         doc1 = _create_document(title="Python Doc")
@@ -606,7 +541,7 @@ class TestSearchByTags:
         assert doc2 in result_ids
         assert doc3 not in result_ids
 
-    def test_search_all_mode_exact(self):
+    def test_search_all_mode_exact(self) -> None:
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         doc1 = _create_document(title="Has Both")
@@ -614,14 +549,12 @@ class TestSearchByTags:
         add_tags_to_document(doc1, ["python", "testing"])
         add_tags_to_document(doc2, ["python"])
 
-        results = search_by_tags(
-            ["python", "testing"], mode="all", prefix_match=False
-        )
+        results = search_by_tags(["python", "testing"], mode="all", prefix_match=False)
         result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
         assert doc2 not in result_ids
 
-    def test_prefix_match_on(self):
+    def test_prefix_match_on(self) -> None:
         """prefix_match=True should match 'work' against 'workflow', etc."""
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
@@ -635,7 +568,7 @@ class TestSearchByTags:
         assert doc1 in result_ids
         assert doc2 in result_ids
 
-    def test_prefix_match_off(self):
+    def test_prefix_match_off(self) -> None:
         """prefix_match=False should only match exact tags."""
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
@@ -646,19 +579,18 @@ class TestSearchByTags:
         result_ids = [r["id"] for r in results]
         assert doc1 not in result_ids
 
-    def test_search_with_alias_expansion(self):
-        """Text aliases in search should be expanded to emojis."""
+    def test_search_text_tags(self) -> None:
+        """Text tags should be searchable as-is."""
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         doc_id = _create_document(title="Gameplan Doc")
         add_tags_to_document(doc_id, ["gameplan"])
 
-        # Search using the text alias -- expand_aliases converts "gameplan" to "🎯"
         results = search_by_tags(["gameplan"], prefix_match=False)
         result_ids = [r["id"] for r in results]
         assert doc_id in result_ids
 
-    def test_search_with_project_filter(self):
+    def test_search_with_project_filter(self) -> None:
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         doc1 = _create_document(title="Proj A Doc", project="project-a")
@@ -666,14 +598,12 @@ class TestSearchByTags:
         add_tags_to_document(doc1, ["python"])
         add_tags_to_document(doc2, ["python"])
 
-        results = search_by_tags(
-            ["python"], project="project-a", prefix_match=False
-        )
+        results = search_by_tags(["python"], project="project-a", prefix_match=False)
         result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
         assert doc2 not in result_ids
 
-    def test_search_respects_limit(self):
+    def test_search_respects_limit(self) -> None:
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         for i in range(5):
@@ -683,7 +613,7 @@ class TestSearchByTags:
         results = search_by_tags(["common"], limit=3, prefix_match=False)
         assert len(results) <= 3
 
-    def test_search_excludes_deleted_documents(self):
+    def test_search_excludes_deleted_documents(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
@@ -692,16 +622,14 @@ class TestSearchByTags:
 
         # Soft-delete the document
         with db_connection.get_connection() as conn:
-            conn.execute(
-                "UPDATE documents SET is_deleted = TRUE WHERE id = ?", (doc_id,)
-            )
+            conn.execute("UPDATE documents SET is_deleted = TRUE WHERE id = ?", (doc_id,))
             conn.commit()
 
         results = search_by_tags(["python"], prefix_match=False)
         result_ids = [r["id"] for r in results]
         assert doc_id not in result_ids
 
-    def test_search_returns_expected_fields(self):
+    def test_search_returns_expected_fields(self) -> None:
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         doc_id = _create_document(title="Test Doc")
@@ -715,13 +643,13 @@ class TestSearchByTags:
         assert "project" in result
         assert "tags" in result
 
-    def test_search_no_results(self):
+    def test_search_no_results(self) -> None:
         from emdx.models.tags import search_by_tags
 
         results = search_by_tags(["nonexistent"], prefix_match=False)
         assert results == []
 
-    def test_all_mode_with_prefix_match_uses_any_logic(self):
+    def test_all_mode_with_prefix_match_uses_any_logic(self) -> None:
         """When mode='all' but prefix_match=True, it falls back to 'any' logic."""
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
@@ -731,9 +659,7 @@ class TestSearchByTags:
         add_tags_to_document(doc2, ["worker"])
 
         # mode="all" + prefix_match=True uses the 'any' branch
-        results = search_by_tags(
-            ["workflow", "worker"], mode="all", prefix_match=True
-        )
+        results = search_by_tags(["workflow", "worker"], mode="all", prefix_match=True)
         result_ids = [r["id"] for r in results]
         # Both should match since prefix_match forces 'any' behavior
         assert doc1 in result_ids
@@ -748,7 +674,7 @@ class TestSearchByTags:
 class TestRenameTag:
     """Test rename_tag()."""
 
-    def test_rename_existing_tag(self):
+    def test_rename_existing_tag(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_document_tags, rename_tag
 
         doc_id = _create_document()
@@ -761,13 +687,13 @@ class TestRenameTag:
         assert "newname" in tags
         assert "oldname" not in tags
 
-    def test_rename_nonexistent_tag(self):
+    def test_rename_nonexistent_tag(self) -> None:
         from emdx.models.tags import rename_tag
 
         success = rename_tag("nonexistent", "newname")
         assert success is False
 
-    def test_rename_to_existing_name_fails(self):
+    def test_rename_to_existing_name_fails(self) -> None:
         from emdx.models.tags import add_tags_to_document, rename_tag
 
         doc_id = _create_document()
@@ -776,7 +702,7 @@ class TestRenameTag:
         success = rename_tag("tag-a", "tag-b")
         assert success is False
 
-    def test_rename_normalizes_case(self):
+    def test_rename_normalizes_case(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document, rename_tag
 
@@ -801,7 +727,7 @@ class TestRenameTag:
 class TestMergeTags:
     """Test merge_tags()."""
 
-    def test_merge_source_into_target(self):
+    def test_merge_source_into_target(self) -> None:
         from emdx.models.tags import (
             add_tags_to_document,
             get_document_tags,
@@ -818,7 +744,7 @@ class TestMergeTags:
         assert "target-tag" in tags
         assert "source-tag" not in tags
 
-    def test_merge_multiple_sources(self):
+    def test_merge_multiple_sources(self) -> None:
         from emdx.models.tags import (
             add_tags_to_document,
             get_document_tags,
@@ -840,7 +766,7 @@ class TestMergeTags:
         assert "tag-a" not in tags1
         assert "tag-b" not in tags2
 
-    def test_merge_skips_nonexistent_sources(self):
+    def test_merge_skips_nonexistent_sources(self) -> None:
         from emdx.models.tags import add_tags_to_document, merge_tags
 
         doc_id = _create_document()
@@ -850,7 +776,7 @@ class TestMergeTags:
         # Should process real-tag and skip fake-tag without error
         assert merged_count >= 1
 
-    def test_merge_skips_self_reference(self):
+    def test_merge_skips_self_reference(self) -> None:
         """Merging a tag into itself should be a no-op for that source."""
         from emdx.models.tags import add_tags_to_document, merge_tags
 
@@ -860,7 +786,7 @@ class TestMergeTags:
         merged_count = merge_tags(["same-tag"], "same-tag")
         assert merged_count == 0
 
-    def test_merge_deletes_source_tags(self):
+    def test_merge_deletes_source_tags(self) -> None:
         """Source tags should be deleted from the tags table after merge."""
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document, merge_tags
@@ -871,12 +797,10 @@ class TestMergeTags:
         merge_tags(["obsolete"], "current")
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM tags WHERE name = 'obsolete'"
-            )
+            cursor = conn.execute("SELECT COUNT(*) FROM tags WHERE name = 'obsolete'")
             assert cursor.fetchone()[0] == 0
 
-    def test_merge_updates_target_usage_count(self):
+    def test_merge_updates_target_usage_count(self) -> None:
         """Target tag usage_count should reflect actual unique document count."""
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document, merge_tags
@@ -889,13 +813,11 @@ class TestMergeTags:
         merge_tags(["tag-a", "tag-b"], "merged")
 
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT usage_count FROM tags WHERE name = 'merged'"
-            )
+            cursor = conn.execute("SELECT usage_count FROM tags WHERE name = 'merged'")
             count = cursor.fetchone()[0]
             assert count == 2
 
-    def test_merge_handles_overlap(self):
+    def test_merge_handles_overlap(self) -> None:
         """If a document already has the target tag, merge should not create a duplicate."""
         from emdx.models.tags import (
             add_tags_to_document,
@@ -923,7 +845,7 @@ class TestMergeTags:
 class TestGetTagSuggestions:
     """Test get_tag_suggestions()."""
 
-    def test_returns_matching_tags(self):
+    def test_returns_matching_tags(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
         doc_id = _create_document()
@@ -934,7 +856,7 @@ class TestGetTagSuggestions:
         assert "pytest" in suggestions
         assert "javascript" not in suggestions
 
-    def test_empty_partial_returns_all_tags(self):
+    def test_empty_partial_returns_all_tags(self) -> None:
         """An empty partial produces LIKE '%' which matches all existing tags."""
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
@@ -946,13 +868,13 @@ class TestGetTagSuggestions:
         assert "python" in suggestions
         assert "rust" in suggestions
 
-    def test_whitespace_partial_returns_empty(self):
+    def test_whitespace_partial_returns_empty(self) -> None:
         from emdx.models.tags import get_tag_suggestions
 
         suggestions = get_tag_suggestions("   ")
         assert suggestions == []
 
-    def test_respects_limit(self):
+    def test_respects_limit(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
         doc_id = _create_document()
@@ -962,7 +884,7 @@ class TestGetTagSuggestions:
         suggestions = get_tag_suggestions("prefix", limit=5)
         assert len(suggestions) <= 5
 
-    def test_ordered_by_usage_count(self):
+    def test_ordered_by_usage_count(self) -> None:
         """More frequently used tags should appear first."""
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
@@ -981,7 +903,7 @@ class TestGetTagSuggestions:
         rare_idx = suggestions.index("py-rare")
         assert popular_idx < rare_idx
 
-    def test_case_insensitive(self):
+    def test_case_insensitive(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
         doc_id = _create_document()
@@ -991,7 +913,7 @@ class TestGetTagSuggestions:
         suggestions = get_tag_suggestions("PY")
         assert "python" in suggestions
 
-    def test_no_matches_returns_empty(self):
+    def test_no_matches_returns_empty(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
         doc_id = _create_document()
@@ -1000,7 +922,7 @@ class TestGetTagSuggestions:
         suggestions = get_tag_suggestions("zzz")
         assert suggestions == []
 
-    def test_default_limit_is_ten(self):
+    def test_default_limit_is_ten(self) -> None:
         from emdx.models.tags import add_tags_to_document, get_tag_suggestions
 
         doc_id = _create_document()

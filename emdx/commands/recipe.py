@@ -1,6 +1,6 @@
 """Recipe management commands for EMDX.
 
-Recipes are emdx documents tagged with 📋 (recipe) that contain
+Recipes are emdx documents tagged with 'recipe' that contain
 instructions for Claude to follow. Recipes can be simple (single-step,
 run via delegate) or structured (multi-step with frontmatter and
 numbered step headers).
@@ -45,7 +45,7 @@ def _find_recipe(id_or_name: str) -> dict[str, Any] | None:
         pass
 
     # Search by recipe tag, then filter by title match
-    recipes = search_by_tags(["📋"], limit=50, prefix_match=False)
+    recipes = search_by_tags(["recipe"], limit=50, prefix_match=False)
     for r in recipes:
         if id_or_name.lower() in r.get("title", "").lower():
             return dict(r)
@@ -62,8 +62,8 @@ def _find_recipe(id_or_name: str) -> dict[str, Any] | None:
 
 @app.command("list")
 def list_recipes() -> None:
-    """List all recipes (documents tagged 📋)."""
-    results = search_by_tags(["📋"], limit=50, prefix_match=False)
+    """List all recipes (documents tagged 'recipe')."""
+    results = search_by_tags(["recipe"], limit=50, prefix_match=False)
 
     if not results:
         console.print("[dim]No recipes found. Create one with:[/dim]")

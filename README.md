@@ -68,9 +68,10 @@ emdx recent                         # See what you worked on recently
 ### Tag and organize
 
 ```bash
-emdx tag 42 gameplan active         # Add tags (text aliases map to emoji)
+emdx tag 42 gameplan active         # Add tags
 emdx find --tags "gameplan,active"  # Search by tags
 ```
+
 
 ## Delegate work to Claude agents
 

@@ -2,6 +2,7 @@
 
 import sqlite3
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,9 @@ from emdx.services.auto_tagger import AutoTagger
 
 
 @pytest.fixture
-def test_db():
+def test_db() -> Generator[str, None, None]:
     """Create a temporary test database."""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
 
     # Initialize database schema
@@ -63,7 +64,7 @@ def test_db():
 
 
 @pytest.fixture
-def tagger(test_db):
+def tagger(test_db: str) -> AutoTagger:
     """Create an AutoTagger instance with test database."""
     return AutoTagger(db_path=test_db)
 
@@ -71,124 +72,126 @@ def tagger(test_db):
 class TestAutoTaggerPatterns:
     """Test pattern matching and confidence scoring."""
 
-    def test_gameplan_detection(self, tagger):
+    def test_gameplan_detection(self, tagger: AutoTagger) -> None:
         """Test gameplan pattern detection."""
         # Title match
         suggestions = tagger.analyze_document("Gameplan: Implement new feature", "Some content")
-        assert any(tag == "🎯" for tag, _ in suggestions)
-        assert any(tag == "🚀" for tag, _ in suggestions)
+        assert any(tag == "gameplan" for tag, _ in suggestions)
+        assert any(tag == "active" for tag, _ in suggestions)
 
         # Content match
         suggestions = tagger.analyze_document(
             "Implementation Strategy",
-            "## Goals\n- Implement feature\n## Success Criteria\n- Tests pass"
+            "## Goals\n- Implement feature\n## Success Criteria\n- Tests pass",
         )
-        assert any(tag == "🎯" for tag, _ in suggestions)
+        assert any(tag == "gameplan" for tag, _ in suggestions)
 
-    def test_bug_detection(self, tagger):
+    def test_bug_detection(self, tagger: AutoTagger) -> None:
         """Test bug pattern detection."""
         # Title match
         suggestions = tagger.analyze_document("Bug: Login fails on mobile", "Description of bug")
-        assert any(tag == "🐛" for tag, _ in suggestions)
-        assert any(tag == "🚀" for tag, _ in suggestions)
+        assert any(tag == "bug" for tag, _ in suggestions)
+        assert any(tag == "active" for tag, _ in suggestions)
 
         # Content match
         suggestions = tagger.analyze_document(
-            "Login issue",
-            "Error: TypeError exception thrown when user clicks login"
+            "Login issue", "Error: TypeError exception thrown when user clicks login"
         )
-        assert any(tag == "🐛" for tag, _ in suggestions)
+        assert any(tag == "bug" for tag, _ in suggestions)
 
-    def test_confidence_scores(self, tagger):
+    def test_confidence_scores(self, tagger: AutoTagger) -> None:
         """Test confidence scoring logic."""
         # High confidence - title match
         suggestions = tagger.analyze_document("Test: Unit tests for auth", "def test_login():")
-        test_tag = next((conf for tag, conf in suggestions if tag == "🧪"), None)
+        test_tag = next((conf for tag, conf in suggestions if tag == "test"), None)
         assert test_tag is not None
         assert test_tag >= 0.9
 
         # Medium confidence - content only
         suggestions = tagger.analyze_document("Auth implementation", "def test_login():")
-        test_tag = next((conf for tag, conf in suggestions if tag == "🧪"), None)
+        test_tag = next((conf for tag, conf in suggestions if tag == "test"), None)
         assert test_tag is not None
         assert 0.6 <= test_tag < 0.9
 
-    def test_multiple_patterns(self, tagger):
+    def test_multiple_patterns(self, tagger: AutoTagger) -> None:
         """Test detection of multiple patterns."""
         suggestions = tagger.analyze_document(
             "Urgent Bug: Fix critical error in payment system",
-            "Error traceback shows exception in payment processing"
+            "Error traceback shows exception in payment processing",
         )
 
         tags = [tag for tag, _ in suggestions]
-        assert "🐛" in tags  # bug
-        assert "🚨" in tags  # urgent
-        assert "🚀" in tags  # active
+        assert "bug" in tags
+        assert "urgent" in tags
+        assert "active" in tags
 
-    def test_no_duplicate_suggestions(self, tagger):
+    def test_no_duplicate_suggestions(self, tagger: AutoTagger) -> None:
         """Test that existing tags are not suggested again."""
-        existing_tags = ["🎯", "🚀"]
+        existing_tags = ["gameplan", "active"]
         suggestions = tagger.analyze_document(
-            "Gameplan: New project",
-            "## Goals",
-            existing_tags=existing_tags
+            "Gameplan: New project", "## Goals", existing_tags=existing_tags
         )
 
         suggested_tags = [tag for tag, _ in suggestions]
-        assert "🎯" not in suggested_tags
-        assert "🚀" not in suggested_tags
+        assert "gameplan" not in suggested_tags
+        assert "active" not in suggested_tags
 
 
 class TestAutoTaggerDatabase:
     """Test database operations."""
 
-    def test_suggest_tags_for_document(self, tagger, test_db):
+    def test_suggest_tags_for_document(self, tagger: AutoTagger, test_db: str) -> None:
         """Test suggesting tags for a saved document."""
         # Create a document
         conn = sqlite3.connect(test_db)
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Bug: Test fails randomly", "Error in test_auth.py line 42")
+            ("Bug: Test fails randomly", "Error in test_auth.py line 42"),
         )
         doc_id = cursor.lastrowid
+        assert doc_id is not None
         conn.commit()
         conn.close()
 
         # Get suggestions
         suggestions = tagger.suggest_tags(doc_id)
         assert len(suggestions) > 0
-        assert any(tag == "🐛" for tag, _ in suggestions)
+        assert any(tag == "bug" for tag, _ in suggestions)
 
-    def test_auto_tag_document(self, tagger, test_db):
+    def test_auto_tag_document(self, tagger: AutoTagger, test_db: str) -> None:
         """Test automatically applying tags to a document."""
         # Create a document
         conn = sqlite3.connect(test_db)
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Gameplan: Refactor authentication", "## Goals\n- Improve security")
+            ("Gameplan: Refactor authentication", "## Goals\n- Improve security"),
         )
         doc_id = cursor.lastrowid
+        assert doc_id is not None
         conn.commit()
 
         # Auto-tag
         applied_tags = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
         assert len(applied_tags) > 0
-        assert "🎯" in applied_tags
+        assert "gameplan" in applied_tags
 
         # Verify tags were saved
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT t.name FROM tags t
             JOIN document_tags dt ON t.id = dt.tag_id
             WHERE dt.document_id = ?
-        """, (doc_id,))
+        """,
+            (doc_id,),
+        )
         saved_tags = [row[0] for row in cursor.fetchall()]
         conn.close()
 
-        assert "🎯" in saved_tags
+        assert "gameplan" in saved_tags
 
-    def test_batch_suggest(self, tagger, test_db):
+    def test_batch_suggest(self, tagger: AutoTagger, test_db: str) -> None:
         """Test batch suggestion for multiple documents."""
         conn = sqlite3.connect(test_db)
         cursor = conn.cursor()
@@ -201,10 +204,7 @@ class TestAutoTaggerDatabase:
         ]
 
         for title, content in docs:
-            cursor.execute(
-                "INSERT INTO documents (title, content) VALUES (?, ?)",
-                (title, content)
-            )
+            cursor.execute("INSERT INTO documents (title, content) VALUES (?, ?)", (title, content))
 
         conn.commit()
         conn.close()
@@ -217,7 +217,7 @@ class TestAutoTaggerDatabase:
         for _doc_id, doc_suggestions in suggestions.items():
             assert len(doc_suggestions) > 0
 
-    def test_batch_auto_tag(self, tagger, test_db):
+    def test_batch_auto_tag(self, tagger: AutoTagger, test_db: str) -> None:
         """Test batch auto-tagging."""
         conn = sqlite3.connect(test_db)
         cursor = conn.cursor()
@@ -225,48 +225,50 @@ class TestAutoTaggerDatabase:
         # Create documents
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Test: API endpoints", "def test_get_user():")
+            ("Test: API endpoints", "def test_get_user():"),
         )
         doc1_id = cursor.lastrowid
+        assert doc1_id is not None
 
         cursor.execute(
             "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Bug: 500 error on save", "Server error when saving")
+            ("Bug: 500 error on save", "Server error when saving"),
         )
         doc2_id = cursor.lastrowid
+        assert doc2_id is not None
 
         conn.commit()
         conn.close()
 
         # Batch auto-tag
         results = tagger.batch_auto_tag(
-            document_ids=[doc1_id, doc2_id],
-            confidence_threshold=0.7,
-            dry_run=False
+            document_ids=[doc1_id, doc2_id], confidence_threshold=0.7, dry_run=False
         )
 
-        assert results['processed'] == 2
-        assert results['tagged'] == 2
-        assert results['tags_applied'] > 0
+        assert results["processed"] == 2
+        assert results["tagged"] == 2
+        assert results["tags_applied"] > 0
 
 
 class TestCustomPatterns:
     """Test custom pattern functionality."""
 
-    def test_add_custom_pattern(self, tagger):
+    def test_add_custom_pattern(self, tagger: AutoTagger) -> None:
         """Test adding a custom pattern."""
         tagger.add_custom_pattern(
             "meeting",
             title_patterns=[r"meeting:", r"standup:"],
             content_patterns=[r"action items:", r"decisions:"],
-            tags=["📝", "meeting"],
-            confidence=0.85
+            tags=["notes", "meeting"],
+            confidence=0.85,
         )
 
-        suggestions = tagger.analyze_document("Meeting: Sprint planning", "Action items: Plan tasks")  # noqa: E501
-        assert any(tag == "📝" for tag, _ in suggestions)
+        suggestions = tagger.analyze_document(
+            "Meeting: Sprint planning", "Action items: Plan tasks"
+        )  # noqa: E501
+        assert any(tag == "notes" for tag, _ in suggestions)
 
-    def test_remove_pattern(self, tagger):
+    def test_remove_pattern(self, tagger: AutoTagger) -> None:
         """Test removing a pattern."""
         # Add then remove
         tagger.add_custom_pattern("test_pattern", tags=["test"])
@@ -279,30 +281,30 @@ class TestCustomPatterns:
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_empty_document(self, tagger):
+    def test_empty_document(self, tagger: AutoTagger) -> None:
         """Test handling empty content."""
         suggestions = tagger.analyze_document("", "")
         assert isinstance(suggestions, list)
 
-    def test_none_content(self, tagger):
+    def test_none_content(self, tagger: AutoTagger) -> None:
         """Test handling None content."""
         suggestions = tagger.analyze_document("Title", None)
         assert isinstance(suggestions, list)
 
-    def test_invalid_document_id(self, tagger, test_db):
+    def test_invalid_document_id(self, tagger: AutoTagger, test_db: str) -> None:
         """Test handling invalid document ID."""
         suggestions = tagger.suggest_tags(99999)
         assert len(suggestions) == 0
 
-    def test_confidence_threshold_bounds(self, tagger, test_db):
+    def test_confidence_threshold_bounds(self, tagger: AutoTagger, test_db: str) -> None:
         """Test confidence threshold boundaries."""
         conn = sqlite3.connect(test_db)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Test doc", "content")
+            "INSERT INTO documents (title, content) VALUES (?, ?)", ("Test doc", "content")
         )
         doc_id = cursor.lastrowid
+        assert doc_id is not None
         conn.commit()
         conn.close()
 
@@ -318,7 +320,7 @@ class TestEdgeCases:
 class TestIntegration:
     """Integration tests with real patterns."""
 
-    def test_real_world_gameplan(self, tagger):
+    def test_real_world_gameplan(self, tagger: AutoTagger) -> None:
         """Test with real gameplan content."""
         content = """
         # Gameplan: Implement EMDX Maintenance Features
@@ -341,13 +343,13 @@ class TestIntegration:
         suggestions = tagger.analyze_document("Gameplan: EMDX Maintenance", content)
         tags = [tag for tag, _ in suggestions]
 
-        assert "🎯" in tags  # gameplan
-        assert "🚀" in tags  # active
+        assert "gameplan" in tags
+        assert "active" in tags
         # Should have high confidence
-        gameplan_conf = next(conf for tag, conf in suggestions if tag == "🎯")
+        gameplan_conf = next(conf for tag, conf in suggestions if tag == "gameplan")
         assert gameplan_conf >= 0.9
 
-    def test_real_world_bug_report(self, tagger):
+    def test_real_world_bug_report(self, tagger: AutoTagger) -> None:
         """Test with real bug report content."""
         content = """
         Error when running emdx gui:
@@ -363,9 +365,9 @@ class TestIntegration:
         suggestions = tagger.analyze_document("Bug: emdx gui crashes", content)
         tags = [tag for tag, _ in suggestions]
 
-        assert "🐛" in tags  # bug
-        assert "🚨" in tags  # urgent (due to "urgent attention")
-        assert "🚀" in tags  # active
+        assert "bug" in tags
+        assert "urgent" in tags  # due to "urgent attention"
+        assert "active" in tags
 
 
 if __name__ == "__main__":

@@ -3,14 +3,12 @@
 Tests cover:
 - Basic delegate call with single task
 - --synthesize flag for parallel task synthesis
-- --each/--do flags for dynamic discovery
 - --pr flag for pull request creation
 - --worktree flag for git worktree isolation
 - --doc flag for document context
 - Error handling and edge cases
 """
 
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -27,7 +25,6 @@ from emdx.commands.delegate import (
     _make_output_file_path,
     _make_pr_instruction,
     _resolve_task,
-    _run_discovery,
     _run_parallel,
     _run_single,
     _save_output_fallback,
@@ -275,72 +272,6 @@ class TestLoadDocContext:
         mock_get.return_value = None
         with pytest.raises(typer.Exit):
             _load_doc_context(99999, "prompt")
-
-
-# =============================================================================
-# Tests for _run_discovery
-# =============================================================================
-
-
-class TestRunDiscovery:
-    """Tests for _run_discovery — runs shell command to discover items."""
-
-    @patch("subprocess.run")
-    def test_successful_discovery(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="file1.py\nfile2.py\nfile3.py\n",
-            stderr="",
-        )
-        result = _run_discovery("find . -name '*.py'")
-        assert result == ["file1.py", "file2.py", "file3.py"]
-        mock_run.assert_called_once()
-
-    @patch("subprocess.run")
-    def test_strips_whitespace(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="  file1.py  \n  file2.py  \n",
-            stderr="",
-        )
-        result = _run_discovery("ls")
-        assert result == ["file1.py", "file2.py"]
-
-    @patch("subprocess.run")
-    def test_skips_empty_lines(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="file1.py\n\n\nfile2.py\n\n",
-            stderr="",
-        )
-        result = _run_discovery("ls")
-        assert result == ["file1.py", "file2.py"]
-
-    @patch("subprocess.run")
-    def test_failed_command_exits(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="command not found",
-        )
-        with pytest.raises(typer.Exit):
-            _run_discovery("invalid_command")
-
-    @patch("subprocess.run")
-    def test_empty_output_exits(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="",
-            stderr="",
-        )
-        with pytest.raises(typer.Exit):
-            _run_discovery("ls empty_dir")
-
-    @patch("subprocess.run")
-    def test_timeout_exits(self, mock_run):
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="slow_cmd", timeout=30)
-        with pytest.raises(typer.Exit):
-            _run_discovery("slow_cmd")
 
 
 # =============================================================================
@@ -692,8 +623,6 @@ class TestRunParallel:
         assert mock_cleanup_worktree.call_count == 2
 
 
-
-
 # =============================================================================
 # Tests for delegate command (CLI entry point)
 # =============================================================================
@@ -724,8 +653,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         mock_run_single.assert_called_once()
@@ -754,70 +681,9 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         mock_run_parallel.assert_called_once()
-
-    def test_each_requires_do(self):
-        """Test that --each requires --do to be specified."""
-        ctx = MagicMock()
-        ctx.invoked_subcommand = None
-
-        with pytest.raises(typer.Exit):
-            delegate(
-                ctx=ctx,
-                tasks=None,
-                tags=None,
-                title=None,
-                synthesize=False,
-                jobs=None,
-                model=None,
-                quiet=False,
-                doc=None,
-                pr=False,
-                branch=False,
-                worktree=False,
-                base_branch="main",
-                    each="find . -name '*.py'",
-                do=None,
-            )
-
-    @patch("emdx.commands.delegate._run_discovery")
-    @patch("emdx.commands.delegate._run_parallel")
-    def test_each_do_discovers_and_runs(self, mock_run_parallel, mock_run_discovery):
-        """Test that --each/--do discovers items and creates tasks."""
-        mock_run_discovery.return_value = ["file1.py", "file2.py"]
-        mock_run_parallel.return_value = [10, 20]
-        ctx = MagicMock()
-        ctx.invoked_subcommand = None
-
-        delegate(
-            ctx=ctx,
-            tasks=None,
-            tags=None,
-            title=None,
-            synthesize=False,
-            jobs=None,
-            model=None,
-            quiet=False,
-            doc=None,
-            pr=False,
-            branch=False,
-            draft=False,
-            worktree=False,
-            base_branch="main",
-            each="find . -name '*.py'",
-            do="Review {{item}} for issues",
-        )
-
-        mock_run_discovery.assert_called_once_with("find . -name '*.py'")
-        # Should create tasks from discovered items
-        call_args = mock_run_parallel.call_args
-        tasks = call_args[1]["tasks"]
-        assert "Review file1.py for issues" in tasks
-        assert "Review file2.py for issues" in tasks
 
     @patch("emdx.commands.delegate._load_doc_context")
     @patch("emdx.commands.delegate._run_single")
@@ -843,8 +709,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         mock_load_doc.assert_called_once_with(42, "implement this")
@@ -874,8 +738,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=True,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         mock_create_wt.assert_called_once_with("main", task_title="fix bug")
@@ -906,8 +768,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,  # Not explicitly set, but should be implied
             base_branch="develop",
-            each=None,
-            do=None,
         )
 
         # Worktree should be created even though --worktree not set
@@ -937,8 +797,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         call_kwargs = mock_run_parallel.call_args[1]
@@ -971,8 +829,6 @@ class TestDelegateCommand:
             draft=True,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1005,8 +861,6 @@ class TestDelegateCommand:
             draft=False,  # --no-draft
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1034,8 +888,6 @@ class TestDelegateCommand:
             draft=False,  # --no-draft
             worktree=True,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         call_kwargs = mock_run_parallel.call_args[1]
@@ -1061,8 +913,6 @@ class TestDelegateCommand:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
-                do=None,
             )
 
     @patch("emdx.commands.delegate.get_document")
@@ -1093,8 +943,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         mock_get_doc.assert_called_once_with(42)
@@ -1124,8 +972,6 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1259,8 +1105,6 @@ class TestBranchFlag:
             draft=False,
             worktree=False,
             base_branch="main",
-            each=None,
-            do=None,
         )
 
         # Worktree should be created
@@ -1292,8 +1136,6 @@ class TestBranchFlag:
             draft=False,
             worktree=False,
             base_branch="develop",
-            each=None,
-            do=None,
         )
 
         mock_create_wt.assert_called_once_with("develop", task_title="add feature")
@@ -1319,8 +1161,6 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
-                do=None,
             )
 
     @patch("emdx.commands.delegate._run_single")
@@ -1348,8 +1188,6 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
-                do=None,
             )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1388,8 +1226,6 @@ class TestErrorHandling:
                 branch=False,
                 worktree=True,
                 base_branch="main",
-                    each=None,
-                do=None,
             )
 
     @patch("emdx.commands.delegate._run_single")
@@ -1414,8 +1250,6 @@ class TestErrorHandling:
                 branch=False,
                 worktree=False,
                 base_branch="main",
-                    each=None,
-                do=None,
             )
 
 

@@ -16,7 +16,6 @@ from ..config.constants import (
 from ..database import DatabaseConnection
 from ..models.tags import get_or_create_tag
 from ..services.types import BatchAutoTagResult, DocumentTagResult
-from ..utils.emoji_aliases import EMOJI_ALIASES
 
 # Type alias for SQL parameters
 SqlParam = Union[str, int, float, None]
@@ -173,10 +172,8 @@ class AutoTagger:
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:
                 for tag in rules["tags"]:
-                    # Convert to emoji if needed
-                    emoji_tag = EMOJI_ALIASES.get(tag, tag)
-                    if emoji_tag not in existing_set:
-                        suggestions[emoji_tag] = max(suggestions[emoji_tag], confidence)
+                    if tag not in existing_set:
+                        suggestions[tag] = max(suggestions[tag], confidence)
 
         # Sort by confidence
         sorted_suggestions = sorted(suggestions.items(), key=lambda x: x[1], reverse=True)

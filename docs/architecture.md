@@ -101,7 +101,7 @@ emdx/
 └── utils/                  # Shared utilities
     ├── git.py             # git operations (worktrees, branches)
     ├── git_ops.py         # additional git utilities
-    ├── emoji_aliases.py   # tag alias system
+    ├── emoji_aliases.py   # tag utilities
     ├── claude_wrapper.py  # Claude Code integration
     ├── chunk_splitter.py  # document chunking
     ├── output.py          # shared console output
@@ -168,7 +168,7 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 
 ### **Key Design Decisions**
 - **SQLite with FTS5** - Fast full-text search with simple deployment
-- **Emoji tags** - Space-efficient visual organization
+- **Plain text tags** - Simple, readable tag organization
 - **JSON metadata** - Flexible document attributes
 - **Versioned migrations** - Safe schema evolution
 

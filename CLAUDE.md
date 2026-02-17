@@ -22,7 +22,7 @@ EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+
 - `ui/` - TUI components (Textual widgets)
 - `services/` - Business logic (log streaming, file watching, etc.)
 - `models/` - Data models and operations
-- `utils/` - Shared utilities (git, emoji aliases, Claude integration)
+- `utils/` - Shared utilities (git, tags, Claude integration)
 
 **Detailed docs:** [docs/](docs/) | [Architecture](docs/architecture.md) | [CLI Reference](docs/cli-api.md) | [Development Setup](docs/development-setup.md)
 
@@ -143,12 +143,9 @@ emdx delegate --branch -b develop "add feature X"
 
 # All flags compose together
 emdx delegate --doc 42 --pr "fix the bug"
-
-# Dynamic discovery
-emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 ```
 
-**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--each`/`--do`, `--epic`/`-e`, `--cat`/`-c`, `--cleanup`
+**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--epic`/`-e`, `--cat`/`-c`, `--cleanup`
 
 ### Quick Reference
 
@@ -157,7 +154,6 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 | Research/analysis | `emdx delegate "task"` |
 | Parallel research | `emdx delegate "t1" "t2" "t3"` |
 | Combined summary | `emdx delegate --synthesize "t1" "t2"` |
-| Discover + process | `emdx delegate --each "cmd" --do "Review {{item}}"` |
 | Doc as input | `emdx delegate --doc 42 "implement this"` |
 | Code changes with PR | `emdx delegate --pr "fix the bug"` |
 | Push branch, no PR | `emdx delegate --branch "add feature"` |
@@ -166,7 +162,7 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 
 ### Document Tags vs Task Organization
 
-**Documents** use tags (emoji aliases) for classification:
+**Documents** use plain text tags for classification:
 
 | Content Type | Tags |
 |--------------|------|
