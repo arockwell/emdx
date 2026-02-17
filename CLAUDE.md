@@ -182,8 +182,8 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 **Tasks** use categories and epics (NOT tags):
 - `--cat FEAT` / `--cat FIX` / `--cat ARCH` etc. — assigns a category
 - `--epic <id>` — groups task under a parent epic
-- Use `emdx cat list` to see available categories
-- Use `emdx epic list` to see active epics
+- Use `emdx task cat list` to see available categories
+- Use `emdx task epic list` to see active epics
 
 ## Essential Commands
 
@@ -204,8 +204,8 @@ emdx task add "Title" -D "Details" --epic 898 --cat FEAT
 emdx task ready                        # Show unblocked tasks
 emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
-emdx epic list                         # See active epics
-emdx cat list                          # See available categories
+emdx task epic list                    # See active epics
+emdx task cat list                     # See available categories
 
 # Tags
 emdx tag add 42 gameplan active
