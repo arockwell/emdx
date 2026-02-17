@@ -42,6 +42,44 @@ _DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 _ANSWER_TIMEOUT = 120.0
 
 
+def _save_terminal_state() -> "list[Any] | None":
+    """Save current terminal attributes so they can be restored later.
+
+    Something in the retrieval/subprocess pipeline resets the terminal
+    from raw mode to cooked mode, which kills Textual's mouse and key
+    handling.  We save before and restore after.
+    """
+    import sys
+    import termios
+
+    try:
+        fd = sys.stdin.fileno()
+        return termios.tcgetattr(fd)  # type: ignore[no-any-return]
+    except Exception:
+        return None
+
+
+def _restore_terminal_state(saved: "list[Any] | None") -> None:
+    """Restore terminal attributes saved by _save_terminal_state."""
+    import sys
+    import termios
+
+    if saved is None:
+        return
+    try:
+        fd = sys.stdin.fileno()
+        current = termios.tcgetattr(fd)
+        if current != saved:
+            logger.info(
+                "Terminal state changed — restoring (lflag %#x -> %#x)",
+                current[3],
+                saved[3],
+            )
+            termios.tcsetattr(fd, termios.TCSANOW, saved)
+    except Exception as e:
+        logger.warning("Failed to restore terminal state: %s", e)
+
+
 def _run_claude(question: str, context: str) -> str:
     """Run claude CLI directly — bypasses UnifiedExecutor."""
     system_prompt = (
@@ -166,29 +204,10 @@ def _retrieve_context(question: str, limit: int = 8) -> tuple[list[tuple[int, st
             except Exception as e:
                 logger.debug(f"FTS retrieval failed: {e}")
 
-    # Semantic fallback if keyword found nothing
-    if not docs:
-        try:
-            from emdx.services.embedding_service import EmbeddingService
-
-            svc = EmbeddingService()
-            stats = svc.stats()
-            if stats.indexed_documents >= 50:
-                matches = svc.search(question, limit=limit)
-                with db.get_connection() as conn:
-                    cursor = conn.cursor()
-                    for m in matches:
-                        cursor.execute(
-                            "SELECT id, title, content FROM documents WHERE id = ?",
-                            (m.doc_id,),
-                        )
-                        row = cursor.fetchone()
-                        if row:
-                            docs.append(row)
-                        if len(docs) >= limit:
-                            break
-        except Exception:
-            pass
+    # NOTE: Semantic fallback (EmbeddingService) is intentionally excluded here.
+    # Importing torch/sentence-transformers resets the terminal from raw to
+    # cooked mode, which kills Textual's mouse and key handling.
+    # Keyword FTS + explicit #ID references cover the common Q&A cases well.
 
     # Build context string
     parts = []
@@ -406,11 +425,18 @@ class QAScreen(HelpMixin, Widget):
         self._append_message("[dim]Thinking...[/dim]")
         self.call_later(self._update_status, "Retrieving context...")
 
+        # Save terminal state once on the main thread. Background threads
+        # (torch/sentence-transformers imports, subprocess) can reset the
+        # terminal from raw to cooked mode. We restore after each await.
+        term_state = _save_terminal_state()
+
         try:
             docs, context = await asyncio.to_thread(_retrieve_context, question)
+            _restore_terminal_state(term_state)
             self.call_later(self._update_status, "Generating answer...")
 
             answer = await asyncio.to_thread(_run_claude, question, context)
+            _restore_terminal_state(term_state)
 
             # Store for save feature
             self._entries.append({"question": question, "answer": answer, "sources": docs})
