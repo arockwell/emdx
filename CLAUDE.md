@@ -267,6 +267,16 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 - **Mocked internal functions in tests**: When refactoring a function's signature (parameters, return type), grep for tests that mock it — they break silently. Use: `rg "mock.*<func_name>\|patch.*<func_name>" tests/`
 - **Terminal state corruption in TUI**: Running code in background threads (via `asyncio.to_thread`) that imports heavy libraries (torch, sentence-transformers) or runs subprocesses can reset the terminal from raw mode to cooked mode, killing Textual's mouse/key handling. **Fix**: Save terminal state with `termios.tcgetattr()` before the threaded call and restore with `termios.tcsetattr()` after. See `qa_screen.py` `_save_terminal_state()`/`_restore_terminal_state()` for the pattern. This also explains why `UnifiedExecutor` corrupted the terminal — its `get_subprocess_env()` or subprocess execution path triggers the same reset.
 
+## Textual Pilot Testing Patterns
+
+- `Static.content` returns `VisualType` (not `str`) — always wrap with `str()` for mypy: `assert "text" in str(bar.content)`
+- `RichLog.lines` contains `Strip` objects with `.text` property — use helper: `"\n".join(line.text for line in widget.lines)`
+- OptionList doesn't auto-fire `OptionHighlighted` on mount — press `j` then `k` to trigger detail pane rendering in tests
+- Mouse click tests need explicit `offset=(x, y)` to hit specific rows; clicking without offset may hit disabled headers
+- BrowserContainer tests: let `register_all_themes` run normally, mock `get_theme` to return `"textual-dark"` (a built-in theme) to avoid `InvalidThemeError`
+- `Static` has no `.renderable` attribute — use `.content` property instead
+- See `tests/test_task_browser.py` for canonical patterns: `TaskTestApp`, `mock_task_data` fixture, `_richlog_text()` helper, `_select_first_task()` helper
+
 ## Delegate Debugging
 
 ### Stuck Delegate Diagnostics
