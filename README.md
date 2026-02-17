@@ -67,20 +67,20 @@ emdx recent                         # See what you worked on recently
 
 ### Tag and organize
 
-Tags use plain text that maps to emoji under the hood:
+Tags are plain text strings for flexible classification:
 
 ```bash
 emdx tag 42 gameplan active         # Add tags
 emdx find --tags "gameplan,active"  # Search by tags
 ```
 
-| You type | Means | Use for |
-|----------|-------|---------|
-| `gameplan` | 🎯 | Plans and strategy |
-| `analysis` | 🔍 | Research and investigation |
-| `active` | 🚀 | Currently working on |
-| `done` | ✅ | Completed |
-| `blocked` | 🚧 | Stuck or waiting |
+| Tag | Use for |
+|-----|---------|
+| `gameplan` | Plans and strategy |
+| `analysis` | Research and investigation |
+| `active` | Currently working on |
+| `done` | Completed |
+| `blocked` | Stuck or waiting |
 
 ## Delegate work to Claude agents
 
