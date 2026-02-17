@@ -10,15 +10,13 @@ NOTE: The source has a bug at lines 262-263 where `pid` should be `execution.pid
 in the except handlers. Tests are written to work with the existing code.
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock, PropertyMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import psutil
 
 from emdx.models.executions import Execution
 from emdx.services.execution_monitor import ExecutionMonitor
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -355,7 +353,7 @@ class TestKillZombieProcesses:
     @patch("emdx.services.execution_monitor.get_running_executions")
     @patch("psutil.Process", side_effect=psutil.NoSuchProcess(999))
     def test_nosuchprocess_during_zombie_check(self, mock_proc_cls, mock_running):
-        """NoSuchProcess in kill_zombie_processes is handled (bug: uses `pid` instead of `execution.pid`)."""
+        """NoSuchProcess in kill_zombie_processes is handled (bug: uses `pid` instead of `execution.pid`)."""  # noqa: E501
         execution = _make_execution(id=5, pid=999)
         mock_running.return_value = [execution]
         # This may raise NameError due to bug at line 262 (pid not defined).

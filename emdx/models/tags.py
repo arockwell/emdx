@@ -1,9 +1,10 @@
 """Tag management operations for emdx."""
 
 import sqlite3
-from typing import Any
+from typing import cast
 
 from emdx.database import db
+from emdx.models.types import TagSearchResultDict, TagStatsDict
 from emdx.utils.datetime_utils import parse_datetime
 from emdx.utils.emoji_aliases import expand_aliases, normalize_tag_to_emoji
 
@@ -16,29 +17,39 @@ def get_or_create_tag(conn: sqlite3.Connection, tag_name: str) -> int:
     cursor.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
     result = cursor.fetchone()
 
-    if result:
-        return result[0]
+    if result is not None:
+        return int(result[0])
 
     cursor.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
+    assert cursor.lastrowid is not None
     return cursor.lastrowid
 
 
-def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
-    """Add tags to a document. Returns list of newly added tags."""
+def add_tags_to_document(
+    doc_id: int, tag_names: list[str], conn: sqlite3.Connection | None = None
+) -> list[str]:
+    """Add tags to a document. Returns list of newly added tags.
+
+    Args:
+        doc_id: Document ID to add tags to
+        tag_names: List of tag names to add
+        conn: Optional existing connection for atomic transactions.
+              If provided, caller is responsible for commit.
+    """
     # Expand aliases before processing
     expanded_tags = expand_aliases(tag_names)
 
-    with db.get_connection() as conn:
+    def _add_tags(connection: sqlite3.Connection) -> list[str]:
         added_tags = []
         for tag_name in expanded_tags:
             tag_name = tag_name.lower().strip()
             if not tag_name:
                 continue
 
-            tag_id = get_or_create_tag(conn, tag_name)
+            tag_id = get_or_create_tag(connection, tag_name)
 
             try:
-                conn.execute(
+                connection.execute(
                     """
                     INSERT INTO document_tags (document_id, tag_id)
                     VALUES (?, ?)
@@ -48,7 +59,7 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
                 added_tags.append(tag_name)
 
                 # Update usage count
-                conn.execute(
+                connection.execute(
                     """
                     UPDATE tags SET usage_count = usage_count + 1
                     WHERE id = ?
@@ -58,9 +69,17 @@ def add_tags_to_document(doc_id: int, tag_names: list[str]) -> list[str]:
             except sqlite3.IntegrityError:
                 # Tag already exists for this document
                 pass
-
-        conn.commit()
         return added_tags
+
+    if conn is not None:
+        # Use provided connection - caller handles commit
+        return _add_tags(conn)
+    else:
+        # Create new connection and commit
+        with db.get_connection() as new_conn:
+            result = _add_tags(new_conn)
+            new_conn.commit()
+            return result
 
 
 def remove_tags_from_document(doc_id: int, tag_names: list[str]) -> list[str]:
@@ -170,7 +189,7 @@ def get_tags_for_documents(doc_ids: list[int]) -> dict[int, list[str]]:
         return result
 
 
-def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
+def list_all_tags(sort_by: str = "usage") -> list[TagStatsDict]:
     """List all tags with statistics.
 
     Args:
@@ -210,15 +229,13 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
             # Normalize tag name to emoji for display
             normalized_name = normalize_tag_to_emoji(row[1])
 
-            tags.append(
-                {
-                    "id": row[0],
-                    "name": normalized_name,
-                    "count": row[2],
-                    "created_at": created_at,
-                    "last_used": last_used,
-                }
-            )
+            tags.append(cast(TagStatsDict, {
+                "id": row[0],
+                "name": normalized_name,
+                "count": row[2],
+                "created_at": created_at,
+                "last_used": last_used,
+            }))
 
         return tags
 
@@ -226,7 +243,7 @@ def list_all_tags(sort_by: str = "usage") -> list[dict[str, Any]]:
 def search_by_tags(
     tag_names: list[str], mode: str = "all", project: str | None = None, limit: int = 20,
     prefix_match: bool = True
-) -> list[dict[str, Any]]:
+) -> list[TagSearchResultDict]:
     """Search documents by tags.
 
     Args:
@@ -274,7 +291,7 @@ def search_by_tags(
                 ",".join("?" * len(tag_names_lower))
             )
 
-            params = tag_names_lower + [len(tag_names_lower)]
+            params: list[str | int | None] = list(tag_names_lower) + [len(tag_names_lower)]
         else:
             # Documents with ANY of the specified tags (or prefix matches)
             query = f"""
@@ -288,7 +305,7 @@ def search_by_tags(
                 AND ({tag_conditions})
             """
 
-            params = tag_params
+            params = list(tag_params)
 
         if project:
             query += " AND d.project = ?"
@@ -301,8 +318,10 @@ def search_by_tags(
 
         docs = []
         for row in cursor.fetchall():
-            doc = dict(zip([col[0] for col in cursor.description], row))
-            docs.append(doc)
+            doc = dict(zip(
+                [col[0] for col in cursor.description], row, strict=False,
+            ))
+            docs.append(cast(TagSearchResultDict, doc))
 
         return docs
 
@@ -378,7 +397,8 @@ def merge_tags(source_tags: list[str], target_tag: str) -> int:
             (target_tag_id,),
         )
 
-        new_count = cursor.fetchone()[0]
+        count_result = cursor.fetchone()
+        new_count = count_result[0] if count_result else 0
         conn.execute(
             """
             UPDATE tags SET usage_count = ?

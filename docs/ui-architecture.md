@@ -25,9 +25,6 @@ EMDXApp (Main Application)
     ├── ActivityView (Press 'a')
     │   ├── ActivityTree (executions, documents, groups)
     │   └── ContextPanel (details for selected item)
-    ├── RunBrowser (Press '4' - Cascade)
-    │   ├── Stage columns (idea → prompt → analyzed → planned → done)
-    │   └── ActivityFeed (cascade runs/executions)
     └── FileBrowser (Press 'f')
         ├── FileTree (Left)
         └── FilePreview (Right)
@@ -155,14 +152,6 @@ The ActivityView (press `a`) shows a unified tree of recent executions, document
 - **Multiple item types** - Executions, documents, groups in one view
 - **Refresh** - Press `r` to refresh
 
-### **5. RunBrowser - Cascade Stage Browser**
-
-The RunBrowser (press `4`) shows cascade pipeline stages and runs.
-
-- **Stage navigation** - `h/l` to switch between stages
-- **Document processing** - `p` to process through Claude
-- **Activity feed** - Shows cascade run progress
-
 ## 🎮 **Key Binding System**
 
 ### **Global Bindings (Available in All Modes)**
@@ -179,17 +168,6 @@ GLOBAL_BINDINGS = [
 - **Document Mode**: vim-like navigation (j/k/g/G), search (/), edit (e)
 - **Log Mode**: live toggle (space), follow (f), kill (k)
 - **Activity Mode**: expand/collapse (l/h), refresh (r), fullscreen (f)
-
-### **Modal Editing (Vim Mode)**
-```python
-class VimEditTextArea(TextArea):
-    """Complete vim-like editing experience."""
-    
-    # Modes: NORMAL, INSERT, VISUAL, VISUAL_LINE
-    # Commands: h/j/k/l, w/b/e, 0/$, gg/G, i/a/I/A/o/O, x/dd/yy/p
-    # Repeat counts: 3j, 5w, 2dd
-    # Dual ESC: INSERT→NORMAL→EXIT
-```
 
 ## 🎨 **Styling & Theming**
 

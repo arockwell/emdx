@@ -6,6 +6,7 @@ or creating a new group.
 """
 
 import logging
+from typing import Any
 
 from textual import events
 from textual.app import ComposeResult
@@ -20,7 +21,7 @@ try:
     from emdx.services import group_service as groups_db
     HAS_GROUPS = True
 except ImportError:
-    groups_db = None
+    groups_db = None  # type: ignore[assignment]
     HAS_GROUPS = False
 
 
@@ -110,10 +111,10 @@ class GroupPicker(Widget):
     }
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.groups: list[dict] = []
-        self.filtered_groups: list[dict] = []
+        self.groups: list[dict[str, Any]] = []
+        self.filtered_groups: list[dict[str, Any]] = []
         self.selected_index: int = 0
         self.doc_id: int | None = None
         self.source_group_id: int | None = None  # When nesting a group
@@ -165,9 +166,11 @@ class GroupPicker(Widget):
             all_groups = groups_db.list_groups(include_inactive=False)
             # Exclude the source group if nesting (can't nest under itself)
             if self.source_group_id:
-                self.groups = [g for g in all_groups if g["id"] != self.source_group_id]
+                self.groups = [
+                    dict(g) for g in all_groups if g["id"] != self.source_group_id
+                ]
             else:
-                self.groups = all_groups
+                self.groups = [dict(g) for g in all_groups]
             self.filtered_groups = self.groups.copy()
             self.selected_index = 0
         except Exception as e:
@@ -195,9 +198,9 @@ class GroupPicker(Widget):
         if not self.filtered_groups:
             input_widget = self.query_one("#group-input", Input)
             if input_widget.value:
-                list_widget.update(f"  [dim]Press Tab to create '[/dim]{input_widget.value}[dim]'[/dim]")
+                list_widget.update(f"  [dim]Press Tab to create '[/dim]{input_widget.value}[dim]'[/dim]")  # noqa: E501
             else:
-                list_widget.update("  [dim]No groups yet. Type a name and press Tab to create.[/dim]")
+                list_widget.update("  [dim]No groups yet. Type a name and press Tab to create.[/dim]")  # noqa: E501
             return
 
         lines = []

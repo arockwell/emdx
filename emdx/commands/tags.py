@@ -70,7 +70,9 @@ def _add_tags_impl(
 
             for tag_name, confidence in suggestions:
                 conf_percent = f"{confidence:.0%}"
-                apply_hint = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"
+                apply_hint = (
+                    "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"
+                )
                 table.add_row(tag_name, conf_percent, apply_hint)
 
             console.print(table)
@@ -138,7 +140,7 @@ def remove(
 ):
     """Remove tags from a document."""
     # Check if document exists
-    doc = require_document(doc_id)
+    require_document(doc_id)
 
     # Remove tags
     removed_tags = remove_tags_from_document(doc_id, tags)
@@ -183,8 +185,10 @@ def list_tags(
     table.add_column("Last Used", style="magenta")
 
     for tag_entry in all_tags[:limit]:
-        created = tag_entry["created_at"].strftime("%Y-%m-%d") if tag_entry["created_at"] else "Unknown"
-        last_used = tag_entry["last_used"].strftime("%Y-%m-%d") if tag_entry["last_used"] else "Never"
+        created_at = tag_entry["created_at"]
+        last = tag_entry["last_used"]
+        created = created_at.strftime("%Y-%m-%d") if created_at else "Unknown"
+        last_used = last.strftime("%Y-%m-%d") if last else "Never"
 
         table.add_row(tag_entry["name"], str(tag_entry["count"]), created, last_used)
 
@@ -273,11 +277,17 @@ def merge(
 @app.command()
 @combined_decorator("batch tagging")
 def batch(
-    untagged_only: bool = typer.Option(True, "--untagged/--all", help="Only process untagged documents"),
+    untagged_only: bool = typer.Option(
+        True, "--untagged/--all", help="Only process untagged documents"
+    ),
     project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
-    confidence: float = typer.Option(0.7, "--confidence", "-c", help="Minimum confidence threshold"),
-    max_tags: int = typer.Option(3, "--max-tags", "-m", help="Maximum tags per document"),
-    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),
+    confidence: float = typer.Option(
+        0.7, "--confidence", "-c", help="Minimum confidence threshold"
+    ),
+    max_tags: int = typer.Option(3, "--max-tags", "-m", help="Max tags per document"),
+    dry_run: bool = typer.Option(
+        True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"
+    ),
     limit: int | None = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
 ):
     """Batch auto-tag multiple documents."""
@@ -286,9 +296,7 @@ def batch(
     # Get suggestions first
     with console.status("[bold green]Analyzing documents..."):
         suggestions = tagger.batch_suggest(
-            untagged_only=untagged_only,
-            project=project,
-            limit=limit
+            untagged_only=untagged_only, project=project, limit=limit
         )
 
     if not suggestions:
@@ -301,8 +309,7 @@ def batch(
 
     for doc_id, doc_suggestions in suggestions.items():
         eligible_tags = [
-            (tag_name, conf) for tag_name, conf in doc_suggestions[:max_tags]
-            if conf >= confidence
+            (tag_name, conf) for tag_name, conf in doc_suggestions[:max_tags] if conf >= confidence
         ]
         if eligible_tags:
             eligible_docs.append((doc_id, eligible_tags))
@@ -325,7 +332,7 @@ def batch(
         for doc_id, tag_list in eligible_docs[:sample_size]:
             # Get document title
             doc = get_document(str(doc_id))
-            title = truncate_title(doc['title'], TITLE_TRUNCATE_LENGTH)
+            title = truncate_title(doc["title"], TITLE_TRUNCATE_LENGTH)
 
             console.print(f"  [dim]#{doc_id}[/dim] {title}")
             for tag_name, conf in tag_list:
@@ -341,7 +348,8 @@ def batch(
         console.print("\n[dim]Run with --execute to apply tags[/dim]")
     else:
         # Confirm
-        if not typer.confirm(f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"):
+        msg = f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"
+        if not typer.confirm(msg):
             console.print("[red]Batch tagging cancelled[/red]")
             return
 
@@ -350,17 +358,13 @@ def batch(
         tagged_docs = 0
 
         with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
         ) as progress:
             task = progress.add_task("Applying tags...", total=len(eligible_docs))
 
-            for doc_id, tag_list in eligible_docs:
+            for doc_id, _tag_list in eligible_docs:
                 applied = tagger.auto_tag_document(
-                    doc_id,
-                    confidence_threshold=confidence,
-                    max_tags=max_tags
+                    doc_id, confidence_threshold=confidence, max_tags=max_tags
                 )
                 if applied:
                     applied_count += len(applied)

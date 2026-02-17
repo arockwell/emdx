@@ -10,10 +10,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.13"
 
@@ -26,7 +26,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: .venv
         key: venv-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
@@ -44,10 +44,10 @@ jobs:
   type-check:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.13"
 
@@ -60,7 +60,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: .venv
         key: venv-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
@@ -83,10 +83,10 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -99,7 +99,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
@@ -117,7 +117,7 @@ jobs:
 
     - name: Upload coverage reports
       if: matrix.python-version == '3.13'
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         file: ./coverage.xml
         fail_ci_if_error: false

@@ -14,13 +14,20 @@ Tree's guide prefix, always fills the widget width:
 
 Title fills available space. Time and id are right-justified and
 aligned across all rows regardless of depth.
+
+Click behavior:
+- Single click: highlights/selects node (moves cursor, updates preview)
+- Double click: opens fullscreen document preview
+- Enter key: opens fullscreen document preview (unchanged)
 """
 
 import logging
-from typing import Dict, List, Tuple
+import time
 
 from rich.style import Style
 from rich.text import Text
+from textual.events import Click
+from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets._tree import TreeNode
 
@@ -29,15 +36,15 @@ from .activity_items import ActivityItem
 logger = logging.getLogger(__name__)
 
 # Type alias for the key that uniquely identifies an item
-ItemKey = Tuple[str, int]  # (item_type, item_id)
+ItemKey = tuple[str, int]  # (item_type, item_id)
 
 # guide_depth=2 is the minimum Textual allows.
 # With show_root=False, a node at depth d gets (d+1)*2 chars of guide prefix.
 GUIDE_DEPTH = 2
 
 # Right-side column widths
-TIME_WIDTH = 3   # "2m", "1h", "3d" — compact
-ID_WIDTH = 6     # " #5921" / "   #42" right-aligned
+TIME_WIDTH = 3  # "2m", "1h", "3d" — compact
+ID_WIDTH = 6  # " #5921" / "   #42" right-aligned
 
 
 def _item_key(item: ActivityItem) -> ItemKey:
@@ -63,18 +70,74 @@ class ActivityTree(Tree[ActivityItem]):
     preservation natively — no manual ViewState needed.
 
     Rows are rendered with aligned columns via render_label().
+
+    Click behavior is customized:
+    - Single click: moves cursor (highlights node, triggers NodeHighlighted)
+    - Double click: posts DoubleClicked message (opens fullscreen)
+    - Enter key: posts NodeSelected (opens fullscreen, unchanged)
     """
 
-    show_root = False
-    show_guides = False
-    guide_depth = GUIDE_DEPTH
-    auto_expand = False
+    # Double-click detection threshold in seconds
+    DOUBLE_CLICK_THRESHOLD = 0.4
+
+    class DoubleClicked(Message):
+        """Posted when a tree node is double-clicked."""
+
+        def __init__(self, node: TreeNode) -> None:
+            self.node = node
+            super().__init__()
+
+    show_root = False  # type: ignore[assignment]
+    show_guides = False  # type: ignore[assignment]
+    guide_depth = GUIDE_DEPTH  # type: ignore[assignment]
+    auto_expand = False  # type: ignore[assignment]
 
     # Suppress Tree's default expand icons — we render our own in render_label()
     ICON_NODE = ""
     ICON_NODE_EXPANDED = ""
 
     BINDINGS = []  # Parent ActivityView owns all bindings
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        # Track last click time and node for double-click detection
+        self._last_click_time: float = 0.0
+        self._last_click_node: TreeNode | None = None
+
+    async def _on_click(self, event: Click) -> None:
+        """Handle click events with custom single/double-click behavior.
+
+        Overrides Tree's default click handling to:
+        - Single click: just move cursor (no NodeSelected, no fullscreen)
+        - Double click: post DoubleClicked message (opens fullscreen)
+        """
+        # Find which node was clicked
+        meta = self.get_style_at(event.x, event.y).meta
+        if not meta or "line" not in meta:
+            return
+
+        line = meta["line"]
+        node = self.get_node_at_line(line)
+        if node is None:
+            return
+
+        current_time = time.monotonic()
+        time_since_last = current_time - self._last_click_time
+
+        # Check for double-click: same node, within threshold
+        if self._last_click_node is node and time_since_last < self.DOUBLE_CLICK_THRESHOLD:
+            # Double-click detected — post message and reset
+            self.post_message(self.DoubleClicked(node))
+            self._last_click_time = 0.0
+            self._last_click_node = None
+        else:
+            # Single click — just move cursor (triggers NodeHighlighted)
+            self.move_cursor(node)
+            self._last_click_time = current_time
+            self._last_click_node = node
+
+        # Stop event propagation to prevent Tree's default NodeSelected behavior
+        event.stop()
 
     def get_label_width(self, node: TreeNode[ActivityItem]) -> int:
         """Return label width so virtual_size equals the viewport.
@@ -107,7 +170,7 @@ class ActivityTree(Tree[ActivityItem]):
         """Get the ID string for an item."""
         if item.item_type == "group":
             return f"#{item.item_id}" if item.item_id else ""
-        elif item.item_type in ("document", "cascade"):
+        elif item.item_type == "document":
             return f"#{item.doc_id}" if getattr(item, "doc_id", None) else ""
         else:
             return f"#{item.item_id}" if item.item_id else ""
@@ -126,9 +189,7 @@ class ActivityTree(Tree[ActivityItem]):
         id_str = self._get_id_str(item)
         return f"{icon}|{time_str}|{item.title}{suffix}|{id_str}"
 
-    def render_label(
-        self, node: TreeNode[ActivityItem], base_style: Style, style: Style
-    ) -> Text:
+    def render_label(self, node: TreeNode[ActivityItem], base_style: Style, style: Style) -> Text:
         """Render a fixed-width table row with aligned columns.
 
         Layout: [expand][icon] title...  [time] [  id]
@@ -209,8 +270,8 @@ class ActivityTree(Tree[ActivityItem]):
 
         return text
 
-    def _add_children(
-        self, parent: TreeNode[ActivityItem], children: List[ActivityItem]
+    def add_activity_children(
+        self, parent: TreeNode[ActivityItem], children: list[ActivityItem]
     ) -> None:
         """Add child items to a parent node."""
         for child in children:
@@ -219,7 +280,7 @@ class ActivityTree(Tree[ActivityItem]):
             else:
                 parent.add_leaf(self._make_label(child), data=child)
 
-    def populate_from_items(self, items: List[ActivityItem]) -> None:
+    def populate_from_items(self, items: list[ActivityItem]) -> None:
         """Initial full load: clear tree and add all top-level items."""
         self.clear()
         for item in items:
@@ -229,7 +290,7 @@ class ActivityTree(Tree[ActivityItem]):
             else:
                 node = self.root.add_leaf(self._make_label(item), data=item)
 
-    def refresh_from_items(self, items: List[ActivityItem]) -> None:
+    def refresh_from_items(self, items: list[ActivityItem]) -> None:
         """Diff-based periodic refresh.
 
         Updates existing nodes in-place via set_label() (no scroll disruption).
@@ -239,7 +300,7 @@ class ActivityTree(Tree[ActivityItem]):
         self._refresh_children(self.root, items)
 
     def _refresh_children(
-        self, parent: TreeNode[ActivityItem], fresh_items: List[ActivityItem]
+        self, parent: TreeNode[ActivityItem], fresh_items: list[ActivityItem]
     ) -> None:
         """Diff and update children of a parent node.
 
@@ -248,16 +309,14 @@ class ActivityTree(Tree[ActivityItem]):
         at the top).
         """
         # Build map of existing children by item key
-        existing: Dict[ItemKey, TreeNode[ActivityItem]] = {}
+        existing: dict[ItemKey, TreeNode[ActivityItem]] = {}
         for child in parent.children:
             if child.data is not None:
                 existing[_item_key(child.data)] = child
 
         fresh_keys = {_item_key(item) for item in fresh_items}
         existing_keys = [
-            _item_key(child.data)
-            for child in parent.children
-            if child.data is not None
+            _item_key(child.data) for child in parent.children if child.data is not None
         ]
 
         # Compute the expected order of keys that already exist
@@ -275,7 +334,7 @@ class ActivityTree(Tree[ActivityItem]):
         if has_new or has_removed or order_changed:
             # Structural change — save expanded/cursor state, repopulate
             expanded_keys: set[ItemKey] = set()
-            expanded_children: Dict[ItemKey, List[ActivityItem]] = {}
+            expanded_children: dict[ItemKey, list[ActivityItem]] = {}
             for child in parent.children:
                 if child.data is not None and child.is_expanded:
                     key = _item_key(child.data)
@@ -313,9 +372,7 @@ class ActivityTree(Tree[ActivityItem]):
                                 self._refresh_children(child, item.children)
                             break
 
-    def find_node_by_item_key(
-        self, item_type: str, item_id: int
-    ) -> TreeNode[ActivityItem] | None:
+    def find_node_by_item_key(self, item_type: str, item_id: int) -> TreeNode[ActivityItem] | None:
         """Walk the tree to find a node matching (item_type, item_id)."""
         target_key = (item_type, item_id)
 
@@ -330,9 +387,7 @@ class ActivityTree(Tree[ActivityItem]):
 
         return _search(self.root)
 
-    def find_node_by_doc_id(
-        self, doc_id: int
-    ) -> TreeNode[ActivityItem] | None:
+    def find_node_by_doc_id(self, doc_id: int) -> TreeNode[ActivityItem] | None:
         """Walk the tree to find a node with a matching doc_id."""
 
         def _search(node: TreeNode[ActivityItem]) -> TreeNode[ActivityItem] | None:

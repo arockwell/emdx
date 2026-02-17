@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "emdx"
-version = "0.14.0"
-description = "Documentation Index Management System - A powerful knowledge base for developers"
+version = "0.16.0"
+description = "A knowledge base that AI agents can read, write, and search — and so can you"
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/arockwell/emdx"
 repository = "https://github.com/arockwell/emdx"
 documentation = "https://github.com/arockwell/emdx#readme"
-keywords = ["knowledge-base", "documentation", "cli", "sqlite", "full-text-search"]
+keywords = ["knowledge-base", "ai-agents", "claude", "cli", "sqlite"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -25,38 +25,37 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-typer = {extras = ["all"], version = "^0.15.0"}
+typer = {extras = ["all"], version = "^0.23.1"}
 click = ">=8.1.0"  # Typer 0.15+ requires click 8.1+
-rich = "^13.0.0"
-textual = "^4.0.0"
+rich = "^14.3.0"
+textual = "^7.5.0"
 psutil = "^7.0.0"
 pyyaml = ">=6.0"
 
 # Optional heavy dependencies (declared but not installed by default)
 scikit-learn = {version = "^1.6.0", optional = true}
 datasketch = {version = "^1.6.0", optional = true}
-sentence-transformers = {version = "^3.0.0", optional = true}
-anthropic = {version = "^0.40.0", optional = true}
-numpy = {version = "^1.26.0", optional = true}
+sentence-transformers = {version = "^5.2.2", optional = true}
+numpy = {version = "^2.4.2", optional = true}
 google-api-python-client = {version = "^2.100.0", optional = true}
-google-auth-httplib2 = {version = "^0.2.0", optional = true}
+google-auth-httplib2 = {version = "^0.3.0", optional = true}
 google-auth-oauthlib = {version = "^1.2.0", optional = true}
 
 [tool.poetry.extras]
-ai = ["sentence-transformers", "scikit-learn", "numpy", "anthropic"]
+ai = ["sentence-transformers", "scikit-learn", "numpy"]
 similarity = ["scikit-learn", "datasketch", "numpy"]
 google = ["google-api-python-client", "google-auth-httplib2", "google-auth-oauthlib"]
-all = ["sentence-transformers", "scikit-learn", "numpy", "anthropic",
+all = ["sentence-transformers", "scikit-learn", "numpy",
        "datasketch", "google-api-python-client", "google-auth-httplib2",
        "google-auth-oauthlib"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.0.0"
-pytest-cov = "^4.0.0"
-pytest-asyncio = "^0.21.0"
+pytest = "^9.0.0"
+pytest-cov = "^7.0.0"
+pytest-asyncio = "^1.3.0"
 ruff = "^0.15.0"
 mypy = "^1.0.0"
-pre-commit = "^3.0.0"
+pre-commit = "^4.5.1"
 
 [tool.poetry.scripts]
 emdx = "emdx.main:run"
@@ -90,10 +89,33 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
+# Optional dependencies — not installed in CI base environment
+[[tool.mypy.overrides]]
+module = [
+    "sklearn.*",
+    "numpy",
+    "numpy.*",
+    "datasketch",
+    "datasketch.*",
+    "sentence_transformers",
+    "sentence_transformers.*",
+    "psutil",
+    "psutil.*",
+    "watchdog",
+    "watchdog.*",
+]
+ignore_missing_imports = true
+
+# click doesn't ship complete type stubs — suppress type errors in lazy loader
+[[tool.mypy.overrides]]
+module = "emdx.utils.lazy_group"
+disable_error_code = ["valid-type", "misc", "no-any-return", "arg-type", "attr-defined"]
+
 [tool.pytest.ini_options]
-minversion = "7.0.0"
+minversion = "9.0.0"
 addopts = "-v --tb=short --strict-markers"
 testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "asyncio: marks tests as async (deselect with '-m \"not asyncio\"')",
     "integration: marks tests as integration tests requiring actual emdx commands (deselect with '-m \"not integration\"')",

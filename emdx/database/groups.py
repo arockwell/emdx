@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from .connection import db_connection
+from .types import DocumentGroup, DocumentGroupWithCounts, DocumentWithGroups, GroupMember
 
 
 def create_group(
@@ -20,7 +21,6 @@ def create_group(
     project: str | None = None,
     description: str | None = None,
     created_by: str | None = None,
-    **kwargs,
 ) -> int:
     """Create a new document group.
 
@@ -54,10 +54,12 @@ def create_group(
             (name, description, parent_group_id, group_type, project, created_by),
         )
         conn.commit()
-        return cursor.lastrowid
+        row_id = cursor.lastrowid
+        assert row_id is not None
+        return row_id
 
 
-def get_group(group_id: int) -> dict[str, Any] | None:
+def get_group(group_id: int) -> DocumentGroup | None:
     """Get a group by ID.
 
     Returns:
@@ -69,7 +71,7 @@ def get_group(group_id: int) -> dict[str, Any] | None:
             (group_id,),
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return dict(row) if row else None  # type: ignore[return-value]
 
 
 def list_groups(
@@ -78,8 +80,7 @@ def list_groups(
     group_type: str | None = None,
     include_inactive: bool = False,
     top_level_only: bool = False,
-    **kwargs,
-) -> list[dict[str, Any]]:
+) -> list[DocumentGroup]:
     """List groups with optional filters.
 
     Args:
@@ -92,8 +93,8 @@ def list_groups(
     Returns:
         List of group dicts
     """
-    conditions = []
-    params = []
+    conditions: list[str] = []
+    params: list[str | int | None] = []
 
     if not include_inactive:
         conditions.append("is_active = TRUE")
@@ -123,10 +124,10 @@ def list_groups(
             """,
             params,
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
-def update_group(group_id: int, **kwargs) -> bool:
+def update_group(group_id: int, **kwargs: Any) -> bool:
     """Update group properties.
 
     Supported kwargs: name, description, parent_group_id, group_type,
@@ -247,7 +248,7 @@ def remove_document_from_group(group_id: int, document_id: int) -> bool:
 
 def get_group_members(
     group_id: int,
-) -> list[dict[str, Any]]:
+) -> list[GroupMember]:
     """Get all documents in a group.
 
     Args:
@@ -273,10 +274,10 @@ def get_group_members(
             """,
             (group_id,),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
-def get_document_groups(document_id: int) -> list[dict[str, Any]]:
+def get_document_groups(document_id: int) -> list[DocumentWithGroups]:
     """Get all groups a document belongs to.
 
     Returns:
@@ -297,10 +298,10 @@ def get_document_groups(document_id: int) -> list[dict[str, Any]]:
             """,
             (document_id,),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
-def get_child_groups(parent_group_id: int) -> list[dict[str, Any]]:
+def get_child_groups(parent_group_id: int) -> list[DocumentGroup]:
     """Get all direct child groups of a parent.
 
     Returns:
@@ -352,10 +353,11 @@ def get_recursive_doc_count(group_id: int) -> int:
             """,
             (group_id,),
         )
-        return cursor.fetchone()[0]
+        result = cursor.fetchone()
+        return int(result[0]) if result else 0
 
 
-def list_top_groups_with_counts() -> list[dict[str, Any]]:
+def list_top_groups_with_counts() -> list[DocumentGroupWithCounts]:
     """List top-level groups with child_group_count and doc_count in one query.
 
     Avoids the N+1 pattern of calling get_child_groups + get_recursive_doc_count
@@ -385,7 +387,7 @@ def list_top_groups_with_counts() -> list[dict[str, Any]]:
             ORDER BY g.created_at DESC
             """
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
 
 
 def update_group_metrics(group_id: int) -> bool:
@@ -398,7 +400,7 @@ def update_group_metrics(group_id: int) -> bool:
         return _update_group_metrics(conn, group_id)
 
 
-def _update_group_metrics(conn, group_id: int) -> bool:
+def _update_group_metrics(conn: sqlite3.Connection, group_id: int) -> bool:
     """Internal: Update group metrics using existing connection."""
     # Count documents
     cursor = conn.execute(
@@ -408,7 +410,8 @@ def _update_group_metrics(conn, group_id: int) -> bool:
         """,
         (group_id,),
     )
-    doc_count = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    doc_count = result[0] if result else 0
 
     conn.execute(
         """
@@ -438,8 +441,8 @@ def _would_create_cycle(parent_id: int, child_id: int | None) -> bool:
     # Walk up the parent chain from parent_id
     # If we find child_id, it would be a cycle
     with db_connection.get_connection() as conn:
-        current = parent_id
-        visited = set()
+        current: int | None = parent_id
+        visited: set[int] = set()
 
         while current is not None:
             if current == child_id:

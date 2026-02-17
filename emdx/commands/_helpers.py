@@ -6,8 +6,9 @@ This module provides:
 - @ensure_schema: Ensures database schema before command execution
 """
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import typer
 

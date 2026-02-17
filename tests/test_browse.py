@@ -67,7 +67,7 @@ class TestBrowseCommands:
         """Test list command with JSON format."""
         from datetime import datetime
         mock_db.ensure_schema = Mock()
-        mock_list_docs.return_value = [{"id": 1, "title": "Test", "project": "test", "created_at": datetime.now(), "access_count": 0}]
+        mock_list_docs.return_value = [{"id": 1, "title": "Test", "project": "test", "created_at": datetime.now(), "access_count": 0}]  # noqa: E501
 
         result = runner.invoke(app, ["list", "--format", "json"])
 

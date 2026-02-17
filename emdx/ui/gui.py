@@ -13,9 +13,9 @@ def gui(
         None,
         "--theme",
         "-t",
-        help="Theme to use (emdx-dark, emdx-light, emdx-nord, emdx-solarized-dark, emdx-solarized-light)",
+        help="Theme to use (emdx-dark, emdx-light, emdx-nord, emdx-solarized-dark, emdx-solarized-light)",  # noqa: E501
     ),
-):
+) -> None:
     """TUI browser for the EMDX knowledge base."""
     from emdx.ui.run_browser import run_browser
 

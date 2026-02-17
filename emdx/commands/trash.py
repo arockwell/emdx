@@ -25,9 +25,7 @@ app = typer.Typer(help="Manage deleted documents (trash)")
 @app.callback(invoke_without_command=True)
 def trash_callback(
     ctx: typer.Context,
-    days: int | None = typer.Option(
-        None, "--days", "-d", help="Show items deleted in last N days"
-    ),
+    days: int | None = typer.Option(None, "--days", "-d", help="Show items deleted in last N days"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
 ) -> None:
     """Manage deleted documents (trash)."""
@@ -39,9 +37,7 @@ def trash_callback(
 
 @app.command("list")
 def list_cmd(
-    days: int | None = typer.Option(
-        None, "--days", "-d", help="Show items deleted in last N days"
-    ),
+    days: int | None = typer.Option(None, "--days", "-d", help="Show items deleted in last N days"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
 ) -> None:
     """List all soft-deleted documents."""
@@ -157,9 +153,7 @@ def purge(
 
     if count == 0:
         if older_than:
-            console.print(
-                f"[yellow]No documents deleted more than {older_than} days ago[/yellow]"
-            )
+            console.print(f"[yellow]No documents deleted more than {older_than} days ago[/yellow]")
         else:
             console.print("[yellow]No documents in trash to purge[/yellow]")
         return
@@ -175,6 +169,4 @@ def purge(
 
     purged_count = purge_deleted_documents(older_than_days=older_than)
 
-    console.print(
-        f"\n[green]✅ Permanently deleted {purged_count} document(s) from trash[/green]"
-    )
+    console.print(f"\n[green]✅ Permanently deleted {purged_count} document(s) from trash[/green]")

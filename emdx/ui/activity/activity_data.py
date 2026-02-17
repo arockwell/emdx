@@ -5,15 +5,14 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, Set, Tuple
+from typing import cast
 
+from emdx.ui.types import GroupDict
 from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
     ActivityItem,
     AgentExecutionItem,
-    CascadeRunItem,
-    CascadeStageItem,
     DocumentItem,
     GroupItem,
 )
@@ -27,8 +26,8 @@ try:
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
-    doc_svc = None
-    group_svc = None
+    doc_svc = None  # type: ignore[assignment]
+    group_svc = None  # type: ignore[assignment]
     HAS_DOCS = False
     HAS_GROUPS = False
 
@@ -39,7 +38,7 @@ class ActivityDataLoader:
     def __init__(self) -> None:
         pass
 
-    async def load_all(self, zombies_cleaned: bool = True) -> List[ActivityItem]:
+    async def load_all(self, zombies_cleaned: bool = True) -> list[ActivityItem]:
         """Load all activity items, sorted.
 
         Args:
@@ -48,7 +47,7 @@ class ActivityDataLoader:
         Returns:
             Sorted list of typed ActivityItem instances.
         """
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
 
         if HAS_GROUPS:
             items.extend(await self._load_groups())
@@ -56,14 +55,11 @@ class ActivityDataLoader:
         if HAS_DOCS:
             items.extend(await self._load_direct_saves())
 
-        items.extend(await self._load_cascade_executions())
         items.extend(await self._load_agent_executions())
 
         # Sort: running items first (pinned), then by timestamp descending
-        def sort_key(item: ActivityItem) -> Tuple:
-            is_running = (
-                item.item_type == "agent_execution" and item.status == "running"
-            )
+        def sort_key(item: ActivityItem) -> tuple[int, float]:
+            is_running = item.item_type == "agent_execution" and item.status == "running"
             return (
                 0 if is_running else 1,
                 -item.timestamp.timestamp() if item.timestamp else 0,
@@ -72,12 +68,12 @@ class ActivityDataLoader:
         items.sort(key=sort_key)
         return items
 
-    async def _load_groups(self) -> List[ActivityItem]:
+    async def _load_groups(self) -> list[ActivityItem]:
         """Load document groups into typed GroupItem instances.
 
         Uses a single batched query instead of N+1 per-group lookups.
         """
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
         try:
             top_groups = group_svc.list_top_groups_with_counts()
         except Exception as e:
@@ -93,12 +89,12 @@ class ActivityDataLoader:
                     item_id=group_id,
                     title=group["name"],
                     timestamp=created,
-                    group=group,
-                    doc_count=group.get("doc_count", 0),
-                    total_cost=group.get("total_cost_usd", 0) or 0,
-                    total_tokens=group.get("total_tokens", 0) or 0,
-                    child_group_count=group.get("child_group_count", 0),
-                    cost=group.get("total_cost_usd", 0) or 0,
+                    group=cast(GroupDict, dict(group)),
+                    doc_count=group["doc_count"],
+                    total_cost=group["total_cost_usd"] or 0,
+                    total_tokens=group["total_tokens"],
+                    child_group_count=group["child_group_count"],
+                    cost=group["total_cost_usd"] or 0,
                 )
 
                 items.append(item)
@@ -108,10 +104,10 @@ class ActivityDataLoader:
 
         return items
 
-    async def _load_direct_saves(self) -> List[ActivityItem]:
+    async def _load_direct_saves(self) -> list[ActivityItem]:
         """Load documents not added to groups (standalone saves)."""
-        items: List[ActivityItem] = []
-        grouped_doc_ids: Set[int] = set()
+        items: list[ActivityItem] = []
+        grouped_doc_ids: set[int] = set()
         if HAS_GROUPS:
             try:
                 grouped_doc_ids = group_svc.get_all_grouped_document_ids()
@@ -151,99 +147,9 @@ class ActivityDataLoader:
 
         return items
 
-    async def _load_cascade_executions(self) -> List[ActivityItem]:
-        """Load cascade executions into CascadeRunItem instances."""
-        items: List[ActivityItem] = []
-        try:
-            from emdx.database.connection import db_connection
-            from emdx.services.cascade_service import get_cascade_run_executions, list_cascade_runs
-
-            cutoff = datetime.now() - timedelta(days=7)
-            seen_run_ids: Set[int] = set()
-
-            # Load cascade runs (grouped view)
-            try:
-                runs = list_cascade_runs(limit=30)
-
-                for run in runs:
-                    run_id = run.get("id")
-                    if not run_id:
-                        continue
-
-                    seen_run_ids.add(run_id)
-                    timestamp = parse_datetime(run.get("started_at")) or datetime.now()
-                    title = run.get("initial_doc_title", f"Cascade Run #{run_id}")[:40]
-                    executions = get_cascade_run_executions(run_id)
-
-                    item = CascadeRunItem(
-                        item_id=run_id,
-                        title=title,
-                        timestamp=timestamp,
-                        cascade_run=run,
-                        status=run.get("status", "running"),
-                        pipeline_name=run.get("pipeline_name", "default"),
-                        current_stage=run.get("current_stage", ""),
-                        execution_count=len(executions),
-                    )
-                    items.append(item)
-
-            except Exception as e:
-                logger.debug(f"Could not load cascade runs (may not exist yet): {e}")
-
-            # Backward-compat: individual executions not part of any run
-            with db_connection.get_connection() as conn:
-                cursor = conn.execute(
-                    """
-                    SELECT e.id, e.doc_id, e.doc_title, e.status, e.started_at, e.completed_at,
-                           d.stage, d.pr_url, e.cascade_run_id
-                    FROM executions e
-                    LEFT JOIN documents d ON e.doc_id = d.id
-                    WHERE e.doc_id IS NOT NULL
-                      AND e.started_at > ?
-                      AND (e.cascade_run_id IS NULL OR e.cascade_run_id NOT IN (SELECT id FROM cascade_runs))
-                      AND e.id = (
-                          SELECT MAX(e2.id) FROM executions e2
-                          WHERE e2.doc_id = e.doc_id
-                      )
-                    ORDER BY e.started_at DESC
-                    LIMIT 50
-                    """,
-                    (cutoff.isoformat(),),
-                )
-                rows = cursor.fetchall()
-
-            for row in rows:
-                exec_id, doc_id, doc_title, status, started_at, completed_at, stage, pr_url, run_id = row
-
-                if run_id and run_id in seen_run_ids:
-                    continue
-
-                timestamp = parse_datetime(started_at) or datetime.now()
-                title = doc_title or f"Document #{doc_id}"
-                if stage:
-                    title = f"📋 {title}"
-                if pr_url:
-                    title = f"🔗 {title}"
-
-                # Use CascadeStageItem for individual cascade executions (backward compat)
-                item = CascadeStageItem(
-                    item_id=exec_id,
-                    title=title,
-                    status=status or "unknown",
-                    timestamp=timestamp,
-                    doc_id=doc_id,
-                    stage=stage or "",
-                )
-                items.append(item)
-
-        except Exception as e:
-            logger.error(f"Error loading cascade executions: {e}", exc_info=True)
-
-        return items
-
-    async def _load_agent_executions(self) -> List[ActivityItem]:
+    async def _load_agent_executions(self) -> list[ActivityItem]:
         """Load standalone agent executions."""
-        items: List[ActivityItem] = []
+        items: list[ActivityItem] = []
         try:
             from emdx.services.execution_service import get_agent_executions
 
@@ -261,11 +167,15 @@ class ActivityDataLoader:
                 exit_code = row["exit_code"]
                 working_dir = row["working_dir"]
 
+                # Skip completed executions that produced a doc — the doc
+                # already shows in the activity feed (standalone or grouped).
+                # Only keep running/failed executions for visibility.
+                if status == "completed" and doc_id:
+                    continue
+
                 timestamp = parse_datetime(started_at) or datetime.now()
 
                 cli_tool = "claude"
-                if log_file and "cursor" in log_file.lower():
-                    cli_tool = "cursor"
 
                 title = doc_title or f"Execution #{exec_id}"
                 if title.startswith("Agent: "):
@@ -290,6 +200,7 @@ class ActivityDataLoader:
                         "working_dir": working_dir,
                         "cost_usd": row.get("cost_usd", 0.0),
                         "tokens_used": row.get("tokens_used", 0),
+                        "output_text": row.get("output_text"),
                     },
                     status=status or "unknown",
                     doc_id=doc_id,

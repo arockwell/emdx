@@ -1,6 +1,7 @@
 """Activity Browser - wraps ActivityView for the browser container."""
 
 import logging
+from typing import Self
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -15,10 +16,6 @@ class ActivityBrowser(Widget):
     """Browser wrapper for ActivityView - Mission Control."""
 
     BINDINGS = [
-        ("1", "switch_activity", "Activity"),
-        ("2", "switch_cascade", "Cascade"),
-        ("3", "switch_search", "Search"),
-        ("4", "switch_documents", "Documents"),
         ("?", "show_help", "Help"),
     ]
 
@@ -39,7 +36,7 @@ class ActivityBrowser(Widget):
     }
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.activity_view: ActivityView | None = None
 
@@ -47,7 +44,7 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Activity │ [dim]2[/dim] Cascade │ [dim]3[/dim] Search │ [dim]4[/dim] Docs │ "
+            "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ [dim]3[/dim] Q&A │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
             id="help-bar",
         )
@@ -61,25 +58,6 @@ class ActivityBrowser(Widget):
             # Fallback: switch to document browser and select the doc
             logger.info(f"Would view document #{event.doc_id}")
 
-    async def action_switch_activity(self) -> None:
-        """Already on activity, do nothing."""
-        pass
-
-    async def action_switch_cascade(self) -> None:
-        """Switch to cascade browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
-
-    async def action_switch_documents(self) -> None:
-        """Switch to document browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("document")
-
-    async def action_switch_search(self) -> None:
-        """Switch to search screen."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("search")
-
     def action_show_help(self) -> None:
         """Show help."""
         # Could show a help modal here
@@ -89,7 +67,7 @@ class ActivityBrowser(Widget):
         """Update status - for compatibility with browser container."""
         pass
 
-    def focus(self, scroll_visible: bool = True) -> None:
+    def focus(self, scroll_visible: bool = True) -> Self:
         """Focus the activity view."""
         if self.activity_view:
             try:
@@ -99,6 +77,7 @@ class ActivityBrowser(Widget):
             except Exception:
                 # Widget not mounted yet, will focus on mount
                 pass
+        return self
 
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Select and show a document by its ID in the activity view."""

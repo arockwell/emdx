@@ -1,14 +1,17 @@
 """Event-driven log file streaming with file watching."""
+from __future__ import annotations
 
 import logging
 import threading
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .file_watcher import FileWatcher
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
 
 logger = logging.getLogger(__name__)
-
 
 class LogStreamSubscriber(ABC):
     """Interface for components that consume log updates."""
@@ -23,14 +26,13 @@ class LogStreamSubscriber(ABC):
         """Called when log reading encounters an error."""
         pass
 
-
 class LogStream:
     """Event-driven log file streaming with file watching."""
 
     def __init__(self, log_file_path: Path):
         self.path = log_file_path
         self.position = 0
-        self.subscribers: List[LogStreamSubscriber] = []
+        self.subscribers: list[LogStreamSubscriber] = []
         self.watcher: FileWatcher | None = None
         self.is_watching = False
         self._polling = False
@@ -140,7 +142,7 @@ class LogStream:
         self._polling = True
         self.is_watching = True
 
-        def poll_loop():
+        def poll_loop() -> None:
             while self._polling and not self._stopped:
                 try:
                     content = self._read_new_content()

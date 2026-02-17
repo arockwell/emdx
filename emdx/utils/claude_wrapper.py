@@ -18,7 +18,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from emdx.models.executions import update_execution_heartbeat, update_execution_status
+from emdx.models.executions import update_execution_heartbeat, update_execution_status  # noqa: E402
 
 
 def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
@@ -37,7 +37,7 @@ def heartbeat_thread(exec_id: int, stop_event: threading.Event) -> None:
         stop_event.wait(30)
 
 
-def main():
+def main() -> None:
     """Main wrapper function."""
     if len(sys.argv) < 4:
         print("Usage: claude_wrapper.py <exec_id> <log_file> <command...>", file=sys.stderr)
@@ -51,7 +51,7 @@ def main():
     log_handle = open(log_file, 'w', buffering=1)  # Line buffered
 
     # Helper to write timestamped log entries
-    def write_log(message: str):
+    def write_log(message: str) -> None:
         timestamp = datetime.now().strftime('%H:%M:%S')
         log_handle.write(f"[{timestamp}] {message}\n")
         log_handle.flush()
@@ -106,7 +106,7 @@ def main():
 
         # Stream and format output
         lines_processed = 0
-        for line in process.stdout:
+        for line in (process.stdout or []):
             lines_processed += 1
             line = line.strip()
             if not line:
@@ -154,7 +154,7 @@ def main():
                                 write_log("🛠️ Tools available:")
                                 for i, tool in enumerate(basic_tools, 1):
                                     write_log(f"    {i:2d}. {tool}")
-                                if len(basic_tools) > 20:  # Only show first 20 to keep logs readable
+                                if len(basic_tools) > 20:  # Only show first 20 to keep logs readable  # noqa: E501
                                     write_log(f"         ...and {len(basic_tools) - 20} more")
 
                             if mcp_tools:

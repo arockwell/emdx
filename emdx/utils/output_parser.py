@@ -9,10 +9,8 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict
 
 logger = logging.getLogger(__name__)
-
 
 def extract_output_doc_id(log_file: Path) -> int | None:
     """Extract output document ID from execution log.
@@ -43,18 +41,23 @@ def extract_output_doc_id(log_file: Path) -> int | None:
         rich_codes = re.compile(r'\[\d+(?:;\d+)*m')
         clean_content = rich_codes.sub('', clean_content)
 
+        # Strip markdown bold (**text**) and backtick (`text`) markers
+        clean_content = clean_content.replace('**', '')
+        clean_content = clean_content.replace('`', '')
+
         # Look for document creation patterns (check LAST match to get final save)
         patterns = [
             r'saved as document #(\d+)',  # Agent natural language
             r'Saved as #(\d+)',           # CLI output
             r'Created document #(\d+)',
-            r'Document ID(?:\s+created)?[:\s]*\*?\*?#?(\d+)\*?\*?',  # Agent output (with optional "created" and markdown bold)
-            r'\*\*Document ID:\*\*\s*(\d+)',  # Cursor markdown: **Document ID:** 5714
+            r'Document saved[:\s]+#?(\d+)',  # "Document saved: #6436"
+            r'Document ID(?:\s+created)?[:\s]*#?(\d+)',  # "Document ID: 123"
             r'document ID[:\s]+#?(\d+)',
             r'doc_id[:\s]+(\d+)',
             r'✅ Saved as\s*#(\d+)',      # With emoji
-            r'doc ID\s*`(\d+)`',          # Markdown backtick format: doc ID `123`
-            r'Saved to EMDX as.*?(\d+)',  # "Saved to EMDX as **doc ID `5704`**"
+            r'doc ID\s*(\d+)',            # "doc ID 123" or "doc ID `123`" (backticks stripped)
+            r'Saved to EMDX as.*?(\d+)',  # "Saved to EMDX as doc ID 5704"
+            r'saved as #(\d+)',           # Generic catch-all
         ]
 
         # Find ALL matches and return the LAST one (most likely the final output)
@@ -69,11 +72,10 @@ def extract_output_doc_id(log_file: Path) -> int | None:
         logger.debug(f"Could not read log file {log_file}: {type(e).__name__}: {e}")
         return None
     except Exception as e:
-        logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")
+        logger.warning(f"Unexpected error extracting output doc ID from {log_file}: {type(e).__name__}: {e}")  # noqa: E501
         return None
 
-
-def extract_token_usage(log_file: Path) -> int:
+def extract_token_usage(log_file: Path) -> int | float:
     """Extract total token usage from Claude execution log.
 
     Convenience wrapper around extract_token_usage_detailed that
@@ -88,8 +90,7 @@ def extract_token_usage(log_file: Path) -> int:
     usage = extract_token_usage_detailed(log_file)
     return usage.get('total', 0)
 
-
-def extract_token_usage_detailed(log_file: Path) -> Dict[str, int]:
+def extract_token_usage_detailed(log_file: Path) -> dict[str, int | float]:
     """Extract detailed token usage from Claude execution log.
 
     Parses the log file looking for the raw result JSON that was embedded
@@ -154,5 +155,5 @@ def extract_token_usage_detailed(log_file: Path) -> Dict[str, int]:
         logger.debug(f"Could not read log file {log_file}: {type(e).__name__}: {e}")
         return empty
     except Exception as e:
-        logger.warning(f"Unexpected error extracting tokens from {log_file}: {type(e).__name__}: {e}")
+        logger.warning(f"Unexpected error extracting tokens from {log_file}: {type(e).__name__}: {e}")  # noqa: E501
         return empty

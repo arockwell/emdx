@@ -5,15 +5,16 @@ This module defines the abstract interface that all CLI executors must implement
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+
+from .types import ContentItem, EnvironmentInfo, StreamMessage
 
 
 @dataclass
 class CliCommand:
     """Represents a CLI command to execute."""
 
-    args: List[str]  # Command arguments
-    env: Dict[str, str] = field(default_factory=dict)  # Additional env vars
+    args: list[str]  # Command arguments
+    env: dict[str, str] = field(default_factory=dict)  # Additional env vars
     cwd: str | None = None  # Working directory
 
 
@@ -32,7 +33,7 @@ class CliResult:
     cache_read_tokens: int = 0
     cache_create_tokens: int = 0
 
-    # Cost (Claude only)
+    # Cost
     cost_usd: float = 0.0
 
     # Timing
@@ -54,11 +55,7 @@ class CliResult:
 
 
 class CliExecutor(ABC):
-    """Abstract base class for CLI executors.
-
-    Each CLI tool (Claude, Cursor) implements this interface to provide
-    tool-specific command building and output parsing.
-    """
+    """Abstract base class for CLI executors."""
 
     @property
     @abstractmethod
@@ -71,7 +68,7 @@ class CliExecutor(ABC):
         self,
         prompt: str,
         model: str | None = None,
-        allowed_tools: List[str] | None = None,
+        allowed_tools: list[str] | None = None,
         output_format: str = "stream-json",
         working_dir: str | None = None,
         timeout: int | None = None,
@@ -111,23 +108,23 @@ class CliExecutor(ABC):
         pass
 
     @abstractmethod
-    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
+    def parse_stream_line(self, line: str) -> StreamMessage | None:
         """Parse a single line from stream-json output.
 
         Args:
             line: A single JSON line from the stream
 
         Returns:
-            Parsed dict or None if line should be skipped
+            Parsed StreamMessage or None if line should be skipped
         """
         pass
 
     @abstractmethod
-    def validate_environment(self) -> tuple[bool, Dict[str, Any]]:
+    def validate_environment(self) -> tuple[bool, EnvironmentInfo]:
         """Validate that the CLI is properly installed and configured.
 
         Returns:
-            Tuple of (is_valid, info_dict with details/errors)
+            Tuple of (is_valid, EnvironmentInfo with details/errors)
         """
         pass
 
@@ -140,10 +137,8 @@ class CliExecutor(ABC):
         """
         pass
 
-    def extract_text_content(self, content: List[Dict[str, Any]]) -> str:
+    def extract_text_content(self, content: list[ContentItem]) -> str:
         """Extract text from message content array.
-
-        This is common to both Claude and Cursor formats.
 
         Args:
             content: List of content items with type and text fields
@@ -151,8 +146,4 @@ class CliExecutor(ABC):
         Returns:
             Concatenated text content
         """
-        return "".join(
-            item.get("text", "")
-            for item in content
-            if item.get("type") == "text"
-        )
+        return "".join(item.get("text", "") for item in content if item.get("type") == "text")

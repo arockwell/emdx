@@ -6,7 +6,6 @@ This folder contains detailed documentation for EMDX.
 
 ### Getting Started
 - [CLI Reference](cli-api.md) - Complete command documentation
-- [Cascade System](cascade.md) - Autonomous idea-to-code pipeline
 - [AI System](ai-system.md) - Semantic search and Q&A over your knowledge base
 
 ### Architecture & Design
@@ -14,6 +13,7 @@ This folder contains detailed documentation for EMDX.
 - [Database Design](database-design.md) - Schema, migrations, and data flow
 - [UI Architecture](ui-architecture.md) - TUI components, theming, and keybindings
 - [Event-Driven Streaming](event-driven-streaming.md) - Log streaming implementation
+- [Architecture Decision Records](adr/) - ADRs for key design decisions
 
 ### Development
 - [Development Setup](development-setup.md) - Installation, testing, and contributing
@@ -24,13 +24,13 @@ This folder contains detailed documentation for EMDX.
 | I want to... | Read this |
 |--------------|-----------|
 | Learn all CLI commands | [CLI Reference](cli-api.md) |
-| Transform ideas to code | [Cascade System](cascade.md) |
 | Use semantic search & Q&A | [AI System](ai-system.md) |
 | Understand the codebase | [Architecture](architecture.md) |
 | Contribute code | [Development Setup](development-setup.md) |
 | Write tests | [Testing Guide](testing.md) |
 | Build TUI components | [UI Architecture](ui-architecture.md) |
 | Work with the database | [Database Design](database-design.md) |
+| Understand design decisions | [ADRs](adr/) |
 
 ## Documentation Standards
 

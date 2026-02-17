@@ -190,4 +190,14 @@ DEFAULT_STAGE_RUNS = 1  # Default number of runs per stage
 # CLAUDE MODEL CONFIGURATION
 # =============================================================================
 
-DEFAULT_CLAUDE_MODEL = "claude-opus-4-5-20251101"
+DEFAULT_CLAUDE_MODEL = "claude-opus-4-6"
+DEFAULT_CLAUDE_SONNET_MODEL = "claude-sonnet-4-5-20250929"
+
+# =============================================================================
+# SUBPROCESS & NETWORK TIMEOUTS (in seconds)
+# =============================================================================
+
+DELEGATE_EXECUTION_TIMEOUT = 1800  # 30 min - delegates need time for complex tasks
+SUBPROCESS_DEFAULT_TIMEOUT = 30  # Default subprocess timeout
+SUBPROCESS_SHORT_TIMEOUT = 10  # Short operations (git status, gist check)
+NETWORK_REQUEST_TIMEOUT = 30  # HTTP request timeout

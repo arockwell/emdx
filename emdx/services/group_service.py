@@ -18,8 +18,15 @@ from emdx.database.groups import (
     remove_document_from_group,
     update_group,
 )
+from emdx.database.types import (
+    DocumentGroup,
+    DocumentGroupWithCounts,
+    DocumentWithGroups,
+    GroupMember,
+)
 
 __all__ = [
+    # Functions
     "add_document_to_group",
     "create_group",
     "get_all_grouped_document_ids",
@@ -32,4 +39,10 @@ __all__ = [
     "list_top_groups_with_counts",
     "remove_document_from_group",
     "update_group",
+    # Types
+    "DocumentGroup",
+    "DocumentGroupWithCounts",
+    "DocumentWithGroups",
+    "GroupMember",
 ]
+

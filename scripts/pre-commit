@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+# emdx pre-commit hook — runs ruff lint on staged Python files
+#
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Or:      just install-hooks
+#
+# Prevents commits with lint errors. Auto-fixes are NOT applied;
+# run `poetry run ruff check . --fix` manually if needed.
+
+# Find staged .py files
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$')
+
+if [ -z "$STAGED_PY" ]; then
+    exit 0
+fi
+
+# Run ruff on staged files only
+if command -v poetry >/dev/null 2>&1; then
+    poetry run ruff check $STAGED_PY
+else
+    ruff check $STAGED_PY
+fi
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Pre-commit: ruff lint errors found. Fix with:"
+    echo "  poetry run ruff check . --fix"
+    echo ""
+    echo "To bypass (emergency only): git commit --no-verify"
+    exit 1
+fi

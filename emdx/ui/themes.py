@@ -5,6 +5,8 @@ This module defines custom themes for the EMDX TUI application
 using Textual's theming system.
 """
 
+from typing import Any
+
 from textual.theme import Theme
 
 # =============================================================================
@@ -148,7 +150,7 @@ LIGHT_THEMES: set[str] = {
 }
 
 
-def register_all_themes(app) -> None:
+def register_all_themes(app: Any) -> None:
     """
     Register all custom EMDX themes with the app.
 

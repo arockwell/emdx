@@ -4,7 +4,7 @@ This module provides a LazyTyperGroup class that extends Typer's group
 to support lazy loading of subcommands. This significantly improves
 startup performance for CLI applications with many heavy dependencies.
 
-Heavy commands (cascade, delegate, ai, etc.) are only imported
+Heavy commands (delegate, ai, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
 
@@ -77,11 +77,13 @@ class LazyCommand(click.MultiCommand):
             cmd_object = getattr(mod, obj_name)
             self._real_command = self._convert_to_click_command(cmd_object)
             return self._real_command
-        except ImportError:
+        except ImportError as e:
             # Create an error command
+            import_err = str(e)
+
             @click.command(name=self.name)
             def error_cmd() -> None:
-                click.echo(f"Command '{self.name}' is not available: {e}", err=True)
+                click.echo(f"Command '{self.name}' is not available: {import_err}", err=True)
                 click.echo(
                     "This might be due to missing optional dependencies.",
                     err=True,
@@ -90,10 +92,12 @@ class LazyCommand(click.MultiCommand):
 
             self._real_command = error_cmd
             return self._real_command
-        except Exception:
+        except Exception as e:
+            load_err = str(e)
+
             @click.command(name=self.name)
             def error_cmd() -> None:
-                click.echo(f"Command '{self.name}' failed to load: {e}", err=True)
+                click.echo(f"Command '{self.name}' failed to load: {load_err}", err=True)
                 raise SystemExit(1)
 
             self._real_command = error_cmd
@@ -108,11 +112,8 @@ class LazyCommand(click.MultiCommand):
             from typer.main import get_command, get_group
 
             # Check if it has multiple commands (use group) or single (use command)
-            if (
-                len(cmd_object.registered_commands) > 1
-                or cmd_object.registered_groups
-            ):
-                cmd = get_group(cmd_object)
+            if len(cmd_object.registered_commands) > 1 or cmd_object.registered_groups:
+                cmd: click.BaseCommand = get_group(cmd_object)
             else:
                 cmd = get_command(cmd_object)
             cmd.name = self.name
@@ -162,7 +163,9 @@ class LazyCommand(click.MultiCommand):
     def get_params(self, ctx: click.Context) -> list[click.Parameter]:
         """Get parameters (loads the real command first for accurate params)."""
         real_cmd = self._load_real_command()
-        return real_cmd.get_params(ctx)
+        if isinstance(real_cmd, click.Command):
+            return real_cmd.get_params(ctx)
+        return list(getattr(real_cmd, "params", []))
 
     def main(self, *args: Any, **kwargs: Any) -> Any:
         """Run as main entry point."""
@@ -220,7 +223,7 @@ class LazyTyperGroup(TyperGroup):
         all_commands = base + [cmd for cmd in lazy if cmd not in base]
         return sorted(all_commands)
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.BaseCommand | None:
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         """Get command, returning a lazy placeholder if needed.
 
         For lazy commands, this returns a LazyCommand placeholder that:
@@ -229,7 +232,10 @@ class LazyTyperGroup(TyperGroup):
         """
         # Check if we've already loaded the real command
         if cmd_name in self._loaded_commands:
-            return self._loaded_commands[cmd_name]
+            loaded = self._loaded_commands[cmd_name]
+            if isinstance(loaded, click.Command):
+                return loaded
+            return None
 
         # Check if this is a lazy command
         if cmd_name in self.lazy_subcommands:

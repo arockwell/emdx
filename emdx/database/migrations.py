@@ -1,14 +1,18 @@
 """Database migration system for emdx."""
+# ruff: noqa: E501
+# SQL schema definitions contain long lines for readability; breaking them
+# would make the migration scripts harder to understand and maintain.
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from pathlib import Path
 
 from ..config.settings import get_db_path
 
 
 @contextmanager
-def foreign_keys_disabled(conn: sqlite3.Connection):
+def foreign_keys_disabled(conn: sqlite3.Connection) -> Generator[None, None, None]:
     """Context manager to temporarily disable foreign key constraints.
 
     Used during migrations that need to recreate tables, which requires
@@ -47,14 +51,14 @@ def get_schema_version(conn: sqlite3.Connection) -> int:
     return result[0] if result[0] is not None else -1
 
 
-def set_schema_version(conn: sqlite3.Connection, version: int):
+def set_schema_version(conn: sqlite3.Connection, version: int) -> None:
     """Set the schema version."""
     cursor = conn.cursor()
     cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
     conn.commit()
 
 
-def migration_000_create_documents_table(conn: sqlite3.Connection):
+def migration_000_create_documents_table(conn: sqlite3.Connection) -> None:
     """Create the initial documents table and related schema."""
     cursor = conn.cursor()
 
@@ -150,7 +154,7 @@ def migration_000_create_documents_table(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_001_add_tags(conn: sqlite3.Connection):
+def migration_001_add_tags(conn: sqlite3.Connection) -> None:
     """Add tags tables for tag system support."""
     cursor = conn.cursor()
 
@@ -190,7 +194,7 @@ def migration_001_add_tags(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_002_add_executions(conn: sqlite3.Connection):
+def migration_002_add_executions(conn: sqlite3.Connection) -> None:
     """Add executions table for tracking Claude executions."""
     cursor = conn.cursor()
 
@@ -220,7 +224,7 @@ def migration_002_add_executions(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_003_add_document_relationships(conn: sqlite3.Connection):
+def migration_003_add_document_relationships(conn: sqlite3.Connection) -> None:
     """Add parent_id column to track document generation relationships."""
     cursor = conn.cursor()
 
@@ -233,7 +237,7 @@ def migration_003_add_document_relationships(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_004_add_execution_pid(conn: sqlite3.Connection):
+def migration_004_add_execution_pid(conn: sqlite3.Connection) -> None:
     """Add process ID tracking to executions table."""
     cursor = conn.cursor()
 
@@ -243,7 +247,7 @@ def migration_004_add_execution_pid(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
+def migration_005_add_execution_heartbeat(conn: sqlite3.Connection) -> None:
     """Add heartbeat tracking to executions table."""
     cursor = conn.cursor()
 
@@ -251,21 +255,23 @@ def migration_005_add_execution_heartbeat(conn: sqlite3.Connection):
     cursor.execute("ALTER TABLE executions ADD COLUMN last_heartbeat TIMESTAMP")
 
     # Create index for efficient heartbeat queries
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)"
+    )
 
     conn.commit()
 
 
-def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
+def migration_006_numeric_execution_ids(conn: sqlite3.Connection) -> None:
     """Convert executions table to use numeric IDs."""
     cursor = conn.cursor()
 
     # Check if we need to migrate (if id column is still TEXT)
     cursor.execute("PRAGMA table_info(executions)")
     columns = cursor.fetchall()
-    id_col = next((col for col in columns if col[1] == 'id'), None)
+    id_col = next((col for col in columns if col[1] == "id"), None)
 
-    if id_col and id_col[2] == 'TEXT':
+    if id_col and id_col[2] == "TEXT":
         # Create new table with numeric ID
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS executions_new (
@@ -301,14 +307,18 @@ def migration_006_numeric_execution_ids(conn: sqlite3.Connection):
 
         # Recreate indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_executions_heartbeat ON executions(status, last_heartbeat)"
+        )
 
     conn.commit()
 
 
-def migration_007_add_agent_tables(conn: sqlite3.Connection):
+def migration_007_add_agent_tables(conn: sqlite3.Connection) -> None:
     """Add tables for agent system."""
     cursor = conn.cursor()
 
@@ -443,9 +453,15 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     """)
 
     # Create indexes for performance
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_executions(agent_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_executions(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_executions_started_at ON agent_executions(started_at)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_executions(agent_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_executions(status)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_executions_started_at ON agent_executions(started_at)"
+    )
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_agents_category ON agents(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_agents_is_active ON agents(is_active)")
 
@@ -483,7 +499,7 @@ def migration_007_add_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_008_add_workflow_tables(conn: sqlite3.Connection):
+def migration_008_add_workflow_tables(conn: sqlite3.Connection) -> None:
     """Add tables for workflow orchestration system.
 
     Workflows allow composing multiple agent runs with different execution modes:
@@ -605,12 +621,22 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_category ON workflows(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_is_active ON workflows(is_active)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id)"
+    )
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_started_at ON workflow_runs(started_at)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_runs_started_at ON workflow_runs(started_at)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)"
+    )
 
     # Insert builtin iteration strategies
     cursor.execute("""
@@ -645,7 +671,7 @@ def migration_008_add_workflow_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_009_add_tasks(conn: sqlite3.Connection):
+def migration_009_add_tasks(conn: sqlite3.Connection) -> None:
     """Add tasks tables for task management system."""
     cursor = conn.cursor()
 
@@ -696,7 +722,7 @@ def migration_009_add_tasks(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_010_add_task_executions(conn: sqlite3.Connection):
+def migration_010_add_task_executions(conn: sqlite3.Connection) -> None:
     """Add task_executions table - the join between tasks and workflows.
 
     This table connects the task system to the workflow system, tracking
@@ -730,16 +756,26 @@ def migration_010_add_task_executions(conn: sqlite3.Connection):
     """)
 
     # Create indexes for efficient queries
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_workflow_run ON task_executions(workflow_run_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_executions_workflow_run ON task_executions(workflow_run_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)"
+    )
 
     conn.commit()
 
 
-def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
+def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection) -> None:
     """Add 'dynamic' to workflow stage mode CHECK constraint.
 
     Dynamic mode allows stages to discover items at runtime and process
@@ -783,13 +819,17 @@ def migration_011_add_dynamic_workflow_mode(conn: sqlite3.Connection):
         cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
 
         # Recreate indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)"
+        )
 
     conn.commit()
 
 
-def migration_012_add_gdocs(conn: sqlite3.Connection):
+def migration_012_add_gdocs(conn: sqlite3.Connection) -> None:
     """Add gdocs table for tracking Google Docs exports."""
     cursor = conn.cursor()
 
@@ -814,7 +854,7 @@ def migration_012_add_gdocs(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
+def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection) -> None:
     """Make doc_id nullable in executions table for workflow agent runs.
 
     Workflow agent executions don't always have an associated document,
@@ -854,13 +894,15 @@ def migration_013_make_execution_doc_id_nullable(conn: sqlite3.Connection):
 
         # Recreate indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions(started_at)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_executions_doc_id ON executions(doc_id)")
 
     conn.commit()
 
 
-def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
+def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection) -> None:
     """Fix workflow_individual_runs FK to reference executions instead of agent_executions.
 
     The workflow executor uses the executions table directly for tracking,
@@ -899,16 +941,22 @@ def migration_014_fix_individual_runs_fk(conn: sqlite3.Connection):
 
         # Drop old table and rename new one
         cursor.execute("DROP TABLE workflow_individual_runs")
-        cursor.execute("ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs")
+        cursor.execute(
+            "ALTER TABLE workflow_individual_runs_new RENAME TO workflow_individual_runs"
+        )
 
         # Recreate indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_stage_run_id ON workflow_individual_runs(stage_run_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_workflow_individual_runs_status ON workflow_individual_runs(status)"
+        )
 
     conn.commit()
 
 
-def migration_015_add_export_profiles(conn: sqlite3.Connection):
+def migration_015_add_export_profiles(conn: sqlite3.Connection) -> None:
     """Add export profiles and export history tables.
 
     Export profiles provide reusable, configurable export configurations
@@ -962,68 +1010,77 @@ def migration_015_add_export_profiles(conn: sqlite3.Connection):
 
     # Create indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_name ON export_profiles(name)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_project ON export_profiles(project)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_profiles_is_active ON export_profiles(is_active)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_profiles_project ON export_profiles(project)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_profiles_is_active ON export_profiles(is_active)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)"
+    )
 
     # Insert built-in profiles
     builtin_profiles = [
         {
-            'name': 'blog-post',
-            'display_name': 'Blog Post',
-            'description': 'Export as blog post with YAML frontmatter',
-            'format': 'markdown',
-            'add_frontmatter': True,
-            'frontmatter_fields': '["title", "date", "tags"]',
-            'strip_tags': '["🚧", "🚨", "🐛"]',
-            'dest_type': 'file',
-            'dest_path': '~/blog/drafts/{{title}}.md',
-            'is_builtin': True,
+            "name": "blog-post",
+            "display_name": "Blog Post",
+            "description": "Export as blog post with YAML frontmatter",
+            "format": "markdown",
+            "add_frontmatter": True,
+            "frontmatter_fields": '["title", "date", "tags"]',
+            "strip_tags": '["🚧", "🚨", "🐛"]',
+            "dest_type": "file",
+            "dest_path": "~/blog/drafts/{{title}}.md",
+            "is_builtin": True,
         },
         {
-            'name': 'gdoc-meeting',
-            'display_name': 'Google Doc (Meeting)',
-            'description': 'Export meeting notes to Google Docs',
-            'format': 'gdoc',
-            'header_template': '# Meeting Notes: {{title}}\n\nDate: {{date}}\n',
-            'dest_type': 'gdoc',
-            'gdoc_folder': 'EMDX Meetings',
-            'is_builtin': True,
+            "name": "gdoc-meeting",
+            "display_name": "Google Doc (Meeting)",
+            "description": "Export meeting notes to Google Docs",
+            "format": "gdoc",
+            "header_template": "# Meeting Notes: {{title}}\n\nDate: {{date}}\n",
+            "dest_type": "gdoc",
+            "gdoc_folder": "EMDX Meetings",
+            "is_builtin": True,
         },
         {
-            'name': 'github-issue',
-            'display_name': 'GitHub Issue',
-            'description': 'Format for GitHub issue creation',
-            'format': 'markdown',
-            'tag_to_label': '{"🐛": "bug", "✨": "enhancement", "🔧": "refactor"}',
-            'strip_tags': '["🚧", "🚨"]',
-            'dest_type': 'clipboard',
-            'is_builtin': True,
+            "name": "github-issue",
+            "display_name": "GitHub Issue",
+            "description": "Format for GitHub issue creation",
+            "format": "markdown",
+            "tag_to_label": '{"🐛": "bug", "✨": "enhancement", "🔧": "refactor"}',
+            "strip_tags": '["🚧", "🚨"]',
+            "dest_type": "clipboard",
+            "is_builtin": True,
         },
         {
-            'name': 'share-external',
-            'display_name': 'Share External',
-            'description': 'Clean version for external sharing',
-            'format': 'markdown',
-            'strip_tags': '["🚧", "🚨", "🐛", "🎯", "🔍"]',
-            'dest_type': 'clipboard',
-            'is_builtin': True,
+            "name": "share-external",
+            "display_name": "Share External",
+            "description": "Clean version for external sharing",
+            "format": "markdown",
+            "strip_tags": '["🚧", "🚨", "🐛", "🎯", "🔍"]',
+            "dest_type": "clipboard",
+            "is_builtin": True,
         },
         {
-            'name': 'quick-gist',
-            'display_name': 'Quick Gist',
-            'description': 'Create secret GitHub gist',
-            'format': 'gist',
-            'dest_type': 'gist',
-            'gist_public': False,
-            'post_actions': '["copy_url", "open_browser"]',
-            'is_builtin': True,
+            "name": "quick-gist",
+            "display_name": "Quick Gist",
+            "description": "Create secret GitHub gist",
+            "format": "gist",
+            "dest_type": "gist",
+            "gist_public": False,
+            "post_actions": '["copy_url", "open_browser"]',
+            "is_builtin": True,
         },
     ]
 
     for profile in builtin_profiles:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR IGNORE INTO export_profiles (
                 name, display_name, description, format,
                 add_frontmatter, frontmatter_fields, strip_tags,
@@ -1037,29 +1094,31 @@ def migration_015_add_export_profiles(conn: sqlite3.Connection):
                 :dest_type, :dest_path, :gdoc_folder, :gist_public,
                 :post_actions, :is_builtin
             )
-        """, {
-            'name': profile.get('name'),
-            'display_name': profile.get('display_name'),
-            'description': profile.get('description'),
-            'format': profile.get('format', 'markdown'),
-            'add_frontmatter': profile.get('add_frontmatter', False),
-            'frontmatter_fields': profile.get('frontmatter_fields'),
-            'strip_tags': profile.get('strip_tags'),
-            'header_template': profile.get('header_template'),
-            'footer_template': profile.get('footer_template'),
-            'tag_to_label': profile.get('tag_to_label'),
-            'dest_type': profile.get('dest_type', 'clipboard'),
-            'dest_path': profile.get('dest_path'),
-            'gdoc_folder': profile.get('gdoc_folder'),
-            'gist_public': profile.get('gist_public', False),
-            'post_actions': profile.get('post_actions'),
-            'is_builtin': profile.get('is_builtin', False),
-        })
+        """,
+            {
+                "name": profile.get("name"),
+                "display_name": profile.get("display_name"),
+                "description": profile.get("description"),
+                "format": profile.get("format", "markdown"),
+                "add_frontmatter": profile.get("add_frontmatter", False),
+                "frontmatter_fields": profile.get("frontmatter_fields"),
+                "strip_tags": profile.get("strip_tags"),
+                "header_template": profile.get("header_template"),
+                "footer_template": profile.get("footer_template"),
+                "tag_to_label": profile.get("tag_to_label"),
+                "dest_type": profile.get("dest_type", "clipboard"),
+                "dest_path": profile.get("dest_path"),
+                "gdoc_folder": profile.get("gdoc_folder"),
+                "gist_public": profile.get("gist_public", False),
+                "post_actions": profile.get("post_actions"),
+                "is_builtin": profile.get("is_builtin", False),
+            },
+        )
 
     conn.commit()
 
 
-def migration_016_add_input_output_tokens(conn: sqlite3.Connection):
+def migration_016_add_input_output_tokens(conn: sqlite3.Connection) -> None:
     """Add input_tokens and output_tokens columns to workflow_individual_runs.
 
     This allows tracking input vs output token usage separately for better
@@ -1080,7 +1139,7 @@ def migration_016_add_input_output_tokens(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_017_add_cost_usd(conn: sqlite3.Connection):
+def migration_017_add_cost_usd(conn: sqlite3.Connection) -> None:
     """Add cost_usd column to workflow_individual_runs.
 
     Stores the actual cost from Claude API for accurate billing tracking.
@@ -1094,7 +1153,7 @@ def migration_017_add_cost_usd(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
+def migration_018_add_document_hierarchy(conn: sqlite3.Connection) -> None:
     """Add relationship and archived_at columns for document hierarchy.
 
     - relationship: describes how a child relates to parent ('supersedes', 'exploration', 'variant')
@@ -1115,14 +1174,12 @@ def migration_018_add_document_hierarchy(conn: sqlite3.Connection):
         cursor.execute("ALTER TABLE documents ADD COLUMN archived_at TIMESTAMP")
 
     # Add index for efficient archived queries
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_documents_archived_at ON documents(archived_at)"
-    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_archived_at ON documents(archived_at)")
 
     conn.commit()
 
 
-def migration_019_add_document_sources(conn: sqlite3.Connection):
+def migration_019_add_document_sources(conn: sqlite3.Connection) -> None:
     """Add document_sources table to track document provenance.
 
     This table links documents to their originating workflow runs,
@@ -1164,7 +1221,7 @@ def migration_019_add_document_sources(conn: sqlite3.Connection):
     conn.commit()
 
 
-def _backfill_document_sources(cursor):
+def _backfill_document_sources(cursor: sqlite3.Cursor) -> None:
     """Populate document_sources from existing workflow tables."""
     # Backfill from individual runs (most common case)
     cursor.execute("""
@@ -1209,7 +1266,7 @@ def _backfill_document_sources(cursor):
     """)
 
 
-def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
+def migration_020_add_synthesis_cost(conn: sqlite3.Connection) -> None:
     """Add synthesis_cost_usd to workflow_stage_runs table.
 
     Tracks the cost of synthesis Claude calls separately from individual runs.
@@ -1236,7 +1293,7 @@ def migration_020_add_synthesis_cost(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_021_add_workflow_presets(conn: sqlite3.Connection):
+def migration_021_add_workflow_presets(conn: sqlite3.Connection) -> None:
     """Add workflow_presets table for named variable configurations.
 
     Presets are named bundles of variables that can be applied to a workflow.
@@ -1296,7 +1353,7 @@ def migration_021_add_workflow_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_022_add_document_groups(conn: sqlite3.Connection):
+def migration_022_add_document_groups(conn: sqlite3.Connection) -> None:
     """Add document grouping system for organizing related documents.
 
     This enables hierarchical organization of documents into batches, rounds,
@@ -1360,7 +1417,7 @@ def migration_022_add_document_groups(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
+def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection) -> None:
     """Deactivate legacy builtin workflows that are superseded by dynamic task-driven workflows.
 
     These workflows were created before the dynamic workflow system (task_parallel, parallel_fix,
@@ -1389,31 +1446,31 @@ def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
     # Legacy workflow names to deactivate
     # Note: Names must match exactly what's in the database
     legacy_workflows = [
-        'deep_analysis',
-        'robust_planning',
-        'quick_analysis',
-        'tech_debt_analysis',
-        'code_fix',
-        'tech_debt_discovery',
-        'architecture_review',
-        'fix_and_pr',
-        'comprehensive_tech_debt',
-        'parallel_task_fix',
-        'feature_exploration',
-        'feature_exploration_v2',
-        'feature_exploration_dynamic',
-        'feature_development',
-        'feature_development_v2',
-        'full_feature_development',
-        'implement_tracks_c_d',
-        'weird_feature_exploration',
-        'tech_debt_parallel_fix',
-        'merge_main_all_branches',
-        'ux_views_analysis',
+        "deep_analysis",
+        "robust_planning",
+        "quick_analysis",
+        "tech_debt_analysis",
+        "code_fix",
+        "tech_debt_discovery",
+        "architecture_review",
+        "fix_and_pr",
+        "comprehensive_tech_debt",
+        "parallel_task_fix",
+        "feature_exploration",
+        "feature_exploration_v2",
+        "feature_exploration_dynamic",
+        "feature_development",
+        "feature_development_v2",
+        "full_feature_development",
+        "implement_tracks_c_d",
+        "weird_feature_exploration",
+        "tech_debt_parallel_fix",
+        "merge_main_all_branches",
+        "ux_views_analysis",
     ]
 
     # Soft-delete by setting is_active = FALSE
-    placeholders = ','.join('?' * len(legacy_workflows))
+    placeholders = ",".join("?" * len(legacy_workflows))
     cursor.execute(
         f"""
         UPDATE workflows
@@ -1426,7 +1483,7 @@ def migration_023_deactivate_legacy_workflows(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_024_remove_agent_tables(conn: sqlite3.Connection):
+def migration_024_remove_agent_tables(conn: sqlite3.Connection) -> None:
     """Remove the agent system tables.
 
     The agent system has been deprecated in favor of the workflow system,
@@ -1457,7 +1514,7 @@ def migration_024_remove_agent_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_025_add_standalone_presets(conn: sqlite3.Connection):
+def migration_025_add_standalone_presets(conn: sqlite3.Connection) -> None:
     """Add standalone presets table for quick run configurations.
 
     Unlike workflow_presets which are tied to specific workflows,
@@ -1497,7 +1554,7 @@ def migration_025_add_standalone_presets(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_026_add_embeddings(conn: sqlite3.Connection):
+def migration_026_add_embeddings(conn: sqlite3.Connection) -> None:
     """Add document embeddings table for semantic search.
 
     Stores vector embeddings computed by sentence-transformers for
@@ -1532,7 +1589,7 @@ def migration_026_add_embeddings(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
+def migration_027_add_synthesizing_status(conn: sqlite3.Connection) -> None:
     """Add 'synthesizing' status to workflow_stage_runs.
 
     When a parallel or dynamic workflow enters the synthesis phase
@@ -1582,13 +1639,17 @@ def migration_027_add_synthesizing_status(conn: sqlite3.Connection):
         cursor.execute("ALTER TABLE workflow_stage_runs_new RENAME TO workflow_stage_runs")
 
         # Recreate indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_workflow_run_id ON workflow_stage_runs(workflow_run_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_workflow_stage_runs_status ON workflow_stage_runs(status)"
+        )
 
     conn.commit()
 
 
-def migration_028_add_document_stage(conn: sqlite3.Connection):
+def migration_028_add_document_stage(conn: sqlite3.Connection) -> None:
     """Add stage column to documents for streaming pipeline processing.
 
     The stage column enables a status-as-queue pattern where documents
@@ -1612,7 +1673,7 @@ def migration_028_add_document_stage(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_029_add_document_pr_url(conn: sqlite3.Connection):
+def migration_029_add_document_pr_url(conn: sqlite3.Connection) -> None:
     """Add pr_url column to documents for tracking pipeline outputs.
 
     When a pipeline document reaches 'done' through actual implementation,
@@ -1635,7 +1696,7 @@ def migration_029_add_document_pr_url(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
+def migration_030_cleanup_unused_tables(conn: sqlite3.Connection) -> None:
     """Remove unused tables and features identified in cruft audit.
 
     Removes:
@@ -1668,7 +1729,7 @@ def migration_030_cleanup_unused_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_031_add_cascade_runs(conn: sqlite3.Connection):
+def migration_031_add_cascade_runs(conn: sqlite3.Connection) -> None:
     """Add cascade_runs table to track end-to-end cascade executions.
 
     This enables:
@@ -1720,7 +1781,7 @@ def migration_031_add_cascade_runs(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_032_extract_cascade_metadata(conn: sqlite3.Connection):
+def migration_032_extract_cascade_metadata(conn: sqlite3.Connection) -> None:
     """Extract cascade metadata (stage, pr_url) to a dedicated table.
 
     This migration:
@@ -1777,7 +1838,7 @@ def migration_032_extract_cascade_metadata(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_033_add_mail_config(conn: sqlite3.Connection):
+def migration_033_add_mail_config(conn: sqlite3.Connection) -> None:
     """Add mail configuration and read receipts tables."""
     cursor = conn.cursor()
 
@@ -1803,7 +1864,7 @@ def migration_033_add_mail_config(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
+def migration_034_delegate_activity_tracking(conn: sqlite3.Connection) -> None:
     """Add delegate activity tracking columns to tasks table."""
     cursor = conn.cursor()
 
@@ -1834,7 +1895,7 @@ def migration_034_delegate_activity_tracking(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
+def migration_035_remove_workflow_tables(conn: sqlite3.Connection) -> None:
     """Remove the entire workflow system.
 
     The workflow system has been replaced by recipes — markdown documents
@@ -1884,10 +1945,18 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
         """)
         cursor.execute("DROP TABLE task_executions")
         cursor.execute("ALTER TABLE task_executions_new RENAME TO task_executions")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_task_executions_execution ON task_executions(execution_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_task_executions_type ON task_executions(execution_type)"
+        )
 
         # 3. Recreate document_groups without workflow_run_id column
         cursor.execute("DROP TABLE IF EXISTS document_groups_new")
@@ -1919,7 +1988,9 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
         cursor.execute("DROP TABLE document_groups")
         cursor.execute("ALTER TABLE document_groups_new RENAME TO document_groups")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_name ON document_groups(name)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dg_parent ON document_groups(parent_group_id)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_project ON document_groups(project)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_type ON document_groups(group_type)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dg_active ON document_groups(is_active)")
@@ -1927,7 +1998,7 @@ def migration_035_remove_workflow_tables(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_036_add_execution_metrics(conn: sqlite3.Connection):
+def migration_036_add_execution_metrics(conn: sqlite3.Connection) -> None:
     """Add metrics and task linkage to executions table.
 
     Fixes delegate→activity browser data flow:
@@ -1955,7 +2026,7 @@ def migration_036_add_execution_metrics(conn: sqlite3.Connection):
     conn.commit()
 
 
-def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
+def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection) -> None:
     """Add ON DELETE CASCADE to foreign keys missing it.
 
     This migration fixes 6 foreign keys that were created without CASCADE,
@@ -2049,11 +2120,26 @@ def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
     """)
 
     # Build the column list for INSERT, only including columns that exist
-    exec_cols = ['id', 'doc_id', 'doc_title', 'status', 'started_at', 'completed_at',
-                 'log_file', 'exit_code', 'working_dir', 'pid', 'cascade_run_id',
-                 'task_id', 'cost_usd', 'tokens_used', 'input_tokens', 'output_tokens']
+    exec_cols = [
+        "id",
+        "doc_id",
+        "doc_title",
+        "status",
+        "started_at",
+        "completed_at",
+        "log_file",
+        "exit_code",
+        "working_dir",
+        "pid",
+        "cascade_run_id",
+        "task_id",
+        "cost_usd",
+        "tokens_used",
+        "input_tokens",
+        "output_tokens",
+    ]
     existing_cols = [c for c in exec_cols if c in col_names]
-    cols_str = ', '.join(existing_cols)
+    cols_str = ", ".join(existing_cols)
     cursor.execute(f"INSERT INTO executions_new ({cols_str}) SELECT {cols_str} FROM executions")
     cursor.execute("DROP TABLE executions")
     cursor.execute("ALTER TABLE executions_new RENAME TO executions")
@@ -2079,8 +2165,12 @@ def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
     cursor.execute("INSERT INTO export_history_new SELECT * FROM export_history")
     cursor.execute("DROP TABLE export_history")
     cursor.execute("ALTER TABLE export_history_new RENAME TO export_history")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_history_document ON export_history(document_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_export_history_profile ON export_history(profile_id)"
+    )
 
     # 5. Recreate cascade_runs table with proper CASCADE/SET NULL
     cursor.execute("DROP TABLE IF EXISTS cascade_runs_new")
@@ -2106,13 +2196,15 @@ def migration_037_add_cascade_delete_fks(conn: sqlite3.Connection):
     cursor.execute("DROP TABLE cascade_runs")
     cursor.execute("ALTER TABLE cascade_runs_new RENAME TO cascade_runs")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_status ON cascade_runs(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc ON cascade_runs(start_doc_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cascade_runs_start_doc ON cascade_runs(start_doc_id)"
+    )
 
     cursor.execute("PRAGMA foreign_keys = ON")
     conn.commit()
 
 
-def migration_038_add_title_lower_index(conn: sqlite3.Connection):
+def migration_038_add_title_lower_index(conn: sqlite3.Connection) -> None:
     """Add functional index on LOWER(title) for case-insensitive search.
 
     This index improves performance for case-insensitive title searches,
@@ -2127,6 +2219,94 @@ def migration_038_add_title_lower_index(conn: sqlite3.Connection):
         ON documents(LOWER(title))
     """)
 
+
+def migration_039_add_categories_and_epic_fields(conn: sqlite3.Connection) -> None:
+    """Add categories table and epic fields to tasks.
+
+    Categories are permanent buckets with a short key (SEC, DEBT) that own
+    the numbering namespace. Epics are regular tasks with type='epic' that
+    group work within a category.
+    """
+    cursor = conn.cursor()
+
+    # Create categories table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Add epic columns to tasks
+    existing = {row[1] for row in cursor.execute("PRAGMA table_info(tasks)").fetchall()}
+
+    if "epic_key" not in existing:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN epic_key TEXT REFERENCES categories(key)")
+    if "epic_seq" not in existing:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN epic_seq INTEGER")
+
+    # Unique index: only one task per (epic_key, epic_seq) combination
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq
+        ON tasks(epic_key, epic_seq)
+        WHERE epic_key IS NOT NULL AND epic_seq IS NOT NULL
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_epic_key ON tasks(epic_key)")
+
+    conn.commit()
+
+
+def migration_040_add_chunk_embeddings(conn: sqlite3.Connection) -> None:
+    """Add chunk embeddings table for chunk-level semantic search.
+
+    Chunks are sections of documents split by markdown headings. Each chunk
+    gets its own embedding, enabling more precise semantic search that returns
+    the relevant paragraph, not the entire 5000-word document.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chunk_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            heading_path TEXT NOT NULL,
+            text TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            dimension INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(document_id, chunk_index, model_name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_document
+        ON chunk_embeddings(document_id)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model
+        ON chunk_embeddings(model_name)
+    """)
+
+    conn.commit()
+
+
+def migration_041_add_execution_output_text(conn: sqlite3.Connection) -> None:
+    """Add output_text column to executions for persisting answer text.
+
+    When an execution completes (e.g. TUI Ask), the answer text is stored here
+    so the activity screen can display it without parsing log files.
+    """
+    cursor = conn.cursor()
+    existing = {row[1] for row in cursor.execute("PRAGMA table_info(executions)").fetchall()}
+    if "output_text" not in existing:
+        cursor.execute("ALTER TABLE executions ADD COLUMN output_text TEXT")
     conn.commit()
 
 
@@ -2171,30 +2351,40 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
     (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
     (38, "Add LOWER(title) index for case-insensitive search", migration_038_add_title_lower_index),
+    (39, "Add categories and epic fields to tasks", migration_039_add_categories_and_epic_fields),
+    (40, "Add chunk embeddings for semantic search", migration_040_add_chunk_embeddings),
+    (41, "Add output_text to executions", migration_041_add_execution_output_text),
 ]
 
 
-def run_migrations(db_path=None):
+def run_migrations(db_path: str | Path | None = None) -> None:
     """Run all pending migrations."""
     if db_path is None:
         db_path = get_db_path()
     # Don't return early - we need to run migrations even for new databases
     # The database file will be created when we connect to it
 
-    conn = sqlite3.connect(db_path)
-    # Enable foreign keys for this connection (migrations use foreign_keys_disabled()
-    # context manager when they need to temporarily disable them for table recreation)
-    conn.execute("PRAGMA foreign_keys = ON")
-
+    conn = None
     try:
+        conn = sqlite3.connect(db_path)
+        # Enable foreign keys for this connection (migrations use foreign_keys_disabled()
+        # context manager when they need to temporarily disable them for table recreation)
+        conn.execute("PRAGMA foreign_keys = ON")
+
         current_version = get_schema_version(conn)
 
         for version, description, migration_func in MIGRATIONS:
             if version > current_version:
                 print(f"Running migration {version}: {description}")
-                migration_func(conn)
+                try:
+                    migration_func(conn)
+                except Exception as e:
+                    # Rollback any uncommitted changes from the failed migration
+                    conn.rollback()
+                    raise RuntimeError(f"Migration {version} ({description}) failed: {e}") from e
                 set_schema_version(conn, version)
                 print(f"✅ Migration {version} completed")
 
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()

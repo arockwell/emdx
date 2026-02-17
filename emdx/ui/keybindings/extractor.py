@@ -9,7 +9,7 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from typing import List, Type
+from types import ModuleType
 
 from textual.binding import Binding
 from textual.widget import Widget
@@ -28,11 +28,11 @@ class KeybindingExtractor:
     with BINDINGS defined, then converts them to KeybindingEntry objects.
     """
 
-    def __init__(self):
-        self.entries: List[KeybindingEntry] = []
-        self.scanned_classes: set = set()
+    def __init__(self) -> None:
+        self.entries: list[KeybindingEntry] = []
+        self.scanned_classes: set[type] = set()
 
-    def scan_module(self, module_name: str = "emdx.ui") -> List[KeybindingEntry]:
+    def scan_module(self, module_name: str = "emdx.ui") -> list[KeybindingEntry]:
         """
         Scan a module and all submodules for widgets with BINDINGS.
 
@@ -60,7 +60,7 @@ class KeybindingExtractor:
 
         return self.entries
 
-    def _scan_module_recursive(self, module, module_name: str) -> None:
+    def _scan_module_recursive(self, module: ModuleType, module_name: str) -> None:
         """Recursively scan a module and its submodules."""
         # Scan the module itself
         self._scan_module_members(module)
@@ -77,9 +77,9 @@ class KeybindingExtractor:
                 except Exception as e:
                     logger.warning(f"Error scanning {full_name}: {e}")
 
-    def _scan_module_members(self, module) -> None:
+    def _scan_module_members(self, module: ModuleType) -> None:
         """Scan a module's members for Widget classes with BINDINGS."""
-        for name, obj in inspect.getmembers(module, inspect.isclass):
+        for _name, obj in inspect.getmembers(module, inspect.isclass):
             # Skip if already scanned (class might be imported in multiple places)
             if obj in self.scanned_classes:
                 continue
@@ -98,7 +98,7 @@ class KeybindingExtractor:
             if hasattr(obj, "BINDINGS") and obj.BINDINGS:
                 self._extract_bindings(obj)
 
-    def _extract_bindings(self, widget_class: Type[Widget]) -> None:
+    def _extract_bindings(self, widget_class: type[Widget]) -> None:
         """Extract BINDINGS from a widget class."""
         bindings = widget_class.BINDINGS
 
@@ -117,7 +117,7 @@ class KeybindingExtractor:
                     self.entries.append(entry)
 
     def _binding_to_entry(
-        self, binding: Binding, widget_class: Type[Widget], context: Context
+        self, binding: Binding, widget_class: type[Widget], context: Context
     ) -> KeybindingEntry | None:
         """Convert a Textual Binding to a KeybindingEntry."""
         try:
@@ -131,13 +131,11 @@ class KeybindingExtractor:
                 show=binding.show,
             )
         except Exception as e:
-            logger.warning(
-                f"Failed to convert binding {binding} from {widget_class.__name__}: {e}"
-            )
+            logger.warning(f"Failed to convert binding {binding} from {widget_class.__name__}: {e}")
             return None
 
     def _tuple_to_entry(
-        self, binding: tuple, widget_class: Type[Widget], context: Context
+        self, binding: tuple[str, ...], widget_class: type[Widget], context: Context
     ) -> KeybindingEntry | None:
         """Convert a legacy tuple binding to a KeybindingEntry."""
         try:
@@ -154,13 +152,12 @@ class KeybindingExtractor:
             )
         except Exception as e:
             logger.warning(
-                f"Failed to convert tuple binding {binding} "
-                f"from {widget_class.__name__}: {e}"
+                f"Failed to convert tuple binding {binding} from {widget_class.__name__}: {e}"
             )
             return None
 
 
-def extract_all_keybindings() -> List[KeybindingEntry]:
+def extract_all_keybindings() -> list[KeybindingEntry]:
     """
     Convenience function to extract all keybindings from emdx.ui.
 

@@ -9,7 +9,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,6 @@ class CommandContext(Enum):
     """Contexts where commands are available."""
 
     GLOBAL = "global"  # Available everywhere
-    DOCUMENT_BROWSER = "document_browser"
     ACTIVITY = "activity"
 
 
@@ -29,7 +27,7 @@ class PaletteCommand:
     id: str  # Unique identifier, e.g., "nav.activity"
     name: str  # Display name: "Go to Activity"
     description: str  # What it does
-    keywords: List[str] = field(default_factory=list)  # For fuzzy matching
+    keywords: list[str] = field(default_factory=list)  # For fuzzy matching
     action: Callable | None = None  # Function to execute (app) -> None
     context: CommandContext = CommandContext.GLOBAL  # Where available
     shortcut: str | None = None  # Keyboard shortcut hint
@@ -39,8 +37,8 @@ class PaletteCommand:
 class CommandRegistry:
     """Registry of available commands for the palette."""
 
-    def __init__(self):
-        self._commands: Dict[str, PaletteCommand] = {}
+    def __init__(self) -> None:
+        self._commands: dict[str, PaletteCommand] = {}
         self._register_defaults()
 
     def register(self, command: PaletteCommand) -> None:
@@ -59,7 +57,7 @@ class CommandRegistry:
         """Get a command by ID."""
         return self._commands.get(command_id)
 
-    def get_all(self, context: CommandContext | None = None) -> List[PaletteCommand]:
+    def get_all(self, context: CommandContext | None = None) -> list[PaletteCommand]:
         """Get all commands, optionally filtered by context."""
         commands = list(self._commands.values())
         if context:
@@ -74,7 +72,7 @@ class CommandRegistry:
         context: CommandContext | None = None,
         limit: int = 10,
         threshold: float = 0.3,
-    ) -> List[PaletteCommand]:
+    ) -> list[PaletteCommand]:
         """
         Fuzzy search commands by name and keywords.
 
@@ -91,7 +89,7 @@ class CommandRegistry:
             return self.get_all(context)[:limit]
 
         query_lower = query.lower().strip()
-        scored: List[tuple[float, PaletteCommand]] = []
+        scored: list[tuple[float, PaletteCommand]] = []
 
         for cmd in self._commands.values():
             # Filter by context
@@ -110,8 +108,7 @@ class CommandRegistry:
 
                 # Fuzzy match on keywords
                 keyword_scores = [
-                    SequenceMatcher(None, query_lower, kw.lower()).ratio()
-                    for kw in cmd.keywords
+                    SequenceMatcher(None, query_lower, kw.lower()).ratio() for kw in cmd.keywords
                 ]
                 keyword_score = max(keyword_scores) if keyword_scores else 0.0
 
@@ -150,10 +147,10 @@ class CommandRegistry:
 
         self.register(
             PaletteCommand(
-                id="nav.cascade",
-                name="Go to Cascade",
-                description="Switch to Cascade browser",
-                keywords=["cascade", "pipeline", "stages", "flow"],
+                id="nav.tasks",
+                name="Go to Tasks",
+                description="Switch to Task browser",
+                keywords=["task", "tasks", "todo", "work", "queue", "ready"],
                 context=CommandContext.GLOBAL,
                 shortcut="2",
                 category="Navigation",
@@ -162,24 +159,12 @@ class CommandRegistry:
 
         self.register(
             PaletteCommand(
-                id="nav.search",
-                name="Go to Search",
-                description="Switch to Search screen",
-                keywords=["search", "find", "query", "lookup"],
+                id="nav.qa",
+                name="Go to Q&A",
+                description="Switch to Q&A screen",
+                keywords=["qa", "search", "find", "query", "lookup"],
                 context=CommandContext.GLOBAL,
                 shortcut="3",
-                category="Navigation",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="nav.documents",
-                name="Go to Documents",
-                description="Switch to Document browser",
-                keywords=["document", "docs", "knowledge", "notes", "browse"],
-                context=CommandContext.GLOBAL,
-                shortcut="4",
                 category="Navigation",
             )
         )
@@ -194,43 +179,6 @@ class CommandRegistry:
                 context=CommandContext.GLOBAL,
                 shortcut="\\",
                 category="Appearance",
-            )
-        )
-
-        # Document commands
-        self.register(
-            PaletteCommand(
-                id="doc.new",
-                name="New Document",
-                description="Create a new document",
-                keywords=["new", "create", "document", "add", "write"],
-                context=CommandContext.DOCUMENT_BROWSER,
-                shortcut="n",
-                category="Documents",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="doc.edit",
-                name="Edit Document",
-                description="Edit the selected document",
-                keywords=["edit", "modify", "change", "update"],
-                context=CommandContext.DOCUMENT_BROWSER,
-                shortcut="e",
-                category="Documents",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="doc.tag",
-                name="Add Tags",
-                description="Add tags to the selected document",
-                keywords=["tag", "tags", "label", "category"],
-                context=CommandContext.DOCUMENT_BROWSER,
-                shortcut="t",
-                category="Documents",
             )
         )
 

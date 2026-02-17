@@ -6,12 +6,14 @@ import json
 import os
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import typer
-from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.table import Table
 
 from emdx.database import db
@@ -56,7 +58,6 @@ class DocumentMetadata:
 
     title: str
     project: str | None = None
-    tags: list[str] | None = None
 
 
 def get_input_content(input_arg: str | None) -> InputContent:
@@ -169,7 +170,7 @@ def display_save_result(
     doc_id: int,
     metadata: DocumentMetadata,
     applied_tags: list[str],
-    supersede_target: dict | None = None,
+    supersede_target: Mapping[str, Any] | None = None,
 ) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
@@ -192,26 +193,51 @@ def save(
     ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
     group_id: int | None = typer.Option(
-        None, "--group", "-g",
-        help="Add document to group",
-        envvar="EMDX_GROUP_ID"
+        None, "--group", "-g", help="Add document to group", envvar="EMDX_GROUP_ID"
     ),
     group_role: str = typer.Option(
-        "member", "--group-role",
-        help="Role in group (primary, exploration, synthesis, variant, member)"
+        "member",
+        "--group-role",
+        help="Role in group (primary, exploration, synthesis, variant, member)",
     ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
-    suggest_tags: bool = typer.Option(False, "--suggest-tags", help="Show tag suggestions after saving"),
+    suggest_tags: bool = typer.Option(
+        False, "--suggest-tags", help="Show tag suggestions after saving"
+    ),  # noqa: E501
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
-    gist: bool = typer.Option(False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"),
+    gist: bool = typer.Option(
+        False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"
+    ),  # noqa: E501
     public: bool = typer.Option(False, "--public", help="Make gist public (default: secret)"),
-    secret: bool = typer.Option(False, "--secret", help="Make gist secret (default, for explicitness)"),
+    secret: bool = typer.Option(
+        False, "--secret", help="Make gist secret (default, for explicitness)"
+    ),  # noqa: E501
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
+    task: int | None = typer.Option(
+        None, "--task", help="Link saved document to a task as its output"
+    ),
+    mark_done: bool = typer.Option(
+        False, "--done", help="Also mark the linked task as done (requires --task)"
+    ),
 ) -> None:
     """Save content to the knowledge base (from file, stdin, or direct text)"""
+    # Validate --done requires --task
+    if mark_done and task is None:
+        console.print("[red]Error: --done requires --task[/red]")
+        raise typer.Exit(1)
+
+    # Validate task exists before doing any work
+    if task is not None:
+        from emdx.models.tasks import get_task
+
+        linked_task = get_task(task)
+        if not linked_task:
+            console.print(f"[red]Error: Task #{task} not found[/red]")
+            raise typer.Exit(1)
+
     # Step 1: Get input content
     input_content = get_input_content(input)
 
@@ -246,6 +272,7 @@ def save(
     # Step 6.5: Add to group if specified
     if group_id is not None:
         from emdx.database import groups
+
         group = groups.get_group(group_id)
         if group:
             success = groups.add_document_to_group(group_id, doc_id, role=group_role)
@@ -253,6 +280,15 @@ def save(
                 console.print(f"   [dim]Group:[/dim] #{group_id} ({group['name']})")
         else:
             console.print(f"   [yellow]Warning: Group #{group_id} not found[/yellow]")
+
+    # Step 6.7: Link to task if specified
+    if task is not None:
+        from emdx.models.tasks import update_task
+
+        update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
+        if mark_done:
+            update_kwargs["status"] = "done"
+        update_task(task, **update_kwargs)
 
     # Step 7: Auto-tagging if requested
     if auto_tag:
@@ -264,6 +300,13 @@ def save(
 
     # Step 8: Display result
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
+
+    # Step 8.5: Display task link
+    if task is not None:
+        if mark_done:
+            console.print(f"   [dim]Task:[/dim] #{task} [green](done)[/green]")
+        else:
+            console.print(f"   [dim]Task:[/dim] #{task}")
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
@@ -294,7 +337,9 @@ def save(
 
         token = get_github_auth()
         if not token:
-            console.print("[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]")
+            console.print(
+                "[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]"
+            )  # noqa: E501
         else:
             filename = sanitize_filename(metadata.title)
             description = f"{metadata.title} - emdx knowledge base"
@@ -313,7 +358,7 @@ def save(
                 try:
                     with db.get_connection() as conn:
                         conn.execute(
-                            "INSERT INTO gists (document_id, gist_id, gist_url, is_public) VALUES (?, ?, ?, ?)",
+                            "INSERT INTO gists (document_id, gist_id, gist_url, is_public) VALUES (?, ?, ?, ?)",  # noqa: E501
                             (doc_id, gist_id_str, gist_url, public),
                         )
                         conn.commit()
@@ -332,7 +377,9 @@ def save(
                     wb.open(gist_url)
                     console.print("   [green]✓ Opened in browser[/green]")
             else:
-                console.print("[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]")
+                console.print(
+                    "[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]"
+                )  # noqa: E501
 
 
 @app.command()
@@ -344,19 +391,61 @@ def find(
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
     fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy search"),
-    tags: str | None = typer.Option(
-        None, "--tags", "-t", help="Filter by tags (comma-separated)"
-    ),
+    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
     no_tags: str | None = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
-    ids_only: bool = typer.Option(False, "--ids-only", help="Output only document IDs (for piping)"),
+    ids_only: bool = typer.Option(
+        False, "--ids-only", help="Output only document IDs (for piping)"
+    ),  # noqa: E501
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
-    created_after: str | None = typer.Option(None, "--created-after", help="Show documents created after date (YYYY-MM-DD)"),
-    created_before: str | None = typer.Option(None, "--created-before", help="Show documents created before date (YYYY-MM-DD)"),
-    modified_after: str | None = typer.Option(None, "--modified-after", help="Show documents modified after date (YYYY-MM-DD)"),
-    modified_before: str | None = typer.Option(None, "--modified-before", help="Show documents modified before date (YYYY-MM-DD)"),
+    created_after: str | None = typer.Option(
+        None,
+        "--created-after",
+        help="Show documents created after date (YYYY-MM-DD)",
+    ),
+    created_before: str | None = typer.Option(
+        None,
+        "--created-before",
+        help="Show documents created before date (YYYY-MM-DD)",
+    ),
+    modified_after: str | None = typer.Option(
+        None,
+        "--modified-after",
+        help="Show documents modified after date (YYYY-MM-DD)",
+    ),
+    modified_before: str | None = typer.Option(
+        None,
+        "--modified-before",
+        help="Show documents modified before date (YYYY-MM-DD)",
+    ),
+    mode: str | None = typer.Option(
+        None,
+        "--mode",
+        "-m",
+        help="Search mode: keyword (FTS5), semantic (embeddings), "
+        "hybrid (both, default if index exists)",
+    ),
+    extract: bool = typer.Option(
+        False,
+        "--extract",
+        "-e",
+        help="Show matching chunk text instead of document snippets",
+    ),
 ) -> None:
-    """Search the knowledge base with full-text search"""
+    """Search the knowledge base with full-text search.
+
+    Supports three search modes:
+      - keyword: Fast FTS5 full-text search (exact keyword matches)
+      - semantic: Embedding-based search (conceptual similarity)
+      - hybrid: Both combined (default when index exists)
+
+    Use --extract to see the matching paragraph/section instead of the full document.
+
+    Examples:
+        emdx find "authentication patterns"              # hybrid search
+        emdx find "auth" --mode keyword                  # keyword only
+        emdx find "how to configure logging" --extract   # show matching chunks
+    """
     search_query = " ".join(query) if query else ""
 
     try:
@@ -369,210 +458,403 @@ def find(
             console.print("[red]Error: Provide search terms, tags, or date filters[/red]")
             raise typer.Exit(1)
 
-        # Handle tag-based search
+        # Determine if we should use hybrid search
+        # Use hybrid when: no date filters, no fuzzy, and user wants text search
+        use_hybrid = (
+            search_query
+            and not has_date_filters
+            and not fuzzy
+            and mode != "keyword"  # Explicit keyword mode skips hybrid
+        )
+
+        # For tag-only or date-filtered searches, use the old FTS path
+        if not use_hybrid:
+            _find_keyword_search(
+                search_query,
+                project,
+                limit,
+                snippets,
+                fuzzy,
+                tags,
+                any_tags,
+                no_tags,
+                ids_only,
+                json_output,
+                created_after,
+                created_before,
+                modified_after,
+                modified_before,
+            )
+            return
+
+        # Use hybrid search for text queries
+        from emdx.services.hybrid_search import HybridSearchService
+
+        hybrid_service = HybridSearchService()
+        hybrid_results = hybrid_service.search(
+            query=search_query,
+            limit=limit,
+            mode=mode,
+            extract=extract,
+            project=project,
+        )
+
+        # Apply tag filters if specified
         if tags:
-            # Expand aliases in the tag string before parsing
             expanded_tags = expand_alias_string(tags)
             tag_list = [t.strip() for t in expanded_tags.split(",") if t.strip()]
             tag_mode = "any" if any_tags else "all"
 
-            # If we have both tags and search query, we need to combine results
-            if search_query:
-                # Get documents matching tags
-                tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
-                tag_doc_ids = {doc["id"] for doc in tag_results}
+            # Get docs matching tags
+            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit * 2)
+            tag_doc_ids = {doc["id"] for doc in tag_results}
 
-                # Get documents matching search query
-                search_results = search_documents(
-                    search_query, project=project, limit=limit * 2, fuzzy=fuzzy,
-                    created_after=created_after, created_before=created_before,
-                    modified_after=modified_after, modified_before=modified_before
-                )
+            # Filter hybrid results to only include docs with matching tags
+            hybrid_results = [r for r in hybrid_results if r.doc_id in tag_doc_ids]
 
-                # Combine: only show documents that match both criteria
-                results = [doc for doc in search_results if doc["id"] in tag_doc_ids][:limit]
-
-                if not results:
-                    console.print(
-                        f"[yellow]No results found matching both '[/yellow]{search_query}[yellow]' "
-                        f"and tags: {', '.join(tag_list)}[/yellow]"
-                    )
-                    return
-            else:
-                # Tag-only search
-                results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
-                if not results:
-                    mode_desc = "all" if not any_tags else "any"
-                    console.print(
-                        f"[yellow]No results found with {mode_desc} tags: "
-                        f"{', '.join(tag_list)}[/yellow]"
-                    )
-                    return
-                search_query = f"tags: {', '.join(tag_list)}"
-        else:
-            # Regular search without tags (but might have date filters)
-            # If we have no search query but have date filters, use a wildcard
-            effective_query = search_query if search_query else "*"
-
-            results = search_documents(
-                effective_query, project=project, limit=limit, fuzzy=fuzzy,
-                created_after=created_after, created_before=created_before,
-                modified_after=modified_after, modified_before=modified_before
-            )
-
-            if not results:
-                if search_query:
-                    console.print(
-                        f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
-                    )
-                else:
-                    console.print("[yellow]No results found matching the date filters[/yellow]")
-                return
-
-        # Batch fetch tags for all results to avoid N+1 queries
-        doc_ids = [result["id"] for result in results]
-        all_tags_map = get_tags_for_documents(doc_ids)
-
-        # Filter out documents with excluded tags if --no-tags is specified
+        # Apply --no-tags filter
         if no_tags:
             expanded_no_tags = expand_alias_string(no_tags)
             no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
-
             if no_tag_list:
-                # Filter results to exclude documents with any of the no_tags
-                filtered_results = []
-                for result in results:
-                    doc_tags = all_tags_map.get(result["id"], [])
-                    # Check if document has any excluded tags
-                    has_excluded_tag = any(tag in doc_tags for tag in no_tag_list)
-                    if not has_excluded_tag:
-                        filtered_results.append(result)
+                hybrid_results = [
+                    r for r in hybrid_results if not any(tag in r.tags for tag in no_tag_list)
+                ]
 
-                results = filtered_results
+        if not hybrid_results:
+            console.print(
+                f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
+            )
+            return
 
-                if not results:
-                    console.print(
-                        f"[yellow]No results found after excluding tags: {', '.join(no_tag_list)}[/yellow]"
-                    )
-                    return
-
-        # Handle different output formats
+        # Handle output formats
         if ids_only:
-            # Output only IDs, one per line
-            for result in results:
-                print(result['id'])
+            for result in hybrid_results:
+                print(result.doc_id)
             return
 
         if json_output:
-            # Output as JSON with all metadata
             output_results = []
-            for result in results:
-                # Use batch-fetched tags
-                doc_tags = all_tags_map.get(result["id"], [])
-
-                # Build clean result object
+            for result in hybrid_results:
                 output_result = {
-                    "id": result["id"],
-                    "title": result["title"],
-                    "project": result.get("project"),
-                    "created_at": result["created_at"].isoformat(),
-                    "updated_at": result.get("updated_at", result["created_at"]).isoformat(),
-                    "tags": doc_tags,
-                    "access_count": result.get("access_count", 0),
+                    "id": result.doc_id,
+                    "title": result.title,
+                    "project": result.project,
+                    "score": result.score,
+                    "source": result.source,
+                    "tags": result.tags,
                 }
-
-                # Add search-specific metadata if available
-                if "rank" in result:
-                    output_result["relevance"] = result["rank"]
-                elif "score" in result:
-                    output_result["similarity"] = result["score"]
-
-                if snippets and "snippet" in result:
-                    # Clean snippet of HTML tags
-                    output_result["snippet"] = result["snippet"].replace("<b>", "").replace("</b>", "")
-
+                if result.keyword_score > 0:
+                    output_result["keyword_score"] = result.keyword_score
+                if result.semantic_score > 0:
+                    output_result["semantic_score"] = result.semantic_score
+                if result.chunk_heading:
+                    output_result["chunk_heading"] = result.chunk_heading
+                if snippets or extract:
+                    output_result["snippet"] = result.chunk_text or result.snippet
                 output_results.append(output_result)
-
-            # Output as JSON
             print(json.dumps(output_results, indent=2))
             return
 
-        # Display results (default human-readable format)
-        # Build search description
-        search_desc = []
-        if search_query:
-            search_desc.append(f"'[cyan]{search_query}[/cyan]'")
-        if created_after or created_before:
-            date_range = []
-            if created_after:
-                date_range.append(f"after {created_after}")
-            if created_before:
-                date_range.append(f"before {created_before}")
-            search_desc.append(f"created {' and '.join(date_range)}")
-        if modified_after or modified_before:
-            date_range = []
-            if modified_after:
-                date_range.append(f"after {modified_after}")
-            if modified_before:
-                date_range.append(f"before {modified_before}")
-            search_desc.append(f"modified {' and '.join(date_range)}")
-
-        search_description = " ".join(search_desc) if search_desc else "all documents"
+        # Display human-readable results
+        mode_desc = hybrid_service.determine_mode(mode).value
         console.print(
-            f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n"
+            f"\n[bold]🔍 Found {len(hybrid_results)} results for "
+            f"'[cyan]{search_query}[/cyan]' [dim]({mode_desc} search)[/dim][/bold]\n"
         )
 
-        for i, result in enumerate(results, 1):
-            # Display result header
-            console.print(f"[bold cyan]#{result['id']}[/bold cyan] [bold]{result['title']}[/bold]")
+        for i, result in enumerate(hybrid_results, 1):
+            # Display result header with chunk heading if available
+            if result.chunk_heading:
+                console.print(
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold] "
+                    f"[dim]{result.chunk_heading}[/dim]"
+                )
+            else:
+                console.print(
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]"
+                )
 
             # Display metadata
             metadata = []
-            if result["project"]:
-                metadata.append(f"[green]{result['project']}[/green]")
-            metadata.append(f"[yellow]{result['created_at'].strftime('%Y-%m-%d')}[/yellow]")
-
-            if "rank" in result:
-                metadata.append(f"[dim]relevance: {result['rank']:.3f}[/dim]")
-            elif "score" in result:
-                metadata.append(f"[dim]similarity: {result['score']:.3f}[/dim]")
-
+            if result.project:
+                metadata.append(f"[green]{result.project}[/green]")
+            metadata.append(f"[dim]{result.source}[/dim]")
+            metadata.append(f"[dim]score: {result.score:.0%}[/dim]")
             console.print(" • ".join(metadata))
 
-            # Display tags (using batch-fetched tags)
-            doc_tags = all_tags_map.get(result["id"], [])
-            if doc_tags:
-                console.print(f"[dim]Tags: {format_tags(doc_tags)}[/dim]")
+            # Display tags
+            if result.tags:
+                console.print(f"[dim]Tags: {format_tags(result.tags)}[/dim]")
 
-            # Display snippet if requested
-            if snippets and "snippet" in result:
-                # Clean up the snippet (remove HTML tags from highlighting)
-                snippet = (
-                    result["snippet"]
-                    .replace("<b>", "[bold yellow]")
-                    .replace("</b>", "[/bold yellow]")
+            # Display snippet/chunk text
+            if extract and result.chunk_text:
+                # Show the matching chunk (truncated)
+                chunk_preview = result.chunk_text[:300]
+                if len(result.chunk_text) > 300:
+                    chunk_preview += "..."
+                console.print(f"[dim]{chunk_preview}[/dim]")
+            elif snippets and result.snippet:
+                snippet = result.snippet.replace("<b>", "[bold yellow]").replace(
+                    "</b>", "[/bold yellow]"
                 )
                 console.print(f"[dim]...{snippet}...[/dim]")
 
-            # Add spacing between results
-            if i < len(results):
+            if i < len(hybrid_results):
                 console.print()
 
-        # Show tip for viewing documents
-        if len(results) > 0:
-            console.print("\n[dim]💡 Use 'emdx view <id>' to view a document[/dim]")
+        console.print("\n[dim]💡 Use 'emdx view <id>' to view a document[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error searching documents: {e}[/red]")
         raise typer.Exit(1) from e
 
 
+def _find_keyword_search(
+    search_query: str,
+    project: str | None,
+    limit: int,
+    snippets: bool,
+    fuzzy: bool,
+    tags: str | None,
+    any_tags: bool,
+    no_tags: str | None,
+    ids_only: bool,
+    json_output: bool,
+    created_after: str | None,
+    created_before: str | None,
+    modified_after: str | None,
+    modified_before: str | None,
+) -> None:
+    """Original keyword-based search for tag/date filtered queries."""
+    # Handle tag-based search
+    if tags:
+        # Expand aliases in the tag string before parsing
+        expanded_tags = expand_alias_string(tags)
+        tag_list = [t.strip() for t in expanded_tags.split(",") if t.strip()]
+        tag_mode = "any" if any_tags else "all"
+
+        # If we have both tags and search query, we need to combine results
+        if search_query:
+            # Get documents matching tags
+            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+            tag_doc_ids = {doc["id"] for doc in tag_results}
+
+            # Get documents matching search query
+            search_results = search_documents(
+                search_query,
+                project=project,
+                limit=limit * 2,
+                fuzzy=fuzzy,
+                created_after=created_after,
+                created_before=created_before,
+                modified_after=modified_after,
+                modified_before=modified_before,
+            )
+
+            # Combine: only show documents that match both criteria
+            results: list[dict[str, Any]] = [
+                dict(doc) for doc in search_results if doc["id"] in tag_doc_ids
+            ][:limit]
+
+            if not results:
+                console.print(
+                    f"[yellow]No results found matching both '[/yellow]{search_query}[yellow]' "
+                    f"and tags: {', '.join(tag_list)}[/yellow]"
+                )
+                return
+        else:
+            # Tag-only search
+            results = [
+                dict(d)
+                for d in search_by_tags(
+                    tag_list,
+                    mode=tag_mode,
+                    project=project,
+                    limit=limit,
+                )
+            ]
+            if not results:
+                mode_desc = "all" if not any_tags else "any"
+                console.print(
+                    f"[yellow]No results found with {mode_desc} tags: "
+                    f"{', '.join(tag_list)}[/yellow]"
+                )
+                return
+            search_query = f"tags: {', '.join(tag_list)}"
+    else:
+        # Regular search without tags (but might have date filters)
+        # If we have no search query but have date filters, use a wildcard
+        effective_query = search_query if search_query else "*"
+
+        results = [
+            dict(r)
+            for r in search_documents(
+                effective_query,
+                project=project,
+                limit=limit,
+                fuzzy=fuzzy,
+                created_after=created_after,
+                created_before=created_before,
+                modified_after=modified_after,
+                modified_before=modified_before,
+            )
+        ]
+
+        if not results:
+            if search_query:
+                console.print(
+                    f"[yellow]No results found for '[/yellow]{search_query}[yellow]'[/yellow]"
+                )
+            else:
+                console.print("[yellow]No results found matching the date filters[/yellow]")
+            return
+
+    # Batch fetch tags for all results to avoid N+1 queries
+    doc_ids = [result["id"] for result in results]
+    all_tags_map = get_tags_for_documents(doc_ids)
+
+    # Filter out documents with excluded tags if --no-tags is specified
+    if no_tags:
+        expanded_no_tags = expand_alias_string(no_tags)
+        no_tag_list = [t.strip() for t in expanded_no_tags.split(",") if t.strip()]
+
+        if no_tag_list:
+            # Filter results to exclude documents with any of the no_tags
+            filtered_results = []
+            for result in results:
+                doc_tags = all_tags_map.get(result["id"], [])
+                # Check if document has any excluded tags
+                has_excluded_tag = any(tag in doc_tags for tag in no_tag_list)
+                if not has_excluded_tag:
+                    filtered_results.append(result)
+
+            results = filtered_results
+
+            if not results:
+                console.print(
+                    "[yellow]No results found after excluding tags: "
+                    f"{', '.join(no_tag_list)}[/yellow]"
+                )
+                return
+
+    # Handle different output formats
+    if ids_only:
+        # Output only IDs, one per line
+        for result in results:
+            print(result["id"])
+        return
+
+    if json_output:
+        # Output as JSON with all metadata
+        output_results = []
+        for result in results:
+            # Use batch-fetched tags
+            doc_tags = all_tags_map.get(result["id"], [])
+
+            # Build clean result object
+            output_result = {
+                "id": result["id"],
+                "title": result["title"],
+                "project": result.get("project"),
+                "created_at": str(result["created_at"] or ""),
+                "updated_at": str(result.get("updated_at") or result["created_at"] or ""),
+                "tags": doc_tags,
+                "access_count": result.get("access_count", 0),
+            }
+
+            # Add search-specific metadata if available
+            if "rank" in result:
+                output_result["relevance"] = result["rank"]
+            elif "score" in result:
+                output_result["similarity"] = result["score"]
+
+            if snippets and result.get("snippet"):
+                # Clean snippet of HTML tags
+                snippet = result["snippet"]
+                if snippet:
+                    output_result["snippet"] = snippet.replace("<b>", "").replace("</b>", "")
+
+            output_results.append(output_result)
+
+        # Output as JSON
+        print(json.dumps(output_results, indent=2))
+        return
+
+    # Display results (default human-readable format)
+    # Build search description
+    search_desc = []
+    if search_query:
+        search_desc.append(f"'[cyan]{search_query}[/cyan]'")
+    if created_after or created_before:
+        date_range = []
+        if created_after:
+            date_range.append(f"after {created_after}")
+        if created_before:
+            date_range.append(f"before {created_before}")
+        search_desc.append(f"created {' and '.join(date_range)}")
+    if modified_after or modified_before:
+        date_range = []
+        if modified_after:
+            date_range.append(f"after {modified_after}")
+        if modified_before:
+            date_range.append(f"before {modified_before}")
+        search_desc.append(f"modified {' and '.join(date_range)}")
+
+    search_description = " ".join(search_desc) if search_desc else "all documents"
+    console.print(f"\n[bold]🔍 Found {len(results)} results for {search_description}[/bold]\n")
+
+    for i, result in enumerate(results, 1):
+        # Display result header
+        console.print(f"[bold cyan]#{result['id']}[/bold cyan] [bold]{result['title']}[/bold]")
+
+        # Display metadata
+        metadata = []
+        if result["project"]:
+            metadata.append(f"[green]{result['project']}[/green]")
+        created = result["created_at"]
+        if created:
+            date_str = str(created)[:10]
+            metadata.append(f"[yellow]{date_str}[/yellow]")
+
+        if "rank" in result:
+            metadata.append(f"[dim]relevance: {result['rank']:.3f}[/dim]")
+        elif "score" in result:
+            metadata.append(f"[dim]similarity: {result['score']:.3f}[/dim]")
+
+        console.print(" • ".join(metadata))
+
+        # Display tags (using batch-fetched tags)
+        doc_tags = all_tags_map.get(result["id"], [])
+        if doc_tags:
+            console.print(f"[dim]Tags: {format_tags(doc_tags)}[/dim]")
+
+        # Display snippet if requested
+        if snippets and result.get("snippet"):
+            # Clean up the snippet (remove HTML tags from highlighting)
+            raw_snippet = result["snippet"] or ""
+            snippet = raw_snippet.replace("<b>", "[bold yellow]").replace("</b>", "[/bold yellow]")
+            console.print(f"[dim]...{snippet}...[/dim]")
+
+        # Add spacing between results
+        if i < len(results):
+            console.print()
+
+    # Show tip for viewing documents
+    if len(results) > 0:
+        console.print("\n[dim]💡 Use 'emdx view <id>' to view a document[/dim]")
+
+
 @app.command()
 def view(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown without formatting"),
+    rich_mode: bool = typer.Option(
+        False, "--rich", help="Rich formatted output with colors and panel header"
+    ),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """View a document from the knowledge base"""
     try:
@@ -586,57 +868,127 @@ def view(
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
 
-        # Display document with or without pager
-        if no_pager:
-            # Direct output without pager
+        doc_tags = get_document_tags(doc["id"])
+
+        # JSON output
+        if json_output:
+            content = doc["content"]
+            output = {
+                "id": doc["id"],
+                "title": doc["title"],
+                "content": content,
+                "project": doc["project"],
+                "created_at": str(doc.get("created_at") or ""),
+                "updated_at": str(doc.get("updated_at") or ""),
+                "accessed_at": str(doc.get("accessed_at") or ""),
+                "access_count": doc["access_count"],
+                "parent_id": doc.get("parent_id"),
+                "tags": doc_tags,
+                "word_count": len(content.split()),
+                "char_count": len(content),
+                "line_count": content.count("\n") + 1 if content else 0,
+            }
+            print(json.dumps(output, indent=2))
+            return
+
+        def _render_output() -> None:
             if not no_header:
-                console.print(f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]")
-                console.print("=" * 60)
-                console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                console.print(f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}")
-                console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-                # Show tags
-                doc_tags = get_document_tags(doc["id"])
-                if doc_tags:
-                    console.print(f"[dim]Tags:[/dim] {format_tags(doc_tags)}")
-                console.print("=" * 60 + "\n")
+                if rich_mode:
+                    _print_view_header_rich(doc, doc_tags)
+                else:
+                    _print_view_header_plain(doc, doc_tags)
+                print()
 
             if raw:
-                console.print(doc["content"])
+                print(doc["content"])
+            elif rich_mode:
+                from emdx.ui.markdown_config import MarkdownConfig
+
+                console.print(MarkdownConfig.create_markdown(doc["content"]))
             else:
-                markdown = Markdown(doc["content"])
-                console.print(markdown)
+                print(doc["content"])
+
+        if no_pager:
+            _render_output()
         else:
-            # Use Rich's pager with color support
-            # Set LESS environment variable if not already set
             if "LESS" not in os.environ:
                 os.environ["LESS"] = "-R"
-            with console.pager():
-                if not no_header:
-                    console.print(
-                        f"\n[bold cyan]#{doc['id']}:[/bold cyan] [bold]{doc['title']}[/bold]"
-                    )
-                    console.print("=" * 60)
-                    console.print(f"[dim]Project:[/dim] {doc['project'] or 'None'}")
-                    console.print(
-                        f"[dim]Created:[/dim] {doc['created_at'].strftime('%Y-%m-%d %H:%M')}"
-                    )
-                    console.print(f"[dim]Views:[/dim] {doc['access_count']}")
-                    # Show tags
-                    doc_tags = get_document_tags(doc["id"])
-                    if doc_tags:
-                        console.print(f"[dim]Tags:[/dim] {format_tags(doc_tags)}")
-                    console.print("=" * 60 + "\n")
-
-                if raw:
-                    console.print(doc["content"])
-                else:
-                    markdown = Markdown(doc["content"])
-                    console.print(markdown)
+            if rich_mode:
+                with console.pager(styles=True, links=True):
+                    _render_output()
+            else:
+                with console.pager():
+                    _render_output()
 
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def _print_view_header_plain(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
+    """Print a plain text header for machine-friendly output."""
+    print(f"#{doc['id']}  {doc['title']}")
+
+    meta = []
+    if doc.get("project"):
+        meta.append(f"Project: {doc['project']}")
+    created = str(doc.get("created_at") or "")[:16]
+    if created:
+        meta.append(f"Created: {created}")
+    updated = str(doc.get("updated_at") or "")[:16]
+    if updated and updated != created:
+        meta.append(f"Updated: {updated}")
+    if doc_tags:
+        meta.append(f"Tags: {format_tags(doc_tags)}")
+    if meta:
+        print("  ".join(meta))
+    print("---")
+
+
+def _print_view_header_rich(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
+    """Print a rich panel header for document view, matching the TUI."""
+    content = doc.get("content", "")
+    word_count = len(content.split())
+    char_count = len(content)
+    line_count = content.count("\n") + 1 if content else 0
+
+    lines = []
+    lines.append(f"[bold cyan]#{doc['id']}[/bold cyan]  [bold]{doc['title']}[/bold]")
+    lines.append("")
+
+    if doc.get("project"):
+        lines.append(f"  [dim]Project:[/dim]   {doc['project']}")
+
+    if doc_tags:
+        lines.append(f"  [dim]Tags:[/dim]      {format_tags(doc_tags)}")
+
+    created = str(doc.get("created_at") or "")[:16]
+    updated = str(doc.get("updated_at") or "")[:16]
+    accessed = str(doc.get("accessed_at") or "")[:16]
+
+    if created:
+        lines.append(f"  [dim]Created:[/dim]   {created}")
+    if updated and updated != created:
+        lines.append(f"  [dim]Updated:[/dim]   {updated}")
+    if accessed:
+        lines.append(f"  [dim]Accessed:[/dim]  {accessed}")
+
+    lines.append(
+        f"  [dim]Views:[/dim]     {doc.get('access_count', 0)}   "
+        f"[dim]Words:[/dim] {word_count}   "
+        f"[dim]Lines:[/dim] {line_count}   "
+        f"[dim]Chars:[/dim] {char_count}"
+    )
+
+    if doc.get("parent_id"):
+        lines.append(f"  [dim]Parent:[/dim]    #{doc['parent_id']}")
+
+    panel = Panel(
+        "\n".join(lines),
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    console.print(panel)
 
 
 @app.command()
@@ -682,7 +1034,7 @@ def edit(
             # Write header comment
             tmp_file.write(f"# Editing: {doc['title']} (ID: {doc['id']})\n")
             tmp_file.write(f"# Project: {doc['project'] or 'None'}\n")
-            tmp_file.write(f"# Created: {doc['created_at'].strftime('%Y-%m-%d %H:%M')}\n")
+            tmp_file.write(f"# Created: {str(doc['created_at'] or '')[:16]}\n")
             tmp_file.write("# Lines starting with '#' will be removed\n")
             tmp_file.write("#\n")
             tmp_file.write("# First line (after comments) will be used as the title\n")
@@ -811,7 +1163,7 @@ def delete(
                 str(doc["id"]),
                 doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
                 doc["project"] or "[dim]None[/dim]",
-                doc["created_at"].strftime("%Y-%m-%d"),
+                str(doc["created_at"] or "")[:10],
                 "[red]PERMANENT[/red]" if hard else "[yellow]Soft delete[/yellow]",
             )
 
@@ -854,7 +1206,9 @@ def delete(
         # Report results
         if deleted_count > 0:
             if hard:
-                console.print(f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]")
+                console.print(
+                    f"\n[green]✅ Permanently deleted {deleted_count} document(s)[/green]"
+                )  # noqa: E501
             else:
                 console.print(f"\n[green]✅ Moved {deleted_count} document(s) to trash[/green]")
                 console.print("[dim]💡 Use 'emdx trash' to view deleted documents[/dim]")
@@ -871,5 +1225,3 @@ def delete(
     except Exception as e:
         console.print(f"[red]Error deleting documents: {e}[/red]")
         raise typer.Exit(1) from e
-
-

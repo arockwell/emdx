@@ -10,11 +10,14 @@ Features:
 
 import asyncio
 import logging
+from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.reactive import reactive
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
@@ -55,10 +58,6 @@ class SearchScreen(HelpMixin, Widget):
         Binding("slash", "focus_search", "Search"),
         Binding("r", "refresh", "Refresh"),
         Binding("question_mark", "show_help", "Help"),
-        Binding("1", "switch_activity", "Activity"),
-        Binding("2", "switch_cascade", "Cascade"),
-        Binding("3", "switch_search", "Search"),
-        Binding("4", "switch_documents", "Documents"),
     ]
 
     DEFAULT_CSS = """
@@ -131,10 +130,10 @@ class SearchScreen(HelpMixin, Widget):
     current_mode = reactive(SearchMode.FTS)
     is_empty_state = reactive(True)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.presenter = SearchPresenter(on_state_update=self._on_state_update)
-        self._debounce_timer = None
+        self._debounce_timer: Timer | None = None
         self._current_vm: SearchStateVM | None = None
 
     def compose(self) -> ComposeResult:
@@ -156,9 +155,9 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Cascade │ [bold]3[/bold] Search │ [dim]4[/dim] Docs │ "
+            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ "
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
-            id="search-nav"
+            id="search-nav",
         )
 
     async def on_mount(self) -> None:
@@ -235,7 +234,7 @@ class SearchScreen(HelpMixin, Widget):
             shown = len(results_to_show)
             count_text = f"{shown} of {total_found}" if total_found > shown else str(shown)
             self.query_one("#search-status", Static).update(
-                f"{count_text} results | {state.mode.value.upper()} | {state.search_time_ms}ms | j/k=nav | Enter=view"
+                f"{count_text} results | {state.mode.value.upper()} | {state.search_time_ms}ms | j/k=nav | Enter=view"  # noqa: E501
             )
         except Exception as e:
             logger.error(f"Error rendering results: {e}")
@@ -268,7 +267,9 @@ class SearchScreen(HelpMixin, Widget):
         """Format the snippet showing WHY this matched, with rich highlighting."""
         if result.snippet:
             # Convert <b> tags to rich markup highlights
-            snippet = result.snippet.replace("<b>", "[yellow bold]").replace("</b>", "[/yellow bold]")
+            snippet = result.snippet.replace("<b>", "[yellow bold]").replace(
+                "</b>", "[/yellow bold]"
+            )  # noqa: E501
             # Clean up whitespace but keep it readable
             snippet = " ".join(snippet.split())
             # Allow longer snippets now that we have more space
@@ -279,7 +280,7 @@ class SearchScreen(HelpMixin, Widget):
         # Fallback explanations for different match types
         if "semantic" in result.source:
             score_pct = int(result.score * 100)
-            return f"[magenta]🧠 {score_pct}% semantic similarity[/magenta] - conceptually related to your search"
+            return f"[magenta]🧠 {score_pct}% semantic similarity[/magenta] - conceptually related to your search"  # noqa: E501
         if "tags" in result.source:
             return f"[cyan]🏷️ Matched tags:[/cyan] {' '.join(result.tags[:5])}"
         if "fuzzy" in result.source:
@@ -294,7 +295,14 @@ class SearchScreen(HelpMixin, Widget):
         """Get icon based on match source."""
         if "+" in source:
             return "🔀"
-        return {"fts": "📝", "tags": "🏷️", "semantic": "🧠", "fuzzy": "🔍", "recent": "🕐", "id": "🆔"}.get(source, "📄")
+        return {
+            "fts": "📝",
+            "tags": "🏷️",
+            "semantic": "🧠",
+            "fuzzy": "🔍",
+            "recent": "🕐",
+            "id": "🆔",
+        }.get(source, "📄")  # noqa: E501
 
     def _format_time(self, time_str: str) -> str:
         """Format timestamp as relative time."""
@@ -302,6 +310,7 @@ class SearchScreen(HelpMixin, Widget):
             return ""
         try:
             from datetime import datetime
+
             if "T" in time_str:
                 dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
             else:
@@ -342,7 +351,7 @@ class SearchScreen(HelpMixin, Widget):
         debounce_ms = self.presenter.get_debounce_time()
 
         # Schedule search after debounce delay
-        def do_search():
+        def do_search() -> None:
             self._debounce_timer = None
             asyncio.create_task(self.presenter.search(query))
 
@@ -367,8 +376,9 @@ class SearchScreen(HelpMixin, Widget):
         """Handle when an option is selected (Enter pressed on OptionList)."""
         if event.option_list.id == "results-list" and event.option.id:
             doc_id = int(event.option.id)
-            from ..modals import DocumentPreviewModal
-            self.app.push_screen(DocumentPreviewModal(doc_id))
+            from ..modals import DocumentPreviewScreen
+
+            self.app.push_screen(DocumentPreviewScreen(doc_id))
 
     def action_cursor_down(self) -> None:
         """Move cursor down and focus results list."""
@@ -413,7 +423,11 @@ class SearchScreen(HelpMixin, Widget):
         else:
             # Check if embeddings are available before enabling semantic search
             if not self.presenter.search_service.has_embeddings():
-                self.notify("No embeddings indexed. Run 'emdx ai index' first.", severity="warning", timeout=3)
+                self.notify(
+                    "No embeddings indexed. Run 'emdx ai index' first.",
+                    severity="warning",
+                    timeout=3,
+                )  # noqa: E501
                 return
             self.presenter.set_mode(SearchMode.SEMANTIC)
             self.current_mode = SearchMode.SEMANTIC
@@ -460,8 +474,9 @@ class SearchScreen(HelpMixin, Widget):
             option = results_list.get_option_at_index(results_list.highlighted)
             if option and option.id:
                 doc_id = int(option.id)
-                from ..modals import DocumentPreviewModal
-                await self.app.push_screen(DocumentPreviewModal(doc_id))
+                from ..modals import DocumentPreviewScreen
+
+                await self.app.push_screen(DocumentPreviewScreen(doc_id))
 
     async def action_edit_document(self) -> None:
         """Edit the selected document."""
@@ -518,7 +533,7 @@ class SearchScreen(HelpMixin, Widget):
         if "query" in state and state["query"]:
             self.set_query(state["query"])
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         """Handle key events - block vim keys when input is focused."""
         # Check if the search input has focus
         try:
@@ -526,29 +541,22 @@ class SearchScreen(HelpMixin, Widget):
             if search_input.has_focus:
                 # When input is focused, don't let vim keys trigger actions
                 # Let them pass through to the input widget
-                vim_keys = {"j", "k", "g", "G", "e", "t", "T", "r", "space", "slash", "1", "2", "3", "4"}
+                vim_keys = {
+                    "j",
+                    "k",
+                    "g",
+                    "G",
+                    "e",
+                    "t",
+                    "T",
+                    "r",
+                    "space",
+                    "slash",
+                    "1",
+                    "2",
+                }
                 if event.key in vim_keys:
                     # Don't stop - let the input handle it
                     return
         except Exception:
             pass
-
-    async def action_switch_activity(self) -> None:
-        """Switch to activity browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("activity")
-
-    async def action_switch_cascade(self) -> None:
-        """Switch to cascade browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("cascade")
-
-    async def action_switch_documents(self) -> None:
-        """Switch to document browser."""
-        if hasattr(self.app, "switch_browser"):
-            await self.app.switch_browser("document")
-
-    async def action_switch_search(self) -> None:
-        """Already on search, do nothing."""
-        pass
-

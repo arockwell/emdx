@@ -5,14 +5,19 @@ Orchestrates FTS5, tag-based, and semantic search into a single interface.
 Supports query parsing with special syntax for different search modes.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, TypedDict
 
 from ..database import db
+
+if TYPE_CHECKING:
+    from .embedding_service import EmbeddingService, SemanticMatch
 from ..database.search import search_documents
 from ..models.tags import get_tags_for_documents, search_by_tags
 from ..utils.datetime_utils import parse_datetime
@@ -20,12 +25,29 @@ from ..utils.datetime_utils import parse_datetime
 logger = logging.getLogger(__name__)
 
 
+class FuzzyMatchDoc(TypedDict):
+    """Document data used in fuzzy matching."""
+
+    id: int
+    title: str
+    project: str | None
+    created_at: str | None
+    updated_at: str | None
+
+
+class PopularTagDict(TypedDict):
+    """Popular tag with count."""
+
+    name: str
+    count: int
+
+
 @dataclass
 class SearchQuery:
     """Represents a parsed search query with all filter options."""
 
     text: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     tag_mode: str = "all"  # "all" or "any"
     semantic: bool = False
     created_after: datetime | None = None
@@ -45,7 +67,7 @@ class SearchResult:
     snippet: str
     score: float  # Normalized 0-1
     source: str  # "fts", "tags", "semantic", "fuzzy"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     project: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -66,11 +88,11 @@ class UnifiedSearchService:
     - #123: Document ID lookup
     """
 
-    def __init__(self):
-        self._embedding_service = None  # Lazy load
+    def __init__(self) -> None:
+        self._embedding_service: EmbeddingService | None = None  # Lazy load
 
     @property
-    def embedding_service(self):
+    def embedding_service(self) -> EmbeddingService | None:
         """Lazy load the embedding service."""
         if self._embedding_service is None:
             try:
@@ -109,7 +131,9 @@ class UnifiedSearchService:
                 query.tag_mode = "any"
             tag_str = tags_match.group(2)
             query.tags = [t.strip() for t in tag_str.split(",") if t.strip()]
-            remaining_text = remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]
+            remaining_text = (
+                remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]
+            )  # noqa: E501
 
         # Extract @tag patterns (alternative syntax)
         at_tags = re.findall(r"@(\w+)", remaining_text)
@@ -126,25 +150,33 @@ class UnifiedSearchService:
         after_match = re.search(r"after:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if after_match:
             query.created_after = parse_datetime(after_match.group(1))
-            remaining_text = remaining_text[: after_match.start()] + remaining_text[after_match.end() :]
+            remaining_text = (
+                remaining_text[: after_match.start()] + remaining_text[after_match.end() :]
+            )  # noqa: E501
 
         # Extract before: date
         before_match = re.search(r"before:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if before_match:
             query.created_before = parse_datetime(before_match.group(1))
-            remaining_text = remaining_text[: before_match.start()] + remaining_text[before_match.end() :]
+            remaining_text = (
+                remaining_text[: before_match.start()] + remaining_text[before_match.end() :]
+            )  # noqa: E501
 
         # Extract modified: date
         modified_match = re.search(r"modified:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
         if modified_match:
             query.modified_after = parse_datetime(modified_match.group(1))
-            remaining_text = remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]
+            remaining_text = (
+                remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]
+            )  # noqa: E501
 
         # Extract project: filter
         project_match = re.search(r"project:(\S+)", remaining_text, re.IGNORECASE)
         if project_match:
             query.project = project_match.group(1)
-            remaining_text = remaining_text[: project_match.start()] + remaining_text[project_match.end() :]
+            remaining_text = (
+                remaining_text[: project_match.start()] + remaining_text[project_match.end() :]
+            )  # noqa: E501
 
         # Clean up remaining text
         query.text = " ".join(remaining_text.split()).strip()
@@ -175,7 +207,7 @@ class UnifiedSearchService:
 
         return " ".join(prepared_words)
 
-    async def search(self, query: SearchQuery) -> List[SearchResult]:
+    async def search(self, query: SearchQuery) -> list[SearchResult]:
         """
         Execute search across all specified modes.
 
@@ -186,10 +218,10 @@ class UnifiedSearchService:
         # Run blocking search in thread pool to avoid blocking event loop
         return await asyncio.to_thread(self._search_sync, query)
 
-    def _search_sync(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_sync(self, query: SearchQuery) -> list[SearchResult]:
         """Synchronous search implementation (runs in thread pool)."""
-        results: List[SearchResult] = []
-        seen_ids: Set[int] = set()
+        results: list[SearchResult] = []
+        seen_ids: set[int] = set()
 
         # Collect results from different sources
         if query.text:
@@ -260,7 +292,7 @@ class UnifiedSearchService:
 
         return results
 
-    def _search_fts(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_fts(self, query: SearchQuery) -> list[SearchResult]:
         """Execute FTS5 full-text search."""
         # Build date filter strings
         created_after_str = query.created_after.isoformat() if query.created_after else None
@@ -293,7 +325,7 @@ class UnifiedSearchService:
                 SearchResult(
                     doc_id=doc["id"],
                     title=doc["title"],
-                    snippet=doc.get("snippet", "")[:200] if doc.get("snippet") else "",
+                    snippet=(doc.get("snippet") or "")[:200],
                     score=score,
                     source="fts",
                     project=doc.get("project"),
@@ -304,7 +336,7 @@ class UnifiedSearchService:
 
         return results
 
-    def _search_tags(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_tags(self, query: SearchQuery) -> list[SearchResult]:
         """Execute tag-based search."""
         docs = search_by_tags(
             tag_names=query.tags,
@@ -324,13 +356,13 @@ class UnifiedSearchService:
                     score=0.8,  # High base score for tag matches
                     source="tags",
                     project=doc.get("project"),
-                    created_at=doc.get("created_at"),
+                    created_at=parse_datetime(doc.get("created_at")),
                 )
             )
 
         return results
 
-    def _search_semantic(self, query: SearchQuery) -> List[SearchResult]:
+    def _search_semantic(self, query: SearchQuery) -> list[SearchResult]:
         """Execute semantic similarity search (sync version)."""
         if not self.embedding_service:
             return []
@@ -347,7 +379,7 @@ class UnifiedSearchService:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
-    async def _search_semantic_async(self, query: SearchQuery) -> List[SearchResult]:
+    async def _search_semantic_async(self, query: SearchQuery) -> list[SearchResult]:
         """Execute semantic similarity search (async version - runs in thread pool)."""
         if not self.embedding_service:
             return []
@@ -364,7 +396,7 @@ class UnifiedSearchService:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
-    def _convert_semantic_matches(self, matches) -> List[SearchResult]:
+    def _convert_semantic_matches(self, matches: list[SemanticMatch]) -> list[SearchResult]:
         """Convert semantic matches to SearchResult objects."""
         results = []
         for match in matches:
@@ -385,8 +417,8 @@ class UnifiedSearchService:
         query: str,
         limit: int = 20,
         threshold: float = 0.4,
-        exclude_ids: Set[int] | None = None,
-    ) -> List[SearchResult]:
+        exclude_ids: set[int] | None = None,
+    ) -> list[SearchResult]:
         """
         Fuzzy search document titles using SequenceMatcher.
 
@@ -409,7 +441,7 @@ class UnifiedSearchService:
             rows = cursor.fetchall()
 
         query_lower = query.lower()
-        scored: List[Tuple[float, Dict[str, Any]]] = []
+        scored: list[tuple[float, FuzzyMatchDoc]] = []
 
         for row in rows:
             doc_id = row[0]
@@ -477,7 +509,7 @@ class UnifiedSearchService:
 
         return results
 
-    def get_recent_documents(self, limit: int = 10) -> List[SearchResult]:
+    def get_recent_documents(self, limit: int = 10) -> list[SearchResult]:
         """Get recently accessed documents for empty state suggestions."""
         with db.get_connection() as conn:
             cursor = conn.cursor()
@@ -518,7 +550,7 @@ class UnifiedSearchService:
 
         return results
 
-    def get_popular_tags(self, limit: int = 15) -> List[Dict[str, Any]]:
+    def get_popular_tags(self, limit: int = 15) -> list[PopularTagDict]:
         """Get popular tags for empty state suggestions."""
         with db.get_connection() as conn:
             cursor = conn.cursor()
@@ -580,7 +612,7 @@ class UnifiedSearchService:
             with db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM document_embeddings LIMIT 1")
-                count = cursor.fetchone()[0]
+                count = int(cursor.fetchone()[0])
                 return count > 0
         except Exception:
             return False

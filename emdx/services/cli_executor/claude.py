@@ -5,10 +5,19 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
 
 from ...config.cli_config import CLI_CONFIGS, CliTool, resolve_model_alias
 from .base import CliCommand, CliExecutor, CliResult
+from .types import (
+    AssistantMessage,
+    EnvironmentInfo,
+    ErrorMessage,
+    ResultMessage,
+    StreamMessage,
+    SystemMessage,
+    ThinkingMessage,
+    ToolCallMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +25,7 @@ logger = logging.getLogger(__name__)
 class ClaudeCliExecutor(CliExecutor):
     """Executor for Claude Code CLI."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = CLI_CONFIGS[CliTool.CLAUDE]
 
     @property
@@ -27,7 +36,7 @@ class ClaudeCliExecutor(CliExecutor):
         self,
         prompt: str,
         model: str | None = None,
-        allowed_tools: List[str] | None = None,
+        allowed_tools: list[str] | None = None,
         output_format: str = "stream-json",
         working_dir: str | None = None,
         timeout: int | None = None,
@@ -35,7 +44,8 @@ class ClaudeCliExecutor(CliExecutor):
         """Build Claude CLI command.
 
         Claude command format:
-            claude --print "prompt" --model <model> --output-format <format> [--verbose] [--allowedTools X,Y,Z]
+            claude --print "prompt" --model <model> --output-format <format>
+                   [--verbose] [--allowedTools X,Y,Z]
         """
         # Start with binary
         cmd = list(self.config.binary)
@@ -44,9 +54,7 @@ class ClaudeCliExecutor(CliExecutor):
         cmd.extend([self.config.prompt_flag, prompt])
 
         # Add model
-        resolved_model = resolve_model_alias(
-            model or self.config.default_model, CliTool.CLAUDE
-        )
+        resolved_model = resolve_model_alias(model or self.config.default_model, CliTool.CLAUDE)
         cmd.extend([self.config.model_flag, resolved_model])
 
         # Add output format
@@ -57,7 +65,7 @@ class ClaudeCliExecutor(CliExecutor):
             cmd.append("--verbose")
 
         # Add allowed tools if supported and provided
-        if allowed_tools and self.config.supports_allowed_tools:
+        if allowed_tools and self.config.supports_allowed_tools and self.config.allowed_tools_flag:
             cmd.extend([self.config.allowed_tools_flag, ",".join(allowed_tools)])
 
         return CliCommand(args=cmd, cwd=working_dir)
@@ -131,7 +139,7 @@ class ClaudeCliExecutor(CliExecutor):
             exit_code=exit_code,
         )
 
-    def parse_stream_line(self, line: str) -> Dict[str, Any] | None:
+    def parse_stream_line(self, line: str) -> StreamMessage | None:
         """Parse a single line from Claude's stream-json output."""
         if not line.strip():
             return None
@@ -141,7 +149,7 @@ class ClaudeCliExecutor(CliExecutor):
             msg_type = data.get("type")
 
             if msg_type == "system":
-                return {
+                msg: SystemMessage = {
                     "type": "system",
                     "subtype": data.get("subtype"),
                     "session_id": data.get("session_id"),
@@ -149,38 +157,65 @@ class ClaudeCliExecutor(CliExecutor):
                     "cwd": data.get("cwd"),
                     "tools": data.get("tools", []),
                 }
+                return msg
 
             elif msg_type == "assistant":
                 message = data.get("message", {})
                 content = message.get("content", [])
-                return {
+                msg_a: AssistantMessage = {
                     "type": "assistant",
                     "text": self.extract_text_content(content),
-                    "tool_uses": [
-                        item for item in content if item.get("type") == "tool_use"
-                    ],
+                    "tool_uses": [item for item in content if item.get("type") == "tool_use"],
                     "usage": message.get("usage", {}),
                 }
+                return msg_a
+
+            elif msg_type == "tool_call":
+                msg_tc: ToolCallMessage = {
+                    "type": "tool_call",
+                    "subtype": data.get("subtype"),
+                    "call_id": data.get("call_id"),
+                    "tool_call": data.get("tool_call", {}),
+                }
+                return msg_tc
+
+            elif msg_type == "thinking":
+                msg_th: ThinkingMessage = {
+                    "type": "thinking",
+                    "subtype": data.get("subtype"),
+                    "text": data.get("text", ""),
+                }
+                return msg_th
 
             elif msg_type == "result":
-                return {
+                msg_r: ResultMessage = {
                     "type": "result",
                     "success": not data.get("is_error", False),
                     "result": data.get("result"),
                     "duration_ms": data.get("duration_ms", 0),
                     "cost_usd": data.get("total_cost_usd", 0.0),
                     "usage": data.get("usage", {}),
+                    "raw_line": line.strip(),
                 }
+                return msg_r
 
-            return data
+            elif msg_type == "error":
+                msg_e: ErrorMessage = {
+                    "type": "error",
+                    "error": data.get("error", {}),
+                }
+                return msg_e
+
+            # Unknown type — return as-is with type preserved
+            return data  # type: ignore[no-any-return]
 
         except json.JSONDecodeError:
             logger.debug(f"Failed to parse line as JSON: {line[:100]}")
             return None
 
-    def validate_environment(self) -> tuple[bool, Dict[str, Any]]:
+    def validate_environment(self) -> tuple[bool, EnvironmentInfo]:
         """Validate Claude CLI is installed and configured."""
-        info: Dict[str, Any] = {"cli": "claude", "errors": [], "warnings": []}
+        info: EnvironmentInfo = {"cli": "claude", "errors": [], "warnings": []}
 
         # Check if binary exists
         binary_path = self.get_binary_path()
@@ -204,7 +239,7 @@ class ClaudeCliExecutor(CliExecutor):
             info["warnings"].append(f"Could not get version: {e}")
 
         # Check config file
-        config_path = Path(self.config.config_path).expanduser()
+        config_path = Path(self.config.config_path or "~/.claude").expanduser()
         if config_path.exists():
             info["config_path"] = str(config_path)
         else:

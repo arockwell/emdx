@@ -1,15 +1,13 @@
 """Tests for core CRUD commands (save, view, edit, delete, restore, etc.)."""
 
+import json
 import re
-import tempfile
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-import typer
 from typer.testing import CliRunner
 
-from emdx.commands.core import app, get_input_content, generate_title, InputContent
+from emdx.commands.core import InputContent, app, generate_title, get_input_content
 
 runner = CliRunner()
 
@@ -121,7 +119,7 @@ class TestSaveCommand:
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
-    def test_save_with_title_and_project(self, mock_detect, mock_create, mock_tags, mock_display, tmp_path):
+    def test_save_with_title_and_project(self, mock_detect, mock_create, mock_tags, mock_display, tmp_path):  # noqa: E501
         """Save with explicit --title and --project."""
         f = tmp_path / "note.md"
         f.write_text("content")
@@ -187,7 +185,8 @@ class TestFindCommand:
         ]
         mock_get_tags.return_value = {1: ["python"]}
 
-        result = runner.invoke(app, ["find", "hello"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "hello", "--mode", "keyword"])
         assert result.exit_code == 0
         assert "Found Doc" in _out(result)
 
@@ -206,7 +205,8 @@ class TestFindCommand:
         mock_db.ensure_schema = Mock()
         mock_search.return_value = []
 
-        result = runner.invoke(app, ["find", "nonexistent"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "nonexistent", "--mode", "keyword"])
         assert result.exit_code == 0
         assert "No results" in _out(result)
 
@@ -227,7 +227,8 @@ class TestFindCommand:
         ]
         mock_get_tags.return_value = {}
 
-        result = runner.invoke(app, ["find", "test", "--ids-only"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "test", "--ids-only", "--mode", "keyword"])
         assert result.exit_code == 0
         assert "42" in _out(result)
 
@@ -249,7 +250,8 @@ class TestFindCommand:
         ]
         mock_get_tags.return_value = {1: []}
 
-        result = runner.invoke(app, ["find", "test", "--json"])
+        # Use --mode keyword to force FTS path (which is what search_documents mock tests)
+        result = runner.invoke(app, ["find", "test", "--json", "--mode", "keyword"])
         assert result.exit_code == 0
         assert '"id": 1' in _out(result)
 
@@ -353,6 +355,34 @@ class TestViewCommand:
         assert result.exit_code == 0
         assert "Project:" not in out
         assert "Views:" not in out
+
+    @patch("emdx.commands.core.get_document_tags")
+    @patch("emdx.commands.core.get_document")
+    @patch("emdx.commands.core.db")
+    def test_view_json(self, mock_db, mock_get_doc, mock_get_tags):
+        """View with --json outputs valid JSON."""
+        mock_db.ensure_schema = Mock()
+        mock_get_doc.return_value = {
+            "id": 1,
+            "title": "JSON Doc",
+            "content": "Hello world",
+            "project": "test",
+            "created_at": datetime(2024, 1, 1),
+            "updated_at": datetime(2024, 1, 2),
+            "accessed_at": datetime(2024, 1, 3),
+            "access_count": 5,
+        }
+        mock_get_tags.return_value = ["python"]
+
+        result = runner.invoke(app, ["view", "1", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == 1
+        assert data["title"] == "JSON Doc"
+        assert data["content"] == "Hello world"
+        assert data["project"] == "test"
+        assert data["tags"] == ["python"]
+        assert data["access_count"] == 5
 
     def test_view_missing_id(self):
         """View with no ID should fail."""
@@ -507,8 +537,8 @@ class TestDeleteCommand:
 
         def side_effect(identifier):
             docs = {
-                "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},
-                "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},
+                "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},  # noqa: E501
+                "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},  # noqa: E501
             }
             return docs.get(identifier)
 
@@ -528,8 +558,10 @@ class TestDeleteCommand:
 # ---------------------------------------------------------------------------
 # trash command (now a subcommand group: emdx trash [list|restore|purge])
 # Uses main_app since trash is registered as a typer subgroup there.
+# Late import to avoid circular dependency with main module
 # ---------------------------------------------------------------------------
-from emdx.main import app as main_app
+from emdx.main import app as main_app  # noqa: E402
+
 
 class TestTrashCommand:
     """Tests for the trash command."""
@@ -652,7 +684,7 @@ class TestPurgeCommand:
     def test_purge_with_force(self, mock_db, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
         mock_db.ensure_schema = Mock()
-        mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]
+        mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]  # noqa: E501
         mock_purge.return_value = 1
 
         result = runner.invoke(main_app, ["trash", "purge", "--force"])

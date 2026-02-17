@@ -150,7 +150,7 @@ def stats(
     if stats_data.get("most_viewed"):
         most_viewed = stats_data["most_viewed"]
         console.print(
-            f"[blue]Most Viewed:[/blue] \"{most_viewed['title']}\" "
+            f'[blue]Most Viewed:[/blue] "{most_viewed["title"]}" '
             f"({most_viewed['access_count']} views)"
         )
     else:
@@ -229,5 +229,3 @@ def stats(
             console.print("\n[bold]Access Patterns[/bold]")
             for row in cursor.fetchall():
                 console.print(f"[blue]{row[0]}:[/blue] {row[1]} documents")
-
-

@@ -2,9 +2,9 @@
 
 The primary interface for monitoring Claude Code's work:
 - Status bar with active count, docs today, cost, errors, sparkline
-- Activity stream showing cascades, agents, groups, and direct saves
+- Activity stream showing agents, groups, and direct saves
 - Preview pane with document content
-- Hierarchical drill-in for groups and cascade runs
+- Hierarchical drill-in for groups
 
 Uses Textual's Tree widget for native hierarchy, expand/collapse,
 and cursor tracking by node reference — eliminating scroll jumping.
@@ -13,14 +13,14 @@ and cursor tracking by node reference — eliminating scroll jumping.
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import RichLog, Static, Tree
+from textual.widgets import Log, RichLog, Static, Tree
 
 from emdx.utils.datetime_utils import parse_datetime
 
@@ -33,7 +33,6 @@ from .sparkline import sparkline
 
 logger = logging.getLogger(__name__)
 
-
 try:
     from emdx.services import document_service as doc_db
     from emdx.services import group_service as groups_db
@@ -42,8 +41,8 @@ try:
     HAS_DOCS = True
     HAS_GROUPS = True
 except ImportError:
-    doc_db = None
-    groups_db = None
+    doc_db = None  # type: ignore[assignment]
+    groups_db = None  # type: ignore[assignment]
     HAS_DOCS = False
     HAS_GROUPS = False
 
@@ -136,7 +135,7 @@ class ActivityView(HelpMixin, Widget):
     BINDINGS = [
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
-        ("enter", "select", "Select/Expand"),
+        ("enter", "fullscreen", "Open"),
         ("l", "expand", "Expand"),
         ("h", "collapse", "Collapse"),
         ("f", "fullscreen", "Fullscreen"),
@@ -145,9 +144,11 @@ class ActivityView(HelpMixin, Widget):
         ("G", "create_group", "Create Group"),
         ("i", "create_gist", "New Gist"),
         ("u", "ungroup", "Ungroup"),
+        ("x", "dismiss_execution", "Kill/Dismiss"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
+        ("c", "toggle_copy_mode", "Copy Mode"),
     ]
 
     DEFAULT_CSS = """
@@ -225,6 +226,12 @@ class ActivityView(HelpMixin, Widget):
         padding: 0 1;
     }
 
+    #preview-copy {
+        height: 1fr;
+        padding: 0 1;
+        display: none;
+    }
+
     #preview-log {
         height: 1fr;
         display: none;
@@ -251,15 +258,17 @@ class ActivityView(HelpMixin, Widget):
     notification_visible = reactive(False)
     notification_is_error = reactive(False)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.activity_items: List[ActivityItem] = []
+        self.activity_items: list[ActivityItem] = []
         self.log_stream: LogStream | None = None
         self.log_subscriber = AgentLogSubscriber(self)
         self.streaming_item_id: int | None = None
         self._fullscreen = False
         # Cache to prevent flickering during refresh
         self._last_preview_key: tuple | None = None  # (item_type, item_id, status)
+        self._preview_raw_content: str = ""  # Raw markdown for copy mode
+        self._copy_mode = False
         # Flag to only run zombie cleanup once on startup
         self._zombies_cleaned = False
         # Reentrance guard: prevents overlapping async refreshes
@@ -295,14 +304,36 @@ class ActivityView(HelpMixin, Widget):
                 with Vertical(id="context-section"):
                     yield Static("DETAILS", id="context-header")
                     with ScrollableContainer(id="context-scroll"):
-                        yield RichLog(id="context-content", highlight=True, markup=True, wrap=True, auto_scroll=False)
+                        yield RichLog(
+                            id="context-content",
+                            highlight=True,
+                            markup=True,
+                            wrap=True,
+                            auto_scroll=False,
+                        )  # noqa: E501
 
             # Right: Preview (document content)
             with Vertical(id="preview-panel"):
                 yield Static("PREVIEW", id="preview-header")
                 with ScrollableContainer(id="preview-scroll"):
-                    yield RichLog(id="preview-content", highlight=True, markup=True, wrap=True, auto_scroll=False)
-                yield RichLog(id="preview-log", highlight=True, markup=True, wrap=True)
+                    yield RichLog(
+                        id="preview-content",
+                        highlight=True,
+                        markup=True,
+                        wrap=True,
+                        auto_scroll=False,
+                    )
+                yield Log(
+                    id="preview-copy",
+                    highlight=True,
+                    auto_scroll=False,
+                )
+                yield RichLog(
+                    id="preview-log",
+                    highlight=True,
+                    markup=True,
+                    wrap=True,
+                )
 
         # Group picker (inline at bottom, hidden by default)
         yield GroupPicker(id="group-picker")
@@ -338,44 +369,44 @@ class ActivityView(HelpMixin, Widget):
         status_bar = self.query_one("#status-bar", Static)
 
         # Count active items (running agents)
-        active = sum(
-            1
-            for item in self.activity_items
-            if item.status == "running"
-        )
+        active = len([item for item in self.activity_items if item.status == "running"])
 
         # Count docs today
         today = datetime.now().date()
-        docs_today = sum(
-            1
-            for item in self.activity_items
-            if item.timestamp and item.timestamp.date() == today
+        docs_today = len(
+            [
+                item
+                for item in self.activity_items
+                if item.timestamp and item.timestamp.date() == today
+            ]
         )
 
         # Total cost today
-        cost_today = sum(
-            item.cost
-            for item in self.activity_items
-            if item.timestamp
-            and item.timestamp.date() == today
-            and item.cost
+        cost_today: float = sum(
+            (
+                item.cost
+                for item in self.activity_items
+                if item.timestamp and item.timestamp.date() == today and item.cost
+            ),
+            0.0,
         )
 
         # Count errors (today only)
-        errors = sum(
-            1
-            for item in self.activity_items
-            if item.status == "failed"
-            and item.timestamp
-            and item.timestamp.date() == today
+        errors = len(
+            [
+                item
+                for item in self.activity_items
+                if item.status == "failed" and item.timestamp and item.timestamp.date() == today
+            ]
         )
 
         # Generate sparkline for the week
         week_data = self._get_week_activity_data()
-        spark = sparkline(week_data, width=7)
+        spark = sparkline([float(x) for x in week_data], width=7)
 
         # Get theme indicator
         from emdx.ui.themes import get_theme_indicator
+
         theme_indicator = get_theme_indicator(self.app.theme)
 
         # Format status bar
@@ -397,17 +428,19 @@ class ActivityView(HelpMixin, Widget):
 
         status_bar.update(" │ ".join(parts))
 
-    def _get_week_activity_data(self) -> List[int]:
+    def _get_week_activity_data(self) -> list[int]:
         """Get activity counts for each day of the past week."""
         today = datetime.now().date()
         counts = []
 
         for i in range(6, -1, -1):  # 6 days ago to today
             day = today - timedelta(days=i)
-            count = sum(
-                1
-                for item in self.activity_items
-                if item.timestamp and item.timestamp.date() == day
+            count = len(
+                [
+                    item
+                    for item in self.activity_items
+                    if item.timestamp and item.timestamp.date() == day
+                ]
             )
             counts.append(count)
 
@@ -417,21 +450,53 @@ class ActivityView(HelpMixin, Widget):
         """Render markdown content to the preview RichLog."""
         from emdx.ui.markdown_config import MarkdownConfig
 
+        # Cache raw content for copy mode
+        self._preview_raw_content = content[:50000] if content else ""
+
         preview = self.query_one("#preview-content", RichLog)
         preview.clear()
 
         try:
-            # Limit preview to first 50000 chars for performance
             if len(content) > 50000:
-                content = content[:50000] + "\n\n[dim]... (truncated for preview)[/dim]"
+                content = content[:50000] + "\n\n[dim]... (truncated)[/dim]"
             if content.strip():
                 markdown = MarkdownConfig.create_markdown(content)
                 preview.write(markdown)
             else:
                 preview.write("[dim]Empty document[/dim]")
         except Exception:
-            # Fallback to plain text if markdown fails
             preview.write(content[:50000] if content else "[dim]No content[/dim]")
+
+        # If in copy mode, also update the copy Log
+        if self._copy_mode:
+            self._update_copy_widget()
+
+    def _update_copy_widget(self) -> None:
+        """Populate the copy-mode Log with raw markdown."""
+        try:
+            copy_log = self.query_one("#preview-copy", Log)
+            copy_log.clear()
+            if self._preview_raw_content.strip():
+                copy_log.write(self._preview_raw_content)
+        except Exception:
+            pass
+
+    def action_toggle_copy_mode(self) -> None:
+        """Toggle between rendered preview and selectable copy mode."""
+        try:
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            copy_log = self.query_one("#preview-copy", Log)
+        except Exception:
+            return
+
+        self._copy_mode = not self._copy_mode
+        if self._copy_mode:
+            self._update_copy_widget()
+            preview_scroll.display = False
+            copy_log.display = True
+        else:
+            preview_scroll.display = True
+            copy_log.display = False
 
     async def _update_preview(self, force: bool = False) -> None:
         """Update the preview pane with selected item."""
@@ -444,9 +509,15 @@ class ActivityView(HelpMixin, Widget):
             logger.debug(f"Preview widgets not ready: {e}")
             return
 
-        def show_markdown():
-            preview_scroll.display = True
+        def show_markdown() -> None:
+            copy_log = self.query_one("#preview-copy", Log)
             preview_log.display = False
+            if self._copy_mode:
+                preview_scroll.display = False
+                copy_log.display = True
+            else:
+                preview_scroll.display = True
+                copy_log.display = False
 
         item = self._get_selected_item()
 
@@ -482,11 +553,11 @@ class ActivityView(HelpMixin, Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    # Check if content already has a markdown title header (may have leading whitespace)
+                    # Check if content already has a markdown title header (may have leading whitespace)  # noqa: E501
                     content_stripped = content.lstrip()
                     has_title_header = (
-                        content_stripped.startswith(f"# {title}") or
-                        content_stripped.startswith("# ")  # Any h1 header counts
+                        content_stripped.startswith(f"# {title}")
+                        or content_stripped.startswith("# ")  # Any h1 header counts
                     )
                     if has_title_header:
                         self._render_markdown_preview(content)
@@ -571,6 +642,7 @@ class ActivityView(HelpMixin, Widget):
 
             try:
                 from emdx.services.tag_service import get_document_tags
+
                 tags = get_document_tags(item.doc_id)
             except ImportError:
                 tags = []
@@ -615,10 +687,13 @@ class ActivityView(HelpMixin, Widget):
                 return
 
             header.update(f"📦 {group['name']}")
-            content.write(f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]")
+            content.write(
+                f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]"
+            )  # noqa: E501
 
-            if group.get("description"):
-                content.write(f"{group['description'][:100]}")
+            desc = group.get("description")
+            if desc:
+                content.write(f"{desc[:100]}")
 
         except Exception as e:
             logger.error(f"Error showing group context: {e}")
@@ -644,8 +719,9 @@ class ActivityView(HelpMixin, Widget):
 
             lines = [f"# {group['name']}", ""]
 
-            if group.get("description"):
-                lines.append(group["description"])
+            desc = group.get("description")
+            if desc:
+                lines.append(desc)
                 lines.append("")
 
             lines.append(f"**Type:** {group.get('group_type', 'batch')}")
@@ -671,7 +747,9 @@ class ActivityView(HelpMixin, Widget):
                         "session": "💾",
                     }
                     icon = type_icons.get(cg.get("group_type", ""), "📁")
-                    lines.append(f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)")
+                    lines.append(
+                        f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)"
+                    )  # noqa: E501
                 if len(child_groups) > 10:
                     lines.append(f"*... and {len(child_groups) - 10} more*")
 
@@ -681,7 +759,12 @@ class ActivityView(HelpMixin, Widget):
                 lines.append("## Documents")
                 for m in members[:15]:
                     role = m.get("role", "member")
-                    role_icons = {"primary": "★", "synthesis": "📝", "exploration": "◇", "variant": "≈"}
+                    role_icons = {
+                        "primary": "★",
+                        "synthesis": "📝",
+                        "exploration": "◇",
+                        "variant": "≈",
+                    }  # noqa: E501
                     role_icon = role_icons.get(role, "•")
                     lines.append(f"- {role_icon} #{m['id']} {m['title'][:40]} ({role})")
                 if len(members) > 15:
@@ -706,6 +789,10 @@ class ActivityView(HelpMixin, Widget):
             return
 
         preview_scroll.display = False
+        try:
+            self.query_one("#preview-copy", Log).display = False
+        except Exception:
+            pass
         preview_log.display = True
         preview_log.clear()
 
@@ -715,7 +802,7 @@ class ActivityView(HelpMixin, Widget):
             log_path = None
 
             if item.item_type == "agent_execution":
-                log_file = getattr(item, 'log_file', None)
+                log_file = getattr(item, "log_file", None)
                 if log_file:
                     log_path = Path(log_file)
 
@@ -735,9 +822,12 @@ class ActivityView(HelpMixin, Widget):
             initial = self.log_stream.get_initial_content()
             if initial:
                 from emdx.ui.live_log_writer import LiveLogWriter
-                writer = LiveLogWriter(preview_log, auto_scroll=True)
+
+                LiveLogWriter(preview_log, auto_scroll=True)
                 from emdx.utils.stream_json_parser import parse_and_format_live_logs
+
                 formatted = parse_and_format_live_logs(initial)
+                formatted = [ln for ln in formatted if "__RAW_RESULT_JSON__:" not in ln]
                 for line in formatted[-50:]:
                     preview_log.write(line)
                 preview_log.scroll_end(animate=False)
@@ -750,7 +840,14 @@ class ActivityView(HelpMixin, Widget):
 
     def _handle_log_content(self, content: str) -> None:
         """Handle new log content from stream - LIVE LOGS formatted."""
-        def update_ui():
+        # Filter out raw result JSON markers from live display
+        content = "\n".join(
+            ln for ln in content.split("\n") if not ln.startswith("__RAW_RESULT_JSON__:")
+        )
+        if not content.strip():
+            return
+
+        def update_ui() -> None:
             try:
                 from emdx.ui.live_log_writer import LiveLogWriter
 
@@ -851,10 +948,12 @@ class ActivityView(HelpMixin, Widget):
                 item.expanded = True
                 # Add children to tree node
                 node.remove_children()
-                tree._add_children(node, item.children)
+                tree.add_activity_children(node, item.children)
                 node.expand()
             except Exception as e:
-                logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True
+                )  # noqa: E501
 
     async def action_expand(self) -> None:
         """Expand current item."""
@@ -872,10 +971,12 @@ class ActivityView(HelpMixin, Widget):
                 item.children = await item.load_children(doc_db)
                 item.expanded = True
                 node.remove_children()
-                tree._add_children(node, item.children)
+                tree.add_activity_children(node, item.children)
                 node.expand()
             except Exception as e:
-                logger.error(f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True
+                )  # noqa: E501
 
     async def action_collapse(self) -> None:
         """Collapse current item or go to parent."""
@@ -893,13 +994,15 @@ class ActivityView(HelpMixin, Widget):
             tree.move_cursor(node.parent)
 
     def action_fullscreen(self) -> None:
-        """Toggle fullscreen preview."""
+        """Open document in fullscreen preview modal."""
         item = self._get_selected_item()
         if item is None:
             return
 
         if item.doc_id:
-            self.post_message(self.ViewDocument(item.doc_id))
+            from emdx.ui.modals import DocumentPreviewScreen
+
+            self.app.push_screen(DocumentPreviewScreen(item.doc_id))
 
     async def action_refresh(self) -> None:
         """Manual refresh."""
@@ -918,9 +1021,9 @@ class ActivityView(HelpMixin, Widget):
         await self._update_preview(force=True)
         await self._update_context_panel()
 
-    async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Handle tree node selection (Enter key)."""
-        await self.action_select()
+    def on_activity_tree_double_clicked(self, event: ActivityTree.DoubleClicked) -> None:
+        """Handle double-click on tree node — open fullscreen."""
+        self.action_fullscreen()
 
     async def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
         """Handle lazy child loading when a node is expanded."""
@@ -939,9 +1042,12 @@ class ActivityView(HelpMixin, Widget):
                 item.children = await item.load_children(doc_db)
                 item.expanded = True
                 tree = self.query_one("#activity-tree", ActivityTree)
-                tree._add_children(node, item.children)
+                tree.add_activity_children(node, item.children)
             except Exception as e:
-                logger.error(f"Error loading children for {item.item_type} #{item.item_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error loading children for {item.item_type} #{item.item_id}: {e}",
+                    exc_info=True,
+                )  # noqa: E501
 
     def on_tree_node_collapsed(self, event: Tree.NodeCollapsed) -> None:
         """Track collapse state on the item."""
@@ -992,6 +1098,50 @@ class ActivityView(HelpMixin, Widget):
 
         except Exception as e:
             logger.error(f"Error creating gist: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
+
+    # Execution management actions
+
+    async def action_dismiss_execution(self) -> None:
+        """Kill or dismiss a stale/running execution."""
+        item = self._get_selected_item()
+        if item is None:
+            self._show_notification("No item selected", is_error=True)
+            return
+
+        if item.item_type != "agent_execution":
+            self._show_notification("Can only dismiss executions", is_error=True)
+            return
+
+        if item.status != "running":
+            self._show_notification("Execution is not running", is_error=True)
+            return
+
+        try:
+            from emdx.models.executions import get_execution, update_execution_status
+
+            execution = get_execution(item.item_id)
+            if not execution:
+                self._show_notification(f"Execution #{item.item_id} not found", is_error=True)
+                return
+
+            # Try to kill the process if it has a PID
+            if execution.pid:
+                try:
+                    import psutil
+
+                    proc = psutil.Process(execution.pid)
+                    proc.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass  # Process already gone or can't access
+
+            # Mark as failed
+            update_execution_status(item.item_id, "failed", exit_code=-6)
+            self._show_notification(f"Dismissed execution #{item.item_id}")
+            await self._refresh_data()
+
+        except Exception as e:
+            logger.error(f"Error dismissing execution: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
 
     # Group management actions

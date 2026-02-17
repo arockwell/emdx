@@ -4,11 +4,12 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (cascade, delegate, ai, etc.) are only imported when
+fast. Heavy commands (delegate, ai, etc.) are only imported when
 actually invoked.
 """
 
 import os
+from collections.abc import Callable
 
 import typer
 
@@ -23,32 +24,34 @@ from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
     "recipe": "emdx.commands.recipe:app",
-    "cascade": "emdx.commands.cascade:app",
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
     "ai": "emdx.commands.ask:app",
+    "distill": "emdx.commands.distill:app",
+    "compact": "emdx.commands.compact:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
     "recipe": "Manage and run EMDX recipes",
-    "cascade": "Cascade ideas through stages to working code",
-    "delegate": "One-shot AI execution (parallel, chain, worktree, PR)",
+    "delegate": "One-shot AI execution (parallel, worktree, PR)",
     "ai": "AI-powered Q&A and semantic search",
+    "distill": "Distill KB content into audience-aware summaries",
+    "compact": "Compact related documents through AI-powered synthesis",
 }
 
 
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (cascade, delegate, recipe).
+    Safe mode disables execution commands (delegate, recipe).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"cascade", "delegate", "recipe"}
+UNSAFE_COMMANDS = {"delegate", "recipe"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -67,13 +70,12 @@ def get_lazy_help() -> dict[str, str]:
     return LAZY_HELP
 
 
-def create_disabled_command(name: str):
+def create_disabled_command(name: str) -> Callable[[], None]:
     """Create a command that shows a disabled message in safe mode."""
-    def disabled_command():
+
+    def disabled_command() -> None:
         typer.echo(
-            f"Command '{name}' is disabled in safe mode. "
-            f"Set EMDX_SAFE_MODE=0 to enable.",
-            err=True
+            f"Command '{name}' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.", err=True
         )
         raise typer.Exit(1)
 
@@ -87,24 +89,32 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 
 # =============================================================================
 # EAGER IMPORTS - Core KB commands (fast, always needed)
+# Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
-from emdx.commands.browse import app as browse_app
-from emdx.commands.core import app as core_app
-from emdx.commands.executions import app as executions_app
-from emdx.commands.gist import app as gist_app
-from emdx.commands.groups import app as groups_app
-from emdx.commands.maintain import app as maintain_app
-from emdx.commands.prime import prime as prime_command
-from emdx.commands.status import status as status_command
-from emdx.commands.tags import app as tag_app
-from emdx.commands.tasks import app as tasks_app
-from emdx.commands.trash import app as trash_app
-from emdx.ui.gui import gui as gui_command
+from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
+from emdx.commands.browse import app as browse_app  # noqa: E402
+from emdx.commands.categories import app as categories_app  # noqa: E402
+from emdx.commands.core import app as core_app  # noqa: E402
+from emdx.commands.epics import app as epics_app  # noqa: E402
+from emdx.commands.executions import app as executions_app  # noqa: E402
+from emdx.commands.gist import app as gist_app  # noqa: E402
+from emdx.commands.groups import app as groups_app  # noqa: E402
+from emdx.commands.maintain import app as maintain_app  # noqa: E402
+from emdx.commands.prime import prime as prime_command  # noqa: E402
+from emdx.commands.review import app as review_app  # noqa: E402
+from emdx.commands.stale import app as stale_app  # noqa: E402
+from emdx.commands.stale import touch as touch_command  # noqa: E402
+from emdx.commands.status import status as status_command  # noqa: E402
+from emdx.commands.tags import app as tag_app  # noqa: E402
+from emdx.commands.tasks import app as tasks_app  # noqa: E402
+from emdx.commands.trash import app as trash_app  # noqa: E402
+from emdx.commands.wrapup import wrapup as wrapup_command  # noqa: E402
+from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
 app = typer.Typer(
     name="emdx",
-    help="Documentation Index Management System - A powerful knowledge base for developers",
+    help="A powerful knowledge base for developers and AI agents",
     add_completion=True,
     rich_markup_mode="rich",
     cls=LazyTyperGroup,
@@ -147,8 +157,21 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 # Add groups as a subcommand group
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
 
+# Add epics and categories as subcommand groups
+app.add_typer(epics_app, name="epic", help="Manage task epics")
+app.add_typer(categories_app, name="cat", help="Manage task categories")
+
+# Add review commands for triaging agent outputs
+app.add_typer(review_app, name="review", help="Triage agent-produced documents")
+
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
+
+# Add stale as a subcommand group for knowledge decay
+app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
+
+# Add touch as a top-level command for convenience
+app.command(name="touch")(touch_command)
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
@@ -156,9 +179,14 @@ app.command(name="prime")(prime_command)
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
 
+# Add the briefing command for activity summary
+app.command(name="briefing")(briefing_command)
+
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
 
+# Add the wrapup command for session summaries
+app.command(name="wrapup")(wrapup_command)
 
 
 # =============================================================================
@@ -173,11 +201,11 @@ if is_safe_mode():
 
 # Version command
 @app.command()
-def version():
+def version() -> None:
     """Show emdx version"""
     typer.echo(f"emdx version {__version__}")
     typer.echo(f"Build ID: {__build_id__}")
-    typer.echo("Documentation Index Management System")
+    typer.echo("A knowledge base for developers and AI agents")
 
 
 # Callback for global options
@@ -191,19 +219,21 @@ def main(
         None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
     ),
     safe_mode: bool = typer.Option(
-        False, "--safe-mode", envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (cascade, delegate, recipe)"
+        False,
+        "--safe-mode",
+        envvar="EMDX_SAFE_MODE",
+        help="Disable execution commands (delegate, recipe)",
     ),
-):
+) -> None:
     """
-    emdx - Documentation Index Management System
+    emdx - A knowledge base for developers and AI agents
 
-    A powerful CLI tool for managing your knowledge base with full-text search,
-    Git integration, and seamless editor workflows.
+    Save research, delegate tasks to Claude agents, and search everything
+    with full-text and semantic search.
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (cascade, delegate, recipe). Useful for read-only access
+    (delegate, recipe). Useful for read-only access
     or when external execution should be prevented.
 
     Examples:
@@ -226,7 +256,7 @@ def main(
 
     Enable safe mode:
         [cyan]EMDX_SAFE_MODE=1 emdx --help[/cyan]
-        [cyan]emdx --safe-mode cascade add "idea"[/cyan]  # Will show disabled message
+        [cyan]emdx --safe-mode delegate "task"[/cyan]  # Will show disabled message
     """
     # Handle --version flag
     if version:
@@ -249,7 +279,7 @@ def main(
 _TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "batch", "--help", "-h", "help"}
 
 
-def run():
+def run() -> None:
     """Entry point for the CLI.
 
     Supports trailing 'help' as alternative to --help:
@@ -283,10 +313,7 @@ def _rewrite_tag_shorthand(argv: list[str]) -> None:
     """
     # Find the position of 'tag' in argv (skip argv[0] which is the program name)
     try:
-        tag_idx = next(
-            i for i in range(1, len(argv))
-            if argv[i] == "tag"
-        )
+        tag_idx = next(i for i in range(1, len(argv)) if argv[i] == "tag")
     except StopIteration:
         return
 

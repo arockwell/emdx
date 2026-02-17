@@ -6,7 +6,6 @@ They form a hierarchy where child contexts inherit from parent contexts.
 """
 
 from enum import Enum
-from typing import List
 
 
 class Context(Enum):
@@ -75,7 +74,7 @@ class Context(Enum):
     AGENT_LIST_WIDGET = "widget:agent_list"
 
     @classmethod
-    def get_parent_contexts(cls, context: "Context") -> List["Context"]:
+    def get_parent_contexts(cls, context: "Context") -> list["Context"]:
         """
         Get parent contexts in inheritance hierarchy.
 
@@ -157,16 +156,13 @@ class Context(Enum):
             "BrowserContainer": cls.GLOBAL,
             # Activity browser
             "ActivityView": cls.ACTIVITY_NORMAL,
-            # Document browser and related
-            "DocumentBrowser": cls.DOCUMENT_NORMAL,
             # Agent browser
             "AgentBrowser": cls.AGENT_NORMAL,
             "AgentHistoryModal": cls.MODAL_AGENT,
             # Log browser
             "LogBrowser": cls.LOG_NORMAL,
             "LogView": cls.LOG_VIEW,
-            # Vim editor
-            "VimEditTextArea": cls.VIM_NORMAL,
+            # Selection text area
             "SelectionTextArea": cls.DOCUMENT_SELECTION,
             # Theme selector
             "ThemeSelectorScreen": cls.MODAL_THEME,
@@ -176,7 +172,6 @@ class Context(Enum):
             "RunAgentModal": cls.MODAL_AGENT_RUN,
             "DeleteAgentModal": cls.MODAL_DELETE,
             "AgentSelectionModal": cls.MODAL_AGENT_SELECT,
-            "AgentHistoryModal": cls.MODAL_AGENT,
             "AgentListWidget": cls.AGENT_LIST_WIDGET,
             # Agent inputs - each gets its own context to avoid false conflicts
             "AgentNameInput": cls.INPUT_AGENT_NAME,

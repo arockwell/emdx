@@ -4,13 +4,18 @@ Presenter for the command palette.
 Handles search logic, result ranking, and action dispatch.
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Set
+from typing import TYPE_CHECKING, Any
 
 from .palette_commands import CommandContext, PaletteCommand, get_command_registry
+
+if TYPE_CHECKING:
+    from emdx.services.unified_search import UnifiedSearchService
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +40,7 @@ class PaletteResultItem:
     subtitle: str  # Secondary info (project, description)
     icon: str  # Emoji or symbol
     score: float  # Relevance score for sorting
-    data: Dict[str, Any] = field(default_factory=dict)  # Type-specific payload
+    data: dict[str, Any] = field(default_factory=dict)  # Type-specific payload
 
 
 @dataclass
@@ -43,10 +48,10 @@ class PaletteState:
     """Current state of the palette."""
 
     query: str = ""
-    results: List[PaletteResultItem] = field(default_factory=list)
+    results: list[PaletteResultItem] = field(default_factory=list)
     selected_index: int = 0
     is_searching: bool = False
-    recent_items: List[PaletteResultItem] = field(default_factory=list)
+    recent_items: list[PaletteResultItem] = field(default_factory=list)
 
 
 class PalettePresenter:
@@ -70,12 +75,12 @@ class PalettePresenter:
         self.context = context or CommandContext.GLOBAL
         self._state = PaletteState()
         self._command_registry = get_command_registry()
-        self._search_service = None  # Lazy load
-        self._history: List[PaletteResultItem] = []
+        self._search_service: UnifiedSearchService | None = None  # Lazy load
+        self._history: list[PaletteResultItem] = []
         self._max_history = 10
 
     @property
-    def search_service(self):
+    def search_service(self) -> UnifiedSearchService | None:
         """Lazy load the unified search service."""
         if self._search_service is None:
             try:
@@ -102,9 +107,9 @@ class PalettePresenter:
         self._state.results = self._state.recent_items.copy()
         self._notify_update()
 
-    def _get_recent_items(self) -> List[PaletteResultItem]:
+    def _get_recent_items(self) -> list[PaletteResultItem]:
         """Get recent items from history and recent documents."""
-        items: List[PaletteResultItem] = []
+        items: list[PaletteResultItem] = []
 
         # Add history items first
         for item in self._history:
@@ -130,7 +135,7 @@ class PalettePresenter:
             except Exception as e:
                 logger.debug(f"Could not load recent documents: {e}")
 
-        return items[:self._max_history]
+        return items[: self._max_history]
 
     async def search(self, query: str) -> None:
         """
@@ -172,7 +177,7 @@ class PalettePresenter:
         self._state.selected_index = 0
         self._notify_update()
 
-    def _search_commands(self, query: str) -> List[PaletteResultItem]:
+    def _search_commands(self, query: str) -> list[PaletteResultItem]:
         """Search registered commands."""
         commands = self._command_registry.search(query, context=self.context, limit=10)
 
@@ -189,7 +194,7 @@ class PalettePresenter:
             for cmd in commands
         ]
 
-    async def _search_tags(self, query: str) -> List[PaletteResultItem]:
+    async def _search_tags(self, query: str) -> list[PaletteResultItem]:
         """Search by tags or suggest tags."""
         if not self.search_service:
             return []
@@ -240,7 +245,7 @@ class PalettePresenter:
             logger.error(f"Tag search failed: {e}")
             return []
 
-    async def _search_by_id_or_semantic(self, query: str) -> List[PaletteResultItem]:
+    async def _search_by_id_or_semantic(self, query: str) -> list[PaletteResultItem]:
         """Search by document ID or semantic similarity."""
         if not self.search_service:
             return []
@@ -312,7 +317,7 @@ class PalettePresenter:
 
         return []
 
-    def _search_navigation(self, query: str) -> List[PaletteResultItem]:
+    def _search_navigation(self, query: str) -> list[PaletteResultItem]:
         """Search for screens/navigation targets."""
         # Filter commands to navigation category
         nav_commands = [
@@ -350,13 +355,13 @@ class PalettePresenter:
             for cmd in nav_commands[:10]
         ]
 
-    async def _search_documents(self, query: str) -> List[PaletteResultItem]:
+    async def _search_documents(self, query: str) -> list[PaletteResultItem]:
         """Search documents by title and content."""
         if not self.search_service:
             return []
 
-        results: List[PaletteResultItem] = []
-        seen_ids: Set[int] = set()
+        results: list[PaletteResultItem] = []
+        seen_ids: set[int] = set()
 
         try:
             # Fuzzy title search first (fast)
@@ -434,7 +439,7 @@ class PalettePresenter:
         # Trim
         self._history = self._history[: self._max_history]
 
-    async def execute_selected(self, app) -> Dict[str, Any] | None:
+    async def execute_selected(self, app: object) -> dict[str, Any] | None:
         """
         Execute the selected result.
 
@@ -448,7 +453,7 @@ class PalettePresenter:
         self.add_to_history(result)
 
         if result.type == ResultType.COMMAND:
-            cmd: PaletteCommand = result.data.get("command")
+            cmd: PaletteCommand | None = result.data.get("command")
             if cmd:
                 return {"action": "command", "command_id": cmd.id}
 
@@ -458,9 +463,9 @@ class PalettePresenter:
                 return {"action": "view_document", "doc_id": doc_id}
 
         elif result.type == ResultType.SCREEN:
-            cmd: PaletteCommand = result.data.get("command")
-            if cmd:
-                return {"action": "command", "command_id": cmd.id}
+            nav_cmd: PaletteCommand | None = result.data.get("command")
+            if nav_cmd:
+                return {"action": "command", "command_id": nav_cmd.id}
 
         elif result.type == ResultType.TAG:
             tag = result.data.get("tag")

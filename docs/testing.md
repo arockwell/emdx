@@ -2,7 +2,7 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has 38 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
+EMDX has 52 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
 
 ### **Current Test Status**
 
@@ -20,24 +20,36 @@ tests/
 ├── conftest.py                       # Pytest configuration and fixtures
 ├── test_auto_tagger.py               # Automatic tagging system
 ├── test_browse.py                    # Browse commands (list, stats, recent)
-├── test_cascade_metadata.py          # Cascade stage operations
+├── test_categories.py                # Category management
+├── test_chunk_splitter.py            # Document chunking
 ├── test_cli.py                       # CLI integration tests
 ├── test_commands_core.py             # Core command tests (save, find, view)
 ├── test_commands_groups.py           # Group command tests
+├── test_commands_prime.py            # Prime command tests
+├── test_commands_recipe.py           # Recipe command tests
+├── test_commands_stale.py            # Staleness tracking tests
+├── test_commands_status.py           # Status command tests
 ├── test_commands_tags.py             # Tag command tests
+├── test_commands_trash.py            # Trash command tests
+├── test_compact.py                   # Document compaction tests
 ├── test_config.py                    # Configuration management
 ├── test_core.py                      # Core CLI commands (save, find, view)
 ├── test_database.py                  # Database operations and models
+├── test_delegate_commands.py         # Delegate command tests
+├── test_distill.py                   # Distillation tests
 ├── test_document_merger.py           # Document merging
 ├── test_documents.py                 # Document CRUD operations
 ├── test_duplicate_detector.py        # Duplicate detection
 ├── test_emoji_aliases.py             # Emoji alias system
+├── test_epics.py                     # Epic management tests
 ├── test_execution_monitor.py         # Execution monitoring
 ├── test_execution_system.py          # Execution tracking
 ├── test_execution_system_comprehensive.py # Comprehensive execution tests
 ├── test_file_size.py                 # File size utilities
 ├── test_file_watcher.py              # File watcher service tests
+├── test_fixtures.py                  # Test fixture tests
 ├── test_groups.py                    # Document group management
+├── test_hybrid_search.py             # Hybrid search tests
 ├── test_init.py                      # Package initialization
 ├── test_input_content.py             # Content input handling
 ├── test_lazy_loading.py              # Lazy loading functionality
@@ -45,17 +57,18 @@ tests/
 ├── test_migrations.py                # Database schema migrations
 ├── test_modal_keys.py                # Modal key bindings
 ├── test_models_tags.py               # Tag model tests
+├── test_output_parser.py             # Output parsing tests
 ├── test_project_discovery.py         # Project auto-detection
 ├── test_search.py                    # Search functionality tests
 ├── test_similarity.py                # Document similarity service
 ├── test_sqlite_database.py           # SQLite-specific database tests
 ├── test_stream_json_parser.py        # Stream JSON parsing
 ├── test_tags.py                      # Tag system and emoji aliases
+├── test_task_commands.py             # Task command tests
 ├── test_text_formatting.py           # Text formatting utilities
 ├── test_title_normalization.py       # Title normalization
 ├── test_unified_executor.py          # Unified CLI executor
-├── test_utils.py                     # Utility functions
-└── test_vim_line_numbers.py          # Vim editor line numbering
+└── test_utils.py                     # Utility functions
 ```
 
 ## 🎯 **Test Categories**
@@ -65,19 +78,22 @@ tests/
 - **Database Operations** (`test_database.py`, `test_sqlite_database.py`, `test_documents.py`) - CRUD, search, migrations
 - **Tag System** (`test_tags.py`, `test_models_tags.py`, `test_commands_tags.py`, `test_emoji_aliases.py`) - emoji tags, aliases, management
 - **Groups** (`test_groups.py`, `test_commands_groups.py`) - document group management
+- **Tasks** (`test_task_commands.py`, `test_epics.py`, `test_categories.py`) - task queue, epics, categories
 
 ### **Advanced Feature Tests**
 - **Execution System** (`test_execution_system.py`, `test_execution_system_comprehensive.py`, `test_execution_monitor.py`, `test_unified_executor.py`) - execution tracking and monitoring
-- **TUI Components** (`test_log_browser.py`, `test_vim_line_numbers.py`, `test_modal_keys.py`) - UI widget tests
-- **Cascade** (`test_cascade_metadata.py`) - cascade stage operations
+- **Delegate** (`test_delegate_commands.py`) - delegate command tests
+- **TUI Components** (`test_log_browser.py`, `test_modal_keys.py`) - UI widget tests
 - **Similarity** (`test_similarity.py`, `test_duplicate_detector.py`) - document similarity and dedup
+- **AI Features** (`test_compact.py`, `test_distill.py`, `test_hybrid_search.py`) - compaction, distillation, hybrid search
 
 ### **Infrastructure Tests**
 - **Database Migrations** (`test_migrations.py`) - Schema evolution
 - **Configuration** (`test_config.py`) - Settings and configuration
-- **Utilities** (`test_utils.py`, `test_file_size.py`, `test_text_formatting.py`, `test_title_normalization.py`) - Helper functions
-- **Search** (`test_search.py`) - FTS5 search functionality
-- **Input/Output** (`test_input_content.py`, `test_stream_json_parser.py`) - content handling and parsing
+- **Utilities** (`test_utils.py`, `test_file_size.py`, `test_text_formatting.py`, `test_title_normalization.py`, `test_output_parser.py`) - Helper functions
+- **Search** (`test_search.py`, `test_hybrid_search.py`) - FTS5 and hybrid search
+- **Input/Output** (`test_input_content.py`, `test_stream_json_parser.py`, `test_chunk_splitter.py`) - content handling and parsing
+- **Other** (`test_commands_prime.py`, `test_commands_recipe.py`, `test_commands_stale.py`, `test_commands_status.py`, `test_commands_trash.py`, `test_fixtures.py`) - additional command tests
 
 ## 🔧 **Common Test Patterns**
 

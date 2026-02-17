@@ -4,10 +4,7 @@ Tests the execution lifecycle: creating records, updating status,
 timeout handling, and log recording.
 """
 
-import os
-import tempfile
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from datetime import datetime
 
 import pytest
 
@@ -248,9 +245,8 @@ class TestExecutionCRUD:
 
     def test_update_execution_generic_fields(self, isolate_test_database):
         """Test updating arbitrary execution fields."""
-        from emdx.models.executions import create_execution, update_execution
-
         from emdx.database.connection import db_connection
+        from emdx.models.executions import create_execution, update_execution
 
         exec_id = create_execution(
             doc_id=None,
@@ -338,9 +334,9 @@ class TestExecutionQueries:
             update_execution_status,
         )
 
-        exec1 = create_execution(doc_id=None, doc_title="Running", log_file="/tmp/1.log")
+        create_execution(doc_id=None, doc_title="Running", log_file="/tmp/1.log")
         exec2 = create_execution(doc_id=None, doc_title="Completed", log_file="/tmp/2.log")
-        exec3 = create_execution(doc_id=None, doc_title="Also Running", log_file="/tmp/3.log")
+        create_execution(doc_id=None, doc_title="Also Running", log_file="/tmp/3.log")
 
         update_execution_status(exec2, "completed", exit_code=0)
 
@@ -360,7 +356,7 @@ class TestExecutionQueries:
         )
 
         # Create executions with various statuses
-        exec1 = create_execution(doc_id=None, doc_title="T1", log_file="/tmp/1.log")
+        create_execution(doc_id=None, doc_title="T1", log_file="/tmp/1.log")
         exec2 = create_execution(doc_id=None, doc_title="T2", log_file="/tmp/2.log")
         exec3 = create_execution(doc_id=None, doc_title="T3", log_file="/tmp/3.log")
 
@@ -436,12 +432,11 @@ class TestTimeoutHandling:
         Note: This test is skipped because migration 013 removed the
         last_heartbeat column from the executions table.
         """
+        from emdx.database.connection import db_connection
         from emdx.models.executions import (
             create_execution,
             update_execution_heartbeat,
         )
-
-        from emdx.database.connection import db_connection
 
         exec_id = create_execution(
             doc_id=None,
@@ -465,11 +460,11 @@ class TestExecutionService:
     """Tests for the execution service facade."""
 
     def test_get_agent_executions(self, isolate_test_database):
-        """Test getting agent/delegate executions."""
+        """Test getting standalone executions."""
         from emdx.models.executions import create_execution
         from emdx.services.execution_service import get_agent_executions
 
-        # Create agent and delegate executions
+        # Create various executions (all standalone)
         create_execution(
             doc_id=None,
             doc_title="Agent: test task",
@@ -482,21 +477,21 @@ class TestExecutionService:
         )
         create_execution(
             doc_id=None,
-            doc_title="Regular execution",
-            log_file="/tmp/regular.log",
+            doc_title="Any Type Analysis [1/5]",
+            log_file="/tmp/analysis.log",
         )
 
-        # Get agent executions from recent time
+        # Get all standalone executions from recent time
         from datetime import datetime, timezone
 
         cutoff = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
         agents = get_agent_executions(cutoff, limit=10)
 
-        # Should only get Agent: and Delegate: prefixed ones
+        # Should get all standalone executions regardless of title
         titles = [a["doc_title"] for a in agents]
         assert any("Agent:" in t for t in titles)
         assert any("Delegate:" in t for t in titles)
-        assert not any(t == "Regular execution" for t in titles)
+        assert any("Any Type Analysis" in t for t in titles)
 
     def test_get_execution_log_file(self, isolate_test_database):
         """Test getting log file for running execution."""

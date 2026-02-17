@@ -4,10 +4,11 @@ Simple test to verify modal key bindings work correctly.
 """
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Grid
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, DataTable
-from textual.binding import Binding
+from textual.widgets import Button, DataTable, Label
+
 
 class DeleteConfirmScreen(ModalScreen):
     """Test modal screen for delete confirmation."""
@@ -84,12 +85,12 @@ class DeleteConfirmScreen(ModalScreen):
 
 class ModalTestApp(App):
     """Test app to verify delete modal functionality."""
-    
+
     BINDINGS = [
         Binding("d", "show_delete", "Delete"),
         Binding("q", "quit", "Quit"),
     ]
-    
+
     def compose(self) -> ComposeResult:
         # Create a simple table
         table = DataTable()
@@ -99,11 +100,11 @@ class ModalTestApp(App):
         table.add_row("2", "Test Document 2")
         yield table
         yield Label("Press 'd' to test delete modal, 'q' to quit", id="status")
-    
+
     def action_show_delete(self):
         """Show the delete confirmation modal."""
         print("Showing delete modal...")
-        
+
         def handle_result(result: bool) -> None:
             print(f"Modal result: {result}")
             status = self.query_one("#status", Label)
@@ -111,9 +112,9 @@ class ModalTestApp(App):
                 status.update("Delete confirmed!")
             else:
                 status.update("Delete cancelled!")
-        
+
         self.push_screen(DeleteConfirmScreen(123, "Test Document"), handle_result)
-    
+
     def on_key(self, event) -> None:
         """Debug all key events."""
         print(f"App.on_key: key={event.key}, character={event.character}")

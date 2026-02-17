@@ -1,15 +1,16 @@
 """
-emdx - Documentation Index Management System
+emdx - A knowledge base that AI agents can read, write, and search
 """
 
 import hashlib
 import time
 from pathlib import Path
 
-__version__ = "0.14.0"
+__version__ = "0.16.0"
+
 
 # Generate a unique build identifier based on current timestamp and file modification times
-def _generate_build_id():
+def _generate_build_id() -> str:
     """Generate a unique build identifier for version tracking."""
     try:
         # Get current file modification time
@@ -23,5 +24,6 @@ def _generate_build_id():
     except Exception:
         # Fallback to timestamp if file ops fail
         return f"{__version__}-{int(time.time())}"
+
 
 __build_id__ = _generate_build_id()

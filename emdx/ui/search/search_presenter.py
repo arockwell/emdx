@@ -8,10 +8,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
-
 
 class SearchMode(Enum):
     """Available search modes."""
@@ -21,7 +20,6 @@ class SearchMode(Enum):
     SEMANTIC = "semantic"  # AI-powered semantic search
     COMBINED = "combined"  # FTS + semantic
 
-
 @dataclass
 class SearchResultItem:
     """Single search result for display."""
@@ -29,7 +27,7 @@ class SearchResultItem:
     doc_id: int
     title: str
     snippet: str
-    tags: List[str]
+    tags: list[str]
     tags_display: str  # Formatted tags for display
     score: float  # Normalized 0-1
     source: str  # "fts", "tags", "semantic"
@@ -37,23 +35,21 @@ class SearchResultItem:
     updated_at: str | None = None
     is_selected: bool = False  # For multi-select
 
-
 @dataclass
 class SearchStateVM:
     """Complete search state for the UI."""
 
     query: str = ""
-    results: List[SearchResultItem] = field(default_factory=list)
+    results: list[SearchResultItem] = field(default_factory=list)
     total_count: int = 0
     mode: SearchMode = SearchMode.FTS
     is_searching: bool = False
     search_time_ms: int = 0
-    recent_docs: List[SearchResultItem] = field(default_factory=list)
-    popular_tags: List[Dict[str, Any]] = field(default_factory=list)
-    selected_indices: Set[int] = field(default_factory=set)
-    active_filters: List[str] = field(default_factory=list)
+    recent_docs: list[SearchResultItem] = field(default_factory=list)
+    popular_tags: list[dict[str, Any]] = field(default_factory=list)
+    selected_indices: set[int] = field(default_factory=set)
+    active_filters: list[str] = field(default_factory=list)
     status_text: str = ""
-
 
 class SearchPresenter:
     """
@@ -83,12 +79,12 @@ class SearchPresenter:
     ):
         self.on_state_update = on_state_update
         self._state = SearchStateVM()
-        self._search_service = None  # Lazy load
-        self._cache: Dict[str, List[SearchResultItem]] = {}
+        self._search_service: Any = None  # Lazy load
+        self._cache: dict[str, list[SearchResultItem]] = {}
         self._cache_max_size = 20
 
     @property
-    def search_service(self):
+    def search_service(self) -> Any:
         """Lazy load the unified search service."""
         if self._search_service is None:
             try:
@@ -156,7 +152,7 @@ class SearchPresenter:
             self._state.status_text = f"Error: {e}"
             await self._notify_update()
 
-    def _load_initial_data_sync(self):
+    def _load_initial_data_sync(self) -> tuple[Any, list[dict[str, Any]]]:
         """Synchronous helper to load initial data (runs in thread pool)."""
         recent = self.search_service.get_recent_documents(limit=10)
         popular_tags = self.search_service.get_popular_tags(limit=15)
@@ -179,12 +175,12 @@ class SearchPresenter:
 
         # Don't search for very short queries (just show recent)
         query_stripped = query.strip()
-        if len(query_stripped) < self.MIN_QUERY_LENGTH and not query_stripped.startswith('@') and not query_stripped.startswith('tags:'):
+        if len(query_stripped) < self.MIN_QUERY_LENGTH and not query_stripped.startswith('@') and not query_stripped.startswith('tags:'):  # noqa: E501
             self._state.results = self._state.recent_docs.copy()
             self._state.total_count = len(self._state.results)
             self._state.search_time_ms = 0
             self._state.is_searching = False
-            self._state.status_text = f"Type {self.MIN_QUERY_LENGTH}+ chars to search | {len(self._state.results)} recent"
+            self._state.status_text = f"Type {self.MIN_QUERY_LENGTH}+ chars to search | {len(self._state.results)} recent"  # noqa: E501
             await self._notify_update()
             return
 
@@ -201,8 +197,9 @@ class SearchPresenter:
             await self._notify_update()
             return
 
-        # Check cache
-        cache_key = f"{self._state.mode.value}:{query}"
+        # Check cache - include active filters and tags in the key
+        filters_str = ",".join(sorted(self._state.active_filters)) if self._state.active_filters else ""  # noqa: E501
+        cache_key = f"{self._state.mode.value}:{query}:filters={filters_str}"
         if cache_key in self._cache:
             self._state.results = self._cache[cache_key]
             self._state.total_count = len(self._state.results)
@@ -241,7 +238,7 @@ class SearchPresenter:
         self._state.selected_indices.clear()
         await self._notify_update()
 
-    async def _execute_search(self, query: str) -> List[SearchResultItem]:
+    async def _execute_search(self, query: str) -> list[SearchResultItem]:
         """Execute the actual search based on current mode."""
         if not self.search_service:
             return []
@@ -358,7 +355,7 @@ class SearchPresenter:
         for item in self._state.results:
             item.is_selected = False
 
-    def get_selected_doc_ids(self) -> List[int]:
+    def get_selected_doc_ids(self) -> list[int]:
         """Get document IDs of selected results."""
         return [
             self._state.results[i].doc_id

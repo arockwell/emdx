@@ -6,10 +6,7 @@ Analyzes document content and suggests appropriate tags based on patterns.
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
-
-# Type alias for SQL parameters
-SqlParam = Union[str, int, float, None]
+from typing import Union
 
 from ..config.constants import (
     DEFAULT_MAX_SUGGESTIONS,
@@ -18,7 +15,11 @@ from ..config.constants import (
 )
 from ..database import DatabaseConnection
 from ..models.tags import get_or_create_tag
+from ..services.types import BatchAutoTagResult, DocumentTagResult
 from ..utils.emoji_aliases import EMOJI_ALIASES
+
+# Type alias for SQL parameters
+SqlParam = Union[str, int, float, None]
 
 
 class AutoTagger:
@@ -27,84 +28,81 @@ class AutoTagger:
     # Default pattern rules for auto-tagging
     DEFAULT_PATTERNS = {
         # Document types
-        'gameplan': {
-            'title_patterns': [r'^gameplan:', r'gameplan for', r'plan to'],
-            'content_patterns': [r'## goals', r'## objectives', r'## success criteria'],
-            'confidence': 0.9,
-            'tags': ['gameplan', 'active']
+        "gameplan": {
+            "title_patterns": [r"^gameplan:", r"gameplan for", r"plan to"],
+            "content_patterns": [r"## goals", r"## objectives", r"## success criteria"],
+            "confidence": 0.9,
+            "tags": ["gameplan", "active"],
         },
-        'analysis': {
-            'title_patterns': [r'^analysis:', r'analyzing', r'investigation'],
-            'content_patterns': [r'## findings', r'## results', r'## conclusion'],
-            'confidence': 0.85,
-            'tags': ['analysis']
+        "analysis": {
+            "title_patterns": [r"^analysis:", r"analyzing", r"investigation"],
+            "content_patterns": [r"## findings", r"## results", r"## conclusion"],
+            "confidence": 0.85,
+            "tags": ["analysis"],
         },
-        'notes': {
-            'title_patterns': [r'^notes:', r'meeting notes', r'quick notes'],
-            'content_patterns': [r'^- ', r'^\* ', r'TODO:', r'note:'],
-            'confidence': 0.7,
-            'tags': ['notes']
+        "notes": {
+            "title_patterns": [r"^notes:", r"meeting notes", r"quick notes"],
+            "content_patterns": [r"^- ", r"^\* ", r"TODO:", r"note:"],
+            "confidence": 0.7,
+            "tags": ["notes"],
         },
-        'docs': {
-            'title_patterns': [r'documentation', r'readme', r'guide', r'tutorial'],
-            'content_patterns': [r'## installation', r'## usage', r'## examples'],
-            'confidence': 0.8,
-            'tags': ['docs']
+        "docs": {
+            "title_patterns": [r"documentation", r"readme", r"guide", r"tutorial"],
+            "content_patterns": [r"## installation", r"## usage", r"## examples"],
+            "confidence": 0.8,
+            "tags": ["docs"],
         },
-
         # Technical work
-        'bug': {
-            'title_patterns': [r'bug:', r'fix:', r'error:', r'issue:'],
-            'content_patterns': [r'error', r'exception', r'traceback', r'bug'],
-            'confidence': 0.85,
-            'tags': ['bug', 'active']
+        "bug": {
+            "title_patterns": [r"bug:", r"fix:", r"error:", r"issue:"],
+            "content_patterns": [r"error", r"exception", r"traceback", r"bug"],
+            "confidence": 0.85,
+            "tags": ["bug", "active"],
         },
-        'feature': {
-            'title_patterns': [r'feature:', r'implement', r'add support'],
-            'content_patterns': [r'new feature', r'enhancement', r'implement'],
-            'confidence': 0.8,
-            'tags': ['feature', 'active']
+        "feature": {
+            "title_patterns": [r"feature:", r"implement", r"add support"],
+            "content_patterns": [r"new feature", r"enhancement", r"implement"],
+            "confidence": 0.8,
+            "tags": ["feature", "active"],
         },
-        'refactor': {
-            'title_patterns': [r'refactor:', r'cleanup:', r'improve'],
-            'content_patterns': [r'refactor', r'cleanup', r'optimize', r'reorganize'],
-            'confidence': 0.75,
-            'tags': ['refactor']
+        "refactor": {
+            "title_patterns": [r"refactor:", r"cleanup:", r"improve"],
+            "content_patterns": [r"refactor", r"cleanup", r"optimize", r"reorganize"],
+            "confidence": 0.75,
+            "tags": ["refactor"],
         },
-        'test': {
-            'title_patterns': [r'test:', r'testing', r'tests for'],
-            'content_patterns': [r'test_', r'assert', r'pytest', r'unittest'],
-            'confidence': 0.9,
-            'tags': ['test']
+        "test": {
+            "title_patterns": [r"test:", r"testing", r"tests for"],
+            "content_patterns": [r"test_", r"assert", r"pytest", r"unittest"],
+            "confidence": 0.9,
+            "tags": ["test"],
         },
-
         # Status detection
-        'done': {
-            'title_patterns': [r'✓', r'done:', r'completed:'],
-            'content_patterns': [r'completed', r'finished', r'done', r'success'],
-            'confidence': 0.7,
-            'tags': ['done']
+        "done": {
+            "title_patterns": [r"✓", r"done:", r"completed:"],
+            "content_patterns": [r"completed", r"finished", r"done", r"success"],
+            "confidence": 0.7,
+            "tags": ["done"],
         },
-        'blocked': {
-            'title_patterns': [r'blocked:', r'stuck:'],
-            'content_patterns': [r'blocked by', r'waiting for', r'stuck on', r'cannot proceed'],
-            'confidence': 0.8,
-            'tags': ['blocked']
+        "blocked": {
+            "title_patterns": [r"blocked:", r"stuck:"],
+            "content_patterns": [r"blocked by", r"waiting for", r"stuck on", r"cannot proceed"],
+            "confidence": 0.8,
+            "tags": ["blocked"],
         },
-
         # Priority
-        'urgent': {
-            'title_patterns': [r'urgent:', r'urgent\s', r'critical:', r'critical\s', r'asap'],
-            'content_patterns': [r'urgent', r'critical', r'immediately', r'asap'],
-            'confidence': 0.85,
-            'tags': ['urgent']
-        }
+        "urgent": {
+            "title_patterns": [r"urgent:", r"urgent\s", r"critical:", r"critical\s", r"asap"],
+            "content_patterns": [r"urgent", r"critical", r"immediately", r"asap"],
+            "confidence": 0.85,
+            "tags": ["urgent"],
+        },
     }
 
     def __init__(
         self,
         db_path: Union[str, Path] | None = None,
-        patterns: Dict | None = None,
+        patterns: dict | None = None,
     ):
         # Use centralized database connection management
         if db_path is not None:
@@ -119,14 +117,11 @@ class AutoTagger:
             # Merge default patterns with user configuration
             from ..config.tagging_rules import merge_with_defaults
 
-            self.patterns = merge_with_defaults(None)
+            self.patterns = merge_with_defaults({})
 
     def analyze_document(
-        self,
-        title: str,
-        content: str | None = None,
-        existing_tags: List[str] | None = None
-    ) -> List[Tuple[str, float]]:
+        self, title: str, content: str | None = None, existing_tags: list[str] | None = None
+    ) -> list[tuple[str, float]]:
         """
         Analyze a document and suggest tags with confidence scores.
 
@@ -138,21 +133,21 @@ class AutoTagger:
         Returns:
             List of tuples (tag, confidence) sorted by confidence
         """
-        existing_tags = set(existing_tags or [])
-        suggestions = defaultdict(float)
+        existing_set: set[str] = set(existing_tags or [])
+        suggestions: defaultdict[str, float] = defaultdict(float)
 
         # Normalize text for matching
         title_lower = title.lower()
-        content_lower = (content or '').lower()
+        content_lower = (content or "").lower()
 
         # Check each pattern
-        for pattern_name, rules in self.patterns.items():
+        for _pattern_name, rules in self.patterns.items():
             confidence = 0.0
-            base_confidence = rules['confidence']
+            base_confidence = rules["confidence"]
 
             # Check title patterns
             title_matches = 0
-            for pattern in rules.get('title_patterns', []):
+            for pattern in rules.get("title_patterns", []):
                 if re.search(pattern, title_lower, re.IGNORECASE):
                     title_matches += 1
 
@@ -160,9 +155,9 @@ class AutoTagger:
                 confidence = base_confidence
 
             # Check content patterns (if content provided)
-            if content and rules.get('content_patterns'):
+            if content and rules.get("content_patterns"):
                 content_matches = 0
-                for pattern in rules['content_patterns']:
+                for pattern in rules["content_patterns"]:
                     if re.search(pattern, content_lower, re.IGNORECASE):
                         content_matches += 1
 
@@ -171,14 +166,16 @@ class AutoTagger:
                     if title_matches > 0:
                         confidence = min(1.0, confidence + 0.1)
                     else:
-                        confidence = base_confidence * 0.75  # Lower confidence for content-only match
+                        confidence = (
+                            base_confidence * 0.75
+                        )  # Lower confidence for content-only match  # noqa: E501
 
             # Add suggested tags if confidence threshold met
             if confidence >= 0.6:
-                for tag in rules['tags']:
+                for tag in rules["tags"]:
                     # Convert to emoji if needed
                     emoji_tag = EMOJI_ALIASES.get(tag, tag)
-                    if emoji_tag not in existing_tags:
+                    if emoji_tag not in existing_set:
                         suggestions[emoji_tag] = max(suggestions[emoji_tag], confidence)
 
         # Sort by confidence
@@ -186,10 +183,8 @@ class AutoTagger:
         return sorted_suggestions
 
     def suggest_tags(
-        self,
-        document_id: int,
-        max_suggestions: int = DEFAULT_MAX_SUGGESTIONS
-    ) -> List[Tuple[str, float]]:
+        self, document_id: int, max_suggestions: int = DEFAULT_MAX_SUGGESTIONS
+    ) -> list[tuple[str, float]]:
         """
         Suggest tags for a specific document.
 
@@ -231,7 +226,7 @@ class AutoTagger:
         document_id: int,
         confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
         max_tags: int = DEFAULT_MAX_TAGS_PER_DOC,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Automatically apply high-confidence tags to a document.
 
@@ -281,7 +276,7 @@ class AutoTagger:
         untagged_only: bool = True,
         project: str | None = None,
         limit: int | None = None,
-    ) -> Dict[int, List[Tuple[str, float]]]:
+    ) -> dict[int, list[tuple[str, float]]]:
         """
         Suggest tags for multiple documents.
 
@@ -305,7 +300,7 @@ class AutoTagger:
                 WHERE d.is_deleted = 0
             """
 
-            params: List[SqlParam] = []
+            params: list[SqlParam] = []
 
             if project:
                 query += " AND d.project = ?"
@@ -338,13 +333,13 @@ class AutoTagger:
 
     def batch_auto_tag(
         self,
-        document_ids: List[int] | None = None,
+        document_ids: list[int] | None = None,
         untagged_only: bool = True,
         project: str | None = None,
         confidence_threshold: float = DEFAULT_TAGGING_CONFIDENCE,
         max_tags_per_doc: int = DEFAULT_MAX_TAGS_PER_DOC,
-        dry_run: bool = True
-    ) -> Dict[str, Any]:
+        dry_run: bool = True,
+    ) -> BatchAutoTagResult:
         """
         Apply auto-tagging to multiple documents.
 
@@ -359,88 +354,78 @@ class AutoTagger:
         Returns:
             Summary of operations
         """
+        processed = 0
+        tagged = 0
+        tags_applied = 0
+        documents: list[DocumentTagResult] = []
+
         if document_ids:
             # Process specific documents
-            results = {
-                'processed': 0,
-                'tagged': 0,
-                'tags_applied': 0,
-                'documents': []
-            }
-
             for doc_id in document_ids:
-                suggestions = self.suggest_tags(doc_id, max_suggestions=max_tags_per_doc)
+                doc_suggestions = self.suggest_tags(doc_id, max_suggestions=max_tags_per_doc)
                 eligible_tags = [
-                    (tag, conf) for tag, conf in suggestions
-                    if conf >= confidence_threshold
+                    (tag, conf) for tag, conf in doc_suggestions if conf >= confidence_threshold
                 ]
 
                 if eligible_tags:
-                    doc_result = {
-                        'id': doc_id,
-                        'suggested_tags': eligible_tags
-                    }
+                    doc_result: DocumentTagResult = {"id": doc_id, "suggested_tags": eligible_tags}
 
                     if not dry_run:
                         applied = self.auto_tag_document(
-                            doc_id,
-                            confidence_threshold,
-                            max_tags_per_doc
+                            doc_id, confidence_threshold, max_tags_per_doc
                         )
-                        doc_result['applied_tags'] = applied
-                        results['tags_applied'] += len(applied)
+                        doc_result["applied_tags"] = applied
+                        tags_applied += len(applied)
                         if applied:
-                            results['tagged'] += 1
+                            tagged += 1
 
-                    results['documents'].append(doc_result)
+                    documents.append(doc_result)
 
-                results['processed'] += 1
+                processed += 1
         else:
             # Batch process based on criteria
-            suggestions = self.batch_suggest(untagged_only, project)
+            batch_suggestions = self.batch_suggest(untagged_only, project)
+            processed = len(batch_suggestions)
 
-            results = {
-                'processed': len(suggestions),
-                'tagged': 0,
-                'tags_applied': 0,
-                'documents': []
-            }
-
-            for doc_id, doc_suggestions in suggestions.items():
+            for doc_id, doc_suggestions in batch_suggestions.items():
                 eligible_tags = [
-                    (tag, conf) for tag, conf in doc_suggestions[:max_tags_per_doc]
+                    (tag, conf)
+                    for tag, conf in doc_suggestions[:max_tags_per_doc]
                     if conf >= confidence_threshold
                 ]
 
                 if eligible_tags:
-                    doc_result = {
-                        'id': doc_id,
-                        'suggested_tags': eligible_tags
+                    batch_result: DocumentTagResult = {
+                        "id": doc_id,
+                        "suggested_tags": eligible_tags,
                     }
 
                     if not dry_run:
                         applied = self.auto_tag_document(
-                            doc_id,
-                            confidence_threshold,
-                            max_tags_per_doc
+                            doc_id, confidence_threshold, max_tags_per_doc
                         )
-                        doc_result['applied_tags'] = applied
-                        results['tags_applied'] += len(applied)
+                        batch_result["applied_tags"] = applied
+                        tags_applied += len(applied)
                         if applied:
-                            results['tagged'] += 1
+                            tagged += 1
 
-                    results['documents'].append(doc_result)
+                    documents.append(batch_result)
 
-        return results
+        return {
+            "processed": processed,
+            "tagged": tagged,
+            "tags_applied": tags_applied,
+            "documents": documents,
+        }
 
     def add_custom_pattern(
         self,
         name: str,
-        title_patterns: List[str] | None = None,
-        content_patterns: List[str] | None = None,
-        tags: List[str] = None,
-        confidence: float = DEFAULT_TAGGING_CONFIDENCE
-    ):
+        title_patterns: list[str] | None = None,
+        content_patterns: list[str] | None = None,
+        tags: list[str] | None = None,
+        confidence: float = DEFAULT_TAGGING_CONFIDENCE,
+    ) -> None:
         """
         Add a custom pattern for auto-tagging.
 
@@ -452,13 +437,13 @@ class AutoTagger:
             confidence: Base confidence score for this pattern
         """
         self.patterns[name] = {
-            'title_patterns': title_patterns or [],
-            'content_patterns': content_patterns or [],
-            'tags': tags or [],
-            'confidence': confidence
+            "title_patterns": title_patterns or [],
+            "content_patterns": content_patterns or [],
+            "tags": tags or [],
+            "confidence": confidence,
         }
 
-    def remove_pattern(self, name: str):
+    def remove_pattern(self, name: str) -> None:
         """Remove a custom pattern."""
         if name in self.patterns:
             del self.patterns[name]

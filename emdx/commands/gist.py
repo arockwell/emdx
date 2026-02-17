@@ -7,13 +7,13 @@ import os
 import subprocess
 import webbrowser
 
-logger = logging.getLogger(__name__)
-
 import typer
 
 from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.utils.output import console
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="GitHub Gist integration")
 
@@ -182,7 +182,7 @@ def create(
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
     update: str | None = typer.Option(None, "--update", "-u", help="Update existing gist ID"),
-):
+) -> None:
     """Create or update a GitHub Gist from a document."""
     # Ensure database schema is up to date
     db.ensure_schema()

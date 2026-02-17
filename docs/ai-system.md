@@ -22,23 +22,25 @@ The AI system provides:
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Services Layer                           │
-├──────────────────────────┬──────────────────────────────────┤
-│   EmbeddingService       │        AskService                │
-│   - Index management     │   - Document retrieval           │
-│   - Vector search        │   - Context building             │
-│   - Similarity calc      │   - LLM integration              │
-└──────────────────────────┴──────────────────────────────────┘
+├─────────────────────┬─────────────────────┬─────────────────┤
+│  EmbeddingService   │ HybridSearchService │   AskService    │
+│  - Index management │ - FTS5 + semantic   │ - Doc retrieval │
+│  - Vector search    │ - Score merging     │ - Context build │
+│  - Similarity calc  │ - Mode detection    │ - LLM integr.   │
+├─────────────────────┴─────────────────────┴─────────────────┤
+│  chunk_splitter - Splits docs into ~100-500 token chunks    │
+└─────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Storage Layer                            │
-├──────────────────────────┬──────────────────────────────────┤
-│  document_embeddings     │        documents                 │
-│  - document_id           │   - id, title, content           │
-│  - model_name            │   - project, tags                │
-│  - embedding (BLOB)      │   - FTS5 index                   │
-│  - dimension             │                                  │
-└──────────────────────────┴──────────────────────────────────┘
+├────────────────────┬────────────────────┬───────────────────┤
+│ document_embeddings│  chunk_embeddings  │    documents      │
+│ - document_id      │ - document_id      │ - id, title       │
+│ - model_name       │ - chunk_index      │ - content         │
+│ - embedding (BLOB) │ - heading_path     │ - project, tags   │
+│ - dimension        │ - text, embedding  │ - FTS5 index      │
+└────────────────────┴────────────────────┴───────────────────┘
 ```
 
 ## Getting Started
@@ -80,23 +82,24 @@ emdx ai similar 42
 **Option A: Using Claude API** (requires `ANTHROPIC_API_KEY`):
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-emdx ai ask "How does the cascade system work?"
+emdx ai ask "How does the delegate system work?"
 ```
 
 **Option B: Using Claude CLI** (uses Claude Max subscription):
 ```bash
-emdx ai context "How does the cascade system work?" | claude
+emdx ai context "How does the delegate system work?" | claude
 ```
 
 ## Commands Reference
 
 ### `emdx ai index`
 
-Build or update the embedding index.
+Build or update the embedding index. By default, indexes both document-level and chunk-level embeddings.
 
 ```bash
-emdx ai index              # Index new documents only
+emdx ai index              # Index new documents and chunks
 emdx ai index --force      # Reindex everything
+emdx ai index --no-chunks  # Only index documents, skip chunk-level
 emdx ai index --batch-size 100  # Process in larger batches
 ```
 
@@ -171,10 +174,33 @@ EMDX uses `all-MiniLM-L6-v2` from sentence-transformers:
 
 ### Search Algorithm
 
-1. Query is converted to a 384-dimensional vector
-2. Cosine similarity is computed against all document vectors
-3. Results are ranked by similarity score (0-1)
-4. Documents above threshold are returned
+EMDX uses **hybrid search** that combines keyword and semantic search:
+
+1. **Keyword search** (FTS5): Fast, exact term matching
+2. **Semantic search** (chunks): Conceptual similarity via embeddings
+3. **Score merging**: Results are combined with weighted scoring:
+   - Keyword score weight: **0.4**
+   - Semantic score weight: **0.6**
+   - Hybrid boost: **+0.15** for documents found by both methods
+4. Results are deduplicated and ranked by combined score
+
+The system auto-detects the best mode based on available indexes.
+
+### Chunk-Level Search
+
+Documents are split into **~100-500 token chunks** for more precise semantic search:
+
+- **Splitting strategy**: Chunks are created by markdown headings (##, ###, etc.)
+- **Large sections**: Split further by paragraph breaks, then sentences
+- **Small sections**: Merged with adjacent content to meet minimum size
+- **Heading paths**: Each chunk preserves its location (e.g., "Methods > Data Collection")
+
+Benefits of chunk-level indexing:
+- **Precision**: Find the exact section that matches, not just "somewhere in this doc"
+- **Context**: Heading paths tell you where the match is
+- **Scale**: ~6x more entries than doc-level (chunks per document varies)
+
+The chunk splitter (`emdx/utils/chunk_splitter.py`) handles the splitting logic.
 
 ### Fallback Behavior
 
@@ -264,9 +290,17 @@ pip install sentence-transformers
 
 ## Storage
 
-Embeddings are stored in SQLite:
+Embeddings are stored in SQLite across two tables:
+
+**Document embeddings** (`document_embeddings`):
 - ~1.5KB per document (384 floats × 4 bytes)
 - 100 docs ≈ 150KB
 - 1000 docs ≈ 1.5MB
 
-The index is stored in your EMDX database alongside documents.
+**Chunk embeddings** (`chunk_embeddings`):
+- ~6x more entries than document-level (varies by doc length)
+- Each chunk stores: heading_path, text, embedding
+- 100 docs with ~5 chunks each ≈ 900KB
+- 1000 docs ≈ 9MB
+
+The indexes are stored in your EMDX database alongside documents. Use `emdx ai stats` to see current index sizes.

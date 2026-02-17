@@ -8,7 +8,6 @@ at startup before they can cause runtime crashes.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Set
 
 from .context import Context
 
@@ -44,10 +43,10 @@ class KeybindingEntry:
     show: bool = True  # Whether to show in help
     allow_override: bool = True  # Can user override in config
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.key, self.action, self.context.value, self.widget_class))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, KeybindingEntry):
             return False
         return (
@@ -129,19 +128,19 @@ class KeybindingRegistry:
     """
 
     # All registered bindings
-    bindings: List[KeybindingEntry] = field(default_factory=list)
+    bindings: list[KeybindingEntry] = field(default_factory=list)
 
     # Bindings indexed by context for fast lookup
-    by_context: Dict[Context, List[KeybindingEntry]] = field(default_factory=dict)
+    by_context: dict[Context, list[KeybindingEntry]] = field(default_factory=dict)
 
     # Bindings indexed by key for conflict detection
-    by_key: Dict[str, List[KeybindingEntry]] = field(default_factory=dict)
+    by_key: dict[str, list[KeybindingEntry]] = field(default_factory=dict)
 
     # Detected conflicts
-    conflicts: List[ConflictReport] = field(default_factory=list)
+    conflicts: list[ConflictReport] = field(default_factory=list)
 
     # User overrides from config
-    overrides: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def register(self, entry: KeybindingEntry) -> None:
         """
@@ -166,7 +165,7 @@ class KeybindingRegistry:
             self.by_key[entry.key] = []
         self.by_key[entry.key].append(entry)
 
-    def register_many(self, entries: List[KeybindingEntry]) -> None:
+    def register_many(self, entries: list[KeybindingEntry]) -> None:
         """Register multiple keybindings at once."""
         for entry in entries:
             self.register(entry)
@@ -217,7 +216,7 @@ class KeybindingRegistry:
 
         return False
 
-    def detect_conflicts(self) -> List[ConflictReport]:
+    def detect_conflicts(self) -> list[ConflictReport]:
         """
         Detect all keybinding conflicts.
 
@@ -264,9 +263,7 @@ class KeybindingRegistry:
         if ctx1 == ctx2:
             if binding1.action != binding2.action:
                 # Check if actions are semantically similar (both do same thing)
-                similar_actions = self._are_actions_similar(
-                    binding1.action, binding2.action
-                )
+                similar_actions = self._are_actions_similar(binding1.action, binding2.action)
                 return ConflictReport(
                     key=key,
                     context1=ctx1,
@@ -275,7 +272,9 @@ class KeybindingRegistry:
                     binding2=binding2,
                     conflict_type=ConflictType.SAME_CONTEXT,
                     # Downgrade to INFO if actions do the same thing
-                    severity=ConflictSeverity.INFO if similar_actions else ConflictSeverity.CRITICAL,
+                    severity=ConflictSeverity.INFO
+                    if similar_actions
+                    else ConflictSeverity.CRITICAL,  # noqa: E501
                 )
             # Same action = duplicate, not a conflict
             return None
@@ -326,7 +325,7 @@ class KeybindingRegistry:
 
     def get_bindings_for_context(
         self, context: Context, include_parents: bool = True
-    ) -> List[KeybindingEntry]:
+    ) -> list[KeybindingEntry]:
         """
         Get all bindings active in a context.
 
@@ -344,7 +343,7 @@ class KeybindingRegistry:
                 bindings.extend(self.by_context.get(parent, []))
 
         # Sort: priority bindings first, then by context specificity
-        def sort_key(b: KeybindingEntry) -> tuple:
+        def sort_key(b: KeybindingEntry) -> tuple[int, int]:
             # Get context depth (more specific = higher number)
             ctx_order = [context] + Context.get_parent_contexts(context)
             try:
@@ -357,13 +356,11 @@ class KeybindingRegistry:
 
         return bindings
 
-    def get_all_keys(self) -> Set[str]:
+    def get_all_keys(self) -> set[str]:
         """Get all registered keys."""
         return set(self.by_key.keys())
 
-    def get_binding_for_key(
-        self, key: str, context: Context
-    ) -> KeybindingEntry | None:
+    def get_binding_for_key(self, key: str, context: Context) -> KeybindingEntry | None:
         """
         Get the active binding for a key in a context.
 
@@ -375,9 +372,7 @@ class KeybindingRegistry:
                 return binding
         return None
 
-    def get_conflicts_by_severity(
-        self, severity: ConflictSeverity
-    ) -> List[ConflictReport]:
+    def get_conflicts_by_severity(self, severity: ConflictSeverity) -> list[ConflictReport]:
         """Get conflicts filtered by severity."""
         return [c for c in self.conflicts if c.severity == severity]
 

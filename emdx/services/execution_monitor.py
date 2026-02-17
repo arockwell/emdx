@@ -2,11 +2,8 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
 
 import psutil
-
-logger = logging.getLogger(__name__)
 
 from ..database.connection import db_connection
 from ..models.executions import (
@@ -15,6 +12,9 @@ from ..models.executions import (
     get_stale_executions,
     update_execution_status,
 )
+from ..services.types import ExecutionAction, ExecutionMetrics, ProcessHealthStatus
+
+logger = logging.getLogger(__name__)
 
 
 class ExecutionMonitor:
@@ -24,11 +24,12 @@ class ExecutionMonitor:
         """Initialize execution monitor.
 
         Args:
-            stale_timeout_seconds: Seconds after which execution is considered stale (default 30 min)
+            stale_timeout_seconds: Seconds after which execution is considered
+                stale (default 30 min)
         """
         self.stale_timeout = stale_timeout_seconds
 
-    def check_process_health(self, execution: Execution) -> Dict[str, Any]:
+    def check_process_health(self, execution: Execution) -> ProcessHealthStatus:
         """Check if an execution's process is still healthy.
 
         Args:
@@ -37,48 +38,50 @@ class ExecutionMonitor:
         Returns:
             Dictionary with health status
         """
-        health = {
-            'execution_id': execution.id,
-            'is_zombie': False,
-            'is_running': False,
-            'process_exists': False,
-            'is_stale': False,
-            'reason': None
+        health: ProcessHealthStatus = {
+            "execution_id": execution.id,
+            "is_zombie": False,
+            "is_running": False,
+            "process_exists": False,
+            "is_stale": False,
+            "reason": None,
         }
 
         # Check if process exists
         if execution.pid:
             try:
                 proc = psutil.Process(execution.pid)
-                health['process_exists'] = True
-                health['is_running'] = proc.is_running()
+                health["process_exists"] = True
+                health["is_running"] = proc.is_running()
 
                 # Check if zombie
                 if proc.status() == psutil.STATUS_ZOMBIE:
-                    health['is_zombie'] = True
-                    health['reason'] = 'Process is zombie'
+                    health["is_zombie"] = True
+                    health["reason"] = "Process is zombie"
 
             except psutil.NoSuchProcess:
                 logger.debug("Process %s not found for execution %s", execution.pid, execution.id)
-                health['process_exists'] = False
-                health['reason'] = 'Process not found'
+                health["process_exists"] = False
+                health["reason"] = "Process not found"
             except psutil.AccessDenied:
-                logger.debug("Access denied to process %s for execution %s", execution.pid, execution.id)
-                health['process_exists'] = True  # Assume it exists if we can't access
-                health['reason'] = 'Access denied to process'
+                logger.debug(
+                    "Access denied to process %s for execution %s", execution.pid, execution.id
+                )  # noqa: E501
+                health["process_exists"] = True  # Assume it exists if we can't access
+                health["reason"] = "Access denied to process"
         else:
-            health['reason'] = 'No PID recorded'
+            health["reason"] = "No PID recorded"
 
         # Check staleness
         age = (datetime.now(timezone.utc) - execution.started_at).total_seconds()
         if age > self.stale_timeout:
-            health['is_stale'] = True
-            if not health['reason']:
-                health['reason'] = f'Running for {int(age/60)} minutes'
+            health["is_stale"] = True
+            if not health["reason"]:
+                health["reason"] = f"Running for {int(age / 60)} minutes"
 
         return health
 
-    def cleanup_stuck_executions(self, dry_run: bool = True) -> List[Dict[str, Any]]:
+    def cleanup_stuck_executions(self, dry_run: bool = True) -> list[ExecutionAction]:
         """Find and clean up stuck executions.
 
         Args:
@@ -87,7 +90,7 @@ class ExecutionMonitor:
         Returns:
             List of actions taken/would be taken
         """
-        actions = []
+        actions: list[ExecutionAction] = []
 
         # Get all running executions
         running = get_running_executions()
@@ -99,37 +102,37 @@ class ExecutionMonitor:
             should_fail = False
             fail_reason = None
 
-            if health['is_zombie']:
+            if health["is_zombie"]:
                 should_fail = True
-                fail_reason = 'zombie_process'
-            elif not health['process_exists'] and execution.pid:
+                fail_reason = "zombie_process"
+            elif not health["process_exists"] and execution.pid:
                 should_fail = True
-                fail_reason = 'process_died'
-            elif health['is_stale'] and not health['is_running']:
+                fail_reason = "process_died"
+            elif health["is_stale"] and not health["is_running"]:
                 should_fail = True
-                fail_reason = 'stale_execution'
+                fail_reason = "stale_execution"
 
             if should_fail:
-                action = {
-                    'execution_id': execution.id,
-                    'doc_title': execution.doc_title,
-                    'action': 'mark_failed',
-                    'reason': fail_reason,
-                    'details': health['reason']
+                action: ExecutionAction = {
+                    "execution_id": execution.id,
+                    "doc_title": execution.doc_title,
+                    "action": "mark_failed",
+                    "reason": fail_reason,
+                    "details": health["reason"],
                 }
 
                 if not dry_run:
                     # Mark as failed with appropriate exit code
                     exit_code = {
-                        'zombie_process': -2,
-                        'process_died': -3,
-                        'stale_execution': -4
-                    }.get(fail_reason, -1)
+                        "zombie_process": -2,
+                        "process_died": -3,
+                        "stale_execution": -4,
+                    }.get(fail_reason or "", -1)
 
-                    update_execution_status(execution.id, 'failed', exit_code)
-                    action['completed'] = True
+                    update_execution_status(execution.id, "failed", exit_code)
+                    action["completed"] = True
                 else:
-                    action['completed'] = False
+                    action["completed"] = False
 
                 actions.append(action)
 
@@ -138,28 +141,28 @@ class ExecutionMonitor:
 
         for execution in stale:
             # Skip if already processed
-            if any(a['execution_id'] == execution.id for a in actions):
+            if any(a["execution_id"] == execution.id for a in actions):
                 continue
 
-            action = {
-                'execution_id': execution.id,
-                'doc_title': execution.doc_title,
-                'action': 'mark_failed',
-                'reason': 'no_heartbeat',
-                'details': f'No heartbeat for {self.stale_timeout/60} minutes'
+            stale_action: ExecutionAction = {
+                "execution_id": execution.id,
+                "doc_title": execution.doc_title,
+                "action": "mark_failed",
+                "reason": "no_heartbeat",
+                "details": f"No heartbeat for {self.stale_timeout / 60} minutes",
             }
 
             if not dry_run:
-                update_execution_status(execution.id, 'failed', -5)  # -5 for heartbeat timeout
-                action['completed'] = True
+                update_execution_status(execution.id, "failed", -5)  # -5 for heartbeat timeout
+                stale_action["completed"] = True
             else:
-                action['completed'] = False
+                stale_action["completed"] = False
 
-            actions.append(action)
+            actions.append(stale_action)
 
         return actions
 
-    def get_execution_metrics(self) -> Dict[str, Any]:
+    def get_execution_metrics(self) -> ExecutionMetrics:
         """Get metrics about executions.
 
         Returns:
@@ -198,26 +201,26 @@ class ExecutionMonitor:
 
             # Failure rate
             total = sum(status_counts.values())
-            failed = status_counts.get('failed', 0)
+            failed = status_counts.get("failed", 0)
             failure_rate = (failed / total * 100) if total > 0 else 0
 
             # Check current health
             running = get_running_executions()
             health_checks = [self.check_process_health(e) for e in running]
-            unhealthy = sum(1 for h in health_checks if h['is_zombie'] or not h['process_exists'])
+            unhealthy = sum(1 for h in health_checks if h["is_zombie"] or not h["process_exists"])
 
             return {
-                'total_executions': total,
-                'status_breakdown': status_counts,
-                'recent_24h': recent_counts,
-                'currently_running': len(running),
-                'unhealthy_running': unhealthy,
-                'average_duration_minutes': round(avg_duration, 2),
-                'failure_rate_percent': round(failure_rate, 2),
-                'metrics_timestamp': datetime.now(timezone.utc).isoformat()
+                "total_executions": total,
+                "status_breakdown": status_counts,
+                "recent_24h": recent_counts,
+                "currently_running": len(running),
+                "unhealthy_running": unhealthy,
+                "average_duration_minutes": round(avg_duration, 2),
+                "failure_rate_percent": round(failure_rate, 2),
+                "metrics_timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-    def kill_zombie_processes(self, dry_run: bool = True) -> List[Dict[str, Any]]:
+    def kill_zombie_processes(self, dry_run: bool = True) -> list[ExecutionAction]:
         """Kill zombie execution processes.
 
         Args:
@@ -226,7 +229,7 @@ class ExecutionMonitor:
         Returns:
             List of actions taken/would be taken
         """
-        actions = []
+        actions: list[ExecutionAction] = []
         running = get_running_executions()
 
         for execution in running:
@@ -238,22 +241,22 @@ class ExecutionMonitor:
 
                 # Check if it's a zombie
                 if proc.status() == psutil.STATUS_ZOMBIE:
-                    action = {
-                        'execution_id': execution.id,
-                        'pid': execution.pid,
-                        'action': 'kill_zombie',
-                        'doc_title': execution.doc_title
+                    action: ExecutionAction = {
+                        "execution_id": execution.id,
+                        "pid": execution.pid,
+                        "action": "kill_zombie",
+                        "doc_title": execution.doc_title,
                     }
 
                     if not dry_run:
                         try:
                             proc.kill()
-                            action['completed'] = True
+                            action["completed"] = True
                         except Exception as e:
-                            action['completed'] = False
-                            action['error'] = str(e)
+                            action["completed"] = False
+                            action["error"] = str(e)
                     else:
-                        action['completed'] = False
+                        action["completed"] = False
 
                     actions.append(action)
 
