@@ -313,6 +313,8 @@ class QAScreen(HelpMixin, Widget):
         self._has_claude_cli = shutil.which("claude") is not None
         self._source_ids: list[int] = []
         self._entries: list[dict[str, Any]] = []
+        # Background task that survives widget unmount/remount
+        self._bg_task: asyncio.Task[None] | None = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="qa-input-bar"):
@@ -387,19 +389,7 @@ class QAScreen(HelpMixin, Widget):
         """
         for entry in self._entries:
             self._append_message(f"\n[bold cyan]Q:[/bold cyan] {entry['question']}\n")
-            self._append_message("[bold green]A:[/bold green]")
-            self._append_markdown(entry["answer"])
-            docs = entry.get("sources", [])
-            meta_parts: list[str] = []
-            if docs:
-                source_parts = [f"#{d[0]} {d[1]}" for d in docs]
-                meta_parts.append(f"Sources: {' · '.join(source_parts)}")
-            elapsed = entry.get("elapsed")
-            if elapsed is not None:
-                meta_parts.append(f"{elapsed:.1f}s")
-            if meta_parts:
-                self._append_message(f"[dim]{' | '.join(meta_parts)}[/dim]")
-            self._append_message("[dim]─────────────────────────────────────────[/dim]")
+            self._render_entry(entry)
 
         if self._is_asking:
             self._set_thinking("[dim]Still generating answer...[/dim]")
@@ -433,26 +423,20 @@ class QAScreen(HelpMixin, Widget):
         # Show the question
         self._append_message(f"\n[bold cyan]Q:[/bold cyan] {question}\n")
 
-        self.run_worker(
-            self._ask_and_render(question),
-            name="qa_ask",
-            group="qa_ask",
-            exclusive=True,
-            exit_on_error=False,
-        )
+        # Launch as a free-standing asyncio task so it survives widget
+        # unmount/remount (run_worker gets cancelled on unmount).
+        self._is_asking = True
+        self._bg_task = asyncio.get_event_loop().create_task(self._fetch_and_store(question))
 
     def _cancel_asking(self) -> None:
         """Cancel the current Q&A operation and reset state."""
+        if self._bg_task and not self._bg_task.done():
+            self._bg_task.cancel()
         self._is_asking = False
+        self._remove_thinking()
         self._append_message("[dim italic]Cancelled[/dim italic]")
         self._append_message("[dim]─────────────────────────────────────────[/dim]")
         self._update_status("Cancelled | Ready")
-        # Kill the worker — exclusive=True means the next run_worker will
-        # cancel it too, but this handles the Escape-to-cancel case.
-        workers = self.workers
-        for worker in workers:
-            if worker.name == "qa_ask":
-                worker.cancel()
 
     def _set_thinking(self, text: str) -> None:
         """Update or create the thinking indicator."""
@@ -460,10 +444,13 @@ class QAScreen(HelpMixin, Widget):
             existing = self.query_one("#qa-thinking", Static)
             existing.update(text)
         except Exception:
-            container = self.query_one("#qa-conversation", ScrollableContainer)
-            indicator = Static(text, id="qa-thinking", classes="qa-message")
-            container.mount(indicator)
-            indicator.scroll_visible()
+            try:
+                container = self.query_one("#qa-conversation", ScrollableContainer)
+                indicator = Static(text, id="qa-thinking", classes="qa-message")
+                container.mount(indicator)
+                indicator.scroll_visible()
+            except Exception:
+                pass  # Widget not mounted
 
     def _remove_thinking(self) -> None:
         """Remove the thinking indicator."""
@@ -472,16 +459,44 @@ class QAScreen(HelpMixin, Widget):
         except Exception:
             pass
 
-    async def _ask_and_render(self, question: str) -> None:
-        """Ask the question and render the answer."""
-        self._is_asking = True
+    def _is_mounted_in_dom(self) -> bool:
+        """Check if this widget is currently in the live DOM."""
+        try:
+            self.query_one("#qa-conversation", ScrollableContainer)
+            return True
+        except Exception:
+            return False
+
+    def _render_entry(self, entry: dict[str, Any]) -> None:
+        """Render a single Q&A entry into the conversation DOM."""
+        self._append_message("[bold green]A:[/bold green]")
+        self._append_markdown(entry["answer"])
+        docs = entry.get("sources", [])
+        meta_parts: list[str] = []
+        if docs:
+            self._source_ids = [d[0] for d in docs]
+            source_parts = [f"#{d[0]} {d[1]}" for d in docs]
+            meta_parts.append(f"Sources: {' · '.join(source_parts)}")
+        elapsed = entry.get("elapsed")
+        if elapsed is not None:
+            meta_parts.append(f"{elapsed:.1f}s")
+        if meta_parts:
+            self._append_message(f"[dim]{' | '.join(meta_parts)}[/dim]")
+        self._append_message("[dim]─────────────────────────────────────────[/dim]")
+
+    async def _fetch_and_store(self, question: str) -> None:
+        """Fetch context + answer and store in _entries.
+
+        This is a free-standing asyncio task (NOT a Textual worker) so
+        it survives widget unmount/remount when switching screens.
+        UI updates are best-effort — if we're unmounted, they silently
+        fail and on_mount will rebuild from _entries.
+        """
         t0 = time.monotonic()
         self._set_thinking("[dim]Searching knowledge base...[/dim]")
-        self.call_later(self._update_status, "Retrieving context...")
+        self._update_status("Retrieving context...")
 
-        # Save terminal state once on the main thread. Background threads
-        # (torch/sentence-transformers imports, subprocess) can reset the
-        # terminal from raw to cooked mode. We restore after each await.
+        # Save terminal state on the main thread before background work.
         term_state = _save_terminal_state()
 
         try:
@@ -493,51 +508,40 @@ class QAScreen(HelpMixin, Widget):
             self._set_thinking(
                 f"[dim]Found {src_count} sources ({t_retrieve:.1f}s) — generating answer...[/dim]"
             )
-            self.call_later(self._update_status, "Generating answer...")
+            self._update_status("Generating answer...")
 
             answer = await asyncio.to_thread(_run_claude, question, context)
             _restore_terminal_state(term_state)
 
             t_total = time.monotonic() - t0
+
+            # Always store — this is the durable state
+            entry: dict[str, Any] = {
+                "question": question,
+                "answer": answer,
+                "sources": docs,
+                "elapsed": t_total,
+            }
+            self._entries.append(entry)
+
+            # Render if we're still in the DOM
             self._remove_thinking()
+            if self._is_mounted_in_dom():
+                self._render_entry(entry)
+                self._update_status(f"Done | {src_count} sources | {t_total:.1f}s")
 
-            # Store for save feature and conversation rebuild
-            self._entries.append(
-                {
-                    "question": question,
-                    "answer": answer,
-                    "sources": docs,
-                    "elapsed": t_total,
-                }
-            )
-
-            # Render answer as markdown
-            self._append_message("[bold green]A:[/bold green]")
-            self._append_markdown(answer)
-
-            # Show sources and timing
-            meta_parts: list[str] = []
-            if docs:
-                self._source_ids = [d[0] for d in docs]
-                source_parts = [f"#{d[0]} {d[1]}" for d in docs]
-                meta_parts.append(f"Sources: {' · '.join(source_parts)}")
-            meta_parts.append(f"{t_total:.1f}s")
-            self._append_message(f"[dim]{' | '.join(meta_parts)}[/dim]")
-
-            self.call_later(self._update_status, f"Done | {src_count} sources | {t_total:.1f}s")
         except asyncio.CancelledError:
-            logger.info("Q&A worker cancelled")
+            logger.info("Q&A task cancelled")
             self._remove_thinking()
             return
         except Exception as e:
             logger.error(f"Q&A failed: {e}", exc_info=True)
             self._remove_thinking()
-            self._append_message(f"[bold red]Error:[/bold red] {e}")
-            self.call_later(self._update_status, f"Error: {e}")
+            if self._is_mounted_in_dom():
+                self._append_message(f"[bold red]Error:[/bold red] {e}")
+                self._update_status(f"Error: {e}")
         finally:
             self._is_asking = False
-
-        self._append_message("[dim]─────────────────────────────────────────[/dim]")
 
     # -- Actions --
 
