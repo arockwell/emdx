@@ -3,7 +3,7 @@
 import json
 import re
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -173,7 +173,6 @@ class TestFindCommand:
     @patch("emdx.commands.core.db")
     def test_find_basic(self, mock_db, mock_search, mock_get_tags):
         """Basic search returns results."""
-        mock_db.ensure_schema = Mock()
         mock_search.return_value = [
             {
                 "id": 1,
@@ -193,7 +192,6 @@ class TestFindCommand:
     @patch("emdx.commands.core.db")
     def test_find_no_args(self, mock_db):
         """Find with no search terms and no tags should error."""
-        mock_db.ensure_schema = Mock()
         result = runner.invoke(app, ["find"])
         assert result.exit_code != 0
 
@@ -202,7 +200,6 @@ class TestFindCommand:
     @patch("emdx.commands.core.db")
     def test_find_no_results(self, mock_db, mock_search, mock_get_tags):
         """Search with no results shows appropriate message."""
-        mock_db.ensure_schema = Mock()
         mock_search.return_value = []
 
         # Use --mode keyword to force FTS path (which is what search_documents mock tests)
@@ -215,7 +212,6 @@ class TestFindCommand:
     @patch("emdx.commands.core.db")
     def test_find_ids_only(self, mock_db, mock_search, mock_get_tags):
         """--ids-only outputs just IDs."""
-        mock_db.ensure_schema = Mock()
         mock_search.return_value = [
             {
                 "id": 42,
@@ -237,7 +233,6 @@ class TestFindCommand:
     @patch("emdx.commands.core.db")
     def test_find_json_output(self, mock_db, mock_search, mock_get_tags):
         """--json outputs JSON array."""
-        mock_db.ensure_schema = Mock()
         mock_search.return_value = [
             {
                 "id": 1,
@@ -260,7 +255,6 @@ class TestFindCommand:
     @patch("emdx.commands.core.db")
     def test_find_by_tags(self, mock_db, mock_search_tags, mock_get_tags):
         """Find with --tags does tag-based search."""
-        mock_db.ensure_schema = Mock()
         mock_search_tags.return_value = [
             {
                 "id": 5,
@@ -288,7 +282,6 @@ class TestViewCommand:
     @patch("emdx.commands.core.db")
     def test_view_by_id(self, mock_db, mock_get_doc, mock_get_tags):
         """View a document by numeric ID."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "My Doc",
@@ -307,7 +300,6 @@ class TestViewCommand:
     @patch("emdx.commands.core.db")
     def test_view_not_found(self, mock_db, mock_get_doc):
         """View nonexistent document shows error."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = None
 
         result = runner.invoke(app, ["view", "999"])
@@ -319,7 +311,6 @@ class TestViewCommand:
     @patch("emdx.commands.core.db")
     def test_view_raw(self, mock_db, mock_get_doc, mock_get_tags):
         """View with --raw shows raw content."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "Raw Doc",
@@ -339,7 +330,6 @@ class TestViewCommand:
     @patch("emdx.commands.core.db")
     def test_view_no_header(self, mock_db, mock_get_doc, mock_get_tags):
         """View with --no-header hides header."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "No Header",
@@ -361,7 +351,6 @@ class TestViewCommand:
     @patch("emdx.commands.core.db")
     def test_view_json(self, mock_db, mock_get_doc, mock_get_tags):
         """View with --json outputs valid JSON."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "JSON Doc",
@@ -401,7 +390,6 @@ class TestEditCommand:
     @patch("emdx.commands.core.db")
     def test_edit_title_only(self, mock_db, mock_get_doc, mock_update):
         """Edit with --title updates title without opening editor."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "Old Title",
@@ -420,7 +408,6 @@ class TestEditCommand:
     @patch("emdx.commands.core.db")
     def test_edit_doc_not_found(self, mock_db, mock_get_doc):
         """Edit nonexistent document shows error."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = None
 
         result = runner.invoke(app, ["edit", "999"])
@@ -432,7 +419,6 @@ class TestEditCommand:
     @patch("emdx.commands.core.db")
     def test_edit_title_failure(self, mock_db, mock_get_doc, mock_update):
         """Edit that fails to update shows error."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "Title",
@@ -463,7 +449,6 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.db")
     def test_delete_soft(self, mock_db, mock_get_doc, mock_delete):
         """Soft delete with --force skips confirmation."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "To Delete",
@@ -484,7 +469,6 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.db")
     def test_delete_hard_force(self, mock_db, mock_get_doc, mock_delete):
         """Hard delete with --force --hard."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "Perm Delete",
@@ -503,7 +487,6 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.db")
     def test_delete_not_found(self, mock_db, mock_get_doc):
         """Deleting a non-existent document shows error."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = None
 
         result = runner.invoke(app, ["delete", "999", "--force"])
@@ -515,7 +498,6 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.db")
     def test_delete_dry_run(self, mock_db, mock_get_doc):
         """--dry-run shows what would be deleted without deleting."""
-        mock_db.ensure_schema = Mock()
         mock_get_doc.return_value = {
             "id": 1,
             "title": "Dry Run Doc",
@@ -533,7 +515,6 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.db")
     def test_delete_multiple(self, mock_db, mock_get_doc, mock_delete):
         """Delete multiple documents at once."""
-        mock_db.ensure_schema = Mock()
 
         def side_effect(identifier):
             docs = {
@@ -567,10 +548,8 @@ class TestTrashCommand:
     """Tests for the trash command."""
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
-    def test_trash_empty(self, mock_db, mock_list_deleted):
+    def test_trash_empty(self, mock_list_deleted):
         """Empty trash shows message."""
-        mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = []
 
         result = runner.invoke(main_app, ["trash"])
@@ -578,10 +557,8 @@ class TestTrashCommand:
         assert "No documents in trash" in _out(result)
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
-    def test_trash_with_items(self, mock_db, mock_list_deleted):
+    def test_trash_with_items(self, mock_list_deleted):
         """Trash with items shows table."""
-        mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = [
             {
                 "id": 1,
@@ -597,10 +574,8 @@ class TestTrashCommand:
         assert "Deleted Doc" in _out(result)
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
-    def test_trash_with_days_filter(self, mock_db, mock_list_deleted):
+    def test_trash_with_days_filter(self, mock_list_deleted):
         """Trash --days filters by age."""
-        mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = []
 
         result = runner.invoke(main_app, ["trash", "--days", "7"])
@@ -615,10 +590,8 @@ class TestRestoreCommand:
     """Tests for the trash restore command."""
 
     @patch("emdx.commands.trash.restore_document")
-    @patch("emdx.commands.trash.db")
-    def test_restore_by_id(self, mock_db, mock_restore):
+    def test_restore_by_id(self, mock_restore):
         """Restore a specific document."""
-        mock_db.ensure_schema = Mock()
         mock_restore.return_value = True
 
         result = runner.invoke(main_app, ["trash", "restore", "1"])
@@ -626,30 +599,24 @@ class TestRestoreCommand:
         assert "Restored" in _out(result)
 
     @patch("emdx.commands.trash.restore_document")
-    @patch("emdx.commands.trash.db")
-    def test_restore_not_found(self, mock_db, mock_restore):
+    def test_restore_not_found(self, mock_restore):
         """Restore a document not in trash."""
-        mock_db.ensure_schema = Mock()
         mock_restore.return_value = False
 
         result = runner.invoke(main_app, ["trash", "restore", "999"])
         assert result.exit_code == 0
         assert "Could not restore" in _out(result)
 
-    @patch("emdx.commands.trash.db")
-    def test_restore_no_args(self, mock_db):
+    def test_restore_no_args(self):
         """Restore with no ID and no --all should error."""
-        mock_db.ensure_schema = Mock()
 
         result = runner.invoke(main_app, ["trash", "restore"])
         assert result.exit_code != 0
 
     @patch("emdx.commands.trash.list_deleted_documents")
     @patch("emdx.commands.trash.restore_document")
-    @patch("emdx.commands.trash.db")
-    def test_restore_all(self, mock_db, mock_restore, mock_list_deleted):
+    def test_restore_all(self, mock_restore, mock_list_deleted):
         """Restore --all restores all deleted documents."""
-        mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = [
             {"id": 1, "title": "D1"},
             {"id": 2, "title": "D2"},
@@ -668,10 +635,8 @@ class TestPurgeCommand:
     """Tests for the trash purge command."""
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
-    def test_purge_empty_trash(self, mock_db, mock_list_deleted):
+    def test_purge_empty_trash(self, mock_list_deleted):
         """Purge with empty trash shows message."""
-        mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = []
 
         result = runner.invoke(main_app, ["trash", "purge"])
@@ -680,10 +645,8 @@ class TestPurgeCommand:
 
     @patch("emdx.commands.trash.purge_deleted_documents")
     @patch("emdx.commands.trash.list_deleted_documents")
-    @patch("emdx.commands.trash.db")
-    def test_purge_with_force(self, mock_db, mock_list_deleted, mock_purge):
+    def test_purge_with_force(self, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
-        mock_db.ensure_schema = Mock()
         mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]  # noqa: E501
         mock_purge.return_value = 1
 

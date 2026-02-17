@@ -1,7 +1,7 @@
 """Tests for group management CLI commands."""
 
 import re
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -22,10 +22,8 @@ class TestGroupCreateCommand:
     """Tests for the group create command."""
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_create_basic(self, mock_db, mock_groups):
+    def test_create_basic(self, mock_groups):
         """Create a basic group."""
-        mock_db.ensure_schema = Mock()
         mock_groups.create_group.return_value = 1
 
         result = runner.invoke(app, ["create", "My Group"])
@@ -42,10 +40,8 @@ class TestGroupCreateCommand:
         )
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_create_with_options(self, mock_db, mock_groups):
+    def test_create_with_options(self, mock_groups):
         """Create a group with type, project, description."""
-        mock_db.ensure_schema = Mock()
         mock_groups.create_group.return_value = 2
 
         result = runner.invoke(app, [
@@ -66,10 +62,8 @@ class TestGroupCreateCommand:
         )
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_create_with_parent(self, mock_db, mock_groups):
+    def test_create_with_parent(self, mock_groups):
         """Create a nested group with --parent."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "Parent Group"}
         mock_groups.create_group.return_value = 3
 
@@ -80,10 +74,8 @@ class TestGroupCreateCommand:
         assert "Parent" in out
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_create_parent_not_found(self, mock_db, mock_groups):
+    def test_create_parent_not_found(self, mock_groups):
         """Create with non-existent parent shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = None
 
         result = runner.invoke(app, ["create", "Orphan", "--parent", "999"])
@@ -104,10 +96,8 @@ class TestGroupAddCommand:
 
     @patch("emdx.commands.groups.get_document")
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_add_documents(self, mock_db, mock_groups, mock_get_doc):
+    def test_add_documents(self, mock_groups, mock_get_doc):
         """Add documents to a group."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "Group 1"}
         mock_groups.add_document_to_group.return_value = True
         mock_get_doc.return_value = {"id": 10, "title": "My Doc"}
@@ -120,10 +110,8 @@ class TestGroupAddCommand:
 
     @patch("emdx.commands.groups.get_document")
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_add_with_role(self, mock_db, mock_groups, mock_get_doc):
+    def test_add_with_role(self, mock_groups, mock_get_doc):
         """Add document with custom role."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.add_document_to_group.return_value = True
         mock_get_doc.return_value = {"id": 5, "title": "Doc 5"}
@@ -133,10 +121,8 @@ class TestGroupAddCommand:
         mock_groups.add_document_to_group.assert_called_once_with(1, 5, role="primary")
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_add_group_not_found(self, mock_db, mock_groups):
+    def test_add_group_not_found(self, mock_groups):
         """Add to non-existent group shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = None
 
         result = runner.invoke(app, ["add", "999", "1"])
@@ -145,10 +131,8 @@ class TestGroupAddCommand:
 
     @patch("emdx.commands.groups.get_document")
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_add_doc_not_found(self, mock_db, mock_groups, mock_get_doc):
+    def test_add_doc_not_found(self, mock_groups, mock_get_doc):
         """Add non-existent document reports not found."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_get_doc.return_value = None
 
@@ -158,10 +142,8 @@ class TestGroupAddCommand:
 
     @patch("emdx.commands.groups.get_document")
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_add_already_in_group(self, mock_db, mock_groups, mock_get_doc):
+    def test_add_already_in_group(self, mock_groups, mock_get_doc):
         """Add document already in group shows already-in message."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.add_document_to_group.return_value = False  # already exists
         mock_get_doc.return_value = {"id": 5, "title": "D"}
@@ -178,10 +160,8 @@ class TestGroupRemoveCommand:
     """Tests for the group remove command."""
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_remove_document(self, mock_db, mock_groups):
+    def test_remove_document(self, mock_groups):
         """Remove a document from a group."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.remove_document_from_group.return_value = True
 
@@ -190,10 +170,8 @@ class TestGroupRemoveCommand:
         assert "Removed 1 document" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_remove_not_in_group(self, mock_db, mock_groups):
+    def test_remove_not_in_group(self, mock_groups):
         """Remove document not in group shows not-in message."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.remove_document_from_group.return_value = False
 
@@ -202,10 +180,8 @@ class TestGroupRemoveCommand:
         assert "Not in group" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_remove_group_not_found(self, mock_db, mock_groups):
+    def test_remove_group_not_found(self, mock_groups):
         """Remove from non-existent group shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = None
 
         result = runner.invoke(app, ["remove", "999", "1"])
@@ -220,10 +196,8 @@ class TestGroupListCommand:
     """Tests for the group list command."""
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_list_empty(self, mock_db, mock_groups):
+    def test_list_empty(self, mock_groups):
         """List groups with no groups shows message."""
-        mock_db.ensure_schema = Mock()
         mock_groups.list_groups.return_value = []
 
         result = runner.invoke(app, ["list"])
@@ -231,10 +205,8 @@ class TestGroupListCommand:
         assert "No groups found" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_list_with_groups(self, mock_db, mock_groups):
+    def test_list_with_groups(self, mock_groups):
         """List groups shows table."""
-        mock_db.ensure_schema = Mock()
         mock_groups.list_groups.return_value = [
             {
                 "id": 1,
@@ -251,10 +223,8 @@ class TestGroupListCommand:
         assert "Group A" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_list_filter_by_type(self, mock_db, mock_groups):
+    def test_list_filter_by_type(self, mock_groups):
         """List with --type filter."""
-        mock_db.ensure_schema = Mock()
         mock_groups.list_groups.return_value = []
 
         runner.invoke(app, ["list", "--type", "initiative"])
@@ -267,10 +237,8 @@ class TestGroupListCommand:
         )
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_list_top_level_only(self, mock_db, mock_groups):
+    def test_list_top_level_only(self, mock_groups):
         """List with --parent -1 for top-level only."""
-        mock_db.ensure_schema = Mock()
         mock_groups.list_groups.return_value = []
 
         runner.invoke(app, ["list", "--parent", "-1"])
@@ -290,10 +258,8 @@ class TestGroupShowCommand:
     """Tests for the group show command."""
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_show_group(self, mock_db, mock_groups):
+    def test_show_group(self, mock_groups):
         """Show a group."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {
             "id": 1,
             "name": "My Group",
@@ -321,10 +287,8 @@ class TestGroupShowCommand:
         assert "primary" in out
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_show_not_found(self, mock_db, mock_groups):
+    def test_show_not_found(self, mock_groups):
         """Show non-existent group shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = None
 
         result = runner.invoke(app, ["show", "999"])
@@ -332,10 +296,8 @@ class TestGroupShowCommand:
         assert "not found" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_show_empty_group(self, mock_db, mock_groups):
+    def test_show_empty_group(self, mock_groups):
         """Show group with no members."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {
             "id": 2,
             "name": "Empty Group",
@@ -364,10 +326,8 @@ class TestGroupDeleteCommand:
     """Tests for the group delete command."""
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_delete_with_force(self, mock_db, mock_groups):
+    def test_delete_with_force(self, mock_groups):
         """Delete a group with --force."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.get_child_groups.return_value = []
         mock_groups.get_group_members.return_value = []
@@ -380,10 +340,8 @@ class TestGroupDeleteCommand:
         mock_groups.delete_group.assert_called_once_with(1, hard=False)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_delete_hard(self, mock_db, mock_groups):
+    def test_delete_hard(self, mock_groups):
         """Hard delete a group."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.get_child_groups.return_value = []
         mock_groups.get_group_members.return_value = []
@@ -395,10 +353,8 @@ class TestGroupDeleteCommand:
         mock_groups.delete_group.assert_called_once_with(1, hard=True)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_delete_not_found(self, mock_db, mock_groups):
+    def test_delete_not_found(self, mock_groups):
         """Delete non-existent group shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = None
 
         result = runner.invoke(app, ["delete", "999", "--force"])
@@ -406,10 +362,8 @@ class TestGroupDeleteCommand:
         assert "not found" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_delete_with_confirmation(self, mock_db, mock_groups):
+    def test_delete_with_confirmation(self, mock_groups):
         """Delete with confirmation prompt."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.get_child_groups.return_value = []
         mock_groups.get_group_members.return_value = []
@@ -420,10 +374,8 @@ class TestGroupDeleteCommand:
         assert "Deleted" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_delete_cancelled(self, mock_db, mock_groups):
+    def test_delete_cancelled(self, mock_groups):
         """Delete cancelled by user."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.get_child_groups.return_value = []
         mock_groups.get_group_members.return_value = []
@@ -432,10 +384,8 @@ class TestGroupDeleteCommand:
         assert "Cancelled" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_delete_failure(self, mock_db, mock_groups):
+    def test_delete_failure(self, mock_groups):
         """Delete that fails shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.get_child_groups.return_value = []
         mock_groups.get_group_members.return_value = []
@@ -454,10 +404,8 @@ class TestGroupEditCommand:
     """Tests for the group edit command."""
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_edit_name(self, mock_db, mock_groups):
+    def test_edit_name(self, mock_groups):
         """Edit group name."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "Old"}
         mock_groups.update_group.return_value = True
 
@@ -468,10 +416,8 @@ class TestGroupEditCommand:
         mock_groups.update_group.assert_called_once_with(1, name="New Name")
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_edit_multiple_fields(self, mock_db, mock_groups):
+    def test_edit_multiple_fields(self, mock_groups):
         """Edit multiple fields at once."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.update_group.return_value = True
 
@@ -490,10 +436,8 @@ class TestGroupEditCommand:
         )
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_edit_no_changes(self, mock_db, mock_groups):
+    def test_edit_no_changes(self, mock_groups):
         """Edit with no changes shows message."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
 
         result = runner.invoke(app, ["edit", "1"])
@@ -501,10 +445,8 @@ class TestGroupEditCommand:
         assert "No changes" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_edit_not_found(self, mock_db, mock_groups):
+    def test_edit_not_found(self, mock_groups):
         """Edit non-existent group shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = None
 
         result = runner.invoke(app, ["edit", "999", "--name", "X"])
@@ -512,10 +454,8 @@ class TestGroupEditCommand:
         assert "not found" in _out(result)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_edit_remove_parent(self, mock_db, mock_groups):
+    def test_edit_remove_parent(self, mock_groups):
         """Edit with --parent 0 removes parent."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 2, "name": "Child"}
         mock_groups.update_group.return_value = True
 
@@ -524,10 +464,8 @@ class TestGroupEditCommand:
         mock_groups.update_group.assert_called_once_with(2, parent_group_id=None)
 
     @patch("emdx.commands.groups.groups")
-    @patch("emdx.commands.groups.db")
-    def test_edit_failure(self, mock_db, mock_groups):
+    def test_edit_failure(self, mock_groups):
         """Edit that fails shows error."""
-        mock_db.ensure_schema = Mock()
         mock_groups.get_group.return_value = {"id": 1, "name": "G"}
         mock_groups.update_group.return_value = False
 

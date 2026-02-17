@@ -237,7 +237,6 @@ def stale_list(
         emdx stale --critical-days 15  # Custom threshold
     """
     try:
-        db.ensure_schema()
 
         stale_docs = _get_stale_documents(
             critical_days=critical_days,
@@ -343,7 +342,6 @@ def touch(
         emdx touch 42 43 44     # Touch multiple documents
     """
     try:
-        db.ensure_schema()
 
         touched = []
         not_found = []

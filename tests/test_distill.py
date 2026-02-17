@@ -171,7 +171,6 @@ class TestDistillCommand:
         """Distill without topic or tags shows error."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
 
         result = runner.invoke(app, [])
         assert result.exit_code != 0
@@ -184,7 +183,6 @@ class TestDistillCommand:
         """Distill with topic searches and synthesizes."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
         mock_get_docs.return_value = [
             {"id": 1, "title": "Auth Doc", "content": "Auth content"},
         ]
@@ -211,7 +209,6 @@ class TestDistillCommand:
         """Distill with --tags searches by tags."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
         mock_get_docs.return_value = [
             {"id": 5, "title": "Security Doc", "content": "Security info"},
         ]
@@ -238,7 +235,6 @@ class TestDistillCommand:
         """Distill --for option sets audience."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
         mock_get_docs.return_value = [{"id": 1, "title": "T", "content": "C"}]
 
         mock_service = MagicMock()
@@ -267,7 +263,6 @@ class TestDistillCommand:
         """Distill --quiet outputs only content."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
         mock_get_docs.return_value = [{"id": 1, "title": "T", "content": "C"}]
 
         mock_service = MagicMock()
@@ -295,7 +290,6 @@ class TestDistillCommand:
         """Distill with no matching documents shows message."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
         mock_get_docs.return_value = []
 
         result = runner.invoke(app, ["nonexistent-topic-xyz"])
@@ -307,7 +301,6 @@ class TestDistillCommand:
         """Distill with invalid --for shows error."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
 
         result = runner.invoke(app, ["--for", "invalid", "topic"])
         assert result.exit_code != 0
@@ -324,7 +317,6 @@ class TestDistillCommand:
         """Distill --save saves the output to KB."""
         from emdx.commands.distill import app
 
-        mock_db.ensure_schema = MagicMock()
         mock_get_docs.return_value = [{"id": 1, "title": "T", "content": "C"}]
 
         mock_service = MagicMock()

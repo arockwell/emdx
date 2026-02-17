@@ -184,9 +184,6 @@ def create(
     update: str | None = typer.Option(None, "--update", "-u", help="Update existing gist ID"),
 ) -> None:
     """Create or update a GitHub Gist from a document."""
-    # Ensure database schema is up to date
-    db.ensure_schema()
-
     # Check for conflicting options
     if public and secret:
         console.print("[red]Error: Cannot use both --public and --secret options[/red]")
