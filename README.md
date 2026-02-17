@@ -13,20 +13,25 @@ emdx fixes this. It's a local knowledge base backed by SQLite. Save your researc
 ## See it in action
 
 ```bash
-# Dispatch three agents in parallel — results saved to your KB
-emdx delegate "analyze auth module" "review test coverage" "check for XSS"
+# Save your research
+$ emdx save security-audit.md
+✅ Saved as #42: security-audit
 
-# A week later, find what they discovered
-emdx find "XSS"
+# Dispatch an agent to act on it
+$ emdx delegate --doc 42 "implement the fixes from this audit"
 
-# Build on past work — feed a previous analysis into a new task
-emdx delegate --doc 84 "implement the fixes from this security analysis"
+# A week later, find what they did
+$ emdx find "security"
+🔍 Found 4 results for 'security'
 
-# Or go straight to a PR
-emdx delegate --pr "fix the null pointer in token refresh"
+# Run three agents in parallel
+$ emdx delegate "check auth" "review tests" "scan for XSS"
+
+# Go straight from idea to pull request
+$ emdx delegate --pr "fix the null pointer in token refresh"
 ```
 
-Each result prints to stdout (so you can read it inline) and gets saved to your knowledge base (so you can find it later).
+Everything prints to stdout (so you can read it inline) and gets saved to your knowledge base (so you can find it later).
 
 ## Install
 
@@ -46,7 +51,9 @@ pip install 'emdx[all]'         # Everything
 
 </details>
 
-## The basics: save, find, build
+## The knowledge base
+
+The foundation of emdx: save anything, find it later, organize with tags.
 
 ### Save anything
 
@@ -72,36 +79,36 @@ emdx tag 42 gameplan active         # Add tags
 emdx find --tags "gameplan,active"  # Search by tags
 ```
 
+## Delegate work to agents
 
-## Delegate work to Claude agents
-
-This is where emdx gets powerful. `delegate` sends tasks to Claude Code agents and saves their output to your knowledge base.
-
-### Parallel execution
-
-Run multiple tasks concurrently — each gets its own agent:
+This is where emdx gets powerful. `delegate` sends tasks to Claude Code agents. Each agent runs independently, and its output is saved to your knowledge base automatically.
 
 ```bash
+# Send a task to a Claude agent
+emdx delegate "analyze the auth module for security issues"
+
+# Run multiple tasks in parallel — each gets its own agent
 emdx delegate "check auth" "review tests" "scan for XSS"
 
 # Control concurrency
 emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
 
-# Combine outputs into a single synthesized summary
+# Combine outputs into a synthesized summary
 emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
 ```
 
 ### Code changes with PRs
 
-Agents can make changes in isolated git worktrees and open PRs:
+Agents work in isolated git worktrees and can open PRs directly:
 
 ```bash
 emdx delegate --pr "fix the auth bug"                   # Branch + PR
-emdx delegate --worktree --pr "fix X"                    # Isolated worktree + PR
 emdx delegate --doc 42 --pr "implement this plan"        # Use a doc as context
 ```
 
-### Use your knowledge base as input
+### Build on past work
+
+The knowledge base and delegate feed into each other. Save research, delegate work based on it, find the results later, delegate more:
 
 ```bash
 emdx delegate --doc 42 "implement the plan described here"
