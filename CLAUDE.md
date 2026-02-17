@@ -226,6 +226,36 @@ These commands work but are not yet stable:
 
 - **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
+## TUI Debugging & Logging
+
+### Log File Locations
+| File | Purpose | Written by |
+|------|---------|------------|
+| `~/.config/emdx/tui_debug.log` | TUI runtime logs | `setup_tui_logging()` in `run_browser.py` |
+| `~/.config/emdx/emdx.log` | CLI command logs | `get_logger()` in `logging_utils.py` |
+| `~/.config/emdx/key_events.log` | Key events (WARNING+ only) | `setup_tui_logging()` |
+
+### Log Levels
+- **Root logger**: WARNING (suppresses noisy third-party libs)
+- **`emdx.*` loggers**: INFO (all emdx modules)
+- To see `logger.debug()` calls, you must temporarily change the level in `setup_tui_logging()` or set it per-module
+
+### Quick Debug Workflow
+```bash
+# Watch TUI logs live while running GUI in another terminal
+tail -f ~/.config/emdx/tui_debug.log
+
+# Check recent TUI logs after a session
+tail -100 ~/.config/emdx/tui_debug.log
+
+# Check for errors only
+grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
+```
+
+### Common Pitfall
+- `logger.debug("msg")` will NOT appear in TUI logs — emdx.* level is INFO. Use `logger.info()` or `logger.warning()` for debug output that must be visible.
+- TUI logs and CLI logs go to DIFFERENT files. If you're debugging the GUI, check `tui_debug.log`, not `emdx.log`.
+
 ## Known Gotchas
 
 - **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
@@ -235,6 +265,7 @@ These commands work but are not yet stable:
 - **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
 - **FTS5 virtual table queries**: `documents_fts` is a separate FTS5 virtual table, NOT a column on `documents`. You must JOIN it: `SELECT d.id FROM documents d JOIN documents_fts fts ON d.id = fts.rowid WHERE fts.documents_fts MATCH ?`. Never use `WHERE documents_fts MATCH ?` directly on the documents table — it silently fails with "no such column". See `emdx/database/search.py` for the canonical pattern.
 - **Mocked internal functions in tests**: When refactoring a function's signature (parameters, return type), grep for tests that mock it — they break silently. Use: `rg "mock.*<func_name>\|patch.*<func_name>" tests/`
+- **Terminal state corruption in TUI**: Running code in background threads (via `asyncio.to_thread`) that imports heavy libraries (torch, sentence-transformers) or runs subprocesses can reset the terminal from raw mode to cooked mode, killing Textual's mouse/key handling. **Fix**: Save terminal state with `termios.tcgetattr()` before the threaded call and restore with `termios.tcsetattr()` after. See `qa_screen.py` `_save_terminal_state()`/`_restore_terminal_state()` for the pattern. This also explains why `UnifiedExecutor` corrupted the terminal — its `get_subprocess_env()` or subprocess execution path triggers the same reset.
 
 ## Delegate Debugging
 
