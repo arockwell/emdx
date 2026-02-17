@@ -58,8 +58,6 @@ def _make_epic(
     }
 
 
-# Patch ensure_schema globally for all CLI tests since we mock the data queries
-_SCHEMA_PATCH = "emdx.commands.prime.db.ensure_schema"
 
 
 # ---------------------------------------------------------------------------
@@ -117,12 +115,11 @@ class TestFormatEpicLine:
 class TestPrimeDefault:
     """Test default output (no flags)."""
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_header_and_project(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_shows_header_and_project(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = "myproject"
         mock_epics.return_value = []
         mock_ready.return_value = []
@@ -133,12 +130,11 @@ class TestPrimeDefault:
         assert "EMDX WORK CONTEXT" in result.stdout
         assert "Project: myproject" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_usage_instructions(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_shows_usage_instructions(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []
@@ -154,12 +150,11 @@ class TestPrimeDefault:
         assert "emdx task active" in result.stdout
         assert "emdx task log" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_ready_tasks(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_shows_ready_tasks(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = [
@@ -176,12 +171,11 @@ class TestPrimeDefault:
         assert "DEBT-10" in result.stdout
         assert "Fix type safety" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_doc_reference(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_shows_doc_reference(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = [_make_task(id=1, title="Task", source_doc_id=42)]
@@ -190,12 +184,11 @@ class TestPrimeDefault:
         result = runner.invoke(app, [])
         assert "doc #42" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_active_epics(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_shows_active_epics(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = [_make_epic(epic_key="SEC", title="Security Hardening")]
         mock_ready.return_value = []
@@ -207,12 +200,11 @@ class TestPrimeDefault:
         assert "Security Hardening" in result.stdout
         assert "2/5 done" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_in_progress(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_shows_in_progress(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []
@@ -223,12 +215,11 @@ class TestPrimeDefault:
         assert "#3" in result.stdout
         assert "Work in progress" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_no_ready_tasks_message(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_no_ready_tasks_message(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []
@@ -241,11 +232,10 @@ class TestPrimeDefault:
 class TestPrimeQuiet:
     """Test --quiet flag."""
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_quiet_omits_header_and_instructions(self, mock_project, mock_ip, mock_ready, _):
+    def test_quiet_omits_header_and_instructions(self, mock_project, mock_ip, mock_ready):
         mock_project.return_value = "proj"
         mock_ready.return_value = [_make_task(id=1, title="A task")]
         mock_ip.return_value = []
@@ -256,11 +246,10 @@ class TestPrimeQuiet:
         assert "Project:" not in result.stdout
         assert "EMDX COMMANDS:" not in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_quiet_still_shows_tasks(self, mock_project, mock_ip, mock_ready, _):
+    def test_quiet_still_shows_tasks(self, mock_project, mock_ip, mock_ready):
         mock_project.return_value = None
         mock_ready.return_value = [_make_task(id=5, title="Quiet task")]
         mock_ip.return_value = []
@@ -273,14 +262,13 @@ class TestPrimeQuiet:
 class TestPrimeVerbose:
     """Test --verbose flag."""
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_verbose_shows_recent_docs(
-        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs, _
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs
     ):
         mock_project.return_value = None
         mock_epics.return_value = []
@@ -294,14 +282,13 @@ class TestPrimeVerbose:
         assert "#100" in result.stdout
         assert "Design Doc" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_verbose_shows_task_descriptions(
-        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs, _
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs
     ):
         mock_project.return_value = None
         mock_epics.return_value = []
@@ -318,12 +305,11 @@ class TestPrimeVerbose:
 class TestPrimeJson:
     """Test --format json output."""
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_json_output_structure(self, mock_project, mock_ip, mock_ready, mock_epics, _):
+    def test_json_output_structure(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = "myproject"
         mock_epics.return_value = [_make_epic()]
         mock_ready.return_value = [_make_task()]
@@ -339,14 +325,13 @@ class TestPrimeJson:
         assert len(data["active_epics"]) == 1
         assert len(data["ready_tasks"]) == 1
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_json_verbose_includes_extras(
-        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs, _
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_docs
     ):
         mock_project.return_value = None
         mock_epics.return_value = []
@@ -359,13 +344,12 @@ class TestPrimeJson:
         assert "execution_methods" in data
         assert "recent_docs" in data
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_json_non_verbose_excludes_extras(
-        self, mock_project, mock_ip, mock_ready, mock_epics, _
+        self, mock_project, mock_ip, mock_ready, mock_epics
     ):
         mock_project.return_value = None
         mock_epics.return_value = []
@@ -542,14 +526,13 @@ class TestGetKeyDocs:
 class TestPrimeWithGitContext:
     """Test that git context appears in prime output."""
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_git_context")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_text_output_shows_git_context(
-        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, _
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git
     ):
         mock_project.return_value = "myproject"
         mock_epics.return_value = []
@@ -571,14 +554,13 @@ class TestPrimeWithGitContext:
         assert "Open PRs:" in result.stdout
         assert "#42 My PR (my-pr)" in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_git_context")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
     def test_json_output_includes_git_context(
-        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git, _
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_git
     ):
         mock_project.return_value = None
         mock_epics.return_value = []
@@ -602,7 +584,6 @@ class TestPrimeWithGitContext:
 class TestPrimeWithKeyDocs:
     """Test that key docs appear in verbose mode."""
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_key_docs")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_git_context")
@@ -619,7 +600,6 @@ class TestPrimeWithKeyDocs:
         mock_git,
         mock_recent,
         mock_key_docs,
-        _,
     ):
         mock_project.return_value = None
         mock_epics.return_value = []
@@ -638,7 +618,6 @@ class TestPrimeWithKeyDocs:
         assert '#1 "Important Doc" — 100 views' in result.stdout
         assert '#2 "Another Doc" — 50 views' in result.stdout
 
-    @patch(_SCHEMA_PATCH)
     @patch("emdx.commands.prime._get_key_docs")
     @patch("emdx.commands.prime._get_recent_docs")
     @patch("emdx.commands.prime._get_git_context")
@@ -655,7 +634,6 @@ class TestPrimeWithKeyDocs:
         mock_git,
         mock_recent,
         mock_key_docs,
-        _,
     ):
         mock_project.return_value = None
         mock_epics.return_value = []

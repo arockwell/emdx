@@ -23,7 +23,7 @@ emdx save document.md --title "Custom Title"
 # Save from stdin
 echo "Content here" | emdx save --title "My Note"
 
-# Save with tags using text aliases
+# Save with tags
 echo "Gameplan content" | emdx save --title "Auth Gameplan" --tags "gameplan,active"
 
 # Save from command output
@@ -38,7 +38,7 @@ emdx save notes.md --public --copy
 
 **Options:**
 - `--title, -t TEXT` - Custom title (auto-detected from filename if not provided)
-- `--tags TEXT` - Comma-separated tags using text aliases
+- `--tags TEXT` - Comma-separated tags
 - `--project, -p TEXT` - Override project detection
 - `--group, -g INTEGER` - Add document to group
 - `--group-role TEXT` - Role in group (primary, exploration, synthesis, variant, member)
@@ -61,7 +61,7 @@ Search documents with hybrid (default when index exists), keyword, or semantic s
 emdx find "docker compose"
 emdx find "kubernetes deployment"
 
-# Tag-based search using text aliases
+# Tag-based search
 emdx find --tags "gameplan,active"      # Active gameplans
 emdx find --tags "bug,urgent"           # Urgent bugs
 emdx find --tags "feature,done"         # Completed features
@@ -95,7 +95,7 @@ emdx find "database" --snippets
 ```
 
 **Options:**
-- `--tags, -t TEXT` - Search by tags (using text aliases)
+- `--tags, -t TEXT` - Search by tags
 - `--any-tags` - Match ANY tag instead of ALL tags
 - `--no-tags TEXT` - Exclude documents with specified tags (comma-separated)
 - `--project, -p TEXT` - Limit search to specific project
@@ -159,10 +159,10 @@ emdx delete 42 43 44
 ## 🏷️ **Tag Management**
 
 ### **emdx tag add**
-Add tags to a document using intuitive text aliases.
+Add tags to a document.
 
 ```bash
-# Add tags using text aliases (much easier than emojis!)
+# Add tags
 emdx tag add 42 gameplan active urgent
 
 # Add tags with auto-tagging
@@ -198,8 +198,8 @@ emdx tag list --sort name
 Rename tags globally across all documents.
 
 ```bash
-# Convert old word tags to emoji system
-emdx tag rename "old-word-tag" "gameplan" --force
+# Rename a tag across all documents
+emdx tag rename "old-tag" "gameplan" --force
 
 # Standardize tag names
 emdx tag rename "todo" "active" --force
@@ -516,7 +516,7 @@ Recipes are reusable emdx documents tagged with `recipe` that contain instructio
 List all recipes.
 
 ```bash
-# List all recipes (documents tagged 📋)
+# List all recipes (documents tagged "recipe")
 emdx recipe list
 ```
 
@@ -737,7 +737,7 @@ Command 'delegate' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.
 # Save a quick thought
 echo "Remember to update documentation" | emdx save --title "Todo: Docs"
 
-# Save with context tags
+# Save with tags
 echo "Bug in auth system" | emdx save --title "Auth Bug" --tags "bug,urgent"
 ```
 
@@ -846,21 +846,6 @@ emdx delegate --worktree --pr "fix X"
 
 ```
 
-### Dynamic Discovery
-
-Discover items at runtime via a shell command, then process each in parallel:
-
-```bash
-# Review all Python files
-emdx delegate --each "fd -e py src/" --do "Review {{item}} for security issues"
-
-# Process all feature branches
-emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
-
-# Combine with explicit tasks
-emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the README"
-```
-
 ### Options Reference
 
 | Option | Short | Description |
@@ -877,13 +862,9 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--draft` / `--no-draft` | | Create PR as draft (default: `--no-draft`) |
 | `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | `-b` | Base branch for worktree (default: main) |
-| `--each` | | Shell command to discover items (one per line) |
-| `--do` | | Template for each discovered item (use `{{item}}`) |
 | `--epic` | `-e` | Epic task ID to add tasks to |
 | `--cat` | `-c` | Category key for auto-numbered tasks |
 | `--cleanup` | | Remove stale delegate worktrees (>1 hour old) |
-
-**Note:** `--each` requires `--do`.
 
 ### Output Format
 

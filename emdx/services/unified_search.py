@@ -566,9 +566,7 @@ class UnifiedSearchService:
             )
             rows = cursor.fetchall()
 
-        from ..utils.emoji_aliases import normalize_tag_to_emoji
-
-        return [{"name": normalize_tag_to_emoji(row[0]), "count": row[1]} for row in rows]
+        return [{"name": row[0], "count": row[1]} for row in rows]
 
     def get_document_by_id(self, doc_id: int) -> SearchResult | None:
         """Get a single document by ID."""

@@ -57,7 +57,6 @@ def prime(
         # For session hooks
         emdx prime >> /tmp/claude-context.md
     """
-    db.ensure_schema()
     project = get_git_project()
 
     if format == "json":
@@ -478,7 +477,6 @@ def _get_execution_methods_json() -> list[ExecutionMethod]:
             when="All one-shot AI execution (single, parallel, PR, worktree)",
             key_flags=[
                 "--doc",
-                "--each/--do",
                 "--pr",
                 "--worktree",
                 "--synthesize",

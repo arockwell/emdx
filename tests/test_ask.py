@@ -55,17 +55,16 @@ class TestFilterHelper:
         result = service._get_filtered_doc_ids(tags=None, recent_days=None)
         assert result is None
 
-    def test_tag_filter_normalizes_aliases(self) -> None:
-        """Text aliases should be normalized to emojis."""
+    def test_tag_filter_finds_text_tags(self) -> None:
+        """Text tags should be found directly."""
         from emdx.models.documents import save_document
         from emdx.models.tags import add_tags_to_document
 
-        # Create a doc with emoji tag
+        # Create a doc with text tag
         doc_id = save_document("Test Doc", "Content", None)
-        add_tags_to_document(doc_id, ["🎯"])  # gameplan emoji
+        add_tags_to_document(doc_id, ["gameplan"])
 
         service = AskService()
-        # Search using text alias "gameplan" should find the doc
         result = service._get_filtered_doc_ids(tags="gameplan", recent_days=None)
         assert result is not None
         assert doc_id in result
@@ -90,7 +89,7 @@ class TestFilterHelper:
 
         # Create a recent doc with tags
         doc_id = save_document("Tagged Recent Doc", "Content", None)
-        add_tags_to_document(doc_id, ["🎯"])
+        add_tags_to_document(doc_id, ["gameplan"])
 
         service = AskService()
         result = service._get_filtered_doc_ids(tags="gameplan", recent_days=7)

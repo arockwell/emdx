@@ -24,14 +24,10 @@ Push branch only (no PR):
 
 With worktree isolation:
     emdx delegate --worktree "fix X"
-
-Dynamic discovery:
-    emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 """
 
 import os
 import re
-import shlex
 import subprocess
 import sys
 import time
@@ -369,96 +365,6 @@ def _resolve_task(task: str, pr: bool = False) -> str:
         )
 
     return f"Execute the following document:\n\n# {title}\n\n{content}"
-
-
-# Allowlist of safe discovery commands that can be used with --each
-# These commands are designed for file/directory discovery and are safe to execute
-SAFE_DISCOVERY_COMMANDS = frozenset(
-    {
-        "fd",  # Modern find alternative
-        "find",  # Traditional file finder
-        "ls",  # List files
-        "eza",  # Modern ls alternative
-        "exa",  # Another ls alternative
-        "rg",  # ripgrep (with --files flag for discovery)
-        "git",  # git ls-files, etc.
-        "locate",  # File location database
-        "tree",  # Directory tree
-        "echo",  # Simple output
-        "cat",  # Read file contents
-        "head",  # First lines
-        "tail",  # Last lines
-        "seq",  # Generate sequences
-    }
-)
-
-
-def _validate_discovery_command(command: str) -> list[str]:
-    """Parse and validate a discovery command against the allowlist.
-
-    Args:
-        command: The discovery command string from --each
-
-    Returns:
-        List of command arguments (parsed via shlex)
-
-    Raises:
-        typer.Exit: If the command is not in the allowlist
-    """
-    try:
-        args = shlex.split(command)
-    except ValueError as e:
-        sys.stderr.write(f"delegate: invalid command syntax: {e}\n")
-        raise typer.Exit(1) from None
-
-    if not args:
-        sys.stderr.write("delegate: empty discovery command\n")
-        raise typer.Exit(1) from None
-
-    # Extract the base command (handle paths like /usr/bin/fd)
-    base_cmd = Path(args[0]).name
-
-    if base_cmd not in SAFE_DISCOVERY_COMMANDS:
-        sys.stderr.write(
-            f"delegate: '{base_cmd}' is not an allowed discovery command\n"
-            f"delegate: allowed commands: {', '.join(sorted(SAFE_DISCOVERY_COMMANDS))}\n"
-        )
-        raise typer.Exit(1) from None
-
-    return args
-
-
-def _run_discovery(command: str) -> list[str]:
-    """Run a validated discovery command and return output lines as items.
-
-    Security: Uses shlex.split() with shell=False and validates the command
-    against an allowlist of safe discovery tools to prevent command injection.
-    """
-    args = _validate_discovery_command(command)
-
-    try:
-        result = subprocess.run(
-            args,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            sys.stderr.write(f"delegate: discovery failed: {result.stderr.strip()}\n")
-            raise typer.Exit(1) from None
-
-        lines = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-        if not lines:
-            sys.stderr.write("delegate: discovery returned no items\n")
-            raise typer.Exit(1) from None
-
-        sys.stderr.write(f"delegate: discovered {len(lines)} item(s)\n")
-        return lines
-
-    except subprocess.TimeoutExpired:
-        sys.stderr.write("delegate: discovery command timed out after 30s\n")
-        raise typer.Exit(1) from None
 
 
 def _load_doc_context(doc_id: int, prompt: str | None) -> str:
@@ -1012,16 +918,6 @@ def delegate(
         "-b",
         help="Base branch for worktree/branch (default: main)",
     ),
-    each: str | None = typer.Option(
-        None,
-        "--each",
-        help="Shell command to discover items (one per line)",
-    ),
-    do: str | None = typer.Option(
-        None,
-        "--do",
-        help="Template for each discovered item (use {{item}})",
-    ),
     epic: int | None = typer.Option(
         None,
         "--epic",
@@ -1073,9 +969,6 @@ def delegate(
     Implement gameplans by doc ID (auto-branches + PRs):
         emdx delegate --worktree --pr -j 7 6097 6098 6099 6100 6101 6102 6103
 
-    Dynamic discovery (for each item, do action):
-        emdx delegate --each "fd -e py src/" --do "Review {{item}} for issues"
-
     With worktree isolation:
         emdx delegate --worktree --pr "fix X"
 
@@ -1091,10 +984,6 @@ def delegate(
     # Validate mutually exclusive options
     if pr and branch:
         typer.echo("Error: --pr and --branch are mutually exclusive", err=True)
-        raise typer.Exit(1) from None
-
-    if each and not do:
-        typer.echo("Error: --each requires --do", err=True)
         raise typer.Exit(1) from None
 
     task_list = list(tasks) if tasks else []
@@ -1124,8 +1013,6 @@ def delegate(
         "-w",
         "--base-branch",
         "-b",
-        "--each",
-        "--do",
         "--epic",
         "-e",
         "--cat",
@@ -1140,13 +1027,6 @@ def delegate(
             f"Example: emdx delegate --tags 'x' --title 'y' \"task1\" \"task2\"\n"
         )
         raise typer.Exit(1)
-
-    # 0. Dynamic discovery: --each "cmd" --do "template {{item}}"
-    if each:
-        items = _run_discovery(each)
-        template = do or "{{item}}"
-        discovered = [template.replace("{{item}}", item) for item in items]
-        task_list = discovered + task_list  # discovered tasks + any explicit tasks
 
     # 1. Resolve numeric args as doc IDs (e.g. `emdx delegate 42 43 44`)
     #    When --pr is set, doc IDs get implementation + PR instructions with branch names

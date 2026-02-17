@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.17.0] - 2026-02-16
+## [0.17.0] - 2026-02-17
 
-**The consolidation release.** The Q&A screen got a ground-up rewrite fixing terminal corruption caused by background thread imports. Task management tightened — `epic` and `cat` commands moved under `emdx task` where they belong. Textual upgraded to v8.0, and the TUI gained its first pilot-based test suite (36 tests). Type safety continued its march with `ExecutionResultDict` TypedDicts replacing loose dicts.
+**The simplification release.** EMDX dropped the emoji alias system entirely — tags are now plain text, with a migration to convert existing emoji tags. The `--each/--do` dynamic discovery feature was removed from delegate. The Q&A screen got a ground-up rewrite fixing terminal corruption. Task management tightened — `epic` and `cat` commands moved under `emdx task`, and `db.ensure_schema()` was centralized into a single app callback. Textual upgraded to v8.0, and the TUI gained its first pilot-based test suite (36 tests).
 
 ### 🔧 Improvements
 
@@ -25,6 +25,9 @@ Updated from Textual ^7.5.0 to ^8.0.0. The major version bump in Textual was pri
 #### Typing improvements (#697, #698, #701)
 Added `ExecutionResultDict` TypedDict for `ExecutionResult.to_dict()` return values, replacing `dict[str, Any]`. Fixed duplicate TypedDict definition that crept in during parallel development.
 
+#### Centralized `db.ensure_schema()` (#693)
+Moved `db.ensure_schema()` from 23+ scattered calls in individual command files to a single call in the main app callback. Net -242 lines across 18 files.
+
 #### Cleanup
 - Added missing `__all__` exports to `emdx/services/__init__.py` (#688)
 - Removed remaining Cursor IDE references and dead code (#689)
@@ -32,8 +35,16 @@ Added `ExecutionResultDict` TypedDict for `ExecutionResult.to_dict()` return val
 ### 📖 Documentation
 - Rewrote README and updated project positioning (#690)
 - Clarified task vs document organization in CLAUDE.md (#691)
+- Streamlined README — removed legend, dynamic discovery, consolidated sections (#704)
+- Removed emoji alias references from documentation (#706)
 
 ### 💥 Breaking Changes
+
+#### Emoji alias system removed (#707)
+The entire emoji alias system (`emoji_aliases.py`, 284 lines) has been removed. Tags are now plain text everywhere. A database migration (042) automatically converts existing emoji tags to their text equivalents (e.g., `🎯` → `gameplan`, `🚀` → `active`), merging duplicates where both forms exist.
+
+#### `--each/--do` removed from delegate (#705)
+The dynamic discovery feature (`emdx delegate --each "cmd" --do "template"`) has been removed. Use explicit task lists instead.
 
 #### `emdx cat` and `emdx epic` moved under `emdx task` (#700)
 Categories and epics are task-specific concepts and now live under the task namespace:

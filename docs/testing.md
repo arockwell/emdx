@@ -40,7 +40,7 @@ tests/
 ├── test_document_merger.py           # Document merging
 ├── test_documents.py                 # Document CRUD operations
 ├── test_duplicate_detector.py        # Duplicate detection
-├── test_emoji_aliases.py             # Emoji alias system
+├── test_emoji_aliases.py             # Tag utilities
 ├── test_epics.py                     # Epic management tests
 ├── test_execution_monitor.py         # Execution monitoring
 ├── test_execution_system.py          # Execution tracking
@@ -76,7 +76,7 @@ tests/
 ### **Core Functionality Tests**
 - **CLI Commands** (`test_core.py`, `test_cli.py`, `test_commands_core.py`) - save, find, view, edit, delete
 - **Database Operations** (`test_database.py`, `test_sqlite_database.py`, `test_documents.py`) - CRUD, search, migrations
-- **Tag System** (`test_tags.py`, `test_models_tags.py`, `test_commands_tags.py`, `test_emoji_aliases.py`) - emoji tags, aliases, management
+- **Tag System** (`test_tags.py`, `test_models_tags.py`, `test_commands_tags.py`, `test_emoji_aliases.py`) - plain text tags, management
 - **Groups** (`test_groups.py`, `test_commands_groups.py`) - document group management
 - **Tasks** (`test_task_commands.py`, `test_epics.py`, `test_categories.py`) - task queue, epics, categories
 

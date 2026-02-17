@@ -56,7 +56,6 @@ class TestCLIBasics:
     @patch("emdx.commands.browse.list_documents")
     def test_list_command(self, mock_list_docs, mock_db):
         """Test list command."""
-        mock_db.ensure_schema = Mock()
         mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list"])
@@ -73,7 +72,6 @@ class TestCLIBasics:
     @patch("emdx.commands.browse.get_stats")
     def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""
-        mock_db.ensure_schema = Mock()
         mock_get_stats.return_value = {
             "total": 0,
             "by_project": {},
