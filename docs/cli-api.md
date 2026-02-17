@@ -846,21 +846,6 @@ emdx delegate --worktree --pr "fix X"
 
 ```
 
-### Dynamic Discovery
-
-Discover items at runtime via a shell command, then process each in parallel:
-
-```bash
-# Review all Python files
-emdx delegate --each "fd -e py src/" --do "Review {{item}} for security issues"
-
-# Process all feature branches
-emdx delegate --each "git branch -r | grep feature" --do "Review branch {{item}}"
-
-# Combine with explicit tasks
-emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the README"
-```
-
 ### Options Reference
 
 | Option | Short | Description |
@@ -877,13 +862,9 @@ emdx delegate --each "fd -e py src/" --do "Check {{item}}" "Also review the READ
 | `--draft` / `--no-draft` | | Create PR as draft (default: `--no-draft`) |
 | `--worktree` | `-w` | Run in isolated git worktree |
 | `--base-branch` | `-b` | Base branch for worktree (default: main) |
-| `--each` | | Shell command to discover items (one per line) |
-| `--do` | | Template for each discovered item (use `{{item}}`) |
 | `--epic` | `-e` | Epic task ID to add tasks to |
 | `--cat` | `-c` | Category key for auto-numbered tasks |
 | `--cleanup` | | Remove stale delegate worktrees (>1 hour old) |
-
-**Note:** `--each` requires `--do`.
 
 ### Output Format
 
