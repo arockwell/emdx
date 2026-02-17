@@ -67,8 +67,6 @@ emdx/
 │   ├── run_browser.py         # execution run browser
 │   ├── task_browser.py        # task management browser
 │   ├── task_view.py           # task detail view
-│   ├── vim_editor.py          # vim modal editing
-│   ├── vim_line_numbers.py    # line number gutter
 │   ├── command_palette/       # command palette system
 │   ├── keybindings/           # keybinding management
 │   ├── search/                # search UI components
@@ -80,7 +78,7 @@ emdx/
 │   ├── themes.py              # theme system
 │   └── theme_selector.py      # theme selection UI
 ├── services/               # Business logic
-│   ├── unified_executor.py    # CLI execution (Claude/Cursor)
+│   ├── unified_executor.py    # CLI execution (Claude)
 │   ├── cli_executor/          # CLI executor components
 │   ├── log_stream.py         # event-driven log streaming
 │   ├── file_watcher.py       # file monitoring

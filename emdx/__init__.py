@@ -1,12 +1,12 @@
 """
-emdx - Documentation Index Management System
+emdx - A knowledge base that AI agents can read, write, and search
 """
 
 import hashlib
 import time
 from pathlib import Path
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 
 # Generate a unique build identifier based on current timestamp and file modification times

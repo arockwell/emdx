@@ -289,10 +289,7 @@ class AgentExecutionItem(ActivityItem):
 
     @property
     def type_icon(self) -> str:
-        # Show different icon based on CLI tool
-        if self.cli_tool == "cursor":
-            return "🖱️"  # Cursor icon
-        return "🤖"  # Claude icon
+        return "🤖"
 
     @property
     def status_icon(self) -> str:

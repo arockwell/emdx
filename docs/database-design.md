@@ -86,7 +86,7 @@ The database also includes tables for:
 - **`task_categories`** — Category definitions for auto-numbered task titles
 - **`document_embeddings`** — Document-level semantic search vectors (384-dimensional)
 - **`chunk_embeddings`** — Chunk-level semantic search vectors for fine-grained retrieval
-- **`delegate_runs`** / **`cascade_metadata`** — Delegate execution tracking
+- **`delegate_runs`** — Delegate execution tracking
 
 See `emdx/database/migrations.py` for complete schema definitions.
 

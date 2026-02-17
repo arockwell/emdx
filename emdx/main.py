@@ -114,7 +114,7 @@ from emdx.ui.gui import gui as gui_command  # noqa: E402
 # Create main app with lazy loading support
 app = typer.Typer(
     name="emdx",
-    help="Documentation Index Management System - A powerful knowledge base for developers",
+    help="A powerful knowledge base for developers and AI agents",
     add_completion=True,
     rich_markup_mode="rich",
     cls=LazyTyperGroup,
@@ -205,7 +205,7 @@ def version() -> None:
     """Show emdx version"""
     typer.echo(f"emdx version {__version__}")
     typer.echo(f"Build ID: {__build_id__}")
-    typer.echo("Documentation Index Management System")
+    typer.echo("A knowledge base for developers and AI agents")
 
 
 # Callback for global options
@@ -226,10 +226,10 @@ def main(
     ),
 ) -> None:
     """
-    emdx - Documentation Index Management System
+    emdx - A knowledge base for developers and AI agents
 
-    A powerful CLI tool for managing your knowledge base with full-text search,
-    Git integration, and seamless editor workflows.
+    Save research, delegate tasks to Claude agents, and search everything
+    with full-text and semantic search.
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands

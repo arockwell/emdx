@@ -1,135 +1,102 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.15.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.16.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**A searchable knowledge base that captures everything you do — and lets you delegate work to Claude agents at scale.**
+**A knowledge base that AI agents can read, write, and search — and so can you.**
 
-EMDX is a CLI tool that stores notes, research, decisions, and AI outputs in a local SQLite database with full-text search. It's also deeply integrated with Claude Code: you can delegate tasks to agents, run them in parallel, and every result automatically lands in your knowledge base — searchable forever.
+Every Claude Code session starts from zero. Your research, decisions, and AI-generated analysis vanish when the session ends. You re-explain context. You re-run searches. You lose work.
 
-## Installation
+emdx fixes this. It's a local knowledge base backed by SQLite. Save your research, pipe in command output, or delegate tasks to Claude agents — every result lands in one searchable place. Next session, it's all still there.
 
-**Requirements:** Python 3.11+
+## See it in action
 
 ```bash
-# Install with uv (recommended)
-uv tool install emdx
+# Dispatch three agents in parallel — results saved to your KB
+emdx delegate "analyze auth module" "review test coverage" "check for XSS"
 
-# Or install with pip
-pip install emdx
+# A week later, find what they discovered
+emdx find "XSS"
 
-# Verify
+# Build on past work — feed a previous analysis into a new task
+emdx delegate --doc 84 "implement the fixes from this security analysis"
+
+# Or go straight to a PR
+emdx delegate --pr "fix the null pointer in token refresh"
+```
+
+Each result prints to stdout (so you can read it inline) and gets saved to your knowledge base (so you can find it later).
+
+## Install
+
+```bash
+pip install emdx        # or: uv tool install emdx
 emdx --help
 ```
 
 <details>
-<summary>Optional extras and development setup</summary>
+<summary>Optional extras</summary>
 
 ```bash
-# Optional extras
-uv tool install 'emdx[ai]'           # Semantic search, embeddings, Claude Q&A
-uv tool install 'emdx[similarity]'    # TF-IDF, MinHash duplicate detection
-uv tool install 'emdx[all]'           # Everything
-
-# Development (from source)
-git clone https://github.com/arockwell/emdx.git
-cd emdx
-uv sync                               # or: poetry install --all-extras
-uv run pytest                          # or: poetry run pytest
+pip install 'emdx[ai]'          # Semantic search, embeddings, Q&A
+pip install 'emdx[similarity]'  # TF-IDF duplicate detection
+pip install 'emdx[all]'         # Everything
 ```
 
 </details>
 
-## Quick Start
+## The basics: save, find, build
 
-### Save something
-
-EMDX stores documents — any text you want to keep.
+### Save anything
 
 ```bash
-# Save a file
-emdx save README.md
-
-# Save a note
-emdx save "Remember: the auth bug is in token refresh" --title "Auth Bug Note"
-
-# Pipe command output
-docker ps | emdx save --title "Running containers"
-
-# Save and tag it for organization
-emdx save meeting-notes.md --tags "meeting,active"
+emdx save meeting-notes.md                              # Save a file
+emdx save "the auth bug is in token refresh" --title "Auth Bug"  # Save a note
+docker ps | emdx save --title "Running containers"       # Pipe any command
 ```
 
 ### Find it later
 
 ```bash
-# Full-text search
-emdx find "auth bug"
-
-# Filter by tags
-emdx find --tags "meeting,active"
-
-# Combine text and tags
-emdx find "docker" --tags "ops"
-
-# View a specific document
-emdx view 42
-
-# See recent documents
-emdx recent
+emdx find "auth bug"                # Full-text search (SQLite FTS5)
+emdx find --tags "security,active"  # Filter by tags
+emdx view 42                        # View a specific document
+emdx recent                         # See what you worked on recently
 ```
 
-### Organize with tags
+### Tag and organize
 
-Tags use emoji under the hood, but you type plain text:
+Tags use plain text that maps to emoji under the hood:
 
 ```bash
-# Add tags to a document
-emdx tag 42 gameplan active
-
-# See all tags in use
-emdx tag list
-
-# Search by tags
-emdx find --tags "gameplan,success"
+emdx tag 42 gameplan active         # Add tags
+emdx find --tags "gameplan,active"  # Search by tags
 ```
 
-| Alias | Emoji | Typical use |
-|-------|-------|-------------|
+| You type | Means | Use for |
+|----------|-------|---------|
 | `gameplan` | 🎯 | Plans and strategy |
 | `analysis` | 🔍 | Research and investigation |
 | `active` | 🚀 | Currently working on |
 | `done` | ✅ | Completed |
 | `blocked` | 🚧 | Stuck or waiting |
-| `success` | 🎉 | Worked as intended |
-| `failed` | ❌ | Didn't work |
 
-Run `emdx tag list` to see all tags in use.
+## Delegate work to Claude agents
 
-## Delegating Work to Claude
+This is where emdx gets powerful. `delegate` sends tasks to Claude Code agents and saves their output to your knowledge base.
 
-This is where EMDX gets powerful. `emdx delegate` sends tasks to Claude Code agents, and everything they produce is automatically saved to your knowledge base.
+### Parallel execution
 
-### Single task
-
-```bash
-emdx delegate "analyze the auth module for security issues"
-```
-
-The agent runs, saves its output, and the result prints to stdout. The document is also persisted — you can `emdx find "auth"` to find it later.
-
-### Parallel tasks
-
-Run multiple tasks concurrently. Each gets its own agent.
+Run multiple tasks concurrently — each gets its own agent:
 
 ```bash
 emdx delegate "check auth" "review tests" "scan for XSS"
 
-# Control concurrency (5 tasks, 3 slots)
-emdx delegate "t1" "t2" "t3" "t4" "t5" -j 3
+# Control concurrency
+emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
 
-# Combine outputs into a single summary
+# Combine outputs into a single synthesized summary
 emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
 ```
 
@@ -141,98 +108,84 @@ Find items at runtime, then process each one:
 # Review every Python file in src/
 emdx delegate --each "fd -e py src/" --do "Review {{item}} for issues"
 
-# Review all feature branches
-emdx delegate --each "git branch -r | grep feature" --do "Review {{item}}"
-```
-
-### Use documents as input
-
-```bash
-# Pass a doc as context alongside a task
-emdx delegate --doc 42 "implement the plan described here"
-
-# Or just run a document directly by ID
-emdx delegate 42
+# Review all open PRs
+emdx delegate --each "gh pr list --json number -q '.[].number'" \
+  --do "Review PR #{{item}}"
 ```
 
 ### Code changes with PRs
 
-```bash
-# Agent makes changes and opens a PR
-emdx delegate --pr "fix the null pointer in auth"
-
-# Isolate changes in a git worktree
-emdx delegate --worktree --pr "fix X"
-
-# All flags compose together
-emdx delegate --doc 42 --worktree --pr "fix the auth module"
-```
-
-## Searching Your Knowledge Base
-
-As your knowledge base grows, EMDX gives you several ways to find things.
-
-### Full-text search
-
-Built on SQLite FTS5 — fast and works out of the box:
+Agents can make changes in isolated git worktrees and open PRs:
 
 ```bash
-emdx find "authentication"
-emdx find "docker" --project myapp
+emdx delegate --pr "fix the auth bug"                   # Branch + PR
+emdx delegate --worktree --pr "fix X"                    # Isolated worktree + PR
+emdx delegate --doc 42 --pr "implement this plan"        # Use a doc as context
 ```
+
+### Use your knowledge base as input
+
+```bash
+emdx delegate --doc 42 "implement the plan described here"
+emdx delegate 42                                         # Run a doc directly
+```
+
+## Search and synthesize
 
 ### Semantic search
 
-Find documents by meaning, not just keywords (requires `emdx[ai]` extra):
+Find documents by meaning, not just keywords (requires `emdx[ai]`):
 
 ```bash
-# Search by concept — finds related content even without keyword matches
 emdx find "how we handle rate limiting" --mode semantic
-
-# Extract key information from results
-emdx find "authentication" --extract
 ```
 
 ### Q&A over your knowledge base
 
 ```bash
-# Pipe relevant docs to Claude CLI (uses Claude Max, no API cost)
-emdx ai context "How does the workflow system work?" | claude
+# Pipe relevant docs to Claude (uses Claude Max — no API cost)
+emdx ai context "How does the auth system work?" | claude
 
-# Or use the API directly (requires ANTHROPIC_API_KEY)
-emdx ai ask "How did we solve the auth bug?"
+# Or query directly (requires ANTHROPIC_API_KEY)
+emdx ai ask "What did we decide about the API redesign?"
 ```
 
-## Going Further
+### Compact: deduplicate over time
 
-### Compact: deduplicate your knowledge base
-
-As your KB grows, related documents pile up. `compact` finds clusters of similar docs using TF-IDF and merges them via Claude:
+As your KB grows, related documents pile up. `compact` clusters similar docs and merges them:
 
 ```bash
-emdx compact --dry-run                  # Show clusters (free, no API calls)
-emdx compact --dry-run --threshold 0.7  # Tighter similarity requirement
-emdx compact 32 33                      # Merge specific documents
-emdx compact --auto                     # Merge all discovered clusters
-emdx compact --topic "auth"             # Only cluster docs matching a topic
+emdx compact --dry-run           # Preview clusters (no API calls)
+emdx compact --auto              # Merge all discovered clusters
+emdx compact --topic "auth"      # Only cluster docs about a topic
 ```
 
-Originals are tagged `superseded` (not deleted) and excluded from future clustering.
+Originals are tagged `superseded` (not deleted) so nothing is lost.
 
-### Distill: synthesize topics for any audience
-
-Search the KB and synthesize matching documents into a coherent summary:
+### Distill: synthesize for any audience
 
 ```bash
-emdx distill "authentication"                    # Personal summary (default)
-emdx distill --for docs "API design"             # Documentation style
+emdx distill "authentication"                    # Personal summary
 emdx distill --for coworkers "sprint progress"   # Team briefing
-emdx distill --tags "security,active" --save     # Save result to KB
+emdx distill --for docs "API design" --save      # Save result to KB
 ```
 
-### Recipes — reusable instructions
+## Claude Code integration
 
-Save instructions as recipes and run them repeatedly:
+emdx is designed to work alongside Claude Code. Add emdx commands to your CLAUDE.md and agents will use them as part of their workflow.
+
+```bash
+emdx prime    # Inject current work context at session start
+emdx status   # Quick overview of recent activity
+emdx wrapup   # Generate a session summary before ending
+```
+
+## More features
+
+<details>
+<summary>Recipes, execution monitoring, TUI, and more</summary>
+
+### Recipes — reusable agent instructions
 
 ```bash
 emdx recipe create security-audit.md --title "Security Audit"
@@ -240,49 +193,51 @@ emdx recipe list
 emdx recipe run "Security Audit" -- "check auth module"
 ```
 
-### Monitoring executions
+### Monitor running agents
 
 ```bash
 emdx exec running          # List active executions
 emdx exec show 42          # Follow logs
-emdx exec health           # Health check
 emdx exec kill 42          # Kill a stuck execution
 ```
 
 ### Interactive TUI
 
-EMDX includes a full terminal UI for browsing, editing, and managing your knowledge base:
+Browse, edit, and manage your knowledge base visually:
 
 ```bash
 emdx gui
 ```
 
-### Claude Code integration
+### Briefings
 
-EMDX works as a Claude Code extension. At the start of each session:
+See what happened in your knowledge base recently:
 
 ```bash
-emdx prime    # Get current work context
-emdx status   # Quick overview
+emdx briefing              # Activity summary
 ```
 
-## Quick Reference
+</details>
+
+## Quick reference
 
 | I want to... | Command |
 |--------------|---------|
-| Save a file or note | `emdx save file.md` or `emdx save "text" --title "T"` |
+| Save a file or note | `emdx save file.md` |
 | Find by keyword | `emdx find "query"` |
 | Find by tag | `emdx find --tags "active"` |
 | View a document | `emdx view 42` |
 | Tag a document | `emdx tag 42 analysis active` |
 | Run an AI task | `emdx delegate "task"` |
 | Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
-| Discover + process items | `emdx delegate --each "cmd" --do "Review {{item}}"` |
-| Create a PR | `emdx delegate --pr "fix the bug"` |
+| Create a PR from a task | `emdx delegate --pr "fix the bug"` |
+| Process items dynamically | `emdx delegate --each "cmd" --do "task {{item}}"` |
 | Search by meaning | `emdx find "concept" --mode semantic` |
-| Ask a question | `emdx ai context "question" \| claude` |
+| Ask your KB a question | `emdx ai context "question" \| claude` |
 | Deduplicate the KB | `emdx compact --dry-run` |
 | Synthesize a topic | `emdx distill "topic"` |
+| Start a Claude session | `emdx prime` |
+
 ## Documentation
 
 - [CLI Reference](docs/cli-api.md) — Complete command documentation

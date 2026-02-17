@@ -109,7 +109,7 @@ emdx status   # Quick overview
 
 1. **Check ready tasks** before starting work: `emdx task ready`
 2. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
-3. **Create tasks** for discovered work: `emdx task add "Title" --description "Details"`
+3. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
 4. **Never end session** without updating task status and creating tasks for remaining work
 
 ### CRITICAL: Use `emdx delegate` Instead of Task Tool Sub-Agents
@@ -164,7 +164,9 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 | Clean up worktrees | `emdx delegate --cleanup` |
 | Run saved recipe | `emdx recipe run 42` |
 
-### Auto-Tagging Guidelines
+### Document Tags vs Task Organization
+
+**Documents** use tags (emoji aliases) for classification:
 
 | Content Type | Tags |
 |--------------|------|
@@ -176,6 +178,12 @@ emdx delegate --each "fd -e py src/" --do "Review {{item}}"
 
 **Status:** `active` (working), `done` (completed), `blocked` (stuck)
 **Outcome:** `success`, `failed`, `partial`
+
+**Tasks** use categories and epics (NOT tags):
+- `--cat FEAT` / `--cat FIX` / `--cat ARCH` etc. — assigns a category
+- `--epic <id>` — groups task under a parent epic
+- Use `emdx cat list` to see available categories
+- Use `emdx epic list` to see active epics
 
 ## Essential Commands
 
@@ -191,11 +199,13 @@ emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
 emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-tags for OR)
 
-# Tasks
-emdx task add "Title" --description "Details"
+# Tasks (use --epic and --cat, NOT --tags)
+emdx task add "Title" -D "Details" --epic 898 --cat FEAT
 emdx task ready                        # Show unblocked tasks
 emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
+emdx epic list                         # See active epics
+emdx cat list                          # See available categories
 
 # Tags
 emdx tag add 42 gameplan active

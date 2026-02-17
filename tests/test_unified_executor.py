@@ -2,6 +2,7 @@
 
 import queue
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from emdx.services.unified_executor import (
@@ -16,7 +17,7 @@ from emdx.services.unified_executor import (
 class TestExecutionConfig:
     """Test ExecutionConfig dataclass."""
 
-    def test_default_values(self):
+    def test_default_values(self) -> None:
         config = ExecutionConfig(prompt="test prompt")
         assert config.prompt == "test prompt"
         assert config.timeout_seconds == 300
@@ -25,7 +26,7 @@ class TestExecutionConfig:
         assert config.doc_id is None
         assert config.title == "CLI Execution"
 
-    def test_custom_values(self):
+    def test_custom_values(self) -> None:
         config = ExecutionConfig(
             prompt="custom prompt",
             title="Custom Title",
@@ -41,7 +42,7 @@ class TestExecutionConfig:
         assert config.output_instruction == "Save with emdx save"
         assert config.allowed_tools == ["Read", "Write"]
 
-    def test_working_dir_default(self):
+    def test_working_dir_default(self) -> None:
         config = ExecutionConfig(prompt="test")
         assert config.working_dir == str(Path.cwd())
 
@@ -49,7 +50,7 @@ class TestExecutionConfig:
 class TestExecutionResult:
     """Test ExecutionResult dataclass."""
 
-    def test_success_result(self):
+    def test_success_result(self) -> None:
         result = ExecutionResult(
             success=True,
             execution_id=1,
@@ -62,7 +63,7 @@ class TestExecutionResult:
         assert result.output_doc_id == 456
         assert result.error_message is None
 
-    def test_failure_result(self):
+    def test_failure_result(self) -> None:
         result = ExecutionResult(
             success=False,
             execution_id=1,
@@ -74,7 +75,7 @@ class TestExecutionResult:
         assert result.error_message == "Claude failed"
         assert result.exit_code == 1
 
-    def test_to_dict(self):
+    def test_to_dict(self) -> None:
         result = ExecutionResult(
             success=True,
             execution_id=42,
@@ -83,49 +84,58 @@ class TestExecutionResult:
             tokens_used=500,
         )
         d = result.to_dict()
-        assert d['success'] is True
-        assert d['execution_id'] == 42
-        assert d['log_file'] == "/tmp/test.log"
-        assert d['output_doc_id'] == 100
-        assert d['tokens_used'] == 500
+        assert d["success"] is True
+        assert d["execution_id"] == 42
+        assert d["log_file"] == "/tmp/test.log"
+        assert d["output_doc_id"] == 100
+        assert d["tokens_used"] == 500
 
 
 class TestUnifiedExecutor:
     """Test UnifiedExecutor."""
 
-    def test_default_log_dir(self):
+    def test_default_log_dir(self) -> None:
         executor = UnifiedExecutor()
         expected = Path.home() / ".config" / "emdx" / "logs"
         assert executor.log_dir == expected
 
-    def test_custom_log_dir(self, tmp_path):
+    def test_custom_log_dir(self, tmp_path: Path) -> None:
         custom_dir = tmp_path / "custom_logs"
         executor = UnifiedExecutor(log_dir=custom_dir)
         assert executor.log_dir == custom_dir
         assert custom_dir.exists()
 
-    @patch('subprocess.Popen')
-    @patch('emdx.services.unified_executor.get_cli_executor')
-    @patch('emdx.services.unified_executor.create_execution')
-    @patch('emdx.services.unified_executor.update_execution_status')
+    @patch("subprocess.Popen")
+    @patch("emdx.services.unified_executor.get_cli_executor")
+    @patch("emdx.services.unified_executor.create_execution")
+    @patch("emdx.services.unified_executor.update_execution_status")
     def test_execution_success(
-        self, mock_update_status, mock_create_exec, mock_get_executor, mock_popen, tmp_path,
-    ):
+        self,
+        mock_update_status: Any,
+        mock_create_exec: Any,
+        mock_get_executor: Any,
+        mock_popen: Any,
+        tmp_path: Path,
+    ) -> None:
         from emdx.services.cli_executor.base import CliCommand, CliResult
 
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
-        mock_executor.parse_output.return_value = CliResult(success=True, output='Done', exit_code=0)  # noqa: E501
+        mock_executor.build_command.return_value = CliCommand(
+            args=["claude", "--print-prompt"], cwd=str(tmp_path)
+        )
+        mock_executor.parse_output.return_value = CliResult(
+            success=True, output="Done", exit_code=0
+        )
         mock_get_executor.return_value = mock_executor
 
         # Setup mock process
         mock_process = MagicMock()
-        mock_process.stdout.readline.side_effect = ['']  # No output
+        mock_process.stdout.readline.side_effect = [""]  # No output
         mock_process.poll.return_value = 0
         mock_process.stdout.__iter__ = lambda self: iter([])
-        mock_process.stderr.read.return_value = ''
+        mock_process.stderr.read.return_value = ""
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
@@ -136,30 +146,39 @@ class TestUnifiedExecutor:
 
         assert result.success is True
         assert result.execution_id == 42
-        mock_update_status.assert_called_with(42, 'completed', 0)
+        mock_update_status.assert_called_with(42, "completed", 0)
 
-    @patch('subprocess.Popen')
-    @patch('emdx.services.unified_executor.get_cli_executor')
-    @patch('emdx.services.unified_executor.create_execution')
-    @patch('emdx.services.unified_executor.update_execution_status')
+    @patch("subprocess.Popen")
+    @patch("emdx.services.unified_executor.get_cli_executor")
+    @patch("emdx.services.unified_executor.create_execution")
+    @patch("emdx.services.unified_executor.update_execution_status")
     def test_execution_failure(
-        self, mock_update_status, mock_create_exec, mock_get_executor, mock_popen, tmp_path,
-    ):
+        self,
+        mock_update_status: Any,
+        mock_create_exec: Any,
+        mock_get_executor: Any,
+        mock_popen: Any,
+        tmp_path: Path,
+    ) -> None:
         from emdx.services.cli_executor.base import CliCommand, CliResult
 
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
-        mock_executor.parse_output.return_value = CliResult(success=False, output='', error='Failed', exit_code=1)  # noqa: E501
+        mock_executor.build_command.return_value = CliCommand(
+            args=["claude", "--print-prompt"], cwd=str(tmp_path)
+        )
+        mock_executor.parse_output.return_value = CliResult(
+            success=False, output="", error="Failed", exit_code=1
+        )
         mock_get_executor.return_value = mock_executor
 
         # Setup mock process
         mock_process = MagicMock()
-        mock_process.stdout.readline.side_effect = ['']
+        mock_process.stdout.readline.side_effect = [""]
         mock_process.poll.return_value = 1
         mock_process.stdout.__iter__ = lambda self: iter([])
-        mock_process.stderr.read.return_value = ''
+        mock_process.stderr.read.return_value = ""
         mock_process.returncode = 1
         mock_popen.return_value = mock_process
 
@@ -169,31 +188,40 @@ class TestUnifiedExecutor:
         result = executor.execute(ExecutionConfig(prompt="test task"))
 
         assert result.success is False
-        assert result.error_message == 'Failed'
-        mock_update_status.assert_called_with(42, 'failed', 1)
+        assert result.error_message == "Failed"
+        mock_update_status.assert_called_with(42, "failed", 1)
 
-    @patch('subprocess.Popen')
-    @patch('emdx.services.unified_executor.get_cli_executor')
-    @patch('emdx.services.unified_executor.create_execution')
-    @patch('emdx.services.unified_executor.update_execution_status')
+    @patch("subprocess.Popen")
+    @patch("emdx.services.unified_executor.get_cli_executor")
+    @patch("emdx.services.unified_executor.create_execution")
+    @patch("emdx.services.unified_executor.update_execution_status")
     def test_output_instruction_appended(
-        self, mock_update_status, mock_create_exec, mock_get_executor, mock_popen, tmp_path,
-    ):
+        self,
+        mock_update_status: Any,
+        mock_create_exec: Any,
+        mock_get_executor: Any,
+        mock_popen: Any,
+        tmp_path: Path,
+    ) -> None:
         from emdx.services.cli_executor.base import CliCommand, CliResult
 
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
-        mock_executor.parse_output.return_value = CliResult(success=True, output='Done', exit_code=0)  # noqa: E501
+        mock_executor.build_command.return_value = CliCommand(
+            args=["claude", "--print-prompt"], cwd=str(tmp_path)
+        )
+        mock_executor.parse_output.return_value = CliResult(
+            success=True, output="Done", exit_code=0
+        )
         mock_get_executor.return_value = mock_executor
 
         # Setup mock process
         mock_process = MagicMock()
-        mock_process.stdout.readline.side_effect = ['']
+        mock_process.stdout.readline.side_effect = [""]
         mock_process.poll.return_value = 0
         mock_process.stdout.__iter__ = lambda self: iter([])
-        mock_process.stderr.read.return_value = ''
+        mock_process.stderr.read.return_value = ""
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
@@ -205,22 +233,29 @@ class TestUnifiedExecutor:
 
         # Verify the prompt was passed to build_command with instruction appended
         call_args = mock_executor.build_command.call_args
-        assert "Base" in call_args.kwargs['prompt']
-        assert "Save it" in call_args.kwargs['prompt']
+        assert "Base" in call_args.kwargs["prompt"]
+        assert "Save it" in call_args.kwargs["prompt"]
 
-    @patch('subprocess.Popen')
-    @patch('emdx.services.unified_executor.get_cli_executor')
-    @patch('emdx.services.unified_executor.create_execution')
-    @patch('emdx.services.unified_executor.update_execution_status')
+    @patch("subprocess.Popen")
+    @patch("emdx.services.unified_executor.get_cli_executor")
+    @patch("emdx.services.unified_executor.create_execution")
+    @patch("emdx.services.unified_executor.update_execution_status")
     def test_exception_handling(
-        self, mock_update_status, mock_create_exec, mock_get_executor, mock_popen, tmp_path,
-    ):
+        self,
+        mock_update_status: Any,
+        mock_create_exec: Any,
+        mock_get_executor: Any,
+        mock_popen: Any,
+        tmp_path: Path,
+    ) -> None:
         from emdx.services.cli_executor.base import CliCommand
 
         # Setup mock executor
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
-        mock_executor.build_command.return_value = CliCommand(args=["claude", "--print-prompt"], cwd=str(tmp_path))  # noqa: E501
+        mock_executor.build_command.return_value = CliCommand(
+            args=["claude", "--print-prompt"], cwd=str(tmp_path)
+        )
         mock_get_executor.return_value = mock_executor
 
         # Make Popen raise an exception
@@ -232,18 +267,21 @@ class TestUnifiedExecutor:
         result = executor.execute(ExecutionConfig(prompt="test"))
 
         assert result.success is False
-        assert "Unexpected" in result.error_message
-        mock_update_status.assert_called_with(42, 'failed', -1)
+        assert "Unexpected" in result.error_message  # type: ignore[operator]
+        mock_update_status.assert_called_with(42, "failed", -1)
 
-
-    @patch('subprocess.Popen')
-    @patch('emdx.services.unified_executor.get_cli_executor')
-    @patch('emdx.services.unified_executor.create_execution')
-    @patch('emdx.services.unified_executor.update_execution_status')
+    @patch("subprocess.Popen")
+    @patch("emdx.services.unified_executor.get_cli_executor")
+    @patch("emdx.services.unified_executor.create_execution")
+    @patch("emdx.services.unified_executor.update_execution_status")
     def test_streaming_writes_to_log_file(
-        self, mock_update_status, mock_create_exec, mock_get_executor,
-        mock_popen, tmp_path,
-    ):
+        self,
+        mock_update_status: Any,
+        mock_create_exec: Any,
+        mock_get_executor: Any,
+        mock_popen: Any,
+        tmp_path: Path,
+    ) -> None:
         """Verify stream-json lines are formatted and written to the log."""
         import json
 
@@ -252,28 +290,57 @@ class TestUnifiedExecutor:
         mock_executor = MagicMock()
         mock_executor.validate_environment.return_value = (True, {})
         mock_executor.build_command.return_value = CliCommand(
-            args=["claude", "--print"], cwd=str(tmp_path),
+            args=["claude", "--print"],
+            cwd=str(tmp_path),
         )
         mock_executor.parse_output.return_value = CliResult(
-            success=True, output='Done', exit_code=0,
+            success=True,
+            output="Done",
+            exit_code=0,
         )
-        mock_get_executor.return_value = mock_executor
 
-        # Simulate stream-json lines
-        init_line = json.dumps({
-            "type": "system", "subtype": "init", "model": "test-model",
-        }) + "\n"
-        result_line = json.dumps({
-            "type": "result", "subtype": "success",
-            "is_error": False, "duration_ms": 100,
-            "result": "all done",
-        }) + "\n"
+        # parse_stream_line must return typed StreamMessage dicts
+        # so format_stream_message can format them for the log
+        init_line = (
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "init",
+                    "model": "test-model",
+                }
+            )
+            + "\n"
+        )
+        result_line = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "duration_ms": 100,
+                    "result": "all done",
+                }
+            )
+            + "\n"
+        )
+
+        mock_executor.parse_stream_line.side_effect = [
+            {"type": "system", "subtype": "init", "model": "test-model"},
+            {
+                "type": "result",
+                "success": True,
+                "result": "all done",
+                "duration_ms": 100,
+                "raw_line": result_line.strip(),
+            },
+        ]
+        mock_get_executor.return_value = mock_executor
 
         mock_process = MagicMock()
         mock_process.stdout.__iter__ = lambda self: iter(
             [init_line, result_line],
         )
-        mock_process.stderr.read.return_value = ''
+        mock_process.stderr.read.return_value = ""
         mock_process.returncode = 0
         mock_process.wait.return_value = 0
         mock_popen.return_value = mock_process
@@ -297,11 +364,25 @@ class TestUnifiedExecutor:
 class TestDefaultAllowedTools:
     """Test default allowed tools."""
 
-    def test_default_tools_list(self):
-        expected = ["Bash", "Edit", "Glob", "Grep", "LS", "MultiEdit", "Read", "Task", "TodoRead", "TodoWrite", "WebFetch", "WebSearch", "Write"]  # noqa: E501
+    def test_default_tools_list(self) -> None:
+        expected = [
+            "Bash",
+            "Edit",
+            "Glob",
+            "Grep",
+            "LS",
+            "MultiEdit",
+            "Read",
+            "Task",
+            "TodoRead",
+            "TodoWrite",
+            "WebFetch",
+            "WebSearch",
+            "Write",
+        ]
         assert DEFAULT_ALLOWED_TOOLS == expected
 
-    def test_config_gets_copy(self):
+    def test_config_gets_copy(self) -> None:
         config1 = ExecutionConfig(prompt="test1")
         config2 = ExecutionConfig(prompt="test2")
         config1.allowed_tools.append("Custom")
@@ -312,7 +393,7 @@ class TestDefaultAllowedTools:
 class TestReaderThread:
     """Test the _reader_thread helper used for reliable pipe reading."""
 
-    def test_reads_lines_and_sends_sentinel(self):
+    def test_reads_lines_and_sends_sentinel(self) -> None:
         """Lines from pipe appear on queue, followed by None sentinel."""
         q: queue.Queue[str | None] = queue.Queue()
         pipe = MagicMock()
@@ -324,7 +405,7 @@ class TestReaderThread:
         assert q.get(timeout=1) == "line2\n"
         assert q.get(timeout=1) is None  # sentinel
 
-    def test_empty_pipe_sends_sentinel(self):
+    def test_empty_pipe_sends_sentinel(self) -> None:
         """An empty pipe still sends the None sentinel."""
         q: queue.Queue[str | None] = queue.Queue()
         pipe = MagicMock()
@@ -334,7 +415,7 @@ class TestReaderThread:
 
         assert q.get(timeout=1) is None
 
-    def test_closed_pipe_sends_sentinel(self):
+    def test_closed_pipe_sends_sentinel(self) -> None:
         """A ValueError (closed pipe) still sends sentinel."""
         q: queue.Queue[str | None] = queue.Queue()
         pipe = MagicMock()
