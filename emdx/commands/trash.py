@@ -12,7 +12,6 @@ Consolidates trash, restore, and purge into a subcommand group:
 import typer
 from rich.table import Table
 
-from emdx.database import db
 from emdx.models.documents import (
     list_deleted_documents,
     purge_deleted_documents,
@@ -52,7 +51,6 @@ def list_cmd(
 def _list_trash(days: int | None = None, limit: int = 50) -> None:
     """Shared implementation for listing trash."""
     try:
-        db.ensure_schema()
 
         deleted_docs = list_deleted_documents(days=days, limit=limit)
 
@@ -102,7 +100,6 @@ def restore(
 ) -> None:
     """Restore soft-deleted document(s)."""
     try:
-        db.ensure_schema()
 
         if not identifiers and not all:
             console.print("[red]Error: Provide document ID(s) to restore or use --all[/red]")
@@ -160,7 +157,6 @@ def purge(
 ) -> None:
     """Permanently delete all items in trash."""
     try:
-        db.ensure_schema()
 
         if older_than:
             deleted_docs = list_deleted_documents()

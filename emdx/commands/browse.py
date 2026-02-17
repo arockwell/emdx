@@ -27,8 +27,6 @@ def list(
     try:
         import json
 
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Query database
         docs = list_documents(project=project, limit=limit)
@@ -99,8 +97,6 @@ def recent(
 ) -> None:
     """Show recently accessed documents"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Query database for recently accessed documents
         docs = get_recent_documents(limit=limit)
@@ -148,8 +144,6 @@ def stats(
 ) -> None:
     """Show knowledge base statistics"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Query database for statistics
         stats_data = get_stats(project=project)

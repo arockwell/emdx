@@ -16,7 +16,6 @@ from typing import Any
 import typer
 from rich.table import Table
 
-from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.models.tags import (
     add_tags_to_document,
@@ -71,7 +70,6 @@ def list_cmd(
         emdx review list --json
     """
     try:
-        db.ensure_schema()
 
         docs = search_by_tags(["needs-review"], limit=limit, prefix_match=False)
 
@@ -136,7 +134,6 @@ def approve(
         emdx review approve 42 --note "LGTM"
     """
     try:
-        db.ensure_schema()
 
         doc = get_document(str(doc_id))
         if not doc:
@@ -207,7 +204,6 @@ def reject(
         emdx review reject 42 -r "Missing error handling"
     """
     try:
-        db.ensure_schema()
 
         doc = get_document(str(doc_id))
         if not doc:
@@ -273,7 +269,6 @@ def stats(
         emdx review stats --json
     """
     try:
-        db.ensure_schema()
 
         needs_review = _get_tag_count("needs-review")
         reviewed = _get_tag_count("reviewed")

@@ -137,13 +137,6 @@ def detect_project(input_content: InputContent, provided_project: str | None) ->
 
 def create_document(title: str, content: str, project: str | None) -> int:
     """Save document to database and return document ID"""
-    # Ensure database schema exists
-    try:
-        db.ensure_schema()
-    except Exception as e:
-        console.print(f"[red]Database error: {e}[/red]")
-        raise typer.Exit(1) from e
-
     # Save to database
     try:
         doc_id = save_document(title, content, project)
@@ -449,8 +442,6 @@ def find(
     search_query = " ".join(query) if query else ""
 
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Validate that we have something to search for
         has_date_filters = any([created_after, created_before, modified_after, modified_before])
@@ -858,8 +849,6 @@ def view(
 ) -> None:
     """View a document from the knowledge base"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Fetch document
         doc = get_document(identifier)
@@ -1003,8 +992,6 @@ def edit(
 ) -> None:
     """Edit a document in the knowledge base"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Fetch document
         doc = get_document(identifier)
@@ -1120,8 +1107,6 @@ def delete(
 ) -> None:
     """Delete one or more documents (soft delete by default)"""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Collect documents to delete
         docs_to_delete = []

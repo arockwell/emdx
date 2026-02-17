@@ -57,7 +57,6 @@ def prime(
         # For session hooks
         emdx prime >> /tmp/claude-context.md
     """
-    db.ensure_schema()
     project = get_git_project()
 
     if format == "json":

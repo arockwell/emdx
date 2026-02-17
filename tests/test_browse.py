@@ -1,7 +1,7 @@
 """Tests for browse commands."""
 
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -17,7 +17,6 @@ class TestBrowseCommands:
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_empty_database(self, mock_list_docs, mock_db):
         """Test list command with empty database."""
-        mock_db.ensure_schema = Mock()
         mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list"])
@@ -30,7 +29,6 @@ class TestBrowseCommands:
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_with_documents(self, mock_list_docs, mock_db):
         """Test list command with documents."""
-        mock_db.ensure_schema = Mock()
         mock_list_docs.return_value = [
             {
                 "id": 1,
@@ -51,7 +49,6 @@ class TestBrowseCommands:
     @patch("emdx.commands.browse.list_documents")
     def test_list_command_with_project_filter(self, mock_list_docs, mock_db):
         """Test list command with project filter."""
-        mock_db.ensure_schema = Mock()
         mock_list_docs.return_value = []
 
         result = runner.invoke(app, ["list", "--project", "test-project"])
@@ -66,7 +63,6 @@ class TestBrowseCommands:
     def test_list_command_json_format(self, mock_list_docs, mock_db):
         """Test list command with JSON format."""
         from datetime import datetime
-        mock_db.ensure_schema = Mock()
         mock_list_docs.return_value = [{"id": 1, "title": "Test", "project": "test", "created_at": datetime.now(), "access_count": 0}]  # noqa: E501
 
         result = runner.invoke(app, ["list", "--format", "json"])
@@ -84,7 +80,6 @@ class TestBrowseCommands:
     @patch("emdx.commands.browse.get_recent_documents")
     def test_recent_command(self, mock_get_recent_docs, mock_db):
         """Test recent command."""
-        mock_db.ensure_schema = Mock()
         mock_get_recent_docs.return_value = [
             {
                 "id": 1,
@@ -105,7 +100,6 @@ class TestBrowseCommands:
     @patch("emdx.commands.browse.get_stats")
     def test_stats_command(self, mock_get_stats, mock_db):
         """Test stats command."""
-        mock_db.ensure_schema = Mock()
         mock_get_stats.return_value = {
             "total_documents": 100,
             "total_projects": 10,

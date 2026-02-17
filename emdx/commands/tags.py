@@ -11,7 +11,6 @@ import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from emdx.database import db
 from emdx.models.documents import get_document
 from emdx.models.tags import (
     add_tags_to_document,
@@ -37,8 +36,6 @@ def _add_tags_impl(
 ) -> None:
     """Shared implementation for adding tags (used by both callback and add subcommand)."""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Check if document exists
         doc = get_document(str(doc_id))
@@ -148,8 +145,6 @@ def remove(
 ) -> None:
     """Remove tags from a document."""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Check if document exists
         doc = get_document(str(doc_id))
@@ -188,8 +183,6 @@ def list_tags(
 ) -> None:
     """List all tags with statistics."""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Get all tags
         all_tags = list_all_tags(sort_by=sort)
@@ -237,8 +230,6 @@ def rename(
 ) -> None:
     """Rename a tag globally."""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Get current usage
         all_tags = list_all_tags()
@@ -281,8 +272,6 @@ def merge(
 ) -> None:
     """Merge multiple tags into one."""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         # Get info about source tags
         all_tags = list_all_tags()
@@ -334,8 +323,6 @@ def batch(
 ) -> None:
     """Batch auto-tag multiple documents."""
     try:
-        # Ensure database schema exists
-        db.ensure_schema()
 
         tagger = AutoTagger()
 

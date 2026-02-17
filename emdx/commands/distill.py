@@ -169,8 +169,6 @@ def distill(
     if ctx.invoked_subcommand is not None:
         return
 
-    db.ensure_schema()
-
     # Validate input
     if not topic and not tags:
         console.print(

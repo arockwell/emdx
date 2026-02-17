@@ -274,6 +274,12 @@ def main(
     if safe_mode:
         os.environ["EMDX_SAFE_MODE"] = "1"
 
+    # Ensure database schema is up to date (idempotent, runs pending migrations)
+    if ctx.invoked_subcommand is not None:
+        from emdx.database import db
+
+        db.ensure_schema()
+
 
 # Known subcommands of `emdx tag` — used for shorthand routing
 _TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "batch", "--help", "-h", "help"}
