@@ -333,9 +333,17 @@ class QAScreen(HelpMixin, Widget):
         )
 
     async def on_mount(self) -> None:
-        """Initialize the Q&A screen."""
-        logger.info("QAScreen mounted")
-        self._show_welcome()
+        """Initialize or restore the Q&A screen.
+
+        Called both on first mount and on re-mount after switching screens.
+        If we have prior conversation entries, rebuild them instead of
+        showing the welcome message.
+        """
+        logger.info("QAScreen mounted (entries=%d, asking=%s)", len(self._entries), self._is_asking)
+        if self._entries:
+            self._rebuild_conversation()
+        else:
+            self._show_welcome()
         # Focus conversation, not Input — avoids mouse sequence corruption
         self.query_one("#qa-conversation", ScrollableContainer).focus()
 
@@ -369,6 +377,32 @@ class QAScreen(HelpMixin, Widget):
             "[dim]Tip: Reference docs directly with #42 syntax[/dim]\n"
             "[dim]─────────────────────────────────────────[/dim]"
         )
+
+    def _rebuild_conversation(self) -> None:
+        """Rebuild conversation DOM from saved entries.
+
+        Called on re-mount after switching screens.  The child widgets
+        were destroyed by remove_children() but _entries survived on
+        the Python object.
+        """
+        for entry in self._entries:
+            self._append_message(f"\n[bold cyan]Q:[/bold cyan] {entry['question']}\n")
+            self._append_message("[bold green]A:[/bold green]")
+            self._append_markdown(entry["answer"])
+            docs = entry.get("sources", [])
+            meta_parts: list[str] = []
+            if docs:
+                source_parts = [f"#{d[0]} {d[1]}" for d in docs]
+                meta_parts.append(f"Sources: {' · '.join(source_parts)}")
+            elapsed = entry.get("elapsed")
+            if elapsed is not None:
+                meta_parts.append(f"{elapsed:.1f}s")
+            if meta_parts:
+                self._append_message(f"[dim]{' | '.join(meta_parts)}[/dim]")
+            self._append_message("[dim]─────────────────────────────────────────[/dim]")
+
+        if self._is_asking:
+            self._set_thinking("[dim]Still generating answer...[/dim]")
 
     def _update_status(self, text: str) -> None:
         """Update the status bar text."""
@@ -467,8 +501,15 @@ class QAScreen(HelpMixin, Widget):
             t_total = time.monotonic() - t0
             self._remove_thinking()
 
-            # Store for save feature
-            self._entries.append({"question": question, "answer": answer, "sources": docs})
+            # Store for save feature and conversation rebuild
+            self._entries.append(
+                {
+                    "question": question,
+                    "answer": answer,
+                    "sources": docs,
+                    "elapsed": t_total,
+                }
+            )
 
             # Render answer as markdown
             self._append_message("[bold green]A:[/bold green]")
@@ -576,22 +617,16 @@ class QAScreen(HelpMixin, Widget):
         inp.focus()
 
     def save_state(self) -> dict[str, Any]:
-        """Save current state for restoration."""
+        """Save current state for restoration.
+
+        Conversation data lives in self._entries which survives on the
+        cached widget instance. on_mount rebuilds the DOM from entries.
+        """
         return {
             "entry_count": len(self._entries),
             "is_asking": self._is_asking,
         }
 
     def restore_state(self, state: dict[str, Any]) -> None:
-        """Restore saved state after switching back to Q&A.
-
-        The conversation DOM persists because BrowserContainer caches
-        the widget instance.  If we were mid-question when the user
-        left, the worker kept running in the background and the answer
-        will have been rendered into the (detached) DOM already.
-        Just refresh status bar.
-        """
-        if state.get("is_asking") and not self._is_asking:
-            # Worker finished while we were away
-            self._update_status("Ready")
-        self.query_one("#qa-conversation", ScrollableContainer).scroll_end(animate=False)
+        """Called after re-mount. DOM is already rebuilt by on_mount."""
+        pass
