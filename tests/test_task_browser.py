@@ -1,0 +1,819 @@
+"""Pilot-based tests for TaskBrowser / TaskView TUI widgets."""
+
+from __future__ import annotations
+
+from collections.abc import Generator
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+from textual.app import App, ComposeResult
+from textual.widgets import OptionList, RichLog, Static
+
+from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
+from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
+
+# ---------------------------------------------------------------------------
+# Factories
+# ---------------------------------------------------------------------------
+
+
+def make_task(
+    id: int = 1,
+    title: str = "Test task",
+    status: str = "open",
+    priority: int = 5,
+    description: str | None = None,
+    error: str | None = None,
+    epic_key: str | None = None,
+    created_at: str | None = "2025-01-01T12:00:00",
+    updated_at: str | None = None,
+    completed_at: str | None = None,
+    tags: str | None = None,
+    execution_id: int | None = None,
+    output_doc_id: int | None = None,
+    **kwargs: object,
+) -> TaskDict:
+    base: TaskDict = {
+        "id": id,
+        "title": title,
+        "status": status,
+        "priority": priority,
+        "description": description,
+        "error": error,
+        "epic_key": epic_key,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "completed_at": completed_at,
+        "tags": tags,
+        "execution_id": execution_id,
+        "output_doc_id": output_doc_id,
+        "gameplan_id": None,
+        "project": None,
+        "current_step": None,
+        "prompt": None,
+        "type": "manual",
+        "source_doc_id": None,
+        "parent_task_id": None,
+        "seq": None,
+        "retry_of": None,
+        "epic_seq": None,
+    }
+    return base
+
+
+def make_epic(
+    epic_key: str = "AUTH",
+    child_count: int = 10,
+    children_done: int = 7,
+    children_open: int = 3,
+    **kwargs: object,
+) -> EpicTaskDict:
+    base = make_task(title=f"Epic: {epic_key}", status="open", epic_key=epic_key)
+    epic: EpicTaskDict = {
+        **base,  # type: ignore[typeddict-item]
+        "child_count": child_count,
+        "children_done": children_done,
+        "children_open": children_open,
+    }
+    return epic
+
+
+def make_log_entry(
+    id: int = 1,
+    task_id: int = 1,
+    message: str = "Did something",
+    created_at: str | None = "2025-01-01T12:00:00",
+) -> TaskLogEntryDict:
+    return {
+        "id": id,
+        "task_id": task_id,
+        "message": message,
+        "created_at": created_at,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Assertion helpers
+# ---------------------------------------------------------------------------
+
+
+def _richlog_text(widget: RichLog) -> str:
+    """Extract plain text from a RichLog widget."""
+    parts: list[str] = []
+    for line in widget.lines:
+        parts.append(line.text)
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Test app that mounts only TaskView (lighter than BrowserContainer)
+# ---------------------------------------------------------------------------
+
+_MOCK_BASE = "emdx.ui.task_view"
+
+MockDict = dict[str, MagicMock]
+
+
+class TaskTestApp(App[None]):
+    """Minimal app that mounts a single TaskView."""
+
+    def compose(self) -> ComposeResult:
+        yield TaskView(id="task-view")
+
+
+# ---------------------------------------------------------------------------
+# Fixture: patch all 5 DB functions used by TaskView
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def mock_task_data() -> Generator[MockDict, None, None]:
+    """Patch all DB calls in task_view, defaulting to empty lists.
+
+    Yields a dict of the mock objects so tests can customise return values.
+    """
+    with (
+        patch(f"{_MOCK_BASE}.list_tasks", return_value=[]) as m_list,
+        patch(f"{_MOCK_BASE}.list_epics", return_value=[]) as m_epics,
+        patch(f"{_MOCK_BASE}.get_dependencies", return_value=[]) as m_deps,
+        patch(f"{_MOCK_BASE}.get_dependents", return_value=[]) as m_depts,
+        patch(f"{_MOCK_BASE}.get_task_log", return_value=[]) as m_log,
+    ):
+        yield {
+            "list_tasks": m_list,
+            "list_epics": m_epics,
+            "get_dependencies": m_deps,
+            "get_dependents": m_depts,
+            "get_task_log": m_log,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Shared helper: trigger highlight on the first selectable task
+# ---------------------------------------------------------------------------
+
+
+async def _select_first_task(pilot: Any) -> None:
+    """Press j then k to ensure OptionList fires a highlight event."""
+    await pilot.press("j")
+    await pilot.pause()
+    await pilot.press("k")
+    await pilot.pause()
+
+
+# ===================================================================
+# A. Rendering & Layout
+# ===================================================================
+
+
+class TestRendering:
+    """Tests for initial rendering of the task list and status bar."""
+
+    @pytest.mark.asyncio
+    async def test_empty_state_shows_no_tasks(self, mock_task_data: MockDict) -> None:
+        """Status bar shows 'no tasks' when list_tasks returns empty."""
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-status-bar", Static)
+            assert "no tasks" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_single_status_group_header(self, mock_task_data: MockDict) -> None:
+        """A single-status list renders the correct section header."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # First option is the header (disabled), second is the task
+            header = ol.get_option_at_index(0)
+            assert "READY" in str(header.prompt)
+
+    @pytest.mark.asyncio
+    async def test_multi_status_groups_in_order(self, mock_task_data: MockDict) -> None:
+        """Multiple status groups render in STATUS_ORDER."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="done"),
+            make_task(id=2, status="open"),
+            make_task(id=3, status="active"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Collect all non-disabled option prompts (headers)
+            headers: list[str] = []
+            for i in range(ol.option_count):
+                opt = ol.get_option_at_index(i)
+                if opt.disabled:
+                    text = str(opt.prompt)
+                    if text.strip():  # skip blank separators
+                        headers.append(text)
+            assert len(headers) == 3
+            # STATUS_ORDER: open, active, blocked, done, failed
+            assert "READY" in headers[0]
+            assert "ACTIVE" in headers[1]
+            assert "DONE" in headers[2]
+
+    @pytest.mark.asyncio
+    async def test_task_labels_show_correct_icons(self, mock_task_data: MockDict) -> None:
+        """Each status gets the correct icon in its label."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+            make_task(id=3, title="Blocked task", status="blocked"),
+            make_task(id=4, title="Done task", status="done"),
+            make_task(id=5, title="Failed task", status="failed"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Collect non-disabled option texts
+            labels: list[str] = []
+            for i in range(ol.option_count):
+                opt = ol.get_option_at_index(i)
+                if not opt.disabled:
+                    labels.append(str(opt.prompt))
+            assert any("○" in lbl and "Open task" in lbl for lbl in labels)
+            assert any("●" in lbl and "Active task" in lbl for lbl in labels)
+            assert any("⚠" in lbl and "Blocked task" in lbl for lbl in labels)
+            assert any("✓" in lbl and "Done task" in lbl for lbl in labels)
+            assert any("✗" in lbl and "Failed task" in lbl for lbl in labels)
+
+    @pytest.mark.asyncio
+    async def test_long_title_truncated(self, mock_task_data: MockDict) -> None:
+        """Titles longer than 50 chars are truncated with '...'."""
+        long_title = "A" * 60
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title=long_title, status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Find the non-disabled option
+            for i in range(ol.option_count):
+                opt = ol.get_option_at_index(i)
+                if not opt.disabled:
+                    text = str(opt.prompt)
+                    assert "..." in text
+                    # Full 60-char title should NOT appear
+                    assert long_title not in text
+                    break
+
+    @pytest.mark.asyncio
+    async def test_status_bar_shows_per_status_counts(self, mock_task_data: MockDict) -> None:
+        """Status bar includes counts per status group."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open"),
+            make_task(id=2, status="open"),
+            make_task(id=3, status="active"),
+            make_task(id=4, status="blocked"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-status-bar", Static)
+            assert "2 ready" in str(bar.content)
+            assert "1 active" in str(bar.content)
+            assert "1 blocked" in str(bar.content)
+
+
+# ===================================================================
+# B. Keyboard Navigation
+# ===================================================================
+
+
+class TestKeyboardNavigation:
+    """Tests for j/k navigation and refresh."""
+
+    @pytest.mark.asyncio
+    async def test_j_moves_highlight_down(self, mock_task_data: MockDict) -> None:
+        """Pressing j moves the highlight down."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="First", status="open"),
+            make_task(id=2, title="Second", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            initial = ol.highlighted
+            await pilot.press("j")
+            await pilot.pause()
+            assert ol.highlighted is not None
+            if initial is not None:
+                assert ol.highlighted > initial
+
+    @pytest.mark.asyncio
+    async def test_k_moves_highlight_up(self, mock_task_data: MockDict) -> None:
+        """Pressing k moves the highlight up."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="First", status="open"),
+            make_task(id=2, title="Second", status="open"),
+            make_task(id=3, title="Third", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Move down twice so we have room to go back up
+            await pilot.press("j")
+            await pilot.pause()
+            await pilot.press("j")
+            await pilot.pause()
+            pos_after_jj = ol.highlighted
+            await pilot.press("k")
+            await pilot.pause()
+            assert ol.highlighted is not None
+            assert pos_after_jj is not None
+            assert ol.highlighted < pos_after_jj
+
+    @pytest.mark.asyncio
+    async def test_jk_skip_disabled_headers(self, mock_task_data: MockDict) -> None:
+        """j/k navigation skips disabled section headers."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Navigate down through all items
+            for _ in range(5):
+                await pilot.press("j")
+                await pilot.pause()
+            # The highlighted option should never be a disabled header
+            if ol.highlighted is not None:
+                opt = ol.get_option_at_index(ol.highlighted)
+                assert not opt.disabled
+
+    @pytest.mark.asyncio
+    async def test_highlighting_task_updates_detail_header(self, mock_task_data: MockDict) -> None:
+        """Highlighting a task updates the detail header."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=42, title="My task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            header = app.query_one("#task-detail-header", Static)
+            # After mount, the first task should auto-highlight
+            assert "42" in str(header.content) or "DETAIL" in str(header.content)
+
+    @pytest.mark.asyncio
+    async def test_r_refreshes_task_list(self, mock_task_data: MockDict) -> None:
+        """Pressing r re-calls list_tasks and updates the option list."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Initial", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            initial_count = ol.option_count
+
+            # Change what list_tasks returns, then press r
+            mock_task_data["list_tasks"].return_value = [
+                make_task(id=1, title="Task A", status="open"),
+                make_task(id=2, title="Task B", status="open"),
+                make_task(id=3, title="Task C", status="active"),
+            ]
+            await pilot.press("r")
+            await pilot.pause()
+
+            new_count = ol.option_count
+            assert new_count > initial_count
+
+
+# ===================================================================
+# C. Detail Pane Content
+# ===================================================================
+
+
+class TestDetailPane:
+    """Tests for the right-side detail pane content.
+
+    Each test presses 'j' then 'k' to ensure the OptionList fires a
+    highlight event, which triggers _render_task_detail.
+    """
+
+    @pytest.mark.asyncio
+    async def test_shows_task_title(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows the task title."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Important task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Important task" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_status_and_priority(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows status and priority."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active", priority=3),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "active" in text
+            assert "3" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_epic_info_with_progress(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows epic info with done/total progress."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open", epic_key="AUTH"),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(epic_key="AUTH", child_count=10, children_done=7),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "AUTH" in text
+            assert "7/10 done" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_relative_timestamps(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows relative timestamps."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open", created_at="2020-01-01T00:00:00"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            # Should show "Created Xd ago" (very old date)
+            assert "Created" in text
+            assert "ago" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_dependencies(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows 'Depends on:' section."""
+        dep_task = make_task(id=10, title="Prerequisite", status="done")
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="blocked"),
+        ]
+        mock_task_data["get_dependencies"].return_value = [dep_task]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Depends on:" in text
+            assert "Prerequisite" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_dependents(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows 'Blocks:' section."""
+        dependent = make_task(id=20, title="Downstream work", status="open")
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_dependents"].return_value = [dependent]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Blocks:" in text
+            assert "Downstream work" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_description(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows description text."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, description="This explains what to do.", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Description:" in text
+            assert "This explains what to do." in text
+
+    @pytest.mark.asyncio
+    async def test_shows_error_text(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows error info for failed tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="failed", error="Timeout after 30s"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Error:" in text
+            assert "Timeout after 30s" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_work_log_entries(self, mock_task_data: MockDict) -> None:
+        """Detail pane shows work log entries."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_task_log"].return_value = [
+            make_log_entry(message="Started analysis"),
+            make_log_entry(id=2, message="Found root cause"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Work Log:" in text
+            assert "Started analysis" in text
+            assert "Found root cause" in text
+
+
+# ===================================================================
+# D. Mouse Interaction
+# ===================================================================
+
+
+class TestMouseInteraction:
+    """Tests for mouse click behavior in the task list."""
+
+    @pytest.mark.asyncio
+    async def test_click_highlights_task(self, mock_task_data: MockDict) -> None:
+        """Clicking on a task row in the OptionList highlights it."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+            make_task(id=2, title="Task B", status="open"),
+            make_task(id=3, title="Task C", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Click at a y-offset that should hit a task row
+            await pilot.click("#task-option-list", offset=(5, 2))
+            await pilot.pause()
+            assert ol.highlighted is not None
+
+    @pytest.mark.asyncio
+    async def test_click_updates_detail_pane(self, mock_task_data: MockDict) -> None:
+        """Clicking a task updates the detail pane content."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Click me", status="open"),
+            make_task(id=2, title="Another task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            await pilot.click("#task-option-list", offset=(5, 2))
+            await pilot.pause()
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert len(text.strip()) > 0
+
+
+# ===================================================================
+# E. Screen Switching (BrowserContainer)
+# ===================================================================
+
+
+class TestScreenSwitching:
+    """Tests that 1/2/3 keys switch between browser screens.
+
+    Uses the real BrowserContainer since the key bindings live there.
+    """
+
+    @pytest.fixture()
+    def mock_browser_deps(self) -> Generator[None, None, None]:
+        """Patch heavy BrowserContainer dependencies.
+
+        We let register_all_themes run normally (it registers themes on the
+        app), but mock get_theme so it returns a Textual built-in theme to
+        avoid config file access issues.
+        """
+        with (
+            patch(
+                "emdx.ui.browser_container.get_theme",
+                return_value="textual-dark",
+            ),
+            patch(f"{_MOCK_BASE}.list_tasks", return_value=[]),
+            patch(f"{_MOCK_BASE}.list_epics", return_value=[]),
+            patch(f"{_MOCK_BASE}.get_dependencies", return_value=[]),
+            patch(f"{_MOCK_BASE}.get_dependents", return_value=[]),
+            patch(f"{_MOCK_BASE}.get_task_log", return_value=[]),
+        ):
+            yield
+
+    @pytest.mark.asyncio
+    async def test_press_2_switches_to_tasks(self, mock_browser_deps: None) -> None:
+        """Pressing 2 switches to the task browser."""
+        from emdx.ui.browser_container import BrowserContainer
+
+        app = BrowserContainer()
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            assert app.current_browser == "task"
+
+    @pytest.mark.asyncio
+    async def test_press_1_from_tasks_switches_to_activity(self, mock_browser_deps: None) -> None:
+        """Pressing 1 from tasks switches to activity browser."""
+        from emdx.ui.browser_container import BrowserContainer
+
+        app = BrowserContainer()
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            assert app.current_browser == "task"
+            await pilot.press("1")
+            await pilot.pause()
+            assert app.current_browser == "activity"
+
+    @pytest.mark.asyncio
+    async def test_press_3_from_tasks_switches_to_qa(self, mock_browser_deps: None) -> None:
+        """Pressing 3 from tasks switches to Q&A."""
+        from emdx.ui.browser_container import BrowserContainer
+
+        app = BrowserContainer()
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            await pilot.press("3")
+            await pilot.pause()
+            assert app.current_browser == "qa"
+
+    @pytest.mark.asyncio
+    async def test_help_bar_shows_key_hints(self, mock_task_data: MockDict) -> None:
+        """TaskBrowser help bar shows screen-switching hints."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpBarApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpBarApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-help-bar", Static)
+            assert "1" in str(bar.content)
+            assert "2" in str(bar.content)
+            assert "3" in str(bar.content)
+            assert "Activity" in str(bar.content)
+            assert "Tasks" in str(bar.content)
+            assert "Q&A" in str(bar.content)
+
+
+# ===================================================================
+# F. Edge Cases
+# ===================================================================
+
+
+class TestEdgeCases:
+    """Tests for edge cases and error handling."""
+
+    @pytest.mark.asyncio
+    async def test_task_with_all_optional_fields_none(self, mock_task_data: MockDict) -> None:
+        """A task with all optional fields as None renders without crashing."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="open",
+                description=None,
+                error=None,
+                epic_key=None,
+                created_at=None,
+                updated_at=None,
+                completed_at=None,
+                tags=None,
+                execution_id=None,
+                output_doc_id=None,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Test task" in text
+
+    @pytest.mark.asyncio
+    async def test_very_long_description(self, mock_task_data: MockDict) -> None:
+        """A task with a very long description renders without crashing."""
+        long_desc = "x" * 5000
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open", description=long_desc),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Description:" in text
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_exception_shows_empty(self, mock_task_data: MockDict) -> None:
+        """If list_tasks raises, the view shows an empty state gracefully."""
+        mock_task_data["list_tasks"].side_effect = RuntimeError("DB gone")
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-status-bar", Static)
+            assert "no tasks" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_list_epics_exception_tasks_still_render(self, mock_task_data: MockDict) -> None:
+        """If list_epics raises, tasks still render."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Still visible", status="open"),
+        ]
+        mock_task_data["list_epics"].side_effect = RuntimeError("Epics broken")
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            # Should have at least the header + 1 task option
+            assert ol.option_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_refresh_replaces_old_data(self, mock_task_data: MockDict) -> None:
+        """Refreshing fully replaces the old data."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Old task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            ol = app.query_one("#task-option-list", OptionList)
+            count_before = ol.option_count
+
+            # Refresh with different data
+            mock_task_data["list_tasks"].return_value = [
+                make_task(id=2, title="New task A", status="active"),
+                make_task(id=3, title="New task B", status="active"),
+            ]
+            await pilot.press("r")
+            await pilot.pause()
+
+            # Old data replaced — option count should reflect new data
+            count_after = ol.option_count
+            assert count_after != count_before
+
+
+# ===================================================================
+# G. Unit Tests for pure functions (no pilot needed)
+# ===================================================================
+
+
+class TestPureFunctions:
+    """Unit tests for helper functions that need no TUI."""
+
+    def test_format_time_ago_none(self) -> None:
+        assert _format_time_ago(None) == ""
+
+    def test_format_time_ago_invalid(self) -> None:
+        assert _format_time_ago("not-a-date") == ""
+
+    def test_task_label_short_title(self) -> None:
+        task = make_task(title="Fix bug", status="open")
+        label = _task_label(task)
+        assert "○" in label
+        assert "Fix bug" in label
+
+    def test_task_label_long_title_truncated(self) -> None:
+        task = make_task(title="A" * 60, status="active")
+        label = _task_label(task)
+        assert "●" in label
+        assert "..." in label
+        assert len(label) < 60  # truncated
+
+    def test_task_label_unknown_status(self) -> None:
+        task = make_task(status="weird")
+        label = _task_label(task)
+        assert "?" in label
