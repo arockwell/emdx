@@ -124,6 +124,27 @@ class BatchAutoTagResult(TypedDict):
     documents: list[DocumentTagResult]
 
 
+# ── Unified Executor types ───────────────────────────────────────────
+
+
+class ExecutionResultDict(TypedDict):
+    """Serialized form of ExecutionResult from to_dict()."""
+
+    success: bool
+    execution_id: int
+    log_file: str
+    output_doc_id: int | None
+    output_content: str | None
+    tokens_used: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    execution_time_ms: int
+    error_message: str | None
+    exit_code: int | None
+    cli_tool: str
+
+
 # ── Document Merger types ─────────────────────────────────────────────
 
 
