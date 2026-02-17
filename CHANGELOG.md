@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-02-16
+
+**The consolidation release.** The Q&A screen got a ground-up rewrite fixing terminal corruption caused by background thread imports. Task management tightened — `epic` and `cat` commands moved under `emdx task` where they belong. Textual upgraded to v8.0, and the TUI gained its first pilot-based test suite (36 tests). Type safety continued its march with `ExecutionResultDict` TypedDicts replacing loose dicts.
+
+### 🔧 Improvements
+
+#### Q&A screen rewrite (#694)
+The TUI Q&A screen was rewritten to fix terminal corruption caused by importing torch/sentence-transformers in background threads. The new implementation runs Claude CLI directly via `subprocess.Popen`, bypassing `UnifiedExecutor`. Terminal state is saved/restored around `asyncio.to_thread` calls as a safety net. Also adds: Escape to cancel in-flight questions, progress indicators with timing, markdown rendering for answers, and conversation survival across screen switches.
+
+#### Pilot-based TUI tests (#702)
+First comprehensive test suite for the TUI using Textual's Pilot API — 36 tests covering rendering, keyboard navigation, detail pane content, mouse interaction, screen switching, and edge cases. Establishes reusable patterns (factories, fixtures, assertion helpers) for testing other TUI screens.
+
+#### Textual 8.0 upgrade (#692)
+Updated from Textual ^7.5.0 to ^8.0.0. The major version bump in Textual was primarily a `Select.BLANK` → `Select.NULL` rename.
+
+#### Typing improvements (#697, #698, #701)
+Added `ExecutionResultDict` TypedDict for `ExecutionResult.to_dict()` return values, replacing `dict[str, Any]`. Fixed duplicate TypedDict definition that crept in during parallel development.
+
+#### Cleanup
+- Added missing `__all__` exports to `emdx/services/__init__.py` (#688)
+- Removed remaining Cursor IDE references and dead code (#689)
+
+### 📖 Documentation
+- Rewrote README and updated project positioning (#690)
+- Clarified task vs document organization in CLAUDE.md (#691)
+
+### 💥 Breaking Changes
+
+#### `emdx cat` and `emdx epic` moved under `emdx task` (#700)
+Categories and epics are task-specific concepts and now live under the task namespace:
+
+```bash
+# Old
+emdx cat list
+emdx epic list
+
+# New
+emdx task cat list
+emdx task epic list
+```
+
 ## [0.16.0] - 2026-02-16
 
 **The cleanup release.** EMDX shed its last API key dependency and removed the cascade system entirely (~5,500 lines) — everything now runs through the Claude CLI. New session-aware commands (`wrapup`, git-enriched `prime`, `save --task`) help agents and humans track what happened. The Q&A system got a conversational TUI redesign and tag/recent filters. Under the hood, type safety tightened with Protocols, TypedDicts, and concrete generics.
@@ -826,6 +867,7 @@ A sustained cleanup across 10+ PRs deleted dead code from every layer — unused
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.17.0]: https://github.com/arockwell/emdx/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/arockwell/emdx/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/arockwell/emdx/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/arockwell/emdx/compare/v0.12.0...v0.14.0
