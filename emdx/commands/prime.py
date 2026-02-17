@@ -478,7 +478,6 @@ def _get_execution_methods_json() -> list[ExecutionMethod]:
             when="All one-shot AI execution (single, parallel, PR, worktree)",
             key_flags=[
                 "--doc",
-                "--each/--do",
                 "--pr",
                 "--worktree",
                 "--synthesize",

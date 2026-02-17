@@ -100,19 +100,6 @@ emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
 emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
 ```
 
-### Dynamic discovery
-
-Find items at runtime, then process each one:
-
-```bash
-# Review every Python file in src/
-emdx delegate --each "fd -e py src/" --do "Review {{item}} for issues"
-
-# Review all open PRs
-emdx delegate --each "gh pr list --json number -q '.[].number'" \
-  --do "Review PR #{{item}}"
-```
-
 ### Code changes with PRs
 
 Agents can make changes in isolated git worktrees and open PRs:
@@ -231,7 +218,6 @@ emdx briefing              # Activity summary
 | Run an AI task | `emdx delegate "task"` |
 | Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
 | Create a PR from a task | `emdx delegate --pr "fix the bug"` |
-| Process items dynamically | `emdx delegate --each "cmd" --do "task {{item}}"` |
 | Search by meaning | `emdx find "concept" --mode semantic` |
 | Ask your KB a question | `emdx ai context "question" \| claude` |
 | Deduplicate the KB | `emdx compact --dry-run` |
