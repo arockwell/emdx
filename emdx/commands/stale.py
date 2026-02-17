@@ -33,13 +33,9 @@ class StalenessLevel(str, Enum):
 # Tag weights for importance scoring
 TAG_WEIGHTS: dict[str, float] = {
     "security": 3.0,
-    "🔒": 3.0,  # security emoji
     "gameplan": 2.0,
-    "🎯": 2.0,  # gameplan emoji
     "active": 2.0,
-    "🟢": 2.0,  # active emoji
     "reference": 2.0,
-    "📚": 2.0,  # reference emoji
 }
 DEFAULT_TAG_WEIGHT = 1.0
 
@@ -160,6 +156,7 @@ def _get_stale_documents(
         # Parse accessed_at
         if isinstance(accessed_at, str):
             from emdx.utils.datetime_utils import parse_datetime
+
             accessed_at = parse_datetime(accessed_at)
 
         # Calculate days stale
@@ -169,6 +166,7 @@ def _get_stale_documents(
             # Never accessed - use created_at
             if isinstance(created_at, str):
                 from emdx.utils.datetime_utils import parse_datetime
+
                 created_at = parse_datetime(created_at)
             days_stale = (now - created_at).days if created_at else 0
 
@@ -177,22 +175,22 @@ def _get_stale_documents(
         importance = _calculate_importance_score(access_count, tags)
 
         # Determine staleness level
-        level = _get_staleness_level(
-            days_stale, importance, critical_days, warning_days, info_days
-        )
+        level = _get_staleness_level(days_stale, importance, critical_days, warning_days, info_days)
 
         if level:
-            stale_docs.append({
-                "id": doc_id,
-                "title": title,
-                "project": doc_project,
-                "accessed_at": accessed_at,
-                "access_count": access_count,
-                "tags": tags,
-                "days_stale": days_stale,
-                "importance": importance,
-                "level": level,
-            })
+            stale_docs.append(
+                {
+                    "id": doc_id,
+                    "title": title,
+                    "project": doc_project,
+                    "accessed_at": accessed_at,
+                    "access_count": access_count,
+                    "tags": tags,
+                    "days_stale": days_stale,
+                    "importance": importance,
+                    "level": level,
+                }
+            )
 
     # Sort by urgency: CRITICAL first, then WARNING, then INFO
     # Within level, sort by days_stale descending (oldest first)
@@ -262,18 +260,23 @@ def stale_list(
 
         if json_output:
             import json
+
             output = []
             for doc in stale_docs:
-                output.append({
-                    "id": doc["id"],
-                    "title": doc["title"],
-                    "project": doc["project"],
-                    "days_stale": doc["days_stale"],
-                    "importance": doc["importance"],
-                    "level": doc["level"].value,
-                    "tags": doc["tags"],
-                    "accessed_at": doc["accessed_at"].isoformat() if doc["accessed_at"] else None,
-                })
+                output.append(
+                    {
+                        "id": doc["id"],
+                        "title": doc["title"],
+                        "project": doc["project"],
+                        "days_stale": doc["days_stale"],
+                        "importance": doc["importance"],
+                        "level": doc["level"].value,
+                        "tags": doc["tags"],
+                        "accessed_at": doc["accessed_at"].isoformat()
+                        if doc["accessed_at"]
+                        else None,
+                    }
+                )
             print(json.dumps(output, indent=2))
             return
 
@@ -422,8 +425,7 @@ def get_top_stale_for_priming(
 
     # Only return CRITICAL and WARNING for priming
     urgent = [
-        d for d in stale_docs
-        if d["level"] in (StalenessLevel.CRITICAL, StalenessLevel.WARNING)
+        d for d in stale_docs if d["level"] in (StalenessLevel.CRITICAL, StalenessLevel.WARNING)
     ]
 
     return urgent[:limit]
