@@ -342,8 +342,14 @@ class QAScreen(HelpMixin, Widget):
         If we have prior conversation entries, rebuild them instead of
         showing the welcome message.
         """
-        logger.info("QAScreen mounted (entries=%d, asking=%s)", len(self._entries), self._is_asking)
-        if self._entries:
+        has_state = bool(self._entries) or self._is_asking
+        logger.info(
+            "QAScreen mounted (entries=%d, asking=%s, pending=%s)",
+            len(self._entries),
+            self._is_asking,
+            self._pending_question is not None,
+        )
+        if has_state:
             self._rebuild_conversation()
         else:
             self._show_welcome()
