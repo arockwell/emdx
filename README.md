@@ -122,10 +122,10 @@ With `emdx[ai]` installed, search by meaning instead of just keywords:
 $ emdx find "how we handle rate limiting" --mode semantic
 
 # Build a context package and pipe it to Claude
-$ emdx ai context "How does auth work?" | claude
+$ emdx context "How does auth work?" | claude
 
 # Or ask your KB directly (needs API key)
-$ emdx ai ask "What did we decide about the API redesign?"
+$ emdx ask "What did we decide about the API redesign?"
 ```
 
 ## Claude Code integration
@@ -160,7 +160,7 @@ emdx gui                                         # Interactive TUI browser
 | Run an AI task | `emdx delegate "task"` |
 | Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
 | Create a PR from a task | `emdx delegate --pr "fix the bug"` |
-| Ask your KB a question | `emdx ai context "question" \| claude` |
+| Ask your KB a question | `emdx context "question" \| claude` |
 | Start a Claude session | `emdx prime` |
 
 ## Documentation

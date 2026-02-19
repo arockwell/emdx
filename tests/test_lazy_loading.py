@@ -191,7 +191,9 @@ class TestCLIIntegration:
             'emdx.commands.recipe',
             'emdx.commands.delegate',
             'emdx.commands.claude_execute',
-            'emdx.commands.ask',
+            'emdx.commands.ask_cmd',
+            'emdx.commands.context_cmd',
+            'emdx.commands.embed',
         ]
 
         # Clear any cached imports
@@ -230,7 +232,8 @@ class TestCLIIntegration:
 
         assert result.exit_code == 0
         assert "recipe" in result.output
-        assert "ai" in result.output
+        assert "ask" in result.output
+        assert "embed" in result.output
         assert "gui" in result.output
 
     def test_lazy_help_text_in_output(self):

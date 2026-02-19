@@ -4,7 +4,7 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (delegate, ai, etc.) are only imported when
+fast. Heavy commands (delegate, ask, embed, etc.) are only imported when
 actually invoked.
 """
 
@@ -26,7 +26,9 @@ LAZY_SUBCOMMANDS = {
     "recipe": "emdx.commands.recipe:app",
     "delegate": "emdx.commands.delegate:app",
     # AI features (imports ML libraries, can be slow)
-    "ai": "emdx.commands.ask:app",
+    "ask": "emdx.commands.ask_cmd:app",
+    "context": "emdx.commands.context_cmd:app",
+    "embed": "emdx.commands.embed:app",
     "distill": "emdx.commands.distill:app",
     "compact": "emdx.commands.compact:app",
 }
@@ -35,7 +37,9 @@ LAZY_SUBCOMMANDS = {
 LAZY_HELP = {
     "recipe": "Manage and run EMDX recipes",
     "delegate": "One-shot AI execution (parallel, worktree, PR)",
-    "ai": "AI-powered Q&A and semantic search",
+    "ask": "Ask a question about your knowledge base",
+    "context": "Retrieve context for piping to claude CLI",
+    "embed": "Manage the semantic embedding index",
     "distill": "Distill KB content into audience-aware summaries",
     "compact": "Compact related documents through AI-powered synthesis",
 }

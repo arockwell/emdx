@@ -4,7 +4,7 @@ This module provides a LazyTyperGroup class that extends Typer's group
 to support lazy loading of subcommands. This significantly improves
 startup performance for CLI applications with many heavy dependencies.
 
-Heavy commands (delegate, ai, etc.) are only imported
+Heavy commands (delegate, ask, embed, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
 

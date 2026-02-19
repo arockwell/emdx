@@ -244,7 +244,7 @@ def _interactive_wizard(dry_run: bool) -> None:
 
                 console.print("\n[yellow]These need manual review - skipping for now.[/yellow]")
                 console.print(
-                    "[dim]Use 'emdx ai similar <doc_id>' to review individual documents.[/dim]"
+                    "[dim]Use 'emdx find --similar <doc_id>' to review individual documents.[/dim]"
                 )  # noqa: E501
 
     # Garbage collection (cheap check)

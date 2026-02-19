@@ -875,16 +875,22 @@ emdx delegate --worktree --pr "fix X"
 
 ## ✨ AI-Powered Knowledge Base
 
-The `emdx ai` commands provide semantic search and Q&A capabilities over your knowledge base using embeddings and LLMs.
+Semantic search, Q&A, and embedding management are spread across several commands:
+
+- **`emdx find --mode semantic`** — Semantic search (built into the main search command)
+- **`emdx find --similar <id>`** — Find similar documents
+- **`emdx ask`** — Q&A over your KB
+- **`emdx context`** — Retrieve docs for piping to claude CLI
+- **`emdx embed`** — Manage the embedding index (build/stats/clear)
 
 ### Getting Started
 
 ```bash
 # Build the embedding index (one-time, ~1-2 minutes)
-emdx ai index
+emdx embed build
 
 # Check index status
-emdx ai stats
+emdx embed stats
 ```
 
 ### Semantic Search
@@ -893,22 +899,15 @@ Find documents by meaning, not just keywords:
 
 ```bash
 # Search for conceptually related documents
-emdx ai search "authentication flow"
-emdx ai search "error handling patterns" --limit 10
+emdx find "authentication flow" --mode semantic
+emdx find "error handling patterns" --mode semantic --limit 10
 
-# Filter by project
-emdx ai search "database optimization" --project myapp
+# Hybrid search (keyword + semantic, default when index exists)
+emdx find "database optimization"
 
-# Adjust similarity threshold (0-1)
-emdx ai search "caching strategy" --threshold 0.5
-```
-
-### Find Similar Documents
-
-```bash
 # Find documents similar to a given document
-emdx ai similar 42
-emdx ai similar 42 --limit 10
+emdx find --similar 42
+emdx find --similar 42 --limit 10
 ```
 
 ### Q&A with Claude API
@@ -917,14 +916,14 @@ Ask questions and get synthesized answers (requires `ANTHROPIC_API_KEY`):
 
 ```bash
 # Ask questions about your knowledge base
-emdx ai ask "What's our caching strategy?"
-emdx ai ask "How did we solve the auth bug?" --project myapp
+emdx ask "What's our caching strategy?"
+emdx ask "How did we solve the auth bug?" --project myapp
 
 # Reference specific documents
-emdx ai ask "What does ticket AUTH-123 involve?"
+emdx ask "What does ticket AUTH-123 involve?"
 
 # Force keyword search (no embeddings)
-emdx ai ask "recent changes" --keyword
+emdx ask "recent changes" --keyword
 ```
 
 ### Context Retrieval (for Claude CLI)
@@ -933,45 +932,45 @@ Retrieve context and pipe to the `claude` CLI to use your Claude Max subscriptio
 
 ```bash
 # Basic usage - pipe to claude
-emdx ai context "How does the auth system work?" | claude
+emdx context "How does the auth system work?" | claude
 
 # With a specific prompt
-emdx ai context "What are the tag conventions?" | claude "summarize briefly"
+emdx context "What are the tag conventions?" | claude "summarize briefly"
 
 # Limit docs and filter by project
-emdx ai context "error handling" --limit 5 --project emdx | claude
+emdx context "error handling" --limit 5 --project emdx | claude
 
 # Raw docs without question
-emdx ai context "auth patterns" --no-question | claude "list the patterns"
+emdx context "auth patterns" --no-question | claude "list the patterns"
 ```
 
-### Index Management
+### Index Management (`emdx embed`)
 
 ```bash
 # Build index for new documents only
-emdx ai index
+emdx embed build
 
 # Force reindex everything
-emdx ai index --force
+emdx embed build --force
 
 # Check index statistics
-emdx ai stats
+emdx embed stats
 
 # Clear all embeddings (requires reindexing)
-emdx ai clear --yes
+emdx embed clear --yes
 ```
 
 ### Commands Reference
 
 | Command | Description | Needs API Key? |
 |---------|-------------|----------------|
-| `emdx ai index` | Build/update embedding index | No |
-| `emdx ai search` | Semantic search | No |
-| `emdx ai similar` | Find similar documents | No |
-| `emdx ai stats` | Show index statistics | No |
-| `emdx ai clear` | Clear embedding index | No |
-| `emdx ai ask` | Q&A with Claude API | **Yes** |
-| `emdx ai context` | Get context for piping | No |
+| `emdx embed build` | Build/update embedding index | No |
+| `emdx find --mode semantic` | Semantic search | No |
+| `emdx find --similar <id>` | Find similar documents | No |
+| `emdx embed stats` | Show index statistics | No |
+| `emdx embed clear` | Clear embedding index | No |
+| `emdx ask` | Q&A with Claude API | **Yes** |
+| `emdx context` | Get context for piping | No |
 
 ### How It Works
 
@@ -982,8 +981,8 @@ emdx ai clear --yes
 
 ### Tips
 
-- Run `emdx ai index` periodically to index new documents
-- Use `emdx ai context | claude` to avoid API costs (uses Claude Max)
+- Run `emdx embed build` periodically to index new documents
+- Use `emdx context | claude` to avoid API costs (uses Claude Max)
 - Semantic search works best with natural language queries
 - Lower threshold values (0.2-0.3) return more results but less relevant
 

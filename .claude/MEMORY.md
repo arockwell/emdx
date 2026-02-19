@@ -68,7 +68,7 @@
 ## Feature Research Priorities (as of Feb 2026)
 Top paths for enhancement (ranked by impact x feasibility):
 1. MCP Server (emdx as native Claude tool)
-2. Semantic Search (get emdx ai search working)
+2. Semantic Search (emdx find --mode semantic / emdx embed)
 3. Smart Priming (context-aware session bootstrap)
 4. Auto-Linking (KB self-organization on save)
 5. "Dream Journal" overnight consolidation

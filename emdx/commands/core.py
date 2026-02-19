@@ -421,6 +421,11 @@ def find(
         "-e",
         help="Show matching chunk text instead of document snippets",
     ),
+    similar: int | None = typer.Option(
+        None,
+        "--similar",
+        help="Find documents similar to this document ID",
+    ),
 ) -> None:
     """Search the knowledge base with full-text search.
 
@@ -430,12 +435,19 @@ def find(
       - hybrid: Both combined (default when index exists)
 
     Use --extract to see the matching paragraph/section instead of the full document.
+    Use --similar to find documents similar to a given document.
 
     Examples:
         emdx find "authentication patterns"              # hybrid search
         emdx find "auth" --mode keyword                  # keyword only
         emdx find "how to configure logging" --extract   # show matching chunks
+        emdx find --similar 42                           # find docs like #42
     """
+    # Handle --similar mode
+    if similar is not None:
+        _find_similar(similar, limit, json_output)
+        return
+
     search_query = " ".join(query) if query else ""
 
     try:
@@ -826,6 +838,66 @@ def _find_keyword_search(
     # Show tip for viewing documents
     if len(results) > 0:
         console.print("\n[dim]💡 Use 'emdx view <id>' to view a document[/dim]")
+
+
+def _find_similar(doc_id: int, limit: int, json_output: bool) -> None:
+    """Find documents similar to a given document using embeddings."""
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    service = EmbeddingService()
+
+    # Get the source document title
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM documents WHERE id = ?", (doc_id,))
+        row = cursor.fetchone()
+        if not row:
+            console.print(f"[red]Document {doc_id} not found[/red]")
+            raise typer.Exit(1) from None
+        source_title = row[0]
+
+    try:
+        with console.status("[bold blue]Finding similar...", spinner="dots"):
+            results = service.find_similar(doc_id, limit=limit)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    if not results:
+        console.print("[yellow]No similar documents found[/yellow]")
+        return
+
+    if json_output:
+        output = [
+            {
+                "id": r.doc_id,
+                "title": r.title,
+                "similarity": round(r.similarity, 4),
+                "project": r.project,
+            }
+            for r in results
+        ]
+        print(json.dumps(output, indent=2))
+        return
+
+    console.print(
+        f"[bold]Documents similar to #{doc_id} '{source_title}':[/bold]\n"
+    )
+
+    table = Table()
+    table.add_column("ID", style="cyan", width=6)
+    table.add_column("Score", style="green", width=6)
+    table.add_column("Title", width=50)
+
+    for r in results:
+        score = f"{r.similarity:.0%}"
+        table.add_row(str(r.doc_id), score, r.title)
+
+    console.print(table)
 
 
 @app.command()

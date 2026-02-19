@@ -424,7 +424,7 @@ class SearchScreen(HelpMixin, Widget):
             # Check if embeddings are available before enabling semantic search
             if not self.presenter.search_service.has_embeddings():
                 self.notify(
-                    "No embeddings indexed. Run 'emdx ai index' first.",
+                    "No embeddings indexed. Run 'emdx embed build' first.",
                     severity="warning",
                     timeout=3,
                 )  # noqa: E501

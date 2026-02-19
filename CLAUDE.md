@@ -217,10 +217,10 @@ emdx task cat list                     # See available categories
 emdx tag add 42 gameplan active
 emdx tag list
 
-# AI search (requires emdx[ai] extra)
-# Note: emdx find now supports semantic search natively via --mode semantic
-emdx ai search "concept"
-emdx ai context "question" | claude
+# Semantic search (requires emdx[ai] extra)
+emdx find "concept" --mode semantic
+emdx context "question" | claude
+emdx ask "question"
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).

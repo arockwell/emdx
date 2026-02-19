@@ -14,9 +14,9 @@ The AI system provides:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    emdx ai commands                         │
+│                    AI-powered commands                       │
 ├─────────────────────────────────────────────────────────────┤
-│  index    search    similar    ask    context    stats     │
+│  find --mode semantic  find --similar  ask  context  embed │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
@@ -49,10 +49,10 @@ The AI system provides:
 
 ```bash
 # Index all documents (one-time, ~1-2 minutes for 100+ docs)
-emdx ai index
+emdx embed build
 
 # Check status
-emdx ai stats
+emdx embed stats
 ```
 
 Output:
@@ -71,10 +71,10 @@ Output:
 
 ```bash
 # Semantic search
-emdx ai search "authentication patterns"
+emdx find "authentication patterns" --mode semantic
 
 # Find similar documents
-emdx ai similar 42
+emdx find --similar 42
 ```
 
 ### 3. Ask Questions
@@ -82,83 +82,83 @@ emdx ai similar 42
 **Option A: Using Claude API** (requires `ANTHROPIC_API_KEY`):
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-emdx ai ask "How does the delegate system work?"
+emdx ask "How does the delegate system work?"
 ```
 
 **Option B: Using Claude CLI** (uses Claude Max subscription):
 ```bash
-emdx ai context "How does the delegate system work?" | claude
+emdx context "How does the delegate system work?" | claude
 ```
 
 ## Commands Reference
 
-### `emdx ai index`
+### `emdx embed build`
 
 Build or update the embedding index. By default, indexes both document-level and chunk-level embeddings.
 
 ```bash
-emdx ai index              # Index new documents and chunks
-emdx ai index --force      # Reindex everything
-emdx ai index --no-chunks  # Only index documents, skip chunk-level
-emdx ai index --batch-size 100  # Process in larger batches
+emdx embed build              # Index new documents and chunks
+emdx embed build --force      # Reindex everything
+emdx embed build --no-chunks  # Only index documents, skip chunk-level
+emdx embed build --batch-size 100  # Process in larger batches
 ```
 
-### `emdx ai search`
+### `emdx find --mode semantic`
 
-Semantic search across documents.
+Semantic search across documents. This is built into the main `find` command:
 
 ```bash
-emdx ai search "query"                    # Basic search
-emdx ai search "query" --limit 20         # More results
-emdx ai search "query" --threshold 0.5    # Higher similarity required
-emdx ai search "query" --project myapp    # Filter by project
+emdx find "query" --mode semantic              # Semantic-only search
+emdx find "query" --mode semantic --limit 20   # More results
+emdx find "query"                              # Hybrid (default when index exists)
+emdx find "query" --mode keyword               # Keyword-only
 ```
 
-### `emdx ai similar`
+### `emdx find --similar`
 
 Find documents similar to a given document.
 
 ```bash
-emdx ai similar 42           # Find docs similar to #42
-emdx ai similar 42 --limit 10
+emdx find --similar 42           # Find docs similar to #42
+emdx find --similar 42 --limit 10
 ```
 
-### `emdx ai ask`
+### `emdx ask`
 
 Q&A using Claude API.
 
 ```bash
-emdx ai ask "What's our caching strategy?"
-emdx ai ask "How did we solve AUTH-123?" --project myapp
-emdx ai ask "recent changes" --keyword    # Force keyword search
-emdx ai ask "question" --no-sources       # Hide source references
+emdx ask "What's our caching strategy?"
+emdx ask "How did we solve AUTH-123?" --project myapp
+emdx ask "recent changes" --keyword    # Force keyword search
+emdx ask "question" --no-sources       # Hide source references
 ```
 
-### `emdx ai context`
+### `emdx context`
 
 Retrieve context for piping to external tools.
 
 ```bash
-emdx ai context "question" | claude
-emdx ai context "topic" --limit 5 | claude "summarize"
-emdx ai context "query" --no-question | claude "analyze"
-emdx ai context "query" --keyword    # Force keyword search
+emdx context "question" | claude
+emdx context "topic" --limit 5 | claude "summarize"
+emdx context "query" --no-question | claude "analyze"
+emdx context "query" --keyword    # Force keyword search
 ```
 
-### `emdx ai stats`
+### `emdx embed stats`
 
 Show embedding index statistics.
 
 ```bash
-emdx ai stats
+emdx embed stats
 ```
 
-### `emdx ai clear`
+### `emdx embed clear`
 
 Clear all embeddings (requires reindexing).
 
 ```bash
-emdx ai clear --yes
+emdx embed clear --yes
 ```
 
 ## How It Works
@@ -204,7 +204,7 @@ The chunk splitter (`emdx/utils/chunk_splitter.py`) handles the splitting logic.
 
 ### Fallback Behavior
 
-If embeddings aren't available (not indexed yet), the system automatically falls back to keyword search using SQLite FTS5. This means search always works, even without running `emdx ai index`.
+If embeddings aren't available (not indexed yet), the system automatically falls back to keyword search using SQLite FTS5. This means search always works, even without running `emdx embed build`.
 
 ### Context Building
 
@@ -220,10 +220,10 @@ For Q&A commands, the system:
 
 ```bash
 # Quick Q&A during development
-emdx ai context "How does error handling work?" | claude
+emdx context "How does error handling work?" | claude
 
 # Research before implementing
-emdx ai search "authentication" --limit 5
+emdx find "authentication" --mode semantic --limit 5
 # Then read the relevant docs
 emdx view 123
 ```
@@ -232,7 +232,7 @@ emdx view 123
 
 ```bash
 # Analyze documents found by semantic search
-emdx ai search "tech debt" --limit 10
+emdx find "tech debt" --mode semantic --limit 10
 # Note the IDs, then delegate analysis
 emdx delegate 5350 5351 5352
 ```
@@ -241,17 +241,17 @@ emdx delegate 5350 5351 5352
 
 ```bash
 # Reindex after adding many docs
-emdx ai index
+emdx embed build
 
 # Check coverage
-emdx ai stats
+emdx embed stats
 ```
 
 ## Troubleshooting
 
 ### "No documents indexed"
 
-Run `emdx ai index` to build the embedding index.
+Run `emdx embed build` to build the embedding index.
 
 ### "sentence-transformers not installed"
 
@@ -276,7 +276,7 @@ pip install sentence-transformers
 ### Claude API errors
 
 - Check `ANTHROPIC_API_KEY` is set
-- Use `emdx ai context | claude` to avoid API costs
+- Use `emdx context | claude` to avoid API costs
 
 ## Performance Considerations
 
@@ -303,4 +303,4 @@ Embeddings are stored in SQLite across two tables:
 - 100 docs with ~5 chunks each ≈ 900KB
 - 1000 docs ≈ 9MB
 
-The indexes are stored in your EMDX database alongside documents. Use `emdx ai stats` to see current index sizes.
+The indexes are stored in your EMDX database alongside documents. Use `emdx embed stats` to see current index sizes.
